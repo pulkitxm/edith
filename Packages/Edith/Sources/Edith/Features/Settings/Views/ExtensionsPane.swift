@@ -10,6 +10,8 @@ import SwiftUI
 }
 
 struct ExtensionsPane: View {
+    @AppStorage(AppStorageKeys.Tabs.attentionEnabled, store: SharedDefaults.store) private
+        var attentionEnabled = true
     @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
         var usageEnabled = false
     @AppStorage(AppStorageKeys.Tabs.herdrEnabled, store: SharedDefaults.store) private
@@ -194,6 +196,7 @@ struct ExtensionsPane: View {
 
     private func enabledBinding(for entry: ExtensionRegistryEntry) -> Binding<Bool> {
         switch entry.defaultsKey {
+        case AppStorageKeys.Tabs.attentionEnabled: $attentionEnabled
         case AppStorageKeys.Tabs.usageEnabled: $usageEnabled
         case AppStorageKeys.Tabs.herdrEnabled: $herdrEnabled
         case AppStorageKeys.Tabs.quinjetEnabled: $quinjetEnabled
@@ -393,12 +396,12 @@ private struct ExtensionSettingsSheet: View {
                         .pointerCursor()
                     }
                 }
+                ExtensionDetailRows(entry: entry)
                 ExtensionLifecycleRows(
                     entry: entry, coordinator: coordinator, invalidation: invalidation)
                 ExtensionPermissionRows(entry: entry) {
                     invalidateReadiness()
                 }
-                ExtensionDetailRows(entry: entry)
             }
             .formStyle(.grouped)
             .navigationTitle(entry.title)
@@ -505,6 +508,7 @@ private struct ExtensionSettingsSheet: View {
     private var idealHeight: CGFloat {
         switch entry.id {
         case "micMute", "systemStats": 300
+        case "attention": 440
         case "machines": 420
         case "lidAwake": 400
         case "music": 460
@@ -586,11 +590,13 @@ private struct ExtensionLifecycleRows: View {
                         instructionRow(recovery)
                     }
                     ForEach(lifecycle.documentation) { document in
-                        if let url = URL(
-                            string: "https://github.com/pulkitxm/edith/blob/main/\(document.path)"
-                        ) {
-                            Link(document.title, destination: url)
+                        Button(document.title) {
+                            _ = try? AppInspectionCenter().openLink(
+                                AppInspectionCenter.extensionDocumentationID(
+                                    extensionID: entry.id, documentID: document.id),
+                                contributors: [])
                         }
+                        .buttonStyle(.link)
                     }
                 }
             } else {
@@ -603,6 +609,8 @@ private struct ExtensionLifecycleRows: View {
     }
 
     @MainActor private func refresh() async {
+        let discoveryTrace = PerformanceTrace.begin(.extensionDiscovery, "extensions.report")
+        defer { PerformanceTrace.end(discoveryTrace) }
         report = await coordinator.lifecycleReport()
     }
 
@@ -831,6 +839,7 @@ private struct ExtensionDetailRows: View {
     @ViewBuilder var body: some View {
         if let route = ExtensionDetailRoute(rawValue: entry.id) {
             switch route {
+            case .attention: AttentionRows()
             case .usage: UsageRows()
             case .herdr: HerdrRows()
             case .quinjet: QuinjetRows()
@@ -854,6 +863,41 @@ private struct ExtensionDetailRows: View {
                     .settingsCaption()
             }
         }
+    }
+}
+
+private struct AttentionRows: View {
+    @AppStorage(AppStorageKeys.Tabs.attentionEnabled, store: SharedDefaults.store) private
+        var enabled = true
+    @State private var model = AttentionPageModel()
+
+    var body: some View {
+        Section("Tracking") {
+            Toggle("Track foreground applications", isOn: $model.settings.trackingEnabled)
+            Toggle("Run local browser server", isOn: $model.settings.browserTrackingEnabled)
+            HStack {
+                Button("Save tracking settings") {
+                    model.settings.isEnabled =
+                        model.settings.trackingEnabled || model.settings.browserTrackingEnabled
+                    model.saveSettings()
+                }
+                .pointerCursor()
+                Button("Open Attention") { SectionWindow.open(.attention) }
+                    .pointerCursor()
+            }
+            if let message = model.message {
+                Text(message)
+                    .settingsCaption()
+                    .foregroundStyle(.green)
+            }
+            if let error = model.errorMessage {
+                Text(error)
+                    .settingsCaption()
+                    .foregroundStyle(.red)
+            }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
     }
 }
 

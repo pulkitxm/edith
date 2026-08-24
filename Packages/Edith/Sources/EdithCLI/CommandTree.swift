@@ -3,6 +3,9 @@ import Foundation
 public enum ArgumentKind: Equatable, Sendable {
     case machine
     case appAction
+    case runningApp
+    case appPath
+    case appLink
     case cleanerCategory
     case colorFormat
     case colorIndex
@@ -45,6 +48,16 @@ public enum DestructivePolicy: String, Equatable, Sendable {
     case previewThenYes
 }
 
+public struct PassthroughCompletion: Equatable, Sendable {
+    public let afterPositionals: Int
+    public let remoteMachinePosition: Int?
+
+    public init(afterPositionals: Int, remoteMachinePosition: Int? = nil) {
+        self.afterPositionals = afterPositionals
+        self.remoteMachinePosition = remoteMachinePosition
+    }
+}
+
 public struct CommandNode: Equatable, Sendable {
     public let name: String
     public let summary: String
@@ -54,11 +67,13 @@ public struct CommandNode: Equatable, Sendable {
     public let arguments: [ArgumentKind]
     public let children: [CommandNode]
     public let destructivePolicy: DestructivePolicy?
+    public let passthroughCompletion: PassthroughCompletion?
 
     public init(
         _ name: String, _ summary: String, aliases: [String] = [], options: [String] = [],
         optionValues: [String: ArgumentKind] = [:], arguments: [ArgumentKind] = [],
-        children: [CommandNode] = [], destructivePolicy: DestructivePolicy? = nil
+        children: [CommandNode] = [], destructivePolicy: DestructivePolicy? = nil,
+        passthroughCompletion: PassthroughCompletion? = nil
     ) {
         self.name = name
         self.summary = summary
@@ -68,6 +83,7 @@ public struct CommandNode: Equatable, Sendable {
         self.arguments = arguments
         self.children = children
         self.destructivePolicy = destructivePolicy
+        self.passthroughCompletion = passthroughCompletion
     }
 
     public var names: [String] { [name] + aliases }
@@ -78,13 +94,15 @@ public struct CommandNode: Equatable, Sendable {
 }
 
 public enum CommandTree {
-    public static let inherited = ["--help"]
+    public static let inherited = ["-h", "--help", "--version"]
     public static let common = ["--json"] + inherited
     public static let playback = ["--json", "--help", "--player"]
     public static let playbackValues: [String: ArgumentKind] = ["--player": .musicPlayer]
     public static let usageValues: [String: ArgumentKind] = [
         "--range": .usageRange, "--source": .usageSource, "--machine": .machine,
     ]
+    public static let help = CommandNode(
+        "help", "Show detailed help for a command.", arguments: [.free])
 
     public static let root = CommandNode(
         "ed", "The command line for Edith.", options: ["--help", "--version"],
@@ -135,6 +153,17 @@ public enum CommandTree {
             CommandNode(
                 "app", "One-shot actions the Edith app performs.",
                 children: [
+                    CommandNode("info", "Show the installed app identity.", options: common),
+                    CommandNode(
+                        "diagnostics", "Show live helper diagnostics.", options: common),
+                    CommandNode("paths", "List Edith folders and files.", options: common),
+                    CommandNode("links", "List Edith external links.", options: common),
+                    CommandNode(
+                        "open-path", "Open or reveal one Edith path.", options: common,
+                        arguments: [.appPath]),
+                    CommandNode(
+                        "open-link", "Open one Edith external link.", options: common,
+                        arguments: [.appLink]),
                     CommandNode(
                         "actions", "List the one-shot actions.", aliases: ["ls"],
                         options: common),
@@ -304,7 +333,7 @@ public enum CommandTree {
                 children: [
                     CommandNode(
                         "stats", "Sample CPU, memory, load and network.",
-                        options: ["--json", "--follow", "--interval", "--processes"]),
+                        options: ["--json", "-f", "--follow", "--interval", "--processes"]),
                     CommandNode("disks", "Mounted volumes and their free space.", options: common),
                 ]),
             CommandNode(
@@ -435,7 +464,7 @@ public enum CommandTree {
                     CommandNode(
                         "quit", "Quit one app, or everything else.",
                         options: ["--json", "--help", "--all", "--force", "--yes"],
-                        arguments: [.free], destructivePolicy: .previewThenYes),
+                        arguments: [.runningApp], destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
                 "download", "The download queue Edith feeds to yt-dlp.",
@@ -674,7 +703,7 @@ public enum CommandTree {
                         "add", "Add a machine to Edith's list.",
                         options: [
                             "--json", "--help", "--host", "--port", "--user", "--key",
-                            "--alias", "--mac",
+                            "--alias", "--mac", "--password-stdin", "--key-passphrase-stdin",
                         ],
                         arguments: [.free]),
                     CommandNode(
@@ -682,7 +711,7 @@ public enum CommandTree {
                         options: [
                             "--json", "--help", "--name", "--host", "--port", "--user",
                             "--key", "--agent", "--mac", "--sudo-password-stdin",
-                            "--forget-sudo-password",
+                            "--forget-sudo-password", "--password-stdin", "--key-passphrase-stdin",
                         ],
                         arguments: [.machine]),
                     CommandNode(
@@ -721,7 +750,9 @@ public enum CommandTree {
                             CommandNode(
                                 "add", "Save a command against a machine.",
                                 options: ["--json", "--help", "--shared"],
-                                arguments: [.machine, .free]),
+                                arguments: [.machine, .free, .free],
+                                passthroughCompletion: PassthroughCompletion(
+                                    afterPositionals: 2)),
                             CommandNode(
                                 "rm", "Forget one snippet.", aliases: ["remove"],
                                 options: common, arguments: [.machine, .historyIndex]),
@@ -846,17 +877,20 @@ public enum CommandTree {
                         destructivePolicy: .previewThenYes),
                     CommandNode(
                         "metrics", "Sample a machine.",
-                        options: ["--json", "--follow", "--interval", "--processes"],
+                        options: ["--json", "-f", "--follow", "--interval", "--processes"],
                         arguments: [.machine]),
                     CommandNode(
                         "exec", "Run a command on a machine.", aliases: ["run"],
-                        arguments: [.machine, .free]),
+                        options: ["-t", "--tty"],
+                        arguments: [.machine, .free],
+                        passthroughCompletion: PassthroughCompletion(
+                            afterPositionals: 1, remoteMachinePosition: 0)),
                     CommandNode(
                         "files", "Browse and transfer files.",
                         children: [
                             CommandNode(
                                 "ls", "List a remote directory.", aliases: ["list"],
-                                options: ["--json", "--help", "--all"],
+                                options: ["--json", "--help", "-a", "--all"],
                                 arguments: [.machine, .remotePath]),
                             CommandNode(
                                 "get", "Download a file.", options: ["--json"],
@@ -902,7 +936,7 @@ public enum CommandTree {
                         "docker", "Containers on a machine.",
                         children: [
                             CommandNode(
-                                "ps", "List containers.", options: ["--json", "--all"],
+                                "ps", "List containers.", options: ["--json", "-a", "--all"],
                                 arguments: [.machine]),
                             CommandNode(
                                 "images", "List images.", options: common,
@@ -918,7 +952,7 @@ public enum CommandTree {
                                 arguments: [.machine]),
                             CommandNode(
                                 "logs", "Container logs.",
-                                options: ["--tail", "--follow"],
+                                options: ["--tail", "-f", "--follow"],
                                 arguments: [.machine, .container]),
                             CommandNode(
                                 "inspect", "Raw inspect output.",
@@ -978,7 +1012,7 @@ public enum CommandTree {
                                         arguments: [.machine, .composeProject]),
                                     CommandNode(
                                         "logs", "Logs for a whole project.",
-                                        options: ["--tail", "--follow", "--help"],
+                                        options: ["--tail", "-f", "--follow", "--help"],
                                         arguments: [.machine, .composeProject]),
                                 ]),
                         ]),
@@ -1299,7 +1333,7 @@ public enum CommandTree {
         ])
 
     public static var topLevelNames: [String] {
-        root.children.flatMap(\.names)
+        root.children.flatMap(\.names) + help.names
     }
 
     public static func node(at path: [String]) -> CommandNode? {

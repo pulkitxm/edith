@@ -78,21 +78,20 @@ public enum CompletionScripts {
 
     public static let bash = """
         _ed_complete() {
-          local IFS=$'\\n'
           local line
-          local -a out
           COMPREPLY=()
           local __ed=@ED@
           [ -x "$__ed" ] || __ed=ed
-          out=($("$__ed" __complete --index "$COMP_CWORD" -- "${COMP_WORDS[@]}" 2>/dev/null))
-          for line in "${out[@]}"; do
+          while IFS= read -r line; do
             [ -z "$line" ] && continue
             if [ "$line" = '#files' ]; then
-              COMPREPLY+=($(compgen -f -- "${COMP_WORDS[COMP_CWORD]}"))
+              while IFS= read -r line; do
+                COMPREPLY+=("$line")
+              done < <(compgen -f -- "${COMP_WORDS[COMP_CWORD]}")
               continue
             fi
             COMPREPLY+=("$line")
-          done
+          done < <("$__ed" __complete --index "$COMP_CWORD" -- "${COMP_WORDS[@]}" 2>/dev/null)
         }
 
         complete -o bashdefault -F _ed_complete ed edh edith

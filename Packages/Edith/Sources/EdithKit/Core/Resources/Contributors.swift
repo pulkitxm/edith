@@ -71,14 +71,21 @@ public enum Contributors {
         fileManager: FileManager = .default,
         session: URLSession = .shared
     ) async -> [Contributor] {
+        let requestTrace = PerformanceTrace.begin(.github, "contributors.load")
+        defer { PerformanceTrace.end(requestTrace) }
         let file = cacheFile(directories)
-        if isFresh(file, fileManager: fileManager) {
-            let people = cached(directories: directories, fileManager: fileManager)
-            if !people.isEmpty { return people }
+        let cachedPeople = cached(directories: directories, fileManager: fileManager)
+        if isFresh(file, fileManager: fileManager), !cachedPeople.isEmpty {
+            PerformanceTrace.event(.cache, "contributors.hit")
+            return cachedPeople
         }
+        PerformanceTrace.event(.cache, "contributors.miss")
+        let networkTrace = PerformanceTrace.begin(.slowNetwork, "contributors.fetch")
         guard let fresh = try? await fetch(session: session) else {
-            return cached(directories: directories, fileManager: fileManager)
+            PerformanceTrace.end(networkTrace)
+            return cachedPeople
         }
+        PerformanceTrace.end(networkTrace)
         store(fresh, at: file, fileManager: fileManager)
         return fresh
     }

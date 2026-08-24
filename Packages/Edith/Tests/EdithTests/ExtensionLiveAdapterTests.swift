@@ -37,6 +37,20 @@ import EdithCore
             ])
     }
 
+    @Test func attentionRequiresAnEnabledTrackingSource() {
+        #expect(
+            ExtensionLiveAdapters.attentionReadiness(settings: AttentionSettings())
+                == .needsSetup("Turn on application tracking, browser tracking, or both."))
+        #expect(
+            ExtensionLiveAdapters.attentionReadiness(
+                settings: AttentionSettings(isEnabled: true, trackingEnabled: true))
+                == .ready("Attention tracking is configured for the selected sources."))
+        #expect(
+            ExtensionLiveAdapters.attentionReadiness(
+                settings: AttentionSettings(isEnabled: true, browserTrackingEnabled: true))
+                == .ready("Attention tracking is configured for the selected sources."))
+    }
+
     @Test func usageDetectsMissingLoadingEmptyReadyAndCorruptData() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

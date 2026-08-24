@@ -8,7 +8,7 @@ ed extensions info <id> [--json]
 
 | Argument | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `id` | one of the sixteen ids, or a defaults key | required | The extension to describe |
+| `id` | one of the seventeen ids, or a defaults key | required | The extension to describe |
 
 | Option | Type / values | Default | What it does |
 | --- | --- | --- | --- |

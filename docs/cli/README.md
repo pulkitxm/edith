@@ -22,6 +22,13 @@ completion walks the same command tree used by parity checks, including nested
 routes and typed values, so it is also a reliable discovery surface outside the
 app.
 
+For extension automation, start with `ed extensions status --json`. Preview setup
+with `ed extensions setup <id> --dry-run --json`, apply it with
+`--install-tools` when required, then run `ed extensions verify <id> --json`.
+`ed extensions doctor --json` reports recovery across the registry. An unhealthy
+report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
+`checks`, and `remediation`.
+
 ## Start here
 
 | Page | What it covers |
@@ -34,8 +41,8 @@ app.
 | Page | What it covers |
 | --- | --- |
 | [`ed config`](./config/README.md) | Every setting the UI exposes, and the full setting catalogue |
-| [`ed app`](./app/README.md) | One-shot app actions, section reveal, and PNG window snapshots |
-| [`ed extensions`](./extensions/README.md) | Turning Edith's features on and off |
+| [`ed app`](./app/README.md) | App identity, diagnostics, paths, external links, and one-shot actions |
+| [`ed extensions`](./extensions/README.md) | Enabling features, checking readiness, planning setup, verifying live adapters, and recovering failures |
 | [`ed lid-awake`](./lid-awake/README.md) | Closed-lid sessions, battery auto-pause and live state |
 | [`ed permissions`](./permissions/README.md) | Inspecting and requesting Edith's macOS permissions |
 | [`ed usage`](./usage/README.md) | Agent usage: limits, cost, tokens, projects, sources, and machine attribution |

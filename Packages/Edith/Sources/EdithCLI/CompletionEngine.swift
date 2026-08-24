@@ -1,3 +1,4 @@
+import ArgumentParser
 import EdithKit
 import Foundation
 
@@ -28,13 +29,16 @@ public struct CompletionResult: Equatable, Sendable {
     public var candidates: [String]
     public var wantsFiles: Bool
     public var remoteMachine: String?
+    public var remoteRequest: CompletionRequest?
 
     public init(
-        candidates: [String] = [], wantsFiles: Bool = false, remoteMachine: String? = nil
+        candidates: [String] = [], wantsFiles: Bool = false, remoteMachine: String? = nil,
+        remoteRequest: CompletionRequest? = nil
     ) {
         self.candidates = candidates
         self.wantsFiles = wantsFiles
         self.remoteMachine = remoteMachine
+        self.remoteRequest = remoteRequest
     }
 
     public var lines: [String] {
@@ -47,39 +51,86 @@ public enum CompletionEngine {
         _ request: CompletionRequest, machines: [String], configKeys: [String],
         extensionIDs: [String], shelfItems: [String] = [], musicTracks: [String] = [],
         calendarEvents: [String] = [], toolIDs: [String] = ToolProvisioning.all.map(\.id),
-        usageSources: [String] = [], usageChatIDs: [String] = [], usageProjects: [String] = [],
+        usageSources: [String] = [], runningApps: [String] = [],
+        appLinks: [String] = ["repository", "creator"],
+        usageChatIDs: [String] = [], usageProjects: [String] = [],
         quinjetSessions: [String] = []
     ) -> CompletionResult {
-        let leading = ArgumentRewriting.completionOrder(request.leading)
+        var leading = ArgumentRewriting.completionOrder(request.leading)
         let prefix = request.current
+        let helpRoute = leading.first == CommandTree.help.name
+        if helpRoute { leading.removeFirst() }
         if let first = leading.first, CommandTree.root.child(first) == nil,
             machines.contains(where: { $0.lowercased() == first.lowercased() })
         {
-            return CompletionResult(remoteMachine: first)
+            let localShow =
+                prefix.hasPrefix("-")
+                && leading.dropFirst().allSatisfy { $0.hasPrefix("-") }
+            if localShow {
+                leading = ["machines", "show", first] + leading.dropFirst()
+            } else if !helpRoute {
+                return CompletionResult(remoteMachine: first)
+            }
         }
+        let machineRoute = leading.first == ArgumentRewriting.machinesGroup
         var node = CommandTree.root
+        var command: ParsableCommand.Type = EdRoot.self
         var positionals: [String] = []
         var expectedValue: ArgumentKind?
-        for word in leading {
+        var optionValues = effectiveOptionValues(node: node, command: command)
+        for (offset, word) in leading.enumerated() {
+            if let result = passthroughResult(
+                node: node, positionals: positionals, remaining: leading.dropFirst(offset),
+                prefix: prefix)
+            {
+                return result
+            }
+            if word == "--" { return CompletionResult() }
             if expectedValue != nil {
                 expectedValue = nil
                 continue
             }
             if let separator = word.firstIndex(of: "=") {
                 let option = String(word[..<separator])
-                if node.optionValues[option] != nil { continue }
+                if optionValues[option] != nil {
+                    selectDefaultRoute(
+                        for: option, node: &node, command: &command,
+                        optionValues: &optionValues, enabled: !helpRoute)
+                    continue
+                }
             }
-            if let kind = node.optionValues[word] {
+            if let kind = optionValues[word] {
+                selectDefaultRoute(
+                    for: word, node: &node, command: &command,
+                    optionValues: &optionValues, enabled: !helpRoute)
                 expectedValue = kind
                 continue
             }
-            if word.hasPrefix("-") { continue }
+            if word.hasPrefix("-") {
+                selectDefaultRoute(
+                    for: word, node: &node, command: &command,
+                    optionValues: &optionValues, enabled: !helpRoute)
+                continue
+            }
             if let next = node.child(word) {
                 node = next
+                if let nextCommand = parserChild(word, in: command) { command = nextCommand }
+                optionValues = effectiveOptionValues(node: node, command: command)
                 positionals = []
                 continue
             }
+            let keepsMachineFirstRoute =
+                machineRoute && positionals.isEmpty
+                && machines.contains(where: { $0.lowercased() == word.lowercased() })
+            selectDefaultRoute(
+                for: nil, node: &node, command: &command, optionValues: &optionValues,
+                enabled: !helpRoute && !keepsMachineFirstRoute)
             positionals.append(word)
+        }
+        if let result = passthroughResult(
+            node: node, positionals: positionals, remaining: [], prefix: prefix)
+        {
+            return result
         }
         if let kind = expectedValue {
             return CompletionResult(
@@ -87,44 +138,52 @@ public enum CompletionEngine {
                     values(
                         for: kind, machines: machines, configKeys: configKeys,
                         extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
-                        previous: positionals.last, shelfItems: shelfItems,
+                        appLinks: appLinks, previous: positionals.last, shelfItems: shelfItems,
                         musicTracks: musicTracks, calendarEvents: calendarEvents,
-                        usageChatIDs: usageChatIDs, usageProjects: usageProjects,
-                        quinjetSessions: quinjetSessions), prefix))
+                        runningApps: runningApps, usageChatIDs: usageChatIDs,
+                        usageProjects: usageProjects, quinjetSessions: quinjetSessions), prefix))
         }
         if let separator = prefix.firstIndex(of: "=") {
             let option = String(prefix[..<separator])
-            if let kind = node.optionValues[option] {
+            if let kind = optionValues[option] {
                 let valuePrefix = String(prefix[prefix.index(after: separator)...])
                 let candidates = filtered(
                     values(
                         for: kind, machines: machines, configKeys: configKeys,
                         extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
-                        previous: positionals.last, shelfItems: shelfItems,
+                        appLinks: appLinks, previous: positionals.last, shelfItems: shelfItems,
                         musicTracks: musicTracks, calendarEvents: calendarEvents,
-                        usageChatIDs: usageChatIDs, usageProjects: usageProjects,
-                        quinjetSessions: quinjetSessions), valuePrefix)
+                        runningApps: runningApps, usageChatIDs: usageChatIDs,
+                        usageProjects: usageProjects, quinjetSessions: quinjetSessions), valuePrefix
+                )
                 return CompletionResult(candidates: candidates.map { option + "=" + $0 })
             }
         }
         if prefix.hasPrefix("-") {
             return CompletionResult(
-                candidates: filtered(node.options + CommandTree.inherited, prefix))
+                candidates: filtered(
+                    helpRoute
+                        ? CommandTree.inherited : effectiveOptions(node: node, command: command),
+                    prefix))
         }
-        var candidates = node.children.map(\.name)
+        var candidates = node.name == "ed" && !helpRoute ? [CommandTree.help.name] : []
+        candidates += node.children.map(\.name)
         if node.name == "ed" {
-            candidates += machines
+            if !helpRoute { candidates += machines }
         }
         var wantsFiles = false
         let slot = positionals.count
-        if slot < node.arguments.count {
-            let kind = node.arguments[slot]
+        let arguments = helpRoute ? [] : effectiveArguments(node: node, command: command)
+        if slot < arguments.count {
+            let kind = arguments[slot]
             let values = values(
                 for: kind, machines: machines, configKeys: configKeys,
                 extensionIDs: extensionIDs, toolIDs: toolIDs, usageSources: usageSources,
-                previous: positionals.last, shelfItems: shelfItems, musicTracks: musicTracks,
-                calendarEvents: calendarEvents, usageChatIDs: usageChatIDs,
-                usageProjects: usageProjects, quinjetSessions: quinjetSessions)
+                appLinks: appLinks, previous: positionals.last, shelfItems: shelfItems,
+                musicTracks: musicTracks, calendarEvents: calendarEvents,
+                runningApps: runningApps, usageChatIDs: usageChatIDs,
+                usageProjects: usageProjects,
+                quinjetSessions: quinjetSessions)
             candidates += values
             if kind == .localPath { wantsFiles = true }
             if kind == .quinjetPath { wantsFiles = quinjetPathIsLocal(leading) }
@@ -136,12 +195,16 @@ public enum CompletionEngine {
     static func values(
         for kind: ArgumentKind, machines: [String], configKeys: [String], extensionIDs: [String],
         toolIDs: [String] = ToolProvisioning.all.map(\.id), usageSources: [String] = [],
-        previous: String?, shelfItems: [String] = [], musicTracks: [String] = [],
-        calendarEvents: [String] = [], usageChatIDs: [String] = [],
-        usageProjects: [String] = [], quinjetSessions: [String] = []
+        appLinks: [String] = ["repository", "creator"], previous: String?,
+        shelfItems: [String] = [], musicTracks: [String] = [],
+        calendarEvents: [String] = [], runningApps: [String] = [],
+        usageChatIDs: [String] = [], usageProjects: [String] = [],
+        quinjetSessions: [String] = []
     ) -> [String] {
         switch kind {
         case .machine: return machines
+        case .appPath: return AppPathID.allCases.map(\.rawValue)
+        case .appLink: return appLinks
         case .configKey: return configKeys
         case .configValue:
             guard let previous, let definition = ConfigCatalog.definition(for: previous) else {
@@ -161,6 +224,7 @@ public enum CompletionEngine {
         case .attentionCategory: return AttentionSettings.defaultCategories.map(\.id)
         case .attentionEntity: return []
         case .appAction: return AppActions.all.map(\.name)
+        case .runningApp: return runningApps
         case .cleanerCategory: return JunkCatalog.entries.map(\.id)
         case .colorFormat: return ColorCopyFormat.allCases.map(\.rawValue)
         case .colorIndex:
@@ -193,6 +257,124 @@ public enum CompletionEngine {
             guard value.hasPrefix(prefix), seen.insert(value).inserted else { return false }
             return true
         }
+    }
+
+    private static func parserChild(_ name: String, in command: ParsableCommand.Type)
+        -> ParsableCommand.Type?
+    {
+        command.configuration.subcommands.first {
+            $0.configuration.commandName == name || $0.configuration.aliases.contains(name)
+        }
+    }
+
+    private static func defaultNode(node: CommandNode, command: ParsableCommand.Type)
+        -> CommandNode?
+    {
+        guard let fallback = command.configuration.defaultSubcommand,
+            let name = fallback.configuration.commandName
+        else { return nil }
+        return node.child(name)
+    }
+
+    private static func defaultRoute(node: CommandNode, command: ParsableCommand.Type)
+        -> (node: CommandNode, command: ParsableCommand.Type)?
+    {
+        guard let fallback = command.configuration.defaultSubcommand,
+            let fallbackNode = defaultNode(node: node, command: command)
+        else { return nil }
+        return (fallbackNode, fallback)
+    }
+
+    private static func selectDefaultRoute(
+        for option: String?, node: inout CommandNode, command: inout ParsableCommand.Type,
+        optionValues: inout [String: ArgumentKind], enabled: Bool
+    ) {
+        guard enabled, let route = defaultRoute(node: node, command: command) else { return }
+        if let option {
+            guard route.node.options.contains(option), !parserOptionNames(command).contains(option)
+            else { return }
+        }
+        node = route.node
+        command = route.command
+        optionValues = effectiveOptionValues(node: node, command: command)
+    }
+
+    private static func passthroughResult(
+        node: CommandNode, positionals: [String], remaining: ArraySlice<String>, prefix: String
+    ) -> CompletionResult? {
+        guard let passthrough = node.passthroughCompletion,
+            positionals.count >= passthrough.afterPositionals
+        else { return nil }
+        guard let machinePosition = passthrough.remoteMachinePosition,
+            machinePosition < positionals.count
+        else { return CompletionResult() }
+        var payload = Array(remaining)
+        if payload.first == "--" { payload.removeFirst() }
+        let words = ["ed", positionals[machinePosition]] + payload + [prefix]
+        return CompletionResult(
+            remoteMachine: positionals[machinePosition],
+            remoteRequest: CompletionRequest(words: words, index: words.count - 1))
+    }
+
+    private static func effectiveOptions(node: CommandNode, command: ParsableCommand.Type)
+        -> [String]
+    {
+        node.options + (defaultNode(node: node, command: command)?.options ?? [])
+            + CommandTree.inherited
+    }
+
+    private static func effectiveOptionValues(
+        node: CommandNode, command: ParsableCommand.Type
+    ) -> [String: ArgumentKind] {
+        var values = parserOptionValues(command)
+        if let fallback = command.configuration.defaultSubcommand {
+            values.merge(parserOptionValues(fallback)) { _, fallbackValue in fallbackValue }
+        }
+        values.merge(defaultNode(node: node, command: command)?.optionValues ?? [:]) {
+            _, typedValue in typedValue
+        }
+        values.merge(node.optionValues) { _, nodeValue in nodeValue }
+        return values
+    }
+
+    private static func parserOptionValues(_ command: ParsableCommand.Type)
+        -> [String: ArgumentKind]
+    {
+        var values: [String: ArgumentKind] = [:]
+        for line in command.helpMessage(columns: 400).split(separator: "\n") {
+            guard line.hasPrefix("  -"), !line.hasPrefix("   ") else { continue }
+            let declaration = line.dropFirst(2)
+                .split(separator: " ", omittingEmptySubsequences: false)
+                .prefix { !$0.isEmpty }
+            guard declaration.contains(where: { $0.contains("<") }) else { continue }
+            for token in declaration where token.hasPrefix("-") {
+                let option = token.prefix { $0 != "," && $0 != "<" && $0 != "=" }
+                if option.count > 1 { values[String(option)] = .free }
+            }
+        }
+        return values
+    }
+
+    private static func parserOptionNames(_ command: ParsableCommand.Type) -> Set<String> {
+        Set(
+            command.helpMessage(columns: 400).split(separator: "\n").flatMap { line -> [String] in
+                guard line.hasPrefix("  -"), !line.hasPrefix("   ") else { return [] }
+                let declaration = line.dropFirst(2)
+                    .split(separator: " ", omittingEmptySubsequences: false)
+                    .prefix { !$0.isEmpty }
+                return declaration.compactMap { token in
+                    guard token.hasPrefix("-") else { return nil }
+                    let option = token.prefix { $0 != "," && $0 != "<" && $0 != "=" }
+                    return option.count > 1 ? String(option) : nil
+                }
+            })
+    }
+
+    private static func effectiveArguments(node: CommandNode, command: ParsableCommand.Type)
+        -> [ArgumentKind]
+    {
+        node.arguments.isEmpty
+            ? defaultNode(node: node, command: command)?.arguments ?? [] : node.arguments
     }
 
     private static func quinjetPathIsLocal(_ words: [String]) -> Bool {

@@ -389,14 +389,19 @@ struct CompleteCommand: AsyncParsableCommand {
             extensionIDs: ExtensionRegistry.entries.map(\.id), shelfItems: shelfItems,
             musicTracks: musicTracks, calendarEvents: calendarEvents,
             toolIDs: ToolProvisioning.all.map(\.id),
-            usageSources: usageDocument?.sources?.sorted() ?? [], usageChatIDs: usageChatIDs,
-            usageProjects: usageProjects,
+            usageSources: usageDocument?.sources?.sorted() ?? [],
+            runningApps: RunningAppOperationCenter().completionValues(),
+            appLinks: AppInspectionCLI.center.links(
+                contributors: AppInspectionCLI.contributors
+            ).map(\.id), usageChatIDs: usageChatIDs, usageProjects: usageProjects,
             quinjetSessions: quinjetSessions)
         if let name = result.remoteMachine,
             let machine = try? MachineDirectory.resolve(
                 name, in: machines)
         {
-            for candidate in await RemoteCompletion.candidates(machine: machine, request: request) {
+            for candidate in await RemoteCompletion.candidates(
+                machine: machine, request: result.remoteRequest ?? request)
+            {
                 CLIOut.out(candidate)
             }
             return

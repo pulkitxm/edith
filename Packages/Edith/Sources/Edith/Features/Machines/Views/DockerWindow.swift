@@ -53,29 +53,82 @@ enum DockerDetailTab: String, CaseIterable, Identifiable {
 }
 
 struct PrunePlan: Identifiable, Equatable {
-    let kind: String
+    let kind: DockerPruneTarget
 
-    var id: String { kind }
+    var id: String { kind.rawValue }
 
     var title: String {
         switch kind {
-        case "images": return "Prune unused images?"
-        case "volumes": return "Prune unused volumes?"
-        case "networks": return "Prune unused networks?"
-        default: return "Prune the build cache?"
+        case .images: return "Prune unused images?"
+        case .volumes: return "Prune unused volumes?"
+        case .networks: return "Prune unused networks?"
+        case .builder: return "Prune the build cache?"
+        case .system: return "Prune unused Docker objects?"
         }
     }
 
     var detail: String {
         switch kind {
-        case "images":
+        case .images:
             return "Every image no container is using is deleted on the machine and has to be "
                 + "pulled again."
-        case "volumes":
+        case .volumes:
             return "Every volume no container is using is deleted on the machine, along with the "
                 + "data inside it. This cannot be undone."
-        case "networks": return "Every network no container is attached to is deleted."
-        default: return "The build cache is deleted, so the next build starts from scratch."
+        case .networks: return "Every network no container is attached to is deleted."
+        case .builder: return "The build cache is deleted, so the next build starts from scratch."
+        case .system:
+            return "Stopped containers, unused networks, dangling images, and build cache are "
+                + "deleted. Volumes are left alone."
+        }
+    }
+}
+
+enum DockerObjectRemovalPlan: Identifiable, Equatable {
+    case image(String)
+    case volume(String)
+
+    var id: String {
+        switch self {
+        case let .image(reference): "image:\(reference)"
+        case let .volume(name): "volume:\(name)"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .image: "Remove this image?"
+        case .volume: "Remove this volume?"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case let .image(reference):
+            "\(reference) is deleted from the machine and has to be pulled again."
+        case let .volume(name):
+            "\(name) and all of its data are deleted. This cannot be undone."
+        }
+    }
+
+    var operation: DockerLifecycleOperation {
+        switch self {
+        case .image: .removeImage
+        case .volume: .removeVolume
+        }
+    }
+
+    var target: DockerLifecycleTarget {
+        switch self {
+        case let .image(reference): .image(reference, force: false)
+        case let .volume(name): .volume(name)
+        }
+    }
+
+    var busyID: String {
+        switch self {
+        case let .image(reference): reference
+        case let .volume(name): name
         }
     }
 }
@@ -90,6 +143,7 @@ struct DockerConsoleView: View {
     @State private var error: String?
     @State private var terminalFor: DockerContainer?
     @State private var pendingRemoval: DockerContainer?
+    @State private var pendingObjectRemoval: DockerObjectRemovalPlan?
     @State private var pendingPrune: PrunePlan?
 
     private var dark: Bool { scheme == .dark }
@@ -120,12 +174,30 @@ struct DockerConsoleView: View {
         ) {
             Button("Remove", role: .destructive) {
                 if let container = pendingRemoval {
-                    perform(DockerCommands.lifecycle("rm", id: container.id), on: container.id)
+                    perform(
+                        .removeContainer, target: .containers([container.id]), on: container.id)
                     if selected?.id == container.id { selected = nil }
                 }
                 pendingRemoval = nil
             }
             Button("Cancel", role: .cancel) { pendingRemoval = nil }
+        }
+        .confirmationDialog(
+            pendingObjectRemoval?.title ?? "Remove Docker object?",
+            isPresented: Binding(
+                get: { pendingObjectRemoval != nil },
+                set: { if !$0 { pendingObjectRemoval = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Remove", role: .destructive) {
+                if let plan = pendingObjectRemoval {
+                    perform(plan.operation, target: plan.target, on: plan.busyID)
+                }
+                pendingObjectRemoval = nil
+            }
+            Button("Cancel", role: .cancel) { pendingObjectRemoval = nil }
+        } message: {
+            Text(pendingObjectRemoval?.detail ?? "")
         }
         .confirmationDialog(
             pendingPrune?.title ?? "Prune?",
@@ -135,7 +207,7 @@ struct DockerConsoleView: View {
         ) {
             Button("Prune", role: .destructive) {
                 if let plan = pendingPrune {
-                    perform(DockerCommands.prune(plan.kind), on: "prune")
+                    perform(.prune, target: .prune(plan.kind), on: "prune")
                 }
                 pendingPrune = nil
             }
@@ -217,7 +289,7 @@ struct DockerConsoleView: View {
                 session: session, container: container, dark: dark,
                 onBack: { selected = nil },
                 onAction: { action in
-                    performLifecycle(action, containerIDs: [container.id], on: container.id)
+                    performContainerAction(action, ids: [container.id], on: container.id)
                 },
                 onShell: { terminalFor = container },
                 onRemove: { pendingRemoval = container },
@@ -256,10 +328,10 @@ struct DockerConsoleView: View {
             .buttonStyle(HoverButtonStyle())
             .help("Refresh")
             Menu {
-                Button("Prune unused images…") { pendingPrune = PrunePlan(kind: "images") }
-                Button("Prune unused volumes…") { pendingPrune = PrunePlan(kind: "volumes") }
-                Button("Prune networks…") { pendingPrune = PrunePlan(kind: "networks") }
-                Button("Prune build cache…") { pendingPrune = PrunePlan(kind: "builder") }
+                Button("Prune unused images…") { pendingPrune = PrunePlan(kind: .images) }
+                Button("Prune unused volumes…") { pendingPrune = PrunePlan(kind: .volumes) }
+                Button("Prune networks…") { pendingPrune = PrunePlan(kind: .networks) }
+                Button("Prune build cache…") { pendingPrune = PrunePlan(kind: .builder) }
             } label: {
                 Image(systemName: "trash")
             }
@@ -280,28 +352,26 @@ struct DockerConsoleView: View {
                 session: session, query: query, dark: dark, busyIDs: busyIDs,
                 onOpen: { selected = $0 },
                 onAction: { container, action in
-                    performLifecycle(action, containerIDs: [container.id], on: container.id)
+                    performContainerAction(action, ids: [container.id], on: container.id)
                 },
                 onShell: { terminalFor = $0 },
                 onRemove: { pendingRemoval = $0 },
                 onGroupAction: { key, containers, action in
                     guard !containers.isEmpty else { return }
                     let project = String(key.dropFirst(DockerContainerList.groupKeyPrefix.count))
-                    perform(
-                        DockerCommands.lifecycle(action, ids: containers.map(\.id)), on: key,
+                    performContainerAction(
+                        action, ids: containers.map(\.id), on: key,
                         describing: "\(action == "start" ? "Start" : "Stop") failed for "
                             + (project.isEmpty ? "Standalone" : project))
                 })
         case .images:
             DockerSimpleList(
                 rows: imageRows, dark: dark,
-                onDelete: { id in
-                    perform(DockerCommands.removeImage(id, force: false), on: id)
-                })
+                onDelete: { pendingObjectRemoval = .image($0) })
         case .volumes:
             DockerSimpleList(
                 rows: volumeRows, dark: dark,
-                onDelete: { name in perform(DockerCommands.removeVolume(name), on: name) })
+                onDelete: { pendingObjectRemoval = .volume($0) })
         case .networks:
             DockerSimpleList(rows: networkRows, dark: dark, onDelete: nil)
         case .system:
@@ -342,7 +412,55 @@ struct DockerConsoleView: View {
             }
     }
 
-    private func perform(_ command: String, on id: String, describing: String? = nil) {
+    private func perform(
+        _ operation: DockerLifecycleOperation, target: DockerLifecycleTarget, on id: String,
+        describing: String? = nil
+    ) {
+        busyIDs.insert(id)
+        error = nil
+        Task {
+            let result = await DockerLifecycleOperationExecution.perform(
+                operation, target: target,
+                using: { command, timeout in
+                    await session.runDocker(command, timeout: timeout)
+                })
+            busyIDs.remove(id)
+            if case let .failure(failure) = result {
+                let detail = failure.localizedDescription
+                error = describing.map { "\($0): \(detail)" } ?? detail
+            }
+            await session.refreshImagesAndVolumes()
+        }
+    }
+
+    private func performContainerAction(
+        _ action: String, ids: [String], on id: String, describing: String? = nil
+    ) {
+        if let operation = DockerLifecycleOperation(cliVerb: action) {
+            perform(operation, target: .containers(ids), on: id, describing: describing)
+            return
+        }
+        guard let operation = MachineDockerPauseOperation(rawValue: action) else {
+            performCommand(
+                DockerCommands.lifecycle(action, ids: ids), on: id, describing: describing)
+            return
+        }
+        busyIDs.insert(id)
+        error = nil
+        Task {
+            let result = await MachineDockerPauseOperationExecution.perform(
+                operation, containerIDs: ids,
+                using: { command, _ in await session.runDocker(command) })
+            busyIDs.remove(id)
+            if case let .failure(failure) = result {
+                let detail = failure.localizedDescription
+                error = describing.map { "\($0): \(detail)" } ?? detail
+            }
+            await session.refreshImagesAndVolumes()
+        }
+    }
+
+    private func performCommand(_ command: String, on id: String, describing: String? = nil) {
         busyIDs.insert(id)
         error = nil
         Task {
@@ -356,26 +474,6 @@ struct DockerConsoleView: View {
         }
     }
 
-    private func performLifecycle(
-        _ action: String, containerIDs: [String], on id: String
-    ) {
-        guard let operation = MachineDockerPauseOperation(rawValue: action) else {
-            perform(DockerCommands.lifecycle(action, ids: containerIDs), on: id)
-            return
-        }
-        busyIDs.insert(id)
-        error = nil
-        Task {
-            let result = await MachineDockerPauseOperationExecution.perform(
-                operation, containerIDs: containerIDs,
-                using: { command, _ in await session.runDocker(command) })
-            busyIDs.remove(id)
-            if case let .failure(failure) = result {
-                error = failure.localizedDescription
-            }
-            await session.refreshImagesAndVolumes()
-        }
-    }
 }
 
 struct DockerRow: Identifiable {

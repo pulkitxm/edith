@@ -45,6 +45,7 @@ jobs:
       source: ${{ steps.areas.outputs.source }}
       companion: ${{ steps.areas.outputs.companion }}
       companion_runtime: ${{ steps.areas.outputs.companion_runtime }}
+      release_artifact: ${{ steps.areas.outputs.release_artifact }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -90,6 +91,7 @@ jobs:
           area source '\.(swift|js|mjs|ts|tsx|css|json|ya?ml|html)$'
           area companion '^apps/companion/'
           area companion_runtime '^apps/companion/(Dockerfile|compose(\.[^/]+)?\.yaml)$'
+          area release_artifact '^(Packages/Edith/(Package\.(swift|resolved)|Sources/|Vendor/)|Resources/|edth\.xcodeproj/|build\.sh$)'
 
   checks:
     name: checks
@@ -277,7 +279,7 @@ jobs:
       && ((needs.changes.outputs.companion != 'true'
       && needs.changes.outputs.workflows != 'true') || needs.companion.result == 'success')
       && ((github.event_name == 'push'
-      && needs.changes.outputs.swift == 'true')
+      && needs.changes.outputs.release_artifact == 'true')
       || (github.event_name == 'workflow_dispatch' && inputs.release))
     permissions:
       contents: write
