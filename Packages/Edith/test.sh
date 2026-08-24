@@ -21,4 +21,4 @@ if [[ -d "$FW/Testing.framework" ]]; then
          -Xlinker -rpath -Xlinker "$FW"
          -Xlinker -rpath -Xlinker "$LIB")
 fi
-exec swift test ${FLAGS[@]+"${FLAGS[@]}"} "$@"
+exec swift test --no-parallel ${FLAGS[@]+"${FLAGS[@]}"} "$@"

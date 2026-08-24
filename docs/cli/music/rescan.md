@@ -30,7 +30,7 @@ library`.
 
 This walks the disk itself and needs nothing running, then posts
 `musicFolderChanged` so a live Edith rescans too. With no music folder
-configured it exits 4.
+configured it exits 4 and points to `ed music library ~/Music`.
 
 ## Where to go next
 

@@ -373,6 +373,9 @@ public enum CommandTree {
                         "reveal-current", "Reveal the current track or open its player.",
                         options: playback, optionValues: playbackValues),
                     CommandNode(
+                        "library", "Choose the folder Edith uses as its music library.",
+                        options: common, arguments: [.localPath]),
+                    CommandNode(
                         "start", "Play one track, or a whole folder.",
                         options: ["--json", "--help", "--folder"], arguments: [.free]),
                     CommandNode(

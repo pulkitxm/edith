@@ -68,6 +68,12 @@ public enum UserOperationCatalog {
         + MusicLibraryOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + MusicLibraryContentOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + MusicFolderSelectionOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + MusicTransportOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -653,6 +659,39 @@ private extension MusicLibraryOperation {
     }
 }
 
+private extension MusicLibraryContentOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list:
+            userInterface("Music page", "browse the library")
+        case .rescan:
+            userInterface("Music page", "rescan the library")
+        case .createFolder:
+            userInterface("Music page", "make a folder", ["Chill"])
+        case .move:
+            userInterface("Music page", "move a track into a folder", ["song", "Chill"])
+        case .rename:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Music page", action: "rename a track",
+                    exampleArguments: ["song", "New"]),
+                UserInterfaceActionPlacement(
+                    surface: "Music page", action: "rename a folder",
+                    exampleArguments: ["--folder", "Chill", "Calm"]),
+            ])
+        case .remove:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Music page", action: "move a track to the Trash",
+                    exampleArguments: ["song", "--yes"]),
+                UserInterfaceActionPlacement(
+                    surface: "Music page", action: "move a folder to the Trash",
+                    exampleArguments: ["--folder", "Chill", "--yes"]),
+            ])
+        }
+    }
+}
+
 private extension MusicTransportOperation {
     var interfaceExposure: UserOperationExposure {
         switch self {
@@ -669,7 +708,14 @@ private extension MusicTransportOperation {
         case .previous:
             userInterface("Music player", "skip back")
         case .start:
-            userInterface("Music page", "click a track to play it", ["song"])
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Music page", action: "click a track to play it",
+                    exampleArguments: ["song"]),
+                UserInterfaceActionPlacement(
+                    surface: "Music page", action: "play a whole folder",
+                    exampleArguments: ["--folder", "Chill"]),
+            ])
         case .seek:
             userInterface("Music footer", "drag the seek bar", ["0.5"])
         case .volume:
@@ -764,6 +810,12 @@ private extension ConfigurationOperation {
         case .import:
             commandLineOnly("The app restores settings through iCloud instead of importing JSON.")
         }
+    }
+}
+
+private extension MusicFolderSelectionOperation {
+    var interfaceExposure: UserOperationExposure {
+        userInterface("Music page", "choose the music folder", ["~/Music"])
     }
 }
 

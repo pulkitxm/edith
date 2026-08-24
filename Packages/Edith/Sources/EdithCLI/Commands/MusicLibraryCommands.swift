@@ -5,13 +5,13 @@ import Foundation
 enum LibraryBridge {
     static func requireFolder() throws {
         guard
-            let path = CLIEnvironment.sharedDefaults.string(forKey: Repo.musicFolderPathKey),
-            !path.isEmpty
+            Repo.selectedMusicDirectory(
+                defaults: CLIEnvironment.sharedDefaults,
+                homeDirectory: CLIEnvironment.homeDirectory) != nil
         else {
             throw CLIFailure.unavailable(
                 "no music folder is set",
-                hint: "choose one in Edith under Music, or run `ed config set musicFolderPath "
-                    + "~/Music`")
+                hint: "choose one in Edith under Music, or run `ed music library ~/Music`")
         }
     }
 
@@ -77,6 +77,43 @@ enum LibraryBridge {
     }
 }
 
+struct MusicLibraryFolderCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "library", abstract: "Choose the folder Edith uses as its music library.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Folder to use. A leading tilde expands to your home folder.")
+    var path: String
+
+    func run() async throws {
+        try await execute {
+            let result: MusicFolderSelectionResult
+            do {
+                result = try MusicFolderSelectionOperationExecution.select(
+                    path, defaults: CLIEnvironment.sharedDefaults,
+                    homeDirectory: CLIEnvironment.homeDirectory,
+                    announce: { AppBridge.post(IPC.Name.musicFolderChanged) })
+            } catch let error as MusicFolderSelectionError {
+                throw CLIFailure.notFound(error.localizedDescription)
+            }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "path": .string(result.path), "changed": .bool(result.changed),
+                        "external": .bool(result.confirmsExternalStorage),
+                    ]))
+                return
+            }
+            CLIOut.out(
+                result.changed
+                    ? "music library set to \(result.path)"
+                    : "music library already uses \(result.path)")
+        }
+    }
+}
+
 struct MusicListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ls",
@@ -101,16 +138,13 @@ struct MusicListCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let target = try LibraryBridge.folder(folder)
-            let tracks =
-                recursive
-                ? TrackMeta.tracks(under: target.relativePath)
-                : TrackMeta.entries(in: target.relativePath).tracks
-            let children = TrackMeta.subfolders(in: target.relativePath)
+            let listing = MusicLibraryContentOperationExecution.list(
+                target, recursive: recursive)
             let needle = (search ?? "").lowercased()
             let shown =
                 needle.isEmpty
-                ? tracks
-                : tracks.filter {
+                ? listing.tracks
+                : listing.tracks.filter {
                     $0.relativePath.lowercased().contains(needle)
                         || $0.title.lowercased().contains(needle)
                 }
@@ -119,7 +153,7 @@ struct MusicListCommand: AsyncParsableCommand {
                     .object([
                         "folder": .string(target.relativePath),
                         "folders": .array(
-                            children.map {
+                            listing.folders.map {
                                 .object([
                                     "path": .string($0.relativePath),
                                     "name": .string($0.name),
@@ -131,20 +165,20 @@ struct MusicListCommand: AsyncParsableCommand {
                     ]))
                 return
             }
-            if !children.isEmpty {
+            if !listing.folders.isEmpty {
                 CLIOut.out(
                     TextTable.render(
                         headers: ["FOLDER", "TRACKS"],
-                        rows: children.map {
+                        rows: listing.folders.map {
                             [$0.relativePath, String(TrackMeta.trackCount(under: $0.relativePath))]
                         }))
             }
             guard !folders else { return }
             guard !shown.isEmpty else {
-                if children.isEmpty { CLIOut.note("nothing here") }
+                if listing.folders.isEmpty { CLIOut.note("nothing here") }
                 return
             }
-            if !children.isEmpty { CLIOut.out("") }
+            if !listing.folders.isEmpty { CLIOut.out("") }
             CLIOut.out(
                 TextTable.render(
                     headers: ["TITLE", "PATH"],
@@ -171,7 +205,8 @@ struct MusicNewFolderCommand: AsyncParsableCommand {
             _ = try LibraryBridge.folder(under)
             let made: MusicFolder
             do {
-                made = try MusicLibrary.createFolder(named: name, under: under)
+                made = try MusicLibraryContentOperationExecution.createFolder(
+                    named: name, under: under)
             } catch {
                 throw LibraryBridge.fail(error)
             }
@@ -207,7 +242,7 @@ struct MusicMoveCommand: AsyncParsableCommand {
             _ = try LibraryBridge.folder(folder)
             let move: MusicLibrary.Move
             do {
-                move = try MusicLibrary.move(found, toFolder: folder)
+                move = try MusicLibraryContentOperationExecution.move(found, to: folder)
             } catch {
                 throw LibraryBridge.fail(error)
             }
@@ -244,10 +279,11 @@ struct MusicRenameCommand: AsyncParsableCommand {
         try await execute {
             let move: MusicLibrary.Move
             do {
-                move =
+                let target: MusicLibraryRenameTarget =
                     folder
-                    ? try MusicLibrary.renameFolder(LibraryBridge.folder(target), to: name)
-                    : try MusicLibrary.rename(LibraryBridge.track(target), to: name)
+                    ? .folder(try LibraryBridge.folder(target))
+                    : .track(try LibraryBridge.track(target))
+                move = try MusicLibraryContentOperationExecution.rename(target, to: name)
             } catch let failure as CLIFailure {
                 throw failure
             } catch {
@@ -289,30 +325,27 @@ struct MusicRemoveCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let path: String
-            let count: Int
-            if folder {
-                let found = try LibraryBridge.folder(target)
-                path = found.relativePath
-                count = TrackMeta.trackCount(under: found.relativePath)
-                guard yes else { return preview(path, count: count) }
-                do { try MusicLibrary.trashFolder(found) } catch { throw LibraryBridge.fail(error) }
-            } else {
-                let found = try LibraryBridge.track(target)
-                path = found.relativePath
-                count = 1
-                guard yes else { return preview(path, count: count) }
-                do { try MusicLibrary.trash(found) } catch { throw LibraryBridge.fail(error) }
+            let target: MusicLibraryRemovalTarget =
+                folder
+                ? .folder(try LibraryBridge.folder(target))
+                : .track(try LibraryBridge.track(target))
+            let plan = MusicLibraryContentOperationExecution.removalPlan(target)
+            guard yes else { return preview(plan.path, count: plan.trackCount) }
+            do {
+                try MusicLibraryContentOperationExecution.remove(plan)
+            } catch {
+                throw LibraryBridge.fail(error)
             }
             LibraryBridge.announce()
             guard !json else {
                 CLIOut.json(
                     .object([
-                        "path": .string(path), "tracks": .int(count), "trashed": .bool(true),
+                        "path": .string(plan.path), "tracks": .int(plan.trackCount),
+                        "trashed": .bool(true),
                     ]))
                 return
             }
-            CLIOut.out("moved \(path) to the Trash")
+            CLIOut.out("moved \(plan.path) to the Trash")
         }
     }
 
@@ -568,8 +601,7 @@ struct MusicRescanCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             try LibraryBridge.requireFolder()
-            TrackMeta.invalidateCaches()
-            let tracks = TrackMeta.scanMusicFolder().count
+            let tracks = MusicLibraryContentOperationExecution.rescan().count
             LibraryBridge.announce()
             guard !json else {
                 CLIOut.json(.object(["tracks": .int(tracks)]))

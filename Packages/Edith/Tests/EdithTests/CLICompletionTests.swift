@@ -288,6 +288,13 @@ import Testing
             Self.plan(["ed", "tools", "install", ""], 3).candidates.contains("quinjet"))
     }
 
+    @Test func musicLibrarySelectionCompletesFilesystemPaths() {
+        let result = Self.plan(["ed", "music", "library", ""], 3)
+
+        #expect(result.wantsFiles)
+        #expect(!ConfigCatalog.keys.contains(Repo.musicFolderPathKey))
+    }
+
     @Test func runningApplicationsCompleteForQuit() {
         let result = CompletionEngine.plan(
             CompletionRequest(words: ["ed", "apps", "quit", "Sa"], index: 3),
