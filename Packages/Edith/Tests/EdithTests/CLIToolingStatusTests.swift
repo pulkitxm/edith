@@ -144,6 +144,11 @@ import Testing
         #expect(installed.succeeded)
         #expect(Set(installed.result.linked) == Set(CLIInstaller.toolNames))
         #expect(installed.onPath)
+        let alreadyInstalled = TerminalToolingOperationExecution.install(
+            toolsDirectory: tools, into: target,
+            environment: ["PATH": target.path])
+        #expect(alreadyInstalled.succeeded)
+        #expect(alreadyInstalled.result.linked.isEmpty)
 
         let removed = TerminalToolingOperationExecution.remove(from: target)
         #expect(removed.succeeded)

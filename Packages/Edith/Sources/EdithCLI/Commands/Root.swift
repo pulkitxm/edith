@@ -351,7 +351,10 @@ struct InstallCommand: AsyncParsableCommand {
                     ]))
                 return
             }
-            CLIOut.out("linked \(result.linked.joined(separator: ", ")) in \(result.directory)")
+            CLIOut.out(
+                result.linked.isEmpty
+                    ? "already installed in \(result.directory)"
+                    : "linked \(result.linked.joined(separator: ", ")) in \(result.directory)")
             if !outcome.onPath {
                 CLIOut.note("note: \(result.directory) is not on PATH")
             }

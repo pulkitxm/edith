@@ -276,8 +276,12 @@ struct TerminalSettingsPane: View {
                 "Wrote \(count) and the ~/.zshrc line. Run  exec zsh  in any open terminal."
             )
         case .copySourceLine:
+            let line = await Task.detached(priority: .userInitiated) {
+                TerminalToolingOperationExecution.fallbackSource(for: .zsh)
+            }.value
+            sourceLine = line
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(sourceLine, forType: .string)
+            NSPasteboard.general.setString(line, forType: .string)
             return (true, "Copied the line to the clipboard.")
         }
     }
