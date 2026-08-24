@@ -52,12 +52,14 @@ public struct ExtensionRegistryEntry: Identifiable, Equatable, Sendable {
     public let requiredCapabilities: [PlatformCapability]
     public let optionalCapabilities: [PlatformCapability]
     public let requiredToolIDs: [String]
+    public let optionalToolIDs: [String]
 
     public init(
         id: String, title: String, subtitle: String, symbolName: String,
         group: ExtensionGroup, featured: Bool, defaultsKey: String,
         requiredCapabilities: [PlatformCapability],
-        optionalCapabilities: [PlatformCapability] = [], requiredToolIDs: [String] = []
+        optionalCapabilities: [PlatformCapability] = [], requiredToolIDs: [String] = [],
+        optionalToolIDs: [String] = []
     ) {
         self.id = id
         self.title = title
@@ -69,6 +71,7 @@ public struct ExtensionRegistryEntry: Identifiable, Equatable, Sendable {
         self.requiredCapabilities = requiredCapabilities
         self.optionalCapabilities = optionalCapabilities
         self.requiredToolIDs = requiredToolIDs
+        self.optionalToolIDs = optionalToolIDs
     }
 
     public func availability(
@@ -136,7 +139,7 @@ public enum ExtensionRegistry {
             subtitle: "Plays your local music folder, with media keys.",
             symbolName: "music.note", group: .media, featured: false,
             defaultsKey: "tabMusicEnabled", requiredCapabilities: [.localMusicPlayback],
-            optionalCapabilities: [.mediaControls], requiredToolIDs: ["yt-dlp"]),
+            optionalCapabilities: [.mediaControls], optionalToolIDs: ["yt-dlp"]),
         ExtensionRegistryEntry(
             id: "calendar", title: "Calendar",
             subtitle: "Shows your schedule in the panel and the app.",
