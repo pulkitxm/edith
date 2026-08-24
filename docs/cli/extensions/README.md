@@ -38,6 +38,13 @@ enables immediately and reports missing grants in plain text or JSON.
 | `ed extensions verify <id>` | Runs every readiness check for one extension |
 | `ed extensions doctor [id]` | Diagnoses one extension or all seventeen, with recovery commands |
 
+The Extensions pane and each extension settings modal use these same typed read
+operations. Marketplace browsing maps to `ls`, opening a modal maps to `info`,
+the readiness section maps to `status`, Check again maps to `verify`, and the
+displayed failure and recovery guidance maps to `doctor`. The UI and CLI share
+the same registry lookup, enabled-state read, lifecycle probe, and registry
+ordering.
+
 ## The registry
 
 `ExtensionRegistry.entries` in EdithKit is the single list every command here

@@ -50,6 +50,9 @@ public enum UserOperationCatalog {
         + AppInspectionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + ExtensionInspectionOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + ExtensionMutationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -471,6 +474,25 @@ private extension MachineDockerPauseOperation {
             userInterface("Docker window", "pause a container", ["box", "api"])
         case .unpause:
             userInterface("Docker window", "unpause a container", ["box", "api"])
+        }
+    }
+}
+
+private extension ExtensionInspectionOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list:
+            userInterface("Extensions pane", "browse registered extensions")
+        case .info:
+            userInterface(
+                "Extension settings", "inspect metadata and requirements", ["clipboard"])
+        case .status:
+            userInterface("Extension settings", "inspect live readiness", ["clipboard"])
+        case .verify:
+            userInterface("Extension settings", "check readiness again", ["clipboard"])
+        case .doctor:
+            userInterface(
+                "Extension settings", "inspect failures and recovery guidance", ["clipboard"])
         }
     }
 }

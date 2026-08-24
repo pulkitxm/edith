@@ -151,7 +151,7 @@ struct ExtensionsPane: View {
 
     private var filteredEntries: [ExtensionRegistryEntry] {
         ExtensionMarketplaceFilter.filter(
-            entries: ExtensionRegistry.entries, query: query, category: category)
+            entries: inspectionCenter.list().map(\.entry), query: query, category: category)
     }
 
     private var extensionGrid: some View {
@@ -176,7 +176,11 @@ struct ExtensionsPane: View {
     }
 
     private func openSettings(for entry: ExtensionRegistryEntry) {
-        selectedEntry = entry
+        selectedEntry = inspectionCenter.info(entry).entry
+    }
+
+    private var inspectionCenter: ExtensionInspectionCenter {
+        ExtensionInspectionCenter(environment: ExtensionMutationCenter.application.environment)
     }
 
     private func handleDeepLink(using proxy: ScrollViewProxy) {
@@ -535,7 +539,7 @@ private struct ExtensionLifecycleRows: View {
         self.invalidation = invalidation
         _readiness = State(
             initialValue: ExtensionReadinessModel {
-                await coordinator.lifecycleReport()
+                await coordinator.lifecycleReport($0)
             })
     }
 
@@ -563,7 +567,7 @@ private struct ExtensionLifecycleRows: View {
                         checkRow(check)
                     }
                     Button("Check again") {
-                        readiness.refresh()
+                        readiness.refresh(.verify)
                     }
                     .pointerCursor()
                 } else {
@@ -621,7 +625,7 @@ private struct ExtensionLifecycleRows: View {
         .task(id: "\(entry.id):\(invalidation)") {
             let discoveryTrace = PerformanceTrace.begin(.extensionDiscovery, "extensions.report")
             defer { PerformanceTrace.end(discoveryTrace) }
-            await readiness.refresh().value
+            await readiness.refresh(.status).value
         }
         .onDisappear { readiness.cancel() }
     }

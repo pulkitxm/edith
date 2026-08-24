@@ -98,13 +98,17 @@ public enum ExtensionModalMutationOutcome: Equatable, Sendable {
 public struct ExtensionModalCoordinator: Sendable {
     public let entry: ExtensionRegistryEntry
     public let mutationCenter: ExtensionMutationCenter
+    public let inspectionCenter: ExtensionInspectionCenter
 
     public init(
         entry: ExtensionRegistryEntry,
-        mutationCenter: ExtensionMutationCenter = ExtensionMutationCenter()
+        mutationCenter: ExtensionMutationCenter = ExtensionMutationCenter(),
+        inspectionCenter: ExtensionInspectionCenter? = nil
     ) {
         self.entry = entry
         self.mutationCenter = mutationCenter
+        self.inspectionCenter =
+            inspectionCenter ?? ExtensionInspectionCenter(environment: mutationCenter.environment)
     }
 
     public var route: ExtensionDetailRoute? {
@@ -143,9 +147,13 @@ public struct ExtensionModalCoordinator: Sendable {
         return mutationCenter.missingTools(for: entry).filter { active.contains($0.id) }
     }
 
-    public func lifecycleReport() async -> ExtensionLifecycleReport {
-        await ExtensionLifecycleProbe(environment: mutationCenter.environment.lifecycle)
-            .report(for: entry)
+    public func lifecycleReport(
+        _ operation: ExtensionInspectionOperation = .status
+    ) async -> ExtensionLifecycleReport {
+        let item = await inspectionCenter.inspect(entry, operation: operation)
+        return item.report
+            ?? ExtensionLifecycleReport(
+                state: .preference(extensionID: entry.id, enabled: item.enabled), checks: [])
     }
 }
 

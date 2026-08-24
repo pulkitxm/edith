@@ -7,11 +7,11 @@ import Testing
 @Suite struct ExtensionReadinessModelTests {
     @Test func newestRefreshOwnsPublicationWhenAnOlderLoadFinishesLast() async {
         let fixture = ExtensionReadinessFixture()
-        let model = ExtensionReadinessModel { await fixture.load() }
+        let model = ExtensionReadinessModel { await fixture.load($0) }
 
         let first = model.refresh()
         await fixture.waitUntilStarted(1)
-        let second = model.refresh()
+        let second = model.refresh(.verify)
         await fixture.waitUntilStarted(2)
 
         #expect(first.isCancelled)
@@ -19,6 +19,7 @@ import Testing
         await second.value
         #expect(model.report?.state.extensionID == "new")
         #expect(!model.isRefreshing)
+        #expect(await fixture.requestedOperations() == [.status, .verify])
 
         await fixture.release(0, report: report("old", phase: .failed))
         await first.value
@@ -28,7 +29,7 @@ import Testing
 
     @Test func cancellationInvalidatesABlockedResult() async {
         let fixture = ExtensionReadinessFixture()
-        let model = ExtensionReadinessModel { await fixture.load() }
+        let model = ExtensionReadinessModel { await fixture.load($0) }
 
         let task = model.refresh()
         await fixture.waitUntilStarted(1)
@@ -51,10 +52,12 @@ import Testing
 
 private actor ExtensionReadinessFixture {
     private var started = 0
+    private var operations: [ExtensionInspectionOperation] = []
     private var startWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
     private var loadWaiters: [Int: CheckedContinuation<ExtensionLifecycleReport, Never>] = [:]
 
-    func load() async -> ExtensionLifecycleReport {
+    func load(_ operation: ExtensionInspectionOperation) async -> ExtensionLifecycleReport {
+        operations.append(operation)
         let index = started
         started += 1
         let ready = startWaiters.filter { started >= $0.0 }
@@ -70,5 +73,9 @@ private actor ExtensionReadinessFixture {
 
     func release(_ index: Int, report: ExtensionLifecycleReport) {
         loadWaiters.removeValue(forKey: index)?.resume(returning: report)
+    }
+
+    func requestedOperations() -> [ExtensionInspectionOperation] {
+        operations
     }
 }
