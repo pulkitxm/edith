@@ -137,7 +137,7 @@ struct LimitsRefreshButton: View {
     var body: some View {
         Button {
             refreshing = true
-            IPC.post(IPC.Name.requestLimitsRefresh)
+            UsageCollectionOperationExecution.request(.limitsRefresh)
             Task {
                 try? await Task.sleep(nanoseconds: 10_000_000_000)
                 refreshing = false

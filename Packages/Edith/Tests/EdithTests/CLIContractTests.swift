@@ -339,7 +339,20 @@ enum JSONContract {
         JSONCase("ed usage summary", ["usage", "summary", "--json"]),
         JSONCase("ed usage daily", ["usage", "daily", "--json"]),
         JSONCase("ed usage models", ["usage", "models", "--json"]),
-        JSONCase("ed usage projects", ["usage", "projects", "--json"]),
+        JSONCase("ed usage projects list", ["usage", "projects", "list", "--json"]),
+        JSONCase(
+            "ed usage projects show", ["usage", "projects", "show", "nowhere", "--json"]),
+        JSONCase(
+            "ed usage projects open", ["usage", "projects", "open", "nowhere", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed usage projects copy-link",
+            ["usage", "projects", "copy-link", "nowhere", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed usage projects copy-chat",
+            ["usage", "projects", "copy-chat", "abc", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed usage sources", ["usage", "sources", "--json"]),
         JSONCase(
             "ed usage refresh", ["usage", "refresh", "--json"],

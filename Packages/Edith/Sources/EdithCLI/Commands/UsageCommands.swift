@@ -90,7 +90,9 @@ struct UsageLimitsCommand: AsyncParsableCommand {
                 let answered = await AppBridge.awaitReply(
                     IPC.Name.limitsUpdated, timeout: 20
                 ) {
-                    AppBridge.post(IPC.Name.requestLimitsRefresh)
+                    UsageCollectionOperationExecution.request(.limitsRefresh) {
+                        AppBridge.post($0)
+                    }
                 }
                 guard answered != nil else {
                     throw AppBridge.silence(
@@ -248,13 +250,54 @@ struct UsageModelsCommand: AsyncParsableCommand {
 
 struct UsageProjectsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "projects", abstract: "Cost and tokens per GitHub repository.")
+        commandName: "projects",
+        abstract: "Inspect usage by GitHub repository.",
+        subcommands: [
+            UsageProjectsListCommand.self, UsageProjectsShowCommand.self,
+            UsageProjectsOpenCommand.self, UsageProjectsCopyLinkCommand.self,
+            UsageProjectsCopyChatCommand.self,
+        ],
+        defaultSubcommand: UsageProjectsListCommand.self)
+}
+
+struct UsageProjectsRange: ParsableArguments {
+    @Option(help: "today, week, month or all.")
+    var range: String = "all"
+
+    func summaries() throws -> [UsageProjectSummary] {
+        guard let value = UsageRange(rawValue: range.lowercased()) else {
+            throw CLIFailure.notFound(
+                "no range named \(range)",
+                hint: "ranges: " + UsageRange.allCases.map(\.rawValue).joined(separator: ", "))
+        }
+        let document = try UsageDocument.load()
+        return UsageAnalysis.byProject(UsageAnalysis.days(document, range: value))
+    }
+
+    func resolve(_ query: String) throws -> (UsageProjectSummary, UsageProjectTarget) {
+        let summaries = try summaries()
+        do {
+            let target = try UsageProjectOperationExecution.resolve(
+                query, in: summaries.map(\.operationTarget))
+            guard let summary = summaries.first(where: { $0.repositoryID == target.repositoryID })
+            else {
+                throw CLIFailure.notFound("no usage repository matches \(query)")
+            }
+            return (summary, target)
+        } catch let error as UsageProjectOperationError {
+            throw error.cliFailure
+        }
+    }
+}
+
+struct UsageProjectsListCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "list", abstract: UsageProjectOperation.list.descriptor.summary)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    @Option(help: "today, week, month or all.")
-    var range: String = "all"
+    @OptionGroup var window: UsageProjectsRange
 
     @Option(help: "Show at most this many repositories.")
     var limit: Int?
@@ -267,15 +310,7 @@ struct UsageProjectsCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            guard let value = UsageRange(rawValue: range.lowercased()) else {
-                throw CLIFailure.notFound(
-                    "no range named \(range)",
-                    hint: "ranges: "
-                        + UsageRange.allCases.map(\.rawValue).joined(separator: ", "))
-            }
-            let document = try UsageDocument.load()
-            let allProjects = UsageAnalysis.byProject(
-                UsageAnalysis.days(document, range: value))
+            let allProjects = try window.summaries()
             let projects: [UsageProjectSummary]
             if let requested = self.limit {
                 let limit = try ArgumentChecks.positive(requested, "--limit")
@@ -295,6 +330,204 @@ struct UsageProjectsCommand: AsyncParsableCommand {
             }
             CLIOut.out(TextTable.render(headers: ["REPOSITORY", "COST", "TOKENS"], rows: rows))
         }
+    }
+}
+
+struct UsageProjectsShowCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "show", abstract: UsageProjectOperation.show.descriptor.summary)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @OptionGroup var window: UsageProjectsRange
+
+    @Argument(help: "Repository name, identity or URL.")
+    var repository: String
+
+    func run() async throws {
+        try await execute {
+            let (summary, _) = try window.resolve(repository)
+            guard !json else {
+                CLIOut.json(summary.json)
+                return
+            }
+            CLIOut.out("repository  \(summary.repositoryName)")
+            CLIOut.out("identity    \(summary.repositoryID)")
+            CLIOut.out("link        \(summary.repositoryURL ?? "-")")
+            CLIOut.out(String(format: "cost        %.2f", summary.cost))
+            CLIOut.out("tokens      \(Int(summary.tokens))")
+            CLIOut.out("")
+            CLIOut.out(
+                TextTable.render(
+                    headers: [
+                        "TYPE", "NAME", "CHAT ID", "SOURCE", "MACHINE", "PATH", "COST",
+                        "TOKENS",
+                    ],
+                    rows: Self.hierarchyRows(summary)))
+        }
+    }
+
+    static func hierarchyRows(_ summary: UsageProjectSummary) -> [[String]] {
+        summary.folders.flatMap { folder in
+            var rows = [
+                row(
+                    type: "folder", name: folder.folderName, machine: folder.machineName ?? "local",
+                    path: folder.path, cost: folder.cost, tokens: folder.tokens)
+            ]
+            rows += folder.chats.map {
+                chatRow($0, indent: "  ", machine: folder.machineName ?? "local")
+            }
+            for worktree in folder.worktrees {
+                rows.append(
+                    row(
+                        type: "worktree", name: "  \(worktree.name)",
+                        machine: folder.machineName ?? "local", path: nil,
+                        cost: worktree.cost, tokens: worktree.tokens))
+                rows += worktree.chats.map {
+                    chatRow($0, indent: "    ", machine: folder.machineName ?? "local")
+                }
+            }
+            return rows
+        }
+    }
+
+    private static func chatRow(
+        _ chat: UsageProjectChatSummary, indent: String, machine: String
+    ) -> [String] {
+        row(
+            type: "chat", name: indent + chat.displayName, chatID: chat.id,
+            source: chat.source, machine: machine, path: chat.path,
+            cost: chat.cost, tokens: chat.tokens)
+    }
+
+    private static func row(
+        type: String, name: String, chatID: String? = nil, source: String? = nil,
+        machine: String, path: String?, cost: Double, tokens: Double
+    ) -> [String] {
+        [
+            type, name, chatID ?? "-", source ?? "-", machine, path ?? "-",
+            String(format: "%.2f", cost), String(Int(tokens)),
+        ]
+    }
+}
+
+struct UsageProjectsOpenCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "open", abstract: UsageProjectOperation.openRepository.descriptor.summary)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @OptionGroup var window: UsageProjectsRange
+
+    @Argument(help: "Repository name, identity or URL.")
+    var repository: String
+
+    func run() async throws {
+        try await execute {
+            let (_, target) = try window.resolve(repository)
+            let result = try await performUsageProjectAction {
+                try UsageProjectOperationExecution.openRepository(target)
+            }
+            render(result, json: json, message: "opened \(target.repositoryName)")
+        }
+    }
+}
+
+struct UsageProjectsCopyLinkCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "copy-link",
+        abstract: UsageProjectOperation.copyRepositoryLink.descriptor.summary)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @OptionGroup var window: UsageProjectsRange
+
+    @Argument(help: "Repository name, identity or URL.")
+    var repository: String
+
+    func run() async throws {
+        try await execute {
+            let (_, target) = try window.resolve(repository)
+            let result = try await performUsageProjectAction {
+                try UsageProjectOperationExecution.copyRepositoryLink(target)
+            }
+            render(result, json: json, message: "copied \(result.value)")
+        }
+    }
+}
+
+struct UsageProjectsCopyChatCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "copy-chat", abstract: UsageProjectOperation.copyChatID.descriptor.summary)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Chat identifier from the dashboard drilldown.")
+    var chatID: String
+
+    func run() async throws {
+        try await execute {
+            let result = try await performUsageProjectAction {
+                try UsageProjectOperationExecution.copyChatID(chatID)
+            }
+            render(result, json: json, message: "copied \(result.value)")
+        }
+    }
+}
+
+private extension UsageProjectSummary {
+    var operationTarget: UsageProjectTarget {
+        UsageProjectTarget(
+            repositoryID: repositoryID, repositoryName: repositoryName,
+            repositoryURL: repositoryURL)
+    }
+}
+
+private func render(_ result: UsageProjectOperationResult, json: Bool, message: String) {
+    guard !json else {
+        CLIOut.json(result.json)
+        return
+    }
+    CLIOut.out(message)
+}
+
+private func performUsageProjectAction(
+    _ action: @escaping @MainActor () throws -> UsageProjectOperationResult
+) async throws -> UsageProjectOperationResult {
+    do {
+        return try await MainActor.run { try action() }
+    } catch let error as UsageProjectOperationError {
+        throw error.cliFailure
+    }
+}
+
+extension UsageProjectOperationError {
+    var cliFailure: CLIFailure {
+        switch self {
+        case .emptyQuery, .emptyChatID:
+            .usage(localizedDescription)
+        case .projectNotFound, .projectAmbiguous:
+            .notFound(
+                localizedDescription,
+                hint: "run `ed usage projects list` to see repository names and identities")
+        case .repositoryLinkUnavailable, .invalidRepositoryLink, .actionFailed:
+            .unavailable(localizedDescription)
+        }
+    }
+}
+
+extension UsageProjectOperationResult {
+    var json: JSONValue {
+        .object([
+            "operation": .string(operationID.rawValue),
+            "repositoryID": .optional(repositoryID),
+            "value": .string(value),
+            "performed": .bool(true),
+        ])
     }
 }
 
@@ -385,31 +618,26 @@ struct UsageRefreshCommand: AsyncParsableCommand {
                     force: forceMachines, progress: progress, sink: sink)
             }
             do {
-                var followed = follow
-                let result: UsageRefreshResult
-                if follow {
-                    guard driver.isRunning() else {
-                        throw CLIFailure.unavailable(
-                            "no usage refresh is running", hint: "drop --follow to start one")
-                    }
-                    progress.begin("following")
-                    result = try await driver.attach(sink)
-                } else {
-                    progress.begin("starting")
-                    do {
-                        result = try await driver.start(sink)
-                    } catch UsageRefreshFailure.busy {
-                        followed = true
+                let execution = try await UsageCollectionOperationExecution.refresh(
+                    follow: follow, driver: driver,
+                    onStart: { progress.begin("starting") },
+                    onFollow: { progress.begin("following") },
+                    onBusyAttach: {
                         progress.note("a refresh is already running, attaching to it")
-                        result = try await driver.attach(sink)
-                    }
-                }
+                    },
+                    onEvent: sink)
                 progress.end()
                 guard !json else {
-                    CLIOut.json(Self.payload(result: result, followed: followed))
+                    CLIOut.json(
+                        Self.payload(
+                            result: execution.refresh, followed: execution.followed))
                     return
                 }
                 CLIOut.out("usage refreshed")
+            } catch let failure as UsageCollectionOperationError {
+                progress.end()
+                throw CLIFailure.unavailable(
+                    failure.localizedDescription, hint: failure.hint)
             } catch let failure as UsageRefreshFailure {
                 progress.end()
                 progress.failure(failure.description)
@@ -425,10 +653,20 @@ struct UsageRefreshCommand: AsyncParsableCommand {
         force: Bool, progress: CLIProgress,
         sink: @escaping @Sendable (UsageRefreshEvent) -> Void
     ) async throws {
-        let due = MachineUsageRound.due(force: force)
+        let registry = MachineRegistry.machines()
+        let due = MachineUsageRound.due(
+            MachineUsageSelection.included(in: registry, CLIEnvironment.sharedDefaults),
+            force: force,
+            collectedAt: { MachineUsageStore.summary(machineID: $0)?.collectedAt })
         guard !due.isEmpty else { return }
         progress.begin(due.count == 1 ? "reaching \(due[0].name)" : "reaching the machines")
-        let round = await MachineUsageRound.collect(due, onEvent: sink)
+        let result = await UsageCollectionOperationExecution.collectMachines(
+            UsageMachineCollectionInput(
+                targets: due, registry: registry, dataDirectory: Repo.dataDir,
+                timeout: MachineUsageCollector.defaultTimeout, verbose: false),
+            includeSuccessfulMachines: false, store: CLIEnvironment.sharedDefaults,
+            onEvent: sink, afterChange: {})
+        let round = result.round
         progress.end()
         if force, let failure = forcedMachineCollectionFailure(round) { throw failure }
         if round.skippedBecauseBusy {
