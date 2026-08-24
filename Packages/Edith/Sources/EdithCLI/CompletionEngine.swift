@@ -73,6 +73,7 @@ public enum CompletionEngine {
         var command: ParsableCommand.Type = EdRoot.self
         var positionals: [String] = []
         var expectedValue: ArgumentKind?
+        var optionValues = effectiveOptionValues(node: node, command: command)
         for word in leading {
             if expectedValue != nil {
                 expectedValue = nil
@@ -80,9 +81,9 @@ public enum CompletionEngine {
             }
             if let separator = word.firstIndex(of: "=") {
                 let option = String(word[..<separator])
-                if effectiveOptionValues(node: node, command: command)[option] != nil { continue }
+                if optionValues[option] != nil { continue }
             }
-            if let kind = effectiveOptionValues(node: node, command: command)[word] {
+            if let kind = optionValues[word] {
                 expectedValue = kind
                 continue
             }
@@ -90,6 +91,7 @@ public enum CompletionEngine {
             if let next = node.child(word) {
                 node = next
                 if let nextCommand = parserChild(word, in: command) { command = nextCommand }
+                optionValues = effectiveOptionValues(node: node, command: command)
                 positionals = []
                 continue
             }
@@ -108,7 +110,7 @@ public enum CompletionEngine {
         }
         if let separator = prefix.firstIndex(of: "=") {
             let option = String(prefix[..<separator])
-            if let kind = effectiveOptionValues(node: node, command: command)[option] {
+            if let kind = optionValues[option] {
                 let valuePrefix = String(prefix[prefix.index(after: separator)...])
                 let candidates = filtered(
                     values(
@@ -249,8 +251,32 @@ public enum CompletionEngine {
     private static func effectiveOptionValues(
         node: CommandNode, command: ParsableCommand.Type
     ) -> [String: ArgumentKind] {
-        var values = defaultNode(node: node, command: command)?.optionValues ?? [:]
+        var values = parserOptionValues(command)
+        if let fallback = command.configuration.defaultSubcommand {
+            values.merge(parserOptionValues(fallback)) { _, fallbackValue in fallbackValue }
+        }
+        values.merge(defaultNode(node: node, command: command)?.optionValues ?? [:]) {
+            _, typedValue in typedValue
+        }
         values.merge(node.optionValues) { _, nodeValue in nodeValue }
+        return values
+    }
+
+    private static func parserOptionValues(_ command: ParsableCommand.Type)
+        -> [String: ArgumentKind]
+    {
+        var values: [String: ArgumentKind] = [:]
+        for line in command.helpMessage(columns: 400).split(separator: "\n") {
+            guard line.hasPrefix("  -"), !line.hasPrefix("   ") else { continue }
+            let declaration = line.dropFirst(2)
+                .split(separator: " ", omittingEmptySubsequences: false)
+                .prefix { !$0.isEmpty }
+            guard declaration.contains(where: { $0.contains("<") }) else { continue }
+            for token in declaration where token.hasPrefix("-") {
+                let option = token.prefix { $0 != "," && $0 != "<" && $0 != "=" }
+                if option.count > 1 { values[String(option)] = .free }
+            }
+        }
         return values
     }
 

@@ -188,6 +188,25 @@ import Testing
                 == ColorCopyFormat.allCases.map(\.rawValue))
     }
 
+    @Test func freeOptionValuesDoNotConsumePositionalCompletionSlots() {
+        let words = [
+            "ed", "companion", "connectors", "import", "--endpoint",
+            "http://localhost:8000", "calendar", "",
+        ]
+        #expect(Self.plan(words, 7).wantsFiles)
+
+        let assignment = [
+            "ed", "companion", "connectors", "import",
+            "--endpoint=http://localhost:8000", "calendar", "",
+        ]
+        #expect(Self.plan(assignment, 6).wantsFiles)
+
+        let value = Self.plan(
+            ["ed", "companion", "connectors", "import", "--endpoint", "http"], 5)
+        #expect(value.candidates.isEmpty)
+        #expect(!value.wantsFiles)
+    }
+
     @Test func shortOptionsAndSynthesizedHelpComplete() {
         #expect(Self.plan(["ed", "music", "status", "-h"], 3).candidates == ["-h"])
         #expect(Self.plan(["ed", "system", "stats", "-f"], 3).candidates == ["-f"])
