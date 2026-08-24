@@ -460,6 +460,9 @@ enum JSONContract {
             ["machines", "snippets", "rm", "nowhere-at-all", "1", "--json"]),
         JSONCase("ed machines metrics", ["machines", "metrics", "nowhere-at-all", "--json"]),
         JSONCase(
+            "ed machines terminal broadcast",
+            ["machines", "terminal", "broadcast", "nowhere-at-all", "uptime", "--json"]),
+        JSONCase(
             "ed machines power status",
             ["machines", "power", "status", "nowhere-at-all", "--json"]),
         JSONCase(

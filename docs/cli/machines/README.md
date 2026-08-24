@@ -8,8 +8,9 @@ the saved port forwards and command snippets each machine offers.
 The directory is three JSON files under
 `~/Library/Application Support/Edith/machines`: `machines.json`,
 `forwards.json` and `snippets.json`. Passwords and key passphrases live in the
-login keychain, never in those files. Nothing here talks to the Edith app, so
-every command on this page works whether or not Edith is running; every
+login keychain, never in those files. The terminal broadcast group talks to the
+running Edith app because its purpose is to write into already open tabs. Every
+other command on this page works whether or not Edith is running; every
 mutation posts the same `machinesChanged` notification the app posts to itself,
 so an open Machines window updates immediately when it is there to hear it.
 The Tools and Processes tabs use the same operation definitions as these
@@ -75,13 +76,15 @@ the process state between metric records.
 | `ed machines mount` | Mounts a machine's whole file system on this Mac, so Finder and every local tool can read it. Run again to put a dead mount back. |
 | `ed machines unmount` | Unmounts it again and tidies the folder away. Aliased `umount`. |
 | `ed machines mounts` | Lists every machine file system Edith mounted or can see, and whether each one still answers. |
+| `ed machines terminal broadcast` | Sends one line to every terminal tab already open for one machine in the Edith app. |
 
-Nine more subcommands live under `ed machines` and are documented on six
+Ten more subcommands live under `ed machines` and are documented on seven
 further pages: [`docker`](../machines-docker/README.md), [`files`](../machines-files/README.md),
 [`power`](../machines-power/README.md), [`services`](../machines-power/README.md),
 [`kill`](../machines-power/README.md), [`broadcast`](../machines-power/README.md),
-[`thermal`](../machines-thermal/README.md), [`control`](../machines-control/README.md)
-and [`workspace`](../machines-workspace/README.md).
+[`thermal`](../machines-thermal/README.md), [`control`](../machines-control/README.md),
+[`workspace`](../machines-workspace/README.md) and
+[`terminal`](../machines-terminal/README.md).
 
 ## The machine record
 
@@ -165,14 +168,14 @@ reads and writes.
 | 1 | A duplicate machine name, a port outside 1 to 65535, `--agent` with `--key`, both stdin secret flags together, `--key-passphrase-stdin` without `--key` on `add`, no secret on stdin, a duplicate local port on `forwards add`, ssh refusing to open a forward, an empty snippet command, an empty `exec` command line, a `cd` to a path that does not exist, or a missing collector script. |
 | 2 | The command line was wrong: an unknown flag, a missing `<machine>`, a missing `--host` on `add`, `--interval 0` or negative, or `--processes=-1`. |
 | 3 | The thing you named does not exist: no machines configured at all, no machine by that name, a prefix that matches more than one machine, a `--key` path with no file, or a forward or snippet index outside the range. |
-| 4 | The machine could not be reached, or it connected but never reported a metrics sample. |
+| 4 | The machine could not be reached, it connected but never reported a metrics sample, or the main app did not answer a terminal broadcast. |
 
 `ed machines exec` is the exception, and deliberately so: it propagates the
 remote command's own exit code, so any value from 0 to 255 can come back and
 none of them mean what the table above says.
 
-Nothing on this page needs the Edith app, so no command here exits 4 because the
-app is closed.
+Only `ed machines terminal broadcast` needs the Edith app. It exits 4 when the
+main app is closed and 3 when the selected machine has no open terminal tabs.
 
 ## Notes and gotchas
 
@@ -245,6 +248,8 @@ app is closed.
   airplane mode, Do Not Disturb and keyboard lighting.
 - [`ed machines workspace`](../machines-workspace/README.md) for the saved multi-pane
   layouts.
+- [`ed machines terminal`](../machines-terminal/README.md) for terminal tabs already
+  open in the Edith app.
 - [`ed system`](../system/README.md) for the same metrics report taken on this Mac.
 - [Conventions and contracts](../conventions.md) for the exit code table and the
   `--json` guarantee in full.
