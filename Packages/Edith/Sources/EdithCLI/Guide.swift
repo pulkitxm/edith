@@ -371,7 +371,8 @@ public enum Guide {
 
         ```
         ed tools ls                     yt-dlp and the agent CLIs
-        ed machines broadcast -- uptime one command, every machine
+        ed machines broadcast -- uptime one SSH command, every configured machine
+        ed machines terminal broadcast box -- uptime one line, every open tab for box
         ed apps ls                      what is running here
         ed apps quit Safari | --all --yes
         ed download ls                  the yt-dlp queue

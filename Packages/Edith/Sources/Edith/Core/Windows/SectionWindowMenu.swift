@@ -58,12 +58,60 @@ enum WorkspaceKeyCommand: Equatable {
 @MainActor
 enum TerminalTabRegistry {
     static weak var active: TerminalTabsModel?
+    private static var models: [UUID: [WeakTerminalTabsModel]] = [:]
+
+    static func register(_ model: TerminalTabsModel, machineID: UUID) {
+        active = model
+        var available = models[machineID, default: []].filter { $0.value != nil }
+        if !available.contains(where: { $0.value === model }) {
+            available.append(WeakTerminalTabsModel(model))
+        }
+        models[machineID] = available
+    }
+
+    static func unregister(_ model: TerminalTabsModel, machineID: UUID) {
+        let available = models[machineID, default: []].filter {
+            $0.value != nil && $0.value !== model
+        }
+        if available.isEmpty {
+            models.removeValue(forKey: machineID)
+        } else {
+            models[machineID] = available
+        }
+        if active === model { active = nil }
+    }
+
+    static func broadcast(
+        _ plan: MachineBroadcastPlan, machineID: UUID,
+        send: @MainActor (TerminalSessionHolder, String) -> Void = {
+            $0.terminalView.send(txt: $1)
+        }
+    ) -> Int? {
+        let available = models[machineID, default: []].compactMap(\.value)
+        guard !available.isEmpty else {
+            models.removeValue(forKey: machineID)
+            return nil
+        }
+        models[machineID] = available.map(WeakTerminalTabsModel.init)
+        let count = available.reduce(0) { total, model in
+            total + model.sendBroadcast(plan, send: send)
+        }
+        return count > 0 ? count : nil
+    }
 
     @discardableResult
     static func cycle(backwards: Bool) -> Bool {
         guard let active, active.tabs.count > 1 else { return false }
         active.selectNext(backwards: backwards)
         return true
+    }
+}
+
+private final class WeakTerminalTabsModel {
+    weak var value: TerminalTabsModel?
+
+    init(_ value: TerminalTabsModel) {
+        self.value = value
     }
 }
 

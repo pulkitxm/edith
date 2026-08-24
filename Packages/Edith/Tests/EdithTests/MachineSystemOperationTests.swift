@@ -10,14 +10,16 @@ import Testing
         id: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!, name: "Box",
         host: "box.example", port: 2222, username: "dev")
 
-    @Test func descriptorsCoverTheSixSystemRoutes() {
+    @Test func descriptorsCoverTheSevenSystemRoutes() {
         let descriptors =
             MachineThermalOperation.allCases.map(\.descriptor)
             + MachineExecOperation.allCases.map(\.descriptor)
             + MachineMountOperation.allCases.map(\.descriptor)
             + MachineBroadcastOperation.allCases.map(\.descriptor)
-        #expect(descriptors.count == 6)
-        #expect(Set(descriptors.map(\.id)).count == 6)
+            + MachineTerminalBroadcastOperation.allCases.map(\.descriptor)
+        #expect(descriptors.count == 7)
+        #expect(Set(descriptors.map(\.id)).count == 7)
+        #expect(Set(descriptors.map(\.cli)).count == 7)
         #expect(
             Set(descriptors.map(\.cli))
                 == [
@@ -27,6 +29,7 @@ import Testing
                     ["machines", "mount"],
                     ["machines", "unmount"],
                     ["machines", "broadcast"],
+                    ["machines", "terminal", "broadcast"],
                 ])
         #expect(MachineThermalOperation.status.descriptor.effect == .read)
         #expect(MachineExecOperation.dockerShell.descriptor.effect == .interactive)
@@ -71,6 +74,18 @@ import Testing
         #expect(request?.0.hasPrefix("/usr/bin/sudo -S") == true)
         #expect(request?.1 == password)
         #expect(request?.2 == 30)
+
+        var invoked = false
+        let invalid = await MachineThermalOperationExecution.set(
+            profile: "performance", durationSeconds: 604_801, machineID: machine.id,
+            using: { _, _, _ in
+                invoked = true
+                return .success("")
+            })
+        #expect(
+            throws: MachineThermalOperationError.invalidDuration(604_801),
+            performing: { try invalid.get() })
+        #expect(!invoked)
     }
 
     @Test func dockerShellBuildsTheSameInteractiveCommandAndLaunch() {
@@ -87,6 +102,11 @@ import Testing
             MachineExecOperationExecution.interactiveCommand(
                 words: [command], workingDirectory: "/srv")
                 == MachineWorkingDirectory.prefixed(command, directory: "/srv"))
+        let words = ["printf", "%s", "hello world", "$(touch /tmp/never)"]
+        #expect(
+            MachineExecOperationExecution.interactiveCommand(
+                words: words, workingDirectory: nil)
+                == ShellQuote.command(words))
     }
 
     @Test func mountAndUnmountChooseOneInjectedAdapter() async throws {
@@ -153,6 +173,25 @@ import Testing
         #expect(mountCalls == 0)
     }
 
+    @Test func mountRestoreFailuresDoNotFallThroughToANewMount() async throws {
+        let recorded = MachineMount(
+            machineID: machine.id, target: machine.sshTarget, remotePath: "/",
+            mountPoint: "/tmp/Box")
+        var mountCalls = 0
+        let result = await MachineMountOperationExecution.perform(
+            .mount, machine: machine, restoreDefault: true,
+            restore: { _ in .failed(recorded, "connection refused") },
+            mount: { _, _, _, _ in
+                mountCalls += 1
+                return recorded
+            })
+
+        #expect(
+            throws: MachineMountOperationError.restoreFailed(recorded, "connection refused"),
+            performing: { try result.get() })
+        #expect(mountCalls == 0)
+    }
+
     @Test func broadcastPlansNormalizeCLIAndTerminalInput() throws {
         let fromCLI = try MachineBroadcastOperationExecution.plan(
             words: ["--", "uptime", "--pretty"]
@@ -179,6 +218,125 @@ import Testing
 
         #expect(try result.get().command == "uptime")
         #expect(inputs == ["uptime\n", "uptime\n"])
+    }
+
+    @MainActor @Test func terminalBroadcastIPCIsCorrelatedAndScopedByMachineIdentity() throws {
+        let first = TerminalTabsModel()
+        first.addTab(named: "One")
+        first.addTab(named: "Two")
+        let second = TerminalTabsModel()
+        second.addTab(named: "Three")
+        let other = TerminalTabsModel()
+        other.addTab(named: "Other")
+        let otherID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
+        TerminalTabRegistry.register(first, machineID: machine.id)
+        TerminalTabRegistry.register(second, machineID: machine.id)
+        TerminalTabRegistry.register(other, machineID: otherID)
+        defer {
+            TerminalTabRegistry.unregister(first, machineID: machine.id)
+            TerminalTabRegistry.unregister(second, machineID: machine.id)
+            TerminalTabRegistry.unregister(other, machineID: otherID)
+        }
+        var inputs: [String] = []
+        let requestID = "request-1"
+        let response = MachineTerminalBroadcastBridge.response(
+            to: [
+                MachineTerminalBroadcastIPC.requestIDKey: requestID,
+                MachineTerminalBroadcastIPC.machineIDKey: machine.id.uuidString,
+                MachineTerminalBroadcastIPC.commandKey: " uptime ",
+            ],
+            send: { _, input in inputs.append(input) })
+
+        #expect(response[MachineTerminalBroadcastIPC.requestIDKey] as? String == requestID)
+        #expect(response[MachineTerminalBroadcastIPC.okKey] as? Bool == true)
+        #expect(response[MachineTerminalBroadcastIPC.tabCountKey] as? Int == 3)
+        #expect(response[MachineTerminalBroadcastIPC.commandKey] as? String == "uptime")
+        #expect(inputs == ["uptime\n", "uptime\n", "uptime\n"])
+
+        let missing = MachineTerminalBroadcastBridge.response(
+            to: [
+                MachineTerminalBroadcastIPC.requestIDKey: "request-2",
+                MachineTerminalBroadcastIPC.machineIDKey: UUID().uuidString,
+                MachineTerminalBroadcastIPC.commandKey: "uptime",
+            ])
+        #expect(missing[MachineTerminalBroadcastIPC.okKey] as? Bool == false)
+        #expect(
+            missing[MachineTerminalBroadcastIPC.errorCodeKey] as? String
+                == MachineTerminalBroadcastIPC.noOpenTabsCode)
+    }
+
+    @Test func terminalBroadcastCLIUsesCorrelatedMainAppIPC() async throws {
+        await CLIProbe.inWorld { world in
+            MachineRegistry.add(machine)
+            CLIEnvironment.isMainAppRunning = { true }
+            world.answers { name in
+                guard name == IPC.Name.machineTerminalBroadcastResult,
+                    let request = world.postedPayloads(
+                        for: IPC.Name.requestMachineTerminalBroadcast
+                    ).last,
+                    let requestID = request[MachineTerminalBroadcastIPC.requestIDKey] as? String
+                else { return nil }
+                return [
+                    MachineTerminalBroadcastIPC.requestIDKey: requestID,
+                    MachineTerminalBroadcastIPC.okKey: true,
+                    MachineTerminalBroadcastIPC.tabCountKey: 2,
+                ]
+            }
+
+            let plain = await CLIProbe.capture([
+                "machines", "terminal", "broadcast", "Box", "--", "uptime", "--pretty",
+            ])
+            let json = await CLIProbe.capture([
+                "machines", "terminal", "broadcast", "Box", "uptime", "--json",
+            ])
+
+            #expect(plain.code == 0)
+            #expect(plain.stdout == "sent to 2 open tabs on Box: uptime --pretty\n")
+            #expect(plain.stderr.isEmpty)
+            #expect(json.code == 0)
+            #expect(json.object?["machine"] as? String == "Box")
+            #expect(json.object?["machineID"] as? String == machine.id.uuidString)
+            #expect(json.object?["command"] as? String == "uptime")
+            #expect(json.object?["tabs"] as? Int == 2)
+            #expect(
+                world.postedPayloads(for: IPC.Name.requestMachineTerminalBroadcast)
+                    .allSatisfy {
+                        $0[MachineTerminalBroadcastIPC.machineIDKey] as? String
+                            == machine.id.uuidString
+                            && $0[MachineTerminalBroadcastIPC.requestIDKey] as? String != nil
+                    })
+        }
+    }
+
+    @Test func terminalBroadcastCLIReportsMissingOpenTabs() async {
+        await CLIProbe.inWorld { world in
+            MachineRegistry.add(machine)
+            CLIEnvironment.isMainAppRunning = { true }
+            world.answers { name in
+                guard name == IPC.Name.machineTerminalBroadcastResult,
+                    let requestID = world.postedPayloads(
+                        for: IPC.Name.requestMachineTerminalBroadcast
+                    ).last?[MachineTerminalBroadcastIPC.requestIDKey] as? String
+                else { return nil }
+                return [
+                    MachineTerminalBroadcastIPC.requestIDKey: requestID,
+                    MachineTerminalBroadcastIPC.okKey: false,
+                    MachineTerminalBroadcastIPC.errorCodeKey:
+                        MachineTerminalBroadcastIPC.noOpenTabsCode,
+                    MachineTerminalBroadcastIPC.errorKey:
+                        "That machine has no open terminal tabs.",
+                ]
+            }
+
+            let result = await CLIProbe.capture([
+                "machines", "terminal", "broadcast", "Box", "uptime",
+            ])
+
+            #expect(result.code == ExitCodes.notFound)
+            #expect(result.stdout.isEmpty)
+            #expect(result.stderr.contains("no open terminal tabs"))
+            #expect(result.stderr.contains("open a terminal tab for Box"))
+        }
     }
 
     @Test func cliParsersPreserveEverySystemRouteArgument() throws {
@@ -230,6 +388,13 @@ import Testing
         #expect(broadcast.only == "box,tuf")
         #expect(broadcast.json)
         #expect(broadcast.command == ["uptime"])
+
+        let terminalBroadcast = try #require(
+            try EdRoot.parseAsRoot([
+                "machines", "terminal", "broadcast", "box", "--", "uptime", "--pretty",
+            ]) as? MachinesTerminalBroadcastCommand)
+        #expect(terminalBroadcast.machine == "box")
+        #expect(terminalBroadcast.command == ["uptime", "--pretty"])
     }
 
     @Test func everySystemDescriptorIsAnExactCompletionLeaf() {
@@ -238,6 +403,7 @@ import Testing
             + MachineExecOperation.allCases.map(\.descriptor)
             + MachineMountOperation.allCases.map(\.descriptor)
             + MachineBroadcastOperation.allCases.map(\.descriptor)
+            + MachineTerminalBroadcastOperation.allCases.map(\.descriptor)
 
         for descriptor in descriptors {
             var node = CommandTree.root
@@ -252,12 +418,13 @@ import Testing
         }
     }
 
-    @Test func productionUIPlacementsExactlyCoverTheSixSystemRoutes() {
+    @Test func productionUIPlacementsExactlyCoverTheSixSystemActions() {
         let descriptors =
             MachineThermalOperation.allCases.map(\.descriptor)
             + MachineExecOperation.allCases.map(\.descriptor)
             + MachineMountOperation.allCases.map(\.descriptor)
             + MachineBroadcastOperation.allCases.map(\.descriptor)
+            + MachineTerminalBroadcastOperation.allCases.map(\.descriptor)
         let ids = Set(descriptors.map(\.id))
         let placements = UserOperationCatalog.userInterfaceActions.filter {
             ids.contains($0.operation.id)
@@ -290,8 +457,11 @@ import Testing
                     ],
                     [
                         "Terminal broadcast bar", "send one line to every pane", "machines",
-                        "broadcast", "--", "uptime",
+                        "terminal", "broadcast", "box", "--", "uptime",
                     ],
                 ])
+        #expect(
+            UserOperationCatalog.commandLineOnly.map(\.descriptor.id).contains(
+                MachineBroadcastOperation.fleet.descriptor.id))
     }
 }

@@ -56,10 +56,21 @@ final class TerminalTabsModel {
     ) -> Result<MachineBroadcastPlan, Error> {
         let result = MachineBroadcastOperationExecution.plan(command: command)
         guard case let .success(plan) = result else { return result }
+        _ = sendBroadcast(plan, send: send)
+        return .success(plan)
+    }
+
+    @discardableResult
+    func sendBroadcast(
+        _ plan: MachineBroadcastPlan,
+        send: @MainActor (TerminalSessionHolder, String) -> Void = {
+            $0.terminalView.send(txt: $1)
+        }
+    ) -> Int {
         for tab in tabs {
             send(tab.holder, plan.terminalInput)
         }
-        return .success(plan)
+        return tabs.count
     }
 
     func stopAll() {
@@ -97,10 +108,10 @@ struct TerminalTabsView: View {
         }
         .onAppear {
             model.ensureFirstTab(named: "Shell 1")
-            TerminalTabRegistry.active = model
+            TerminalTabRegistry.register(model, machineID: session.machine.id)
         }
         .onDisappear {
-            if TerminalTabRegistry.active === model { TerminalTabRegistry.active = nil }
+            TerminalTabRegistry.unregister(model, machineID: session.machine.id)
         }
         .background(shortcuts)
     }

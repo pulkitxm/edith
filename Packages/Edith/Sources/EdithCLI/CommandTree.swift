@@ -832,6 +832,14 @@ public enum CommandTree {
                         "broadcast", "Run one command on every machine.",
                         options: ["--json", "--help", "--only"], arguments: [.free]),
                     CommandNode(
+                        "terminal", "Act on terminal tabs that are open in the Edith app.",
+                        children: [
+                            CommandNode(
+                                "broadcast",
+                                "Send one line to every open terminal tab for one machine.",
+                                options: common, arguments: [.machine, .free])
+                        ]),
+                    CommandNode(
                         "kill", "End a process on a machine.",
                         options: ["--json", "--help", "--signal", "--yes"],
                         arguments: [.machine, .historyIndex],

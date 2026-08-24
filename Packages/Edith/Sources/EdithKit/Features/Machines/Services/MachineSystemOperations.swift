@@ -75,7 +75,7 @@ public enum MachineThermalOperationExecution {
         sudoPassword: SudoPasswordLookup = { SudoPassword.stdin(machineID: $0) },
         using run: Run
     ) async -> Result<MachineThermalSetResult, Error> {
-        guard durationSeconds >= 0 else {
+        guard (0...604_800).contains(durationSeconds) else {
             return .failure(MachineThermalOperationError.invalidDuration(durationSeconds))
         }
         let stdin = sudoPassword(machineID)
@@ -138,8 +138,9 @@ public enum MachineExecOperationExecution {
         words: [String], workingDirectory: String?
     ) -> String? {
         guard !words.isEmpty else { return nil }
+        let command = words.count == 1 ? words[0] : ShellQuote.command(words)
         return MachineWorkingDirectory.prefixed(
-            words.joined(separator: " "), directory: workingDirectory)
+            command, directory: workingDirectory)
     }
 }
 
@@ -234,14 +235,37 @@ public enum MachineMountOperationExecution {
 }
 
 public enum MachineBroadcastOperation: String, CaseIterable, Equatable, Sendable {
+    case fleet
+
+    public var descriptor: UserOperationDescriptor {
+        UserOperationDescriptor(
+            id: UserOperationID(rawValue: "machines.broadcast.fleet"),
+            summary: "Run one command over SSH on every selected machine.",
+            cli: ["machines", "broadcast"], effect: .write)
+    }
+}
+
+public enum MachineTerminalBroadcastOperation: String, CaseIterable, Equatable, Sendable {
     case send
 
     public var descriptor: UserOperationDescriptor {
         UserOperationDescriptor(
-            id: UserOperationID(rawValue: "machines.broadcast"),
-            summary: "Send one command to every selected machine terminal.",
-            cli: ["machines", "broadcast"], effect: .write)
+            id: UserOperationID(rawValue: "machines.terminal.broadcast"),
+            summary: "Send one line to every open terminal tab for one machine.",
+            cli: ["machines", "terminal", "broadcast"], effect: .write)
     }
+}
+
+public enum MachineTerminalBroadcastIPC {
+    public static let requestIDKey = "requestID"
+    public static let machineIDKey = "machineID"
+    public static let commandKey = "command"
+    public static let okKey = "ok"
+    public static let tabCountKey = "tabCount"
+    public static let errorCodeKey = "errorCode"
+    public static let errorKey = "error"
+    public static let noOpenTabsCode = "noOpenTabs"
+    public static let invalidRequestCode = "invalidRequest"
 }
 
 public enum MachineBroadcastOperationError: LocalizedError, Equatable, Sendable {

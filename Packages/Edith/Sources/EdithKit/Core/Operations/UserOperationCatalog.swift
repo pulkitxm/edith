@@ -17,6 +17,9 @@ public enum UserOperationCatalog {
         + MachineBroadcastOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + MachineTerminalBroadcastOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + MachineMutationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -256,8 +259,18 @@ private extension MachineMountOperation {
 
 private extension MachineBroadcastOperation {
     var interfaceExposure: UserOperationExposure {
+        .commandLineOnly(
+            reason:
+                "Fleet broadcast runs separate SSH commands and has no matching application control."
+        )
+    }
+}
+
+private extension MachineTerminalBroadcastOperation {
+    var interfaceExposure: UserOperationExposure {
         userInterface(
-            "Terminal broadcast bar", "send one line to every pane", ["--", "uptime"])
+            "Terminal broadcast bar", "send one line to every pane",
+            ["box", "--", "uptime"])
     }
 }
 
