@@ -8,8 +8,7 @@ public final class CalendarStore: FeatureModule {
     public private(set) var events: [CalendarEventPayload] = []
     public private(set) var authStatus: EKAuthorizationStatus
 
-    private var daysLoaded = 14
-    private static let maxDays = 120
+    public private(set) var pagination = CalendarEventPagination()
 
     private let store = EKEventStore()
     private var changeObserver: NSObjectProtocol?
@@ -63,7 +62,7 @@ public final class CalendarStore: FeatureModule {
         fetchTask?.cancel()
         guard authStatus == .fullAccess else { return }
         fetchTask = Task { [weak self] in
-            guard let self, let fetched = await self.fetchEvents() else { return }
+            guard let self, let fetched = await self.fetchEvents(pagination.query()) else { return }
             guard !Task.isCancelled else { return }
             self.events = fetched
         }
@@ -73,29 +72,30 @@ public final class CalendarStore: FeatureModule {
     public func refreshAndWait() async -> [CalendarEventPayload] {
         fetchTask?.cancel()
         fetchTask = nil
-        guard let fetched = await fetchEvents() else { return events }
+        guard let fetched = await fetchEvents(pagination.query()) else { return events }
         events = fetched
         return fetched
     }
 
-    private func fetchEvents() async -> [CalendarEventPayload]? {
+    public func events(_ query: CalendarEventQuery) async -> [CalendarEventPayload] {
+        await fetchEvents(query) ?? []
+    }
+
+    private func fetchEvents(_ query: CalendarEventQuery) async -> [CalendarEventPayload]? {
         guard authStatus == .fullAccess else { return nil }
-        let start = Calendar.current.startOfDay(for: Date())
-        guard let end = Calendar.current.date(byAdding: .day, value: daysLoaded, to: start) else {
-            return nil
+        return await CalendarEventOperationExecution.events(query) { query in
+            await Task.detached(priority: .userInitiated) {
+                let store = EKEventStore()
+                let predicate = store.predicateForEvents(
+                    withStart: query.start, end: query.end,
+                    calendars: store.calendars(for: .event))
+                return store.events(matching: predicate).map(CalendarEventPayload.init(event:))
+            }.value
         }
-        return await Task.detached(priority: .userInitiated) {
-            let store = EKEventStore()
-            let predicate = store.predicateForEvents(
-                withStart: start, end: end, calendars: store.calendars(for: .event))
-            let events = store.events(matching: predicate).map(CalendarEventPayload.init(event:))
-            return CalendarDayEvents.sorted(CalendarDayEvents.deduplicated(events))
-        }.value
     }
 
     public func loadMore() {
-        guard daysLoaded < Self.maxDays else { return }
-        daysLoaded = min(daysLoaded + 14, Self.maxDays)
+        guard pagination.loadMore() else { return }
         refresh()
     }
 
