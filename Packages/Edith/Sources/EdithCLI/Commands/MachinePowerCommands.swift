@@ -531,6 +531,12 @@ struct MachinesTerminalCommand: AsyncParsableCommand {
 }
 
 enum MachineTerminalBroadcastCLI {
+    static func machine(_ query: String) throws -> Machine {
+        if UsageMachineFilter.isLocal(query) { return .local }
+        let machines = [Machine.local] + MachineDirectory.load().filter { $0.id != Machine.localID }
+        return try MachineDirectory.resolve(query, in: machines)
+    }
+
     static func send(
         _ plan: MachineBroadcastPlan, to machine: Machine, timeout: TimeInterval = 5
     ) async throws -> Int {
@@ -598,7 +604,7 @@ struct MachinesTerminalBroadcastCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let target = try MachineResolver.machine(machine)
+            let target = try MachineTerminalBroadcastCLI.machine(machine)
             let plan: MachineBroadcastPlan
             switch MachineBroadcastOperationExecution.plan(words: command) {
             case let .success(value):

@@ -339,6 +339,36 @@ import Testing
         }
     }
 
+    @Test func terminalBroadcastCLIResolvesLocalMachineWithoutConfiguredFleet() async {
+        await CLIProbe.inWorld { world in
+            CLIEnvironment.isMainAppRunning = { true }
+            world.answers { name in
+                guard name == IPC.Name.machineTerminalBroadcastResult,
+                    let requestID = world.postedPayloads(
+                        for: IPC.Name.requestMachineTerminalBroadcast
+                    ).last?[MachineTerminalBroadcastIPC.requestIDKey] as? String
+                else { return nil }
+                return [
+                    MachineTerminalBroadcastIPC.requestIDKey: requestID,
+                    MachineTerminalBroadcastIPC.okKey: true,
+                    MachineTerminalBroadcastIPC.tabCountKey: 1,
+                ]
+            }
+
+            let result = await CLIProbe.capture([
+                "machines", "terminal", "broadcast", "local", "uptime", "--json",
+            ])
+
+            #expect(result.code == 0)
+            #expect(result.object?["machine"] as? String == Machine.local.name)
+            #expect(result.object?["machineID"] as? String == Machine.localID.uuidString)
+            #expect(
+                world.postedPayloads(for: IPC.Name.requestMachineTerminalBroadcast)
+                    .last?[MachineTerminalBroadcastIPC.machineIDKey] as? String
+                    == Machine.localID.uuidString)
+        }
+    }
+
     @Test func cliParsersPreserveEverySystemRouteArgument() throws {
         let status = try #require(
             try EdRoot.parseAsRoot(["machines", "thermal", "status", "box", "--json"])

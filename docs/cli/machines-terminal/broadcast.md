@@ -12,7 +12,7 @@ ed machines terminal broadcast <machine> [--] <command...> [--json]
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `<machine>` | machine name, SSH alias, UUID or unambiguous prefix | required | Which machine's open terminal tabs receive the line. |
+| `<machine>` | `local`, machine name, SSH alias, UUID or unambiguous prefix | required | Which machine's open terminal tabs receive the line. |
 | `<command...>` | words, required | none | The line to write, followed by one newline. Use `--` before option-like command words. |
 
 ## Options
@@ -44,7 +44,8 @@ The line is trimmed at both ends, then one newline is appended. Every open tab
 registered for the resolved machine UUID receives the same bytes on the main
 actor. Tabs for other machines are untouched. The reported `tabs` count is the
 number of terminal processes targeted across every open terminal view for that
-machine.
+machine. `local`, `this-mac`, `thismac` and `mac` select This Mac even when no
+remote machines are configured.
 
 The caller's shell splits arguments before `ed` sees them. When the line itself
 needs quotes, redirection, pipes or other shell syntax, quote the whole line so
@@ -66,6 +67,7 @@ tabs for exactly one machine.
 ed machines terminal broadcast tuf -- uptime
 ed machines terminal broadcast tuf -- "printf '%s\n' ready"
 ed machines terminal broadcast tuf uptime --json
+ed machines terminal broadcast local -- clear
 ```
 
 ## Where to go next
