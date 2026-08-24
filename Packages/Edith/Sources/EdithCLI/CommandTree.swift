@@ -35,6 +35,8 @@ public enum ArgumentKind: Equatable, Sendable {
     case remotePath
     case container
     case tool
+    case usageChat
+    case usageProject
     case usageSource
     case free
 }
@@ -238,9 +240,31 @@ public enum CommandTree {
                         options: ["--json", "--range", "--source", "--machine"],
                         optionValues: usageValues),
                     CommandNode(
-                        "projects", "Cost and tokens per GitHub repository.",
-                        options: ["--json", "--range", "--limit"],
-                        optionValues: ["--range": .usageRange]),
+                        "projects", "Inspect usage by GitHub repository.",
+                        children: [
+                            CommandNode(
+                                "list", "List usage grouped by repository.",
+                                options: ["--json", "--range", "--limit"],
+                                optionValues: ["--range": .usageRange]),
+                            CommandNode(
+                                "show", "Show one repository and its usage hierarchy.",
+                                options: ["--json", "--range"],
+                                optionValues: ["--range": .usageRange],
+                                arguments: [.usageProject]),
+                            CommandNode(
+                                "open", "Open a usage repository in the browser.",
+                                options: ["--json", "--range"],
+                                optionValues: ["--range": .usageRange],
+                                arguments: [.usageProject]),
+                            CommandNode(
+                                "copy-link", "Copy a usage repository link.",
+                                options: ["--json", "--range"],
+                                optionValues: ["--range": .usageRange],
+                                arguments: [.usageProject]),
+                            CommandNode(
+                                "copy-chat", "Copy a usage chat identifier.",
+                                options: common, arguments: [.usageChat]),
+                        ]),
                     CommandNode(
                         "sources", "The agents that produced the history.",
                         options: common),
