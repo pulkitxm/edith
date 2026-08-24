@@ -382,7 +382,7 @@ public enum Guide {
         ed clipboard get 3              entry three, as text
         ed clipboard copy 3             put it back on the pasteboard
         ed clipboard pin 3 | unpin 3
-        ed clipboard rm 3 | clear
+        ed clipboard rm 3 --yes | clear --yes
         ed color ls --format hex        the colours you picked
         ed color copy 1                 copy the newest using your configured format
         ed shelf ls                     what is parked on the notch shelf

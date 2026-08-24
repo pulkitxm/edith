@@ -44,6 +44,15 @@ public enum UserOperationCatalog {
         + CompanionSettingsOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + ClipboardOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + AttentionFocusOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + CleanerOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + QuinjetOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -396,6 +405,56 @@ private extension CompanionSettingsOperation {
                 ["--provider", "anthropic", "--api-key", "sk-x"])
         case .reasonTest:
             userInterface("Companion settings", "test the reasoner")
+        }
+    }
+}
+
+private extension ClipboardOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .stats:
+            userInterface(
+                "Clipboard settings", "see how many entries and how big")
+        case .copy:
+            userInterface("Clipboard panel", "click an entry to copy it", ["1"])
+        case .pin:
+            userInterface("Clipboard panel", "pin an entry", ["1"])
+        case .unpin:
+            userInterface("Clipboard panel", "unpin an entry", ["1"])
+        case .remove:
+            userInterface("Clipboard panel", "delete an entry", ["1", "--yes"])
+        }
+    }
+}
+
+private extension AttentionFocusOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .start:
+            userInterface(
+                "Attention focus card", "start a focus session",
+                ["--for", "25m", "--name", "Focus"])
+        case .stop:
+            userInterface("Attention focus card", "finish a focus session")
+        }
+    }
+}
+
+private extension CleanerOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .scan:
+            userInterface(
+                "Cleaner drive picker", "sweep a folder for project junk",
+                ["--root", "~/code"])
+        case .clean:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Cleaner card", action: "reclaim the scanned caches"),
+                UserInterfaceActionPlacement(
+                    surface: "Cleaner card", action: "clean one category",
+                    exampleArguments: ["--category", "npm", "--yes"]),
+            ])
         }
     }
 }
