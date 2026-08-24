@@ -92,6 +92,9 @@ public enum UserOperationCatalog {
         + ConfigurationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + TerminalToolingOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + PermissionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -958,6 +961,25 @@ private extension ClipboardOperation {
         case .clear:
             userInterface(
                 "Clipboard panel", "clear unpinned entries", ["--keep-pinned", "--yes"])
+        }
+    }
+}
+
+private extension TerminalToolingOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .status:
+            userInterface(
+                "Terminal settings", "inspect command-line tools and shell completions",
+                ["--json"])
+        case .install:
+            userInterface("Terminal settings", "install command-line tools")
+        case .remove:
+            userInterface("Terminal settings", "remove command-line tools")
+        case .completionInstall:
+            userInterface("Terminal settings", "install shell completions")
+        case .fallbackSource:
+            userInterface("Terminal settings", "copy the fallback completion source line")
         }
     }
 }

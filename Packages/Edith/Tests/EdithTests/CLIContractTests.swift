@@ -20,6 +20,8 @@ struct JSONCase {
 enum JSONContract {
     static let cases: [JSONCase] = [
         JSONCase("ed version", ["version", "--json"]),
+        JSONCase("ed status", ["status", "--json"]),
+        JSONCase("ed completions source", ["completions", "source", "--json"]),
         JSONCase("ed attention status", ["attention", "status", "--json"]),
         JSONCase("ed attention summary", ["attention", "summary", "--json"]),
         JSONCase("ed attention timeline", ["attention", "timeline", "--json"]),

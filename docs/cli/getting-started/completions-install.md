@@ -29,7 +29,8 @@ Options
       "path": "/Users/pulkit/.local/share/bash-completion/completions/ed",
       "shell": "bash"
     }
-  ]
+  ],
+  "failures": []
 }
 ```
 
@@ -81,6 +82,13 @@ hint and never gets a profile edit, because fish loads that directory by itself.
 The human output is one `shell: path` line per shell, with the hint indented two
 spaces underneath it.
 
+Each detected shell is attempted independently. If one fails, successful
+shells remain listed in `installed`, the failed shell and its error appear in
+`failures`, and the command exits 1. Plain output writes successful paths to
+stdout and names each failed shell on stderr. The Terminal settings button uses
+the same result and names every shell that failed instead of reporting partial
+success.
+
 A `--shell` value that is not one of the three exits 3 before anything is
 written:
 
@@ -96,4 +104,5 @@ parser and exits 2; write `--shell zsh`.
 ## Where to go next
 
 - [Getting started with `ed`](./README.md), the rest of this group
+- [`ed completions source`](./completions-source.md), print the fallback line
 - [All `ed` commands](../README.md)

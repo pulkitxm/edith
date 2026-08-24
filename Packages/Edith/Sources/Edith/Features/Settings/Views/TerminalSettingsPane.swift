@@ -217,14 +217,11 @@ struct TerminalSettingsPane: View {
 
     private func refresh() async {
         let found = await Task.detached(priority: .userInitiated) {
-            (
-                CLIInstaller.status(), CompletionScripts.statuses(),
-                CompletionScripts.sourceLine(for: .zsh)
-            )
+            TerminalToolingOperationExecution.status()
         }.value
-        tools = found.0
-        completions = found.1
-        sourceLine = found.2
+        tools = found.tools
+        completions = found.completions
+        sourceLine = found.fallbackSourceLine
         loaded = true
     }
 
@@ -241,32 +238,39 @@ struct TerminalSettingsPane: View {
     private func perform(_ action: TerminalAction) async -> (succeeded: Bool, message: String) {
         switch action {
         case .installTools:
-            let result = await Task.detached(priority: .userInitiated) {
-                CLIInstaller.install()
+            let outcome = await Task.detached(priority: .userInitiated) {
+                TerminalToolingOperationExecution.install()
             }.value
+            let result = outcome.result
+            if let message = result.message { return (false, message) }
             guard !result.linked.isEmpty else {
-                return (false, "Nothing to link in \(abbreviate(result.directory)).")
+                return (true, "Already installed in \(abbreviate(result.directory)).")
             }
             return (
                 true,
                 "Linked \(result.linked.joined(separator: ", ")) in \(abbreviate(result.directory))."
             )
         case .removeTools:
-            let result = await Task.detached(priority: .userInitiated) {
-                CLIInstaller.uninstall()
+            let outcome = await Task.detached(priority: .userInitiated) {
+                TerminalToolingOperationExecution.remove()
             }.value
-            guard !result.linked.isEmpty else { return (false, "Nothing to remove.") }
+            let result = outcome.result
+            if let message = result.message { return (false, message) }
+            guard !result.linked.isEmpty else { return (true, "Nothing to remove.") }
             return (true, "Removed \(result.linked.joined(separator: ", ")).")
         case .installCompletions:
-            let written = await Task.detached(priority: .userInitiated) {
-                CompletionScripts.detectShells().compactMap {
-                    try? CompletionScripts.install($0)
-                }
+            let result = await Task.detached(priority: .userInitiated) {
+                TerminalToolingOperationExecution.installCompletions()
             }.value
-            guard !written.isEmpty else {
-                return (false, "Could not write the completion scripts.")
+            if !result.failures.isEmpty {
+                let failures = result.failures.map {
+                    "\($0.shell.rawValue): \($0.message)"
+                }.joined(separator: "; ")
+                return (false, "Could not install every completion script: \(failures)")
             }
-            let count = written.count == 1 ? "1 script" : "\(written.count) scripts"
+            let count =
+                result.installed.count == 1
+                ? "1 script" : "\(result.installed.count) scripts"
             return (
                 true,
                 "Wrote \(count) and the ~/.zshrc line. Run  exec zsh  in any open terminal."

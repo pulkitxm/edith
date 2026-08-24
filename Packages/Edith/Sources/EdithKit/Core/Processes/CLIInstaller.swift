@@ -119,14 +119,20 @@ public enum CLIInstaller {
     ) -> CLIInstallResult {
         let target = directory ?? preferredDirectory(fileManager: fileManager)
         var result = CLIInstallResult(directory: target.path)
+        var failures: [String] = []
         for name in toolNames {
             let link = target.appendingPathComponent(name)
             guard (try? fileManager.destinationOfSymbolicLink(atPath: link.path)) != nil else {
                 continue
             }
-            try? fileManager.removeItem(at: link)
-            result.linked.append(name)
+            do {
+                try fileManager.removeItem(at: link)
+                result.linked.append(name)
+            } catch {
+                failures.append("could not remove \(name): \(error.localizedDescription)")
+            }
         }
+        if !failures.isEmpty { result.message = failures.joined(separator: "; ") }
         return result
     }
 

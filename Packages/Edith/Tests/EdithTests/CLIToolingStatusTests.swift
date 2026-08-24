@@ -99,4 +99,81 @@ import Testing
             home: home, environment: ["PATH": "/usr/bin:\(target.path)"])
         #expect(status.onPath)
     }
+
+    @Test func terminalToolingDescriptorsAreRegisteredAndExact() {
+        let descriptors = TerminalToolingOperation.allCases.map(\.descriptor)
+        #expect(
+            descriptors.map(\.cli) == [
+                ["status"], ["install"], ["uninstall"],
+                ["completions", "install"], ["completions", "source"],
+            ])
+        #expect(descriptors.allSatisfy { UserOperationCatalog.descriptor(id: $0.id) == $0 })
+        #expect(descriptors.allSatisfy { UserOperationCatalog.descriptor(cli: $0.cli) == $0 })
+    }
+
+    @Test func sharedStatusIncludesToolsCompletionsAndFallbackSource() throws {
+        let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try Data().write(to: home.appendingPathComponent(".bashrc"))
+
+        let status = TerminalToolingOperationExecution.status(
+            home: home, environment: ["PATH": "/usr/bin"], store: makeStore())
+
+        #expect(status.tools.directory.contains(home.path))
+        #expect(status.completions.map(\.shell).contains(.zsh))
+        #expect(status.completions.map(\.shell).contains(.bash))
+        #expect(status.fallbackSourceLine.hasPrefix("source "))
+    }
+
+    @Test func sharedInstallAndRemoveUseTheSameNamedLinks() throws {
+        let root = try makeHome()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let tools = root.appendingPathComponent("tools")
+        let target = root.appendingPathComponent("bin")
+        try FileManager.default.createDirectory(at: tools, withIntermediateDirectories: true)
+        for name in ["ed", "edh"] {
+            let file = tools.appendingPathComponent(name)
+            try Data("#!/bin/sh\n".utf8).write(to: file)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: file.path)
+        }
+
+        let installed = TerminalToolingOperationExecution.install(
+            toolsDirectory: tools, into: target,
+            environment: ["PATH": target.path])
+        #expect(installed.succeeded)
+        #expect(Set(installed.result.linked) == Set(CLIInstaller.toolNames))
+        #expect(installed.onPath)
+
+        let removed = TerminalToolingOperationExecution.remove(from: target)
+        #expect(removed.succeeded)
+        #expect(Set(removed.result.linked) == Set(CLIInstaller.toolNames))
+        #expect(
+            CLIInstaller.toolNames.allSatisfy {
+                !FileManager.default.fileExists(atPath: target.appendingPathComponent($0).path)
+            })
+    }
+
+    @Test func completionInstallReportsEachShellFailureWithoutDroppingSuccesses() throws {
+        let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        try FileManager.default.createDirectory(
+            at: home.appendingPathComponent(".bashrc"), withIntermediateDirectories: true)
+
+        let outcome = TerminalToolingOperationExecution.installCompletions(
+            shells: [.zsh, .bash], home: home, store: makeStore())
+
+        #expect(outcome.installed.map(\.shell) == [.zsh])
+        #expect(outcome.failures.map(\.shell) == [.bash])
+        #expect(!outcome.failures[0].message.isEmpty)
+        #expect(!outcome.succeeded)
+    }
+
+    @Test func fallbackSourceSelectsTheRequestedShell() throws {
+        let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let line = TerminalToolingOperationExecution.fallbackSource(
+            for: .fish, home: home, store: makeStore())
+        #expect(line == "source $HOME/.config/fish/completions/ed.fish")
+    }
 }
