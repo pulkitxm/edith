@@ -24,7 +24,11 @@ public enum HerdrAttachCommand {
     public static func observerLine(session: String, pane: String, columns: Int, rows: Int)
         -> String
     {
-        "export PATH=\"\(HerdrCollector.pathPrefix)\"; herdr --session \(session) terminal session observe \(pane) --cols \(columns) --rows \(rows)"
+        let command = ShellQuote.command(
+            ["herdr"]
+                + observerArguments(
+                    session: session, pane: pane, columns: columns, rows: rows))
+        return "export PATH=\"\(HerdrCollector.pathPrefix)\"; \(command)"
     }
 
     public static func observerArguments(

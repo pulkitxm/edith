@@ -196,6 +196,10 @@ struct HerdrSessionView: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(1)
                     .truncationMode(.middle)
+            } else if tab.view == .agent {
+                Label("Live preview", systemImage: "eye")
+                    .font(.system(size: UIScale.pt(10.5)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
     }
@@ -229,10 +233,13 @@ struct HerdrSessionView: View {
 
     private func startIfNeeded() async {
         guard launchEnabled, !tab.holder.started else { return }
+        await Task.yield()
+        let columns = max(1, tab.holder.terminalView.terminal.cols)
+        let rows = max(1, tab.holder.terminalView.terminal.rows)
         starting = true
         defer { starting = false }
         if agent.machineIsLocal {
-            startLocal()
+            startLocal(columns: columns, rows: rows)
             return
         }
         guard let machine = tab.machine else {
@@ -243,9 +250,9 @@ struct HerdrSessionView: View {
             let connection = try await store.connection(for: machine)
             tab.holder.start(
                 executable: SSHConnection.executable.path,
-                arguments: connection.terminalArguments(
-                    remoteCommand: HerdrAttachCommand.remoteShellLine(
-                        session: agent.session, pane: agent.pane)),
+                arguments: connection.execArguments(
+                    command: HerdrAttachCommand.observerLine(
+                        session: agent.session, pane: agent.pane, columns: columns, rows: rows)),
                 environment: Terminal.getEnvironmentVariables(termName: "xterm-256color")
                     + connection.terminalEnvironment())
         } catch {
@@ -253,19 +260,22 @@ struct HerdrSessionView: View {
         }
     }
 
-    private func startLocal() {
+    private func startLocal(columns: Int, rows: Int) {
         let environment = Terminal.getEnvironmentVariables(termName: "xterm-256color")
         if let executable = HerdrCollector.executable() {
             tab.holder.start(
                 executable: executable.path,
-                arguments: HerdrAttachCommand.arguments(session: agent.session, pane: agent.pane),
+                arguments: HerdrAttachCommand.observerArguments(
+                    session: agent.session, pane: agent.pane, columns: columns, rows: rows),
                 environment: environment)
             return
         }
         tab.holder.start(
             executable: "/bin/zsh",
             arguments: [
-                "-c", HerdrAttachCommand.remoteShellLine(session: agent.session, pane: agent.pane),
+                "-c",
+                HerdrAttachCommand.observerLine(
+                    session: agent.session, pane: agent.pane, columns: columns, rows: rows),
             ],
             environment: environment)
     }
