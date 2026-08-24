@@ -16,6 +16,11 @@ installed under `~/.cache/edith` on that machine. That is why collecting waits
 to be asked rather than happening for every machine you have configured, and why
 the first run on a machine can take minutes.
 
+The matching controls under Edith's Agent Usage settings use the same selection,
+collection and forget operations as these commands. Enabling or disabling a
+machine in either place is visible in the other, and both collection paths obey
+the same single-round lock and successful-machine signup rule.
+
 ## `ed usage machines ls`
 
 Lists every configured machine, whether it is counted, and what it has given.
