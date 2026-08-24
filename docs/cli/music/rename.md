@@ -38,6 +38,10 @@ to be a real folder path and anything else exits 3. Favourites follow the new
 name, folders included, and the running player is told so playback does not
 break mid-track.
 
+The empty folder path names the library root. Renaming it is refused and exits
+1 with `the library root cannot be renamed`; choose a different root with
+`ed music library <path>` so confirmation and live state are updated together.
+
 ## Where to go next
 
 - [`ed music`](./README.md), the rest of this group

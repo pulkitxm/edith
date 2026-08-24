@@ -366,6 +366,22 @@ import Testing
         #expect(Guide.claudeSnippet.count < 3000)
     }
 
+    @Test func extensionRecoveryIsDiscoverableInEveryGuide() {
+        let commands = [
+            "ed extensions status", "ed extensions setup", "--dry-run", "--install-tools",
+            "ed extensions verify", "ed extensions doctor",
+        ]
+        let fields = ["verified", "state.phase", "state.runtimePhase", "checks", "remediation"]
+        for guide in [Guide.text, Guide.claudeSnippet] {
+            for command in commands {
+                #expect(guide.contains(command), "the guide never shows \(command)")
+            }
+            for field in fields {
+                #expect(guide.contains(field), "the guide never explains \(field)")
+            }
+        }
+    }
+
     @Test func theGuideIsPrintedAsOneDocumentOnStdout() async {
         let result = await CLIProbe.run(["guide"])
         #expect(result.code == 0)
