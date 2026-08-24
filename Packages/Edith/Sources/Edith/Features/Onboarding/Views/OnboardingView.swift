@@ -519,11 +519,8 @@ struct OnboardingView: View {
     }
 
     private var selectedTools: [CLIToolSpec] {
-        var seen = Set<String>()
-        return ExtensionRegistry.entries
-            .filter { selectedIDs.contains($0.id) }
-            .flatMap(\.requiredTools)
-            .filter { $0.requirement.isActive() && seen.insert($0.id).inserted }
+        OnboardingFlow.requiredTools(selectedIDs: selectedIDs)
+            .filter { $0.requirement.isActive() }
     }
 
     private func stepHeading(_ title: String, detail: String) -> some View {

@@ -28,6 +28,20 @@ import Testing
         #expect(RunningAppOperation.quit.descriptor.effect == .destructive)
     }
 
+    @Test func catalogExposesTheSystemPageListAndBothQuitVariants() {
+        let actions = UserInterfaceActionCatalog.actions.filter {
+            $0.operation.cli.first == "apps"
+        }
+
+        #expect(
+            actions.map { [$0.surface, $0.action] + $0.cli }
+                == [
+                    ["System page", "inspect running applications", "apps", "ls"],
+                    ["System page", "quit one app", "apps", "quit", "Safari", "--yes"],
+                    ["System page", "quit all apps", "apps", "quit", "--all", "--yes"],
+                ])
+    }
+
     @Test func listAndCompletionUseTheSameSortedSnapshots() {
         let center = RunningAppOperationCenter(snapshot: { [Self.music, Self.safari] })
 

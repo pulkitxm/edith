@@ -74,6 +74,12 @@ public enum CLIEnvironment {
         CLIToolEnvironment.executable(named: $0)
     }
 
+    nonisolated(unsafe) public static var extensionToolReadiness:
+        @Sendable (String) async -> ExtensionToolReadiness = { id in
+            await ExtensionLifecycleProbeEnvironment.toolReadiness(
+                id, executableNamed: CLIEnvironment.executableNamed)
+        }
+
     nonisolated(unsafe) public static var resolveCompanionEndpoint: @Sendable (String?) -> URL = {
         CompanionClient.endpoint(override: $0)
     }
@@ -129,6 +135,10 @@ public enum CLIEnvironment {
         usageRefresh = UsageRefreshDriver.live
         installTool = { try await ToolInstaller().install($0, log: $1) }
         executableNamed = { CLIToolEnvironment.executable(named: $0) }
+        extensionToolReadiness = { id in
+            await ExtensionLifecycleProbeEnvironment.toolReadiness(
+                id, executableNamed: CLIEnvironment.executableNamed)
+        }
         resolveCompanionEndpoint = { CompanionClient.endpoint(override: $0) }
         QuinjetCLIEnvironment.reset()
     }

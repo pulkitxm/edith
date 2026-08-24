@@ -33,3 +33,60 @@ public struct UserOperationDescriptor: Equatable, Sendable {
         self.requiresPreview = requiresPreview
     }
 }
+
+public struct UserInterfaceActionPlacement: Equatable, Sendable {
+    public let surface: String
+    public let action: String
+    public let exampleArguments: [String]
+
+    public init(surface: String, action: String, exampleArguments: [String] = []) {
+        self.surface = surface
+        self.action = action
+        self.exampleArguments = exampleArguments
+    }
+}
+
+public enum UserOperationExposure: Equatable, Sendable {
+    case userInterface([UserInterfaceActionPlacement])
+    case commandLineOnly(reason: String)
+}
+
+public struct RegisteredUserOperation: Equatable, Sendable {
+    public let descriptor: UserOperationDescriptor
+    public let exposure: UserOperationExposure
+
+    public init(descriptor: UserOperationDescriptor, exposure: UserOperationExposure) {
+        self.descriptor = descriptor
+        self.exposure = exposure
+    }
+}
+
+public struct RegisteredUserInterfaceAction: Equatable, Sendable {
+    public let operation: UserOperationDescriptor
+    public let surface: String
+    public let action: String
+    public let exampleArguments: [String]
+
+    public init(operation: UserOperationDescriptor, placement: UserInterfaceActionPlacement) {
+        self.operation = operation
+        surface = placement.surface
+        action = placement.action
+        exampleArguments = placement.exampleArguments
+    }
+
+    public var cli: [String] {
+        operation.cli + exampleArguments
+    }
+}
+
+public struct UserInterfacePresentationState: Equatable, Sendable {
+    public let surface: String
+    public let state: String
+    public let reason: String
+
+    public init(surface: String, state: String, reason: String) {
+        self.surface = surface
+        self.state = state
+        self.reason = reason
+    }
+}

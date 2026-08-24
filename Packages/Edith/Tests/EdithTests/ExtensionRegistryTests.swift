@@ -48,13 +48,26 @@ import Testing
         let usage = ExtensionRegistry.entries.first { $0.id == "usage" }!
         let quinjet = ExtensionRegistry.entries.first { $0.id == "quinjet" }!
 
-        #expect(music.requiredTools == [.youtubeDownloader])
+        #expect(music.requiredTools.isEmpty)
+        #expect(music.optionalTools == [.youtubeDownloader])
         #expect(usage.requiredTools == [.claudeCode, .codex])
+        #expect(usage.optionalTools.isEmpty)
         #expect(quinjet.requiredTools == [.quinjet])
         #expect(CLIToolSpec.claudeCode.requirement == .always)
         #expect(
             CLIToolSpec.codex.requirement
                 == .whenPreferenceEnabled(key: "codexLimitsEnabled", defaultValue: true))
+    }
+
+    @Test func unsetExtensionDefaultsMatchEveryEffectiveConfigurationFallback() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        for entry in ExtensionRegistry.entries {
+            #expect(defaults.object(forKey: entry.defaultsKey) == nil)
+            #expect(!entry.isEnabled(in: defaults), "\(entry.id) is on without a stored choice")
+            #expect(ConfigCatalog.definition(for: entry.defaultsKey)?.fallback == .bool(false))
+        }
     }
 
     @Test func marketplaceFilterMatchesQueryAndCategory() {

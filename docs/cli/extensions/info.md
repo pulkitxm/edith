@@ -28,6 +28,7 @@ Clipboard
   key      clipboardEnabled
   group    Utilities
   state    Ready
+  runtime  Installed
   asks for Accessibility
 ```
 
@@ -39,6 +40,7 @@ Calendar
   key      tabCalendarEnabled
   group    Media
   state    Disabled
+  runtime  Uninstalled
   needs    Calendar
 ```
 
@@ -51,8 +53,8 @@ The JSON object retains the registry fields documented by `ls` and adds:
 | Field | Shape | Meaning |
 | --- | --- | --- |
 | `lifecycle` | object | Value, workflows, prerequisites, CLI examples, docs, recovery and verification metadata |
-| `state` | object | Phase, summary and structured issues |
-| `checks` | array | Every readiness check with status, detail and optional recovery command |
+| `state` | object | Readiness phase, runtime phase, summary and structured issues |
+| `checks` | array | Every readiness check with status, runtime phase contribution, detail and optional recovery command |
 | `verified` | boolean | True only when every required check passes |
 
 ```

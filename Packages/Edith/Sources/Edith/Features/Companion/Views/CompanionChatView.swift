@@ -83,7 +83,12 @@ final class CompanionChatModel {
 
     func loadConversations() async {
         do {
-            conversations = try await client.conversations(limit: 50)
+            let client = client
+            conversations = try await CompanionChatLibraryOperationExecution.conversations(
+                limit: 50
+            ) { limit in
+                try await client.conversations(limit: limit)
+            }
             loaded = true
             loadError = nil
         } catch {
@@ -95,7 +100,11 @@ final class CompanionChatModel {
         if streaming { stop() }
         activeConversationId = id
         do {
-            let detail = try await client.conversation(id: id)
+            let client = client
+            let detail = try await CompanionChatLibraryOperationExecution.conversation(id: id) {
+                id in
+                try await client.conversation(id: id)
+            }
             messages = detail.messages.map {
                 DisplayMessage(
                     id: $0.id, role: $0.role, content: $0.content,
@@ -119,7 +128,10 @@ final class CompanionChatModel {
 
     func delete(_ id: String) async {
         do {
-            _ = try await client.deleteConversation(id: id)
+            let client = client
+            _ = try await CompanionChatLibraryOperationExecution.forget(id: id) { id in
+                try await client.deleteConversation(id: id)
+            }
         } catch {
             failure = ChatFailure(message: error.localizedDescription, retryText: nil)
         }
@@ -163,9 +175,14 @@ final class CompanionChatModel {
         do {
             var buffer = ""
             var lastFlush = ContinuousClock.now
-            for try await event in client.chat(
-                message: text, conversationId: activeConversationId, persona: persona)
-            {
+            let client = client
+            let events = CompanionChatLibraryOperationExecution.chat(
+                message: text, conversationID: activeConversationId, persona: persona
+            ) { message, conversationID, persona in
+                client.chat(
+                    message: message, conversationId: conversationID, persona: persona)
+            }
+            for try await event in events {
                 if Task.isCancelled { break }
                 switch event {
                 case let .meta(conversationId, model):
@@ -256,6 +273,7 @@ struct CompanionChatScreen: View {
     @Environment(\.companionGeneration) private var generation
     @FocusState private var composerFocused: Bool
     @State private var anchored = true
+    @State private var pendingDeletion: CompanionConversation?
 
     private var dark: Bool { scheme == .dark }
     private var columnWidth: CGFloat { UIScale.pt(728) }
@@ -279,6 +297,22 @@ struct CompanionChatScreen: View {
             if active { composerFocused = true } else { composerFocused = false }
         }
         .onChange(of: model.focusTick) { if isActive { composerFocused = true } }
+        .confirmationDialog(
+            "Delete \(pendingDeletion?.title ?? "conversation")?",
+            isPresented: Binding(
+                get: { pendingDeletion != nil },
+                set: { if !$0 { pendingDeletion = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete conversation", role: .destructive) {
+                guard let id = pendingDeletion?.id else { return }
+                pendingDeletion = nil
+                Task { await model.delete(id) }
+            }
+            Button("Cancel", role: .cancel) { pendingDeletion = nil }
+        } message: {
+            Text("Every message in this conversation will be deleted.")
+        }
     }
 
     private var rail: some View {
@@ -336,7 +370,7 @@ struct CompanionChatScreen: View {
                                     active: conversation.id == model.activeConversationId,
                                     dark: dark,
                                     open: { Task { await model.open(conversation.id) } },
-                                    delete: { Task { await model.delete(conversation.id) } })
+                                    delete: { pendingDeletion = conversation })
                             }
                         }
                     }
