@@ -541,6 +541,8 @@ final class DashboardModel {
     }
 
     func load() async {
+        let loadTrace = PerformanceTrace.begin(.repository, "dashboard.load")
+        defer { PerformanceTrace.end(loadTrace) }
         syncExtensionState()
         guard extensionEnabled else { return }
         let url = Repo.usageJSON
@@ -567,6 +569,8 @@ final class DashboardModel {
     }
 
     func ingest(_ parsed: DashUsage) {
+        let ingestTrace = PerformanceTrace.begin(.largeRepository, "dashboard.ingest")
+        defer { PerformanceTrace.end(ingestTrace) }
         data = parsed
         sortedPeriods = parsed.daily.map(\.period).sorted()
         let srcIds = (parsed.sources ?? []).filter { id in
