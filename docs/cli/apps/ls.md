@@ -75,8 +75,8 @@ is a real document trimmed to three of the eight entries:
 What the fields mean:
 
 - `name` is the app's localized name, the same string the Dock and the Finder
-  show. An app that reports no name gets `""` rather than `null`, so the key is
-  always a string.
+  show. An app that reports no name gets `"Unknown"`, so the key is always a
+  string.
 - `bundleID` is the bundle identifier, and it is `null` rather than missing when
   the process has none. It is the only nullable field here.
 - `pid` is the process id as an integer, which is what the helper is handed when

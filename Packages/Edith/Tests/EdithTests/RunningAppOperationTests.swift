@@ -162,4 +162,25 @@ import Testing
         #expect(outcome.acknowledged)
         #expect(outcome.changed == 2)
     }
+
+    @Test func helperExecutionRevalidatesRequestedPIDsAndProtectedApps() {
+        final class Capture {
+            var targets: [RunningAppSnapshot] = []
+            var force = false
+        }
+        let capture = Capture()
+        let center = RunningAppOperationCenter(
+            snapshot: { [Self.finder, Self.safari, Self.music] },
+            perform: { targets, force in
+                capture.targets = targets
+                capture.force = force
+                return targets.count
+            })
+
+        let outcome = center.apply(pids: [Self.finder.pid, Self.safari.pid, 999], force: true)
+
+        #expect(capture.targets == [Self.safari])
+        #expect(capture.force)
+        #expect(outcome.changed == 1)
+    }
 }
