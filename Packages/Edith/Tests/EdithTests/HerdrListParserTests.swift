@@ -269,6 +269,20 @@ import Testing
                     "--cols", "132", "--rows", "41",
                 ])
     }
+
+    @Test func observerPreloadsRecentScrollback() {
+        #expect(
+            HerdrAttachCommand.observerHistoryArguments(session: "default", pane: "w3:p1N")
+                == [
+                    "--session", "default", "pane", "read", "w3:p1N",
+                    "--source", "recent", "--lines", "500", "--format", "ansi",
+                ])
+        #expect(
+            HerdrAttachCommand.observerLine(
+                session: "default", pane: "w3:p1N", columns: 132, rows: 41)
+                == "export PATH=\"$HOME/.local/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH\"; herdr --session default pane read w3:p1N --source recent --lines 500 --format ansi; printf '\\n'; exec herdr --session default terminal session observe w3:p1N --cols 132 --rows 41"
+        )
+    }
 }
 
 @Suite struct HerdrObserverStreamDecoderTests {
@@ -292,6 +306,23 @@ import Testing
         var decoder = HerdrObserverStreamDecoder()
 
         #expect(decoder.append(input) == [expected])
+    }
+
+    @MainActor @Test func preloadedHistoryCreatesScrollableRows() {
+        let view = HerdrObserverTerminalView(frame: .zero)
+        let history = (0..<40).map { "history \($0)" }.joined(separator: "\n") + "\n"
+        let frame = Data("\u{1B}[2J\u{1B}[Hlive".utf8)
+        let encoded = frame.base64EncodedString()
+        let input = Data(
+            (history + "{\"type\":\"terminal.frame\",\"bytes\":\"\(encoded)\"}\n").utf8)
+
+        view.dataReceived(slice: Array(input)[...])
+        let bottom = view.scrollPosition
+        view.scrollUp(lines: 1)
+
+        #expect(view.canScroll)
+        #expect(bottom == 1)
+        #expect(view.scrollPosition < bottom)
     }
 }
 

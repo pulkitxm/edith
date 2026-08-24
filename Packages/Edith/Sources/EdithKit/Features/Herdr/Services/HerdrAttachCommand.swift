@@ -24,11 +24,21 @@ public enum HerdrAttachCommand {
     public static func observerLine(session: String, pane: String, columns: Int, rows: Int)
         -> String
     {
-        let command = ShellQuote.command(
+        let history = ShellQuote.command(
+            ["herdr"] + observerHistoryArguments(session: session, pane: pane))
+        let observer = ShellQuote.command(
             ["herdr"]
                 + observerArguments(
                     session: session, pane: pane, columns: columns, rows: rows))
-        return "export PATH=\"\(HerdrCollector.pathPrefix)\"; \(command)"
+        return
+            "export PATH=\"\(HerdrCollector.pathPrefix)\"; \(history); printf '\\n'; exec \(observer)"
+    }
+
+    public static func observerHistoryArguments(session: String, pane: String) -> [String] {
+        [
+            "--session", session, "pane", "read", pane,
+            "--source", "recent", "--lines", "500", "--format", "ansi",
+        ]
     }
 
     public static func observerArguments(

@@ -262,14 +262,6 @@ struct HerdrSessionView: View {
 
     private func startLocal(columns: Int, rows: Int) {
         let environment = Terminal.getEnvironmentVariables(termName: "xterm-256color")
-        if let executable = HerdrCollector.executable() {
-            tab.holder.start(
-                executable: executable.path,
-                arguments: HerdrAttachCommand.observerArguments(
-                    session: agent.session, pane: agent.pane, columns: columns, rows: rows),
-                environment: environment)
-            return
-        }
         tab.holder.start(
             executable: "/bin/zsh",
             arguments: [
