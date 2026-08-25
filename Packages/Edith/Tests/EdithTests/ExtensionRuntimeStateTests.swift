@@ -55,6 +55,9 @@ import Testing
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
         #expect(source.contains("ForEach(filteredEntries)"))
+        #expect(source.contains("if filteredEntries.isEmpty"))
+        #expect(source.contains("ExtensionMarketplaceFilter.emptyState"))
+        #expect(source.contains("ContentUnavailableView"))
         #expect(!source.contains("enabledEntries"))
         #expect(!source.contains("availableEntries"))
     }
@@ -120,9 +123,10 @@ import Testing
         #expect(source.contains("ExtensionLifecycleRows("))
         #expect(source.contains("if let lifecycle = entry.lifecycle"))
         #expect(source.contains("Text(entry.subtitle)"))
-        #expect(source.contains("coordinator.lifecycleReport()"))
+        #expect(source.contains("coordinator.lifecycleReport($0)"))
         #expect(source.contains("ExtensionReadinessModel"))
-        #expect(source.contains("await readiness.refresh().value"))
+        #expect(source.contains("await readiness.refresh(.status).value"))
+        #expect(source.contains("readiness.refresh(.verify)"))
         #expect(source.contains(".onDisappear { readiness.cancel() }"))
         #expect(!source.contains("Task { await refresh() }"))
         #expect(source.contains("report.state.phase.title"))

@@ -4,7 +4,8 @@ import Observation
 @MainActor
 @Observable
 public final class ExtensionReadinessModel {
-    public typealias Load = @Sendable () async -> ExtensionLifecycleReport
+    public typealias Load =
+        @Sendable (ExtensionInspectionOperation) async -> ExtensionLifecycleReport
 
     public private(set) var report: ExtensionLifecycleReport?
     public private(set) var isRefreshing = false
@@ -18,7 +19,9 @@ public final class ExtensionReadinessModel {
     }
 
     @discardableResult
-    public func refresh() -> Task<Void, Never> {
+    public func refresh(
+        _ operation: ExtensionInspectionOperation = .status
+    ) -> Task<Void, Never> {
         generation &+= 1
         let requestedGeneration = generation
         refreshTask?.cancel()
@@ -26,7 +29,7 @@ public final class ExtensionReadinessModel {
         isRefreshing = true
         let load = load
         let task = Task { [weak self] in
-            let result = await load()
+            let result = await load(operation)
             guard !Task.isCancelled else { return }
             self?.publish(result, generation: requestedGeneration)
         }

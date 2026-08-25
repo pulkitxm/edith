@@ -22,7 +22,12 @@ import Testing
         }
         let expectedActions = [
             ("app.clean-keys", "Menu bar", "lock the keyboard to clean it", []),
+            ("app.clean-keys", "Extension settings", "lock the keyboard to clean it", []),
             ("app.test-notification", "Settings", "send a test notification", []),
+            (
+                "app.test-notification", "Extension settings", "send a test notification",
+                []
+            ),
             ("app.open", "Menu bar", "open the panel", []),
             ("app.quit", "Menu bar", "quit Edith", ["--yes"]),
             ("app.check-updates", "About pane", "check for updates", []),

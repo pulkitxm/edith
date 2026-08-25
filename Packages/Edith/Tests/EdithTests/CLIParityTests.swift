@@ -68,6 +68,19 @@ enum UIParity {
             "Extensions pane", "turn an extension on", ["extensions", "enable", "clipboard"]),
         UICapability(
             "Extensions pane", "turn an extension off", ["extensions", "disable", "clipboard"]),
+        UICapability("Extensions pane", "browse registered extensions", ["extensions", "ls"]),
+        UICapability(
+            "Extension settings", "inspect metadata and requirements",
+            ["extensions", "info", "clipboard"]),
+        UICapability(
+            "Extension settings", "inspect live readiness",
+            ["extensions", "status", "clipboard"]),
+        UICapability(
+            "Extension settings", "check readiness again",
+            ["extensions", "verify", "clipboard"]),
+        UICapability(
+            "Extension settings", "inspect failures and recovery guidance",
+            ["extensions", "doctor", "clipboard"]),
         UICapability(
             "Permissions pane", "raise a macOS permission prompt",
             ["permissions", "request", "calendar"]),
@@ -379,6 +392,23 @@ enum UIParity {
 
     static let capabilities =
         UserInterfaceActionCatalog.actions.map(UICapability.init) + legacyCapabilities
+
+    static let expectedLegacyLabels: Set<String> = [
+        "ed attention categories set app:com.example.App focus",
+        "ed companion episode abc --open",
+        "ed companion ingest /tmp/note.md",
+        "ed companion ingest /tmp/notes",
+        "ed companion ingest /tmp/voice-memo.wav",
+        "ed herdr command w3:p1N",
+        "ed machines files cp box /a /b",
+        "ed machines files get box /etc/hosts",
+        "ed machines files ls build /tmp",
+        "ed machines files mkdir box /a",
+        "ed machines files mv box /a /b",
+        "ed machines files put box ./x /tmp/x",
+        "ed quinjet focus 1",
+        "ed quinjet projects --machine build",
+    ]
 }
 
 @Suite struct CLIParityTests {
@@ -498,6 +528,9 @@ enum UIParity {
     }
 
     @Test func legacyInventoryContainsOnlyOperationsAwaitingSharedDescriptors() {
+        #expect(
+            Set(UIParity.legacyCapabilities.map(\.label)) == UIParity.expectedLegacyLabels,
+            "the exact residual UI operation inventory changed")
         for capability in UIParity.legacyCapabilities {
             #expect(
                 !UIParity.isCovered(capability, by: UserInterfaceActionCatalog.actions),
@@ -569,6 +602,17 @@ enum UIParity {
                 == [
                     ["extensions", "enable"], ["extensions", "disable"],
                     ["extensions", "setup"], ["tools", "install"],
+                ])
+    }
+
+    @Test func everyExtensionInspectionLeafDeclaresItsSharedOperation() {
+        let declared = Set(ExtensionInspectionOperation.allCases.map(\.descriptor.cli))
+        #expect(
+            declared
+                == [
+                    ["extensions", "ls"], ["extensions", "info"],
+                    ["extensions", "status"], ["extensions", "verify"],
+                    ["extensions", "doctor"],
                 ])
     }
 

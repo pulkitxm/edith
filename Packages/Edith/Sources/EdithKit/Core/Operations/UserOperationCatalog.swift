@@ -50,6 +50,9 @@ public enum UserOperationCatalog {
         + AppInspectionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + ExtensionInspectionOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + ExtensionMutationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -307,7 +310,7 @@ private extension AppInspectionOperation {
                     surface: "About pane", action: "open a contributor profile",
                     exampleArguments: ["contributor:octo"]),
                 UserInterfaceActionPlacement(
-                    surface: "Extension lifecycle sheet", action: "open an extension guide",
+                    surface: "Extension settings", action: "open an extension guide",
                     exampleArguments: ["extension-doc:usage:guide"]),
             ])
         }
@@ -478,6 +481,25 @@ private extension MachineDockerPauseOperation {
     }
 }
 
+private extension ExtensionInspectionOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list:
+            userInterface("Extensions pane", "browse registered extensions")
+        case .info:
+            userInterface(
+                "Extension settings", "inspect metadata and requirements", ["clipboard"])
+        case .status:
+            userInterface("Extension settings", "inspect live readiness", ["clipboard"])
+        case .verify:
+            userInterface("Extension settings", "check readiness again", ["clipboard"])
+        case .doctor:
+            userInterface(
+                "Extension settings", "inspect failures and recovery guidance", ["clipboard"])
+        }
+    }
+}
+
 private extension DockerLifecycleOperation {
     var interfaceExposure: UserOperationExposure {
         switch self {
@@ -548,9 +570,27 @@ private extension ExtensionMutationOperation {
     var interfaceExposure: UserOperationExposure {
         switch self {
         case .enable:
-            userInterface("Extensions pane", "turn an extension on", ["clipboard"])
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Extensions pane", action: "turn an extension on",
+                    exampleArguments: ["clipboard"]),
+                UserInterfaceActionPlacement(
+                    surface: "Extension settings", action: "turn the extension on",
+                    exampleArguments: ["clipboard"]),
+                UserInterfaceActionPlacement(
+                    surface: "Extension permission sheet",
+                    action: "enable after required permissions are granted",
+                    exampleArguments: ["clipboard"]),
+            ])
         case .disable:
-            userInterface("Extensions pane", "turn an extension off", ["clipboard"])
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Extensions pane", action: "turn an extension off",
+                    exampleArguments: ["clipboard"]),
+                UserInterfaceActionPlacement(
+                    surface: "Extension settings", action: "turn the extension off",
+                    exampleArguments: ["clipboard"]),
+            ])
         case .setup:
             userInterface("Extension setup", "prepare an extension for use", ["clipboard"])
         case .provisionTool:
@@ -570,9 +610,19 @@ private extension AppRuntimeOperation {
     var interfaceExposure: UserOperationExposure {
         switch self {
         case .cleanKeys:
-            userInterface("Menu bar", "lock the keyboard to clean it")
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Menu bar", action: "lock the keyboard to clean it"),
+                UserInterfaceActionPlacement(
+                    surface: "Extension settings", action: "lock the keyboard to clean it"),
+            ])
         case .testNotification:
-            userInterface("Settings", "send a test notification")
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Settings", action: "send a test notification"),
+                UserInterfaceActionPlacement(
+                    surface: "Extension settings", action: "send a test notification"),
+            ])
         case .open:
             userInterface("Menu bar", "open the panel")
         case .quit:
@@ -689,7 +739,12 @@ private extension MusicLibraryOperation {
         case .reveal:
             userInterface("Music page", "reveal a track", ["song"])
         case .open:
-            userInterface("Music page", "open the library")
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Music page", action: "open the library"),
+                UserInterfaceActionPlacement(
+                    surface: "Extension settings", action: "open the music folder"),
+            ])
         }
     }
 }
@@ -825,6 +880,9 @@ private extension ConfigurationOperation {
                     surface: "Settings", action: "change a preference",
                     exampleArguments: ["theme", "dim"]),
                 UserInterfaceActionPlacement(
+                    surface: "Extension settings", action: "change an extension preference",
+                    exampleArguments: ["musicCrossfadeEnabled", "true"]),
+                UserInterfaceActionPlacement(
                     surface: "Companion settings", action: "point at another companion",
                     exampleArguments: [
                         "companionEndpoint", "http://127.0.0.1:4820",
@@ -879,12 +937,33 @@ private extension PermissionOperation {
         case .status:
             userInterface("Permissions pane", "inspect permission state")
         case .request:
-            userInterface("Permissions pane", "raise a macOS permission prompt", ["calendar"])
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Permissions pane", action: "raise a macOS permission prompt",
+                    exampleArguments: ["calendar"]),
+                UserInterfaceActionPlacement(
+                    surface: "Extension settings", action: "raise a macOS permission prompt",
+                    exampleArguments: ["calendar"]),
+                UserInterfaceActionPlacement(
+                    surface: "Extension permission sheet",
+                    action: "raise a macOS permission prompt", exampleArguments: ["calendar"]),
+            ])
         case .refresh:
             userInterface("Permissions pane", "re-read the real permission state")
         case .settings:
-            userInterface(
-                "Permissions pane", "open the relevant System Settings pane", ["calendar"])
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Permissions pane", action: "open the relevant System Settings pane",
+                    exampleArguments: ["calendar"]),
+                UserInterfaceActionPlacement(
+                    surface: "Extension settings",
+                    action: "open the relevant System Settings pane",
+                    exampleArguments: ["calendar"]),
+                UserInterfaceActionPlacement(
+                    surface: "Extension permission sheet",
+                    action: "open the relevant System Settings pane",
+                    exampleArguments: ["calendar"]),
+            ])
         }
     }
 }

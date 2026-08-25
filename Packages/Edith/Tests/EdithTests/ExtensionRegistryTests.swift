@@ -91,6 +91,31 @@ import Testing
         #expect(attentionMatches.map(\.id) == ["attention"])
     }
 
+    @Test func marketplaceTextSearchIgnoresAStaleCategory() {
+        for category in [
+            ExtensionMarketplaceCategory.agent, .system, .media,
+        ] {
+            let matches = ExtensionMarketplaceFilter.filter(
+                entries: ExtensionRegistry.entries, query: " attention ", category: category)
+            #expect(matches.map(\.id) == ["attention"])
+        }
+    }
+
+    @Test func marketplaceEmptyStateExplainsSearchAndCategory() {
+        let search = ExtensionMarketplaceFilter.emptyState(
+            query: " missing extension ", category: .agent)
+        #expect(search.title == "No extensions found")
+        #expect(search.detail == "No extension matches \"missing extension\". Try another search.")
+
+        let category = ExtensionMarketplaceFilter.emptyState(query: "", category: .utilities)
+        #expect(category.title == "No Utilities extensions")
+        #expect(category.detail == "No extensions are available in this category.")
+
+        let marketplace = ExtensionMarketplaceFilter.emptyState(query: "  ", category: .all)
+        #expect(marketplace.title == "No extensions available")
+        #expect(marketplace.detail == "No extensions are registered yet.")
+    }
+
     @Test func permissionTiersMatchFeatureRequirements() {
         let required: [String: [ExtensionPermission]] = [
             "attention": [],

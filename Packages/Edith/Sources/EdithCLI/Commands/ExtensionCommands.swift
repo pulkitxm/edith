@@ -17,18 +17,21 @@ struct ExtensionsCommand: AsyncParsableCommand {
 
 enum ExtensionLookup {
     static func entry(_ id: String) throws -> ExtensionRegistryEntry {
-        let needle = id.lowercased()
-        if let exact = ExtensionRegistry.entries.first(where: { $0.id.lowercased() == needle }) {
-            return exact
+        do {
+            return try inspectionCenter().entry(id)
+        } catch let error as ExtensionInspectionError {
+            throw cliFailure(error)
         }
-        if let byKey = ExtensionRegistry.entries.first(where: {
-            $0.defaultsKey.lowercased() == needle
-        }) {
-            return byKey
+    }
+
+    static func inspect(
+        _ operation: ExtensionInspectionOperation, id: String? = nil
+    ) async throws -> ExtensionInspectionResult {
+        do {
+            return try await inspectionCenter().execute(operation, id: id)
+        } catch let error as ExtensionInspectionError {
+            throw cliFailure(error)
         }
-        throw CLIFailure.notFound(
-            "no extension named \(id)",
-            hint: "known ids: " + ExtensionRegistry.entries.map(\.id).joined(separator: ", "))
     }
 
     static func isEnabled(_ entry: ExtensionRegistryEntry) -> Bool {
@@ -36,7 +39,8 @@ enum ExtensionLookup {
     }
 
     static func json(
-        _ entry: ExtensionRegistryEntry, report: ExtensionLifecycleReport? = nil
+        _ entry: ExtensionRegistryEntry, enabled: Bool? = nil,
+        report: ExtensionLifecycleReport? = nil
     ) -> JSONValue {
         let granted = grantedPermissions()
         var fields: [String: JSONValue] = [
@@ -46,7 +50,7 @@ enum ExtensionLookup {
             "group": .string(entry.group.rawValue),
             "featured": .bool(entry.featured),
             "key": .string(entry.defaultsKey),
-            "enabled": .bool(isEnabled(entry)),
+            "enabled": .bool(enabled ?? isEnabled(entry)),
             "requiredCapabilities": .strings(entry.requiredCapabilities.map(\.rawValue)),
             "optionalCapabilities": .strings(entry.optionalCapabilities.map(\.rawValue)),
             "requiredPermissions": .strings(entry.requiredPermissions.map(\.rawValue)),
@@ -107,6 +111,28 @@ enum ExtensionLookup {
                 toolPresent: toolPresent,
                 installTool: { tool, log in try await CLIEnvironment.installTool(tool, log) },
                 lifecycle: probe().environment))
+    }
+
+    static func inspectionCenter() -> ExtensionInspectionCenter {
+        ExtensionInspectionCenter(environment: mutationCenter().environment)
+    }
+
+    static func report(_ item: ExtensionInspectionItem) throws -> ExtensionLifecycleReport {
+        guard let report = item.report else {
+            throw CLIFailure("extension readiness returned no report")
+        }
+        return report
+    }
+
+    private static func cliFailure(_ error: ExtensionInspectionError) -> CLIFailure {
+        switch error {
+        case let .unknownExtension(_, knownIDs):
+            CLIFailure.notFound(
+                error.localizedDescription,
+                hint: "known ids: " + knownIDs.joined(separator: ", "))
+        case .missingExtensionID, .unexpectedExtensionID:
+            CLIFailure.usage(error.localizedDescription)
+        }
     }
 
     private static func lifecycleJSON(_ lifecycle: ExtensionLifecycleDescriptor) -> JSONValue {
@@ -185,14 +211,19 @@ struct ExtensionsListCommand: AsyncParsableCommand {
     var json = false
 
     func run() async throws {
+        let result = try await ExtensionLookup.inspect(.list)
         guard !json else {
-            CLIOut.json(.array(ExtensionRegistry.entries.map { ExtensionLookup.json($0) }))
+            CLIOut.json(
+                .array(
+                    result.items.map {
+                        ExtensionLookup.json($0.entry, enabled: $0.enabled)
+                    }))
             return
         }
-        let rows = ExtensionRegistry.entries.map { entry in
+        let rows = result.items.map { item in
             [
-                entry.id, ExtensionLookup.isEnabled(entry) ? "on" : "off",
-                entry.group.rawValue, entry.title,
+                item.entry.id, item.enabled ? "on" : "off",
+                item.entry.group.rawValue, item.entry.title,
             ]
         }
         CLIOut.out(TextTable.render(headers: ["ID", "STATE", "GROUP", "NAME"], rows: rows))
@@ -262,10 +293,13 @@ struct ExtensionsInfoCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let entry = try ExtensionLookup.entry(id)
-            let report = await ExtensionLookup.probe().report(for: entry)
+            let item = try await ExtensionLookup.inspect(.info, id: id).items[0]
+            let entry = item.entry
+            let reportItem = try await ExtensionLookup.inspect(.status, id: id).items[0]
+            let report = try ExtensionLookup.report(reportItem)
             guard !json else {
-                CLIOut.json(ExtensionLookup.json(entry, report: report))
+                CLIOut.json(
+                    ExtensionLookup.json(entry, enabled: item.enabled, report: report))
                 return
             }
             let lifecycle = entry.lifecycle
@@ -318,20 +352,23 @@ struct ExtensionsStatusCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let entries = try selectedEntries(id)
-            let reports = await ExtensionLookup.probe().reports(for: entries)
+            let result = try await ExtensionLookup.inspect(.status, id: id)
             guard !json else {
-                let values = zip(entries, reports).map(ExtensionLookup.reportJSON)
+                let values = try result.items.map { item in
+                    ExtensionLookup.reportJSON(
+                        item.entry, try ExtensionLookup.report(item))
+                }
                 CLIOut.json(id == nil ? .array(values) : values[0])
                 return
             }
             CLIOut.out(
                 TextTable.render(
                     headers: ["ID", "READINESS", "RUNTIME", "DETAIL"],
-                    rows: zip(entries, reports).map { entry, report in
-                        [
-                            entry.id, report.state.phase.title, report.state.runtimePhase.title,
-                            report.state.summary,
+                    rows: try result.items.map { item in
+                        let report = try ExtensionLookup.report(item)
+                        return [
+                            item.entry.id, report.state.phase.title,
+                            report.state.runtimePhase.title, report.state.summary,
                         ]
                     }))
         }
@@ -402,8 +439,9 @@ struct ExtensionsVerifyCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let entry = try ExtensionLookup.entry(id)
-            let report = await ExtensionLookup.probe().report(for: entry)
+            let item = try await ExtensionLookup.inspect(.verify, id: id).items[0]
+            let entry = item.entry
+            let report = try ExtensionLookup.report(item)
             guard !json else {
                 CLIOut.json(ExtensionLookup.reportJSON(entry, report))
                 return
@@ -425,23 +463,20 @@ struct ExtensionsDoctorCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let entries = try selectedEntries(id)
-            let reports = await ExtensionLookup.probe().reports(for: entries)
+            let result = try await ExtensionLookup.inspect(.doctor, id: id)
             guard !json else {
-                let values = zip(entries, reports).map(ExtensionLookup.reportJSON)
+                let values = try result.items.map { item in
+                    ExtensionLookup.reportJSON(
+                        item.entry, try ExtensionLookup.report(item))
+                }
                 CLIOut.json(id == nil ? .array(values) : values[0])
                 return
             }
-            for (entry, report) in zip(entries, reports) {
-                printReport(entry, report)
+            for item in result.items {
+                printReport(item.entry, try ExtensionLookup.report(item))
             }
         }
     }
-}
-
-private func selectedEntries(_ id: String?) throws -> [ExtensionRegistryEntry] {
-    if let id { return [try ExtensionLookup.entry(id)] }
-    return ExtensionRegistry.entries
 }
 
 private func printReport(_ entry: ExtensionRegistryEntry, _ report: ExtensionLifecycleReport) {

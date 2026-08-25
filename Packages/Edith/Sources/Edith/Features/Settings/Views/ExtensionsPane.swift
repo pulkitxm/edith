@@ -151,19 +151,30 @@ struct ExtensionsPane: View {
 
     private var filteredEntries: [ExtensionRegistryEntry] {
         ExtensionMarketplaceFilter.filter(
-            entries: ExtensionRegistry.entries, query: query, category: category)
+            entries: inspectionCenter.list().map(\.entry), query: query, category: category)
     }
 
+    @ViewBuilder
     private var extensionGrid: some View {
-        LazyVGrid(columns: gridColumns, spacing: UIScale.pt(14)) {
-            ForEach(filteredEntries) { entry in
-                ExtensionMarketplaceCard(
-                    entry: entry,
-                    enabled: permissionAwareBinding(for: entry),
-                    dark: colorScheme == .dark,
-                    open: { openSettings(for: entry) }
-                )
-                .id(entry.id)
+        if filteredEntries.isEmpty {
+            let state = ExtensionMarketplaceFilter.emptyState(query: query, category: category)
+            ContentUnavailableView {
+                Label(state.title, systemImage: "magnifyingglass")
+            } description: {
+                Text(state.detail)
+            }
+            .frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
+        } else {
+            LazyVGrid(columns: gridColumns, spacing: UIScale.pt(14)) {
+                ForEach(filteredEntries) { entry in
+                    ExtensionMarketplaceCard(
+                        entry: entry,
+                        enabled: permissionAwareBinding(for: entry),
+                        dark: colorScheme == .dark,
+                        open: { openSettings(for: entry) }
+                    )
+                    .id(entry.id)
+                }
             }
         }
     }
@@ -176,7 +187,11 @@ struct ExtensionsPane: View {
     }
 
     private func openSettings(for entry: ExtensionRegistryEntry) {
-        selectedEntry = entry
+        selectedEntry = inspectionCenter.info(entry).entry
+    }
+
+    private var inspectionCenter: ExtensionInspectionCenter {
+        ExtensionInspectionCenter(environment: ExtensionMutationCenter.application.environment)
     }
 
     private func handleDeepLink(using proxy: ScrollViewProxy) {
@@ -535,7 +550,7 @@ private struct ExtensionLifecycleRows: View {
         self.invalidation = invalidation
         _readiness = State(
             initialValue: ExtensionReadinessModel {
-                await coordinator.lifecycleReport()
+                await coordinator.lifecycleReport($0)
             })
     }
 
@@ -563,7 +578,7 @@ private struct ExtensionLifecycleRows: View {
                         checkRow(check)
                     }
                     Button("Check again") {
-                        readiness.refresh()
+                        readiness.refresh(.verify)
                     }
                     .pointerCursor()
                 } else {
@@ -621,7 +636,7 @@ private struct ExtensionLifecycleRows: View {
         .task(id: "\(entry.id):\(invalidation)") {
             let discoveryTrace = PerformanceTrace.begin(.extensionDiscovery, "extensions.report")
             defer { PerformanceTrace.end(discoveryTrace) }
-            await readiness.refresh().value
+            await readiness.refresh(.status).value
         }
         .onDisappear { readiness.cancel() }
     }
