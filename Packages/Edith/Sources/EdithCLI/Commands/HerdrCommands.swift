@@ -12,7 +12,8 @@ struct HerdrCommand: AsyncParsableCommand {
             Herdr still lists the machines that have it.
             """,
         subcommands: [
-            HerdrListCommand.self, HerdrAttachLineCommand.self, HerdrAttachCommandCLI.self,
+            HerdrListCommand.self, HerdrNewCommand.self, HerdrAttachLineCommand.self,
+            HerdrAttachCommandCLI.self,
         ],
         defaultSubcommand: HerdrListCommand.self)
 }
@@ -58,6 +59,8 @@ enum HerdrCLI {
             "session": .string(agent.session),
             "pane": .string(agent.pane),
             "kind": .string(agent.kind),
+            "category": .string(agent.category.rawValue),
+            "process": .string(agent.process),
             "status": .string(agent.status.rawValue),
             "title": .string(agent.title),
             "workspace": .string(agent.workspace),
@@ -135,6 +138,61 @@ struct HerdrListCommand: AsyncParsableCommand {
             CLIOut.out(
                 TextTable.render(
                     headers: ["MACHINE", "KIND", "STATUS", "PANE", "TITLE"], rows: rows))
+        }
+    }
+}
+
+struct HerdrNewCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "new", abstract: "Create a Herdr terminal on a machine.")
+
+    @Option(help: "The machine to create it on, or local for this Mac.")
+    var machine: String?
+
+    @Option(help: "The herdr session name.")
+    var session = "default"
+
+    @Option(help: "The workspace id, for example w2.")
+    var workspace: String?
+
+    @Option(help: "The working directory for the new terminal.")
+    var cwd: String?
+
+    @Option(help: "A label for the new terminal.")
+    var label: String?
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let request = HerdrTerminalRequest(
+                session: session, workspace: workspace, cwd: cwd, label: label)
+            let scope = try HerdrCLI.scope(machine)
+            let pane: String
+            let machineName: String
+            switch scope {
+            case .local, .all:
+                machineName = "This Mac"
+                pane = try await HerdrTerminalOperationExecution.createLocally(request)
+            case let .machine(target):
+                machineName = target.name
+                let connection = SSHConnection(machine: target, controlSocketMode: .shared)
+                try await connection.connect()
+                pane = try await HerdrTerminalOperationExecution.createRemotely(
+                    request, connection: connection)
+            }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "machine": .string(machineName),
+                        "session": .string(session),
+                        "pane": .string(pane),
+                        "label": .optional(label),
+                    ]))
+                return
+            }
+            CLIOut.out("\(machineName) \(session) \(pane)")
         }
     }
 }

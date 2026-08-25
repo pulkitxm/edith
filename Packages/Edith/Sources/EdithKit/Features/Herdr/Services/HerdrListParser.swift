@@ -130,6 +130,18 @@ public enum HerdrListParser {
         return string(in: data, keys: ["final_status"])
     }
 
+    public static func createdPane(in text: String) -> String? {
+        guard let json = firstJSON(in: text) as? [String: Any] else { return nil }
+        let payload = unwrap(json) as? [String: Any] ?? json
+        if let pane = payload["root_pane"], let record = paneRecord(from: pane) {
+            return record.pane
+        }
+        if let pane = payload["pane"], let record = paneRecord(from: pane) {
+            return record.pane
+        }
+        return string(in: payload, keys: ["pane_id", "root_pane_id"])
+    }
+
     public static func processName(in text: String) -> String? {
         guard let json = firstJSON(in: text) as? [String: Any] else { return nil }
         let payload = unwrap(json) as? [String: Any] ?? json

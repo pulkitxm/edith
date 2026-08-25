@@ -2,6 +2,9 @@ import Foundation
 
 public enum HerdrAttachCommand {
     public static func line(for agent: HerdrAgent) -> String {
+        if agent.isTerminal {
+            return HerdrTerminalOperationExecution.attachLine(for: agent)
+        }
         let attach = herdrLine(session: agent.session, pane: agent.pane)
         guard !agent.machineIsLocal, let target = agent.sshTarget, !target.isEmpty else {
             return attach

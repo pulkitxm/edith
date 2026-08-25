@@ -3,11 +3,21 @@ import Foundation
 public enum HerdrAgentView: String, CaseIterable, Codable, Sendable {
     case agent
     case diff
+    case split
 
     public var title: String {
         switch self {
         case .agent: "Open agent"
         case .diff: "Open diff"
+        case .split: "Open split"
+        }
+    }
+
+    public var shortTitle: String {
+        switch self {
+        case .agent: "Agent"
+        case .diff: "Diff"
+        case .split: "Split"
         }
     }
 
@@ -15,7 +25,39 @@ public enum HerdrAgentView: String, CaseIterable, Codable, Sendable {
         switch self {
         case .agent: "terminal"
         case .diff: "arrow.triangle.branch"
+        case .split: "rectangle.split.2x1"
         }
+    }
+
+    public var showsAgent: Bool { self != .diff }
+
+    public var showsDiff: Bool { self != .agent }
+}
+
+public enum HerdrSplitFraction {
+    public static let key = AppStorageKeys.Herdr.splitFraction
+    public static let minimum = 0.25
+    public static let maximum = 0.8
+    public static let standard = 0.58
+
+    public static func clamp(_ value: Double) -> Double {
+        min(maximum, max(minimum, value))
+    }
+
+    public static func fraction(
+        for agentID: String, _ store: UserDefaults = SharedDefaults.store
+    ) -> Double {
+        let raw = (store.dictionary(forKey: key) as? [String: Double]) ?? [:]
+        guard let value = raw[agentID] else { return standard }
+        return clamp(value)
+    }
+
+    public static func set(
+        _ fraction: Double, for agentID: String, _ store: UserDefaults = SharedDefaults.store
+    ) {
+        var raw = (store.dictionary(forKey: key) as? [String: Double]) ?? [:]
+        raw[agentID] = clamp(fraction)
+        store.set(raw, forKey: key)
     }
 }
 

@@ -457,6 +457,10 @@ public enum CommandTree {
                         "ls", "List live Herdr sessions.", aliases: ["list"],
                         options: common + ["--machine"]),
                     CommandNode(
+                        "new", "Create a Herdr terminal on a machine.",
+                        options: common
+                            + ["--machine", "--session", "--workspace", "--cwd", "--label"]),
+                    CommandNode(
                         "command", "Print the command that attaches to a pane.",
                         options: common + ["--machine", "--session"],
                         arguments: [.free]),
