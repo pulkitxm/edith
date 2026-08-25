@@ -173,7 +173,7 @@ import Testing
     @Test func anUnknownGuideTopicIsNotFound() async {
         let result = await CLIProbe.run(["guide", "quantum"])
         #expect(result.code == ExitCodes.notFound)
-        #expect(result.stderr.contains("ed guide claude"))
+        #expect(result.stderr.contains("ed guide agent"))
     }
 
     @Test func aVolumeOutsideZeroToOneIsRejected() async {
