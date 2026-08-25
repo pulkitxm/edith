@@ -146,6 +146,46 @@ public enum MachineReports {
         ])
     }
 
+    public static func inspect(_ value: DockerInspectSummary) -> JSONValue {
+        .object([
+            "image": .string(value.image),
+            "command": .string(value.command),
+            "created": .string(value.created),
+            "restartPolicy": .string(value.restartPolicy),
+            "environment": .strings(value.environment),
+            "mounts": .strings(value.mounts),
+            "networks": .strings(value.networks),
+            "labels": .object(value.labels.mapValues(JSONValue.string)),
+        ])
+    }
+
+    public static func inspectRows(_ value: DockerInspectSummary) -> [[String]] {
+        [
+            ["image", value.image],
+            ["command", value.command],
+            ["created", value.created],
+            ["restart policy", value.restartPolicy],
+            ["environment", value.environment.joined(separator: ", ")],
+            ["mounts", value.mounts.joined(separator: ", ")],
+            ["networks", value.networks.joined(separator: ", ")],
+            [
+                "labels",
+                value.labels.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+                    .joined(separator: ", "),
+            ],
+        ]
+    }
+
+    public static func process(_ value: DockerProcess) -> JSONValue {
+        .object([
+            "pid": .string(value.pid),
+            "user": .string(value.user),
+            "cpuPercent": .string(value.cpu),
+            "memoryPercent": .string(value.memory),
+            "command": .string(value.command),
+        ])
+    }
+
     public static func image(_ value: DockerImage) -> JSONValue {
         .object([
             "id": .string(value.id),
