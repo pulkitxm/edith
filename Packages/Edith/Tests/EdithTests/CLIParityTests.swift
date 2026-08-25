@@ -288,8 +288,6 @@ enum UIParity {
         UICapability(
             "Rate limit cards", "refresh the limits now", ["usage", "limits", "--refresh"]),
         UICapability(
-            "Herdr board", "list live sessions on this Mac and SSH machines", ["herdr", "ls"]),
-        UICapability(
             "Herdr session tab", "copy the attach command for a pane",
             ["herdr", "command", "w3:p1N"]),
         UICapability(
@@ -622,6 +620,29 @@ enum UIParity {
             "these change something but no UI action claims them, so the two surfaces have "
             + "drifted: \(orphans)"
         #expect(orphans.isEmpty, "\(complaint)")
+    }
+
+    @Test func extensionRecoveryControlsHaveExactCLIPlacements() {
+        let actions = UserInterfaceActionCatalog.actions
+
+        #expect(
+            actions.contains {
+                $0.operation.id == MusicFolderSelectionOperation.select.descriptor.id
+                    && $0.surface == "Extension settings"
+                    && $0.cli == ["music", "library", "~/Music"]
+            })
+        #expect(
+            actions.contains {
+                $0.operation.id == MachineMutationOperation.add.descriptor.id
+                    && $0.surface == "Extension settings"
+                    && $0.cli == ["machines", "add", "box", "--host", "h"]
+            })
+        #expect(
+            actions.contains {
+                $0.operation.id == HerdrSessionOperation.list.descriptor.id
+                    && $0.surface == "Extension settings"
+                    && $0.cli == ["herdr", "ls"]
+            })
     }
 
     @Test func nothingIsExemptedThatNoLongerExists() {

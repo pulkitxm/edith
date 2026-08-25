@@ -2,6 +2,8 @@ import EdithKit
 import SwiftUI
 
 struct MachinesRows: View {
+    @State private var model = MachinesModel.shared
+    @State private var addSheetPresented = false
     @AppStorage(AppStorageKeys.Tabs.machinesEnabled, store: SharedDefaults.store) private
         var enabled = false
     @AppStorage(AppStorageKeys.Machines.notifyDown, store: SharedDefaults.store) private
@@ -47,6 +49,19 @@ struct MachinesRows: View {
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
 
+        Section("Setup") {
+            HStack {
+                Button("Add machine...") { addSheetPresented = true }
+                    .pointerCursor()
+                Button("Open Machines") { SectionWindow.open(.machines) }
+                    .pointerCursor()
+            }
+            Text("Add an SSH host here or manage existing connections on the Machines page.")
+                .settingsCaption()
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+
         Section {
             LabeledContent("Connections") {
                 Text("System ssh with connection sharing")
@@ -70,5 +85,16 @@ struct MachinesRows: View {
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
+        .sheet(isPresented: $addSheetPresented) {
+            AddMachineSheet { machine, secrets in
+                model.add(machine, secrets: changes(secrets))
+            }
+        }
+    }
+
+    private func changes(_ secrets: AddMachineSheet.Secrets) -> MachineSecretChanges {
+        MachineSecretChanges(
+            login: secrets.login, sudoPassword: secrets.sudo,
+            forgetSudoPassword: secrets.forgetSudo)
     }
 }

@@ -92,6 +92,12 @@ not here cannot be set, and `import` skips it.
 | `mainSidebarWidth` | number | none | shared | Main window sidebar width in points. |
 | `repoPath` | string | none | shared | Development repository root used for usage data and music. |
 
+### `attention`
+
+| Key | Type | Default | Scope | What it controls |
+| --- | --- | --- | --- | --- |
+| `tabAttentionEnabled` | bool | `false` | shared | Attention extension: app and browser activity with focus sessions. |
+
 ### `usage`
 
 | Key | Type | Default | Scope | What it controls |

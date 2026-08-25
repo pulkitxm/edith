@@ -176,7 +176,7 @@ final class AppServices {
 
         let attentionSettings = AttentionRepository().loadSettings()
         let attentionOn = Self.attentionEnabled(
-            extensionEnabled: Self.preferenceOnByDefault(AppStorageKeys.Tabs.attentionEnabled),
+            extensionEnabled: Self.extensionEnabled(AppStorageKeys.Tabs.attentionEnabled),
             settings: attentionSettings)
         if attentionOn, attention == nil { attention = AttentionTrackingService() }
         if attentionOn { attention?.sync(attentionSettings) }

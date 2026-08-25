@@ -42,6 +42,7 @@ jobs:
       promo: ${{ steps.areas.outputs.promo }}
       site: ${{ steps.areas.outputs.site }}
       scripts: ${{ steps.areas.outputs.scripts }}
+      performance: ${{ steps.areas.outputs.performance }}
       source: ${{ steps.areas.outputs.source }}
       companion: ${{ steps.areas.outputs.companion }}
       companion_runtime: ${{ steps.areas.outputs.companion_runtime }}
@@ -88,6 +89,7 @@ jobs:
           area promo '^apps/promo-video/'
           area site '^apps/site/'
           area scripts '^(scripts/|Casks/|README\.md$|Makefile$|package\.json$|bun\.lock$|biome\.json$)'
+          area performance '^(Packages/Edith/(Sources|Tests)/.*\.swift$|performance/|scripts/(check-performance-audit|bench-helper)(\.|$)|Makefile$)'
           area source '\.(swift|js|mjs|ts|tsx|css|json|ya?ml|html)$'
           area companion '^apps/companion/'
           area companion_runtime '^apps/companion/(Dockerfile|compose(\.[^/]+)?\.yaml)$'
@@ -100,6 +102,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
@@ -125,6 +128,11 @@ jobs:
       - name: Script tests
         if: needs.changes.outputs.scripts == 'true' || needs.changes.outputs.workflows == 'true'
         run: make ci-scripts
+      - name: Performance regression contracts
+        if: needs.changes.outputs.performance == 'true' || needs.changes.outputs.workflows == 'true'
+        env:
+          PERFORMANCE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: make ci-performance
       - name: CLI documentation tests
         if: needs.changes.outputs.docs == 'true' || needs.changes.outputs.workflows == 'true'
         run: make ci-docs
