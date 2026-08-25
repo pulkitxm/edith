@@ -189,6 +189,24 @@ private actor SnippetCancellationGate {
         #expect(
             try DockerBrowserOperationExecution.publishedPort(
                 in: filtered, matching: 84, for: machine, configHosts: config) == loopbackIPv4)
+
+        let distinctBindings = DockerContainer(
+            id: "bound", names: ["bound"], image: "web", command: "", state: .running,
+            status: "Up",
+            ports: DockerParsing.parsePorts(
+                "198.51.100.8:8080->80/tcp, 192.0.2.8:8080->80/tcp"))
+        let exactMachine = Machine(name: "Exact", host: "198.51.100.8")
+        let fallbackMachine = Machine(name: "Fallback", host: "203.0.113.8")
+        #expect(
+            try DockerBrowserOperationExecution.publishedPort(
+                in: distinctBindings, matching: 80, for: exactMachine
+            ).hostIP
+                == "198.51.100.8")
+        #expect(
+            try DockerBrowserOperationExecution.publishedPort(
+                in: distinctBindings, matching: 80, for: fallbackMachine
+            ).hostIP
+                == "192.0.2.8")
     }
 
     @Test func savedSnippetSelectionAndExecutionUseStoredCommand() async throws {

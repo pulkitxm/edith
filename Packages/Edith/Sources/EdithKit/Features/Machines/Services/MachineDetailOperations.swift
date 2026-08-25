@@ -148,22 +148,51 @@ public enum DockerBrowserOperationExecution {
         let ports =
             reachable.isEmpty
             ? publishedPorts(in: container, matching: requestedPort) : reachable
-        return try selectedPort(from: ports, in: container, matching: requestedPort)
+        return try selectedPort(
+            from: ports, in: container, matching: requestedPort,
+            browserHost: browserHost(for: machine, configHosts: configHosts))
     }
 
     private static func selectedPort(
         from ports: [DockerPortMapping], in container: DockerContainer,
-        matching requestedPort: Int?
+        matching requestedPort: Int?, browserHost: String? = nil
     ) throws -> DockerPortMapping {
         guard !ports.isEmpty else {
             throw MachineDetailOperationError.noPublishedPort(
                 container.displayName, requestedPort)
         }
         guard ports.count == 1 else {
+            if let binding = preferredBinding(in: ports, browserHost: browserHost) {
+                return binding
+            }
             throw MachineDetailOperationError.ambiguousPublishedPorts(
                 container.displayName, ports.compactMap(\.hostPort))
         }
         return ports[0]
+    }
+
+    private static func preferredBinding(
+        in ports: [DockerPortMapping], browserHost: String?
+    ) -> DockerPortMapping? {
+        guard let first = ports.first,
+            ports.allSatisfy({
+                $0.hostPort == first.hostPort && $0.containerPort == first.containerPort
+                    && $0.proto == first.proto
+            })
+        else { return nil }
+        let host = browserHost.map { unwrapped($0).lowercased() }
+        let exact = ports.filter { port in
+            guard let bind = port.hostIP else { return false }
+            return unwrapped(bind).lowercased() == host
+        }
+        return (exact.isEmpty ? ports : exact).min { lhs, rhs in
+            normalizedBinding(lhs.hostIP) < normalizedBinding(rhs.hostIP)
+        }
+    }
+
+    private static func normalizedBinding(_ host: String?) -> String {
+        guard let host else { return "" }
+        return unwrapped(host.trimmingCharacters(in: .whitespacesAndNewlines)).lowercased()
     }
 
     public static func url(for port: DockerPortMapping, host: String = "localhost") -> URL? {

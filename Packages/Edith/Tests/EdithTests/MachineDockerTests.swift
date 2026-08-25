@@ -88,12 +88,12 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
         #expect(wildcardFirst[0].hostIP == "0.0.0.0")
     }
 
-    @Test func samePortSpecificBindingsChooseOneDeterministically() {
+    @Test func samePortSpecificBindingsRemainAvailableForHostAwareSelection() {
         let ports = DockerParsing.parsePorts(
             "198.51.100.8:8080->80/tcp, 192.0.2.8:8080->80/tcp")
 
-        #expect(ports.count == 1)
-        #expect(ports[0].hostIP == "192.0.2.8")
+        #expect(ports.count == 2)
+        #expect(ports.map(\.hostIP) == ["198.51.100.8", "192.0.2.8"])
     }
 
     @Test func parsesUnpublishedPorts() {
