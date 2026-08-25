@@ -333,6 +333,10 @@ struct ExtensionsInfoCommand: AsyncParsableCommand {
                 for verification in lifecycle.verification {
                     CLIOut.out("    \(verification.command ?? verification.detail)")
                 }
+                CLIOut.out("  recover")
+                for recovery in lifecycle.recovery {
+                    CLIOut.out("    \(recovery.command ?? recovery.detail)")
+                }
                 CLIOut.out(
                     "  docs     " + lifecycle.documentation.map(\.path).joined(separator: ", "))
             }

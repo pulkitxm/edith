@@ -201,7 +201,7 @@ public enum ExtensionLifecycleCatalog {
             ],
             examples: [
                 "ed extensions enable attention", "ed attention summary --json",
-                "ed attention focus start --name Deep-work --minutes 45",
+                "ed attention focus start --name Deep-work --for 45m",
             ],
             docs: [
                 documentation("guide", "Attention guide", "docs/cli/attention/README.md")
@@ -405,7 +405,8 @@ public enum ExtensionLifecycleCatalog {
             docs: [documentation("guide", "System metrics guide", "docs/cli/system/README.md")],
             recovery: [
                 instruction(
-                    "toggle", "Restart the readout", "Disable and enable the extension preference.",
+                    "toggle", "Restart the readout",
+                    "Reapply the extension preference so the helper synchronizes the readout.",
                     "ed extensions enable systemStats")
             ],
             verification: [
@@ -553,7 +554,7 @@ public enum ExtensionLifecycleCatalog {
             recovery: [
                 instruction(
                     "clear", "Clear stale shelf items", "Remove all parked items and retry.",
-                    "ed shelf clear --json")
+                    "ed shelf clear --yes --json")
             ],
             verification: [
                 instruction(
