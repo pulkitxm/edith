@@ -69,12 +69,20 @@ public enum ConfigurationValueParser {
             }
             value = .bool(flag)
         case .int:
-            guard !(raw is Bool), let number = raw as? NSNumber,
-                number.doubleValue.isFinite,
-                number.doubleValue.rounded() == number.doubleValue,
-                let integer = Int(exactly: number.doubleValue)
-            else {
+            guard !(raw is Bool), let number = raw as? NSNumber else {
                 throw ConfigurationError("\(definition.key) wants a whole number")
+            }
+            let integer: Int
+            if let exact = Int(number.stringValue) {
+                integer = exact
+            } else {
+                let floating = number.doubleValue
+                guard floating.isFinite, floating.rounded() == floating,
+                    let exact = Int(exactly: floating)
+                else {
+                    throw ConfigurationError("\(definition.key) wants a whole number")
+                }
+                integer = exact
             }
             value = .int(integer)
         case .number:

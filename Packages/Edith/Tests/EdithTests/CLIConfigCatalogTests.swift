@@ -415,26 +415,27 @@ enum CatalogSamples {
     @Test func importSkipsOutOfRangeIntegersBeforeApplyingOtherSettings() async throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("ed-invalid-range-\(UUID().uuidString).json")
-        try Data(#"{"lidAwakeBatteryThreshold": 101, "warnPercent": 72}"#.utf8).write(to: url)
+        try Data(#"{"appearance": "dark", "lidAwakeBatteryThreshold": 101}"#.utf8).write(
+            to: url)
         await CLIProbe.inWorld { world in
             let result = await CLIProbe.capture([
                 "config", "import", url.path, "--dry-run", "--json",
             ])
             #expect(result.code == 0)
-            #expect((result.object?["applied"] as? [String]) == ["warnPercent"])
+            #expect((result.object?["applied"] as? [String]) == ["appearance"])
             #expect(
                 (result.object?["skipped"] as? [String]) == ["lidAwakeBatteryThreshold"])
-            #expect(world.shared.persistentDomain(forName: world.suite)?["warnPercent"] == nil)
+            #expect(world.shared.persistentDomain(forName: world.suite)?["appearance"] == nil)
             #expect(
                 world.shared.persistentDomain(forName: world.suite)?[
                     LidAwakeState.batteryThresholdKey] == nil)
 
             let applied = await CLIProbe.capture(["config", "import", url.path, "--json"])
             #expect(applied.code == 0)
-            #expect((applied.object?["applied"] as? [String]) == ["warnPercent"])
+            #expect((applied.object?["applied"] as? [String]) == ["appearance"])
             #expect(
                 (applied.object?["skipped"] as? [String]) == ["lidAwakeBatteryThreshold"])
-            #expect(world.shared.integer(forKey: "warnPercent") == 72)
+            #expect(world.shared.string(forKey: "appearance") == "dark")
             #expect(
                 world.shared.persistentDomain(forName: world.suite)?[
                     LidAwakeState.batteryThresholdKey] == nil)
