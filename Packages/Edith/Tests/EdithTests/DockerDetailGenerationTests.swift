@@ -91,6 +91,28 @@ private actor DockerDetailRunHarness {
         #expect(model.processesFailed)
     }
 
+    @Test func olderFileListingCannotReplaceTheCurrentContainer() async {
+        let model = DockerDetailModel()
+        let session = MachineSession(machine: .local, local: true, observesWakeRequests: false)
+        let older = Self.container(id: "older")
+        let current = Self.container(id: "current")
+        let harness = DockerDetailRunHarness()
+
+        model.startLogs(session: session, container: older)
+        let first = Task {
+            await model.loadFiles(container: older, path: "/") { _, _ in await harness.run() }
+        }
+        await harness.waitUntilStarted(1)
+        model.startLogs(session: session, container: current)
+        await model.loadFiles(container: current, path: "/") { _, _ in
+            .success(Self.file(named: "current.txt"))
+        }
+        await harness.resolve(0, with: Self.file(named: "older.txt"))
+        await first.value
+
+        #expect(model.files.map(\.name) == ["current.txt"])
+    }
+
     private static func container(id: String) -> DockerContainer {
         DockerContainer(
             id: id, names: [id], image: id, command: "", state: .running, status: "Up")
@@ -106,5 +128,9 @@ private actor DockerDetailRunHarness {
 
     private static func process(pid: String, command: String) -> String {
         "PID USER %CPU %MEM RSS COMMAND\n\(pid) root 0 0 1 \(command)"
+    }
+
+    private static func file(named name: String) -> String {
+        "f\(FileListing.separator)1\(FileListing.separator)1\(FileListing.separator)644\(FileListing.separator)\(name)\(FileListing.separator)"
     }
 }

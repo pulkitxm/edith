@@ -88,6 +88,18 @@ public enum DockerDetailOperationExecution {
 }
 
 public enum DockerBrowserOperationExecution {
+    public static func browserHost(
+        for machine: Machine, configHosts: [SSHConfigHost]? = nil
+    ) -> String? {
+        let direct = machine.host.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !direct.isEmpty { return direct }
+        guard case let .sshConfigAlias(alias) = machine.source else { return nil }
+        let resolved = (configHosts ?? SSHConfigFile.concreteHosts()).first {
+            $0.alias.compare(alias, options: .caseInsensitive) == .orderedSame
+        }?.hostName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return resolved.flatMap { $0.isEmpty ? nil : $0 } ?? alias
+    }
+
     public static func container(
         named query: String, in containers: [DockerContainer]
     ) throws -> DockerContainer {
@@ -126,8 +138,7 @@ public enum DockerBrowserOperationExecution {
 
     public static func url(for port: DockerPortMapping, host: String = "localhost") -> URL? {
         guard let hostPort = port.hostPort, port.proto == "tcp" else { return nil }
-        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
+        guard let trimmed = targetHost(bindAddress: port.hostIP, fallback: host) else { return nil }
         let normalized =
             trimmed.contains(":") && !trimmed.hasPrefix("[") ? "[\(trimmed)]" : trimmed
         var components = URLComponents()
@@ -136,11 +147,36 @@ public enum DockerBrowserOperationExecution {
         components.port = hostPort
         return components.url
     }
+
+    public static func url(
+        for port: DockerPortMapping, machine: Machine, configHosts: [SSHConfigHost]? = nil
+    ) -> URL? {
+        guard let host = browserHost(for: machine, configHosts: configHosts) else { return nil }
+        return url(for: port, host: host)
+    }
+
+    private static func targetHost(bindAddress: String?, fallback: String) -> String? {
+        let fallback = unwrapped(fallback.trimmingCharacters(in: .whitespacesAndNewlines))
+        guard !fallback.isEmpty else { return nil }
+        guard let bindAddress else { return fallback }
+        let bind = unwrapped(bindAddress.trimmingCharacters(in: .whitespacesAndNewlines))
+        guard !bind.isEmpty, bind != "0.0.0.0", bind != "::" else { return fallback }
+        guard !isLoopback(bind) || isLoopback(fallback) else { return nil }
+        return bind
+    }
+
+    private static func unwrapped(_ host: String) -> String {
+        guard host.hasPrefix("["), host.hasSuffix("]") else { return host }
+        return String(host.dropFirst().dropLast())
+    }
+
+    private static func isLoopback(_ host: String) -> Bool {
+        let value = unwrapped(host).lowercased()
+        return value == "localhost" || value == "::1" || value.hasPrefix("127.")
+    }
 }
 
 public enum SavedSnippetOperationExecution {
-    public typealias Run = (String, TimeInterval) async -> Result<String, Error>
-
     public static func snippet(
         at index: Int, in snippets: [CommandSnippet]
     ) throws -> CommandSnippet {
@@ -150,9 +186,10 @@ public enum SavedSnippetOperationExecution {
         return snippets[index - 1]
     }
 
-    public static func run(
-        _ snippet: CommandSnippet, using run: Run
-    ) async -> Result<String, Error> {
+    public static func run<Output: Sendable>(
+        _ snippet: CommandSnippet,
+        using run: (String, TimeInterval) async -> Result<Output, Error>
+    ) async -> Result<Output, Error> {
         await run(snippet.command, 120)
     }
 }

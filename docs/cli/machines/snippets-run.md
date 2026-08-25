@@ -18,17 +18,18 @@ ed machines snippets run <machine> <index> [--json]
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `--json` | flag | off | Emit the machine, operation, output and snippet record as JSON. |
+| `--json` | flag | off | Emit the machine, operation, stdout, stderr and snippet record as JSON. |
 | `--help`, `-h` | flag | off | Print help and exit 0. |
 
-Plain mode prints the command's stdout followed by its stderr. JSON returns the
-same combined output in a stable object:
+Plain mode keeps the command's stdout and stderr on their matching local
+streams. JSON returns both streams separately in a stable object:
 
 ```json
 {
   "machine": "Box",
   "operation": "machines.snippets.run",
-  "output": "active\n",
+  "stderr": "",
+  "stdout": "active\n",
   "snippet": {
     "command": "systemctl is-active nginx",
     "id": "F8D5CE93-C9B4-4A05-9109-9AEB1BD806BA",

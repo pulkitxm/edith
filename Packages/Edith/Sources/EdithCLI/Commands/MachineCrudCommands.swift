@@ -481,6 +481,11 @@ struct MachinesSnippetsCommand: AsyncParsableCommand {
 }
 
 enum SnippetBridge {
+    struct Output: Equatable, Sendable {
+        let stdout: String
+        let stderr: String
+    }
+
     struct Selection {
         let machine: Machine
         let snippet: CommandSnippet
@@ -514,14 +519,18 @@ enum SnippetBridge {
 
     static func output(
         stdout: String, stderr: String, status: Int32, machineName: String
-    ) throws -> String {
-        let combined = stdout + stderr
+    ) throws -> Output {
         guard status == 0 else {
+            let diagnostics = [
+                stdout.isEmpty ? nil : "stdout:\n\(stdout)",
+                stderr.isEmpty ? nil : "stderr:\n\(stderr)",
+            ].compactMap { $0 }.joined(separator: "\n")
             throw CLIFailure(
                 "saved command exited \(status) on \(machineName)",
-                hint: combined.trimmingCharacters(in: .whitespacesAndNewlines))
+                hint: diagnostics.isEmpty
+                    ? nil : diagnostics.trimmingCharacters(in: .whitespacesAndNewlines))
         }
-        return combined
+        return Output(stdout: stdout, stderr: stderr)
     }
 }
 
@@ -669,8 +678,12 @@ struct MachinesSnippetsRunCommand: AsyncParsableCommand {
             let selection: SnippetBridge.Selection
             do {
                 selection = try SnippetBridge.selection(machine, index: index)
-            } catch {
+            } catch let failure as CLIFailure {
+                throw failure
+            } catch let error as MachineDetailOperationError {
                 throw CLIFailure.notFound(error.localizedDescription)
+            } catch {
+                throw error
             }
             let runner = try await MachineResolver.runner(selection.machine)
             let result = await SavedSnippetOperationExecution.run(selection.snippet) {
@@ -691,13 +704,15 @@ struct MachinesSnippetsRunCommand: AsyncParsableCommand {
                     .object([
                         "machine": .string(runner.machine.name),
                         "operation": .string(SavedSnippetOperation.run.descriptor.id.rawValue),
-                        "output": .string(output),
+                        "stderr": .string(output.stderr),
+                        "stdout": .string(output.stdout),
                         "snippet": SnippetBridge.json(
                             selection.snippet, index: selection.index),
                     ]))
                 return
             }
-            CLIOut.raw(output)
+            CLIOut.raw(output.stdout)
+            CLIOut.rawError(output.stderr)
         }
     }
 }

@@ -73,12 +73,19 @@ struct DockerOpenCommand: AsyncParsableCommand {
             guard let hostPort = selected.hostPort else {
                 throw CLIFailure.notFound("\(found.displayName) has no published TCP port")
             }
-            guard
-                let url = DockerBrowserOperationExecution.url(
-                    for: selected, host: runner.machine.host)
+            guard let browserHost = DockerBrowserOperationExecution.browserHost(for: runner.machine)
             else {
                 throw CLIFailure.unavailable(
-                    "could not resolve \(runner.machine.host):\(hostPort) for the browser")
+                    "\(runner.machine.name) has no browser-reachable host")
+            }
+            guard
+                let url = DockerBrowserOperationExecution.url(
+                    for: selected, host: browserHost)
+            else {
+                let binding = selected.hostIP ?? browserHost
+                throw CLIFailure.unavailable(
+                    "\(found.displayName)'s \(binding):\(hostPort) binding is not reachable",
+                    hint: "publish the port on a reachable address or add an SSH port forward")
             }
             guard
                 RemoteFileOperationExecution.present(

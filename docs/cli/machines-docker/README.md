@@ -102,9 +102,9 @@ and exit 0.
 | Code | When |
 | --- | --- |
 | 0 | The command did what it said. A guarded preview without `--yes` also exits 0, having changed nothing, and so do `--help` and `--version`. |
-| 1 | Docker ran and refused, or failed: no such container, an image still in use, a volume still attached, a compose file compose could not find. The message names the verb and the machine, and docker's own stderr is the hint. Also a remote command that outran its timeout, and a `logs` stream whose `ssh` would not start. |
+| 1 | Docker ran and refused, failed, or returned invalid structured output: no such container, an image still in use, a volume still attached, a compose file compose could not find, or an empty `inspect`/`top` result. The message names the verb and the machine, and docker's own stderr is the hint. Also a remote command that outran its timeout, and a `logs` stream whose `ssh` would not start. |
 | 2 | `--tail` was negative, or the command line was wrong in the ordinary way: an unknown flag, a missing `<machine>` or `<container>`, a `--tail` that is not a number. |
-| 3 | The machine name matched nothing or matched several; `<what>` was not one of the five prune targets; `<project>` was not in `compose ls`; `inspect` got a zero status and no output. |
+| 3 | The machine name matched nothing or matched several; `<what>` was not one of the five prune targets; `<project>` was not in `compose ls`. |
 | 4 | The machine could not be reached, docker on it is not usable (not installed, the daemon down, or this user cannot talk to the socket), or `ssh` itself could not be launched for a non-streaming command. |
 | other | `shell`, `logs` and `compose logs` propagate the remote process's own exit code verbatim, so anything docker or SSH returns reaches you unchanged. |
 

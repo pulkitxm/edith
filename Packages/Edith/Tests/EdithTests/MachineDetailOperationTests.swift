@@ -117,6 +117,50 @@ private actor SnippetCancellationGate {
         }
     }
 
+    @Test func browserResolutionHonorsBindScopeAndSSHConfigHosts() {
+        let wildcardIPv4 = DockerPortMapping(
+            hostIP: "0.0.0.0", hostPort: 8080, containerPort: 80, proto: "tcp")
+        let wildcardIPv6 = DockerPortMapping(
+            hostIP: "[::]", hostPort: 8081, containerPort: 81, proto: "tcp")
+        let specificIPv4 = DockerPortMapping(
+            hostIP: "192.0.2.8", hostPort: 8082, containerPort: 82, proto: "tcp")
+        let specificIPv6 = DockerPortMapping(
+            hostIP: "[2001:db8::8]", hostPort: 8083, containerPort: 83, proto: "tcp")
+        let loopbackIPv4 = DockerPortMapping(
+            hostIP: "127.0.0.1", hostPort: 8084, containerPort: 84, proto: "tcp")
+        let loopbackIPv6 = DockerPortMapping(
+            hostIP: "[::1]", hostPort: 8085, containerPort: 85, proto: "tcp")
+
+        #expect(
+            DockerBrowserOperationExecution.url(for: wildcardIPv4, host: "box.example")?
+                .absoluteString == "http://box.example:8080")
+        #expect(
+            DockerBrowserOperationExecution.url(for: wildcardIPv6, host: "box.example")?
+                .absoluteString == "http://box.example:8081")
+        #expect(
+            DockerBrowserOperationExecution.url(for: specificIPv4, host: "box.example")?
+                .absoluteString == "http://192.0.2.8:8082")
+        #expect(
+            DockerBrowserOperationExecution.url(for: specificIPv6, host: "box.example")?
+                .absoluteString == "http://[2001:db8::8]:8083")
+        #expect(DockerBrowserOperationExecution.url(for: loopbackIPv4, host: "box.example") == nil)
+        #expect(DockerBrowserOperationExecution.url(for: loopbackIPv6, host: "box.example") == nil)
+        #expect(
+            DockerBrowserOperationExecution.url(for: loopbackIPv4)?.absoluteString
+                == "http://127.0.0.1:8084")
+
+        let machine = Machine(
+            name: "Box", host: "", source: .sshConfigAlias("box-alias"))
+        let config = [SSHConfigHost(alias: "box-alias", hostName: "box.example")]
+        #expect(
+            DockerBrowserOperationExecution.browserHost(for: machine, configHosts: config)
+                == "box.example")
+        #expect(
+            DockerBrowserOperationExecution.url(
+                for: wildcardIPv4, machine: machine, configHosts: config)?.absoluteString
+                == "http://box.example:8080")
+    }
+
     @Test func savedSnippetSelectionAndExecutionUseStoredCommand() async throws {
         let snippets = [
             CommandSnippet(machineID: UUID(), title: "Logs", command: "journalctl -xe"),

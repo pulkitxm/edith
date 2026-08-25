@@ -78,6 +78,18 @@ import Testing
         }
     }
 
+    @Test func missingMachineKeepsTheResolverMessageAndExitCode() async {
+        await CLIProbe.inWorld { _ in
+            let result = await CLIProbe.capture([
+                "machines", "snippets", "run", "nowhere", "1", "--json",
+            ])
+            #expect(result.code == ExitCodes.notFound)
+            #expect(result.stdout.isEmpty)
+            #expect(result.stderr.contains("no machine"))
+            #expect(!result.stderr.contains("EdithCLI.CLIFailure"))
+        }
+    }
+
     @Test func snippetSelectionPinsTheMachineAndSnippetIdentityTogether() async throws {
         try await CLIProbe.inWorld { _ in
             let original = Machine(name: "Box", host: "old.example")
@@ -105,8 +117,17 @@ import Testing
             Issue.record("Expected a failed saved command")
         } catch let failure as CLIFailure {
             #expect(failure.message == "saved command exited 7 on Box")
-            #expect(failure.hint == "partial output\nfailure detail")
+            #expect(
+                failure.hint
+                    == "stdout:\npartial output\n\nstderr:\nfailure detail")
         }
+    }
+
+    @Test func successfulSnippetOutputKeepsStreamsSeparateWithoutTerminators() throws {
+        let output = try SnippetBridge.output(
+            stdout: "value", stderr: "warning", status: 0, machineName: "Box")
+        #expect(output.stdout == "value")
+        #expect(output.stderr == "warning")
     }
 
     private static func completion(_ words: [String], index: Int) -> CompletionResult {

@@ -68,6 +68,7 @@ final class DockerDetailModel {
         detailContainerID = container.id
         inspectRequest &+= 1
         processesRequest &+= 1
+        fileToken &+= 1
         streamEnded = false
         reattempts = 0
         logGeneration += 1
@@ -188,12 +189,21 @@ final class DockerDetailModel {
     }
 
     func loadFiles(session: MachineSession, container: DockerContainer, path: String) async {
-        fileToken += 1
+        await loadFiles(container: container, path: path) { command, timeout in
+            await session.runCommand(command, timeout: timeout)
+        }
+    }
+
+    func loadFiles(
+        container: DockerContainer, path: String, using run: DockerDetailOperationExecution.Run
+    ) async {
+        guard detailContainerID == container.id else { return }
+        fileToken &+= 1
         let token = fileToken
         filePath = path
-        let result = await session.runCommand(
-            DockerCommands.listFiles(containerID: container.id, path: path), timeout: 30)
-        guard token == fileToken else { return }
+        let result = await run(
+            DockerCommands.listFiles(containerID: container.id, path: path), 30)
+        guard detailContainerID == container.id, token == fileToken else { return }
         guard case let .success(output) = result else {
             files = []
             return
@@ -247,6 +257,8 @@ struct DockerContainerDetail: View {
         .task(id: container.id) {
             model.startLogs(session: session, container: container)
             await model.loadInspect(session: session, container: container)
+            guard tab != .inspect else { return }
+            await load(tab)
         }
         .onDisappear { model.stopLogs() }
         .onChange(of: session.containers) { _, _ in model.record(container: live) }
@@ -284,7 +296,7 @@ struct DockerContainerDetail: View {
                 Spacer(minLength: 0)
                 ForEach(live.ports.prefix(3), id: \.self) { port in
                     if let url = DockerBrowserOperationExecution.url(
-                        for: port, host: session.machine.host)
+                        for: port, machine: session.machine)
                     {
                         Button(port.displayName) {
                             RemoteFileOperationExecution.present([url], action: .open) { urls, _ in
