@@ -95,6 +95,25 @@ import Testing
         #expect(agents[0].title == "w1:pA")
     }
 
+    @Test func everyTerminalIsAskedOnceAndFailuresAreSkipped() async {
+        var asked: [String] = []
+        let names = await HerdrLive.processNames(panes: ["w2:p6", "w1:pA", "w9:pZ"]) { pane in
+            asked.append(pane)
+            switch pane {
+            case "w2:p6":
+                return """
+                    {"id":"p","result":{"process_info":{"foreground_processes":[{"name":"bun"}],"pane_id":"w2:p6"},"type":"pane_process_info"}}
+                    """
+            case "w1:pA":
+                return nil
+            default:
+                return "not json at all"
+            }
+        }
+        #expect(asked == ["w2:p6", "w1:pA", "w9:pZ"])
+        #expect(names == ["w2:p6": "bun"])
+    }
+
     @Test func createdPaneIsReadFromTheRootPane() {
         let payload = """
             {"id":"cli:tab:create","result":{"root_pane":{"pane_id":"w2:p7","tab_id":"w2:t7","workspace_id":"w2"},"tab":{"label":"probe","tab_id":"w2:t7"},"type":"tab_created"}}

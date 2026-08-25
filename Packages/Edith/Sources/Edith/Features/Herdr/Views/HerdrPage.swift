@@ -28,7 +28,7 @@ struct HerdrPage: View {
             header
             tabBar
             HStack(spacing: 0) {
-                if !onBoard, store.railOpen {
+                if store.railOpen {
                     agentList
                     Divider().opacity(0.35)
                 }
@@ -44,8 +44,8 @@ struct HerdrPage: View {
                         .opacity(tab.id == store.selectedTab ? 1 : 0)
                         .allowsHitTesting(tab.id == store.selectedTab)
                     }
+                    floatingControls
                     if !onBoard {
-                        floatingControls
                         detailToggle
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     }
@@ -370,7 +370,6 @@ struct HerdrPage: View {
                         ForEach(store.columns, id: \.self) { status in
                             column(status)
                         }
-                        terminalColumn
                     }
                     .pageContent(compact)
                     .padding(.top, UIScale.pt(16))
@@ -397,46 +396,6 @@ struct HerdrPage: View {
                 VStack(spacing: UIScale.pt(8)) {
                     ForEach(cards) { agent in
                         card(agent)
-                    }
-                    if cards.isEmpty {
-                        emptyColumnSlot
-                    }
-                }
-            }
-        }
-        .frame(width: UIScale.pt(compact ? 220 : 240), alignment: .topLeading)
-        .frame(minHeight: UIScale.pt(220), alignment: .topLeading)
-    }
-
-    private var terminalColumn: some View {
-        let cards = listedTerminals
-        return VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            HStack(spacing: UIScale.pt(8)) {
-                Image(systemName: "terminal")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
-                    .foregroundStyle(DashSkin.gold)
-                Text("Terminals")
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
-                Text("\(cards.count)")
-                    .font(DashSkin.mono(10, weight: .medium))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                Spacer(minLength: 0)
-                Button {
-                    composing = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
-                        .foregroundStyle(DashSkin.inkSoft(dark))
-                }
-                .buttonStyle(.plain)
-                .pointerCursor()
-                .help("New terminal")
-            }
-            ScrollView {
-                VStack(spacing: UIScale.pt(8)) {
-                    ForEach(cards) { terminal in
-                        card(terminal)
                     }
                     if cards.isEmpty {
                         emptyColumnSlot

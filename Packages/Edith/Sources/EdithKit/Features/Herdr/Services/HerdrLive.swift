@@ -132,31 +132,26 @@ public enum HerdrLive {
 
     private static func runSession(
         socket: (name: String, path: String),
-        connect: (String) throws -> HerdrSocketClient,
+        connect: @escaping @Sendable (String) throws -> HerdrSocketClient,
         sessions: SessionBag,
         fleet: FleetBag
     ) async {
-        let rpc: HerdrSocketClient
         let stream: HerdrSocketClient
         do {
-            rpc = try connect(socket.path)
             stream = try connect(socket.path)
         } catch {
             fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
             return
         }
         await withTaskCancellationHandler {
-            defer {
-                rpc.close()
-                stream.close()
-            }
+            defer { stream.close() }
             do {
                 try await publishSnapshot(
-                    client: rpc, session: socket.name, sessions: sessions, fleet: fleet)
+                    socket: socket, connect: connect, sessions: sessions, fleet: fleet)
                 try await stream.subscribeBoard()
                 try await Task.sleep(for: .milliseconds(400))
                 try await publishSnapshot(
-                    client: rpc, session: socket.name, sessions: sessions, fleet: fleet)
+                    socket: socket, connect: connect, sessions: sessions, fleet: fleet)
                 let events = stream.events
                 await withTaskGroup(of: Void.self) { group in
                     group.addTask {
@@ -169,7 +164,7 @@ public enum HerdrLive {
                             try? await Task.sleep(for: .seconds(20))
                             guard !Task.isCancelled else { return }
                             try? await publishSnapshot(
-                                client: rpc, session: socket.name, sessions: sessions,
+                                socket: socket, connect: connect, sessions: sessions,
                                 fleet: fleet)
                         }
                     }
@@ -180,21 +175,48 @@ public enum HerdrLive {
                 fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
             }
         } onCancel: {
-            rpc.close()
             stream.close()
         }
     }
 
     private static func publishSnapshot(
-        client: HerdrSocketClient, session: String, sessions: SessionBag, fleet: FleetBag
+        socket: (name: String, path: String),
+        connect: @escaping @Sendable (String) throws -> HerdrSocketClient,
+        sessions: SessionBag,
+        fleet: FleetBag
     ) async throws {
-        let line = try await client.snapshot()
-        fleet.put(sessions.applySnapshot(session: session, text: line))
-        let panes = sessions.terminalPanes(session: session)
+        let client = try connect(socket.path)
+        let line: String
+        do {
+            line = try await client.snapshot()
+            client.close()
+        } catch {
+            client.close()
+            throw error
+        }
+        fleet.put(sessions.applySnapshot(session: socket.name, text: line))
+        let panes = sessions.terminalPanes(session: socket.name)
         guard !panes.isEmpty else { return }
-        let names = await client.processNames(panes: panes)
+        let names = await processNames(panes: panes) { pane in
+            guard let client = try? connect(socket.path) else { return nil }
+            let reply = try? await client.processInfo(pane: pane)
+            client.close()
+            return reply
+        }
         guard !names.isEmpty else { return }
-        fleet.put(sessions.applyProcessNames(session: session, names: names))
+        fleet.put(sessions.applyProcessNames(session: socket.name, names: names))
+    }
+
+    static func processNames(
+        panes: [String], fetch: (String) async -> String?
+    ) async -> [String: String] {
+        var names: [String: String] = [:]
+        for pane in panes {
+            guard let reply = await fetch(pane) else { continue }
+            guard let name = HerdrListParser.processName(in: reply) else { continue }
+            names[pane] = name
+        }
+        return names
     }
 }
 
