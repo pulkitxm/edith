@@ -75,14 +75,11 @@ public enum DockerParsing {
                     && mappings[$0].containerPort == mapping.containerPort
                     && mappings[$0].proto == mapping.proto
             }
-            if isWildcardPublishedBind(mapping), !matching.isEmpty {
-                mappings[matching[0]] = mapping
+            if !matching.isEmpty {
+                let candidates = matching.map { mappings[$0] } + [mapping]
+                mappings[matching[0]] = candidates.min(by: prefersBrowserBind) ?? mapping
                 for index in matching.dropFirst().reversed() { mappings.remove(at: index) }
-            } else if matching.contains(where: { isWildcardPublishedBind(mappings[$0]) }) {
-                continue
-            } else if !matching.contains(where: {
-                normalizedBind(mappings[$0].hostIP) == normalizedBind(mapping.hostIP)
-            }) {
+            } else {
                 mappings.append(mapping)
             }
         }
@@ -96,6 +93,22 @@ public enum DockerParsing {
         guard mapping.hostPort != nil else { return false }
         let bind = normalizedBind(mapping.hostIP)
         return bind.isEmpty || bind == "0.0.0.0" || bind == "::"
+    }
+
+    private static func prefersBrowserBind(
+        _ lhs: DockerPortMapping, _ rhs: DockerPortMapping
+    ) -> Bool {
+        let lhsRank = browserBindRank(lhs)
+        let rhsRank = browserBindRank(rhs)
+        guard lhsRank == rhsRank else { return lhsRank < rhsRank }
+        return normalizedBind(lhs.hostIP) < normalizedBind(rhs.hostIP)
+    }
+
+    private static func browserBindRank(_ mapping: DockerPortMapping) -> Int {
+        if isWildcardPublishedBind(mapping) { return 0 }
+        let bind = normalizedBind(mapping.hostIP)
+        if bind == "localhost" || bind == "::1" || bind.hasPrefix("127.") { return 2 }
+        return 1
     }
 
     private static func normalizedBind(_ hostIP: String?) -> String {

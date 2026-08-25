@@ -59,7 +59,7 @@ struct DockerOpenCommand: AsyncParsableCommand {
             let selected: DockerPortMapping
             do {
                 selected = try DockerBrowserOperationExecution.publishedPort(
-                    in: found, matching: port)
+                    in: found, matching: port, for: runner.machine)
             } catch let error as MachineDetailOperationError {
                 switch error {
                 case .ambiguousPublishedPorts:

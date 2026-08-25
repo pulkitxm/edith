@@ -95,13 +95,16 @@ public enum DockerBrowserOperationExecution {
         guard case let .sshConfigAlias(alias) = machine.source else {
             return direct.isEmpty ? nil : direct
         }
-        let resolved = (configHosts ?? SSHConfigFile.concreteHosts()).first {
+        let configured = (configHosts ?? SSHConfigFile.concreteHosts()).first {
             $0.alias.compare(alias, options: .caseInsensitive) == .orderedSame
-        }?.hostName?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let resolved, !resolved.isEmpty { return resolved }
-        guard !direct.isEmpty, direct.compare(alias, options: .caseInsensitive) != .orderedSame
-        else { return nil }
-        return direct
+        }
+        if let hostName = configured?.hostName?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !hostName.isEmpty
+        {
+            return hostName
+        }
+        if !direct.isEmpty { return direct }
+        return configured?.alias ?? alias
     }
 
     public static func container(
@@ -128,7 +131,30 @@ public enum DockerBrowserOperationExecution {
     public static func publishedPort(
         in container: DockerContainer, matching requestedPort: Int?
     ) throws -> DockerPortMapping {
-        let ports = publishedPorts(in: container, matching: requestedPort)
+        try selectedPort(
+            from: publishedPorts(in: container, matching: requestedPort), in: container,
+            matching: requestedPort)
+    }
+
+    public static func publishedPort(
+        in container: DockerContainer, matching requestedPort: Int?, for machine: Machine,
+        configHosts: [SSHConfigHost]? = nil
+    ) throws -> DockerPortMapping {
+        let reachable = reachablePorts(in: container, for: machine, configHosts: configHosts)
+            .filter { port in
+                guard let requestedPort else { return true }
+                return port.hostPort == requestedPort || port.containerPort == requestedPort
+            }
+        let ports =
+            reachable.isEmpty
+            ? publishedPorts(in: container, matching: requestedPort) : reachable
+        return try selectedPort(from: ports, in: container, matching: requestedPort)
+    }
+
+    private static func selectedPort(
+        from ports: [DockerPortMapping], in container: DockerContainer,
+        matching requestedPort: Int?
+    ) throws -> DockerPortMapping {
         guard !ports.isEmpty else {
             throw MachineDetailOperationError.noPublishedPort(
                 container.displayName, requestedPort)

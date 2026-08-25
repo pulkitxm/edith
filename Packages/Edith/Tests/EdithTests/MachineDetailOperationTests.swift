@@ -117,7 +117,7 @@ private actor SnippetCancellationGate {
         }
     }
 
-    @Test func browserResolutionHonorsBindScopeAndSSHConfigHosts() {
+    @Test func browserResolutionHonorsBindScopeAndSSHConfigHosts() throws {
         let wildcardIPv4 = DockerPortMapping(
             hostIP: "0.0.0.0", hostPort: 8080, containerPort: 80, proto: "tcp")
         let wildcardIPv6 = DockerPortMapping(
@@ -169,7 +169,7 @@ private actor SnippetCancellationGate {
             DockerBrowserOperationExecution.browserHost(
                 for: Machine(
                     name: "Alias", host: "box-alias", source: .sshConfigAlias("box-alias")),
-                configHosts: []) == nil)
+                configHosts: []) == "box-alias")
 
         let filtered = DockerContainer(
             id: "web", names: ["web"], image: "web", command: "", state: .running,
@@ -183,6 +183,12 @@ private actor SnippetCancellationGate {
         #expect(
             DockerBrowserOperationExecution.reachablePorts(
                 in: filtered, for: machine, configHosts: config) == [wildcardIPv6])
+        #expect(
+            try DockerBrowserOperationExecution.publishedPort(
+                in: filtered, matching: nil, for: machine, configHosts: config) == wildcardIPv6)
+        #expect(
+            try DockerBrowserOperationExecution.publishedPort(
+                in: filtered, matching: 84, for: machine, configHosts: config) == loopbackIPv4)
     }
 
     @Test func savedSnippetSelectionAndExecutionUseStoredCommand() async throws {
