@@ -81,15 +81,9 @@ public struct LimitsHistory {
 
     private mutating func seed() {
         seeded = true
-        guard let data = try? Data(contentsOf: fileURL),
-            let text = String(data: data, encoding: .utf8)
-        else { return }
-        for line in text.split(separator: "\n").reversed() {
-            guard let row = try? Self.decoder.decode(Row.self, from: Data(line.utf8)) else {
-                continue
-            }
-            let provider = row.p ?? .claude
-            guard lastKeys[provider] == nil else { continue }
+        for (provider, row) in Self.latestRows(
+            url: fileURL, providers: Set(LimitProvider.allCases))
+        {
             lastKeys[provider] =
                 "\(provider.rawValue)|\(row.s ?? -1)|\(row.w ?? -1)|\(row.f ?? -1)|\(row.sr ?? "-")|\(row.wr ?? "-")|\(row.fr ?? "-")"
         }
@@ -100,25 +94,21 @@ public struct LimitsHistory {
     ) -> (
         date: Date, session: LimitWindow?, week: LimitWindow?, fable: LimitWindow?
     )? {
-        let text = FileTail.read(url, maxBytes: 8192)
-        for line in text.split(separator: "\n").reversed() {
-            guard let row = try? Self.decoder.decode(Row.self, from: Data(line.utf8)),
-                let date = EdithDate.parseISO(row.ts), (row.p ?? .claude) == provider
-            else { continue }
-            return (
-                date: date,
-                session: row.s.map {
-                    LimitWindow(percent: $0, resetsAt: row.sr.flatMap(EdithDate.parseISO))
-                },
-                week: row.w.map {
-                    LimitWindow(percent: $0, resetsAt: row.wr.flatMap(EdithDate.parseISO))
-                },
-                fable: row.f.map {
-                    LimitWindow(percent: $0, resetsAt: row.fr.flatMap(EdithDate.parseISO))
-                }
-            )
-        }
-        return nil
+        guard let row = latestRows(url: url, providers: [provider])[provider],
+            let date = EdithDate.parseISO(row.ts)
+        else { return nil }
+        return (
+            date: date,
+            session: row.s.map {
+                LimitWindow(percent: $0, resetsAt: row.sr.flatMap(EdithDate.parseISO))
+            },
+            week: row.w.map {
+                LimitWindow(percent: $0, resetsAt: row.wr.flatMap(EdithDate.parseISO))
+            },
+            fable: row.f.map {
+                LimitWindow(percent: $0, resetsAt: row.fr.flatMap(EdithDate.parseISO))
+            }
+        )
     }
 
     public static func parse(
@@ -161,17 +151,30 @@ public struct LimitsHistory {
     public static func loadLatestPoint(
         provider: LimitProvider = .claude, url: URL = LimitsHistory.url
     ) -> LimitPoint? {
-        let text = FileTail.read(url, maxBytes: 8192)
-        return parse(text, provider: provider).last
+        guard let latest = latest(provider: provider, url: url) else { return nil }
+        return LimitPoint(
+            date: latest.date, s: latest.session?.percent, w: latest.week?.percent,
+            sessionReset: latest.session?.resetsAt, weekReset: latest.week?.resetsAt)
     }
 
     public static func availableProviders(url: URL = LimitsHistory.url) -> [LimitProvider] {
-        let text = FileTail.read(url, maxBytes: 65_536)
-        let found = Set(
-            text.split(separator: "\n").compactMap { line in
-                (try? decoder.decode(Row.self, from: Data(line.utf8))).map { $0.p ?? .claude }
-            })
+        let found = Set(latestRows(url: url, providers: Set(LimitProvider.allCases)).keys)
         return LimitProvider.allCases.filter(found.contains)
+    }
+
+    private static func latestRows(
+        url: URL, providers: Set<LimitProvider>
+    ) -> [LimitProvider: Row] {
+        var rows: [LimitProvider: Row] = [:]
+        FileTail.scanLinesReversed(url) { data in
+            guard let row = try? decoder.decode(Row.self, from: data),
+                EdithDate.parseISO(row.ts) != nil
+            else { return true }
+            let provider = row.p ?? .claude
+            if providers.contains(provider), rows[provider] == nil { rows[provider] = row }
+            return rows.count < providers.count
+        }
+        return rows
     }
 
     public static func downsample(

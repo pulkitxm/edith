@@ -50,6 +50,36 @@ import Testing
         let url = dir.appendingPathComponent("absent.txt")
         #expect(FileTail.read(url, maxBytes: 1024) == "")
     }
+
+    @Test func reversedScanCrossesChunkBoundariesAndKeepsUnterminatedTail() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("log.txt")
+        try "alpha\nsecond line\nlast".write(to: url, atomically: true, encoding: .utf8)
+        var lines: [String] = []
+
+        FileTail.scanLinesReversed(url, chunkBytes: 5) { data in
+            lines.append(String(decoding: data, as: UTF8.self))
+            return true
+        }
+
+        #expect(lines == ["last", "second line", "alpha"])
+    }
+
+    @Test func reversedScanStopsWhenVisitorFinishes() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("log.txt")
+        try "one\ntwo\nthree\n".write(to: url, atomically: true, encoding: .utf8)
+        var lines: [String] = []
+
+        FileTail.scanLinesReversed(url, chunkBytes: 4) { data in
+            lines.append(String(decoding: data, as: UTF8.self))
+            return lines.count < 2
+        }
+
+        #expect(lines == ["three", "two"])
+    }
 }
 
 @Suite @MainActor struct DashboardRefreshBridgeTests {

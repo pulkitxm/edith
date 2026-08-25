@@ -145,6 +145,32 @@ import Testing
         #expect(claudePoints.map(\.s) == [12])
         #expect(codexPoints.map(\.w) == [48])
     }
+
+    @Test func latestProviderSurvivesMegabytesOfOtherProviderRowsAndTornTail() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-tests-\(UUID().uuidString)")
+        let url = dir.appendingPathComponent("limits-history.jsonl")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let claude = LimitsHistory.row(
+            provider: .claude, session: LimitWindow(percent: 42, resetsAt: nil),
+            week: LimitWindow(percent: 68, resetsAt: nil), now: now)
+        let codexRows = (0..<40_000).map { index in
+            LimitsHistory.row(
+                provider: .codex, session: nil,
+                week: LimitWindow(percent: Double(index % 100), resetsAt: nil),
+                now: now.addingTimeInterval(Double(index + 1))
+            ).line
+        }
+        try Data((claude.line + codexRows.joined() + "{\"ts\":\"torn").utf8).write(to: url)
+
+        let latest = try #require(LimitsHistory.latest(provider: .claude, url: url))
+
+        #expect(latest.session?.percent == 42)
+        #expect(latest.week?.percent == 68)
+        #expect(LimitsHistory.loadLatestPoint(provider: .claude, url: url)?.s == 42)
+        #expect(LimitsHistory.availableProviders(url: url) == [.codex, .claude])
+    }
 }
 
 @Suite struct LimitsHistoryFableTests {
