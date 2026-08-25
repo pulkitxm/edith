@@ -55,6 +55,9 @@ import Testing
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
         #expect(source.contains("ForEach(filteredEntries)"))
+        #expect(source.contains("if filteredEntries.isEmpty"))
+        #expect(source.contains("ExtensionMarketplaceFilter.emptyState"))
+        #expect(source.contains("ContentUnavailableView"))
         #expect(!source.contains("enabledEntries"))
         #expect(!source.contains("availableEntries"))
     }

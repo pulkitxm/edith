@@ -32,12 +32,32 @@ public enum ExtensionMarketplaceFilter {
     ) -> [ExtensionRegistryEntry] {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return entries.filter { entry in
-            let matchesCategory = category.group == nil || entry.group == category.group
+            let matchesCategory =
+                !trimmedQuery.isEmpty || category.group == nil || entry.group == category.group
             let matchesQuery =
                 trimmedQuery.isEmpty || entry.title.localizedCaseInsensitiveContains(trimmedQuery)
                 || entry.subtitle.localizedCaseInsensitiveContains(trimmedQuery)
             return matchesCategory && matchesQuery
         }
+    }
+
+    public static func emptyState(
+        query: String, category: ExtensionMarketplaceCategory
+    ) -> (title: String, detail: String) {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedQuery.isEmpty {
+            return (
+                "No extensions found",
+                "No extension matches \"\(trimmedQuery)\". Try another search."
+            )
+        }
+        if category == .all {
+            return ("No extensions available", "No extensions are registered yet.")
+        }
+        return (
+            "No \(category.rawValue) extensions",
+            "No extensions are available in this category."
+        )
     }
 }
 

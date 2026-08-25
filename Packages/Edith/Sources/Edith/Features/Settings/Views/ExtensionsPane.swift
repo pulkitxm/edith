@@ -154,16 +154,27 @@ struct ExtensionsPane: View {
             entries: inspectionCenter.list().map(\.entry), query: query, category: category)
     }
 
+    @ViewBuilder
     private var extensionGrid: some View {
-        LazyVGrid(columns: gridColumns, spacing: UIScale.pt(14)) {
-            ForEach(filteredEntries) { entry in
-                ExtensionMarketplaceCard(
-                    entry: entry,
-                    enabled: permissionAwareBinding(for: entry),
-                    dark: colorScheme == .dark,
-                    open: { openSettings(for: entry) }
-                )
-                .id(entry.id)
+        if filteredEntries.isEmpty {
+            let state = ExtensionMarketplaceFilter.emptyState(query: query, category: category)
+            ContentUnavailableView {
+                Label(state.title, systemImage: "magnifyingglass")
+            } description: {
+                Text(state.detail)
+            }
+            .frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
+        } else {
+            LazyVGrid(columns: gridColumns, spacing: UIScale.pt(14)) {
+                ForEach(filteredEntries) { entry in
+                    ExtensionMarketplaceCard(
+                        entry: entry,
+                        enabled: permissionAwareBinding(for: entry),
+                        dark: colorScheme == .dark,
+                        open: { openSettings(for: entry) }
+                    )
+                    .id(entry.id)
+                }
             }
         }
     }
