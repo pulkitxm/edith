@@ -145,6 +145,81 @@ import Testing
         #expect(claudePoints.map(\.s) == [12])
         #expect(codexPoints.map(\.w) == [48])
     }
+
+    @Test func latestProviderSurvivesMegabytesOfOtherProviderRowsAndTornTail() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-tests-\(UUID().uuidString)")
+        let url = dir.appendingPathComponent("limits-history.jsonl")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let claude = LimitsHistory.row(
+            provider: .claude, session: LimitWindow(percent: 42, resetsAt: nil),
+            week: LimitWindow(percent: 68, resetsAt: nil), now: now)
+        let codexRows = (0..<40_000).map { index in
+            LimitsHistory.row(
+                provider: .codex, session: nil,
+                week: LimitWindow(percent: Double(index % 100), resetsAt: nil),
+                now: now.addingTimeInterval(Double(index + 1))
+            ).line
+        }
+        try Data((claude.line + codexRows.joined() + "{\"ts\":\"torn").utf8).write(to: url)
+
+        let providers = LimitsHistory.latestProviders(url: url)
+        let latest = try #require(providers[.claude])
+
+        #expect(latest.session?.percent == 42)
+        #expect(latest.week?.percent == 68)
+        #expect(providers[.codex]?.week?.percent == 99)
+        #expect(LimitsHistory.loadLatestPoint(provider: .claude, url: url)?.s == 42)
+        #expect(LimitsHistory.availableProviders(url: url) == [.codex, .claude])
+    }
+
+    @Test func primedHistoryUsesTheLoadedSnapshotWithoutRescanning() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-tests-\(UUID().uuidString)")
+        let url = dir.appendingPathComponent("limits-history.jsonl")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let original = LimitsHistory.row(
+            provider: .claude, session: LimitWindow(percent: 42, resetsAt: nil), week: nil,
+            now: now)
+        try Data(original.line.utf8).write(to: url)
+        let loaded = LimitsHistory.latestProviders(url: url)
+        let replacement = LimitsHistory.row(
+            provider: .claude, session: LimitWindow(percent: 99, resetsAt: nil), week: nil,
+            now: now.addingTimeInterval(60))
+        try Data(replacement.line.utf8).write(to: url)
+
+        var history = LimitsHistory(url: url)
+        history.prime(with: loaded)
+        history.append(
+            provider: .claude, session: LimitWindow(percent: 42, resetsAt: nil), week: nil,
+            now: now.addingTimeInterval(120))
+
+        #expect(try String(contentsOf: url, encoding: .utf8) == replacement.line)
+    }
+
+    @Test func snapshotResolvesTheAvailableProviderAndMatchingPoints() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-tests-\(UUID().uuidString)")
+        let url = dir.appendingPathComponent("limits-history.jsonl")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let first = LimitsHistory.row(
+            provider: .codex, session: LimitWindow(percent: 12, resetsAt: nil), week: nil,
+            now: now)
+        let second = LimitsHistory.row(
+            provider: .codex, session: LimitWindow(percent: 34, resetsAt: nil), week: nil,
+            now: now.addingTimeInterval(60))
+        try Data((first.line + second.line).utf8).write(to: url)
+
+        let snapshot = await LimitsHistory.loadSnapshot(preferredProvider: .claude, url: url)
+
+        #expect(snapshot.providers == [.codex])
+        #expect(snapshot.provider == .codex)
+        #expect(snapshot.latest[.codex]?.session?.percent == 34)
+        #expect(snapshot.points.map(\.s) == [12, 34])
+    }
 }
 
 @Suite struct LimitsHistoryFableTests {

@@ -48,7 +48,15 @@ struct BudgetCardView: View {
                 .frame(maxWidth: .infinity, minHeight: UIScale.pt(60), alignment: .leading)
             }
         }
-        .task { latest = LimitsHistory.loadLatestPoint() }
+        .task {
+            let history = await LimitsHistory.loadLatestProviders(providers: [.claude])
+            guard !Task.isCancelled else { return }
+            latest = history[.claude].map {
+                LimitPoint(
+                    date: $0.date, s: $0.session?.percent, w: $0.week?.percent,
+                    sessionReset: $0.session?.resetsAt, weekReset: $0.week?.resetsAt)
+            }
+        }
     }
 
     private func content(_ status: BudgetStatus) -> some View {

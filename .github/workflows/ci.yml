@@ -93,7 +93,26 @@ jobs:
           area source '\.(swift|js|mjs|ts|tsx|css|json|ya?ml|html)$'
           area companion '^apps/companion/'
           area companion_runtime '^apps/companion/(Dockerfile|compose(\.[^/]+)?\.yaml)$'
-          area release_artifact '^(Packages/Edith/(Package\.(swift|resolved)|Sources/|Vendor/)|Resources/|edth\.xcodeproj/|build\.sh$)'
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ]; then
+            release_status=0
+            ./scripts/release-artifact-changed.sh || release_status=$?
+            case "$release_status" in
+              0)
+                echo "release_artifact=true" >> "$GITHUB_OUTPUT"
+                echo "release_artifact: run"
+                ;;
+              1)
+                echo "release_artifact=false" >> "$GITHUB_OUTPUT"
+                echo "release_artifact: skip"
+                ;;
+              *)
+                echo "release_artifact: inspection failed" >&2
+                exit "$release_status"
+                ;;
+            esac
+          else
+            area release_artifact '^(Packages/Edith/(Package\.(swift|resolved)|Sources/|Vendor/)|Resources/|edth\.xcodeproj/|build\.sh$)'
+          fi
 
   checks:
     name: checks

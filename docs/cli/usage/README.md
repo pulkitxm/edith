@@ -103,8 +103,7 @@ closed.
   and `codexLimitsEnabled` do the same for a single provider's polling.
   `ed usage refresh` runs the pipeline itself and collects either way. The read
   verbs keep working against whatever was collected before that, so
-  `ed usage limits` goes on printing a silenced provider's last row until it
-  scrolls out of the 8 KB tail.
+  `ed usage limits` keeps printing a silenced provider's newest valid row.
 
 ## Attribution model
 

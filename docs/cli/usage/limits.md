@@ -61,11 +61,10 @@ ed usage limits --json | jq -r '.[] | select(.provider == "claude") | .session.p
 
 ## Behaviour
 
-Without `--refresh` the command mutates nothing and needs no app: it reads the
-tail of `limits-history.jsonl` and reports the last line it finds for each
-provider. Only the final 8 KB of that file is read, so a provider whose newest
-row has scrolled out of that window is treated as never seen and is left out of
-the output entirely.
+Without `--refresh` the command mutates nothing and needs no app: it scans
+backward through `limits-history.jsonl` and reports the newest valid line it
+finds for each provider. One provider's newer rows cannot hide another
+provider's history, and a partial final row is ignored.
 
 `percent` is what the provider reported, stored rounded to one decimal place.
 `resetsAt` is the reset time the provider gave, or `null` when it gave none, and

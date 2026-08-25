@@ -676,9 +676,10 @@ public enum UsageAnalysis {
 
 public enum LimitsReport {
     public static func providers() -> [(LimitProvider, Date, LimitWindow?, LimitWindow?)] {
-        LimitProvider.allCases.compactMap { provider in
-            guard let latest = LimitsHistory.latest(provider: provider) else { return nil }
-            return (provider, latest.date, latest.session, latest.week)
+        let latest = LimitsHistory.latestProviders()
+        return LimitProvider.allCases.compactMap { provider in
+            guard let value = latest[provider] else { return nil }
+            return (provider, value.date, value.session, value.week)
         }
     }
 
