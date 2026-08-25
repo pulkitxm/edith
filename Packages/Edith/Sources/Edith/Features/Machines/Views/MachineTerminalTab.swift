@@ -18,12 +18,18 @@ extension EnvironmentValues {
 @MainActor
 @Observable
 final class TerminalSessionHolder {
-    private(set) var terminalView = LocalProcessTerminalView(frame: .zero)
+    private(set) var terminalView = EdithTerminalView(frame: .zero)
     private(set) var generation = 0
     private(set) var started = false
     private(set) var exitMessage: String?
+    private(set) var themeApplicationCount = 0
+    private(set) var presentationGeneration = 0
 
     private var delegateBox: TerminalProcessDelegate?
+    private var appliedPalette: TerminalPalette?
+    private var presentationActive: Bool?
+    private var presentationWantsFocus = false
+    private var focusTask: Task<Void, Never>?
 
     func start(
         executable: String, arguments: [String], environment: [String],
@@ -48,13 +54,19 @@ final class TerminalSessionHolder {
     }
 
     func reset() {
+        presentationGeneration += 1
+        focusTask?.cancel()
+        focusTask = nil
         terminalView.terminal.resetToInitialState()
         if started { terminalView.terminate() }
-        terminalView = LocalProcessTerminalView(frame: .zero)
+        terminalView = EdithTerminalView(frame: .zero)
         generation += 1
         started = false
         exitMessage = nil
         delegateBox = nil
+        appliedPalette = nil
+        presentationActive = nil
+        presentationWantsFocus = false
     }
 
     func stop() {
@@ -64,6 +76,9 @@ final class TerminalSessionHolder {
     }
 
     func applyTheme(_ palette: TerminalPalette) {
+        guard palette != appliedPalette else { return }
+        appliedPalette = palette
+        themeApplicationCount += 1
         terminalView.configureNativeColors()
         terminalView.nativeBackgroundColor = palette.background
         terminalView.nativeForegroundColor = palette.foreground
@@ -72,11 +87,82 @@ final class TerminalSessionHolder {
         terminalView.font = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
     }
 
+    func updatePresentation(active: Bool, wantsFocus: Bool) {
+        let wantsFocus = active && wantsFocus
+        guard active != presentationActive || wantsFocus != presentationWantsFocus else { return }
+        presentationActive = active
+        presentationWantsFocus = wantsFocus
+        terminalView.setRenderingActive(active)
+        presentationGeneration += 1
+        focusTask?.cancel()
+        focusTask = nil
+        guard active, wantsFocus else { return }
+        let view = terminalView
+        let generation = presentationGeneration
+        focusTask = Task { @MainActor [weak self, weak view] in
+            await Task.yield()
+            guard !Task.isCancelled, let self, let view else { return }
+            self.applyFocus(to: view, generation: generation)
+        }
+    }
+
+    private func applyFocus(to view: EdithTerminalView, generation: Int) {
+        guard generation == presentationGeneration,
+            terminalView === view,
+            presentationActive == true,
+            presentationWantsFocus
+        else { return }
+        view.window?.makeFirstResponder(view)
+        focusTask = nil
+    }
+
     func registerOSCHandler(code: Int, handler: @escaping @MainActor (String) -> Void) {
         terminalView.terminal.registerOscHandler(code: code) { bytes in
             guard let payload = String(bytes: bytes, encoding: .utf8) else { return }
             Task { @MainActor in handler(payload) }
         }
+    }
+}
+
+final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResponder {
+    private(set) var renderingActive = true
+    private(set) var deferredDisplayPasses = 0
+    private(set) var reactivationDisplayPasses = 0
+    private(set) var hasDeferredDisplay = false
+
+    func setRenderingActive(_ active: Bool) {
+        guard active != renderingActive else { return }
+        renderingActive = active
+        isHidden = !active
+        guard active, hasDeferredDisplay else { return }
+        hasDeferredDisplay = false
+        reactivationDisplayPasses += 1
+        super.needsDisplay = true
+    }
+
+    override var needsDisplay: Bool {
+        get { super.needsDisplay }
+        set {
+            guard renderingActive || !newValue else {
+                deferDisplay()
+                return
+            }
+            super.needsDisplay = newValue
+        }
+    }
+
+    override func setNeedsDisplay(_ invalidRect: NSRect) {
+        guard renderingActive else {
+            deferDisplay()
+            return
+        }
+        super.setNeedsDisplay(invalidRect)
+    }
+
+    private func deferDisplay() {
+        guard !hasDeferredDisplay else { return }
+        hasDeferredDisplay = true
+        deferredDisplayPasses += 1
     }
 }
 
@@ -99,26 +185,36 @@ private final class TerminalProcessDelegate: NSObject, LocalProcessTerminalViewD
 struct TerminalPane: NSViewRepresentable {
     let holder: TerminalSessionHolder
     let palette: TerminalPalette
+    var active = true
+    var wantsFocus = true
 
     func makeNSView(context: Context) -> LocalProcessTerminalView {
         holder.applyTheme(palette)
+        holder.updatePresentation(active: active, wantsFocus: wantsFocus)
         let view = holder.terminalView
-        DispatchQueue.main.async { view.window?.makeFirstResponder(view) }
         return view
     }
 
     func updateNSView(_ view: LocalProcessTerminalView, context: Context) {
         holder.applyTheme(palette)
+        holder.updatePresentation(active: active, wantsFocus: wantsFocus)
     }
 }
 
 struct MachineTerminalTab: View {
     let session: MachineSession
+    var active = true
+    var wantsFocus = true
     @State private var ownHolder = TerminalSessionHolder()
     private let injectedHolder: TerminalSessionHolder?
 
-    init(session: MachineSession, holder: TerminalSessionHolder? = nil) {
+    init(
+        session: MachineSession, active: Bool = true, wantsFocus: Bool = true,
+        holder: TerminalSessionHolder? = nil
+    ) {
         self.session = session
+        self.active = active
+        self.wantsFocus = wantsFocus
         injectedHolder = holder
     }
 
@@ -132,11 +228,17 @@ struct MachineTerminalTab: View {
     var body: some View {
         VStack(spacing: 0) {
             statusBar
-            TerminalPane(holder: holder, palette: .edith(dark: dark))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            TerminalPane(
+                holder: holder, palette: .edith(dark: dark), active: active,
+                wantsFocus: wantsFocus
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(dark ? Color.black.opacity(0.9) : Color.white)
         .onAppear(perform: startIfPossible)
+        .onChange(of: active) { _, active in
+            if active { startIfPossible() }
+        }
         .onChange(of: session.state.isConnected) { _, connected in
             if connected { startIfPossible() }
         }
@@ -163,7 +265,11 @@ struct MachineTerminalTab: View {
     }
 
     private func startIfPossible() {
-        guard launchEnabled, !holder.started else { return }
+        guard
+            TerminalLaunchPolicy.shouldStart(
+                active: active, launchEnabled: launchEnabled, started: holder.started,
+                isLocal: session.isLocal, connected: session.state.isConnected)
+        else { return }
         if session.isLocal {
             holder.start(
                 executable: "/bin/zsh", arguments: ["-l"],
@@ -181,6 +287,14 @@ struct MachineTerminalTab: View {
     private func restart() {
         holder.stop()
         startIfPossible()
+    }
+}
+
+enum TerminalLaunchPolicy {
+    static func shouldStart(
+        active: Bool, launchEnabled: Bool, started: Bool, isLocal: Bool, connected: Bool
+    ) -> Bool {
+        active && launchEnabled && !started && (isLocal || connected)
     }
 }
 

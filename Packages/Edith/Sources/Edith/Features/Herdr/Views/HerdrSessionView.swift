@@ -7,6 +7,7 @@ struct HerdrSessionView: View {
     let tab: HerdrOpenTab
     let launchEnabled: Bool
     var hideAgents = false
+    var presented = true
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @State private var connectError: String?
@@ -43,8 +44,11 @@ struct HerdrSessionView: View {
 
     private var sessionPane: some View {
         ZStack {
-            TerminalPane(holder: tab.holder, palette: .edith(dark: dark))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            TerminalPane(
+                holder: tab.holder, palette: .edith(dark: dark),
+                active: presented && tab.view == .agent
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             if let connectError {
                 Text(connectError)
                     .font(.system(size: UIScale.pt(13)))
@@ -63,10 +67,13 @@ struct HerdrSessionView: View {
             theme: diffConfiguration.theme, appearance: diffConfiguration.appearance)
         return ZStack {
             Color(nsColor: palette.background)
-            TerminalPane(holder: tab.quinjet.holder, palette: palette)
-                .id(tab.quinjet.holder.generation)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .opacity(tab.quinjet.live ? 1 : 0)
+            TerminalPane(
+                holder: tab.quinjet.holder, palette: palette,
+                active: presented && tab.view == .diff && tab.quinjet.live
+            )
+            .id(tab.quinjet.holder.generation)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .opacity(tab.quinjet.live ? 1 : 0)
             if let error = tab.quinjet.errorMessage {
                 diffPlaceholder(
                     title: "Quinjet could not open this diff", detail: error, palette: palette)

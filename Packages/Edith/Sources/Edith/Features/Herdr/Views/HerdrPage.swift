@@ -38,7 +38,8 @@ struct HerdrPage: View {
                     ForEach(store.tabs) { tab in
                         HerdrSessionView(
                             store: store, tab: tab, launchEnabled: launchEnabled,
-                            hideAgents: hideAgents
+                            hideAgents: hideAgents,
+                            presented: tab.id == store.selectedTab
                         )
                         .opacity(tab.id == store.selectedTab ? 1 : 0)
                         .allowsHitTesting(tab.id == store.selectedTab)
