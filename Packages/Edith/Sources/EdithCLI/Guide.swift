@@ -43,7 +43,8 @@ public enum Guide {
         ed version                  the CLI version, and whether the app is up
         ed status                   command-line links and shell completions
         ed guide                    this text
-        ed guide claude             a CLAUDE.md snippet making a repo ed-aware
+        ed guide agent              repository instructions making an agent ed-aware
+        ed guide --json             the complete parser command catalog
         ```
 
         `ed install` links `ed`, `edh` and `edith` into a directory on PATH, and
@@ -471,7 +472,7 @@ public enum Guide {
           but someone at the logged-in Mac still has to select a colour.
         """
 
-    public static let claudeSnippet = """
+    public static let agentSnippet = """
         ## Edith, from the command line
 
         This machine runs Edith, a macOS menu bar app with a first-class CLI. Prefer it
@@ -480,9 +481,10 @@ public enum Guide {
 
         - `ed guide` is the full manual. `ed --help` lists commands, `ed <command>
           --help` drills in.
-        - Every read command takes `--json`: stdout is exactly one JSON document, logs
-          go to stderr, and the exit code is reliable (0 ok, 1 failed, 2 bad usage,
-          3 not found, 4 the app or machine is unavailable). Gate on it.
+        - `ed guide --json` is the complete command, alias, argument, option and help
+          catalog. Prefer `--json` when a command advertises it: stdout is exactly one
+          JSON document, logs go to stderr, and the exit code is reliable (0 ok,
+          1 failed, 2 bad usage, 3 not found, 4 unavailable). Gate on it.
         - `ed config ls --json`, `ed config get <key>`, `ed config set <key> <value>`
           reach every setting the UI exposes, and the running app picks changes up
           live. `ed schema` is the JSON Schema for the whole config document.

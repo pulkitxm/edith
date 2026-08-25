@@ -132,6 +132,8 @@ public enum CompletionEngine {
         {
             return result
         }
+        let guideCatalogSelected = node.name == "guide" && leading.contains("--json")
+        let guideTopicSelected = node.name == "guide" && !positionals.isEmpty
         if let kind = expectedValue {
             return CompletionResult(
                 candidates: filtered(
@@ -160,20 +162,22 @@ public enum CompletionEngine {
             }
         }
         if prefix.hasPrefix("-") {
+            var options =
+                helpRoute ? CommandTree.inherited : effectiveOptions(node: node, command: command)
+            if guideTopicSelected { options.removeAll { $0 == "--json" } }
             return CompletionResult(
-                candidates: filtered(
-                    helpRoute
-                        ? CommandTree.inherited : effectiveOptions(node: node, command: command),
-                    prefix))
+                candidates: filtered(options, prefix))
         }
         var candidates = node.name == "ed" && !helpRoute ? [CommandTree.help.name] : []
-        candidates += node.children.map(\.name)
+        candidates += node.children.flatMap(\.names)
         if node.name == "ed" {
             if !helpRoute { candidates += machines }
         }
         var wantsFiles = false
         let slot = positionals.count
-        let arguments = helpRoute ? [] : effectiveArguments(node: node, command: command)
+        let arguments =
+            helpRoute || guideCatalogSelected
+            ? [] : effectiveArguments(node: node, command: command)
         let repeatingArgument =
             helpRoute
             ? nil
@@ -209,6 +213,7 @@ public enum CompletionEngine {
         case .machineOrLocal: return UsageMachineFilter.localNames + machines
         case .appPath: return AppPathID.allCases.map(\.rawValue)
         case .appLink: return appLinks
+        case .guideTopic: return ["agent"]
         case .configKey: return configKeys
         case .configValue:
             guard let previous, let definition = ConfigCatalog.definition(for: previous) else {

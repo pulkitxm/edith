@@ -15,8 +15,9 @@ key.
 
 ## Agent discovery
 
-Start with `ed guide`, then use `ed <group> --help` and the reference page for
-the selected command. Prefer `--json` when a command offers it, read only stdout
+Start with `ed guide`, use `ed guide --json` for the complete parser catalog,
+then use `ed <group> --help` and the reference page for the selected command.
+Prefer `--json` when a command offers it, read only stdout
 as the result document, and treat stderr and the exit code as diagnostics. Shell
 completion walks the same command tree used by parity checks, including nested
 routes and typed values, so it is also a reliable discovery surface outside the

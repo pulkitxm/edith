@@ -7,6 +7,7 @@ public enum ArgumentKind: Equatable, Sendable {
     case runningApp
     case appPath
     case appLink
+    case guideTopic
     case cleanerCategory
     case colorFormat
     case colorIndex
@@ -112,7 +113,9 @@ public enum CommandTree {
     public static let root = CommandNode(
         "ed", "The command line for Edith.", options: ["--help", "--version"],
         children: [
-            CommandNode("guide", "Print the built-in manual.", arguments: [.free]),
+            CommandNode(
+                "guide", "Print the built-in manual.", options: ["--json"],
+                arguments: [.guideTopic]),
             CommandNode("schema", "Print the JSON Schema for the config document.", options: []),
             CommandNode("version", "Print the Edith CLI version.", options: common),
             CommandNode(

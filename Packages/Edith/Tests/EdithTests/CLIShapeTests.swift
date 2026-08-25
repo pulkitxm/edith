@@ -209,7 +209,7 @@ enum CommandCrawler {
 
     @Test func everyReadCommandOffersJSON() {
         let exempt: Set<String> = [
-            "ed", "ed guide", "ed schema", "ed completions", "ed completions zsh",
+            "ed", "ed schema", "ed completions", "ed completions zsh",
             "ed completions bash", "ed completions fish", "ed config export",
             "ed machines exec", "ed machines docker shell", "ed machines docker logs",
             "ed machines docker inspect",

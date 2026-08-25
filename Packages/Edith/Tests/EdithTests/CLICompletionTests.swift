@@ -37,6 +37,32 @@ import Testing
         #expect(result.candidates == ["machines"])
     }
 
+    @Test func guideTopicsAndStructuredDiscoveryComplete() {
+        #expect(Self.plan(["ed", "guide", "ag"], 2).candidates == ["agent"])
+        #expect(Self.plan(["ed", "guide", "--j"], 2).candidates == ["--json"])
+    }
+
+    @Test func guideCompletionDoesNotOfferMutuallyExclusiveForms() {
+        #expect(Self.plan(["ed", "guide", "--json", ""], 3).candidates.isEmpty)
+        #expect(Self.plan(["ed", "guide", "agent", "--j"], 3).candidates.isEmpty)
+    }
+
+    @Test func everyCommandAliasCompletesAtEveryDepth() {
+        var missing: [String] = []
+        Self.checkAliases(node: CommandTree.root, words: ["ed"], missing: &missing)
+        #expect(missing.isEmpty, "completion never offers these aliases: \(missing)")
+    }
+
+    static func checkAliases(node: CommandNode, words: [String], missing: inout [String]) {
+        let candidates = Self.plan(words + [""], words.count).candidates
+        for child in node.children {
+            for alias in child.aliases where !candidates.contains(alias) {
+                missing.append((words + [alias]).joined(separator: " "))
+            }
+            checkAliases(node: child, words: words + [child.name], missing: &missing)
+        }
+    }
+
     @Test func namingAMachineFirstHandsOverToRemoteCompletion() {
         let result = Self.plan(["ed", "tuf", "doc"], 2)
         #expect(result.remoteMachine == "tuf")
@@ -113,7 +139,9 @@ import Testing
 
     @Test func lidAwakeCommandsAndFlagsComplete() {
         let commands = Self.plan(["ed", "lid-awake", ""], 2)
-        #expect(commands.candidates == ["status", "on", "off", "battery", "restore-on-quit"])
+        #expect(
+            commands.candidates
+                == ["status", "on", "start", "off", "stop", "battery", "restore-on-quit"])
         let flags = Self.plan(["ed", "lid-awake", "on", "--u"], 3)
         #expect(flags.candidates == ["--until-lid-reopens"])
     }
@@ -123,8 +151,8 @@ import Testing
         #expect(
             commands.candidates
                 == [
-                    "projects", "worktrees", "open", "launch", "status", "sessions",
-                    "new", "focus", "close", "restart", "switch",
+                    "projects", "worktrees", "open", "launch", "status", "sessions", "list",
+                    "ls", "new", "create", "focus", "select", "close", "restart", "switch",
                 ])
         let appearance = Self.plan(["ed", "quinjet", "launch", "--a"], 3)
         #expect(appearance.candidates == ["--appearance"])
@@ -278,7 +306,7 @@ import Testing
     }
 
     @Test func completionNeverAddsGlobalsTheParserRejects() {
-        for words in [["ed", "--j"], ["ed", "guide", "--j"], ["ed", "schema", "--j"]] {
+        for words in [["ed", "--j"], ["ed", "schema", "--j"]] {
             #expect(Self.plan(words, words.count - 1).candidates.isEmpty)
         }
     }
@@ -443,6 +471,30 @@ import Testing
         ShellCompletionScenario(
             words: ["ed", "extensions", "verify", ""],
             expected: Set(ExtensionRegistry.entries.map(\.id)), requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "music", "fav"], expected: ["favorite", "favourite"],
+            requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "machines", "worksp"], expected: ["workspace", "workspaces"],
+            requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "machines", "workspace", "ev"], expected: ["even"],
+            requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "clipboard", "copy", "1", "--p"], expected: ["--plain"],
+            requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "extensions", "verify", "clipboard", "--j"], expected: ["--json"],
+            requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "machines", "docker", "compose", "pull", "--v"],
+            expected: ["--version"], requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "guide", "ag"], expected: ["agent"],
+            requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "guide", "--j"], expected: ["--json"],
+            requiresExactMatch: true),
     ]
 
     static let bashAndZshCompletionInvocations = [
@@ -467,6 +519,27 @@ import Testing
             .appendingPathComponent("edith-completion-process-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
+    }
+
+    static func discoveredCommand(_ path: [String], in catalog: [String: Any]) -> [String: Any]? {
+        guard var command = catalog["command"] as? [String: Any] else { return nil }
+        for name in path {
+            guard
+                let children = command["subcommands"] as? [[String: Any]],
+                let child = children.first(where: { $0["commandName"] as? String == name })
+            else { return nil }
+            command = child
+        }
+        return command
+    }
+
+    static func discoveredOptionNames(_ command: [String: Any]) -> Set<String> {
+        Set(
+            (command["arguments"] as? [[String: Any]] ?? []).flatMap { argument in
+                (argument["names"] as? [[String: Any]] ?? []).compactMap {
+                    $0["name"] as? String
+                }
+            })
     }
 
     @Test func completionWorksOutsideARepositoryAndRejectsInvalidGlobals() throws {
@@ -559,6 +632,38 @@ import Testing
         #expect(result.code == 0)
         #expect(result.stdoutLines == AppPathID.allCases.map(\.rawValue))
         #expect(result.stderr.isEmpty)
+    }
+
+    @Test func agentDiscoveryWorksOutsideARepository() throws {
+        let outside = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let catalog = try CLIProcessProbe.run(["guide", "--json"], currentDirectory: outside)
+        let instructions = try CLIProcessProbe.run(["guide", "agent"], currentDirectory: outside)
+
+        #expect(catalog.code == 0)
+        #expect(catalog.object?["serializationVersion"] as? Int == 0)
+        #expect((catalog.object?["command"] as? [String: Any])?["commandName"] as? String == "ed")
+        let copy = Self.discoveredCommand(["clipboard", "copy"], in: catalog.object ?? [:])
+        let workspace = Self.discoveredCommand(
+            ["machines", "workspace"], in: catalog.object ?? [:])
+        #expect(Self.discoveredCommand(["status"], in: catalog.object ?? [:]) != nil)
+        #expect(
+            Self.discoveredCommand(["completions", "source"], in: catalog.object ?? [:]) != nil)
+        #expect(
+            Self.discoveredOptionNames(copy ?? [:]).isSuperset(of: [
+                "json", "plain", "version", "h", "help",
+            ]))
+        #expect((workspace?["aliases"] as? [String]) == ["workspaces"])
+        #expect(catalog.stderr.isEmpty)
+        #expect(instructions.code == 0)
+        #expect(instructions.stdout.contains("ed guide --json"))
+        #expect(instructions.stderr.isEmpty)
+
+        let invalid = try CLIProcessProbe.run(
+            ["guide", "agent", "--json"], currentDirectory: outside)
+        #expect(invalid.code == ExitCodes.usage)
+        #expect(invalid.stdout.isEmpty)
+        #expect(invalid.stderr.contains("--json does not take a guide topic"))
     }
 
     @Test func requiredFishCompletionDependencyIsAvailable() {
