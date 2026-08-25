@@ -125,6 +125,8 @@ public enum Guide {
         ed machines tuf files ls /var/log
         ed machines tuf files get /etc/os-release ./os-release
         ed machines tuf files put ./deploy.sh /tmp/deploy.sh
+        ed machines tuf files preview /etc/os-release
+        ed machines tuf files launch /srv/reports/latest.pdf
         ed machines tuf services
         ed machines tuf disconnect
         ```
@@ -153,6 +155,7 @@ public enum Guide {
         ed machines edit box --name shed --key ~/.ssh/id_ed25519
         ed machines rm shed --yes               with its forwards, snippets and secrets
         ed machines forwards add box --local 8080 --remote 80
+        ed machines forwards open box 1          open localhost:8080 in a browser
         ed machines snippets add box logs journalctl -xe
         ```
 

@@ -140,6 +140,12 @@ public enum UserOperationCatalog {
         + QuinjetSessionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + RemoteFileOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + RemoteDirectoryOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
 
     private static let remoteActionRegistrations: [RegisteredUserOperation] = {
         var registrations = CompanionChatLibraryOperation.allCases.map {
@@ -152,6 +158,15 @@ public enum UserOperationCatalog {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         registrations += HerdrSessionOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        registrations += PortForwardBrowserOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        registrations += DockerBrowserOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        registrations += MountedFileSystemOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         return registrations
@@ -1190,6 +1205,71 @@ private extension QuinjetSessionOperation {
             userInterface(
                 "Quinjet worktree picker", "switch an open session", ["1", "/tmp/worktree"])
         }
+    }
+}
+
+private extension RemoteFileOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .preview:
+            userInterface(
+                "Machine finder preview", "read a text preview", ["box", "/tmp/notes.txt"])
+        case .launch:
+            userInterface(
+                "Machine finder", "open a remote file in its default app",
+                ["box", "/tmp/notes.txt"])
+        case .reveal:
+            userInterface(
+                "Machine finder", "reveal a downloaded file in Finder",
+                ["box", "/tmp/notes.txt"])
+        case .download:
+            userInterface("Machine finder", "download a remote file", ["box", "/etc/hosts"])
+        }
+    }
+}
+
+private extension RemoteDirectoryOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Machine finder", action: "list a folder",
+                    exampleArguments: ["box", "/a"]),
+                UserInterfaceActionPlacement(
+                    surface: "Quinjet machine picker", action: "browse a folder on another machine",
+                    exampleArguments: ["build", "/tmp"]),
+            ])
+        case .create:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Machine finder", action: "create a folder",
+                    exampleArguments: ["box", "/a/new"]),
+                UserInterfaceActionPlacement(
+                    surface: "Machine finder", action: "make a folder",
+                    exampleArguments: ["box", "/a"]),
+            ])
+        }
+    }
+}
+
+private extension PortForwardBrowserOperation {
+    var interfaceExposure: UserOperationExposure {
+        userInterface("Machine tools", "open a forwarded service", ["box", "1"])
+    }
+}
+
+private extension DockerBrowserOperation {
+    var interfaceExposure: UserOperationExposure {
+        userInterface(
+            "Docker window", "open a published port in the browser",
+            ["box", "api", "--port", "8080"])
+    }
+}
+
+private extension MountedFileSystemOperation {
+    var interfaceExposure: UserOperationExposure {
+        userInterface("Machine tools", "reveal the mounted disk", ["box"])
     }
 }
 

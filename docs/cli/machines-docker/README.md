@@ -132,6 +132,9 @@ something unrecognisable, `docker reported an unknown state`.
   buildx ls`, `ed tuf docker exec -it api sh`.
 - `ed machines docker <machine>` with no verb is `ps`, and
   `ed machines docker compose <machine>` with no verb is `compose ls`.
+- `ed machines docker open <machine> <container>` opens its only published TCP
+  port in the browser. Pass `--port <host-or-container-port>` when it has more
+  than one. `--json` performs the open and reports the resolved localhost URL.
 - `ed machines docker shell <machine> <container>` is the Docker window's shell
   button. Both use the same quoted container target and choose `bash` when it is
   available inside the container, falling back to `sh`.

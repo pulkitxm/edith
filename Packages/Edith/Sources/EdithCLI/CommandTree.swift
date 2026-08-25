@@ -766,6 +766,9 @@ public enum CommandTree {
                                 "off", "Close a saved forward.", options: common,
                                 arguments: [.machine, .historyIndex]),
                             CommandNode(
+                                "open", "Open a forwarded service in the browser.",
+                                options: common, arguments: [.machine, .historyIndex]),
+                            CommandNode(
                                 "rm", "Forget one port forward.", aliases: ["remove"],
                                 options: common, arguments: [.machine, .historyIndex]),
                         ]),
@@ -924,6 +927,15 @@ public enum CommandTree {
                                 "get", "Download a file.", options: ["--json"],
                                 arguments: [.machine, .remotePath, .localPath]),
                             CommandNode(
+                                "preview", "Print a text preview of a remote file.",
+                                options: common, arguments: [.machine, .remotePath]),
+                            CommandNode(
+                                "launch", "Open a remote file in its default Mac app.",
+                                options: common, arguments: [.machine, .remotePath]),
+                            CommandNode(
+                                "reveal", "Reveal a downloaded remote file in Finder.",
+                                options: common, arguments: [.machine, .remotePath]),
+                            CommandNode(
                                 "put", "Upload a file.", options: ["--json"],
                                 arguments: [.machine, .localPath, .remotePath]),
                             CommandNode(
@@ -987,6 +999,10 @@ public enum CommandTree {
                                 arguments: [.machine, .container]),
                             CommandNode(
                                 "inspect", "Raw inspect output.",
+                                arguments: [.machine, .container]),
+                            CommandNode(
+                                "open", "Open a published container port in the browser.",
+                                options: ["--json", "--help", "--port"],
                                 arguments: [.machine, .container]),
                             CommandNode(
                                 "start", "Start a container.", options: ["--json"],
@@ -1078,6 +1094,9 @@ public enum CommandTree {
                         options: ["--json"], arguments: [.machine]),
                     CommandNode(
                         "mounts", "Every machine file system mounted here.", options: common),
+                    CommandNode(
+                        "mount-reveal", "Reveal a mounted machine file system in Finder.",
+                        options: common, arguments: [.machine]),
                 ]),
             CommandNode(
                 "companion", "The companion memory backend.",

@@ -17,12 +17,69 @@ struct MachinesDockerCommand: AsyncParsableCommand {
             DockerLogsCommand.self,
             DockerInspectCommand.self, DockerStartCommand.self, DockerStopCommand.self,
             DockerRestartCommand.self, DockerRemoveCommand.self,
+            DockerOpenCommand.self,
             DockerPauseCommand.self, DockerUnpauseCommand.self,
             DockerRemoveImageCommand.self, DockerRemoveVolumeCommand.self,
             DockerPruneCommand.self,
             DockerComposeCommand.self,
         ],
         defaultSubcommand: DockerPsCommand.self)
+}
+
+struct DockerOpenCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "open", abstract: "Open a published container port in the browser.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Option(help: "Published host or container port when more than one is available.")
+    var port: Int?
+
+    @Argument(help: "Machine name, ssh alias or id.")
+    var machine: String
+
+    @Argument(help: "Container name or id.")
+    var container: String
+
+    func run() async throws {
+        try await execute {
+            let runner = try await DockerBridge.runner(machine)
+            let output = try await runner.text(DockerCommands.containersWithStats(), timeout: 45)
+            let containers = DockerParsing.containers(
+                psOutput: output.components(separatedBy: DockerCommands.listSeparator).first ?? "")
+            guard
+                let found = containers.first(where: {
+                    $0.id == container || $0.shortID == container || $0.names.contains(container)
+                })
+            else { throw CLIFailure.notFound("no container named \(container)") }
+            let ports = LocalBrowserOperationExecution.publishedPorts(in: found, matching: port)
+            guard let selected = ports.first, let hostPort = selected.hostPort else {
+                throw CLIFailure.notFound("\(found.displayName) has no matching published TCP port")
+            }
+            guard ports.count == 1 else {
+                throw CLIFailure(
+                    "\(found.displayName) has more than one published port",
+                    hint: "pass --port with a host or container port")
+            }
+            guard let url = LocalBrowserOperationExecution.url(port: hostPort),
+                RemoteFileOperationExecution.present(
+                    [url], action: .open, using: CLIEnvironment.presentURLs)
+            else { throw CLIFailure.unavailable("macOS could not open localhost:\(hostPort)") }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "container": .string(found.displayName),
+                        "machine": .string(runner.machine.name),
+                        "opened": .bool(true),
+                        "port": .int(hostPort),
+                        "url": .string(url.absoluteString),
+                    ]))
+                return
+            }
+            CLIOut.out("opened \(url.absoluteString)")
+        }
+    }
 }
 
 struct DockerShellCommand: AsyncParsableCommand {

@@ -158,7 +158,8 @@ public enum MachineMounts {
     }
 
     public static func mount(for machine: Machine, in mounts: [MachineMount]) -> MachineMount? {
-        mounts.first { $0.machineID == machine.id || $0.target == machine.sshTarget }
+        mounts.first { $0.machineID == machine.id }
+            ?? mounts.first { $0.machineID == nil && $0.target == machine.sshTarget }
     }
 
     public static func adopted(_ volume: MountedVolume) -> MachineMount? {

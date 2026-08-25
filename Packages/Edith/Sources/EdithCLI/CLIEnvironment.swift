@@ -2,6 +2,16 @@ import AppKit
 import EdithKit
 import Foundation
 
+public struct CLIRemoteDirectoryTarget: Sendable {
+    public let machine: Machine
+    public let endpoint: RemoteDirectoryEndpoint
+
+    public init(machine: Machine, endpoint: RemoteDirectoryEndpoint) {
+        self.machine = machine
+        self.endpoint = endpoint
+    }
+}
+
 public enum CLIEnvironment {
     nonisolated(unsafe) public static var sharedDefaults: UserDefaults = {
         guard let suite = ProcessInfo.processInfo.environment["EDITH_TEST_SHARED_DEFAULTS_SUITE"],
@@ -84,6 +94,24 @@ public enum CLIEnvironment {
         CompanionClient.endpoint(override: $0)
     }
 
+    nonisolated(unsafe) public static var remoteDirectoryTarget:
+        @Sendable (String) async throws -> CLIRemoteDirectoryTarget = {
+            try await liveRemoteDirectoryTarget($0)
+        }
+
+    nonisolated(unsafe) public static var presentURLs:
+        @Sendable ([URL], FilePresentationAction) -> Bool = { urls, action in
+            switch action {
+            case .open:
+                guard let first = urls.first else { return false }
+                return NSWorkspace.shared.open(first)
+            case .reveal:
+                guard !urls.isEmpty else { return false }
+                NSWorkspace.shared.activateFileViewerSelecting(urls)
+                return true
+            }
+        }
+
     private static func detectedInstalledAppURL() -> URL? {
         let bundled = Bundle.main.bundleURL
             .deletingLastPathComponent()
@@ -157,10 +185,31 @@ public enum CLIEnvironment {
                 id, executableNamed: CLIEnvironment.executableNamed)
         }
         resolveCompanionEndpoint = { CompanionClient.endpoint(override: $0) }
+        remoteDirectoryTarget = { try await liveRemoteDirectoryTarget($0) }
+        presentURLs = { urls, action in
+            switch action {
+            case .open:
+                guard let first = urls.first else { return false }
+                return NSWorkspace.shared.open(first)
+            case .reveal:
+                guard !urls.isEmpty else { return false }
+                NSWorkspace.shared.activateFileViewerSelecting(urls)
+                return true
+            }
+        }
         appInspectionCenter = { AppInspectionCenter() }
         appContributors = { Contributors.cached() }
         installedAppURL = { detectedInstalledAppURL() }
         updateHistoryURL = { UpdateCheckLog.url }
         QuinjetCLIEnvironment.reset()
+    }
+
+    private static func liveRemoteDirectoryTarget(
+        _ query: String
+    ) async throws -> CLIRemoteDirectoryTarget {
+        let runner = try await MachineResolver.runner(query)
+        return CLIRemoteDirectoryTarget(
+            machine: runner.machine,
+            endpoint: .remote(machine: runner.machine, connection: runner.ssh))
     }
 }

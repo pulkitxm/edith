@@ -28,7 +28,9 @@ ed machines files mkdir tuf /tmp/work --json
 
 What runs is `mkdir -p`, so missing parents are created in one go and a
 directory that already exists is not an error: it prints `made <path>` and exits
-0. A path the account cannot write exits 1 with the machine's message.
+0. A path the account cannot write exits 1 with the machine's message. The Files
+pane's New Folder action calls the same EdithKit operation before it refreshes
+the directory and starts renaming the new item.
 
 ## Where to go next
 

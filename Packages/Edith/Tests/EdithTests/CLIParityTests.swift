@@ -39,7 +39,7 @@ enum UIParity {
         "previous", "volume", "connect", "disconnect", "start", "restart", "prune",
         "up", "down", "pull", "put", "quit", "open", "clean-keys", "test-notification",
         "check-updates", "collect", "forget", "mount", "unmount", "open-path", "open-link",
-        "favorite", "unfavorite", "add-text", "update", "purge", "close",
+        "favorite", "unfavorite", "add-text", "update", "purge", "close", "mkdir",
     ]
 
     static let notReachableFromTheUI: [String: String] = [
@@ -277,9 +277,6 @@ enum UIParity {
         UICapability("Music page", "open the library", ["music", "open"]),
 
         UICapability(
-            "Machine finder", "download a remote file",
-            ["machines", "files", "get", "box", "/etc/hosts"]),
-        UICapability(
             "Machine finder", "upload a local file",
             ["machines", "files", "put", "box", "./x", "/tmp/x"]),
 
@@ -291,8 +288,6 @@ enum UIParity {
         UICapability(
             "Machine finder", "rename a file",
             ["machines", "files", "rename", "box", "/a", "b"]),
-        UICapability(
-            "Machine finder", "make a folder", ["machines", "files", "mkdir", "box", "/a"]),
         UICapability(
             "Machine finder", "move files to the trash",
             ["machines", "files", "rm", "box", "/a"]),
@@ -324,9 +319,6 @@ enum UIParity {
         UICapability(
             "Quinjet machine picker", "list recent projects on another machine",
             ["quinjet", "projects", "--machine", "build"]),
-        UICapability(
-            "Quinjet machine picker", "browse a folder on another machine",
-            ["machines", "files", "ls", "build", "/tmp"]),
         UICapability(
             "Quinjet tab bar", "list the open native review sessions",
             ["quinjet", "sessions"]),
@@ -401,9 +393,6 @@ enum UIParity {
         "ed companion ingest /tmp/voice-memo.wav",
         "ed herdr command w3:p1N",
         "ed machines files cp box /a /b",
-        "ed machines files get box /etc/hosts",
-        "ed machines files ls build /tmp",
-        "ed machines files mkdir box /a",
         "ed machines files mv box /a /b",
         "ed machines files put box ./x /tmp/x",
         "ed quinjet focus 1",

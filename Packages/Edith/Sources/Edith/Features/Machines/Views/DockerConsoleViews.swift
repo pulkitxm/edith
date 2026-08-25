@@ -244,7 +244,9 @@ private struct DockerContainerRow: View {
             ForEach(container.ports.prefix(2), id: \.self) { port in
                 if let url = port.browserURL {
                     Button {
-                        NSWorkspace.shared.open(url)
+                        RemoteFileOperationExecution.present([url], action: .open) { urls, _ in
+                            NSWorkspace.shared.open(urls[0])
+                        }
                     } label: {
                         Text(port.displayName)
                             .font(DashSkin.mono(9.5))

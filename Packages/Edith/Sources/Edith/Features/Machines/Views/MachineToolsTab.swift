@@ -111,9 +111,12 @@ struct MachineToolsTab: View {
                         ProgressView().controlSize(.small).scaleEffect(0.6)
                     }
                     Button("Reveal") {
-                        NSWorkspace.shared.activateFileViewerSelecting([
-                            URL(fileURLWithPath: mount.mountPoint)
-                        ])
+                        RemoteFileOperationExecution.present(
+                            [URL(fileURLWithPath: mount.mountPoint)], action: .reveal
+                        ) { urls, _ in
+                            NSWorkspace.shared.activateFileViewerSelecting(urls)
+                            return true
+                        }
                     }
                     .disabled(session.mountHealth != .mounted)
                     .pointerCursor()
@@ -223,8 +226,12 @@ struct MachineToolsTab: View {
                         Spacer(minLength: 0)
                         if session.activeForwards.contains(forward.id) {
                             Button("Open") {
-                                if let url = URL(string: "http://localhost:\(forward.localPort)") {
-                                    NSWorkspace.shared.open(url)
+                                if let url = PortForwardBrowserOperationExecution.url(
+                                    forward: forward)
+                                {
+                                    RemoteFileOperationExecution.present(
+                                        [url], action: .open
+                                    ) { urls, _ in NSWorkspace.shared.open(urls[0]) }
                                 }
                             }
                             .pointerCursor()

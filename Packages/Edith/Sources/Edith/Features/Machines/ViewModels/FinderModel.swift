@@ -314,23 +314,28 @@ final class FinderModel {
             return
         }
         if session.isLocal {
-            NSWorkspace.shared.open(URL(fileURLWithPath: entry.path))
+            RemoteFileOperationExecution.present(
+                [URL(fileURLWithPath: entry.path)], action: .open
+            ) { urls, _ in NSWorkspace.shared.open(urls[0]) }
             return
         }
         Task { await openRemote(entry) }
     }
 
     private func openRemote(_ entry: RemoteFileEntry) async {
-        guard let connection = session.connectionRef else { return }
-        let destination = PreviewCache.localURL(for: entry, machineID: session.machine.id)
-        if FileManager.default.fileExists(atPath: destination.path) {
-            NSWorkspace.shared.open(destination)
-            return
-        }
         statusMessage = "Opening \(entry.name)…"
         do {
-            try await connection.download(remotePath: entry.path, to: destination)
-            NSWorkspace.shared.open(destination)
+            let destination = try await RemoteFileOperationExecution.materialize(
+                entry, machineID: session.machine.id, isLocal: false
+            ) { remotePath, localURL in
+                guard let connection = session.connectionRef else {
+                    throw FinderTransferError.notConnected
+                }
+                try await connection.download(remotePath: remotePath, to: localURL)
+            }
+            RemoteFileOperationExecution.present([destination], action: .open) { urls, _ in
+                NSWorkspace.shared.open(urls[0])
+            }
             flash("Opened \(entry.name)")
         } catch {
             errorMessage = error.localizedDescription
@@ -573,7 +578,11 @@ final class FinderModel {
     func newFolder() async {
         let name = FileOperations.newFolderName(existing: entries)
         let target = FileListing.join(parent: path, name: name)
-        await run(FileOperations.makeDirectoryCommand(path: target), reload: true)
+        if case let .failure(error) = await session.createDirectory(path: target) {
+            errorMessage = error.localizedDescription
+            return
+        }
+        await load()
         if let created = entries.first(where: { $0.path == target }) {
             selection = [target]
             reveal(target)
@@ -661,7 +670,10 @@ final class FinderModel {
         guard session.isLocal else { return }
         let urls = selectedEntries.map { URL(fileURLWithPath: $0.path) }
         guard !urls.isEmpty else { return }
-        NSWorkspace.shared.activateFileViewerSelecting(urls)
+        RemoteFileOperationExecution.present(urls, action: .reveal) { urls, _ in
+            NSWorkspace.shared.activateFileViewerSelecting(urls)
+            return true
+        }
     }
 
     func download(to destination: URL) async {
@@ -670,7 +682,11 @@ final class FinderModel {
             statusMessage = "Downloading \(entry.name)…"
             let target = destination.appendingPathComponent(entry.name)
             do {
-                try await connection.download(remotePath: entry.path, to: target)
+                try await RemoteFileOperationExecution.download(
+                    remotePath: entry.path, to: target
+                ) { remotePath, localURL in
+                    try await connection.download(remotePath: remotePath, to: localURL)
+                }
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -990,8 +1006,12 @@ final class FinderModel {
                     at: destination, withIntermediateDirectories: true)
                 let fileURL = destination.appendingPathComponent(name)
                 do {
-                    try await connection.download(remotePath: remotePath, to: fileURL) { sent in
-                        progress.completedUnitCount = sent
+                    try await RemoteFileOperationExecution.download(
+                        remotePath: remotePath, to: fileURL
+                    ) { remotePath, localURL in
+                        try await connection.download(
+                            remotePath: remotePath, to: localURL
+                        ) { sent in progress.completedUnitCount = sent }
                     }
                     completion(fileURL, false, nil)
                 } catch {

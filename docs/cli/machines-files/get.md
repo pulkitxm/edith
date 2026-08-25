@@ -27,10 +27,12 @@ ed machines files get tuf /var/log/syslog ~/Desktop/syslog.txt
 ed machines files get tuf /etc/hosts --json
 ```
 
-The transfer is `cat <remote>` on the far side, streamed into the local file 128
-KB at a time over the shared connection. There is no timeout: a large file takes
-as long as it takes. The local path is created or truncated without asking, so
-downloading twice overwrites the first copy.
+The transfer is `cat <remote>` on the far side, streamed 128 KB at a time into a
+staging file beside the destination over the shared connection. There is no
+timeout: a large file takes as long as it takes. A completed staging file replaces
+the destination, so a shorter second download has no trailing bytes. A failure
+removes only the staging file and preserves any file that was already there. The
+contents are never accumulated in memory, and only one staged copy is kept.
 
 Before the first byte moves, `ed` asks the machine how big the file is with
 `stat`, capped at 30 seconds, and then keeps one line on stderr up to date as
@@ -58,7 +60,7 @@ $ ed machines files get tuf /etc/os-release
 ```
 
 A remote path that does not exist, or one `cat` refuses such as a directory,
-exits 1, and the half-written local file is removed rather than left looking
+exits 1, and the half-written staging file is removed rather than left looking
 complete:
 
 ```
