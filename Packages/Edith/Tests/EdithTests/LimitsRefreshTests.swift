@@ -82,4 +82,11 @@ import Testing
             LimitsRefreshGate.backoffDeadline(retryAfter: 300, now: now)
                 == now.addingTimeInterval(300))
     }
+
+    @Test func historyCompletionCannotStartPollingWhilePaused() {
+        #expect(UsageStore.pollingAllowed(locked: false, sleeping: false))
+        #expect(!UsageStore.pollingAllowed(locked: true, sleeping: false))
+        #expect(!UsageStore.pollingAllowed(locked: false, sleeping: true))
+        #expect(!UsageStore.pollingAllowed(locked: true, sleeping: true))
+    }
 }

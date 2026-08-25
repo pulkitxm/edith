@@ -46,6 +46,7 @@ final class UsageStore: FeatureModule {
     private var wakeObserver: NSObjectProtocol?
     private var sleepObserver: NSObjectProtocol?
     private var locked = false
+    private var sleeping = false
     private var lockObservers: [NSObjectProtocol] = []
     private var refreshTask: Task<Void, Never>?
     private var refreshEvents: [UsageRefreshEvent] = []
@@ -123,6 +124,7 @@ final class UsageStore: FeatureModule {
             Task { @MainActor in
                 Log.lifecycle.notice("going to sleep - pausing usage poll")
                 self?.diag("going to sleep - pausing usage poll")
+                self?.sleeping = true
                 self?.stopPolling()
             }
         }
@@ -132,14 +134,19 @@ final class UsageStore: FeatureModule {
         ) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
+                self.sleeping = false
                 let msg = "woke from sleep (locked=\(self.locked))"
                 Log.lifecycle.notice("\(msg, privacy: .public)")
                 self.diag(msg)
-                guard !self.locked else { return }
+                guard Self.pollingAllowed(locked: self.locked, sleeping: self.sleeping) else {
+                    return
+                }
                 self.wakeTask?.cancel()
                 self.wakeTask = Task { [weak self] in
                     try? await Task.sleep(nanoseconds: 5_000_000_000)
-                    guard !Task.isCancelled, let self, !self.locked else { return }
+                    guard !Task.isCancelled, let self,
+                        Self.pollingAllowed(locked: self.locked, sleeping: self.sleeping)
+                    else { return }
                     self.startPolling()
                 }
             }
@@ -162,7 +169,11 @@ final class UsageStore: FeatureModule {
                     Log.lifecycle.notice("screen unlocked - resuming usage poll")
                     self?.diag("screen unlocked - resuming usage poll")
                     self?.locked = false
-                    self?.startPolling()
+                    if let self,
+                        Self.pollingAllowed(locked: self.locked, sleeping: self.sleeping)
+                    {
+                        self.startPolling()
+                    }
                 }
             },
         ]
@@ -209,7 +220,7 @@ final class UsageStore: FeatureModule {
     }
 
     private func startPolling() {
-        guard timer == nil else { return }
+        guard Self.pollingAllowed(locked: locked, sleeping: sleeping), timer == nil else { return }
         let t = Timer(timeInterval: 300, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.refreshLimits()
@@ -225,6 +236,10 @@ final class UsageStore: FeatureModule {
             await refreshLimits()
             await loadStats()
         }
+    }
+
+    nonisolated static func pollingAllowed(locked: Bool, sleeping: Bool) -> Bool {
+        !locked && !sleeping
     }
 
     private func stopPolling() {
