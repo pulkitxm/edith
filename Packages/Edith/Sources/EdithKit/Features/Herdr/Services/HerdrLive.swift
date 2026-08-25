@@ -84,7 +84,7 @@ public enum HerdrLive {
 
     private static func runHostLease(
         sockets: [(name: String, path: String)],
-        connect: @escaping (String) throws -> HerdrSocketClient,
+        connect: @escaping @Sendable (String) throws -> HerdrSocketClient,
         machineID: String, machineName: String, machineIsLocal: Bool, sshTarget: String?,
         fleet: FleetBag
     ) async {
@@ -112,7 +112,7 @@ public enum HerdrLive {
 
     private static func runHost(
         sockets: [(name: String, path: String)],
-        connect: @escaping (String) throws -> HerdrSocketClient,
+        connect: @escaping @Sendable (String) throws -> HerdrSocketClient,
         machineID: String, machineName: String, machineIsLocal: Bool, sshTarget: String?,
         fleet: FleetBag
     ) async {
