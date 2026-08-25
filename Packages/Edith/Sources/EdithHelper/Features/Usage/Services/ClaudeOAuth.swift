@@ -1,3 +1,4 @@
+import Darwin
 import EdithKit
 import Foundation
 import Security
@@ -248,11 +249,16 @@ enum ClaudeCredentialStore {
     static func credentialFileData(
         at url: URL, maximumOutputBytes: Int = maximumCredentialBytes
     ) -> ClaudeCredentialDataLookup {
-        guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
         guard maximumOutputBytes >= 0, maximumOutputBytes < Int.max else { return .failed }
+        let descriptor = open(url.path, O_RDONLY | O_NONBLOCK | O_NOFOLLOW)
+        guard descriptor >= 0 else { return errno == ENOENT ? .missing : .failed }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        var metadata = stat()
         do {
-            let handle = try FileHandle(forReadingFrom: url)
             defer { try? handle.close() }
+            guard fstat(descriptor, &metadata) == 0, metadata.st_mode & S_IFMT == S_IFREG else {
+                return .failed
+            }
             let data = try handle.read(upToCount: maximumOutputBytes + 1) ?? Data()
             guard data.count <= maximumOutputBytes else { return .oversized }
             return .data(data)

@@ -651,14 +651,19 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
 }
 
 @Suite struct ClaudeCredentialStoreProcessTests {
-    @Test func credentialFileReadIsBoundedAndDistinguishesMissingData() throws {
+    @Test func credentialFileReadIsBoundedAndRejectsNonRegularNodes() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             "edith-credential-file-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("credentials.json")
+        let fifo = directory.appendingPathComponent("credentials.fifo")
+        let link = directory.appendingPathComponent("credentials.link")
         let data = Data(repeating: 65, count: 16)
         try data.write(to: url)
+        try #require(mkfifo(fifo.path, 0o600) == 0)
+        try #require(symlink(fifo.path, link.path) == 0)
+        let started = ProcessInfo.processInfo.systemUptime
 
         #expect(ClaudeCredentialStore.credentialFileData(at: url) == .data(data))
         #expect(
@@ -667,6 +672,9 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
         #expect(
             ClaudeCredentialStore.credentialFileData(
                 at: directory.appendingPathComponent("missing.json")) == .missing)
+        #expect(ClaudeCredentialStore.credentialFileData(at: fifo) == .failed)
+        #expect(ClaudeCredentialStore.credentialFileData(at: link) == .failed)
+        #expect(ProcessInfo.processInfo.systemUptime - started < 5)
     }
 
     @Test func keychainReadUsesBoundedSecretSafeExecution() async throws {
