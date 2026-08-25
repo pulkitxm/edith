@@ -66,6 +66,11 @@ let targets: [Target] = [
         path: "Sources/EdithLidAwakeHelper",
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
+    .executableTarget(
+        name: "UsageSnapshotCrashDriver",
+        dependencies: ["EdithKit"],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
     .target(
         name: "Edith",
         dependencies: [
@@ -108,6 +113,7 @@ let targets: [Target] = [
         name: "EdithTests",
         dependencies: [
             "EdithCore", "Edith", "EdithKit", "EdithHelper", "EdithCLI", "Highlighter", "ed",
+            "UsageSnapshotCrashDriver",
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),

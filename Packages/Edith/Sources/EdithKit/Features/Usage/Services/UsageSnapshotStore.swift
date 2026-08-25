@@ -88,6 +88,7 @@ public enum UsageSnapshotError: LocalizedError, Equatable, Sendable {
     case invalidPointer
     case corruptGeneration(String)
     case generationExists(String)
+    case duplicatePayload(String)
 
     public var errorDescription: String? {
         switch self {
@@ -102,6 +103,7 @@ public enum UsageSnapshotError: LocalizedError, Equatable, Sendable {
             "usage snapshot generation \(generation) is corrupt"
         case .generationExists(let generation):
             "usage snapshot generation \(generation) already exists"
+        case .duplicatePayload(let path): "duplicate usage snapshot payload at \(path)"
         }
     }
 }
@@ -110,15 +112,18 @@ public struct UsageSnapshotHooks: Sendable {
     public var afterCapture: @Sendable () throws -> Void
     public var afterStagingFile: @Sendable (String) throws -> Void
     public var beforePointerPublication: @Sendable () throws -> Void
+    public var beforePointerRepair: @Sendable () throws -> Void
 
     public init(
         afterCapture: @escaping @Sendable () throws -> Void = {},
         afterStagingFile: @escaping @Sendable (String) throws -> Void = { _ in },
-        beforePointerPublication: @escaping @Sendable () throws -> Void = {}
+        beforePointerPublication: @escaping @Sendable () throws -> Void = {},
+        beforePointerRepair: @escaping @Sendable () throws -> Void = {}
     ) {
         self.afterCapture = afterCapture
         self.afterStagingFile = afterStagingFile
         self.beforePointerPublication = beforePointerPublication
+        self.beforePointerRepair = beforePointerRepair
     }
 
     public static let live = UsageSnapshotHooks()
@@ -182,6 +187,10 @@ public actor UsageSnapshotStore {
             ) {
                 let payloads = try captureLocked()
                 guard !payloads.isEmpty else { throw UsageSnapshotError.empty }
+                var paths = Set<String>()
+                for payload in payloads where !paths.insert(payload.path).inserted {
+                    throw UsageSnapshotError.duplicatePayload(payload.path)
+                }
                 return payloads.sorted { $0.path < $1.path }
             }
         } catch UsageDataTransactionError.refreshBusy {
@@ -193,10 +202,9 @@ public actor UsageSnapshotStore {
         var payloads: [Payload] = []
         if manager.fileExists(atPath: source.usageFile.path) {
             let data = try regularFileData(at: source.usageFile)
-            guard let normalized = UsageHistory.merge(local: data, cloud: nil),
-                UsageHistory.isValidDocument(normalized)
+            guard let projected = Self.projectUsage(data, requiresMachine: false)
             else { throw UsageSnapshotError.invalidUsage(source.usageFile.path) }
-            payloads.append(Payload(path: "usage.json", data: normalized))
+            payloads.append(Payload(path: "usage.json", data: projected))
         }
         if manager.fileExists(atPath: source.limitsFile.path) {
             let data = try regularFileData(at: source.limitsFile)
@@ -227,17 +235,18 @@ public actor UsageSnapshotStore {
             else { return nil }
             let data = try regularFileData(at: file)
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                object["daily"] is [Any],
                 let machine = object["machine"] as? [String: Any],
                 let embedded = machine["id"] as? String,
                 UUID(uuidString: embedded) == identifier,
                 let collectedAt = machine["collectedAt"] as? String,
-                EdithDate.parseISO(collectedAt) != nil
+                EdithDate.parseISO(collectedAt) != nil,
+                let projected = Self.projectUsage(data, requiresMachine: true)
             else {
                 throw UsageSnapshotError.invalidMachine(
                     source.machinesDirectory.appendingPathComponent(file.lastPathComponent).path)
             }
-            return Payload(path: "machines/\(identifier.uuidString.lowercased()).json", data: data)
+            return Payload(
+                path: "machines/\(identifier.uuidString.lowercased()).json", data: projected)
         }
     }
 
@@ -312,6 +321,8 @@ public actor UsageSnapshotStore {
         }
         promoted = true
         try UsageDurableFile.synchronize(generationsDirectory)
+        guard try validateGeneration(at: destination, expected: generation) == persistedManifest
+        else { throw UsageSnapshotError.corruptGeneration(generation) }
         try hooks.beforePointerPublication()
         let pointer = UsageSnapshotPointer(
             formatVersion: Self.formatVersion, current: generation,
@@ -344,10 +355,13 @@ public actor UsageSnapshotStore {
             do {
                 let recovered = try publication(
                     generation: previous, previousGeneration: nil)
-                let repaired = UsageSnapshotPointer(
-                    formatVersion: Self.formatVersion, current: previous, previous: nil)
-                try UsageDurableFile.write(try Self.encode(repaired), to: pointerFile)
-                cleanupGenerations(keeping: Set([previous]))
+                do {
+                    try hooks.beforePointerRepair()
+                    let repaired = UsageSnapshotPointer(
+                        formatVersion: Self.formatVersion, current: previous, previous: nil)
+                    try UsageDurableFile.write(try Self.encode(repaired), to: pointerFile)
+                    cleanupGenerations(keeping: Set([previous]))
+                } catch {}
                 return recovered
             } catch {
                 throw currentError
@@ -401,7 +415,7 @@ public actor UsageSnapshotStore {
 
     private func validatePayload(_ data: Data, path: String) throws {
         if path == "usage.json" {
-            guard UsageHistory.isValidDocument(data)
+            guard Self.projectUsage(data, requiresMachine: false) == data
             else { throw UsageSnapshotError.invalidUsage(path) }
             return
         }
@@ -420,7 +434,8 @@ public actor UsageSnapshotStore {
             let embedded = machine["id"] as? String,
             UUID(uuidString: embedded) == identifier,
             let collectedAt = machine["collectedAt"] as? String,
-            EdithDate.parseISO(collectedAt) != nil
+            EdithDate.parseISO(collectedAt) != nil,
+            Self.projectUsage(data, requiresMachine: true) == data
         else { throw UsageSnapshotError.invalidMachine(path) }
     }
 
@@ -525,6 +540,180 @@ public actor UsageSnapshotStore {
         let file = String(components[1])
         return file.hasSuffix(".json")
             && UUID(uuidString: String(file.dropLast(".json".count))) != nil
+    }
+
+    private static func projectUsage(_ data: Data, requiresMachine: Bool) -> Data? {
+        guard let normalized = UsageHistory.merge(local: data, cloud: nil),
+            let object = try? JSONSerialization.jsonObject(with: normalized) as? [String: Any],
+            object["daily"] is [[String: Any]],
+            !requiresMachine || object["machine"] is [String: Any]
+        else { return nil }
+        let projected = projectRoot(object, requiresMachine: requiresMachine)
+        guard JSONSerialization.isValidJSONObject(projected),
+            let encoded = try? JSONSerialization.data(
+                withJSONObject: projected, options: [.sortedKeys]),
+            UsageHistory.isValidDocument(encoded)
+        else { return nil }
+        return encoded
+    }
+
+    private static func projectRoot(
+        _ object: [String: Any], requiresMachine: Bool
+    ) -> [String: Any] {
+        var result = primitives(object, ["schemaVersion", "generatedAt"])
+        if let sources = object["sources"] as? [String] { result["sources"] = sources }
+        if let sources = object["defaultSources"] as? [String] {
+            result["defaultSources"] = sources
+        }
+        if let sourceMeta = object["sourceMeta"] as? [String: Any] {
+            result["sourceMeta"] = map(sourceMeta) {
+                primitives(
+                    $0, ["label", "tool", "machine", "machineID", "machineHost"])
+            }
+        }
+        if let totals = object["totals"] as? [String: Any] {
+            result["totals"] = projectTotals(totals)
+        }
+        if let daily = object["daily"] as? [[String: Any]] {
+            result["daily"] = daily.map(projectDay)
+        }
+        if let sessions = object["sessions"] as? [[String: Any]] {
+            result["sessions"] = sessions.map {
+                primitives($0, ["id", "source", "totalTokens", "cost"])
+            }
+        }
+        if let machines = object["machines"] as? [[String: Any]] {
+            result["machines"] = machines.map(projectMachine)
+        }
+        if requiresMachine, let machine = object["machine"] as? [String: Any] {
+            result["machine"] = projectMachine(machine)
+        }
+        return result
+    }
+
+    private static func projectTotals(_ object: [String: Any]) -> [String: Any] {
+        var result = primitives(
+            object,
+            [
+                "cost", "tokens", "inputTokens", "outputTokens", "cacheCreationTokens",
+                "cacheReadTokens",
+            ])
+        if let sources = object["bySource"] as? [String: Any] {
+            result["bySource"] = map(sources) { primitives($0, ["cost", "tokens"]) }
+        }
+        return result
+    }
+
+    private static func projectDay(_ object: [String: Any]) -> [String: Any] {
+        var result = primitives(object, ["period"])
+        if let sources = object["bySource"] as? [String: Any] {
+            result["bySource"] = mapArrays(sources) { projectModel($0) }
+        }
+        if let hours = object["hours"] as? [[String: Any]] {
+            result["hours"] = hours.map(projectHour)
+        }
+        if let projects = object["projects"] as? [[String: Any]] {
+            result["projects"] = projects.map(projectProject)
+        }
+        return result
+    }
+
+    private static func projectModel(_ object: [String: Any]) -> [String: Any] {
+        primitives(
+            object,
+            [
+                "modelName", "inputTokens", "outputTokens", "cacheCreationTokens",
+                "cacheReadTokens", "cost",
+            ])
+    }
+
+    private static func projectHour(_ object: [String: Any]) -> [String: Any] {
+        var result = projectDetailNode(object)
+        if let paths = object["byPath"] as? [String: Any] {
+            result["byPath"] = map(paths) { projectDetailNode($0) }
+        }
+        return result
+    }
+
+    private static func projectDetailNode(_ object: [String: Any]) -> [String: Any] {
+        var result = primitives(object, ["tokens", "cost"])
+        if let sources = object["bySource"] as? [String: Any] {
+            result["bySource"] = map(sources) { source in
+                var projected = primitives(source, ["tokens", "cost"])
+                if let models = source["byModel"] as? [String: Any] {
+                    projected["byModel"] = map(models) {
+                        primitives($0, ["tokens", "cost"])
+                    }
+                }
+                return projected
+            }
+        }
+        return result
+    }
+
+    private static func projectProject(_ object: [String: Any]) -> [String: Any] {
+        var result = projectDetailNode(object)
+        result.merge(
+            primitives(
+                object,
+                [
+                    "projectName", "repositoryID", "repositoryName", "repositoryURL",
+                    "folderName", "path", "machineName", "machineID",
+                ]),
+            uniquingKeysWith: { _, new in new })
+        if let chats = object["chats"] as? [[String: Any]] {
+            result["chats"] = chats.map(projectChat)
+        }
+        if let worktrees = object["worktrees"] as? [[String: Any]] {
+            result["worktrees"] = worktrees.map { worktree in
+                var projected = primitives(worktree, ["name", "tokens", "cost"])
+                if let chats = worktree["chats"] as? [[String: Any]] {
+                    projected["chats"] = chats.map(projectChat)
+                }
+                return projected
+            }
+        }
+        return result
+    }
+
+    private static func projectChat(_ object: [String: Any]) -> [String: Any] {
+        primitives(
+            object,
+            ["id", "path", "title", "tokens", "cost", "firstTs", "lastTs", "source"])
+    }
+
+    private static func projectMachine(_ object: [String: Any]) -> [String: Any] {
+        var result = primitives(object, ["id", "name", "slug", "host", "collectedAt"])
+        if let sources = object["sources"] as? [String] { result["sources"] = sources }
+        return result
+    }
+
+    private static func primitives(
+        _ object: [String: Any], _ keys: [String]
+    ) -> [String: Any] {
+        keys.reduce(into: [:]) { result, key in
+            guard let value = object[key], value is String || value is NSNumber || value is NSNull
+            else { return }
+            result[key] = value
+        }
+    }
+
+    private static func map(
+        _ object: [String: Any], _ project: ([String: Any]) -> [String: Any]
+    ) -> [String: Any] {
+        object.reduce(into: [:]) { result, entry in
+            guard let value = entry.value as? [String: Any] else { return }
+            result[entry.key] = project(value)
+        }
+    }
+
+    private static func mapArrays(
+        _ object: [String: Any], _ project: ([String: Any]) -> [String: Any]
+    ) -> [String: Any] {
+        object.reduce(into: [:]) { result, entry in
+            guard let values = entry.value as? [[String: Any]] else { return }
+            result[entry.key] = values.map(project)
+        }
     }
 
     private static func digest(_ data: Data) -> String {
