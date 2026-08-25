@@ -816,7 +816,7 @@ final class SettingsBackup {
     nonisolated static let persistenceMaintenanceTimeout: Duration = .seconds(6)
     nonisolated static let persistenceRetryInterval: Duration = .seconds(3)
     nonisolated static let terminationPersistenceRetryInterval: Duration = .milliseconds(50)
-    nonisolated static let terminationPersistenceTimeout: Duration = .seconds(4)
+    nonisolated static let terminationPersistenceTimeout: Duration = .seconds(1)
     nonisolated static let terminationAttemptTimeout: Duration = .seconds(1)
 
     private var cloudEnabled: Bool {
@@ -1740,7 +1740,7 @@ final class SettingsBackup {
         }
         pendingPersistence.formUnion(
             SettingsBackupPersistenceIntents(
-                limitsRestore: true, limitsExport: true, usageRestore: true,
+                limitsRestore: false, limitsExport: true, usageRestore: false,
                 usageExport: true))
         persistenceMaintenanceGeneration += 1
         let generation = persistenceMaintenanceGeneration
