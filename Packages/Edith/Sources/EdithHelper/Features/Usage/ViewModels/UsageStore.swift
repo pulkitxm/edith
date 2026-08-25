@@ -2,6 +2,28 @@ import AppKit
 import EdithKit
 import Foundation
 
+struct HistoryWriteGate {
+    private var waitingForSeed = true
+    private var pending: Set<LimitProvider> = []
+
+    mutating func record(_ provider: LimitProvider) -> Bool {
+        guard waitingForSeed else { return true }
+        pending.insert(provider)
+        return false
+    }
+
+    mutating func finish() -> [LimitProvider] {
+        waitingForSeed = false
+        let providers = LimitProvider.allCases.filter(pending.contains)
+        pending = []
+        return providers
+    }
+
+    mutating func cancel() {
+        pending = []
+    }
+}
+
 struct RangeStat: Identifiable {
     let id: String
     let label: String
@@ -46,6 +68,7 @@ final class UsageStore: FeatureModule {
     private var wakeObserver: NSObjectProtocol?
     private var sleepObserver: NSObjectProtocol?
     private var locked = false
+    private var sleeping = false
     private var lockObservers: [NSObjectProtocol] = []
     private var refreshTask: Task<Void, Never>?
     private var refreshEvents: [UsageRefreshEvent] = []
@@ -61,6 +84,9 @@ final class UsageStore: FeatureModule {
     private var quickRetries = 0
     private var quickRetryTask: Task<Void, Never>?
     private var machineTask: Task<Void, Never>?
+    private var historySeedJob: Task<Void, Never>?
+    private var historySeedGeneration = 0
+    private var historyWriteGate = HistoryWriteGate()
     private var pendingMachineMerge = false
     let notifier = LimitNotifier()
     private var history = LimitsHistory()
@@ -102,8 +128,20 @@ final class UsageStore: FeatureModule {
     }
 
     init() {
-        seedFromHistory()
-        startPolling()
+        historySeedGeneration += 1
+        let generation = historySeedGeneration
+        historySeedJob = Task { [weak self] in
+            let latest = await LimitsHistory.loadLatestProviders()
+            guard !Task.isCancelled, let self, self.historySeedGeneration == generation else {
+                return
+            }
+            let pendingProviders = self.historyWriteGate.finish()
+            self.history.prime(with: latest)
+            self.seedFromHistory(latest, excluding: Set(pendingProviders))
+            self.historySeedJob = nil
+            self.flushPendingHistory(pendingProviders)
+            self.startPolling()
+        }
 
         sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
@@ -111,6 +149,7 @@ final class UsageStore: FeatureModule {
             Task { @MainActor in
                 Log.lifecycle.notice("going to sleep - pausing usage poll")
                 self?.diag("going to sleep - pausing usage poll")
+                self?.sleeping = true
                 self?.stopPolling()
             }
         }
@@ -120,14 +159,19 @@ final class UsageStore: FeatureModule {
         ) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
+                self.sleeping = false
                 let msg = "woke from sleep (locked=\(self.locked))"
                 Log.lifecycle.notice("\(msg, privacy: .public)")
                 self.diag(msg)
-                guard !self.locked else { return }
+                guard Self.pollingAllowed(locked: self.locked, sleeping: self.sleeping) else {
+                    return
+                }
                 self.wakeTask?.cancel()
                 self.wakeTask = Task { [weak self] in
                     try? await Task.sleep(nanoseconds: 5_000_000_000)
-                    guard !Task.isCancelled, let self, !self.locked else { return }
+                    guard !Task.isCancelled, let self,
+                        Self.pollingAllowed(locked: self.locked, sleeping: self.sleeping)
+                    else { return }
                     self.startPolling()
                 }
             }
@@ -150,7 +194,11 @@ final class UsageStore: FeatureModule {
                     Log.lifecycle.notice("screen unlocked - resuming usage poll")
                     self?.diag("screen unlocked - resuming usage poll")
                     self?.locked = false
-                    self?.startPolling()
+                    if let self,
+                        Self.pollingAllowed(locked: self.locked, sleeping: self.sleeping)
+                    {
+                        self.startPolling()
+                    }
                 }
             },
         ]
@@ -179,14 +227,16 @@ final class UsageStore: FeatureModule {
         }
     }
 
-    private func seedFromHistory() {
-        if let last = LimitsHistory.latest(provider: .claude) {
+    private func seedFromHistory(
+        _ latest: [LimitProvider: LimitsHistory.Latest], excluding: Set<LimitProvider>
+    ) {
+        if !excluding.contains(.claude), let last = latest[.claude] {
             session = Self.fresh(last.session)
             week = Self.fresh(last.week)
             fableWeek = Self.fresh(last.fable)
-            limitsUpdatedAt = last.date
+            limitsUpdatedAt = max(limitsUpdatedAt ?? .distantPast, last.date)
         }
-        if let last = LimitsHistory.latest(provider: .codex) {
+        if !excluding.contains(.codex), let last = latest[.codex] {
             codexSession = Self.fresh(last.session)
             codexWeek = Self.fresh(last.week)
             limitsUpdatedAt = max(limitsUpdatedAt ?? .distantPast, last.date)
@@ -197,7 +247,7 @@ final class UsageStore: FeatureModule {
     }
 
     private func startPolling() {
-        guard timer == nil else { return }
+        guard Self.pollingAllowed(locked: locked, sleeping: sleeping), timer == nil else { return }
         let t = Timer(timeInterval: 300, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.refreshLimits()
@@ -213,6 +263,10 @@ final class UsageStore: FeatureModule {
             await refreshLimits()
             await loadStats()
         }
+    }
+
+    nonisolated static func pollingAllowed(locked: Bool, sleeping: Bool) -> Bool {
+        !locked && !sleeping
     }
 
     private func stopPolling() {
@@ -269,6 +323,10 @@ final class UsageStore: FeatureModule {
         quickRetryTask = nil
         machineTask?.cancel()
         machineTask = nil
+        historySeedGeneration += 1
+        historySeedJob?.cancel()
+        historySeedJob = nil
+        historyWriteGate.cancel()
     }
 
     func syncStatusItem() {
@@ -454,7 +512,7 @@ final class UsageStore: FeatureModule {
         quickRetryTask?.cancel()
         quickRetryTask = nil
         notifier.evaluate(session: session, week: week)
-        history.append(provider: .claude, session: session, week: week, fable: fableWeek)
+        recordHistory(.claude)
         SettingsBackup.shared.syncLimits()
         updateStatusItem()
         IPC.post(IPC.Name.limitsUpdated)
@@ -468,7 +526,7 @@ final class UsageStore: FeatureModule {
             codexSession = limits.session
             codexWeek = limits.week
             limitsUpdatedAt = Date()
-            history.append(provider: .codex, session: codexSession, week: codexWeek)
+            recordHistory(.codex)
             SettingsBackup.shared.syncLimits()
             updateStatusItem()
             IPC.post(IPC.Name.limitsUpdated)
@@ -478,6 +536,27 @@ final class UsageStore: FeatureModule {
         } catch {
             diag("codex limits unavailable: \(error.localizedDescription)")
             keepOrBlankMenuBar()
+        }
+    }
+
+    private func recordHistory(_ provider: LimitProvider) {
+        guard historyWriteGate.record(provider) else { return }
+        appendHistory(provider)
+    }
+
+    private func flushPendingHistory(_ providers: [LimitProvider]) {
+        for provider in providers { appendHistory(provider) }
+        guard !providers.isEmpty else { return }
+        SettingsBackup.shared.syncLimits()
+        IPC.post(IPC.Name.limitsUpdated)
+    }
+
+    private func appendHistory(_ provider: LimitProvider) {
+        switch provider {
+        case .claude:
+            history.append(provider: provider, session: session, week: week, fable: fableWeek)
+        case .codex:
+            history.append(provider: provider, session: codexSession, week: codexWeek)
         }
     }
 

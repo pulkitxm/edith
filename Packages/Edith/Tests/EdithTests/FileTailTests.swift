@@ -50,6 +50,106 @@ import Testing
         let url = dir.appendingPathComponent("absent.txt")
         #expect(FileTail.read(url, maxBytes: 1024) == "")
     }
+
+    @Test func reversedScanCrossesChunkBoundariesAndKeepsUnterminatedTail() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("log.txt")
+        try "alpha\nsecond line\nlast".write(to: url, atomically: true, encoding: .utf8)
+        var lines: [String] = []
+
+        FileTail.scanLinesReversed(url, chunkBytes: 5) { data in
+            lines.append(String(decoding: data, as: UTF8.self))
+            return true
+        }
+
+        #expect(lines == ["last", "second line", "alpha"])
+    }
+
+    @Test func reversedScanStopsWhenVisitorFinishes() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("log.txt")
+        try "one\ntwo\nthree\n".write(to: url, atomically: true, encoding: .utf8)
+        var lines: [String] = []
+
+        FileTail.scanLinesReversed(url, chunkBytes: 4) { data in
+            lines.append(String(decoding: data, as: UTF8.self))
+            return lines.count < 2
+        }
+
+        #expect(lines == ["three", "two"])
+    }
+
+    @Test func reversedScanDropsOversizedCompleteAndTornLines() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let completeURL = dir.appendingPathComponent("complete.txt")
+        let tornURL = dir.appendingPathComponent("torn.txt")
+        let oversized = String(repeating: "x", count: 10_000)
+        try "before\n\(oversized)\nafter\n".write(
+            to: completeURL, atomically: true, encoding: .utf8)
+        try "before\n\(oversized)".write(to: tornURL, atomically: true, encoding: .utf8)
+
+        func scan(_ url: URL) -> [String] {
+            var lines: [String] = []
+            FileTail.scanLinesReversed(url, chunkBytes: 31, maxLineBytes: 128) { data in
+                lines.append(String(decoding: data, as: UTF8.self))
+                return true
+            }
+            return lines
+        }
+
+        #expect(scan(completeURL) == ["after", "before"])
+        #expect(scan(tornURL) == ["before"])
+    }
+
+    @Test func reversedScanCancelsWhileDiscardingANewlineFreeLine() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("cancel.txt")
+        try ("before\n" + String(repeating: "x", count: 10_000)).write(
+            to: url, atomically: true, encoding: .utf8)
+        var checks = 0
+        var lines: [String] = []
+
+        FileTail.scanLinesReversed(
+            url, chunkBytes: 31, maxLineBytes: 128,
+            shouldContinue: {
+                checks += 1
+                return checks <= 4
+            }
+        ) { data in
+            lines.append(String(decoding: data, as: UTF8.self))
+            return true
+        }
+
+        #expect(checks == 5)
+        #expect(lines.isEmpty)
+    }
+
+    @Test func reversedScanChecksCancellationBeforeTheLeadingLine() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("leading.txt")
+        try "single line".write(to: url, atomically: true, encoding: .utf8)
+        var checks = 0
+        var lines: [String] = []
+
+        FileTail.scanLinesReversed(
+            url,
+            shouldContinue: {
+                checks += 1
+                return checks == 1
+            }
+        ) { data in
+            lines.append(String(decoding: data, as: UTF8.self))
+            return true
+        }
+
+        #expect(checks == 2)
+        #expect(lines.isEmpty)
+    }
 }
 
 @Suite @MainActor struct DashboardRefreshBridgeTests {
