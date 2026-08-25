@@ -213,6 +213,84 @@ private final class UsageSnapshotPublishGate: @unchecked Sendable {
         #expect(try await store.current()?.manifest.generation == first.uuidString.lowercased())
     }
 
+    @Test func unsafeSourceNodesNeverBlockOrFollowLinks() async throws {
+        let fixture = try Self.fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        try Self.populate(fixture)
+        try FileManager.default.removeItem(at: fixture.source.usageFile)
+        try #require(mkfifo(fixture.source.usageFile.path, 0o600) == 0)
+        let store = UsageSnapshotStore(source: fixture.source, root: fixture.snapshots)
+        let clock = ContinuousClock()
+        let started = clock.now
+
+        await #expect(throws: UsageSnapshotError.unsafeFile(fixture.source.usageFile.path)) {
+            try await store.publish(generation: UUID())
+        }
+        #expect(started.duration(to: clock.now) < .seconds(1))
+
+        try FileManager.default.removeItem(at: fixture.source.usageFile)
+        let victim = fixture.directory.appendingPathComponent("victim.json")
+        try Self.usage.write(to: victim)
+        try FileManager.default.createSymbolicLink(
+            at: fixture.source.usageFile, withDestinationURL: victim)
+
+        await #expect(throws: UsageSnapshotError.unsafeFile(fixture.source.usageFile.path)) {
+            try await store.publish(generation: UUID())
+        }
+        #expect(try Data(contentsOf: victim) == Self.usage)
+    }
+
+    @Test func oversizedSourceAndStoredPayloadsAreRejected() async throws {
+        let fixture = try Self.fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        try Self.populate(fixture)
+        var bounds = UsageSnapshotBounds.live
+        bounds.maximumUsageBytes = Self.usage.count
+        let store = UsageSnapshotStore(
+            source: fixture.source, root: fixture.snapshots, bounds: bounds)
+        let oversized = Data(repeating: UInt8(ascii: "x"), count: Self.usage.count + 1)
+        try oversized.write(to: fixture.source.usageFile)
+
+        await #expect(throws: UsageSnapshotError.oversizedFile(fixture.source.usageFile.path)) {
+            try await store.publish(generation: UUID())
+        }
+
+        try Self.usage.write(to: fixture.source.usageFile)
+        let publication = try await store.publish(generation: UUID())
+        let payload = publication.directory.appendingPathComponent("usage.json")
+        try oversized.write(to: payload)
+
+        await #expect(throws: UsageSnapshotError.self) {
+            try await store.current()
+        }
+    }
+
+    @Test func unsafeStoredPayloadNodesNeverBlockOrFollowLinks() async throws {
+        let fixture = try Self.fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        try Self.populate(fixture)
+        let store = UsageSnapshotStore(source: fixture.source, root: fixture.snapshots)
+        let publication = try await store.publish(generation: UUID())
+        let payload = publication.directory.appendingPathComponent("usage.json")
+        let victim = fixture.directory.appendingPathComponent("stored-victim.json")
+        try FileManager.default.moveItem(at: payload, to: victim)
+        try FileManager.default.createSymbolicLink(at: payload, withDestinationURL: victim)
+
+        await #expect(throws: UsageSnapshotError.self) {
+            try await store.current()
+        }
+        #expect(FileManager.default.fileExists(atPath: victim.path))
+
+        try FileManager.default.removeItem(at: payload)
+        try #require(mkfifo(payload.path, 0o600) == 0)
+        let clock = ContinuousClock()
+        let started = clock.now
+        await #expect(throws: UsageSnapshotError.self) {
+            try await store.current()
+        }
+        #expect(started.duration(to: clock.now) < .seconds(1))
+    }
+
     @Test func finalTornLimitRowIsDroppedButInteriorCorruptionIsRejected() async throws {
         let fixture = try Self.fixture()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }

@@ -89,6 +89,7 @@ public enum UsageSnapshotError: LocalizedError, Equatable, Sendable {
     case corruptGeneration(String)
     case generationExists(String)
     case duplicatePayload(String)
+    case oversizedFile(String)
 
     public var errorDescription: String? {
         switch self {
@@ -104,6 +105,7 @@ public enum UsageSnapshotError: LocalizedError, Equatable, Sendable {
         case .generationExists(let generation):
             "usage snapshot generation \(generation) already exists"
         case .duplicatePayload(let path): "duplicate usage snapshot payload at \(path)"
+        case .oversizedFile(let path): "usage snapshot file is too large at \(path)"
         }
     }
 }
@@ -129,6 +131,19 @@ public struct UsageSnapshotHooks: Sendable {
     public static let live = UsageSnapshotHooks()
 }
 
+struct UsageSnapshotBounds: Sendable {
+    var maximumUsageBytes = UsageDataFiles.maximumUsageDocumentBytes
+    var maximumLimitsBytes = UsageDataFiles.maximumLimitsHistoryBytes
+    var maximumMachineBytes = UsageDataFiles.maximumMachineDocumentBytes
+    var maximumPointerBytes = 64 * 1_024
+    var maximumManifestBytes = 1 * 1_024 * 1_024
+    var maximumInspectedMachineEntries = MachineUsageStore.maximumInspectedMachineEntries
+    var maximumMachineDocuments = MachineUsageStore.maximumMachineDocuments
+    var maximumMachineAggregateBytes = MachineUsageStore.maximumMachineDocumentBytesPerScan
+
+    static let live = UsageSnapshotBounds()
+}
+
 public actor UsageSnapshotStore {
     public static let formatVersion = 1
 
@@ -140,6 +155,7 @@ public actor UsageSnapshotStore {
     private let source: UsageSnapshotSource
     private let root: URL
     private let hooks: UsageSnapshotHooks
+    private let bounds: UsageSnapshotBounds
     private let manager = FileManager.default
 
     public init(
@@ -150,6 +166,17 @@ public actor UsageSnapshotStore {
         self.source = source
         self.root = root
         self.hooks = hooks
+        self.bounds = .live
+    }
+
+    init(
+        source: UsageSnapshotSource, root: URL, hooks: UsageSnapshotHooks = .live,
+        bounds: UsageSnapshotBounds
+    ) {
+        self.source = source
+        self.root = root
+        self.hooks = hooks
+        self.bounds = bounds
     }
 
     public func publish(
@@ -201,13 +228,15 @@ public actor UsageSnapshotStore {
     private func captureLocked() throws -> [Payload] {
         var payloads: [Payload] = []
         if manager.fileExists(atPath: source.usageFile.path) {
-            let data = try regularFileData(at: source.usageFile)
+            let data = try regularFileData(
+                at: source.usageFile, maximumBytes: bounds.maximumUsageBytes)
             guard let projected = Self.projectUsage(data, requiresMachine: false)
             else { throw UsageSnapshotError.invalidUsage(source.usageFile.path) }
             payloads.append(Payload(path: "usage.json", data: projected))
         }
         if manager.fileExists(atPath: source.limitsFile.path) {
-            let data = try regularFileData(at: source.limitsFile)
+            let data = try regularFileData(
+                at: source.limitsFile, maximumBytes: bounds.maximumLimitsBytes)
             guard let text = String(data: data, encoding: .utf8) else {
                 throw UsageSnapshotError.unsafeFile(source.limitsFile.path)
             }
@@ -233,7 +262,7 @@ public actor UsageSnapshotStore {
             guard file.pathExtension == "json",
                 let identifier = UUID(uuidString: file.deletingPathExtension().lastPathComponent)
             else { return nil }
-            let data = try regularFileData(at: file)
+            let data = try regularFileData(at: file, maximumBytes: bounds.maximumMachineBytes)
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                 let machine = object["machine"] as? [String: Any],
                 let embedded = machine["id"] as? String,
@@ -250,28 +279,22 @@ public actor UsageSnapshotStore {
         }
     }
 
-    private func regularFileData(at url: URL) throws -> Data {
-        let descriptor = open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
-        guard descriptor >= 0 else {
-            throw UsageSnapshotError.unsafeFile(url.path)
-        }
-        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
-        var metadata = stat()
-        guard fstat(descriptor, &metadata) == 0 else {
-            try? handle.close()
-            throw UsageSnapshotError.unsafeFile(url.path)
-        }
-        guard metadata.st_mode & S_IFMT == S_IFREG else {
-            try? handle.close()
-            throw UsageSnapshotError.unsafeFile(url.path)
+    private func regularFileData(at url: URL, maximumBytes: Int) throws -> Data {
+        guard maximumBytes >= 0, maximumBytes < Int.max else {
+            throw UsageSnapshotError.oversizedFile(url.path)
         }
         do {
-            let data = try handle.readToEnd() ?? Data()
-            try handle.close()
+            guard
+                let data = try UsageDataFiles.readRegularFile(
+                    at: url, maximumBytes: maximumBytes)
+            else {
+                throw UsageSnapshotError.unsafeFile(url.path)
+            }
             return data
-        } catch {
-            try? handle.close()
-            throw error
+        } catch UsageDataFileError.unsafe(_) {
+            throw UsageSnapshotError.unsafeFile(url.path)
+        } catch UsageDataFileError.oversized(_) {
+            throw UsageSnapshotError.oversizedFile(url.path)
         }
     }
 
@@ -336,7 +359,8 @@ public actor UsageSnapshotStore {
 
     private func readPointer() throws -> UsageSnapshotPointer? {
         guard manager.fileExists(atPath: pointerFile.path) else { return nil }
-        let data = try regularFileData(at: pointerFile)
+        let data = try regularFileData(
+            at: pointerFile, maximumBytes: bounds.maximumPointerBytes)
         guard let pointer = try? Self.decode(UsageSnapshotPointer.self, from: data),
             pointer.formatVersion == Self.formatVersion,
             UUID(uuidString: pointer.current) != nil,
@@ -384,7 +408,9 @@ public actor UsageSnapshotStore {
     {
         do {
             try validateDirectory(directory)
-            let data = try regularFileData(at: directory.appendingPathComponent("manifest.json"))
+            let manifestURL = directory.appendingPathComponent("manifest.json")
+            let data = try regularFileData(
+                at: manifestURL, maximumBytes: bounds.maximumManifestBytes)
             let manifest = try Self.decode(UsageSnapshotManifest.self, from: data)
             guard manifest.formatVersion == Self.formatVersion,
                 manifest.generation == generation,
@@ -394,7 +420,13 @@ public actor UsageSnapshotStore {
                 guard Self.allowed(path: file.path) else {
                     throw UsageSnapshotError.corruptGeneration(generation)
                 }
-                let payload = try regularFileData(at: directory.appendingPathComponent(file.path))
+                let maximumBytes = maximumPayloadBytes(path: file.path)
+                guard file.bytes >= 0, file.bytes <= Int64(maximumBytes) else {
+                    throw UsageSnapshotError.corruptGeneration(generation)
+                }
+                let payload = try regularFileData(
+                    at: directory.appendingPathComponent(file.path),
+                    maximumBytes: maximumBytes)
                 guard payload.count == file.bytes, Self.digest(payload) == file.sha256 else {
                     throw UsageSnapshotError.corruptGeneration(generation)
                 }
@@ -540,6 +572,12 @@ public actor UsageSnapshotStore {
         let file = String(components[1])
         return file.hasSuffix(".json")
             && UUID(uuidString: String(file.dropLast(".json".count))) != nil
+    }
+
+    private func maximumPayloadBytes(path: String) -> Int {
+        if path == "usage.json" { return bounds.maximumUsageBytes }
+        if path == "limits-history.jsonl" { return bounds.maximumLimitsBytes }
+        return bounds.maximumMachineBytes
     }
 
     private static func projectUsage(_ data: Data, requiresMachine: Bool) -> Data? {
