@@ -394,24 +394,15 @@ private struct ExtensionSettingsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Extension") {
-                    Toggle("Enabled", isOn: enabledBinding)
-                        .toggleStyle(.switch)
-                        .pointerCursor()
-                    Text(
-                        enabled
-                            ? "This extension is available throughout Edith."
-                            : "Enable this extension to use its controls and workflows."
-                    )
-                    .settingsCaption()
-                    if enabled, !coordinator.missingRequiredTools.isEmpty {
+                ExtensionDetailRows(entry: entry)
+                if enabled, !coordinator.missingRequiredTools.isEmpty {
+                    Section {
                         Button("Set up required tools...") {
                             provisioningEntry = entry
                         }
                         .pointerCursor()
                     }
                 }
-                ExtensionDetailRows(entry: entry)
                 ExtensionLifecycleRows(
                     entry: entry, coordinator: coordinator, invalidation: invalidation)
                 ExtensionPermissionRows(entry: entry) {
@@ -420,6 +411,17 @@ private struct ExtensionSettingsSheet: View {
             }
             .formStyle(.grouped)
             .navigationTitle(entry.title)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Toggle(isOn: enabledBinding) {
+                        Text("\(entry.title) enabled")
+                    }
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .accessibilityLabel("\(entry.title) enabled")
+                    .pointerCursor()
+                }
+            }
             .safeAreaInset(edge: .bottom, spacing: UIScale.pt(0)) {
                 VStack(spacing: UIScale.pt(0)) {
                     Divider()
