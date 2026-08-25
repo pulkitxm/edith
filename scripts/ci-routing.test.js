@@ -53,6 +53,16 @@ test("every change area covers its repository inputs", () => {
       "bun.lock",
       "biome.json",
     ],
+    performance: [
+      "Packages/Edith/Sources/Edith/App.swift",
+      "Packages/Edith/Tests/EdithTests/PerformanceTraceTests.swift",
+      "performance/audit.json",
+      "scripts/check-performance-audit.mjs",
+      "scripts/check-performance-audit.test.js",
+      "scripts/bench-helper.sh",
+      "scripts/bench-helper.test.js",
+      "Makefile",
+    ],
     source: [
       "Packages/Edith/Sources/Edith/App.swift",
       "apps/companion/compose.yaml",
@@ -130,6 +140,20 @@ test("documentation changes run focused documentation tests", () => {
     "needs.changes.outputs.docs == 'true' || needs.changes.outputs.workflows == 'true'",
   );
   expect(ciWorkflow).toContain("run: make ci-docs");
+});
+
+test("performance inputs run structural contracts against the compared revision", () => {
+  expect(ciWorkflow).toContain("area performance '");
+  expect(ciWorkflow).toContain(
+    "needs.changes.outputs.performance == 'true' || needs.changes.outputs.workflows == 'true'",
+  );
+  expect(ciWorkflow).toContain("PERFORMANCE_BASE:");
+  expect(ciWorkflow).toContain("run: make ci-performance");
+  const checks = ciWorkflow.slice(
+    ciWorkflow.indexOf("\n  checks:"),
+    ciWorkflow.indexOf("\n  promo-video:"),
+  );
+  expect(checks).toContain("fetch-depth: 0");
 });
 
 test("main releases skip the redundant debug app build", () => {
