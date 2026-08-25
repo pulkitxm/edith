@@ -67,8 +67,13 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
         AppState.services.usage?.prepareForTermination()
         SettingsBackup.shared.prepareForTermination()
         terminationFlushTask = Task { [weak self] in
-            await AppState.services.usage?.drainHistoryPersistence()
-            await SettingsBackup.shared.flushForTermination()
+            let usage = AppState.services.usage
+            let backup = SettingsBackup.shared
+            async let historyDrain: Void? = usage?.drainHistoryPersistence(
+                syncLimitsAfterDrain: false)
+            async let backupFlush: Void = backup.flushForTermination()
+            _ = await historyDrain
+            await backupFlush
             self?.finishTermination(sender)
         }
         terminationTimeoutTask = Task { [weak self] in
