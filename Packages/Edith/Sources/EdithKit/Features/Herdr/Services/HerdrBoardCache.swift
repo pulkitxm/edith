@@ -4,10 +4,8 @@ public final class HerdrBoardCache: @unchecked Sendable {
     public let context: HerdrBoardContext
     private let lock = NSLock()
     private var labels: [String: String] = [:]
-    private var tabLabels: [String: String] = [:]
     private var knownPanes = Set<String>()
     private var paneWorkspace: [String: String] = [:]
-    private var paneTab: [String: String] = [:]
     private var agentsByPane: [String: HerdrAgent] = [:]
 
     public init(context: HerdrBoardContext) {
@@ -26,7 +24,6 @@ public final class HerdrBoardCache: @unchecked Sendable {
         defer { lock.unlock() }
         guard let board = HerdrListParser.snapshotBoard(from: text) else { return listed() }
         for (id, label) in board.labels { labels[id] = label }
-        for (id, label) in board.tabLabels { tabLabels[id] = label }
         var records: [String: HerdrPaneRecord] = [:]
         for record in board.panes { records[record.pane] = record }
         for record in board.agents {
@@ -40,25 +37,23 @@ public final class HerdrBoardCache: @unchecked Sendable {
         }
         var next: [String: HerdrAgent] = [:]
         var nextWorkspace: [String: String] = [:]
-        var nextTab: [String: String] = [:]
         for pane in knownPanes {
             guard let record = records[pane] else {
                 if let old = agentsByPane[pane] {
                     next[pane] = old
                     if let id = paneWorkspace[pane] { nextWorkspace[pane] = id }
-                    if let id = paneTab[pane] { nextTab[pane] = id }
                 }
                 continue
             }
             if let id = record.workspaceID { nextWorkspace[pane] = id }
-            if let id = record.tabID { nextTab[pane] = id }
-            next[pane] = HerdrListParser.agent(
-                from: record, context: context, workspaceLabels: labels, tabLabels: tabLabels,
-                previous: agentsByPane[pane])
+            if record.looksLikeAgent || agentsByPane[pane] != nil {
+                next[pane] = HerdrListParser.agent(
+                    from: record, context: context, workspaceLabels: labels,
+                    previous: agentsByPane[pane])
+            }
         }
         agentsByPane = next
         paneWorkspace = nextWorkspace
-        paneTab = nextTab
         return listed()
     }
 
@@ -103,14 +98,6 @@ public final class HerdrBoardCache: @unchecked Sendable {
                 }
                 upsert(record)
             }
-        case "tab_created", "tab_renamed":
-            if let tab = HerdrListParser.eventTab(in: text), let label = tab.label {
-                tabLabels[tab.id] = label
-                relabelTabs()
-            }
-            return listed()
-        case "tab_closed":
-            if let tab = HerdrListParser.eventTab(in: text) { tabLabels[tab.id] = nil }
         case "workspace_created", "workspace_updated", "workspace_renamed":
             if let workspace = HerdrListParser.eventWorkspace(in: text) {
                 if let label = workspace.label { labels[workspace.id] = label }
@@ -130,17 +117,16 @@ public final class HerdrBoardCache: @unchecked Sendable {
 
     private func upsert(_ record: HerdrPaneRecord) {
         if let id = record.workspaceID { paneWorkspace[record.pane] = id }
-        if let id = record.tabID { paneTab[record.pane] = id }
+        let previous = agentsByPane[record.pane]
+        if previous == nil, !record.looksLikeAgent { return }
         agentsByPane[record.pane] = HerdrListParser.agent(
-            from: record, context: context, workspaceLabels: labels, tabLabels: tabLabels,
-            previous: agentsByPane[record.pane])
+            from: record, context: context, workspaceLabels: labels, previous: previous)
     }
 
     private func remove(_ pane: String) {
         knownPanes.remove(pane)
         agentsByPane[pane] = nil
         paneWorkspace[pane] = nil
-        paneTab[pane] = nil
     }
 
     private func relabel() {
@@ -149,40 +135,6 @@ public final class HerdrBoardCache: @unchecked Sendable {
                 agentsByPane[pane]?.workspace = label
             }
         }
-    }
-
-    private func relabelTabs() {
-        for pane in agentsByPane.keys {
-            guard let agent = agentsByPane[pane], agent.category == .terminal else { continue }
-            guard let id = paneTab[pane] else { continue }
-            guard let label = HerdrListParser.tabTitle(tabLabels[id]) else { continue }
-            agentsByPane[pane]?.title = label
-        }
-    }
-
-    public var terminalPanes: [String] {
-        lock.lock()
-        defer { lock.unlock() }
-        return agentsByPane.values.filter { $0.category == .terminal }.map(\.pane).sorted()
-    }
-
-    public var unnamedTerminalPanes: [String] {
-        lock.lock()
-        defer { lock.unlock() }
-        return agentsByPane.values
-            .filter { $0.category == .terminal && $0.process.isEmpty }
-            .map(\.pane).sorted()
-    }
-
-    @discardableResult
-    public func applyProcessNames(_ names: [String: String]) -> [HerdrAgent] {
-        lock.lock()
-        defer { lock.unlock() }
-        for (pane, name) in names where !name.isEmpty {
-            guard agentsByPane[pane] != nil else { continue }
-            agentsByPane[pane]?.process = name
-        }
-        return listed()
     }
 
     private func listed() -> [HerdrAgent] {

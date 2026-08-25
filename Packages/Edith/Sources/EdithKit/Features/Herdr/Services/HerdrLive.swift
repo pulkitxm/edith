@@ -2,7 +2,6 @@ import Foundation
 
 public enum HerdrLive {
     static let remoteLeaseDuration = Duration.seconds(20)
-    static let replayReconcileDelay = Duration.milliseconds(600)
 
     public static func watch(_ yield: @escaping @Sendable ([HerdrHostSnapshot]) -> Void) async {
         let fleet = FleetBag(yield: yield)
@@ -150,6 +149,9 @@ public enum HerdrLive {
                 try await publishSnapshot(
                     socket: socket, connect: connect, sessions: sessions, fleet: fleet)
                 try await stream.subscribeBoard()
+                try await Task.sleep(for: .milliseconds(400))
+                try await publishSnapshot(
+                    socket: socket, connect: connect, sessions: sessions, fleet: fleet)
                 let events = stream.events
                 await withTaskGroup(of: Void.self) { group in
                     group.addTask {
@@ -158,14 +160,12 @@ public enum HerdrLive {
                         }
                     }
                     group.addTask {
-                        var delay = replayReconcileDelay
                         while !Task.isCancelled {
-                            try? await Task.sleep(for: delay)
+                            try? await Task.sleep(for: .seconds(20))
                             guard !Task.isCancelled else { return }
                             try? await publishSnapshot(
                                 socket: socket, connect: connect, sessions: sessions,
                                 fleet: fleet)
-                            delay = .seconds(20)
                         }
                     }
                     await group.next()
@@ -195,28 +195,6 @@ public enum HerdrLive {
             throw error
         }
         fleet.put(sessions.applySnapshot(session: socket.name, text: line))
-        let panes = sessions.unnamedTerminalPanes(session: socket.name)
-        guard !panes.isEmpty else { return }
-        let names = await processNames(panes: panes) { pane in
-            guard let client = try? connect(socket.path) else { return nil }
-            let reply = try? await client.processInfo(pane: pane)
-            client.close()
-            return reply
-        }
-        guard !names.isEmpty else { return }
-        fleet.put(sessions.applyProcessNames(session: socket.name, names: names))
-    }
-
-    static func processNames(
-        panes: [String], fetch: (String) async -> String?
-    ) async -> [String: String] {
-        var names: [String: String] = [:]
-        for pane in panes {
-            guard let reply = await fetch(pane) else { continue }
-            guard let name = HerdrListParser.processName(in: reply) else { continue }
-            names[pane] = name
-        }
-        return names
     }
 }
 
@@ -265,19 +243,6 @@ private final class SessionBag: @unchecked Sendable {
         _ = cache.applySnapshot(text)
         lock.lock()
         errors[session] = nil
-        let host = hostLocked()
-        lock.unlock()
-        return host
-    }
-
-    func unnamedTerminalPanes(session: String) -> [String] {
-        lockedCache(for: session).unnamedTerminalPanes
-    }
-
-    func applyProcessNames(session: String, names: [String: String]) -> HerdrHostSnapshot {
-        let cache = lockedCache(for: session)
-        _ = cache.applyProcessNames(names)
-        lock.lock()
         let host = hostLocked()
         lock.unlock()
         return host

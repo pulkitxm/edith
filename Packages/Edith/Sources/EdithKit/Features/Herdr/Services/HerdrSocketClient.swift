@@ -117,10 +117,6 @@ final class HerdrSocketClient: @unchecked Sendable {
         try await request(method: "session.snapshot", params: [:])
     }
 
-    func processInfo(pane: String) async throws -> String {
-        try await request(method: "pane.process_info", params: ["pane_id": pane])
-    }
-
     func subscribeBoard() async throws {
         let line = try await request(
             method: "events.subscribe",

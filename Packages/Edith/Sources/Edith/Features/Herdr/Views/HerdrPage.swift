@@ -11,7 +11,6 @@ struct HerdrPage: View {
     @AppStorage(AppStorageKeys.Presenter.blurAgents, store: SharedDefaults.store) private
         var presenterBlurAgents = true
     private var presenterState = PresenterState.shared
-    @State private var composing = false
 
     @MainActor init(store: HerdrStore? = nil) {
         _store = State(initialValue: store ?? .shared)
@@ -21,14 +20,14 @@ struct HerdrPage: View {
     private var hideAgents: Bool { presenterState.active && presenterBlurAgents }
     private var onBoard: Bool { store.selectedTab == HerdrStore.boardID }
     private var listedAgents: [HerdrAgent] { store.listedAgents }
-    private var listedTerminals: [HerdrAgent] { store.listedTerminals }
+    private var machineTerminals: [HerdrAgent] { store.machineTerminals }
 
     var body: some View {
         VStack(spacing: 0) {
             header
             tabBar
             HStack(spacing: 0) {
-                if store.railOpen {
+                if !onBoard, store.railOpen {
                     agentList
                     Divider().opacity(0.35)
                 }
@@ -44,8 +43,8 @@ struct HerdrPage: View {
                         .opacity(tab.id == store.selectedTab ? 1 : 0)
                         .allowsHitTesting(tab.id == store.selectedTab)
                     }
-                    floatingControls
                     if !onBoard {
+                        floatingControls
                         detailToggle
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     }
@@ -56,9 +55,6 @@ struct HerdrPage: View {
         }
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
         .navigationTitle("Herdr")
-        .sheet(isPresented: $composing) {
-            HerdrTerminalSheet(store: store)
-        }
         .task(id: automaticActions) {
             if automaticActions {
                 await store.watch()
@@ -72,21 +68,13 @@ struct HerdrPage: View {
         PageHeader(
             "Herdr",
             trailing: {
-                HStack(spacing: UIScale.pt(8)) {
-                    Button {
-                        composing = true
-                    } label: {
-                        Label("New Terminal", systemImage: "plus")
-                    }
-                    .buttonStyle(HoverButtonStyle())
-                    Button {
-                        Task { await store.refresh() }
-                    } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(HoverButtonStyle())
-                    .disabled(store.refreshing)
+                Button {
+                    Task { await store.refresh() }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
                 }
+                .buttonStyle(HoverButtonStyle())
+                .disabled(store.refreshing)
             },
             accessory: { filters })
     }
@@ -177,10 +165,7 @@ struct HerdrPage: View {
                 isSelected: { $0 == store.machineFilter }
             ) { store.machineFilter = $0 }
             pillRow(
-                items: [("all", "Everything")]
-                    + store.kindChoices.map {
-                        ($0, $0 == HerdrKind.terminalLabel ? "Terminals" : $0)
-                    },
+                items: [("all", "Any agent")] + store.kindChoices.map { ($0, $0) },
                 isSelected: { store.kindIsSelected($0) },
                 showsKindMark: true
             ) { store.selectKind($0) }
@@ -202,9 +187,6 @@ struct HerdrPage: View {
                         HStack(spacing: UIScale.pt(5)) {
                             if showsKindMark, item.0 != "all" {
                                 HerdrKindMark(kind: item.0, size: UIScale.pt(11))
-                                    .foregroundStyle(
-                                        item.0 == HerdrKind.terminalLabel
-                                            ? DashSkin.gold : DashSkin.inkSoft(dark))
                             }
                             Text(item.1)
                                 .font(.system(size: UIScale.pt(11.5), weight: .medium))
@@ -330,7 +312,9 @@ struct HerdrPage: View {
         .pointerCursor()
         .contextMenu { tabContextMenu(id: id, closable: closable) }
         .help(
-            agent.map { "\($0.isTerminal ? $0.processLabel : $0.kind) · \($0.machineName)" }
+            agent.map {
+                "\($0.isTerminal ? HerdrMachineTerminal.title : $0.kind) · \($0.machineName)"
+            }
                 ?? "Board")
     }
 
@@ -435,7 +419,7 @@ struct HerdrPage: View {
                     HerdrKindMark(kind: agent.kind, size: UIScale.pt(13))
                         .foregroundStyle(
                             agent.isTerminal ? DashSkin.gold : DashSkin.inkSoft(dark))
-                    Text(rowKind(agent))
+                    Text(agent.kind)
                         .font(.system(size: UIScale.pt(10.5), weight: .semibold))
                     Spacer(minLength: 0)
                     if open {
@@ -466,13 +450,6 @@ struct HerdrPage: View {
                         .font(DashSkin.mono(10))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .lineLimit(1)
-                    if agent.isTerminal, !agent.cwd.isEmpty {
-                        Text(agent.cwd)
-                            .font(DashSkin.mono(10))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .lineLimit(1)
-                            .truncationMode(.head)
-                    }
                 }
             }
             .padding(UIScale.pt(12))
@@ -492,7 +469,7 @@ struct HerdrPage: View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    railHeader("Agents", count: listedAgents.count, adds: false)
+                    railHeader("Agents", count: listedAgents.count)
                     ForEach(listedAgents) { agent in
                         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                             agentRow(agent)
@@ -507,8 +484,8 @@ struct HerdrPage: View {
                             }
                         }
                     }
-                    railHeader("Terminals", count: listedTerminals.count, adds: true)
-                    ForEach(listedTerminals) { terminal in
+                    railHeader("Terminals", count: machineTerminals.count)
+                    ForEach(machineTerminals) { terminal in
                         agentRow(terminal)
                     }
                 }
@@ -521,7 +498,7 @@ struct HerdrPage: View {
         .background(DashSkin.paper(dark))
     }
 
-    private func railHeader(_ title: String, count: Int, adds: Bool) -> some View {
+    private func railHeader(_ title: String, count: Int) -> some View {
         HStack(spacing: UIScale.pt(8)) {
             Text(title)
                 .font(.system(size: UIScale.pt(11), weight: .semibold))
@@ -530,18 +507,6 @@ struct HerdrPage: View {
                 .font(DashSkin.mono(10, weight: .medium))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Spacer(minLength: 0)
-            if adds {
-                Button {
-                    composing = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
-                        .foregroundStyle(DashSkin.inkSoft(dark))
-                }
-                .buttonStyle(.plain)
-                .pointerCursor()
-                .help("New terminal")
-            }
         }
         .padding(.horizontal, UIScale.pt(8))
         .padding(.top, UIScale.pt(10))
@@ -562,7 +527,7 @@ struct HerdrPage: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     if hideAgents {
                         hiddenLine
-                        Text("\(rowKind(agent)) · \(agent.machineName)")
+                        Text(agent.machineName)
                             .font(DashSkin.mono(9.5))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .lineLimit(1)
@@ -575,7 +540,7 @@ struct HerdrPage: View {
                             .foregroundStyle(DashSkin.ink(dark))
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
-                        Text("\(rowKind(agent)) · \(agent.machineName) · \(agent.pane)")
+                        Text(rowDetail(agent))
                             .font(DashSkin.mono(9.5))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .lineLimit(1)
@@ -598,8 +563,9 @@ struct HerdrPage: View {
         .pointerCursor()
     }
 
-    private func rowKind(_ agent: HerdrAgent) -> String {
-        agent.isTerminal ? agent.processLabel : agent.kind
+    private func rowDetail(_ agent: HerdrAgent) -> String {
+        agent.isTerminal
+            ? agent.machineName : "\(agent.kind) · \(agent.machineName) · \(agent.pane)"
     }
 
     private func openAgent(_ agent: HerdrAgent) {

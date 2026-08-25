@@ -6,29 +6,23 @@ import Testing
 
 @MainActor
 @Suite struct HerdrCockpitUITests {
-    @Test func theListSplitsAgentsFromTerminals() {
+    @Test func oneTerminalIsOfferedPerMachineThatHasHerdr() {
         let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
-        store.apply([host])
+        store.apply([host, remote, missing])
         #expect(store.listedAgents.map(\.pane) == ["w2:p1"])
-        #expect(store.listedTerminals.map(\.pane) == ["w2:p6"])
+        #expect(store.machineTerminals.map(\.machineName) == ["This Mac", "tuf-wired"])
+        #expect(store.machineTerminals.filter(\.isTerminal).count == 2)
     }
 
-    @Test func theTerminalsPillFiltersToTerminals() {
+    @Test func theMachineFilterAlsoNarrowsTheTerminals() {
         let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
-        store.apply([host])
-        store.selectKind(HerdrKind.terminalLabel, exclusive: true)
-        #expect(store.listedAgents.isEmpty)
-        #expect(store.listedTerminals.map(\.pane) == ["w2:p6"])
-        store.selectKind("all", exclusive: false)
-        #expect(store.listedAgents.map(\.pane) == ["w2:p1"])
-    }
-
-    @Test func terminalsAreOfferedAsAKindWithoutTheirProcesses() {
-        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
-        store.apply([host])
-        #expect(store.kindChoices.last == HerdrKind.terminalLabel)
-        #expect(!store.kindChoices.contains("bun"))
-        #expect(store.kindChoices.contains("Claude Code"))
+        store.apply([host, remote])
+        store.machineFilter = "local"
+        #expect(store.machineTerminals.map(\.machineName) == ["This Mac"])
+        store.machineFilter = remote.id
+        #expect(store.machineTerminals.map(\.machineName) == ["tuf-wired"])
+        store.machineFilter = "all"
+        #expect(store.machineTerminals.count == 2)
     }
 
     @Test func openingASplitClosesTheDetailPane() {
@@ -44,6 +38,7 @@ import Testing
         let suite = defaults()
         let store = HerdrStore(defaults: suite, liveWatcher: { _ in })
         store.apply([host])
+        let terminal = HerdrMachineTerminal.agent(for: host)
         HerdrAgentViews.set(.diff, for: terminal.id, suite)
         store.open(terminal)
         #expect(store.view(for: terminal.id) == .agent)
@@ -58,14 +53,8 @@ import Testing
         #expect(second.railOpen == false)
     }
 
-    @Test func workspacesAreOfferedPerMachine() {
-        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
-        store.apply([host])
-        #expect(store.workspaceChoices(for: "local").map(\.id) == ["edith"])
-        #expect(store.workspaceChoices(for: "nowhere").isEmpty)
-    }
-
     @Test func terminalsCarryTheirOwnToneAndAgentsFollowTheirStatus() {
+        let terminal = HerdrMachineTerminal.agent(for: host)
         #expect(HerdrStatusColor.tone(terminal, dark: false) == DashSkin.gold)
         #expect(
             HerdrStatusColor.tone(agent, dark: false)
@@ -111,15 +100,19 @@ import Testing
             title: "Herdr cockpit", workspace: "edith", cwd: "/repo")
     }
 
-    private var terminal: HerdrAgent {
-        HerdrAgent.make(
-            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
-            session: "default", pane: "w2:p6", kind: HerdrKind.terminalLabel, status: .unknown,
-            title: "site dev server", workspace: "edith", cwd: "/repo/apps/site",
-            category: .terminal, process: "bun")
+    private var host: HerdrHostSnapshot {
+        .local(herdrPresent: true, agents: [agent])
     }
 
-    private var host: HerdrHostSnapshot {
-        .local(herdrPresent: true, agents: [agent, terminal])
+    private var remote: HerdrHostSnapshot {
+        HerdrHostSnapshot(
+            id: "60E1AA8E-9B9C-487D-BA0F-D7D664D97CEB", name: "tuf-wired", isLocal: false,
+            sshTarget: "tuf-wired", herdrPresent: true, reachable: true)
+    }
+
+    private var missing: HerdrHostSnapshot {
+        HerdrHostSnapshot(
+            id: "11111111-1111-1111-1111-111111111111", name: "mini-pc", isLocal: false,
+            sshTarget: "mini-pc", herdrPresent: false, reachable: true)
     }
 }

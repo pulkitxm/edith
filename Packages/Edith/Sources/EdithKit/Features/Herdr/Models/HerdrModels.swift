@@ -156,13 +156,12 @@ public struct HerdrAgent: Identifiable, Equatable, Hashable, Sendable {
     public var workspace: String
     public var cwd: String
     public var category: HerdrPaneCategory
-    public var process: String
 
     public init(
         id: String, machineID: String, machineName: String, machineIsLocal: Bool,
         sshTarget: String?, session: String, pane: String, kind: String,
         status: HerdrAgentStatus, title: String, workspace: String, cwd: String,
-        category: HerdrPaneCategory = .agent, process: String = ""
+        category: HerdrPaneCategory = .agent
     ) {
         self.id = id
         self.machineID = machineID
@@ -177,24 +176,21 @@ public struct HerdrAgent: Identifiable, Equatable, Hashable, Sendable {
         self.workspace = workspace
         self.cwd = cwd
         self.category = category
-        self.process = process
     }
 
     public static func make(
         machineID: String, machineName: String, machineIsLocal: Bool, sshTarget: String?,
         session: String, pane: String, kind: String, status: HerdrAgentStatus, title: String,
-        workspace: String, cwd: String, category: HerdrPaneCategory = .agent, process: String = ""
+        workspace: String, cwd: String, category: HerdrPaneCategory = .agent
     ) -> HerdrAgent {
         HerdrAgent(
             id: "\(machineID)|\(session)|\(pane)",
             machineID: machineID, machineName: machineName, machineIsLocal: machineIsLocal,
             sshTarget: sshTarget, session: session, pane: pane, kind: kind, status: status,
-            title: title, workspace: workspace, cwd: cwd, category: category, process: process)
+            title: title, workspace: workspace, cwd: cwd, category: category)
     }
 
     public var isTerminal: Bool { category == .terminal }
-
-    public var processLabel: String { process.isEmpty ? HerdrKind.terminalLabel : process }
 }
 
 public struct HerdrHostSnapshot: Identifiable, Equatable, Sendable {
@@ -276,13 +272,10 @@ public struct HerdrPaneRecord: Equatable, Sendable {
     public var title: String?
     public var workspaceID: String?
     public var cwd: String?
-    public var tabID: String?
-    public var process: String?
 
     public init(
         pane: String, kindRaw: String? = nil, statusRaw: String? = nil, title: String? = nil,
-        workspaceID: String? = nil, cwd: String? = nil, tabID: String? = nil,
-        process: String? = nil
+        workspaceID: String? = nil, cwd: String? = nil
     ) {
         self.pane = pane
         self.kindRaw = kindRaw
@@ -290,8 +283,6 @@ public struct HerdrPaneRecord: Equatable, Sendable {
         self.title = title
         self.workspaceID = workspaceID
         self.cwd = cwd
-        self.tabID = tabID
-        self.process = process
     }
 
     public var looksLikeAgent: Bool {
@@ -325,25 +316,21 @@ public struct HerdrPaneRecord: Equatable, Sendable {
             statusRaw: status,
             title: incoming.title ?? title,
             workspaceID: incoming.workspaceID ?? workspaceID,
-            cwd: incoming.cwd ?? cwd,
-            tabID: incoming.tabID ?? tabID,
-            process: incoming.process ?? process)
+            cwd: incoming.cwd ?? cwd)
     }
 }
 
 public struct HerdrSnapshotBoard: Equatable, Sendable {
     public var labels: [String: String]
-    public var tabLabels: [String: String]
     public var panes: [HerdrPaneRecord]
     public var agents: [HerdrPaneRecord]
     public var hasPaneList: Bool
 
     public init(
-        labels: [String: String], tabLabels: [String: String] = [:],
-        panes: [HerdrPaneRecord], agents: [HerdrPaneRecord], hasPaneList: Bool
+        labels: [String: String], panes: [HerdrPaneRecord], agents: [HerdrPaneRecord],
+        hasPaneList: Bool
     ) {
         self.labels = labels
-        self.tabLabels = tabLabels
         self.panes = panes
         self.agents = agents
         self.hasPaneList = hasPaneList

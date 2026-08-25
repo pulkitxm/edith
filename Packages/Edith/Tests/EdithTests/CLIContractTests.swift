@@ -680,9 +680,6 @@ enum JSONContract {
         JSONCase(
             "ed machines mount-reveal",
             ["machines", "mount-reveal", "nowhere-at-all", "--json"]),
-        JSONCase(
-            "ed herdr new", ["herdr", "new", "--machine", "nowhere-at-all", "--json"],
-            mutatesTheMachine: true),
     ]
 }
 

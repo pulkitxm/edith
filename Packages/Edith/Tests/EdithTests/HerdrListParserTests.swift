@@ -107,14 +107,12 @@ import Testing
             fromSnapshot: json, session: "default",
             machineID: "60E1AA8E-9B9C-487D-BA0F-D7D664D97CEB", machineName: "tuf-wired",
             machineIsLocal: false, sshTarget: "tuf-wired")
-        #expect(agents.map(\.pane) == ["w3:p1N", "w3:p1Q"])
+        #expect(agents.map(\.pane) == ["w3:p1N"])
         #expect(agents[0].kind == "OpenCode")
         #expect(agents[0].category == .agent)
         #expect(agents[0].status == .working)
         #expect(agents[0].workspace == "quinjet")
         #expect(agents[0].id == "60E1AA8E-9B9C-487D-BA0F-D7D664D97CEB|default|w3:p1N")
-        #expect(agents[1].category == .terminal)
-        #expect(agents[1].kind == HerdrKind.terminalLabel)
     }
 
     @Test func eventNameNormalizesDottedTypes() {

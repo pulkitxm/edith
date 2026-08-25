@@ -122,10 +122,9 @@ public enum HerdrCollector {
             return Listing(present: false, agents: [], error: "herdr is not installed")
         }
         if HerdrListParser.hasSnapshot(snapshot.stdout) {
-            var agents = HerdrListParser.agents(
+            let agents = HerdrListParser.agents(
                 fromSnapshot: snapshot.stdout, session: session, machineID: machineID,
                 machineName: machineName, machineIsLocal: machineIsLocal, sshTarget: sshTarget)
-            agents = await named(agents, runner: runner, session: quoted)
             return Listing(
                 present: true, agents: agents,
                 error: agents.isEmpty ? jsonOrProcessError(snapshot) : nil)
@@ -140,29 +139,6 @@ public enum HerdrCollector {
         return Listing(
             present: true, agents: agents,
             error: agents.isEmpty ? jsonOrProcessError(result) : nil)
-    }
-
-    static func processInfoCommand(session: String, panes: [String]) -> String {
-        let targets = panes.map(ShellQuote.quote).joined(separator: " ")
-        return "for pane in \(targets); do herdr --session \(session) pane process-info "
-            + "--pane \"$pane\" 2>/dev/null; done"
-    }
-
-    private static func named(
-        _ agents: [HerdrAgent], runner: Runner, session: String
-    ) async -> [HerdrAgent] {
-        let panes = agents.filter(\.isTerminal).map(\.pane)
-        guard !panes.isEmpty else { return agents }
-        let result = await runShell(
-            runner, command: processInfoCommand(session: session, panes: panes))
-        let names = HerdrListParser.processNames(in: result.stdout)
-        guard !names.isEmpty else { return agents }
-        return agents.map { agent in
-            guard let name = names[agent.pane], !name.isEmpty else { return agent }
-            var named = agent
-            named.process = name
-            return named
-        }
     }
 
     private struct CommandResult {

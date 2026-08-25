@@ -172,9 +172,6 @@ public enum UserOperationCatalog {
         registrations += HerdrOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        registrations += HerdrTerminalOperation.allCases.map {
-            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
-        }
         return registrations
     }()
 
@@ -1276,17 +1273,6 @@ private extension DockerBrowserOperation {
 private extension MountedFileSystemOperation {
     var interfaceExposure: UserOperationExposure {
         userInterface("Machine tools", "reveal the mounted disk", ["box"])
-    }
-}
-
-private extension HerdrTerminalOperation {
-    var interfaceExposure: UserOperationExposure {
-        switch self {
-        case .new:
-            userInterface(
-                "Herdr board", "create a terminal on a machine",
-                ["--machine", "local", "--cwd", "/tmp"])
-        }
     }
 }
 

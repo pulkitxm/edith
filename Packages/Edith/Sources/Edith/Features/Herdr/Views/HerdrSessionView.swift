@@ -221,8 +221,8 @@ struct HerdrSessionView: View {
                 if !agent.isTerminal { metaRow("Status", agent.status.title) }
                 metaRow("Machine", agent.machineName)
                 if !hideAgents {
-                    metaRow("Session", agent.session)
-                    metaRow("Pane", agent.pane)
+                    if !agent.session.isEmpty { metaRow("Session", agent.session) }
+                    if !agent.pane.isEmpty { metaRow("Pane", agent.pane) }
                     if !agent.workspace.isEmpty { metaRow("Workspace", agent.workspace) }
                     if !agent.cwd.isEmpty { metaRow("Directory", agent.cwd) }
                     VStack(alignment: .leading, spacing: UIScale.pt(6)) {
@@ -279,7 +279,7 @@ struct HerdrSessionView: View {
                 .foregroundStyle(DashSkin.inkFaint(dark))
             HStack(spacing: UIScale.pt(8)) {
                 HerdrKindMark(kind: agent.kind, size: UIScale.pt(14))
-                Text(agent.isTerminal ? agent.processLabel : agent.kind)
+                Text(agent.isTerminal ? HerdrMachineTerminal.title : agent.kind)
                     .font(.system(size: UIScale.pt(12.5)))
                     .textSelection(.enabled)
             }
