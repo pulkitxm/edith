@@ -311,6 +311,14 @@ import Testing
         #expect(!DropResolver.isDropAllowed(paths: ["/a/src"], destination: "/a/src"))
         #expect(!DropResolver.isDropAllowed(paths: ["/a/src"], destination: "/a/src/deep"))
         #expect(!DropResolver.isDropAllowed(paths: ["/a/src/x.txt"], destination: "/a/src"))
+        #expect(
+            !DropResolver.isDropAllowed(
+                paths: ["/a/one/../src"], destination: "/a/src/./deep"))
+        #expect(!DropResolver.isDropAllowed(paths: ["~/src"], destination: "~/src/../src/deep"))
+        #expect(!DropResolver.isDropAllowed(paths: ["/"], destination: "/a/src"))
+        #expect(!DropResolver.isDropAllowed(paths: ["."], destination: "relative/descendant"))
+        #expect(!DropResolver.isDropAllowed(paths: ["/"], destination: "relative"))
+        #expect(!DropResolver.isDropAllowed(paths: ["."], destination: "/absolute"))
         #expect(DropResolver.isDropAllowed(paths: ["/a/src/x.txt"], destination: "/b"))
     }
 }
@@ -327,92 +335,6 @@ import Testing
                 == ["a.txt"])
         #expect(NameConflicts.uniqueName(for: "a.txt", existing: existing) == "a 3.txt")
         #expect(NameConflicts.uniqueName(for: "b.txt", existing: existing) == "b.txt")
-    }
-
-    @Test func buildsMoveCommandsHonouringResolutions() {
-        let intent = DropIntent.moveWithinMachine(["/src/a.txt", "/src/b.txt"])
-        let replace = NameConflicts.command(
-            intent: intent, destination: "/d", resolutions: ["a.txt": .replace],
-            existing: existing)
-        #expect(
-            replace
-                == "mv /src/a.txt /d/a.txt.edith-replacing && rm -rf /d/a.txt"
-                + " && mv /d/a.txt.edith-replacing /d/a.txt; "
-                + "mv /src/b.txt /d/b.txt")
-
-        let skip = NameConflicts.command(
-            intent: intent, destination: "/d", resolutions: ["a.txt": .skip], existing: existing)
-        #expect(skip == "mv /src/b.txt /d/b.txt")
-
-        let keep = NameConflicts.command(
-            intent: intent, destination: "/d", resolutions: ["a.txt": .keepBoth],
-            existing: existing)
-        #expect(keep?.contains("/d/a 3.txt") == true)
-    }
-
-    @Test func copyIntentUsesCopyCommand() {
-        let command = NameConflicts.command(
-            intent: .copyWithinMachine(["/src/x"]), destination: "/d",
-            resolutions: ["x": .keepBoth], existing: [])
-        #expect(command == "cp -a /src/x /d/x")
-    }
-
-    @Test func skippingEverythingProducesNoCommand() {
-        let command = NameConflicts.command(
-            intent: .moveWithinMachine(["/src/a.txt"]), destination: "/d",
-            resolutions: ["a.txt": .skip], existing: existing)
-        #expect(command == nil)
-    }
-}
-
-@Suite struct ReplaceOntoDirectoryTests {
-    @Test func replacingClearsTheTargetSoFoldersAreNotNested() {
-        let existing = [
-            RemoteFileEntry(name: "docs", path: "/d/docs", kind: .directory, sizeBytes: 0)
-        ]
-        let command = NameConflicts.command(
-            intent: .moveWithinMachine(["/src/docs"]), destination: "/d",
-            resolutions: ["docs": .replace], existing: existing)
-        #expect(
-            command
-                == "mv /src/docs /d/docs.edith-replacing && rm -rf /d/docs"
-                + " && mv /d/docs.edith-replacing /d/docs")
-        #expect(command?.contains("mv -f") == false)
-        #expect(command?.hasPrefix("rm -rf") == false)
-    }
-
-    @Test func anUnresolvedNameNeverDeletesAnything() {
-        let existing = [
-            RemoteFileEntry(name: "docs", path: "/d/docs", kind: .directory, sizeBytes: 0)
-        ]
-        let command = NameConflicts.command(
-            intent: .moveWithinMachine(["/src/docs"]), destination: "/d",
-            resolutions: [:], existing: existing)
-        #expect(command?.contains("rm -rf") == false)
-        #expect(command == "mv /src/docs '/d/docs 2'")
-    }
-
-    @Test func replaceStagesTheArrivalBeforeRemovingTheTarget() {
-        let command =
-            NameConflicts.command(
-                intent: .copyWithinMachine(["/src/docs"]), destination: "/d",
-                resolutions: ["docs": .replace],
-                existing: [
-                    RemoteFileEntry(name: "docs", path: "/d/docs", kind: .directory, sizeBytes: 0)
-                ]) ?? ""
-        let stage = command.range(of: "cp -a /src/docs /d/docs.edith-replacing")
-        let removal = command.range(of: "rm -rf /d/docs ")
-        #expect(stage != nil)
-        #expect(removal != nil)
-        #expect(stage!.lowerBound < removal!.lowerBound)
-    }
-
-    @Test func oneFailureDoesNotAbortTheRest() {
-        let command = NameConflicts.command(
-            intent: .moveWithinMachine(["/src/a", "/src/b"]), destination: "/d",
-            resolutions: ["a": .keepBoth, "b": .keepBoth], existing: [])
-        #expect(command?.contains("; ") == true)
-        #expect(command?.contains("&& mv /src/b") == false)
     }
 }
 
@@ -648,18 +570,4 @@ import Testing
         #expect(NameFolding.split("Makefile").suffix == "")
     }
 
-    @Test func keepBothDoesNotHandTwoItemsTheSameName() {
-        let command =
-            NameConflicts.command(
-                intent: .moveWithinMachine(["/a/report.txt", "/b/REPORT.TXT"]),
-                destination: "/d",
-                resolutions: ["report.txt": .keepBoth, "REPORT.TXT": .keepBoth],
-                existing: [
-                    RemoteFileEntry(
-                        name: "report.txt", path: "/d/report.txt", kind: .file, sizeBytes: 1)
-                ]) ?? ""
-        #expect(command.contains("/d/report 2.txt"))
-        #expect(command.contains("/d/REPORT 3.TXT"))
-        #expect(!command.contains("rm -rf"))
-    }
 }

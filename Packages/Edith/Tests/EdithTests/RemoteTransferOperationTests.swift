@@ -10,8 +10,11 @@ import Testing
             descriptors.map(\.cli) == [
                 ["machines", "files", "get-many"],
                 ["machines", "files", "transfer"],
+                ["machines", "files", "put"],
+                ["machines", "files", "cp"],
+                ["machines", "files", "mv"],
             ])
-        #expect(descriptors.map(\.requiresPreview) == [true, true])
+        #expect(descriptors.map(\.requiresPreview) == [true, true, true, true, true])
         #expect(Set(descriptors.map(\.id)).count == descriptors.count)
     }
 
@@ -60,6 +63,49 @@ import Testing
         #expect(
             plan.items.map(\.destinationPath)
                 == (2...1_001).map { "/out/report \($0).txt" })
+    }
+
+    @Test func exactDestinationPlansMakeEveryResolutionExplicit() {
+        let existing = [entry("report.txt"), entry("report 2.txt")]
+        let kept = RemoteTransferOperationExecution.plan(
+            sourcePath: "/in/source.txt", destinationPath: "/out/report.txt",
+            existing: existing)
+        let replaced = RemoteTransferOperationExecution.plan(
+            sourcePath: "/in/source.txt", destinationPath: "/out/report.txt",
+            existing: existing, resolution: .replace)
+        let skipped = RemoteTransferOperationExecution.plan(
+            sourcePath: "/in/source.txt", destinationPath: "/out/report.txt",
+            existing: existing, resolution: .skip)
+
+        #expect(kept.items.map(\.destinationPath) == ["/out/report 3.txt"])
+        #expect(!kept.items[0].replacesExisting)
+        #expect(replaced.items.map(\.destinationPath) == ["/out/report.txt"])
+        #expect(replaced.items[0].replacesExisting)
+        #expect(skipped.items.isEmpty)
+        #expect(skipped.skipped == ["/in/source.txt"])
+    }
+
+    @Test func withinMachineCommandsRejectSelfAndDescendantDestinations() {
+        let selfPlan = RemoteTransferPlan(
+            destination: "/a",
+            items: [
+                RemoteTransferPlanItem(
+                    sourcePath: "/a/report", destinationPath: "/a/report",
+                    replacesExisting: true)
+            ], skipped: [])
+        let descendantPlan = RemoteTransferPlan(
+            destination: "/a/report",
+            items: [
+                RemoteTransferPlanItem(
+                    sourcePath: "/a/report", destinationPath: "/a/report/archive",
+                    replacesExisting: false)
+            ], skipped: [])
+
+        #expect(
+            RemoteTransferOperationExecution.withinMachineCommand(selfPlan, moving: true) == nil)
+        #expect(
+            RemoteTransferOperationExecution.withinMachineCommand(
+                descendantPlan, moving: false) == nil)
     }
 
     @Test func replacementCannotExecuteWithoutConfirmation() async {
@@ -124,10 +170,11 @@ import Testing
     @Test func failuresReportResolvedDestinationsAndProcessedProgress() async throws {
         let progress = TransferProgressRecorder()
         let destination = RemoteTransferEndpoint(
-            machineID: UUID(), name: "Destination", list: { _ in [] },
+            machineID: UUID(), name: "Destination", isDirectory: { _ in false },
+            list: { _ in [] },
             fetch: { _, _ in }, store: { _, _, _ in })
         let source = RemoteTransferEndpoint(
-            machineID: UUID(), name: "Source", list: { _ in [] },
+            machineID: UUID(), name: "Source", isDirectory: { _ in false }, list: { _ in [] },
             fetch: { path, url in
                 if path.hasSuffix("bad.txt") {
                     throw RemoteTransferError.listingFailed("unreadable")
@@ -159,7 +206,7 @@ import Testing
         try Data().write(to: sentinel)
         defer { try? FileManager.default.removeItem(at: stagingRoot) }
         let source = RemoteTransferEndpoint(
-            machineID: UUID(), name: "Source", list: { _ in [] },
+            machineID: UUID(), name: "Source", isDirectory: { _ in false }, list: { _ in [] },
             fetch: { path, url in
                 try Data(path.utf8).write(to: url)
                 if path.hasSuffix("bad.txt") {
@@ -183,7 +230,7 @@ import Testing
 
     @Test func eachItemStagingDirectoryIsRemovedBeforeTheNextFetch() async throws {
         let source = RemoteTransferEndpoint(
-            machineID: UUID(), name: "Source", list: { _ in [] },
+            machineID: UUID(), name: "Source", isDirectory: { _ in false }, list: { _ in [] },
             fetch: { path, url in
                 if path == "/second.txt" {
                     let previous = url.deletingLastPathComponent()
@@ -212,7 +259,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: stagingRoot) }
         let calls = TransferCallCounter()
         let source = RemoteTransferEndpoint(
-            machineID: UUID(), name: "Source", list: { _ in [] },
+            machineID: UUID(), name: "Source", isDirectory: { _ in false }, list: { _ in [] },
             fetch: { path, _ in
                 calls.record(path)
                 throw CancellationError()
@@ -234,7 +281,7 @@ import Testing
     @Test func genericErrorsFromACancelledTransferPropagateAsCancellation() async {
         let calls = TransferCallCounter()
         let source = RemoteTransferEndpoint(
-            machineID: UUID(), name: "Source", list: { _ in [] },
+            machineID: UUID(), name: "Source", isDirectory: { _ in false }, list: { _ in [] },
             fetch: { path, _ in
                 calls.record(path)
                 withUnsafeCurrentTask { $0?.cancel() }
@@ -255,7 +302,7 @@ import Testing
 
     @Test func cancellationAfterStoreCannotReturnASuccessfulOutcome() async {
         let source = RemoteTransferEndpoint(
-            machineID: UUID(), name: "Source", list: { _ in [] },
+            machineID: UUID(), name: "Source", isDirectory: { _ in false }, list: { _ in [] },
             fetch: { path, url in try Data(path.utf8).write(to: url) },
             store: { _, _, _ in withUnsafeCurrentTask { $0?.cancel() } })
         let plan = RemoteTransferOperationExecution.plan(
@@ -272,7 +319,7 @@ import Testing
 
     @Test func cancellationFromProgressCannotReturnASuccessfulOutcome() async {
         let source = RemoteTransferEndpoint(
-            machineID: UUID(), name: "Source", list: { _ in [] },
+            machineID: UUID(), name: "Source", isDirectory: { _ in false }, list: { _ in [] },
             fetch: { path, url in try Data(path.utf8).write(to: url) },
             store: { _, _, _ in })
         let plan = RemoteTransferOperationExecution.plan(
@@ -300,6 +347,21 @@ import Testing
         }
     }
 
+    @Test func localEndpointProbesDirectoriesWithoutListingTheirContents() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-transfer-probe-\(UUID().uuidString)")
+        let directory = root.appendingPathComponent("folder")
+        let file = root.appendingPathComponent("file.txt")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data().write(to: file)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let endpoint = RemoteTransferEndpoint.local(machineID: UUID(), name: "Local")
+
+        #expect(try await endpoint.isDirectory(directory.path))
+        #expect(try await !endpoint.isDirectory(file.path))
+        #expect(try await !endpoint.isDirectory(root.appendingPathComponent("missing").path))
+    }
+
     @Test func failedLocalReplacementPreservesTheExistingDestination() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-transfer-replacement-\(UUID().uuidString)")
@@ -308,7 +370,7 @@ import Testing
         let destination = root.appendingPathComponent("report.txt")
         try Data("old".utf8).write(to: destination)
         let source = RemoteTransferEndpoint(
-            machineID: UUID(), name: "Source", list: { _ in [] },
+            machineID: UUID(), name: "Source", isDirectory: { _ in false }, list: { _ in [] },
             fetch: { _, _ in }, store: { _, _, _ in })
         let target = RemoteTransferEndpoint.local(machineID: UUID(), name: "Target")
         let plan = RemoteTransferOperationExecution.plan(
@@ -321,6 +383,153 @@ import Testing
         #expect(outcome.completed.isEmpty)
         #expect(outcome.failures.first?.destination == destination.path)
         #expect(try String(contentsOf: destination, encoding: .utf8) == "old")
+    }
+
+    @Test func withinMachineDirectoryCopyReplacesTransactionally() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-within-copy-\(UUID().uuidString)")
+        let sourceRoot = root.appendingPathComponent("source")
+        let destinationRoot = root.appendingPathComponent("destination")
+        let source = sourceRoot.appendingPathComponent("report")
+        let destination = destinationRoot.appendingPathComponent("report")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        try Data("new".utf8).write(to: source.appendingPathComponent("new.txt"))
+        try Data("old".utf8).write(to: destination.appendingPathComponent("old.txt"))
+        defer { try? FileManager.default.removeItem(at: root) }
+        let plan = RemoteTransferOperationExecution.plan(
+            sourcePath: source.path, destinationPath: destination.path,
+            existing: [directoryEntry("report")], resolution: .replace)
+        let command = try #require(
+            RemoteTransferOperationExecution.withinMachineCommand(plan, moving: false))
+
+        _ = try await LocalMachineCommandExecution.run(command).get()
+
+        #expect(
+            FileManager.default.fileExists(atPath: source.appendingPathComponent("new.txt").path))
+        #expect(
+            FileManager.default.fileExists(
+                atPath: destination.appendingPathComponent("new.txt").path))
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: destination.appendingPathComponent("old.txt").path))
+        #expect(
+            try FileManager.default.contentsOfDirectory(atPath: destinationRoot.path) == ["report"])
+    }
+
+    @Test func withinMachineDirectoryMoveDeletesSourceOnlyAfterPublication() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-within-move-\(UUID().uuidString)")
+        let sourceRoot = root.appendingPathComponent("source")
+        let destinationRoot = root.appendingPathComponent("destination")
+        let source = sourceRoot.appendingPathComponent("report")
+        let destination = destinationRoot.appendingPathComponent("report")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: destinationRoot, withIntermediateDirectories: true)
+        try Data("new".utf8).write(to: source.appendingPathComponent("new.txt"))
+        defer { try? FileManager.default.removeItem(at: root) }
+        let plan = RemoteTransferOperationExecution.plan(
+            sourcePath: source.path, destinationPath: destination.path, existing: [])
+        let command = try #require(
+            RemoteTransferOperationExecution.withinMachineCommand(plan, moving: true))
+
+        _ = try await LocalMachineCommandExecution.run(command).get()
+
+        #expect(!FileManager.default.fileExists(atPath: source.path))
+        #expect(
+            FileManager.default.fileExists(
+                atPath: destination.appendingPathComponent("new.txt").path))
+        #expect(
+            try FileManager.default.contentsOfDirectory(atPath: destinationRoot.path) == ["report"])
+    }
+
+    @Test func failedWithinMachinePublicationPreservesSourceAndOriginalDestination() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-within-rollback-\(UUID().uuidString)")
+        let sourceRoot = root.appendingPathComponent("source")
+        let destinationRoot = root.appendingPathComponent("destination")
+        let source = sourceRoot.appendingPathComponent("report")
+        let destination = destinationRoot.appendingPathComponent("report")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        try Data("new".utf8).write(to: source.appendingPathComponent("new.txt"))
+        try Data("old".utf8).write(to: destination.appendingPathComponent("old.txt"))
+        defer { try? FileManager.default.removeItem(at: root) }
+        let plan = RemoteTransferOperationExecution.plan(
+            sourcePath: source.path, destinationPath: destination.path,
+            existing: [directoryEntry("report")], resolution: .replace)
+        let operation = try #require(
+            RemoteTransferOperationExecution.withinMachineCommand(plan, moving: true))
+        let target = ShellQuote.quote(destination.path)
+        let command =
+            "function mv { if [ \"$1\" = -n ] && [ \"$3\" = \(target) ]; then "
+            + "case \"$2\" in *\(NameConflicts.stagingSuffix)-backup-*) ;; *) return 91;; esac; "
+            + "fi; command mv \"$@\"; }; \(operation)"
+
+        let result = await LocalMachineCommandExecution.run(command)
+
+        #expect(throws: Error.self) { try result.get() }
+        #expect(
+            FileManager.default.fileExists(atPath: source.appendingPathComponent("new.txt").path))
+        #expect(
+            FileManager.default.fileExists(
+                atPath: destination.appendingPathComponent("old.txt").path))
+        #expect(
+            try FileManager.default.contentsOfDirectory(atPath: destinationRoot.path) == ["report"])
+    }
+
+    @Test func concurrentDirectoryDestinationDoesNotCaptureTheStagedCopy() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-within-race-\(UUID().uuidString)")
+        let sourceRoot = root.appendingPathComponent("source")
+        let destinationRoot = root.appendingPathComponent("destination")
+        let source = sourceRoot.appendingPathComponent("report")
+        let destination = destinationRoot.appendingPathComponent("report")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: destinationRoot, withIntermediateDirectories: true)
+        try Data("new".utf8).write(to: source.appendingPathComponent("new.txt"))
+        defer { try? FileManager.default.removeItem(at: root) }
+        let plan = RemoteTransferOperationExecution.plan(
+            sourcePath: source.path, destinationPath: destination.path, existing: [])
+        let operation = try #require(
+            RemoteTransferOperationExecution.withinMachineCommand(plan, moving: false))
+        let target = ShellQuote.quote(destination.path)
+        let command =
+            "function mv { if [ \"$1\" = -n ] && [ \"$3\" = \(target) ]; then "
+            + "mkdir \(target); fi; command mv \"$@\"; }; \(operation)"
+
+        let result = await LocalMachineCommandExecution.run(command)
+
+        #expect(throws: Error.self) { try result.get() }
+        #expect(
+            FileManager.default.fileExists(atPath: source.appendingPathComponent("new.txt").path))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: destination.path).isEmpty)
+        #expect(
+            try FileManager.default.contentsOfDirectory(atPath: destinationRoot.path) == ["report"])
+    }
+
+    @Test func withinMachineBatchStopsAfterTheFirstFailure() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-within-batch-\(UUID().uuidString)")
+        let destination = root.appendingPathComponent("destination")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let second = root.appendingPathComponent("second.txt")
+        try Data("second".utf8).write(to: second)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let plan = RemoteTransferOperationExecution.plan(
+            paths: [root.appendingPathComponent("missing.txt").path, second.path],
+            destination: destination.path, existing: [])
+        let command = try #require(
+            RemoteTransferOperationExecution.withinMachineCommand(plan, moving: false))
+
+        let result = await LocalMachineCommandExecution.run(command)
+
+        #expect(throws: Error.self) { try result.get() }
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: destination.appendingPathComponent("second.txt").path))
     }
 
     @Test func remoteKeepBothPublicationCannotOverwriteAConcurrentDestination() {
@@ -412,9 +621,14 @@ import Testing
         RemoteFileEntry(name: name, path: "/out/\(name)", kind: .file, sizeBytes: 1)
     }
 
+    private func directoryEntry(_ name: String) -> RemoteFileEntry {
+        RemoteFileEntry(name: name, path: "/out/\(name)", kind: .directory, sizeBytes: 1)
+    }
+
     private func inertEndpoint() -> RemoteTransferEndpoint {
         RemoteTransferEndpoint(
-            machineID: UUID(), name: "Test", list: { _ in [] }, fetch: { _, _ in },
+            machineID: UUID(), name: "Test", isDirectory: { _ in false }, list: { _ in [] },
+            fetch: { _, _ in },
             store: { _, _, _ in })
     }
 }
