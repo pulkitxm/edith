@@ -1,4 +1,5 @@
 import Darwin
+import EdithKit
 import Foundation
 
 enum ClaudeShellProcessResult: Equatable, Sendable {
@@ -15,112 +16,30 @@ struct ClaudeShellInvocation: Equatable, Sendable {
     let currentDirectory: URL
 }
 
-private final class ClaudeShellOutputBuffer: @unchecked Sendable {
-    private let lock = NSLock()
-    private let maximumBytes: Int
-    private var data = Data()
-    private var rejected = false
-
-    init(maximumBytes: Int) {
-        self.maximumBytes = maximumBytes
-    }
-
-    func append(_ chunk: Data) {
-        lock.lock()
-        defer { lock.unlock() }
-        guard !rejected else { return }
-        guard data.count + chunk.count <= maximumBytes else {
-            data.removeAll(keepingCapacity: false)
-            rejected = true
-            return
-        }
-        data.append(chunk)
-    }
-
-    func result() -> ClaudeShellProcessResult {
-        lock.lock()
-        defer { lock.unlock() }
-        return rejected ? .oversized : .output(data)
-    }
-}
-
 enum ClaudeShellProcessRunner {
-    private static let terminationGrace: TimeInterval = 0.25
-    private static let processGroupScript = """
-        set -m
-        "$@" &
-        child=$!
-        set +m
-        terminate_group() {
-            if kill -TERM -"$child" 2>/dev/null; then
-                sleep 0.1
-                kill -KILL -"$child" 2>/dev/null || :
-            fi
-        }
-        trap 'terminate_group; exit 124' TERM INT
-        wait "$child"
-        status=$?
-        terminate_group
-        trap - TERM INT
-        exit "$status"
-        """
-
     static func run(
         _ invocation: ClaudeShellInvocation, timeout: TimeInterval, maximumOutputBytes: Int
-    ) -> ClaudeShellProcessResult {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments =
-            [
-                "-c", processGroupScript, "credential-resolver", invocation.executable.path,
-            ] + invocation.arguments
-        process.environment = invocation.environment
-        process.currentDirectoryURL = invocation.currentDirectory
-        process.standardInput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-
-        let output = Pipe()
-        process.standardOutput = output
-        let buffer = ClaudeShellOutputBuffer(maximumBytes: maximumOutputBytes)
-        let readerFinished = DispatchSemaphore(value: 0)
-        DispatchQueue.global(qos: .utility).async {
-            while true {
-                let chunk = output.fileHandleForReading.readData(ofLength: 4_096)
-                guard !chunk.isEmpty else { break }
-                buffer.append(chunk)
-            }
-            readerFinished.signal()
-        }
-
-        let processFinished = DispatchSemaphore(value: 0)
-        process.terminationHandler = { _ in processFinished.signal() }
+    ) async -> ClaudeShellProcessResult {
+        let request = CLICommandRequest(
+            executableURL: invocation.executable,
+            arguments: invocation.arguments,
+            environment: invocation.environment,
+            currentDirectoryURL: invocation.currentDirectory,
+            timeout: timeout,
+            maximumOutputBytes: maximumOutputBytes,
+            discardsStandardError: true,
+            terminatesProcessGroup: true)
         do {
-            try process.run()
-            try? output.fileHandleForWriting.close()
-        } catch {
-            try? output.fileHandleForWriting.close()
-            _ = readerFinished.wait(timeout: .now() + terminationGrace)
-            return .failed
-        }
-
-        let deadline = DispatchTime.now() + max(0, timeout)
-        guard processFinished.wait(timeout: deadline) == .success else {
-            process.terminate()
-            if processFinished.wait(timeout: .now() + terminationGrace) == .timedOut,
-                process.isRunning
-            {
-                kill(process.processIdentifier, SIGKILL)
-                _ = processFinished.wait(timeout: .now() + terminationGrace)
-            }
-            _ = readerFinished.wait(timeout: .now() + terminationGrace)
+            let result = try await CLICommandRunner.run(request) { _ in }
+            guard result.terminationStatus == 0 else { return .failed }
+            return .output(result.outputData)
+        } catch CLICommandRunnerError.timedOut {
             return .timedOut
-        }
-
-        guard readerFinished.wait(timeout: .now() + terminationGrace) == .success else {
+        } catch CLICommandRunnerError.outputLimitExceeded {
+            return .oversized
+        } catch {
             return .failed
         }
-        guard process.terminationStatus == 0 else { return .failed }
-        return buffer.result()
     }
 }
 
@@ -137,7 +56,7 @@ struct ClaudeShellCredentialResolver: Sendable {
     typealias Runner =
         @Sendable (
             ClaudeShellInvocation, TimeInterval, Int
-        ) -> ClaudeShellProcessResult
+        ) async -> ClaudeShellProcessResult
 
     let shell: URL
     let home: URL
@@ -155,7 +74,7 @@ struct ClaudeShellCredentialResolver: Sendable {
         maximumOutputBytes: Int = 16_384,
         marker: String = UUID().uuidString,
         runner: @escaping Runner = { invocation, timeout, maximumOutputBytes in
-            ClaudeShellProcessRunner.run(
+            await ClaudeShellProcessRunner.run(
                 invocation, timeout: timeout, maximumOutputBytes: maximumOutputBytes)
         }
     ) {
@@ -178,7 +97,7 @@ struct ClaudeShellCredentialResolver: Sendable {
         let timeout = timeout
         let maximumOutputBytes = maximumOutputBytes
         let result = await Task.detached(priority: .utility) {
-            runner(invocation, timeout, maximumOutputBytes)
+            await runner(invocation, timeout, maximumOutputBytes)
         }.value
         switch result {
         case .output(let data):

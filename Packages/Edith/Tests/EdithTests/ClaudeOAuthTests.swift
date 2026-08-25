@@ -176,12 +176,12 @@ private final class ClaudeShellCredentialQueue: @unchecked Sendable {
         await expect(.failed, from: .failed)
     }
 
-    @Test func liveRunnerBoundsTimeAndOutput() {
+    @Test func liveRunnerBoundsTimeAndOutput() async {
         let environment = [
             "HOME": home.path,
             "PATH": "/usr/bin:/bin",
         ]
-        let timeout = ClaudeShellProcessRunner.run(
+        let timeout = await ClaudeShellProcessRunner.run(
             ClaudeShellInvocation(
                 executable: URL(fileURLWithPath: "/bin/sh"),
                 arguments: ["-c", "sleep 2"],
@@ -189,7 +189,7 @@ private final class ClaudeShellCredentialQueue: @unchecked Sendable {
                 currentDirectory: home),
             timeout: 0.05,
             maximumOutputBytes: 1_024)
-        let oversized = ClaudeShellProcessRunner.run(
+        let oversized = await ClaudeShellProcessRunner.run(
             ClaudeShellInvocation(
                 executable: URL(fileURLWithPath: "/bin/sh"),
                 arguments: ["-c", "head -c 4096 /dev/zero | tr '\\0' x"],
@@ -206,8 +206,10 @@ private final class ClaudeShellCredentialQueue: @unchecked Sendable {
             .appendingPathComponent("edith-claude-shell-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
-        try Data("export CLAUDE_CODE_OAUTH_TOKEN=fixture-token\n".utf8)
-            .write(to: directory.appendingPathComponent(".zshrc"))
+        let profile = Data(
+            "printf startup-noise >&2\nexport CLAUDE_CODE_OAUTH_TOKEN=fixture-token\n".utf8
+        )
+        try profile.write(to: directory.appendingPathComponent(".zshrc"))
         let resolver = ClaudeShellCredentialResolver(
             shell: shell,
             home: directory,
