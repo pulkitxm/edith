@@ -791,21 +791,33 @@ final class FinderModel {
     }
 
     func download(to destination: URL) async {
-        guard let connection = session.connectionRef else { return }
-        for entry in selectedEntries where !entry.isDirectory {
-            statusMessage = "Downloading \(entry.name)…"
-            let target = destination.appendingPathComponent(entry.name)
-            do {
-                try await RemoteFileOperationExecution.download(
-                    remotePath: entry.path, to: target
-                ) { remotePath, localURL in
-                    try await connection.download(remotePath: remotePath, to: localURL)
-                }
-            } catch {
-                errorMessage = error.localizedDescription
-            }
+        let sources = selectedEntries.filter { !$0.isDirectory }
+        guard !sources.isEmpty else { return }
+        guard let source = transferEndpoint(for: session) else {
+            errorMessage = FinderTransferError.notConnected.localizedDescription
+            return
         }
-        flash("Download finished")
+        let local = RemoteTransferEndpoint.local(
+            machineID: session.machine.id, name: "This Mac")
+        errorMessage = nil
+        do {
+            let existing = try await local.list(destination.path)
+            let plan = RemoteTransferOperationExecution.plan(
+                paths: sources.map(\.path), destination: destination.path,
+                existing: existing)
+            progress = FileOperationProgress(title: "Downloading", total: plan.items.count)
+            let outcome = try await RemoteTransferOperationExecution.execute(
+                plan, from: source, to: local, confirmsReplacement: false
+            ) { [weak self] processed, total in
+                await self?.setTransferProgress(
+                    title: "Downloading", processed: processed, total: total)
+            }
+            finishTransfer(outcome, verb: "Downloaded")
+        } catch is CancellationError {
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        progress = nil
     }
 
     func upload(_ urls: [URL]) async {
@@ -934,10 +946,15 @@ final class FinderModel {
         await perform(intent: intent, destination: destination)
     }
 
-    private func destinationEntries(_ destination: String) async -> [RemoteFileEntry] {
+    private func destinationEntries(_ destination: String) async -> [RemoteFileEntry]? {
         if destination == path { return entries }
-        if case let .success(items) = await session.listFiles(path: destination) { return items }
-        return []
+        switch await session.listFiles(path: destination) {
+        case let .success(items):
+            return items
+        case let .failure(error):
+            errorMessage = error.localizedDescription
+            return nil
+        }
     }
 
     func perform(intent: DropIntent, destination: String) async {
@@ -945,7 +962,7 @@ final class FinderModel {
             return
         }
         let names = intent.paths.map { ($0 as NSString).lastPathComponent }
-        let existing = await destinationEntries(destination)
+        guard let existing = await destinationEntries(destination) else { return }
         let clashes = NameConflicts.conflicting(names: names, existing: existing)
         if !clashes.isEmpty {
             pendingConflict = PendingConflict(
@@ -961,7 +978,7 @@ final class FinderModel {
     ) async {
         switch intent {
         case .moveWithinMachine, .copyWithinMachine:
-            let existing = await destinationEntries(destination)
+            guard let existing = await destinationEntries(destination) else { return }
             guard
                 let command = NameConflicts.command(
                     intent: intent, destination: destination, resolutions: resolutions,
@@ -986,68 +1003,82 @@ final class FinderModel {
         case let .uploadLocalFiles(paths):
             await uploadPaths(paths.map { URL(fileURLWithPath: $0) }, into: destination)
         case let .transferBetweenMachines(from, paths):
-            await transfer(paths: paths, fromMachine: from, into: destination)
+            await transfer(
+                paths: paths, fromMachine: from, into: destination,
+                resolutions: resolutions)
         }
     }
 
-    private func transfer(paths: [String], fromMachine: UUID, into destination: String) async {
-        guard let source = MachinesModel.shared.sessions[fromMachine] else { return }
-        progress = FileOperationProgress(title: "Transferring", total: paths.count)
-        let staging = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-        try? FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
-        var completed = 0
-        var failures: [String] = []
-        for path in paths {
-            let name = (path as NSString).lastPathComponent
-            let local = staging.appendingPathComponent(name)
-            do {
-                if source.isLocal {
-                    try FileManager.default.copyItem(at: URL(fileURLWithPath: path), to: local)
-                } else if let connection = source.connectionRef {
-                    try await connection.download(remotePath: path, to: local)
-                } else {
-                    throw TransferFailure.noConnection(source.machine.name)
-                }
-                if session.isLocal {
-                    try FileManager.default.moveItem(
-                        at: local,
-                        to: URL(fileURLWithPath: FileListing.join(parent: destination, name: name)))
-                } else if let connection = session.connectionRef {
-                    try await connection.upload(
-                        localURL: local,
-                        toRemotePath: FileListing.join(parent: destination, name: name))
-                } else {
-                    throw TransferFailure.noConnection(session.machine.name)
-                }
-                completed += 1
-            } catch {
-                failures.append("\(name): \(error.localizedDescription)")
-            }
-            progress = FileOperationProgress(
-                title: "Transferring", completed: completed, total: paths.count)
+    private func transfer(
+        paths: [String], fromMachine: UUID, into destination: String,
+        resolutions: [String: NameConflictResolution]
+    ) async {
+        guard let sourceSession = MachinesModel.shared.sessions[fromMachine] else {
+            errorMessage = "The source machine is unavailable."
+            return
         }
-        try? FileManager.default.removeItem(at: staging)
+        guard let source = transferEndpoint(for: sourceSession) else {
+            errorMessage = "\(sourceSession.machine.name) is not connected."
+            return
+        }
+        guard let target = transferEndpoint(for: session) else {
+            errorMessage = "\(session.machine.name) is not connected."
+            return
+        }
+        errorMessage = nil
+        do {
+            let existing = try await target.list(destination)
+            let plan = RemoteTransferOperationExecution.plan(
+                paths: paths, destination: destination, existing: existing,
+                resolutions: resolutions)
+            guard !plan.items.isEmpty else {
+                flash("Nothing transferred")
+                return
+            }
+            progress = FileOperationProgress(title: "Transferring", total: plan.items.count)
+            let outcome = try await RemoteTransferOperationExecution.execute(
+                plan, from: source, to: target,
+                confirmsReplacement: !plan.replacements.isEmpty
+            ) { [weak self] processed, total in
+                await self?.setTransferProgress(
+                    title: "Transferring", processed: processed, total: total)
+            }
+            finishTransfer(outcome, verb: "Transferred")
+        } catch is CancellationError {
+        } catch {
+            errorMessage = error.localizedDescription
+        }
         progress = nil
-        if failures.isEmpty {
-            flash("Transferred \(completed) item\(completed == 1 ? "" : "s")")
-        } else {
-            errorMessage =
-                failures.count == 1
-                ? failures[0]
-                : "\(failures.count) of \(paths.count) items failed. \(failures[0])"
-        }
+        let transferError = errorMessage
         await load()
+        if let transferError { errorMessage = transferError }
     }
 
-    enum TransferFailure: LocalizedError {
-        case noConnection(String)
-
-        var errorDescription: String? {
-            switch self {
-            case let .noConnection(name): return "\(name) is not connected."
-            }
+    private func transferEndpoint(for session: MachineSession) -> RemoteTransferEndpoint? {
+        if session.isLocal {
+            return .local(machineID: session.machine.id, name: session.machine.name)
         }
+        guard let connection = session.connectionRef else { return nil }
+        return .remote(machine: session.machine, connection: connection)
+    }
+
+    private func setTransferProgress(title: String, processed: Int, total: Int) {
+        progress = FileOperationProgress(
+            title: title, completed: processed, total: total)
+    }
+
+    private func finishTransfer(_ outcome: RemoteTransferOutcome, verb: String) {
+        let completed = outcome.completed.count
+        guard let first = outcome.failures.first else {
+            flash("\(verb) \(completed) item\(completed == 1 ? "" : "s")")
+            return
+        }
+        let name = (first.sourcePath as NSString).lastPathComponent
+        let detail = "\(name) -> \(first.destination): \(first.message)"
+        errorMessage =
+            outcome.failures.count == 1
+            ? detail
+            : "\(outcome.failures.count) of \(completed + outcome.failures.count) items failed. \(detail)"
     }
 
     private func uploadPaths(_ urls: [URL], into destination: String) async {

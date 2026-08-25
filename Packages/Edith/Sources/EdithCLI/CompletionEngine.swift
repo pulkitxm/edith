@@ -143,7 +143,8 @@ public enum CompletionEngine {
                         appLinks: appLinks, previous: positionals.last, shelfItems: shelfItems,
                         musicTracks: musicTracks, calendarEvents: calendarEvents,
                         runningApps: runningApps, usageChatIDs: usageChatIDs,
-                        usageProjects: usageProjects, quinjetSessions: quinjetSessions), prefix))
+                        usageProjects: usageProjects, quinjetSessions: quinjetSessions), prefix),
+                wantsFiles: kind == .localPath)
         }
         if let separator = prefix.firstIndex(of: "=") {
             let option = String(prefix[..<separator])

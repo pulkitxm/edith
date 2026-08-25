@@ -230,6 +230,40 @@ import Testing
         #expect(listFlags.candidates == ["--all"])
     }
 
+    @Test func batchTransferCompletionKeepsEveryPathSlotTyped() throws {
+        let files = try #require(CommandTree.root.child("machines")?.child("files"))
+        let getMany = try #require(files.child("get-many"))
+        let transfer = try #require(files.child("transfer"))
+
+        #expect(getMany.arguments == [.machine, .remotePath])
+        #expect(getMany.repeatingArgument == .remotePath)
+        #expect(getMany.optionValues["--to"] == .localPath)
+        #expect(transfer.arguments == [.machine, .machine, .remotePath])
+        #expect(transfer.repeatingArgument == .remotePath)
+        #expect(transfer.optionValues["--into"] == .remotePath)
+    }
+
+    @Test func getManyDestinationUsesLocalFileCompletion() {
+        let result = Self.plan(
+            [
+                "ed", "machines", "files", "get-many", "tuf", "/one", "/two", "--to", "",
+            ], 8)
+
+        #expect(result.wantsFiles)
+        #expect(result.lines.first == "#files")
+    }
+
+    @Test func transferDestinationStaysRemoteAfterRepeatedSources() {
+        let result = Self.plan(
+            [
+                "ed", "machines", "files", "transfer", "tuf", "Asus TUF 7", "/one", "/two",
+                "--into", "",
+            ], 9)
+
+        #expect(!result.wantsFiles)
+        #expect(result.candidates.isEmpty)
+    }
+
     @Test func flagsCompleteWhenTheWordStartsWithADash() {
         let result = Self.plan(["ed", "machines", "ls", "--j"], 3)
         #expect(result.candidates == ["--json"])

@@ -493,6 +493,93 @@ private final class PausedPreviewImageLoader {
     }
 }
 
+@Suite(.serialized) @MainActor struct FinderTransferTests {
+    @Test func selectionDownloadUsesTheSharedKeepBothPlan() async throws {
+        let (model, root) = try sandbox()
+        let destination = root.appendingPathComponent("downloads")
+        try FileManager.default.createDirectory(
+            at: destination, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write("report.txt", into: root, contents: "new")
+        try write("notes.txt", into: root, contents: "notes")
+        try write("report.txt", into: destination, contents: "old")
+        await model.load()
+        model.selection = Set(
+            model.entries.filter { !$0.isDirectory }.map(\.path))
+
+        await model.download(to: destination)
+
+        #expect(
+            try String(
+                contentsOf: destination.appendingPathComponent("report.txt"),
+                encoding: .utf8) == "old")
+        #expect(
+            try String(
+                contentsOf: destination.appendingPathComponent("report 2.txt"),
+                encoding: .utf8) == "new")
+        #expect(exists("downloads/notes.txt", in: root))
+        #expect(model.errorMessage == nil)
+    }
+
+    @Test func destinationListingFailurePreventsCrossMachineTransfer() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-finder-transfer-list-\(UUID().uuidString)")
+        let sourceRoot = root.appendingPathComponent("source")
+        let destinationRoot = root.appendingPathComponent("destination")
+        try FileManager.default.createDirectory(
+            at: sourceRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: destinationRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = sourceRoot.appendingPathComponent("report.txt")
+        try Data("new".utf8).write(to: source)
+        let sourceSession = MachinesModel.shared.session(for: MachinesModel.localMachineID)
+        let targetSession = MachineSession(
+            machine: Machine(name: "Destination", host: "localhost"), local: true)
+        let model = FinderModel(session: targetSession, path: destinationRoot.path)
+        await model.load()
+        let missingDestination = destinationRoot.appendingPathComponent("missing")
+
+        await model.perform(
+            intent: .transferBetweenMachines(
+                from: sourceSession.machine.id, paths: [source.path]),
+            destination: missingDestination.path)
+
+        #expect(FileManager.default.fileExists(atPath: source.path))
+        #expect(!FileManager.default.fileExists(atPath: missingDestination.path))
+        #expect(model.errorMessage != nil)
+    }
+
+    @Test func transferFailureNamesTheResolvedDestination() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-finder-transfer-error-\(UUID().uuidString)")
+        let sourceRoot = root.appendingPathComponent("source")
+        let destinationRoot = root.appendingPathComponent("destination")
+        try FileManager.default.createDirectory(
+            at: sourceRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: destinationRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data("old".utf8).write(
+            to: destinationRoot.appendingPathComponent("report.txt"))
+        let missing = sourceRoot.appendingPathComponent("report.txt")
+        let sourceSession = MachinesModel.shared.session(for: MachinesModel.localMachineID)
+        let targetSession = MachineSession(
+            machine: Machine(name: "Destination", host: "localhost"), local: true)
+        let model = FinderModel(session: targetSession, path: destinationRoot.path)
+        await model.load()
+
+        await model.commit(
+            intent: .transferBetweenMachines(
+                from: sourceSession.machine.id, paths: [missing.path]),
+            destination: destinationRoot.path,
+            resolutions: ["report.txt": .keepBoth])
+
+        let resolved = destinationRoot.appendingPathComponent("report 2.txt").path
+        #expect(model.errorMessage?.contains(resolved) == true)
+    }
+}
+
 @Suite(.serialized) @MainActor struct FinderNavigationTests {
     @Test func openingAFolderNavigatesIntoIt() async throws {
         let (model, root) = try sandbox()
