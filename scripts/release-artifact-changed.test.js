@@ -1,5 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
@@ -46,9 +52,10 @@ function commit(root, path, content) {
   git(root, "commit", "-m", `Update ${path}`);
 }
 
-function changed(root) {
+function changed(root, values = {}) {
   return Bun.spawnSync(["bash", script], {
     cwd: root,
+    env: { ...process.env, ...values },
     stderr: "pipe",
     stdout: "pipe",
   });
@@ -92,6 +99,66 @@ test("docs-only history never dispatches a release", () => {
 
   expect(result.exitCode).toBe(1);
   expect(result.stderr.toString()).toContain("release artifact unchanged");
+});
+
+test("a repository without a release tag fails inspection", () => {
+  const root = repository();
+  commit(root, "docs/cli/README.md", "documentation");
+
+  const result = changed(root);
+
+  expect(result.exitCode).toBe(2);
+  expect(result.stderr.toString()).toContain(
+    "release artifact inspection failed: no release tag is available",
+  );
+});
+
+test("a shallow checkout fails instead of treating missing tags as unchanged", () => {
+  const source = repository();
+  commit(source, "Packages/Edith/Sources/Edith/App.swift", "released");
+  git(source, "tag", "v0.0.139");
+  commit(source, "docs/cli/README.md", "documentation");
+  const checkout = `${source}-shallow`;
+  roots.push(checkout);
+  git(tmpdir(), "clone", "--depth", "1", `file://${source}`, checkout);
+
+  const result = changed(checkout);
+
+  expect(result.exitCode).toBe(2);
+  expect(result.stderr.toString()).toContain(
+    "release artifact inspection failed: repository is shallow",
+  );
+});
+
+test("a Git command failure fails inspection", () => {
+  const root = repository();
+  commit(root, "README.md", "released baseline");
+  git(root, "tag", "v0.0.139");
+  commit(root, ".github/workflows/ci.yml", "workflow");
+  const shimDirectory = join(root, "git-shim");
+  const shim = join(shimDirectory, "git");
+  mkdirSync(shimDirectory);
+  writeFileSync(
+    shim,
+    `#!/usr/bin/env bash
+if [[ "\${1:-}" == diff ]]; then
+  echo "fatal: simulated diff failure" >&2
+  exit 44
+fi
+exec "${command(root, "which", ["git"])}" "$@"
+`,
+  );
+  chmodSync(shim, 0o755);
+
+  const result = changed(root, {
+    PATH: `${shimDirectory}:${process.env.PATH}`,
+  });
+
+  expect(result.exitCode).toBe(2);
+  expect(result.stderr.toString()).toContain("fatal: simulated diff failure");
+  expect(result.stderr.toString()).toContain(
+    "release artifact inspection failed: could not compare v0.0.139 with HEAD",
+  );
 });
 
 test.each([
