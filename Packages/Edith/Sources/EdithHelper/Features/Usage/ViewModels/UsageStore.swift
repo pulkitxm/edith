@@ -417,7 +417,10 @@ final class UsageStore: FeatureModule {
             return
         }
 
-        guard let latest = await currentClaudeCredential(reload: true) else {
+        guard
+            let latest = await currentClaudeCredential(
+                reload: true, rejectingAccessToken: credential.accessToken)
+        else {
             limitsError = "Claude Code token not found"
             diag("token re-read failed across persisted and login shell sources")
             keepOrBlankMenuBar()
@@ -709,10 +712,13 @@ final class UsageStore: FeatureModule {
         }
     }
 
-    private func currentClaudeCredential(reload: Bool = false) async -> ClaudeOAuthCredential? {
+    private func currentClaudeCredential(
+        reload: Bool = false, rejectingAccessToken: String? = nil
+    ) async -> ClaudeOAuthCredential? {
         let credential =
             reload
-            ? await claudeCredentialSession.reload() : await claudeCredentialSession.current()
+            ? await claudeCredentialSession.reload(rejectingAccessToken: rejectingAccessToken)
+            : await claudeCredentialSession.current()
         guard let credential else {
             Log.usage.error("no token found across persisted and login shell sources")
             return nil

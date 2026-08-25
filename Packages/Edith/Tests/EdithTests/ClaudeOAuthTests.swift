@@ -353,6 +353,67 @@ private final class ClaudeShellCredentialQueue: @unchecked Sendable {
         #expect(shell.calls == 2)
     }
 
+    @Test func rejectedPersistedCredentialFallsBackToTheShellOnce() async throws {
+        let persisted = try #require(
+            ClaudeOAuthCredential.decode(
+                credentialData("persisted-token"), source: .keychain))
+        let shell = ClaudeShellCredentialQueue(tokens: ["rotated-shell-token"])
+        let session = ClaudeCredentialSession(
+            persistedReader: { persisted },
+            shellReader: { shell.next() })
+
+        let initial = await session.current()
+        let recovered = await session.reload(rejectingAccessToken: "persisted-token")
+        let cached = await session.current()
+
+        #expect(initial?.accessToken == "persisted-token")
+        #expect(recovered?.accessToken == "rotated-shell-token")
+        #expect(recovered?.source == .shell)
+        #expect(cached?.accessToken == "rotated-shell-token")
+        #expect(shell.calls == 1)
+    }
+
+    @Test func rotatedPersistedCredentialStillPrecedesTheShellOnRetry() async throws {
+        let original = try #require(
+            ClaudeOAuthCredential.decode(
+                credentialData("persisted-token"), source: .keychain))
+        let rotated = try #require(
+            ClaudeOAuthCredential.decode(
+                credentialData("rotated-persisted-token"), source: .keychain))
+        var reads = 0
+        let shell = ClaudeShellCredentialQueue(tokens: ["shell-token"])
+        let session = ClaudeCredentialSession(
+            persistedReader: {
+                reads += 1
+                return reads == 1 ? original : rotated
+            },
+            shellReader: { shell.next() })
+
+        let initial = await session.current()
+        let recovered = await session.reload(rejectingAccessToken: "persisted-token")
+
+        #expect(initial?.accessToken == "persisted-token")
+        #expect(recovered?.accessToken == "rotated-persisted-token")
+        #expect(recovered?.source == .keychain)
+        #expect(shell.calls == 0)
+    }
+
+    @Test func persistedRejectionIsLimitedToOneLoad() async throws {
+        let persisted = try #require(
+            ClaudeOAuthCredential.decode(
+                credentialData("persisted-token"), source: .keychain))
+        let session = ClaudeCredentialSession(
+            persistedReader: { persisted },
+            shellReader: { .missing })
+
+        _ = await session.current()
+        let rejected = await session.reload(rejectingAccessToken: "persisted-token")
+        let nextLoad = await session.current()
+
+        #expect(rejected == nil)
+        #expect(nextLoad?.accessToken == "persisted-token")
+    }
+
     private func credentialData(_ accessToken: String) throws -> Data {
         try JSONSerialization.data(withJSONObject: [
             "claudeAiOauth": [

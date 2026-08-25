@@ -181,17 +181,17 @@ final class ClaudeCredentialSession {
         return await load()
     }
 
-    func reload() async -> ClaudeOAuthCredential? {
+    func reload(rejectingAccessToken: String? = nil) async -> ClaudeOAuthCredential? {
         cached = nil
-        return await load()
+        return await load(rejectingAccessToken: rejectingAccessToken)
     }
 
     func store(_ credential: ClaudeOAuthCredential) {
         cached = credential
     }
 
-    private func load() async -> ClaudeOAuthCredential? {
-        if let credential = persistedReader() {
+    private func load(rejectingAccessToken: String? = nil) async -> ClaudeOAuthCredential? {
+        if let credential = persistedReader(), credential.accessToken != rejectingAccessToken {
             cached = credential
             return credential
         }
