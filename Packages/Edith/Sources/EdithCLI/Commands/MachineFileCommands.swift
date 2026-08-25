@@ -71,10 +71,23 @@ struct MachineFilesListCommand: AsyncParsableCommand {
 
 struct MachineFilesGetCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "get", abstract: "Download a file from a machine.")
+        commandName: "get", abstract: "Download a file from a machine.",
+        discussion: """
+            Existing files are kept by adding a number. Pass --replace to preview
+            replacement, then add --yes to confirm it.
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
+
+    @Flag(help: "Show the resolved destination without downloading.")
+    var dryRun = false
+
+    @Flag(help: "Replace a destination file with the same name.")
+    var replace = false
+
+    @Flag(help: "Confirm replacement requested with --replace.")
+    var yes = false
 
     @Argument(help: "Machine name, ssh alias or id.")
     var machine: String
@@ -87,41 +100,50 @@ struct MachineFilesGetCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let runner = try await MachineResolver.runner(machine)
-            let destination = URL(
-                fileURLWithPath: (local ?? (remote as NSString).lastPathComponent as String)
-                    .expandingTilde())
-            let progress = CLIProgress.forCommand(json: json)
-            let expected = await runner.ssh.remoteFileSize(remote)
-            let meter = TransferMeter(
-                total: expected, label: (remote as NSString).lastPathComponent)
-            progress.begin(meter.text(sent: 0))
-            do {
-                try await RemoteFileOperationExecution.download(
-                    remotePath: remote, to: destination
-                ) { remotePath, localURL in
-                    try await runner.ssh.download(remotePath: remotePath, to: localURL) { written in
-                        progress.update(meter.text(sent: written))
-                    }
-                }
-                progress.end()
-            } catch {
-                progress.end()
-                throw CLIFailure("download failed: \(error.localizedDescription)")
+            let source = try await CLIEnvironment.remoteTransferTarget(machine)
+            let remoteName = (remote as NSString).lastPathComponent
+            let requested = URL(
+                fileURLWithPath: (local ?? remoteName).expandingTilde()
+            ).standardizedFileURL
+            var isDirectory: ObjCBool = false
+            let destination =
+                (FileManager.default.fileExists(
+                    atPath: requested.path, isDirectory: &isDirectory) && isDirectory.boolValue)
+                    || local?.hasSuffix("/") == true
+                ? requested.appendingPathComponent(remoteName) : requested
+            let directory = destination.deletingLastPathComponent()
+            var parentIsDirectory: ObjCBool = false
+            guard
+                FileManager.default.fileExists(
+                    atPath: directory.path, isDirectory: &parentIsDirectory),
+                parentIsDirectory.boolValue
+            else {
+                throw CLIFailure.notFound("no destination directory at \(directory.path)")
             }
-            let size =
-                (try? FileManager.default.attributesOfItem(atPath: destination.path)[.size])
-                as? Int ?? 0
-            guard !json else {
-                CLIOut.json(
-                    .object([
-                        "remote": .string(remote),
-                        "local": .string(destination.path),
-                        "sizeBytes": .int(size),
-                    ]))
+            let local = RemoteTransferEndpoint.local(
+                machineID: UUID(uuidString: "00000000-0000-0000-0000-000000000000")!,
+                name: "This Mac")
+            let existing = try await local.list(directory.path)
+            let plan = RemoteTransferOperationExecution.plan(
+                sourcePath: remote, destinationPath: destination.path, existing: existing,
+                resolution: RemoteTransferCLI.resolution(replace: replace))
+            let confirmationMissing = replace && !yes && !plan.replacements.isEmpty
+            if RemoteTransferCLI.shouldPreview(
+                plan, dryRun: dryRun, replace: replace, yes: yes)
+            {
+                RemoteTransferCLI.reportPlan(
+                    operation: RemoteFileOperation.download.descriptor.id, verb: "download",
+                    source: source.machine.name, destinationMachine: nil, plan: plan,
+                    dryRun: dryRun, confirmationMissing: confirmationMissing, json: json)
                 return
             }
-            CLIOut.out("\(destination.path)  \(ByteFormatter.string(Int64(size)))")
+            let outcome = try await RemoteTransferOperationExecution.execute(
+                plan, from: source.endpoint, to: local,
+                confirmsReplacement: replace && yes)
+            try RemoteTransferCLI.reportOutcome(
+                operation: RemoteFileOperation.download.descriptor.id,
+                completedVerb: "downloaded", source: source.machine.name,
+                destinationMachine: nil, plan: plan, outcome: outcome, json: json)
         }
     }
 }
@@ -251,10 +273,23 @@ struct MachineFilesRevealCommand: AsyncParsableCommand {
 
 struct MachineFilesPutCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "put", abstract: "Upload a file to a machine.")
+        commandName: "put", abstract: "Upload a file to a machine.",
+        discussion: """
+            Existing files are kept by adding a number. Pass --replace to preview
+            replacement, then add --yes to confirm it.
+            """)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
+
+    @Flag(help: "Show the resolved destination without uploading.")
+    var dryRun = false
+
+    @Flag(help: "Replace a destination file with the same name.")
+    var replace = false
+
+    @Flag(help: "Confirm replacement requested with --replace.")
+    var yes = false
 
     @Argument(help: "Machine name, ssh alias or id.")
     var machine: String
@@ -268,39 +303,46 @@ struct MachineFilesPutCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let source = URL(fileURLWithPath: local.expandingTilde())
-            guard FileManager.default.fileExists(atPath: source.path) else {
+            var isDirectory: ObjCBool = false
+            guard
+                FileManager.default.fileExists(
+                    atPath: source.path, isDirectory: &isDirectory), !isDirectory.boolValue
+            else {
                 throw CLIFailure.notFound("no file at \(source.path)")
             }
-            let runner = try await MachineResolver.runner(machine)
-            let destination = try await RemoteDestination.resolve(
-                remote, named: source.lastPathComponent, on: runner)
-            let progress = CLIProgress.forCommand(json: json)
-            let expected =
-                (try? FileManager.default.attributesOfItem(atPath: source.path)[.size]) as? Int64
-            let meter = TransferMeter(total: expected, label: source.lastPathComponent)
-            progress.begin(meter.text(sent: 0))
-            do {
-                try await runner.ssh.upload(localURL: source, toRemotePath: destination) { sent in
-                    progress.update(meter.text(sent: sent))
-                }
-                progress.end()
-            } catch {
-                progress.end()
-                throw CLIFailure("upload failed: \(error.localizedDescription)")
-            }
-            let size =
-                (try? FileManager.default.attributesOfItem(atPath: source.path)[.size]) as? Int
-                ?? 0
-            guard !json else {
-                CLIOut.json(
-                    .object([
-                        "local": .string(source.path),
-                        "remote": .string(destination),
-                        "sizeBytes": .int(size),
-                    ]))
+            let target = try await CLIEnvironment.remoteTransferTarget(machine)
+            let remoteIsDirectory =
+                remote.hasSuffix("/") ? true : try await target.endpoint.isDirectory(remote)
+            let trimmed = remote.hasSuffix("/") ? String(remote.dropLast()) : remote
+            let destination =
+                remoteIsDirectory
+                ? FileListing.join(parent: trimmed, name: source.lastPathComponent) : remote
+            let rawDirectory = (destination as NSString).deletingLastPathComponent
+            let directory = rawDirectory.isEmpty ? "." : rawDirectory
+            let existing = try await target.endpoint.list(directory)
+            let plan = RemoteTransferOperationExecution.plan(
+                sourcePath: source.path, destinationPath: destination, existing: existing,
+                resolution: RemoteTransferCLI.resolution(replace: replace))
+            let confirmationMissing = replace && !yes && !plan.replacements.isEmpty
+            let operation = RemoteTransferOperation.uploadFile.descriptor.id
+            if RemoteTransferCLI.shouldPreview(
+                plan, dryRun: dryRun, replace: replace, yes: yes)
+            {
+                RemoteTransferCLI.reportPlan(
+                    operation: operation, verb: "upload", source: "This Mac",
+                    destinationMachine: target.machine.name, plan: plan, dryRun: dryRun,
+                    confirmationMissing: confirmationMissing, json: json)
                 return
             }
-            CLIOut.out("\(destination)  \(ByteFormatter.string(Int64(size)))")
+            let local = RemoteTransferEndpoint.local(
+                machineID: UUID(uuidString: "00000000-0000-0000-0000-000000000000")!,
+                name: "This Mac")
+            let outcome = try await RemoteTransferOperationExecution.execute(
+                plan, from: local, to: target.endpoint,
+                confirmsReplacement: replace && yes)
+            try RemoteTransferCLI.reportOutcome(
+                operation: operation, completedVerb: "uploaded", source: "This Mac",
+                destinationMachine: target.machine.name, plan: plan, outcome: outcome, json: json)
         }
     }
 }
@@ -385,24 +427,5 @@ struct MachinesFilesOpenCommand: AsyncParsableCommand {
 extension String {
     func expandingTilde() -> String {
         (self as NSString).expandingTildeInPath
-    }
-}
-
-enum RemoteDestination {
-    static func resolve(_ remote: String, named filename: String, on runner: RemoteRunner)
-        async throws -> String
-    {
-        let trimmed = remote.hasSuffix("/") ? String(remote.dropLast()) : remote
-        guard !trimmed.isEmpty else { return "/" + filename }
-        if remote.hasSuffix("/") { return joined(trimmed, filename) }
-        let probe = "test -d \(ShellQuote.quote(trimmed)) && echo dir || echo file"
-        let answer = try? await runner.text(probe, timeout: 20)
-        let isDirectory =
-            (answer ?? "").trimmingCharacters(in: .whitespacesAndNewlines) == "dir"
-        return isDirectory ? joined(trimmed, filename) : remote
-    }
-
-    static func joined(_ directory: String, _ filename: String) -> String {
-        directory + "/" + filename
     }
 }

@@ -1101,19 +1101,3 @@ import Testing
         }
     }
 }
-
-@Suite struct RemoteUploadDestinationTests {
-    @Test func aTrailingSlashMeansPutItInThatDirectory() {
-        #expect(RemoteDestination.joined("/tmp/uploads", "clip.mov") == "/tmp/uploads/clip.mov")
-    }
-
-    @Test func aNameWithSpacesSurvivesBeingJoined() {
-        #expect(
-            RemoteDestination.joined("/home/pulkit/Desktop/uploads", "Screen Recording 1.mov")
-                == "/home/pulkit/Desktop/uploads/Screen Recording 1.mov")
-    }
-
-    @Test func aBareSlashStillProducesAnAbsolutePath() {
-        #expect(RemoteDestination.joined("", "clip.mov") == "/clip.mov")
-    }
-}

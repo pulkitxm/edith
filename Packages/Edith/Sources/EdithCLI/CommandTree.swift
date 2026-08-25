@@ -928,8 +928,10 @@ public enum CommandTree {
                                 options: ["--json", "--help", "-a", "--all"],
                                 arguments: [.machine, .remotePath]),
                             CommandNode(
-                                "get", "Download a file.", options: ["--json"],
-                                arguments: [.machine, .remotePath, .localPath]),
+                                "get", "Download a file.",
+                                options: ["--json", "--help", "--dry-run", "--replace", "--yes"],
+                                arguments: [.machine, .remotePath, .localPath],
+                                destructivePolicy: .previewThenYes),
                             CommandNode(
                                 "preview", "Print a text preview of a remote file.",
                                 options: common, arguments: [.machine, .remotePath]),
@@ -956,14 +958,22 @@ public enum CommandTree {
                                 repeatingArgument: .remotePath,
                                 destructivePolicy: .previewThenYes),
                             CommandNode(
-                                "put", "Upload a file.", options: ["--json"],
-                                arguments: [.machine, .localPath, .remotePath]),
+                                "put", "Upload a file.",
+                                options: ["--json", "--help", "--dry-run", "--replace", "--yes"],
+                                arguments: [.machine, .localPath, .remotePath],
+                                destructivePolicy: .previewThenYes),
                             CommandNode(
-                                "cp", "Copy files into a directory there.", options: common,
-                                arguments: [.machine, .remotePath]),
+                                "cp", "Copy files into a directory there.",
+                                options: ["--json", "--help", "--dry-run", "--replace", "--yes"],
+                                arguments: [.machine, .remotePath],
+                                repeatingArgument: .remotePath,
+                                destructivePolicy: .previewThenYes),
                             CommandNode(
-                                "mv", "Move files into a directory there.", options: common,
-                                arguments: [.machine, .remotePath]),
+                                "mv", "Move files into a directory there.",
+                                options: ["--json", "--help", "--dry-run", "--replace", "--yes"],
+                                arguments: [.machine, .remotePath],
+                                repeatingArgument: .remotePath,
+                                destructivePolicy: .previewThenYes),
                             CommandNode(
                                 "rename", "Rename one file there.", options: common,
                                 arguments: [.machine, .remotePath]),

@@ -1270,6 +1270,13 @@ private extension RemoteTransferOperation {
             userInterface(
                 "Machine finder", "drag files between machines",
                 ["box", "server", "/tmp/a", "--into", "/srv", "--dry-run"])
+        case .uploadFile:
+            userInterface(
+                "Machine finder", "upload a local file", ["box", "./x", "/tmp/x"])
+        case .copyWithinMachine:
+            userInterface("Machine finder", "copy files", ["box", "/a", "/b"])
+        case .moveWithinMachine:
+            userInterface("Machine finder", "cut and paste files", ["box", "/a", "/b"])
         }
     }
 }

@@ -388,9 +388,6 @@ enum UIParity {
         "ed companion ingest /tmp/note.md",
         "ed companion ingest /tmp/notes",
         "ed companion ingest /tmp/voice-memo.wav",
-        "ed machines files cp box /a /b",
-        "ed machines files mv box /a /b",
-        "ed machines files put box ./x /tmp/x",
         "ed quinjet focus 1",
         "ed quinjet projects --machine build",
     ]

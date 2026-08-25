@@ -230,14 +230,20 @@ import Testing
         #expect(listFlags.candidates == ["--all"])
     }
 
-    @Test func batchTransferCompletionKeepsEveryPathSlotTyped() throws {
+    @Test func transferCompletionKeepsEveryPathSlotTyped() throws {
         let files = try #require(CommandTree.root.child("machines")?.child("files"))
+        let copy = try #require(files.child("cp"))
         let getMany = try #require(files.child("get-many"))
+        let move = try #require(files.child("mv"))
         let transfer = try #require(files.child("transfer"))
 
+        #expect(copy.arguments == [.machine, .remotePath])
+        #expect(copy.repeatingArgument == .remotePath)
         #expect(getMany.arguments == [.machine, .remotePath])
         #expect(getMany.repeatingArgument == .remotePath)
         #expect(getMany.optionValues["--to"] == .localPath)
+        #expect(move.arguments == [.machine, .remotePath])
+        #expect(move.repeatingArgument == .remotePath)
         #expect(transfer.arguments == [.machine, .machine, .remotePath])
         #expect(transfer.repeatingArgument == .remotePath)
         #expect(transfer.optionValues["--into"] == .remotePath)

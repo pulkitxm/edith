@@ -36,10 +36,9 @@ enum FileOps {
         }
     }
 
-    static func apply(
-        _ command: String, machine name: String, describing what: String, json: Bool,
-        fields: [String: JSONValue]
-    ) async throws {
+    static func run(_ command: String, machine name: String, describing what: String) async throws
+        -> Machine
+    {
         let runner = try await MachineResolver.runner(name)
         let result = try await runner.run(command, timeout: 300)
         let detail = result.combinedText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -47,14 +46,47 @@ enum FileOps {
             throw CLIFailure(
                 "\(what) failed on \(runner.machine.name)" + (detail.isEmpty ? "" : ": \(detail)"))
         }
-        guard !json else {
-            var payload = fields
-            payload["machine"] = .string(runner.machine.name)
-            payload["done"] = .bool(true)
-            CLIOut.json(.object(payload))
+        return runner.machine
+    }
+}
+
+enum WithinMachineTransferCLI {
+    static func run(
+        moving: Bool, machine: String, sources: [String], destination: String,
+        dryRun: Bool, replace: Bool, yes: Bool, json: Bool
+    ) async throws {
+        guard DropResolver.isDropAllowed(paths: sources, destination: destination) else {
+            throw CLIFailure("the destination cannot be a source, its parent or its descendant")
+        }
+        let target = try await CLIEnvironment.remoteDirectoryTarget(machine)
+        let existing = try await target.endpoint.list(destination)
+        let plan = RemoteTransferOperationExecution.plan(
+            paths: sources, destination: destination, existing: existing,
+            resolution: RemoteTransferCLI.resolution(replace: replace))
+        let confirmationMissing = replace && !yes && !plan.replacements.isEmpty
+        let operation =
+            moving
+            ? RemoteTransferOperation.moveWithinMachine.descriptor.id
+            : RemoteTransferOperation.copyWithinMachine.descriptor.id
+        let verb = moving ? "move" : "copy"
+        if RemoteTransferCLI.shouldPreview(
+            plan, dryRun: dryRun, replace: replace, yes: yes)
+        {
+            RemoteTransferCLI.reportPlan(
+                operation: operation, verb: verb, source: target.machine.name,
+                destinationMachine: target.machine.name, plan: plan, dryRun: dryRun,
+                confirmationMissing: confirmationMissing, json: json)
             return
         }
-        CLIOut.out(what)
+        guard
+            let command = RemoteTransferOperationExecution.withinMachineCommand(
+                plan, moving: moving)
+        else { return }
+        let applied = try await FileOps.run(
+            command, machine: machine, describing: "\(verb) \(sources.count) item(s)")
+        RemoteTransferCLI.reportApplied(
+            operation: operation, completedVerb: moving ? "moved" : "copied",
+            machine: applied.name, plan: plan, json: json)
     }
 }
 
@@ -64,6 +96,15 @@ struct MachinesFilesCopyCommand: AsyncParsableCommand {
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
+
+    @Flag(help: "Show the resolved destinations without copying.")
+    var dryRun = false
+
+    @Flag(help: "Replace destination items with matching names.")
+    var replace = false
+
+    @Flag(help: "Confirm replacement requested with --replace.")
+    var yes = false
 
     @Argument(help: "Machine name, ssh alias or id.")
     var machine: String
@@ -78,11 +119,9 @@ struct MachinesFilesCopyCommand: AsyncParsableCommand {
             }
             let destination = paths[paths.count - 1]
             let sources = Array(paths.dropLast())
-            try await FileOps.apply(
-                FileOperations.copyCommand(paths: sources, toDirectory: destination),
-                machine: machine,
-                describing: "copied \(sources.count) into \(destination)", json: json,
-                fields: ["copied": .strings(sources), "into": .string(destination)])
+            try await WithinMachineTransferCLI.run(
+                moving: false, machine: machine, sources: sources, destination: destination,
+                dryRun: dryRun, replace: replace, yes: yes, json: json)
         }
     }
 }
@@ -93,6 +132,15 @@ struct MachinesFilesMoveCommand: AsyncParsableCommand {
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
+
+    @Flag(help: "Show the resolved destinations without moving.")
+    var dryRun = false
+
+    @Flag(help: "Replace destination items with matching names.")
+    var replace = false
+
+    @Flag(help: "Confirm replacement requested with --replace.")
+    var yes = false
 
     @Argument(help: "Machine name, ssh alias or id.")
     var machine: String
@@ -107,11 +155,9 @@ struct MachinesFilesMoveCommand: AsyncParsableCommand {
             }
             let destination = paths[paths.count - 1]
             let sources = Array(paths.dropLast())
-            try await FileOps.apply(
-                FileOperations.moveCommand(paths: sources, toDirectory: destination),
-                machine: machine,
-                describing: "moved \(sources.count) into \(destination)", json: json,
-                fields: ["moved": .strings(sources), "into": .string(destination)])
+            try await WithinMachineTransferCLI.run(
+                moving: true, machine: machine, sources: sources, destination: destination,
+                dryRun: dryRun, replace: replace, yes: yes, json: json)
         }
     }
 }

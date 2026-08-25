@@ -521,6 +521,90 @@ private final class PausedPreviewImageLoader {
         #expect(model.errorMessage == nil)
     }
 
+    @Test func uploadUsesTheSharedKeepBothPlan() async throws {
+        let (model, root) = try sandbox()
+        let sourceRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-upload-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: sourceRoot, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: sourceRoot)
+        }
+        try write("report.txt", into: root, contents: "old")
+        try write("report.txt", into: sourceRoot, contents: "new")
+        await model.load()
+
+        await model.upload([sourceRoot.appendingPathComponent("report.txt")])
+
+        #expect(
+            try String(
+                contentsOf: root.appendingPathComponent("report.txt"),
+                encoding: .utf8) == "old")
+        #expect(
+            try String(
+                contentsOf: root.appendingPathComponent("report 2.txt"),
+                encoding: .utf8) == "new")
+        #expect(model.errorMessage == nil)
+    }
+
+    @Test func uploadKeepsItsTransferErrorAfterReloadingTheDestination() async throws {
+        let (model, root) = try sandbox()
+        let sourceRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-upload-failure-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: sourceRoot, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o700], ofItemAtPath: root.path)
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: sourceRoot)
+        }
+        let source = sourceRoot.appendingPathComponent("report.txt")
+        try Data("new".utf8).write(to: source)
+        await model.load()
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o500], ofItemAtPath: root.path)
+
+        await model.upload([source])
+
+        #expect(model.errorMessage != nil)
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: root.appendingPathComponent("report.txt").path))
+    }
+
+    @Test func localFileDropUsesTheSharedConflictResolution() async throws {
+        let (model, root) = try sandbox()
+        let sourceRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-upload-drop-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: sourceRoot, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: sourceRoot)
+        }
+        let source = sourceRoot.appendingPathComponent("report.txt")
+        try Data("new".utf8).write(to: source)
+        try write("report.txt", into: root, contents: "old")
+        await model.load()
+
+        let intent = DropIntent.uploadLocalFiles([source.path])
+        await model.perform(intent: intent, destination: root.path)
+
+        #expect(model.pendingConflict?.names == ["report.txt"])
+        model.pendingConflict = nil
+        await model.commit(
+            intent: intent, destination: root.path,
+            resolutions: ["report.txt": .replace])
+
+        #expect(
+            try String(
+                contentsOf: root.appendingPathComponent("report.txt"),
+                encoding: .utf8) == "new")
+        #expect(model.errorMessage == nil)
+    }
+
     @Test func destinationListingFailurePreventsCrossMachineTransfer() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-finder-transfer-list-\(UUID().uuidString)")

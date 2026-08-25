@@ -173,22 +173,3 @@ public final class CLIProgress: @unchecked Sendable {
         text.count >= width ? text : String(repeating: " ", count: width - text.count) + text
     }
 }
-
-public struct TransferMeter: Sendable {
-    public let total: Int64?
-    public let label: String
-
-    public init(total: Int64?, label: String) {
-        self.total = total
-        self.label = label
-    }
-
-    public func text(sent: Int64) -> String {
-        guard let total, total > 0 else {
-            return "\(label)  \(ByteFormatter.string(sent))"
-        }
-        let percent = Int((Double(sent) / Double(total) * 100).rounded())
-        return
-            "\(label)  \(ByteFormatter.string(sent)) of \(ByteFormatter.string(total))  \(min(percent, 100))%"
-    }
-}

@@ -124,36 +124,36 @@ listing until it is refreshed with Command-R. The traffic only goes the other
 way, through `undo`.
 
 The timeouts are fixed and worth knowing when a machine is slow: 15 seconds for
-the `$HOME` probe, 20 for the `test -d` probe `put` makes, 30 for the `stat`
-calls around a transfer, the one `get` makes to size the remote file and the one
-`put` makes to check what landed, 45 for a directory listing, 120 for `search`
-and `info`, 300 for `cp`, `mv`, `rename`, `mkdir`, `rm` and `duplicate`, and 20
-for the `undo` reply. The transfer itself has no timeout at all, because a slow
-file is not a broken one.
+the `$HOME` probe, 20 for the file-kind probe `put` makes, 30 for the `stat`
+check after an upload, 45 for a directory listing or final staged publication,
+120 for `search` and `info`, 300 for `cp`, `mv`, `rename`, `mkdir`, `rm` and
+`duplicate`, and 20 for the `undo` reply. The byte transfer itself has no total
+duration cap, because a slow file is not necessarily a broken one.
 
-A failed command and a broken connection are different exit codes on purpose. A
-command the machine ran and rejected exits 1 with the machine's own message
-appended; a connection that could not be opened or that dropped mid-command
-exits 4. Gate a script on 4 for "try again later" and on 1 for "this will not
-work".
+A failed command and a connection that cannot be opened are different exit
+codes. A command the machine ran and rejected exits 1 with the machine's own
+message appended, while a connection that cannot be established exits 4. Once
+a multi-file transfer begins, individual failures are collected into its one
+outcome and any failed item makes the final status 1.
 
 `--json` never changes what happens on the machine, only what is printed. Every
 verb here prints exactly one document per invocation, with object keys sorted,
 diagnostics on stderr only, and no streaming mode. `search` is the one whose
 document is an array rather than an object, and `rm`'s dry run is the one whose
-document has a different shape from its success. The transfer meter on `get` and
-`put` is the one thing `--json` switches off rather than reshapes, because it is
-stderr furniture rather than anything printed on stdout.
+document has a different shape from its success. Transfer progress on
+`get-many` and `transfer` is suppressed by `--json`, because it is stderr
+furniture rather than stdout data.
 
-`--yes` exists on `rm` only, and only `--delete` consults it. Passing `--yes`
-without `--delete` changes nothing: trashing never asks, because the machine's
-trash can give the file back.
+`--yes` confirms `--replace` for `get`, `get-many`, `put`, `transfer`, `cp` and
+`mv`. It also confirms `rm --delete`. Passing it without the matching mode
+changes nothing.
 
-The Files window and the CLI share the same `search`, `info`, `duplicate`,
-`undo`, `rename` and `rm` operation contracts. Their paths, timeouts and safety
-rules therefore stay aligned. Permanent removal previews without connecting and
-does not run until `--yes` is present. The window presents the equivalent
-confirmation before it asks the same operation executor to delete immediately.
+The Files window and the CLI share the same transfer, `search`, `info`,
+`duplicate`, `undo`, `rename` and `rm` operation contracts. Their paths,
+timeouts and safety rules therefore stay aligned. Permanent removal previews
+without connecting and does not run until `--yes` is present. The window
+presents the equivalent confirmation before it asks the same operation executor
+to delete immediately.
 
 The remote trash is the freedesktop directory under the login home, whatever the
 machine's desktop environment would normally use. On a machine with no desktop

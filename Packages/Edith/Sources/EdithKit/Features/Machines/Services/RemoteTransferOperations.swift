@@ -5,6 +5,9 @@ import Foundation
 public enum RemoteTransferOperation: String, CaseIterable, Sendable {
     case downloadSelection
     case transferBetweenMachines
+    case uploadFile
+    case copyWithinMachine
+    case moveWithinMachine
 
     public var descriptor: UserOperationDescriptor {
         switch self {
@@ -19,6 +22,24 @@ public enum RemoteTransferOperation: String, CaseIterable, Sendable {
                 id: UserOperationID(rawValue: "machines.files.transfer-between-machines"),
                 summary: "Transfer files between two machines.",
                 cli: ["machines", "files", "transfer"], effect: .write,
+                requiresPreview: true)
+        case .uploadFile:
+            UserOperationDescriptor(
+                id: UserOperationID(rawValue: "machines.files.upload-file"),
+                summary: "Upload a file to a machine.",
+                cli: ["machines", "files", "put"], effect: .write,
+                requiresPreview: true)
+        case .copyWithinMachine:
+            UserOperationDescriptor(
+                id: UserOperationID(rawValue: "machines.files.copy-within-machine"),
+                summary: "Copy files on a machine.",
+                cli: ["machines", "files", "cp"], effect: .write,
+                requiresPreview: true)
+        case .moveWithinMachine:
+            UserOperationDescriptor(
+                id: UserOperationID(rawValue: "machines.files.move-within-machine"),
+                summary: "Move files on a machine.",
+                cli: ["machines", "files", "mv"], effect: .write,
                 requiresPreview: true)
         }
     }
@@ -102,27 +123,38 @@ public enum RemoteTransferError: LocalizedError, Equatable, Sendable {
 }
 
 public struct RemoteTransferEndpoint: Sendable {
+    public typealias IsDirectory = @Sendable (String) async throws -> Bool
     public typealias List = @Sendable (String) async throws -> [RemoteFileEntry]
     public typealias Fetch = @Sendable (String, URL) async throws -> Void
     public typealias Store = @Sendable (URL, String, Bool) async throws -> Void
 
     public let machineID: UUID
     public let name: String
+    private let isDirectoryAction: IsDirectory
     private let listAction: List
     private let fetchAction: Fetch
     private let storeAction: Store
 
     public init(
         machineID: UUID, name: String,
+        isDirectory: @escaping IsDirectory = { _ in false },
         list: @escaping List,
         fetch: @escaping Fetch,
         store: @escaping Store
     ) {
         self.machineID = machineID
         self.name = name
+        isDirectoryAction = isDirectory
         listAction = list
         fetchAction = fetch
         storeAction = store
+    }
+
+    public func isDirectory(_ path: String) async throws -> Bool {
+        try Task.checkCancellation()
+        let result = try await isDirectoryAction(path)
+        try Task.checkCancellation()
+        return result
     }
 
     public func list(_ path: String) async throws -> [RemoteFileEntry] {
@@ -140,6 +172,14 @@ public struct RemoteTransferEndpoint: Sendable {
     public static func local(machineID: UUID, name: String) -> RemoteTransferEndpoint {
         RemoteTransferEndpoint(
             machineID: machineID, name: name,
+            isDirectory: { path in
+                try Task.checkCancellation()
+                var isDirectory: ObjCBool = false
+                let exists = FileManager.default.fileExists(
+                    atPath: path, isDirectory: &isDirectory)
+                try Task.checkCancellation()
+                return exists && isDirectory.boolValue
+            },
             list: { path in try localEntries(path) },
             fetch: { path, destination in
                 try Task.checkCancellation()
@@ -161,6 +201,22 @@ public struct RemoteTransferEndpoint: Sendable {
     ) -> RemoteTransferEndpoint {
         RemoteTransferEndpoint(
             machineID: machine.id, name: machine.name,
+            isDirectory: { path in
+                try Task.checkCancellation()
+                let quoted = ShellQuote.quote(path)
+                let result = try await connection.run(
+                    "if test -d \(quoted); then printf directory; else printf other; fi",
+                    timeout: 20)
+                try Task.checkCancellation()
+                guard result.succeeded else {
+                    let detail = result.stderrText.trimmingCharacters(
+                        in: .whitespacesAndNewlines)
+                    throw RemoteTransferError.listingFailed(
+                        detail.isEmpty
+                            ? "Could not inspect \(path) on \(machine.name)." : detail)
+                }
+                return result.stdoutText == "directory"
+            },
             list: { path in
                 let result = try await connection.run(
                     FileListing.command(path: path, showHidden: true), timeout: 45)
@@ -263,6 +319,78 @@ public struct RemoteTransferEndpoint: Sendable {
             + "if [ \"$edith_status\" -ne 0 ]; then "
             + "printf '%s\\n' 'The destination changed before publication.' >&2; "
             + "exit \"$edith_status\"; fi"
+    }
+
+    static func withinMachinePublishCommand(
+        staged: String, target: String, replacing: Bool
+    ) -> String {
+        let source = ShellQuote.quote(staged)
+        let destination = ShellQuote.quote(target)
+        let nestedSource = ShellQuote.quote(
+            FileListing.join(
+                parent: target, name: (staged as NSString).lastPathComponent))
+        let prepare =
+            "edith_inode() { stat -c '%d:%i' \"$1\" 2>/dev/null"
+            + " || stat -f '%d:%i' \"$1\" 2>/dev/null; }; "
+            + "edith_exists() { [ -e \"$1\" ] || [ -L \"$1\" ]; }; "
+            + "edith_source_inode=$(edith_inode \(source)) || exit 74; "
+        let publish =
+            "edith_status=0; mv -n \(source) \(destination) || edith_status=$?; "
+            + "if [ \"$edith_status\" -eq 0 ] && edith_exists \(source); then "
+            + "edith_status=73; fi; "
+            + "if [ \"$edith_status\" -eq 0 ]; then "
+            + "edith_target_inode=$(edith_inode \(destination)) || edith_status=$?; fi; "
+            + "if [ \"$edith_status\" -eq 0 ]"
+            + " && [ \"$edith_target_inode\" != \"$edith_source_inode\" ]; then "
+            + "edith_status=73; fi; "
+            + "if [ \"$edith_status\" -ne 0 ]; then "
+            + "edith_nested_inode=$(edith_inode \(nestedSource)) || true; "
+            + "if [ \"$edith_nested_inode\" = \"$edith_source_inode\" ]"
+            + " && ! edith_exists \(source); then "
+            + "mv -n \(nestedSource) \(source) >/dev/null 2>&1 || true; fi; fi; "
+        guard replacing else {
+            return
+                prepare + publish
+                + "if [ \"$edith_status\" -ne 0 ]; then "
+                + "printf '%s\\n' 'The destination changed before publication.' >&2; "
+                + "exit \"$edith_status\"; fi"
+        }
+
+        let backupRootPath =
+            target + NameConflicts.stagingSuffix + "-backup-" + UUID().uuidString
+        let backupPayloadPath = FileListing.join(parent: backupRootPath, name: "payload")
+        let backupRoot = ShellQuote.quote(backupRootPath)
+        let backupPayload = ShellQuote.quote(backupPayloadPath)
+        return
+            prepare
+            + "edith_had_target=0; "
+            + "if edith_exists \(destination); then "
+            + "umask 077; mkdir \(backupRoot) || exit $?; "
+            + "edith_original_inode=$(edith_inode \(destination))"
+            + " || { edith_status=$?; rmdir \(backupRoot) >/dev/null 2>&1 || true;"
+            + " exit \"$edith_status\"; }; "
+            + "mv \(destination) \(backupPayload) || { edith_status=$?; "
+            + "rmdir \(backupRoot) >/dev/null 2>&1 || true; exit \"$edith_status\"; }; "
+            + "edith_backup_inode=$(edith_inode \(backupPayload)) || exit 74; "
+            + "if edith_exists \(destination)"
+            + " || [ \"$edith_backup_inode\" != \"$edith_original_inode\" ]; then "
+            + "if ! edith_exists \(destination); then "
+            + "mv -n \(backupPayload) \(destination) >/dev/null 2>&1 || true; fi; "
+            + "if edith_exists \(backupPayload); then "
+            + "printf '%s%s\\n' 'Transfer failed; original retained at ' \(backupPayload) >&2;"
+            + " fi; exit 73; fi; edith_had_target=1; fi; "
+            + publish
+            + "if [ \"$edith_status\" -eq 0 ]; then "
+            + "if [ \"$edith_had_target\" -eq 1 ]; then rm -rf \(backupRoot) || true; fi; "
+            + "else if [ \"$edith_had_target\" -eq 1 ]; then "
+            + "if ! edith_exists \(destination); then "
+            + "mv -n \(backupPayload) \(destination) >/dev/null 2>&1 || true; "
+            + "edith_restored_inode=$(edith_inode \(destination)) || true; "
+            + "if [ \"$edith_restored_inode\" = \"$edith_original_inode\" ]; then "
+            + "rm -rf \(backupRoot) || true; fi; fi; "
+            + "if edith_exists \(backupPayload); then "
+            + "printf '%s%s\\n' 'Transfer failed; original retained at ' \(backupPayload) >&2;"
+            + " fi; fi; exit \"$edith_status\"; fi"
     }
 
     private static func localEntries(_ path: String) throws -> [RemoteFileEntry] {
@@ -407,6 +535,73 @@ public enum RemoteTransferOperationExecution {
                     replacesExisting: replaces))
         }
         return RemoteTransferPlan(destination: destination, items: items, skipped: skipped)
+    }
+
+    public static func plan(
+        sourcePath: String, destinationPath: String, existing: [RemoteFileEntry],
+        resolution: NameConflictResolution = .keepBoth,
+        caseInsensitive: Bool = true
+    ) -> RemoteTransferPlan {
+        let rawParent = (destinationPath as NSString).deletingLastPathComponent
+        let destination = rawParent.isEmpty ? "." : rawParent
+        let name = (destinationPath as NSString).lastPathComponent
+        var taken = Set(
+            existing.map { NameFolding.key($0.name, caseInsensitive: caseInsensitive) })
+        let collides = taken.contains(
+            NameFolding.key(name, caseInsensitive: caseInsensitive))
+        if collides, resolution == .skip {
+            return RemoteTransferPlan(
+                destination: destination, items: [], skipped: [sourcePath])
+        }
+        let targetName =
+            collides && resolution != .replace
+            ? NameConflicts.claim(
+                name, taken: &taken, caseInsensitive: caseInsensitive)
+            : name
+        let targetPath =
+            rawParent.isEmpty
+            ? targetName : FileListing.join(parent: rawParent, name: targetName)
+        return RemoteTransferPlan(
+            destination: destination,
+            items: [
+                RemoteTransferPlanItem(
+                    sourcePath: sourcePath, destinationPath: targetPath,
+                    replacesExisting: collides && resolution == .replace)
+            ], skipped: [])
+    }
+
+    public static func withinMachineCommand(
+        _ plan: RemoteTransferPlan, moving: Bool
+    ) -> String? {
+        guard
+            plan.items.allSatisfy({ item in
+                DropResolver.isDropAllowed(
+                    paths: [item.sourcePath], destination: item.destinationPath)
+            })
+        else { return nil }
+        let commands = plan.items.map { item in
+            let source = ShellQuote.quote(item.sourcePath)
+            let stageRootPath =
+                item.destinationPath + NameConflicts.stagingSuffix + "-" + UUID().uuidString
+            let stagedPath = FileListing.join(parent: stageRootPath, name: "payload")
+            let stageRoot = ShellQuote.quote(stageRootPath)
+            let staged = ShellQuote.quote(stagedPath)
+            let publish = RemoteTransferEndpoint.withinMachinePublishCommand(
+                staged: stagedPath, target: item.destinationPath,
+                replacing: item.replacesExisting)
+            let success =
+                moving
+                ? "rm -rf \(stageRoot) || true; rm -rf \(source)"
+                : "rm -rf \(stageRoot) || true"
+            let failure =
+                "edith_status=$?; rm -rf \(stageRoot) || true; exit \"$edith_status\""
+            return
+                "umask 077; mkdir \(stageRoot)"
+                + " && if cp -a \(source) \(staged); then "
+                + "if (\(publish)); then \(success); else \(failure); fi; "
+                + "else \(failure); fi"
+        }
+        return commands.isEmpty ? nil : commands.joined(separator: " && ")
     }
 
     public static func execute(
