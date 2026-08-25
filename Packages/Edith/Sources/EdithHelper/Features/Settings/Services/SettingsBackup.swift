@@ -381,6 +381,61 @@ actor SettingsBackupUsageWorker {
     }
 }
 
+let settingsBackupMaximumSettingsBytes = 1_024 * 1_024
+
+func settingsBackupReadSettingsFile(
+    at url: URL, maximumBytes: Int = settingsBackupMaximumSettingsBytes
+) -> Data? {
+    guard maximumBytes >= 0, maximumBytes < Int.max else { return nil }
+    let descriptor = open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
+    guard descriptor >= 0 else { return nil }
+    let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+    var metadata = stat()
+    guard fstat(descriptor, &metadata) == 0, metadata.st_mode & S_IFMT == S_IFREG,
+        metadata.st_size >= 0, UInt64(metadata.st_size) <= UInt64(maximumBytes)
+    else {
+        try? handle.close()
+        return nil
+    }
+    do {
+        var data = Data()
+        while data.count <= maximumBytes {
+            let remaining = maximumBytes + 1 - data.count
+            guard let chunk = try handle.read(upToCount: min(64 * 1_024, remaining)),
+                !chunk.isEmpty
+            else { break }
+            data.append(chunk)
+        }
+        try handle.close()
+        return data.count <= maximumBytes ? data : nil
+    } catch {
+        try? handle.close()
+        return nil
+    }
+}
+
+@MainActor
+func settingsBackupAwaitFinalSettingsExport(
+    after previousExport: Task<Void, Never>?, generation: Int,
+    ownsGeneration: (Int) -> Bool
+) async -> Bool {
+    previousExport?.cancel()
+    await previousExport?.value
+    return !Task.isCancelled && ownsGeneration(generation)
+}
+
+@MainActor
+func settingsBackupDrainSettingsExports(
+    generation: Int, ownsGeneration: (Int) -> Bool, takePending: () -> Data?,
+    publish: (Data) async -> Bool, didPublish: (Bool) -> Void
+) async {
+    while !Task.isCancelled, ownsGeneration(generation), let data = takePending() {
+        let exported = await publish(data)
+        guard !Task.isCancelled, ownsGeneration(generation) else { return }
+        didPublish(exported)
+    }
+}
+
 actor SettingsBackupFileWorker {
     static let shared = SettingsBackupFileWorker()
 
@@ -391,7 +446,7 @@ actor SettingsBackupFileWorker {
         do {
             try FileManager.default.createDirectory(
                 at: localURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if (try? Data(contentsOf: localURL)) != data {
+            if settingsBackupReadSettingsFile(at: localURL) != data {
                 try data.write(to: localURL, options: .atomic)
             }
         } catch {
@@ -402,7 +457,7 @@ actor SettingsBackupFileWorker {
         do {
             return try settingsBackupCoordinateCloud(at: cloudURL, writing: true) {
                 coordinatedURL in
-                if (try? Data(contentsOf: coordinatedURL)) != data {
+                if settingsBackupReadSettingsFile(at: coordinatedURL) != data {
                     try data.write(to: coordinatedURL, options: .atomic)
                 }
                 return true
@@ -1391,19 +1446,25 @@ final class SettingsBackup {
     }
 
     private func drainSettingsExports(generation: Int) async {
-        while !Task.isCancelled, settingsExportGeneration == generation,
-            let data = pendingSettingsData
-        {
-            pendingSettingsData = nil
-            let exported = await SettingsBackupFileWorker.shared.exportSettings(
-                data: data, localURL: localFile, cloudURL: cloudFile,
-                shouldExportCloud: transferDecision(for: .settings).shouldExport)
-            guard !Task.isCancelled, settingsExportGeneration == generation else { return }
-            if exported {
-                SharedDefaults.store.set(
-                    Date().timeIntervalSince1970, forKey: AppStorageKeys.Backup.lastBackupAt)
-            }
-        }
+        await settingsBackupDrainSettingsExports(
+            generation: generation, ownsGeneration: { settingsExportGeneration == $0 },
+            takePending: {
+                let data = pendingSettingsData
+                pendingSettingsData = nil
+                return data
+            },
+            publish: { data in
+                await SettingsBackupFileWorker.shared.exportSettings(
+                    data: data, localURL: localFile, cloudURL: cloudFile,
+                    shouldExportCloud: transferDecision(for: .settings).shouldExport)
+            },
+            didPublish: { exported in
+                if exported {
+                    SharedDefaults.store.set(
+                        Date().timeIntervalSince1970,
+                        forKey: AppStorageKeys.Backup.lastBackupAt)
+                }
+            })
         guard settingsExportGeneration == generation else { return }
         settingsExportTask = nil
         if pendingSettingsData != nil { export() }
@@ -1544,8 +1605,22 @@ final class SettingsBackup {
         persistenceRetryInterval: Duration = SettingsBackup.terminationPersistenceRetryInterval
     ) async {
         prepareForTermination()
-        let settingsData = settingsRestorePending ? nil : snapshot()
-        let shouldExportSettings = transferDecision(for: .settings).shouldExport
+        let previousSettingsExport = settingsExportTask
+        settingsExportGeneration += 1
+        let settingsGeneration = settingsExportGeneration
+        let finalSettingsExport = Task { [weak self] in
+            guard let self else { return }
+            guard
+                await settingsBackupAwaitFinalSettingsExport(
+                    after: previousSettingsExport, generation: settingsGeneration,
+                    ownsGeneration: { self.settingsExportGeneration == $0 })
+            else { return }
+            if !self.settingsRestorePending {
+                self.pendingSettingsData = self.snapshot()
+            }
+            await self.drainSettingsExports(generation: settingsGeneration)
+        }
+        settingsExportTask = finalSettingsExport
         let previousPersistence = persistenceMaintenanceTask
         persistenceMaintenanceGeneration += 1
         previousPersistence?.cancel()
@@ -1567,17 +1642,12 @@ final class SettingsBackup {
                 retryInterval: persistenceRetryInterval)
         }
         persistenceMaintenanceTask = persistence
-        async let settingsExported = SettingsBackupFileWorker.shared.exportSettings(
-            data: settingsData, localURL: localFile, cloudURL: cloudFile,
-            shouldExportCloud: shouldExportSettings)
         await withTaskCancellationHandler {
             await persistence.value
+            await finalSettingsExport.value
         } onCancel: {
             persistence.cancel()
-        }
-        if await settingsExported, !Task.isCancelled {
-            SharedDefaults.store.set(
-                Date().timeIntervalSince1970, forKey: AppStorageKeys.Backup.lastBackupAt)
+            finalSettingsExport.cancel()
         }
     }
 

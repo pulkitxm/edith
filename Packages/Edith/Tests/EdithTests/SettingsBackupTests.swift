@@ -570,6 +570,135 @@ import Testing
         #expect(UsageHistory.isValidDocument(try Data(contentsOf: cloudUsage)))
     }
 
+    @Test func settingsComparisonRejectsFIFOWithoutBlocking() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-settings-backup-\(UUID().uuidString)")
+        let fifo = root.appendingPathComponent("settings.json")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try #require(mkfifo(fifo.path, 0o600) == 0)
+        let clock = ContinuousClock()
+        let started = clock.now
+
+        #expect(settingsBackupReadSettingsFile(at: fifo, maximumBytes: 64) == nil)
+        #expect(started.duration(to: clock.now) < .seconds(1))
+    }
+
+    @Test func settingsComparisonNeverFollowsSymlinks() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-settings-backup-\(UUID().uuidString)")
+        let target = root.appendingPathComponent("target.json")
+        let link = root.appendingPathComponent("settings.json")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("target".utf8).write(to: target)
+        try #require(symlink(target.path, link.path) == 0)
+
+        #expect(settingsBackupReadSettingsFile(at: link, maximumBytes: 64) == nil)
+    }
+
+    @Test func settingsComparisonRejectsOversizedFiles() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-settings-backup-\(UUID().uuidString)")
+        let file = root.appendingPathComponent("settings.json")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data(repeating: 1, count: 65).write(to: file)
+
+        #expect(settingsBackupReadSettingsFile(at: file, maximumBytes: 64) == nil)
+    }
+
+    @Test @MainActor func finalSettingsExportPublishesAfterCancelledOlderExport() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-settings-backup-\(UUID().uuidString)")
+        let file = root.appendingPathComponent("settings.json")
+        let started = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let older = Data("older".utf8)
+        let final = Data("final".utf8)
+        defer {
+            release.signal()
+            try? FileManager.default.removeItem(at: root)
+        }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let previous = Task.detached {
+            started.signal()
+            _ = await waitForSignal(release)
+            try? older.write(to: file, options: .atomic)
+        }
+        #expect(await waitForSignal(started))
+        let generation = 1
+
+        let publication = Task { @MainActor in
+            guard
+                await settingsBackupAwaitFinalSettingsExport(
+                    after: previous, generation: generation,
+                    ownsGeneration: { $0 == generation })
+            else { return false }
+            var pending: Data? = final
+            var published = false
+            await settingsBackupDrainSettingsExports(
+                generation: generation, ownsGeneration: { $0 == generation },
+                takePending: {
+                    defer { pending = nil }
+                    return pending
+                },
+                publish: { data in
+                    do {
+                        try data.write(to: file, options: .atomic)
+                        return true
+                    } catch {
+                        return false
+                    }
+                },
+                didPublish: { published = $0 })
+            return published
+        }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(previous.isCancelled)
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+
+        release.signal()
+        #expect(await publication.value)
+        #expect(settingsBackupReadSettingsFile(at: file, maximumBytes: 64) == final)
+    }
+
+    @Test @MainActor func finalSettingsExportRepublishesSnapshotQueuedDuringWrite() async {
+        let started = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let initial = Data("initial".utf8)
+        let newest = Data("newest".utf8)
+        var pending: Data? = initial
+        var published: [Data] = []
+        let generation = 1
+        defer { release.signal() }
+
+        let publication = Task { @MainActor in
+            await settingsBackupDrainSettingsExports(
+                generation: generation, ownsGeneration: { $0 == generation },
+                takePending: {
+                    defer { pending = nil }
+                    return pending
+                },
+                publish: { data in
+                    published.append(data)
+                    if published.count == 1 {
+                        started.signal()
+                        _ = await waitForSignal(release)
+                    }
+                    return true
+                },
+                didPublish: { _ in })
+        }
+        #expect(await waitForSignal(started))
+        pending = newest
+        release.signal()
+
+        await publication.value
+        #expect(published == [initial, newest])
+        #expect(pending == nil)
+    }
+
     @Test func terminationPersistenceDeadlineReturnsEveryUnfinishedIntent() async {
         let clock = ContinuousClock()
         let started = clock.now
