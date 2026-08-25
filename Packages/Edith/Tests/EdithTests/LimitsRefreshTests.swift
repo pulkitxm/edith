@@ -4,6 +4,29 @@ import Testing
 
 @testable import EdithHelper
 
+private actor UsageReloadPublicationHarness {
+    private var generation = UsageReloadGenerationState()
+    private var value = ""
+
+    func publishOlder(
+        after release: AsyncStream<Void>, started: AsyncStream<Void>.Continuation
+    ) async {
+        let request = generation.begin()
+        started.yield()
+        for await _ in release { break }
+        if generation.accepts(request) { value = "older" }
+    }
+
+    func publishNewer() {
+        let request = generation.begin()
+        if generation.accepts(request) { value = "newer" }
+    }
+
+    func publishedValue() -> String {
+        value
+    }
+}
+
 @Suite struct LimitsRefreshTests {
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
 
@@ -142,5 +165,22 @@ import Testing
         #expect(pending == [.codex, .claude])
         #expect(readyClaude)
         #expect(drained.isEmpty)
+    }
+
+    @Test func delayedOlderReloadCannotReplaceANewerPublication() async {
+        let harness = UsageReloadPublicationHarness()
+        let release = AsyncStream<Void>.makeStream()
+        let started = AsyncStream<Void>.makeStream()
+        let older = Task {
+            await harness.publishOlder(after: release.stream, started: started.continuation)
+        }
+        var iterator = started.stream.makeAsyncIterator()
+        _ = await iterator.next()
+
+        await harness.publishNewer()
+        release.continuation.yield()
+        await older.value
+
+        #expect(await harness.publishedValue() == "newer")
     }
 }

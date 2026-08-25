@@ -4,6 +4,51 @@ import Testing
 @testable import EdithKit
 
 @Suite struct SettingsBackupTests {
+    private func waitForSignal(_ semaphore: DispatchSemaphore) async -> Bool {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                continuation.resume(returning: semaphore.wait(timeout: .now() + 2) == .success)
+            }
+        }
+    }
+
+    private func usage(period: String, source: String) throws -> Data {
+        let hours: [[String: Any]] = (0..<24).map {
+            ["hour": $0, "cost": 0, "tokens": 0, "bySource": [:], "byPath": [:]]
+        }
+        return try JSONSerialization.data(
+            withJSONObject: [
+                "schemaVersion": 8,
+                "generatedAt": "2026-08-25T00:00:00Z",
+                "sources": [source],
+                "defaultSources": [source],
+                "sourceMeta": [source: ["label": source]],
+                "machines": [],
+                "sessions": [],
+                "totals": [
+                    "cost": 0, "tokens": 1, "inputTokens": 1, "outputTokens": 0,
+                    "cacheCreationTokens": 0, "cacheReadTokens": 0,
+                    "bySource": [source: ["cost": 0, "tokens": 1]],
+                ],
+                "daily": [
+                    [
+                        "period": period,
+                        "bySource": [
+                            source: [
+                                [
+                                    "modelName": "model", "inputTokens": 1,
+                                    "outputTokens": 0, "cacheCreationTokens": 0,
+                                    "cacheReadTokens": 0, "cost": 0,
+                                ]
+                            ]
+                        ],
+                        "hours": hours,
+                        "projects": [],
+                    ]
+                ],
+            ])
+    }
+
     @Test func everyAppStoragePreferenceIsBackedUpOrDeviceLocal() throws {
         let sourceRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -188,6 +233,16 @@ import Testing
         #expect(state.remaining.isEmpty)
     }
 
+    @Test func replacementRestoreInvalidatesEveryOlderContinuation() {
+        var state = SettingsBackupRestoreGenerationState()
+        let first = state.begin(.usage)
+        let replacement = state.begin(.usage)
+        #expect(!state.accepts(first, for: .usage))
+        #expect(state.accepts(replacement, for: .usage))
+        state.invalidate(.usage)
+        #expect(!state.accepts(replacement, for: .usage))
+    }
+
     @Test func settingsImportSurvivesLeftoverLocalFileOnReinstall() {
         let now = Date()
         let staleCloud = now.addingTimeInterval(-3600)
@@ -224,5 +279,325 @@ import Testing
         for (path, expected) in cases {
             #expect(RestoredPathValidation.verdict(for: path, homeDirectory: home) == expected)
         }
+    }
+
+    @Test func limitsRestoreRereadsLocalHistoryInsideTheMutationLock() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-settings-backup-\(UUID().uuidString)")
+        let data = root.appendingPathComponent("data")
+        let local = data.appendingPathComponent("limits-history.jsonl")
+        let cloud = root.appendingPathComponent("cloud/limits-history.jsonl")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        let localRow = LimitsHistory.row(
+            session: LimitWindow(percent: 10, resetsAt: nil), week: nil, now: now)
+        let cloudRow = LimitsHistory.row(
+            session: LimitWindow(percent: 20, resetsAt: nil), week: nil,
+            now: now.addingTimeInterval(60))
+        try Data(localRow.line.utf8).write(to: local)
+        try FileManager.default.createDirectory(
+            at: cloud.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(cloudRow.line.utf8).write(to: cloud)
+        let held = try UsageDataLock.acquire(dataDirectory: data)
+        let reachedDataLock = DispatchSemaphore(value: 0)
+
+        let restore = Task.detached {
+            settingsBackupTransferLimits(
+                localURL: local, cloudURL: cloud, shouldRestore: true, shouldExport: false,
+                willAcquireDataLock: { reachedDataLock.signal() })
+        }
+        #expect(await waitForSignal(reachedDataLock))
+        let append = Task.detached {
+            var history = LimitsHistory(url: local)
+            history.append(
+                session: LimitWindow(percent: 30, resetsAt: nil), week: nil,
+                now: now.addingTimeInterval(120))
+        }
+
+        held.release()
+        #expect(await restore.value)
+        await append.value
+        #expect(LimitsHistory.loadAll(url: local).map(\.s) == [10, 20, 30])
+    }
+
+    @Test func progressiveRestoreWaitsForAnActiveRefresh() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-settings-backup-\(UUID().uuidString)")
+        let data = root.appendingPathComponent("data")
+        let local = data.appendingPathComponent("limits-history.jsonl")
+        let cloud = root.appendingPathComponent("cloud/limits-history.jsonl")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        let original = LimitsHistory.row(
+            session: LimitWindow(percent: 10, resetsAt: nil), week: nil, now: Date())
+        let incoming = LimitsHistory.row(
+            session: LimitWindow(percent: 20, resetsAt: nil), week: nil, now: Date())
+        try Data(original.line.utf8).write(to: local)
+        try FileManager.default.createDirectory(
+            at: cloud.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(incoming.line.utf8).write(to: cloud)
+        let refresh = try #require(
+            UsageRefreshLock.acquire(at: UsageRefreshRunner.transactionURL(dataDir: data)))
+        defer { refresh.release() }
+
+        #expect(
+            !settingsBackupTransferLimits(
+                localURL: local, cloudURL: cloud, shouldRestore: true, shouldExport: false))
+        #expect(LimitsHistory.loadAll(url: local).map(\.s) == [10])
+    }
+
+    @Test func malformedCloudUsageAndLimitsRemainPending() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-settings-backup-\(UUID().uuidString)")
+        let data = root.appendingPathComponent("data")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        let malformedUsage = Data(#"{"daily":[{}]}"#.utf8)
+        let malformedLimits = Data("not json\n".utf8)
+        let cloudUsage = root.appendingPathComponent("cloud/usage.json")
+        let cloudLimits = root.appendingPathComponent("cloud/limits-history.jsonl")
+        try FileManager.default.createDirectory(
+            at: cloudUsage.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try malformedUsage.write(to: cloudUsage)
+        try malformedLimits.write(to: cloudLimits)
+
+        #expect(
+            !settingsBackupTransferUsage(
+                localURL: data.appendingPathComponent("usage.json"),
+                cloudURL: cloudUsage, shouldRestore: true, shouldExport: false))
+        #expect(
+            !settingsBackupTransferLimits(
+                localURL: data.appendingPathComponent("limits-history.jsonl"),
+                cloudURL: cloudLimits, shouldRestore: true, shouldExport: false))
+        #expect(
+            !FileManager.default.fileExists(atPath: data.appendingPathComponent("usage.json").path))
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: data.appendingPathComponent("limits-history.jsonl").path))
+    }
+
+    @Test func validCloudUsageRepairsMalformedLocalUsage() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-settings-backup-\(UUID().uuidString)")
+        let data = root.appendingPathComponent("data")
+        let local = data.appendingPathComponent("usage.json")
+        let cloud = root.appendingPathComponent("cloud/usage.json")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: cloud.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(#"{"daily":[]}"#.utf8).write(to: local)
+        try usage(period: "2026-08-20", source: "cloud").write(to: cloud)
+
+        #expect(
+            settingsBackupTransferUsage(
+                localURL: local, cloudURL: cloud, shouldRestore: true, shouldExport: false))
+        #expect(UsageHistory.isValidDocument(try Data(contentsOf: local)))
+    }
+
+    @Test func cloudTransferRereadsTheCoordinatedRevisionAfterWaitingForLocalData() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-settings-backup-\(UUID().uuidString)")
+        let data = root.appendingPathComponent("data")
+        let local = data.appendingPathComponent("usage.json")
+        let cloud = root.appendingPathComponent("cloud/usage.json")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: cloud.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try usage(period: "2026-08-20", source: "local").write(to: local)
+        try usage(period: "2026-08-21", source: "cloud-one").write(to: cloud)
+        let held = try UsageDataLock.acquire(dataDirectory: data)
+        let reachedDataLock = DispatchSemaphore(value: 0)
+
+        let transfer = Task.detached {
+            settingsBackupTransferUsage(
+                localURL: local, cloudURL: cloud, shouldRestore: true, shouldExport: true,
+                willAcquireDataLock: { reachedDataLock.signal() })
+        }
+        #expect(await waitForSignal(reachedDataLock))
+        try usage(period: "2026-08-22", source: "cloud-two").write(
+            to: cloud, options: .atomic)
+
+        held.release()
+        #expect(await transfer.value)
+        for url in [local, cloud] {
+            let bytes = try Data(contentsOf: url)
+            let object = try #require(
+                try JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+            let daily = try #require(object["daily"] as? [[String: Any]])
+            #expect(
+                daily.compactMap { $0["period"] as? String }
+                    == ["2026-08-20", "2026-08-22"])
+        }
+    }
+
+    @Test func usageBackupLockContentionNeverBlocksTheMainActor() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-settings-backup-\(UUID().uuidString)")
+        let data = root.appendingPathComponent("data")
+        let local = data.appendingPathComponent("usage.json")
+        let cloud = root.appendingPathComponent("cloud/usage.json")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: cloud.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try usage(period: "2026-08-20", source: "local").write(to: local)
+        try usage(period: "2026-08-21", source: "cloud").write(to: cloud)
+        let held = try UsageDataLock.acquire(dataDirectory: data)
+        let reachedDataLock = DispatchSemaphore(value: 0)
+
+        let transfer = Task { @MainActor in
+            await SettingsBackupUsageWorker.shared.transferUsage(
+                localURL: local, cloudURL: cloud, shouldRestore: true, shouldExport: false,
+                backupEnabled: true, requireCloudAvailability: false,
+                willAcquireDataLock: { reachedDataLock.signal() })
+        }
+        #expect(await waitForSignal(reachedDataLock))
+        let responsive = await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                await Task { @MainActor in true }.value
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                return false
+            }
+            let first = await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
+
+        #expect(responsive)
+        held.release()
+        #expect(await transfer.value)
+    }
+
+    @Test func undownloadedCloudPlaceholderPreventsUsagePublication() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-settings-backup-\(UUID().uuidString)")
+        let data = root.appendingPathComponent("data")
+        let local = data.appendingPathComponent("usage.json")
+        let cloud = root.appendingPathComponent("cloud/usage.json")
+        let placeholder = cloud.deletingLastPathComponent().appendingPathComponent(
+            ".usage.json.icloud")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: cloud.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try usage(period: "2026-08-20", source: "local").write(to: local)
+        try Data("placeholder".utf8).write(to: placeholder)
+
+        #expect(
+            await SettingsBackupUsageWorker.shared.transferUsage(
+                localURL: local, cloudURL: cloud, shouldRestore: true, shouldExport: true,
+                backupEnabled: true, requireCloudAvailability: false) == false)
+        #expect(!FileManager.default.fileExists(atPath: cloud.path))
+    }
+
+    @Test func supersededUsageRestoreCannotCommitAfterWaitingForTheDataLock() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-settings-backup-\(UUID().uuidString)")
+        let data = root.appendingPathComponent("data")
+        let local = data.appendingPathComponent("usage.json")
+        let cloud = root.appendingPathComponent("cloud/usage.json")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: cloud.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let original = try usage(period: "2026-08-20", source: "local")
+        try original.write(to: local)
+        try usage(period: "2026-08-21", source: "cloud").write(to: cloud)
+        let held = try UsageDataLock.acquire(dataDirectory: data)
+        let reachedDataLock = DispatchSemaphore(value: 0)
+        let token = SettingsBackupRestoreToken()
+        let transfer = Task.detached {
+            settingsBackupTransferUsage(
+                localURL: local, cloudURL: cloud, shouldRestore: true, shouldExport: false,
+                willAcquireDataLock: { reachedDataLock.signal() }, restoreToken: token)
+        }
+        #expect(await waitForSignal(reachedDataLock))
+        token.invalidate()
+        held.release()
+        #expect(await transfer.value == false)
+        #expect(try Data(contentsOf: local) == original)
+    }
+
+    @Test func terminationPersistenceRetriesBothExportsAfterRefreshContention() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-settings-backup-\(UUID().uuidString)")
+        let data = root.appendingPathComponent("data")
+        let localUsage = data.appendingPathComponent("usage.json")
+        let localLimits = data.appendingPathComponent("limits-history.jsonl")
+        let cloudUsage = root.appendingPathComponent("cloud/usage.json")
+        let cloudLimits = root.appendingPathComponent("cloud/limits-history.jsonl")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        try usage(period: "2026-08-25", source: "local").write(to: localUsage)
+        let row = LimitsHistory.row(
+            session: LimitWindow(percent: 10, resetsAt: nil), week: nil, now: Date())
+        try Data(row.line.utf8).write(to: localLimits)
+        let refresh = try #require(
+            UsageRefreshLock.acquire(at: UsageRefreshRunner.transactionURL(dataDir: data)))
+        defer { refresh.release() }
+        let clock = ContinuousClock()
+        let intents = SettingsBackupPersistenceIntents(limitsExport: true, usageExport: true)
+
+        let flush = Task {
+            await settingsBackupRetryPersistence(
+                intents, deadline: clock.now.advanced(by: .seconds(2)),
+                retryInterval: .milliseconds(20),
+                transferLimits: { restore, export in
+                    await SettingsBackupUsageWorker.shared.transferLimits(
+                        localURL: localLimits, cloudURL: cloudLimits, shouldRestore: restore,
+                        shouldExport: export, backupEnabled: true,
+                        requireCloudAvailability: false)
+                },
+                transferUsage: { restore, export in
+                    await SettingsBackupUsageWorker.shared.transferUsage(
+                        localURL: localUsage, cloudURL: cloudUsage, shouldRestore: restore,
+                        shouldExport: export, backupEnabled: true,
+                        requireCloudAvailability: false)
+                })
+        }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(!FileManager.default.fileExists(atPath: cloudLimits.path))
+        #expect(!FileManager.default.fileExists(atPath: cloudUsage.path))
+
+        refresh.release()
+        #expect(await flush.value.isEmpty)
+        #expect(LimitsHistory.loadAll(url: cloudLimits).map(\.s) == [10])
+        #expect(UsageHistory.isValidDocument(try Data(contentsOf: cloudUsage)))
+    }
+
+    @Test func terminationPersistenceDeadlineReturnsEveryUnfinishedIntent() async {
+        let clock = ContinuousClock()
+        let started = clock.now
+        let intents = SettingsBackupPersistenceIntents(limitsExport: true, usageExport: true)
+
+        let remaining = await settingsBackupRetryPersistence(
+            intents, deadline: started.advanced(by: .milliseconds(50)),
+            retryInterval: .milliseconds(10),
+            transferLimits: { _, _ in false },
+            transferUsage: { _, _ in false })
+
+        #expect(remaining == intents)
+        #expect(started.duration(to: clock.now) < .seconds(1))
+    }
+
+    @Test func cancellingTerminationPersistencePreservesItsIntent() async {
+        let intents = SettingsBackupPersistenceIntents(usageExport: true)
+        let task = Task {
+            await settingsBackupRetryPersistence(
+                intents, deadline: ContinuousClock().now.advanced(by: .seconds(2)),
+                retryInterval: .seconds(1),
+                transferLimits: { _, _ in false },
+                transferUsage: { _, _ in false })
+        }
+
+        try? await Task.sleep(for: .milliseconds(20))
+        task.cancel()
+
+        #expect(await task.value == intents)
     }
 }

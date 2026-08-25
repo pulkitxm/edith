@@ -93,8 +93,6 @@ public struct LimitsHistory {
         }
     }
 
-    public mutating func prime(with _: [LimitProvider: Latest]) {}
-
     private static func latestKey(provider: LimitProvider, url: URL) -> String? {
         var result: String?
         FileTail.scanLinesReversed(url, maxScanBytes: maximumTailScanBytes) { data in
