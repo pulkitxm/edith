@@ -7,6 +7,12 @@ import UniformTypeIdentifiers
 @MainActor
 @Observable
 final class FinderModel {
+    typealias DirectoryLoader =
+        @MainActor @Sendable (String) async -> Result<
+            [RemoteFileEntry], Error
+        >
+    typealias FreeSpaceLoader = @MainActor @Sendable (String) async -> Int64?
+
     var path: String
     var entries: [RemoteFileEntry] = []
     private(set) var loading = false
@@ -60,11 +66,28 @@ final class FinderModel {
     var gridColumns = 1
     private var typeBuffer = ""
     private var typeBufferAt = Date.distantPast
-    private var loadToken = 0
+    private struct LoadRequest {
+        let generation: Int
+        let path: String
+    }
+
+    private struct LoadOutcome {
+        let path: String
+        let result: Result<[RemoteFileEntry], Error>
+        let freeSpaceKB: Int64?
+    }
+
+    private var loadGeneration = 0
+    private var loadWorkerGeneration = 0
+    private var pendingLoad: LoadRequest?
+    private var loadWorkerTask: Task<Void, Never>?
+    private var activeLoadTask: Task<LoadOutcome?, Never>?
     private var flashToken = 0
     private var searchToken = 0
     private var searchTask: Task<Void, Never>?
     private let localSearch: @Sendable (String, String) async -> [RemoteFileEntry]
+    private let directoryLoader: DirectoryLoader
+    private let freeSpaceLoader: FreeSpaceLoader
     private var folderSizes: [String: Int64] = [:]
     private var folderCounts: [String: Int] = [:]
     private var resolvedHome: String?
@@ -77,10 +100,23 @@ final class FinderModel {
             await Task.detached(priority: .userInitiated) {
                 MachineSession.searchLocalFiles(root: root, query: query)
             }.value
-        }
+        }, directoryLoader: DirectoryLoader? = nil, freeSpaceLoader: FreeSpaceLoader? = nil
     ) {
         self.session = session
         self.localSearch = localSearch
+        self.directoryLoader = directoryLoader ?? { await session.listFiles(path: $0) }
+        self.freeSpaceLoader =
+            freeSpaceLoader ?? { path in
+                if session.isLocal {
+                    let values = try? URL(fileURLWithPath: path).resourceValues(
+                        forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+                    return (values?.volumeAvailableCapacityForImportantUsage).map { $0 / 1024 }
+                }
+                let result = await session.runCommand(
+                    FileOperations.freeSpaceCommand(path: path), timeout: 20)
+                guard case let .success(output) = result else { return nil }
+                return Int64(output.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
         self.path =
             path
             ?? (session.isLocal ? FileManager.default.homeDirectoryForCurrentUser.path : "~")
@@ -108,6 +144,11 @@ final class FinderModel {
 
     var selectedEntries: [RemoteFileEntry] {
         visibleEntries.filter { selection.contains($0.path) }
+    }
+
+    var canRevealSelection: Bool {
+        if session.isLocal { return !selectedEntries.isEmpty }
+        return selectedEntries.contains { !$0.isDirectory }
     }
 
     var statusLine: String {
@@ -210,27 +251,74 @@ final class FinderModel {
         showHidden.toggle()
     }
 
-    func resolveHomeIfNeeded() async {
-        guard !session.isLocal, path == "~" || path.isEmpty else { return }
-        let result = await session.runCommand(FilePlaces.homeDirectoryCommand(), timeout: 20)
-        guard case let .success(output) = result else { return }
-        let home = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        if home.hasPrefix("/") {
-            resolvedHome = home
-            path = home
-        }
+    func load() async {
+        await scheduleLoad().value
     }
 
-    func load() async {
-        await resolveHomeIfNeeded()
-        loadToken += 1
-        let token = loadToken
+    private func scheduleLoad() -> Task<Void, Never> {
+        loadGeneration += 1
+        pendingLoad = LoadRequest(generation: loadGeneration, path: path)
+        activeLoadTask?.cancel()
         loading = true
         errorMessage = nil
-        let result = await session.listFiles(path: path)
-        guard token == loadToken else { return }
+        if let loadWorkerTask { return loadWorkerTask }
+        loadWorkerGeneration += 1
+        let workerGeneration = loadWorkerGeneration
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await self.drainLoads(workerGeneration: workerGeneration)
+        }
+        loadWorkerTask = task
+        return task
+    }
+
+    private func drainLoads(workerGeneration: Int) async {
+        while !Task.isCancelled, let request = pendingLoad {
+            pendingLoad = nil
+            let operation = Task { [weak self] in
+                await self?.loadDirectory(request.path)
+            }
+            activeLoadTask = operation
+            let outcome = await operation.value
+            guard workerGeneration == loadWorkerGeneration else { return }
+            activeLoadTask = nil
+            guard !operation.isCancelled, request.generation == loadGeneration, let outcome else {
+                continue
+            }
+            publish(outcome, requestedPath: request.path)
+        }
+        guard workerGeneration == loadWorkerGeneration else { return }
+        loadWorkerTask = nil
+        activeLoadTask = nil
         loading = false
-        switch result {
+    }
+
+    private func loadDirectory(_ requestedPath: String) async -> LoadOutcome? {
+        var resolvedPath = requestedPath
+        if !session.isLocal, requestedPath == "~" || requestedPath.isEmpty {
+            let result = await session.runCommand(FilePlaces.homeDirectoryCommand(), timeout: 20)
+            guard !Task.isCancelled else { return nil }
+            if case let .success(output) = result {
+                let home = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                if home.hasPrefix("/") { resolvedPath = home }
+            }
+        }
+        let result = await directoryLoader(resolvedPath)
+        guard !Task.isCancelled else { return nil }
+        let freeSpaceKB = await freeSpaceLoader(resolvedPath)
+        guard !Task.isCancelled else { return nil }
+        return LoadOutcome(path: resolvedPath, result: result, freeSpaceKB: freeSpaceKB)
+    }
+
+    private func publish(_ outcome: LoadOutcome, requestedPath: String) {
+        if path == requestedPath, outcome.path != requestedPath {
+            resolvedHome = outcome.path
+            path = outcome.path
+        }
+        guard path == outcome.path else { return }
+        loading = false
+        freeSpaceKB = outcome.freeSpaceKB
+        switch outcome.result {
         case let .success(items):
             entries = items
             selection = selection.filter { path in items.contains { $0.path == path } }
@@ -238,21 +326,17 @@ final class FinderModel {
             entries = []
             errorMessage = failure.localizedDescription
         }
-        await loadFreeSpace()
     }
 
-    private func loadFreeSpace() async {
-        if session.isLocal {
-            let values = try? URL(fileURLWithPath: path).resourceValues(
-                forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-            freeSpaceKB = (values?.volumeAvailableCapacityForImportantUsage).map { $0 / 1024 }
-            return
-        }
-        let result = await session.runCommand(
-            FileOperations.freeSpaceCommand(path: path), timeout: 20)
-        if case let .success(output) = result {
-            freeSpaceKB = Int64(output.trimmingCharacters(in: .whitespacesAndNewlines))
-        }
+    func stopLoading() {
+        loadGeneration += 1
+        loadWorkerGeneration += 1
+        pendingLoad = nil
+        activeLoadTask?.cancel()
+        activeLoadTask = nil
+        loadWorkerTask?.cancel()
+        loadWorkerTask = nil
+        loading = false
     }
 
     func navigate(to newPath: String, recordHistory: Bool = true) {
@@ -269,7 +353,7 @@ final class FinderModel {
         anchor = nil
         searchResults = nil
         searchQuery = ""
-        Task { await load() }
+        _ = scheduleLoad()
     }
 
     private func expandingHome(_ candidate: String) -> String {
@@ -305,7 +389,7 @@ final class FinderModel {
     }
 
     func refresh() {
-        Task { await load() }
+        _ = scheduleLoad()
     }
 
     func open(_ entry: RemoteFileEntry) {
@@ -666,13 +750,43 @@ final class FinderModel {
         }
     }
 
-    func revealInFinder() {
-        guard session.isLocal else { return }
-        let urls = selectedEntries.map { URL(fileURLWithPath: $0.path) }
-        guard !urls.isEmpty else { return }
-        RemoteFileOperationExecution.present(urls, action: .reveal) { urls, _ in
-            NSWorkspace.shared.activateFileViewerSelecting(urls)
-            return true
+    func revealInFinder() async {
+        errorMessage = nil
+        let projection = await FinderRevealProjection.make(
+            entries: selectedEntries, isLocal: session.isLocal)
+        guard !Task.isCancelled else { return }
+        let targets = projection.targets
+        guard !targets.isEmpty else { return }
+        do {
+            let urls: [URL]
+            if let localURLs = projection.localURLs {
+                urls = localURLs
+            } else {
+                guard let connection = session.connectionRef else {
+                    throw FinderTransferError.notConnected
+                }
+                var materialized: [URL] = []
+                for entry in targets {
+                    let destination = try await RemoteFileOperationExecution.materialize(
+                        entry, machineID: session.machine.id, isLocal: false
+                    ) { remotePath, localURL in
+                        try await connection.download(remotePath: remotePath, to: localURL)
+                    }
+                    materialized.append(destination)
+                }
+                urls = materialized
+            }
+            let presented = RemoteFileOperationExecution.present(urls, action: .reveal) {
+                urls, _ in
+                NSWorkspace.shared.activateFileViewerSelecting(urls)
+                return true
+            }
+            guard presented else {
+                throw FinderTransferError.presentationUnavailable
+            }
+            flash("Revealed \(urls.count) item\(urls.count == 1 ? "" : "s")")
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -1027,8 +1141,28 @@ final class FinderModel {
 
 enum FinderTransferError: LocalizedError {
     case notConnected
+    case presentationUnavailable
 
-    var errorDescription: String? { "The machine is not connected." }
+    var errorDescription: String? {
+        switch self {
+        case .notConnected: "The machine is not connected."
+        case .presentationUnavailable: "Finder is unavailable."
+        }
+    }
+}
+
+private struct FinderRevealProjection: Sendable {
+    let targets: [RemoteFileEntry]
+    let localURLs: [URL]?
+
+    static func make(entries: [RemoteFileEntry], isLocal: Bool) async -> FinderRevealProjection {
+        await Task.detached(priority: .userInitiated) {
+            let targets = isLocal ? entries : entries.filter { !$0.isDirectory }
+            return FinderRevealProjection(
+                targets: targets,
+                localURLs: isLocal ? targets.map { URL(fileURLWithPath: $0.path) } : nil)
+        }.value
+    }
 }
 
 extension DropIntent {

@@ -68,6 +68,7 @@ struct FinderBody: View {
         .onChange(of: model.session.state.isConnected) { _, connected in
             if connectionsEnabled, connected { model.refresh() }
         }
+        .onDisappear { model.stopLoading() }
         .overlay {
             if model.quickLookPath != nil {
                 QuickLookOverlay(model: model)
@@ -279,8 +280,8 @@ struct FinderBody: View {
                     }
                     Button("Duplicate") { Task { await model.duplicateSelection() } }
                     Button("Copy Path") { model.copyPaths() }
-                    if model.session.isLocal {
-                        Button("Reveal in Finder") { model.revealInFinder() }
+                    if model.canRevealSelection {
+                        Button("Reveal in Finder") { Task { await model.revealInFinder() } }
                     }
                     Divider()
                     Button("Move to Trash") {

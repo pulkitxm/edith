@@ -2,6 +2,7 @@ import AVKit
 import AppKit
 import EdithKit
 import Highlighter
+import ImageIO
 import Observation
 import PDFKit
 import Quartz
@@ -10,6 +11,12 @@ import SwiftUI
 @MainActor
 @Observable
 final class FilePreviewModel {
+    typealias Materialize =
+        @MainActor @Sendable (
+            RemoteFileEntry, MachineSession, Int64
+        ) async throws -> URL
+    typealias ImageLoader = @MainActor @Sendable (URL) async -> NSImage?
+
     enum Content: Equatable {
         case empty
         case loading
@@ -18,20 +25,65 @@ final class FilePreviewModel {
         case pdf(URL)
         case media(URL)
         case quickLook(URL)
+        case downloadRequired(RemoteFileEntry, available: Bool)
         case unsupported(URL?, reason: String)
         case failed(String)
     }
 
     private(set) var content = Content.empty
     private var task: Task<Void, Never>?
+    private let materializeFile: Materialize
+    private let imageLoader: ImageLoader
 
     static let textPreviewLimit = RemoteFileOperationExecution.previewLimit
 
+    init(
+        materialize: @escaping Materialize = { entry, session, maximumBytes in
+            try await RemoteFileOperationExecution.materialize(
+                entry, machineID: session.machine.id, isLocal: session.isLocal,
+                maximumBytes: maximumBytes
+            ) { remotePath, destination in
+                guard let connection = session.connectionRef else {
+                    throw FinderTransferError.notConnected
+                }
+                try await connection.download(remotePath: remotePath, to: destination)
+            }
+        },
+        imageLoader: @escaping ImageLoader = { await RemoteImagePreview.thumbnail(at: $0) }
+    ) {
+        materializeFile = materialize
+        self.imageLoader = imageLoader
+    }
+
     func load(entry: RemoteFileEntry?, session: MachineSession) {
+        startLoading(entry: entry, session: session, explicit: false)
+    }
+
+    func loadExplicitPreview(entry: RemoteFileEntry, session: MachineSession) {
+        startLoading(entry: entry, session: session, explicit: true)
+    }
+
+    private func startLoading(
+        entry: RemoteFileEntry?, session: MachineSession, explicit: Bool
+    ) {
         task?.cancel()
         guard let entry, !entry.isDirectory else {
             content = .empty
             return
+        }
+        if !explicit {
+            switch RemoteFileOperationExecution.automaticPreviewDecision(
+                for: entry, isLocal: session.isLocal)
+            {
+            case .automatic:
+                break
+            case .requiresExplicitDownload:
+                content = .downloadRequired(entry, available: true)
+                return
+            case .downloadOnly:
+                content = .downloadRequired(entry, available: false)
+                return
+            }
         }
         content = .loading
         task = Task { [weak self] in
@@ -41,11 +93,19 @@ final class FilePreviewModel {
                 await loadText(entry: entry, session: session)
                 return
             }
-            guard let url = await materialize(entry: entry, session: session) else { return }
+            guard
+                let url = await materialize(
+                    entry: entry, session: session,
+                    maximumBytes: explicit
+                        ? RemoteFileOperationExecution.cacheLimitBytes
+                        : RemoteFileOperationExecution.automaticPreviewLimitBytes)
+            else { return }
             guard !Task.isCancelled else { return }
             switch kind {
             case .image:
-                if let image = NSImage(contentsOf: url) {
+                let image = await imageLoader(url)
+                guard !Task.isCancelled else { return }
+                if let image {
                     content = .image(image)
                 } else {
                     content = .unsupported(url, reason: "This image could not be read.")
@@ -66,7 +126,6 @@ final class FilePreviewModel {
             default:
                 content = .quickLook(url)
             }
-            RemoteFileOperationExecution.sweepCache()
         }
     }
 
@@ -106,16 +165,11 @@ final class FilePreviewModel {
         }
     }
 
-    private func materialize(entry: RemoteFileEntry, session: MachineSession) async -> URL? {
+    private func materialize(
+        entry: RemoteFileEntry, session: MachineSession, maximumBytes: Int64
+    ) async -> URL? {
         do {
-            return try await RemoteFileOperationExecution.materialize(
-                entry, machineID: session.machine.id, isLocal: session.isLocal
-            ) { remotePath, destination in
-                guard let connection = session.connectionRef else {
-                    throw FinderTransferError.notConnected
-                }
-                try await connection.download(remotePath: remotePath, to: destination)
-            }
+            return try await materializeFile(entry, session, maximumBytes)
         } catch {
             guard !Task.isCancelled else { return nil }
             content = .failed(error.localizedDescription)
@@ -201,6 +255,28 @@ struct FilePreviewPane: View {
         case let .media(url):
             VideoPlayer(player: AVPlayer(url: url))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case let .downloadRequired(entry, available):
+            VStack(spacing: UIScale.pt(12)) {
+                Image(systemName: available ? "arrow.down.circle" : "externaldrive")
+                    .font(.system(size: UIScale.pt(28)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                Text(
+                    available
+                        ? "This file is too large to preview automatically."
+                        : "This file is larger than the preview cache. Download it to a folder instead."
+                )
+                .font(.system(size: UIScale.pt(12)))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+                .multilineTextAlignment(.center)
+                if available {
+                    Button("Download preview") {
+                        model.loadExplicitPreview(entry: entry, session: session)
+                    }
+                    .pointerCursor()
+                }
+            }
+            .padding(UIScale.pt(20))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         case let .unsupported(url, reason):
             VStack(spacing: UIScale.pt(12)) {
                 Image(systemName: "play.slash")
@@ -238,6 +314,36 @@ struct FilePreviewPane: View {
         }
         .padding(UIScale.pt(20))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+enum RemoteImagePreview {
+    static let maximumPixelSize = 2_048
+
+    @MainActor
+    static func thumbnail(
+        at url: URL,
+        decode: @escaping @Sendable (URL, Int) -> CGImage? = {
+            RemoteImagePreview.decode($0, maximumPixelSize: $1)
+        }
+    ) async -> NSImage? {
+        let decoded = await Task.detached(priority: .userInitiated) {
+            decode(url, maximumPixelSize)
+        }.value
+        guard let image = decoded else { return nil }
+        return NSImage(
+            cgImage: image, size: NSSize(width: image.width, height: image.height))
+    }
+
+    private nonisolated static func decode(_ url: URL, maximumPixelSize: Int) -> CGImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maximumPixelSize,
+            kCGImageSourceShouldCacheImmediately: true,
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 }
 
