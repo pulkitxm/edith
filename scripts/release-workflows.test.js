@@ -87,6 +87,11 @@ test("automated commits do not re-run CI", () => {
 
 test("release waits for and publishes the macOS assets", () => {
   expect(releaseWorkflow).toContain("needs: [version, dmg]");
+  const dmgJob = releaseWorkflow.slice(
+    releaseWorkflow.indexOf("\n  dmg:"),
+    releaseWorkflow.indexOf("\n  publish:"),
+  );
+  expect(dmgJob).toContain("timeout-minutes: 60");
   expect(releaseWorkflow).toContain("release-assets/Edith.dmg");
   expect(releaseWorkflow).toContain("release-assets/appcast.xml");
   expect(releaseWorkflow).toContain("gh release create");
