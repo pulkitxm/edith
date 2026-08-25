@@ -2,6 +2,28 @@ import AppKit
 import EdithKit
 import Foundation
 
+struct HistoryWriteGate {
+    private var waitingForSeed = true
+    private var pending: Set<LimitProvider> = []
+
+    mutating func record(_ provider: LimitProvider) -> Bool {
+        guard waitingForSeed else { return true }
+        pending.insert(provider)
+        return false
+    }
+
+    mutating func finish() -> [LimitProvider] {
+        waitingForSeed = false
+        let providers = LimitProvider.allCases.filter(pending.contains)
+        pending = []
+        return providers
+    }
+
+    mutating func cancel() {
+        pending = []
+    }
+}
+
 struct RangeStat: Identifiable {
     let id: String
     let label: String
@@ -64,6 +86,7 @@ final class UsageStore: FeatureModule {
     private var machineTask: Task<Void, Never>?
     private var historySeedJob: Task<Void, Never>?
     private var historySeedGeneration = 0
+    private var historyWriteGate = HistoryWriteGate()
     private var pendingMachineMerge = false
     let notifier = LimitNotifier()
     private var history = LimitsHistory()
@@ -112,9 +135,11 @@ final class UsageStore: FeatureModule {
             guard !Task.isCancelled, let self, self.historySeedGeneration == generation else {
                 return
             }
+            let pendingProviders = self.historyWriteGate.finish()
             self.history.prime(with: latest)
-            self.seedFromHistory(latest)
+            self.seedFromHistory(latest, excluding: Set(pendingProviders))
             self.historySeedJob = nil
+            self.flushPendingHistory(pendingProviders)
             self.startPolling()
         }
 
@@ -202,14 +227,16 @@ final class UsageStore: FeatureModule {
         }
     }
 
-    private func seedFromHistory(_ latest: [LimitProvider: LimitsHistory.Latest]) {
-        if let last = latest[.claude] {
+    private func seedFromHistory(
+        _ latest: [LimitProvider: LimitsHistory.Latest], excluding: Set<LimitProvider>
+    ) {
+        if !excluding.contains(.claude), let last = latest[.claude] {
             session = Self.fresh(last.session)
             week = Self.fresh(last.week)
             fableWeek = Self.fresh(last.fable)
-            limitsUpdatedAt = last.date
+            limitsUpdatedAt = max(limitsUpdatedAt ?? .distantPast, last.date)
         }
-        if let last = latest[.codex] {
+        if !excluding.contains(.codex), let last = latest[.codex] {
             codexSession = Self.fresh(last.session)
             codexWeek = Self.fresh(last.week)
             limitsUpdatedAt = max(limitsUpdatedAt ?? .distantPast, last.date)
@@ -299,6 +326,7 @@ final class UsageStore: FeatureModule {
         historySeedGeneration += 1
         historySeedJob?.cancel()
         historySeedJob = nil
+        historyWriteGate.cancel()
     }
 
     func syncStatusItem() {
@@ -484,7 +512,7 @@ final class UsageStore: FeatureModule {
         quickRetryTask?.cancel()
         quickRetryTask = nil
         notifier.evaluate(session: session, week: week)
-        history.append(provider: .claude, session: session, week: week, fable: fableWeek)
+        recordHistory(.claude)
         SettingsBackup.shared.syncLimits()
         updateStatusItem()
         IPC.post(IPC.Name.limitsUpdated)
@@ -498,7 +526,7 @@ final class UsageStore: FeatureModule {
             codexSession = limits.session
             codexWeek = limits.week
             limitsUpdatedAt = Date()
-            history.append(provider: .codex, session: codexSession, week: codexWeek)
+            recordHistory(.codex)
             SettingsBackup.shared.syncLimits()
             updateStatusItem()
             IPC.post(IPC.Name.limitsUpdated)
@@ -508,6 +536,27 @@ final class UsageStore: FeatureModule {
         } catch {
             diag("codex limits unavailable: \(error.localizedDescription)")
             keepOrBlankMenuBar()
+        }
+    }
+
+    private func recordHistory(_ provider: LimitProvider) {
+        guard historyWriteGate.record(provider) else { return }
+        appendHistory(provider)
+    }
+
+    private func flushPendingHistory(_ providers: [LimitProvider]) {
+        for provider in providers { appendHistory(provider) }
+        guard !providers.isEmpty else { return }
+        SettingsBackup.shared.syncLimits()
+        IPC.post(IPC.Name.limitsUpdated)
+    }
+
+    private func appendHistory(_ provider: LimitProvider) {
+        switch provider {
+        case .claude:
+            history.append(provider: provider, session: session, week: week, fable: fableWeek)
+        case .codex:
+            history.append(provider: provider, session: codexSession, week: codexWeek)
         }
     }
 

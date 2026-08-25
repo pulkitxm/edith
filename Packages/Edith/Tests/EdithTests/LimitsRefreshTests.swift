@@ -89,4 +89,20 @@ import Testing
         #expect(!UsageStore.pollingAllowed(locked: false, sleeping: true))
         #expect(!UsageStore.pollingAllowed(locked: true, sleeping: true))
     }
+
+    @Test func historyWritesWaitForSeedAndFlushOncePerProvider() {
+        var gate = HistoryWriteGate()
+        let firstClaude = gate.record(.claude)
+        let codex = gate.record(.codex)
+        let secondClaude = gate.record(.claude)
+        let pending = gate.finish()
+        let readyClaude = gate.record(.claude)
+        let drained = gate.finish()
+        #expect(!firstClaude)
+        #expect(!codex)
+        #expect(!secondClaude)
+        #expect(pending == [.codex, .claude])
+        #expect(readyClaude)
+        #expect(drained.isEmpty)
+    }
 }
