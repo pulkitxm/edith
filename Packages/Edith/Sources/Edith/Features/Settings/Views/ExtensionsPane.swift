@@ -922,6 +922,7 @@ private struct AttentionRows: View {
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
+        .task { model.reload() }
     }
 }
 
@@ -1148,9 +1149,6 @@ private struct ExtensionPermissionSheet: View {
         .padding(UIScale.pt(24))
         .frame(width: UIScale.pt(540))
         .onAppear(perform: refresh)
-        .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
-            refresh()
-        }
         .onReceive(
             NotificationCenter.default.publisher(
                 for: NSApplication.didBecomeActiveNotification)

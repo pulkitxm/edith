@@ -55,7 +55,12 @@ struct AttentionPage: View {
                 }
 
                 Group {
-                    if model.needsSetup {
+                    if !model.loaded {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 60)
+                    } else if model.needsSetup {
                         AttentionSetupView(model: model)
                     } else {
                         switch model.section {
@@ -77,6 +82,7 @@ struct AttentionPage: View {
         .background(DashSkin.paper(scheme == .dark))
         .onChange(of: model.range) { model.reload() }
         .task {
+            model.reload()
             await model.checkBrowser()
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(10))
@@ -363,6 +369,7 @@ private struct AttentionOverview: View {
 
 private struct AttentionTimelineView: View {
     @Bindable var model: AttentionPageModel
+    @State private var visibleCount = 100
 
     var body: some View {
         AttentionCard {
@@ -381,7 +388,8 @@ private struct AttentionTimelineView: View {
             if model.events.isEmpty {
                 EmptyInline(text: "No events in \(model.range.title.lowercased())")
             } else {
-                ForEach(Array(model.events.enumerated()), id: \.element.id) { index, event in
+                ForEach(Array(model.events.prefix(visibleCount).enumerated()), id: \.element.id) {
+                    index, event in
                     if index > 0 { Divider() }
                     HStack(spacing: 12) {
                         AttentionEventIcon(event: event)
@@ -399,6 +407,14 @@ private struct AttentionTimelineView: View {
                         }
                     }
                     .padding(.vertical, 6)
+                }
+                if model.events.count > visibleCount {
+                    Button("Show \(min(100, model.events.count - visibleCount)) more events") {
+                        visibleCount += 100
+                    }
+                    .buttonStyle(.bordered)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 6)
                 }
             }
         }
@@ -476,17 +492,25 @@ private struct AttentionResolvedIcon: View {
     let descriptor: AttentionEventIconDescriptor
     let fallbackColor: Color
     @State private var faviconImage: NSImage?
+    @State private var applicationImage: NSImage?
 
     private var faviconURL: URL? {
         guard case .website(let url) = descriptor else { return nil }
         return url
     }
 
+    private var applicationBundleID: String? {
+        guard case .application(let bundleID) = descriptor else { return nil }
+        return bundleID
+    }
+
     var body: some View {
         Group {
             switch descriptor {
             case .application(let bundleID):
-                if let icon = AttentionApplicationIcon.resolve(bundleID: bundleID) {
+                if let icon = applicationImage
+                    ?? AttentionApplicationIcon.cached(bundleID: bundleID)
+                {
                     Image(nsImage: icon)
                         .resizable()
                         .interpolation(.high)
@@ -518,6 +542,15 @@ private struct AttentionResolvedIcon: View {
             else { return }
             faviconImage = NSImage(data: data)
         }
+        .task(id: applicationBundleID) {
+            applicationImage = nil
+            guard let applicationBundleID,
+                AttentionApplicationIcon.cached(bundleID: applicationBundleID) == nil
+            else { return }
+            let icon = await AttentionApplicationIcon.resolve(bundleID: applicationBundleID)
+            guard !Task.isCancelled else { return }
+            applicationImage = icon
+        }
     }
 
     private func fallback(_ systemName: String) -> some View {
@@ -531,16 +564,24 @@ private struct AttentionResolvedIcon: View {
 private enum AttentionApplicationIcon {
     private static var cache: [String: NSImage] = [:]
 
-    static func resolve(bundleID: String?) -> NSImage? {
+    static func cached(bundleID: String?) -> NSImage? {
+        guard let bundleID, !bundleID.isEmpty else { return nil }
+        return cache[bundleID]
+    }
+
+    static func resolve(bundleID: String?) async -> NSImage? {
         guard let bundleID, !bundleID.isEmpty else { return nil }
         if let cached = cache[bundleID] { return cached }
-        let icon =
-            NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first?.icon
+        let icon = await Task.detached { lookup(bundleID: bundleID) }.value
+        if let icon { cache[bundleID] = icon }
+        return icon
+    }
+
+    private nonisolated static func lookup(bundleID: String) -> NSImage? {
+        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first?.icon
             ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID).map {
                 NSWorkspace.shared.icon(forFile: $0.path)
             }
-        if let icon { cache[bundleID] = icon }
-        return icon
     }
 }
 

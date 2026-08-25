@@ -269,7 +269,6 @@ final class MusicRemote {
         entriesGeneration &+= 1
         folderCache.removeAll()
         invalidateSearchScope()
-        refreshFavourites()
         if !folderPath.isEmpty,
             !FileManager.default.fileExists(atPath: TrackMeta.url(for: folderPath).path)
         {
@@ -277,10 +276,14 @@ final class MusicRemote {
         }
         restorePending = SharedDefaults.store.integer(forKey: "restorePending.music")
         rescanTask = Task { [weak self] in
-            let scanned = await Task.detached { scanLibrary() }.value
+            let scanned = await Task.detached {
+                (tracks: scanLibrary(), favourites: Favourites.tracks())
+            }.value
             guard !Task.isCancelled, let self, self.rescanGeneration == generation else { return }
             self.rescanTask = nil
-            self.tracks = scanned
+            self.tracks = scanned.tracks
+            self.favourites = scanned.favourites
+            self.favouritePaths = Set(scanned.favourites.map(\.relativePath))
             self.refreshEntries()
         }
     }
@@ -655,6 +658,46 @@ final class MusicRemote {
     }
 }
 
+private struct MusicListQuery: Equatable {
+    var search: String
+    var showingFavourites: Bool
+    var favourites: [Track]
+    var folders: [MusicFolder]
+    var folderTracks: [Track]
+    var searchTracks: [Track]
+    var searchFolders: [MusicFolder]
+}
+
+private struct MusicListSelection {
+    var folders: [MusicFolder] = []
+    var tracks: [Track] = []
+    var contentKey: [String] = []
+
+    init() {}
+
+    init(query: MusicListQuery) {
+        folders = Self.matchingFolders(query)
+        tracks = Self.matchingTracks(query)
+        contentKey = folders.map(\.relativePath) + tracks.map(\.relativePath)
+    }
+
+    private static func matchingFolders(_ query: MusicListQuery) -> [MusicFolder] {
+        guard !query.showingFavourites else { return [] }
+        guard !query.search.isEmpty else { return query.folders }
+        return query.searchFolders.filter {
+            $0.name.localizedCaseInsensitiveContains(query.search)
+        }
+    }
+
+    private static func matchingTracks(_ query: MusicListQuery) -> [Track] {
+        guard !query.search.isEmpty else {
+            return query.showingFavourites ? query.favourites : query.folderTracks
+        }
+        let source = query.showingFavourites ? query.favourites : query.searchTracks
+        return source.filter { $0.title.localizedCaseInsensitiveContains(query.search) }
+    }
+}
+
 struct MusicPage: View {
     @State private var remote = MusicRemote.shared
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
@@ -681,28 +724,25 @@ struct MusicPage: View {
     @State private var renameFolderTarget: MusicFolder?
     @State private var folderRenameText = ""
     @State private var deleteFolderTarget: MusicFolder?
+    @State private var selection = MusicListSelection()
 
     private var dark: Bool { scheme == .dark }
     private var theme: Color { themeColor(themeName) }
     private var blurMusic: Bool { presenterState.active && presenterBlurMusic }
 
-    private var filteredTracks: [Track] {
-        guard !search.isEmpty else {
-            return remote.showingFavourites ? remote.favourites : remote.folderTracks
-        }
-        let source = remote.showingFavourites ? remote.favourites : remote.searchTracks
-        return source.filter { $0.title.localizedCaseInsensitiveContains(search) }
+    private var listQuery: MusicListQuery {
+        MusicListQuery(
+            search: search, showingFavourites: remote.showingFavourites,
+            favourites: remote.favourites, folders: remote.folders,
+            folderTracks: remote.folderTracks, searchTracks: remote.searchTracks,
+            searchFolders: remote.searchFolders)
     }
 
-    private var filteredFolders: [MusicFolder] {
-        guard !remote.showingFavourites else { return [] }
-        guard !search.isEmpty else { return remote.folders }
-        return remote.searchFolders.filter { $0.name.localizedCaseInsensitiveContains(search) }
-    }
+    private var filteredTracks: [Track] { selection.tracks }
 
-    private var contentKey: [String] {
-        filteredFolders.map(\.relativePath) + filteredTracks.map(\.relativePath)
-    }
+    private var filteredFolders: [MusicFolder] { selection.folders }
+
+    private var contentKey: [String] { selection.contentKey }
 
     private func location(of relativePath: String) -> String? {
         guard !search.isEmpty, !remote.showingFavourites else { return nil }
@@ -793,6 +833,9 @@ struct MusicPage: View {
         }
         .onChange(of: search) { if !search.isEmpty { remote.loadSearchScope() } }
         .onChange(of: remote.folderPath) { if !search.isEmpty { remote.loadSearchScope() } }
+        .onChange(of: listQuery, initial: true) { _, query in
+            selection = MusicListSelection(query: query)
+        }
     }
 
     private var deleteAlertBinding: Binding<Bool> {
