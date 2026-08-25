@@ -61,7 +61,7 @@ final class UsageStore: FeatureModule {
     private var daily: [DailyRow] = []
     private var billingDay = 26
 
-    private var cachedClaudeCredential: ClaudeOAuthCredential?
+    private var claudeCredentialSession = ClaudeCredentialSession()
     private var retryNotBefore: Date?
     private var usageMtime: Date?
     private var timer: Timer?
@@ -392,9 +392,9 @@ final class UsageStore: FeatureModule {
     }
 
     private func fetchLimitsOnce() async {
-        guard var credential = currentClaudeCredential() else {
+        guard var credential = await currentClaudeCredential() else {
             limitsError = "Claude Code token not found"
-            diag("token not found (keychain + credentials file both empty)")
+            diag("token not found in keychain, credentials file, or login shell")
             keepOrBlankMenuBar()
             return
         }
@@ -412,21 +412,22 @@ final class UsageStore: FeatureModule {
         } catch FetchError.unauthorized {
             diag("401 unauthorized - re-reading credentials and refreshing token")
             Log.usage.error("401 unauthorized - re-reading credentials and refreshing token")
-            cachedClaudeCredential = nil
         } catch {
             report(error)
             return
         }
 
-        guard let latest = currentClaudeCredential() else {
+        guard let latest = await currentClaudeCredential(reload: true) else {
             limitsError = "Claude Code token not found"
-            diag("token re-read failed - keychain + credentials file both empty")
+            diag("token re-read failed across persisted and login shell sources")
             keepOrBlankMenuBar()
             return
         }
         do {
             let fresh: ClaudeOAuthCredential
-            if latest.accessToken != credential.accessToken,
+            if latest.source == .shell {
+                fresh = latest
+            } else if latest.accessToken != credential.accessToken,
                 !latest.shouldRefresh(at: Date())
             {
                 fresh = latest
@@ -708,10 +709,12 @@ final class UsageStore: FeatureModule {
         }
     }
 
-    private func currentClaudeCredential() -> ClaudeOAuthCredential? {
-        if let cachedClaudeCredential { return cachedClaudeCredential }
-        guard let credential = ClaudeCredentialStore.read() else {
-            Log.usage.error("no token found - keychain and credentials file both empty")
+    private func currentClaudeCredential(reload: Bool = false) async -> ClaudeOAuthCredential? {
+        let credential =
+            reload
+            ? await claudeCredentialSession.reload() : await claudeCredentialSession.current()
+        guard let credential else {
+            Log.usage.error("no token found across persisted and login shell sources")
             return nil
         }
         switch credential.source {
@@ -722,7 +725,6 @@ final class UsageStore: FeatureModule {
         case .shell:
             Log.usage.notice("token read from login shell environment")
         }
-        cachedClaudeCredential = credential
         return credential
     }
 
@@ -740,7 +742,7 @@ final class UsageStore: FeatureModule {
         guard let refreshed = ClaudeOAuthCredential.decode(data, source: credential.source) else {
             throw FetchError.unauthorized
         }
-        cachedClaudeCredential = refreshed
+        claudeCredentialSession.store(refreshed)
         Log.usage.notice("Claude access token refreshed and saved")
         diag("Claude access token refreshed and saved")
         return refreshed

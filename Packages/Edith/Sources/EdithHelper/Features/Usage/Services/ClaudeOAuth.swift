@@ -115,14 +115,24 @@ enum ClaudeCredentialStore {
     private static let keychainService = "Claude Code-credentials"
 
     static func read() -> ClaudeOAuthCredential? {
+        read(
+            home: FileManager.default.homeDirectoryForCurrentUser,
+            keychainData: keychainData,
+            fileData: { try? Data(contentsOf: $0) })
+    }
+
+    static func read(
+        home: URL,
+        keychainData: () -> Data?,
+        fileData: (URL) -> Data?
+    ) -> ClaudeOAuthCredential? {
         if let data = keychainData(),
             let credential = ClaudeOAuthCredential.decode(data, source: .keychain)
         {
             return credential
         }
-        let url = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude/.credentials.json")
-        guard let data = try? Data(contentsOf: url) else { return nil }
+        let url = home.appendingPathComponent(".claude/.credentials.json")
+        guard let data = fileData(url) else { return nil }
         return ClaudeOAuthCredential.decode(data, source: .file(url))
     }
 

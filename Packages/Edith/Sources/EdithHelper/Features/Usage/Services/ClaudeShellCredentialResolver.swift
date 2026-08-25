@@ -216,3 +216,47 @@ struct ClaudeShellCredentialResolver: Sendable {
         return URL(fileURLWithPath: path)
     }
 }
+
+@MainActor
+final class ClaudeCredentialSession {
+    typealias PersistedReader = () -> ClaudeOAuthCredential?
+    typealias ShellReader = () async -> ClaudeShellCredentialResolution
+
+    private var cached: ClaudeOAuthCredential?
+    private let persistedReader: PersistedReader
+    private let shellReader: ShellReader
+
+    init(
+        persistedReader: @escaping PersistedReader = ClaudeCredentialStore.read,
+        shellReader: @escaping ShellReader = {
+            await ClaudeShellCredentialResolver().resolve()
+        }
+    ) {
+        self.persistedReader = persistedReader
+        self.shellReader = shellReader
+    }
+
+    func current() async -> ClaudeOAuthCredential? {
+        if let cached { return cached }
+        return await load()
+    }
+
+    func reload() async -> ClaudeOAuthCredential? {
+        cached = nil
+        return await load()
+    }
+
+    func store(_ credential: ClaudeOAuthCredential) {
+        cached = credential
+    }
+
+    private func load() async -> ClaudeOAuthCredential? {
+        if let credential = persistedReader() {
+            cached = credential
+            return credential
+        }
+        guard case .credential(let credential) = await shellReader() else { return nil }
+        cached = credential
+        return credential
+    }
+}

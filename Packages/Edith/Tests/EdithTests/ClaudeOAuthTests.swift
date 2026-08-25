@@ -21,6 +21,32 @@ private final class ClaudeShellInvocationCapture: @unchecked Sendable {
     }
 }
 
+private final class ClaudeShellCredentialQueue: @unchecked Sendable {
+    private let lock = NSLock()
+    private var tokens: [String]
+    private var storedCalls = 0
+
+    init(tokens: [String]) {
+        self.tokens = tokens
+    }
+
+    func next() -> ClaudeShellCredentialResolution {
+        lock.lock()
+        defer { lock.unlock() }
+        storedCalls += 1
+        guard !tokens.isEmpty,
+            let credential = ClaudeOAuthCredential.transient(accessToken: tokens.removeFirst())
+        else { return .missing }
+        return .credential(credential)
+    }
+
+    var calls: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedCalls
+    }
+}
+
 @Suite struct ClaudeOAuthCredentialTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
@@ -244,5 +270,93 @@ private final class ClaudeShellInvocationCapture: @unchecked Sendable {
         default:
             Issue.record("unexpected resolution")
         }
+    }
+}
+
+@MainActor
+@Suite struct ClaudeCredentialSessionTests {
+    @Test func keychainPrecedesTheCredentialsFile() throws {
+        let keychain = try credentialData("keychain-token")
+        let file = try credentialData("file-token")
+        var requestedFile: URL?
+        let credential = ClaudeCredentialStore.read(
+            home: URL(fileURLWithPath: "/tmp/credential-home"),
+            keychainData: { keychain },
+            fileData: {
+                requestedFile = $0
+                return file
+            })
+        #expect(credential?.accessToken == "keychain-token")
+        #expect(credential?.source == .keychain)
+        #expect(requestedFile == nil)
+    }
+
+    @Test func malformedKeychainFallsBackToTheCredentialsFile() throws {
+        let home = URL(fileURLWithPath: "/tmp/credential-home")
+        let file = try credentialData("file-token")
+        var requestedFile: URL?
+        let credential = ClaudeCredentialStore.read(
+            home: home,
+            keychainData: { Data("invalid".utf8) },
+            fileData: {
+                requestedFile = $0
+                return file
+            })
+        #expect(credential?.accessToken == "file-token")
+        #expect(
+            credential?.source == .file(home.appendingPathComponent(".claude/.credentials.json")))
+        #expect(requestedFile == home.appendingPathComponent(".claude/.credentials.json"))
+    }
+
+    @Test func persistedCredentialsPrecedeTheShell() async throws {
+        let persisted = try #require(
+            ClaudeOAuthCredential.decode(
+                credentialData("persisted-token"), source: .keychain))
+        let shell = ClaudeShellCredentialQueue(tokens: ["shell-token"])
+        let session = ClaudeCredentialSession(
+            persistedReader: { persisted },
+            shellReader: { shell.next() })
+        let credential = await session.current()
+        #expect(credential?.accessToken == "persisted-token")
+        #expect(credential?.source == .keychain)
+        #expect(shell.calls == 0)
+    }
+
+    @Test func shellCredentialIsResolvedOnceAndCachedOnlyInMemory() async {
+        let shell = ClaudeShellCredentialQueue(tokens: ["shell-token", "unused-token"])
+        let session = ClaudeCredentialSession(
+            persistedReader: { nil },
+            shellReader: { shell.next() })
+        let first = await session.current()
+        let second = await session.current()
+        #expect(first?.accessToken == "shell-token")
+        #expect(second?.accessToken == "shell-token")
+        #expect(first?.source == .shell)
+        #expect(shell.calls == 1)
+    }
+
+    @Test func reloadAfterUnauthorizedResolvesExactlyOnceAndRotates() async {
+        let shell = ClaudeShellCredentialQueue(tokens: [
+            "old-token", "rotated-token", "unused-token",
+        ])
+        let session = ClaudeCredentialSession(
+            persistedReader: { nil },
+            shellReader: { shell.next() })
+        let rejected = await session.current()
+        let rotated = await session.reload()
+        let cached = await session.current()
+        #expect(rejected?.accessToken == "old-token")
+        #expect(rotated?.accessToken == "rotated-token")
+        #expect(cached?.accessToken == "rotated-token")
+        #expect(shell.calls == 2)
+    }
+
+    private func credentialData(_ accessToken: String) throws -> Data {
+        try JSONSerialization.data(withJSONObject: [
+            "claudeAiOauth": [
+                "accessToken": accessToken,
+                "refreshToken": "refresh-token",
+            ]
+        ])
     }
 }
