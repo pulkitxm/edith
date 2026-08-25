@@ -69,19 +69,18 @@ final class MachinesModel {
     }
 
     func add(_ machine: Machine, secrets: MachineSecretChanges = MachineSecretChanges()) {
-        enqueueMutation(.add, machine: machine, secrets: secrets) { [weak self] in
+        enqueueMutation(.add, machine: machine, secrets: secrets) { [weak self] _ in
             guard let self else { return }
             self.store.reload()
             self.selection = machine.id
             let session = self.session(for: machine.id)
             session.start()
-            self.reconcileSSHClipboard(machine, connection: session.connectionRef)
+            await self.reconcileSSHClipboardNow(machine, connection: session.connectionRef)
         }
     }
 
     func update(_ machine: Machine, secrets: MachineSecretChanges = MachineSecretChanges()) {
-        let previous = store.machine(id: machine.id)
-        enqueueMutation(.edit, machine: machine, secrets: secrets) { [weak self] in
+        enqueueMutation(.edit, machine: machine, secrets: secrets) { [weak self] previous in
             guard let self else { return }
             self.store.reload()
             if let session = self.sessions[machine.id] {
@@ -89,7 +88,7 @@ final class MachinesModel {
                 self.sessions[machine.id] = nil
             }
             let session = self.session(for: machine.id)
-            self.reconcileSSHClipboard(
+            await self.reconcileSSHClipboardNow(
                 machine, replacing: previous,
                 connection: machine.sshClipboardEnabled ? session.connectionRef : nil)
         }
@@ -97,14 +96,15 @@ final class MachinesModel {
 
     func remove(id: UUID) {
         guard let machine = store.machine(id: id) else { return }
-        enqueueMutation(.remove, machine: machine) { [weak self] in
+        enqueueMutation(.remove, machine: machine) { [weak self] previous in
             guard let self else { return }
             self.sessions[id]?.stop()
             self.sessions[id] = nil
             self.store.reload()
-            var disabled = machine
-            disabled.sshClipboardEnabled = false
-            self.reconcileSSHClipboard(disabled, replacing: disabled)
+            let disabled = MachineMutationReconciliation.removalTarget(
+                submitted: machine, effectivePrevious: previous)
+            await self.reconcileSSHClipboardNow(
+                disabled, replacing: previous ?? machine)
             self.ensureSelection()
         }
     }
@@ -112,7 +112,7 @@ final class MachinesModel {
     private func enqueueMutation(
         _ operation: MachineMutationOperation, machine: Machine,
         secrets: MachineSecretChanges = MachineSecretChanges(),
-        completion: @escaping @MainActor () -> Void
+        completion: @escaping @MainActor (Machine?) async -> Void
     ) {
         let predecessor = mutationJob
         mutationSequence += 1
@@ -120,13 +120,17 @@ final class MachinesModel {
         mutationJob = Task { [weak self] in
             await predecessor?.value
             guard !Task.isCancelled else { return }
-            _ = await Task.detached(priority: .utility) {
+            let previous = await Task.detached(priority: .utility) {
+                let previous = MachineMutationReconciliation.previous(
+                    for: operation, machineID: machine.id,
+                    machines: MachineRegistry.machines())
                 MachineMutationOperationExecution.perform(
                     operation, machine: machine, secrets: secrets,
                     notify: { IPC.post(IPC.Name.machinesChanged) })
+                return previous
             }.value
             guard !Task.isCancelled, let self else { return }
-            completion()
+            await completion(previous)
             if self.mutationSequence == sequence {
                 self.mutationJob = nil
             }
@@ -246,18 +250,47 @@ final class MachinesModel {
         _ machine: Machine, replacing previous: Machine? = nil,
         connection: SSHConnection? = nil
     ) {
-        sshClipboardStates[machine.id] = machine.sshClipboardEnabled ? .configuring : .disabled
         Task {
-            do {
-                try await SSHClipboardManager.shared.reconcile(
-                    machine, replacing: previous, connection: connection)
-                sshClipboardStates[machine.id] = machine.sshClipboardEnabled ? .active : .disabled
-            } catch {
-                sshClipboardStates[machine.id] = .failed(error.localizedDescription)
-            }
+            await reconcileSSHClipboardNow(
+                machine, replacing: previous, connection: connection)
         }
     }
 
+    private func reconcileSSHClipboardNow(
+        _ machine: Machine, replacing previous: Machine? = nil,
+        connection: SSHConnection? = nil
+    ) async {
+        sshClipboardStates[machine.id] = machine.sshClipboardEnabled ? .configuring : .disabled
+        do {
+            try await SSHClipboardManager.shared.reconcile(
+                machine, replacing: previous, connection: connection)
+            sshClipboardStates[machine.id] = machine.sshClipboardEnabled ? .active : .disabled
+        } catch {
+            sshClipboardStates[machine.id] = .failed(error.localizedDescription)
+        }
+    }
+
+}
+
+enum MachineMutationReconciliation {
+    static func previous(
+        for operation: MachineMutationOperation, machineID: UUID, machines: [Machine]
+    ) -> Machine? {
+        switch operation {
+        case .add:
+            return nil
+        case .edit, .remove:
+            return machines.first { $0.id == machineID }
+        }
+    }
+
+    static func removalTarget(
+        submitted: Machine, effectivePrevious: Machine?
+    ) -> Machine {
+        var target = effectivePrevious ?? submitted
+        target.sshClipboardEnabled = false
+        return target
+    }
 }
 
 enum SSHClipboardSyncState: Equatable {

@@ -95,10 +95,7 @@ struct UsageMachineRows: View {
         reloadTask?.cancel()
         reloadTask = Task {
             let found = await Task.detached(priority: .utility) {
-                Dictionary(
-                    uniqueKeysWithValues: MachineUsageStore.summaries().map {
-                        ($0.machineID, $0)
-                    })
+                MachineUsageRows.summariesByMachineID(MachineUsageStore.summaries())
             }.value
             guard !Task.isCancelled else { return }
             summaries = found
@@ -154,6 +151,42 @@ struct UsageMachineRows: View {
 }
 
 enum MachineUsageRows {
+    static func summariesByMachineID(
+        _ summaries: [MachineUsageSummary]
+    ) -> [UUID: MachineUsageSummary] {
+        summaries.reduce(into: [:]) { result, candidate in
+            guard let existing = result[candidate.machineID] else {
+                result[candidate.machineID] = candidate
+                return
+            }
+            if prefers(candidate, over: existing) {
+                result[candidate.machineID] = candidate
+            }
+        }
+    }
+
+    private static func prefers(
+        _ candidate: MachineUsageSummary, over existing: MachineUsageSummary
+    ) -> Bool {
+        if candidate.collectedAt != existing.collectedAt {
+            return candidate.collectedAt > existing.collectedAt
+        }
+        let candidateText = [
+            candidate.name, candidate.slug, candidate.host,
+            candidate.sources.joined(separator: "\u{0}"),
+        ]
+        let existingText = [
+            existing.name, existing.slug, existing.host,
+            existing.sources.joined(separator: "\u{0}"),
+        ]
+        if candidateText != existingText {
+            return candidateText.lexicographicallyPrecedes(existingText)
+        }
+        if candidate.days != existing.days { return candidate.days > existing.days }
+        if candidate.cost != existing.cost { return candidate.cost > existing.cost }
+        return candidate.tokens > existing.tokens
+    }
+
     static func spoken(_ event: UsageRefreshEvent) -> String? {
         switch event {
         case let .phase(name, detail, _): return "\(name): \(detail)"
