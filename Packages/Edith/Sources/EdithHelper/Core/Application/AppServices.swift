@@ -18,6 +18,7 @@ final class AppServices {
     private(set) var lidAwake: LidAwakeEngine?
     private(set) var systemStats: SystemStatsStatusItem?
     private(set) var attention: AttentionTrackingService?
+    private let startup = StartupCoordinator()
 
     static func preferenceOnByDefault(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? true
@@ -34,11 +35,56 @@ final class AppServices {
         SharedDefaults.store.object(forKey: key) as? Bool ?? false
     }
 
-    init() {
-        sync()
+    func start() {
+        startup.start([
+            StartupPhase(name: "helper.services.media") { [weak self] in
+                self?.reconcileMediaServices()
+            },
+            StartupPhase(name: "helper.services.system") { [weak self] in
+                self?.reconcileSystemServices()
+            },
+            StartupPhase(name: "helper.services.panels") { [weak self] in
+                self?.reconcilePanelServices()
+            },
+            StartupPhase(name: "helper.services.presentation") { [weak self] in
+                self?.reconcilePresentationServices()
+            },
+            StartupPhase(name: "helper.services.hardware") { [weak self] in
+                self?.reconcileHardwareServices()
+            },
+            StartupPhase(name: "helper.services.status") { [weak self] in
+                self?.reconcileStatusServices()
+            },
+            StartupPhase(name: "helper.services.attention") { [weak self] in
+                self?.reconcileAttentionService()
+            },
+            StartupPhase(name: "helper.services.refresh") { [weak self] in
+                self?.refreshServices()
+            },
+        ])
     }
 
     func sync() {
+        startup.cancel()
+        reconcileMediaServices()
+        reconcileSystemServices()
+        reconcilePanelServices()
+        reconcilePresentationServices()
+        reconcileHardwareServices()
+        reconcileStatusServices()
+        reconcileAttentionService()
+        refreshServices()
+    }
+
+    func cancelStartup() {
+        startup.cancel()
+    }
+
+    func waitForStartup() async {
+        await startup.waitForCurrent()
+    }
+
+    private func reconcileMediaServices() {
         let usageState = Self.reconcileAgentUsageSettings()
         let usageOn = usageState.enabled
         let musicOn = Self.extensionEnabled(AppStorageKeys.Tabs.musicEnabled)
@@ -60,7 +106,9 @@ final class AppServices {
             player.shutdown()
             music = nil
         }
+    }
 
+    private func reconcileSystemServices() {
         let systemOn = Self.extensionEnabled(AppStorageKeys.Tabs.systemEnabled)
         if systemOn, system == nil { system = SystemStore() }
         if !systemOn, let store = system {
@@ -87,7 +135,9 @@ final class AppServices {
             store.shutdown()
             calendar = nil
         }
+    }
 
+    private func reconcilePanelServices() {
         let notchShelfOn = SharedDefaults.store.bool(forKey: AppStorageKeys.Notch.shelfEnabled)
         if notchShelfOn, notchShelf == nil { notchShelf = NotchShelfController() }
         if !notchShelfOn, let controller = notchShelf {
@@ -126,7 +176,9 @@ final class AppServices {
         notchShelf?.attachUsage(usage)
         notchShelf?.attachCalendar(calendar)
         notchShelf?.attachColorPicker(colorPicker)
+    }
 
+    private func reconcilePresentationServices() {
         let focusDimOn = FocusDimState.isEnabled()
         if focusDimOn, focusDim == nil { focusDim = FocusDimEngine() }
         if !focusDimOn, let engine = focusDim {
@@ -150,7 +202,9 @@ final class AppServices {
             detector.shutdown()
             presenter = nil
         }
+    }
 
+    private func reconcileHardwareServices() {
         let micOn = Self.extensionEnabled(AppStorageKeys.Mic.muteEnabled)
         if micOn, micMute == nil { micMute = MicMuteEngine() }
         if !micOn, let engine = micMute {
@@ -166,14 +220,18 @@ final class AppServices {
             lidAwake = nil
         }
         notchShelf?.attachLidAwake(lidAwake)
+    }
 
+    private func reconcileStatusServices() {
         let statsOn = Self.extensionEnabled(AppStorageKeys.MenuBar.systemStats)
         if statsOn, systemStats == nil { systemStats = SystemStatsStatusItem() }
         if !statsOn, let stats = systemStats {
             stats.shutdown()
             systemStats = nil
         }
+    }
 
+    private func reconcileAttentionService() {
         let attentionSettings = AttentionRepository().loadSettings()
         let attentionOn = Self.attentionEnabled(
             extensionEnabled: Self.extensionEnabled(AppStorageKeys.Tabs.attentionEnabled),
@@ -184,7 +242,9 @@ final class AppServices {
             service.shutdown()
             attention = nil
         }
+    }
 
+    private func refreshServices() {
         usage?.syncStatusItem()
         usage?.refreshMenuBarItem()
         usage?.notifier.clearStateIfMasterOff()
