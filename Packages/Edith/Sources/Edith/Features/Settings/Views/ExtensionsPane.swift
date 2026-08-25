@@ -371,6 +371,29 @@ private struct ExtensionMarketplaceCard: View {
     }
 }
 
+struct ExtensionSettingsHeader: View {
+    let title: String
+    @Binding var enabled: Bool
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
+            Spacer()
+            Toggle(isOn: $enabled) {
+                Text("\(title) enabled")
+            }
+            .labelsHidden()
+            .toggleStyle(.switch)
+            .accessibilityLabel("\(title) enabled")
+            .pointerCursor()
+        }
+        .padding(.horizontal, UIScale.pt(28))
+        .padding(.vertical, UIScale.pt(18))
+    }
+}
+
 private struct ExtensionSettingsSheet: View {
     let entry: ExtensionRegistryEntry
     let coordinator: ExtensionModalCoordinator
@@ -392,26 +415,21 @@ private struct ExtensionSettingsSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: UIScale.pt(0)) {
+            ExtensionSettingsHeader(title: entry.title, enabled: enabledBinding)
+
+            Divider()
+
             Form {
-                Section("Extension") {
-                    Toggle("Enabled", isOn: enabledBinding)
-                        .toggleStyle(.switch)
-                        .pointerCursor()
-                    Text(
-                        enabled
-                            ? "This extension is available throughout Edith."
-                            : "Enable this extension to use its controls and workflows."
-                    )
-                    .settingsCaption()
-                    if enabled, !coordinator.missingRequiredTools.isEmpty {
+                ExtensionDetailRows(entry: entry)
+                if enabled, !coordinator.missingRequiredTools.isEmpty {
+                    Section {
                         Button("Set up required tools...") {
                             provisioningEntry = entry
                         }
                         .pointerCursor()
                     }
                 }
-                ExtensionDetailRows(entry: entry)
                 ExtensionLifecycleRows(
                     entry: entry, coordinator: coordinator, invalidation: invalidation)
                 ExtensionPermissionRows(entry: entry) {
@@ -419,20 +437,19 @@ private struct ExtensionSettingsSheet: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle(entry.title)
-            .safeAreaInset(edge: .bottom, spacing: UIScale.pt(0)) {
-                VStack(spacing: UIScale.pt(0)) {
-                    Divider()
-                    HStack {
-                        Spacer()
-                        Button("Done") { dismiss() }
-                            .keyboardShortcut(.defaultAction)
-                            .pointerCursor()
-                    }
-                    .padding(.horizontal, UIScale.pt(18))
-                    .padding(.vertical, UIScale.pt(12))
-                    .background(.bar)
+        }
+        .safeAreaInset(edge: .bottom, spacing: UIScale.pt(0)) {
+            VStack(spacing: UIScale.pt(0)) {
+                Divider()
+                HStack {
+                    Spacer()
+                    Button("Done") { dismiss() }
+                        .keyboardShortcut(.defaultAction)
+                        .pointerCursor()
                 }
+                .padding(.horizontal, UIScale.pt(18))
+                .padding(.vertical, UIScale.pt(12))
+                .background(.bar)
             }
         }
         .onChange(of: grantedPermissions) {
@@ -558,12 +575,14 @@ private struct ExtensionLifecycleRows: View {
         Group {
             Section("Readiness") {
                 if let report = readiness.report {
-                    LabeledContent("State") {
-                        Label(
-                            report.state.phase.title,
-                            systemImage: phaseSymbol(report.state.phase)
-                        )
-                        .foregroundStyle(phaseColor(report.state.phase))
+                    if report.state.phase != .enabled, report.state.phase != .disabled {
+                        LabeledContent("State") {
+                            Label(
+                                report.state.phase.title,
+                                systemImage: phaseSymbol(report.state.phase)
+                            )
+                            .foregroundStyle(phaseColor(report.state.phase))
+                        }
                     }
                     LabeledContent("Runtime") {
                         Label(
@@ -572,8 +591,10 @@ private struct ExtensionLifecycleRows: View {
                         )
                         .foregroundStyle(runtimeColor(report.state.runtimePhase))
                     }
-                    Text(report.state.summary)
-                        .settingsCaption()
+                    if report.state.phase != .enabled, report.state.phase != .disabled {
+                        Text(report.state.summary)
+                            .settingsCaption()
+                    }
                     ForEach(report.checks) { check in
                         checkRow(check)
                     }

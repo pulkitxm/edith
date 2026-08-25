@@ -129,6 +129,11 @@ import Testing
         #expect(source.contains("readiness.refresh(.verify)"))
         #expect(source.contains(".onDisappear { readiness.cancel() }"))
         #expect(!source.contains("Task { await refresh() }"))
+        #expect(
+            source.components(
+                separatedBy:
+                    "if report.state.phase != .enabled, report.state.phase != .disabled"
+            ).count == 3)
         #expect(source.contains("report.state.phase.title"))
         #expect(source.contains("report.state.runtimePhase.title"))
         #expect(source.contains("ExtensionLifecycleState.loading(extensionID: entry.id)"))
@@ -152,6 +157,90 @@ import Testing
         let readiness = try #require(sheet.range(of: "ExtensionLifecycleRows("))
 
         #expect(controls.lowerBound < readiness.lowerBound)
+    }
+
+    @Test func everyExtensionSheetUsesOneAccessibleHeaderSwitch() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Edith/Features/Settings/Views/ExtensionsPane.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let headerStart = try #require(source.range(of: "struct ExtensionSettingsHeader"))
+        let sheetStart = try #require(source.range(of: "private struct ExtensionSettingsSheet"))
+        let headerSource = String(source[headerStart.lowerBound..<sheetStart.lowerBound])
+        let sheetEnd = try #require(
+            source.range(
+                of: "private struct ExtensionLifecycleRows",
+                range: sheetStart.upperBound..<source.endIndex))
+        let sheet = String(source[sheetStart.lowerBound..<sheetEnd.lowerBound])
+        let header = try #require(
+            sheet.range(of: "ExtensionSettingsHeader(title: entry.title, enabled: enabledBinding)"))
+        let form = try #require(sheet.range(of: "Form {"))
+
+        #expect(header.lowerBound < form.lowerBound)
+        #expect(headerSource.contains("Toggle(isOn: $enabled)"))
+        #expect(headerSource.contains(".labelsHidden()"))
+        #expect(headerSource.contains(".accessibilityLabel(\"\\(title) enabled\")"))
+        #expect(headerSource.components(separatedBy: "Toggle(").count == 2)
+        #expect(!sheet.contains(".navigationTitle(entry.title)"))
+        #expect(!sheet.contains("ToolbarItem(placement: .primaryAction)"))
+        #expect(!sheet.contains("Section(\"Extension\")"))
+        #expect(!sheet.contains("Toggle(\"Enabled\""))
+        #expect(!sheet.contains("This extension is available throughout Edith."))
+        #expect(!sheet.contains("Enable this extension to use its controls and workflows."))
+        #expect(!sheet.contains(".disabled(!enabled)"))
+        #expect(sheet.contains("Button(\"Set up required tools...\")"))
+        #expect(sheet.contains("ToolProvisioningSheet(entry: entry)"))
+    }
+
+    @Test func everyExtensionDetailKeepsItsDisabledStateGate() throws {
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Edith/Features/Settings/Views")
+        let routes: [(id: String, view: String, binding: String, file: String)] = [
+            ("attention", "AttentionRows", "enabled", "ExtensionsPane.swift"),
+            ("usage", "UsageRows", "enabled", "ExtensionsPane.swift"),
+            ("herdr", "HerdrRows", "enabled", "ExtensionsPane.swift"),
+            ("quinjet", "QuinjetRows", "enabled", "ExtensionsPane.swift"),
+            ("system", "SystemRows", "enabled", "ExtensionsPane.swift"),
+            ("machines", "MachinesRows", "enabled", "MachinesRows.swift"),
+            ("companion", "CompanionRows", "enabled", "ExtensionsPane.swift"),
+            ("systemStats", "SystemStatsRows", "enabled", "ExtensionsPane.swift"),
+            ("micMute", "MicMuteRows", "enabled", "ExtensionsPane.swift"),
+            ("lidAwake", "LidAwakeRows", "enabled", "LidAwakeRows.swift"),
+            ("music", "MusicRows", "enabled", "ExtensionsPane.swift"),
+            ("calendar", "CalendarRows", "enabled", "ExtensionsPane.swift"),
+            ("notchShelf", "NotchShelfRows", "enabled", "NotchShelfRows.swift"),
+            ("clipboard", "ClipboardRows", "enabled", "ClipboardRows.swift"),
+            ("focusDim", "FocusDimRows", "enabled", "FocusDimRows.swift"),
+            ("presenter", "PresenterRows", "presenterEnabled", "PresenterRows.swift"),
+            ("colorPicker", "ColorPickerRows", "colorPickerEnabled", "ColorPickerRows.swift"),
+        ]
+
+        #expect(Set(routes.map(\.id)) == Set(ExtensionDetailRoute.allCases.map(\.rawValue)))
+        for route in routes {
+            let source = try String(
+                contentsOf: sourceRoot.appendingPathComponent(route.file), encoding: .utf8)
+            let body = try Self.viewDeclaration(route.view, in: source)
+            #expect(body.contains(".disabled(!\(route.binding))"), "\(route.id) lost its gate")
+            #expect(
+                body.contains(".opacity(\(route.binding) ? 1 : 0.5)"),
+                "\(route.id) lost its disabled appearance")
+        }
+    }
+
+    private static func viewDeclaration(_ name: String, in source: String) throws -> Substring {
+        let start = try #require(source.range(of: "struct \(name): View"))
+        let remaining = start.upperBound..<source.endIndex
+        let ends = [
+            source.range(of: "\nprivate struct ", range: remaining)?.lowerBound,
+            source.range(of: "\nstruct ", range: remaining)?.lowerBound,
+        ].compactMap { $0 }
+        let end = ends.min() ?? source.endIndex
+        return source[start.lowerBound..<end]
     }
 
     @Test func recoveryControlsUseTheSameOperationsAsTheCLI() throws {
