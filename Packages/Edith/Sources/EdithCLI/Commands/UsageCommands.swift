@@ -665,7 +665,8 @@ struct UsageRefreshCommand: AsyncParsableCommand {
                 targets: due, registry: registry, dataDirectory: Repo.dataDir,
                 timeout: MachineUsageCollector.defaultTimeout, verbose: false),
             includeSuccessfulMachines: false, store: CLIEnvironment.sharedDefaults,
-            onEvent: sink, afterChange: {})
+            onEvent: sink,
+            afterChange: { IPC.post(IPC.Name.requestUsageRefresh) })
         let round = result.round
         progress.end()
         if force, let failure = forcedMachineCollectionFailure(round) { throw failure }

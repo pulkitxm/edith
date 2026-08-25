@@ -3,7 +3,100 @@ import EdithKit
 import Foundation
 import Testing
 
+private final class CommandLineRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var lines: [String] = []
+
+    func append(_ line: String) {
+        lock.lock()
+        lines.append(line)
+        lock.unlock()
+    }
+
+    var snapshot: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return lines
+    }
+}
+
 @Suite struct CLICommandRunnerTests {
+    private func waitForSignal(
+        _ semaphore: DispatchSemaphore, timeout: TimeInterval = 2
+    ) async -> Bool {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                continuation.resume(
+                    returning: semaphore.wait(timeout: .now() + timeout) == .success)
+            }
+        }
+    }
+
+    @Test func separatedStreamsKeepPartialFinalLinesOnTheirOwnChannels() async throws {
+        let standardOutput = CommandLineRecorder()
+        let standardError = CommandLineRecorder()
+        let result = try await CLICommandRunner.runSeparated(
+            CLICommandRequest(
+                executableURL: URL(fileURLWithPath: "/bin/sh"),
+                arguments: ["-c", "printf 'event'; printf 'diagnostic' >&2"],
+                environment: ["PATH": "/usr/bin:/bin"], timeout: 2,
+                maximumOutputBytes: 1_024, terminatesProcessGroup: true),
+            onStandardOutputLine: { standardOutput.append($0) },
+            onStandardErrorLine: { standardError.append($0) })
+        #expect(result.terminationStatus == 0)
+        #expect(standardOutput.snapshot == ["event"])
+        #expect(standardError.snapshot == ["diagnostic"])
+    }
+
+    @Test func separatedRunnerDoesNotReturnWhileACompletedCommandCallbackIsBlocked() async throws {
+        let callbackStarted = DispatchSemaphore(value: 0)
+        let releaseCallback = DispatchSemaphore(value: 0)
+        let runnerFinished = DispatchSemaphore(value: 0)
+        let task = Task {
+            defer { runnerFinished.signal() }
+            return try await CLICommandRunner.runSeparated(
+                CLICommandRequest(
+                    executableURL: URL(fileURLWithPath: "/bin/sh"),
+                    arguments: ["-c", "printf 'ready\\n'"],
+                    environment: ["PATH": "/usr/bin:/bin"], timeout: 2,
+                    maximumOutputBytes: 1_024, terminatesProcessGroup: true),
+                onStandardOutputLine: { _ in
+                    callbackStarted.signal()
+                    releaseCallback.wait()
+                },
+                onStandardErrorLine: { _ in })
+        }
+
+        #expect(await waitForSignal(callbackStarted))
+        #expect(!(await waitForSignal(runnerFinished, timeout: 0.1)))
+        releaseCallback.signal()
+
+        let result = try await task.value
+        #expect(result.terminationStatus == 0)
+    }
+
+    @Test func separatedTimeoutDoesNotStartCallbacksThatCouldOutliveTheRunner() async throws {
+        let callbackStarted = DispatchSemaphore(value: 0)
+        let startedAt = ProcessInfo.processInfo.systemUptime
+
+        do {
+            _ = try await CLICommandRunner.runSeparated(
+                CLICommandRequest(
+                    executableURL: URL(fileURLWithPath: "/bin/sh"),
+                    arguments: ["-c", "printf 'ready\\n'; exec /bin/sleep 30"],
+                    environment: ["PATH": "/usr/bin:/bin"], timeout: 0.1,
+                    maximumOutputBytes: 1_024, terminatesProcessGroup: true),
+                onStandardOutputLine: { _ in callbackStarted.signal() },
+                onStandardErrorLine: { _ in callbackStarted.signal() })
+            Issue.record("expected timeout")
+        } catch let error as CLICommandRunnerError {
+            #expect(error == .timedOut)
+        }
+
+        #expect(ProcessInfo.processInfo.systemUptime - startedAt < 2)
+        #expect(!(await waitForSignal(callbackStarted, timeout: 0.01)))
+    }
+
     @Test func cancellationTerminatesTheCommandAndItsDescendant() async throws {
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }

@@ -169,7 +169,8 @@ struct UsageMachinesCollectCommand: AsyncParsableCommand {
                     targets: targets, registry: machines, dataDirectory: Repo.dataDir,
                     timeout: seconds, verbose: verbose),
                 includeSuccessfulMachines: !once, store: CLIEnvironment.sharedDefaults,
-                onEvent: sink, afterChange: {})
+                onEvent: sink,
+                afterChange: { IPC.post(IPC.Name.requestUsageRefresh) })
             let round = result.round
             progress.end()
             if round.skippedBecauseBusy {
@@ -313,7 +314,8 @@ struct UsageMachinesForgetCommand: AsyncParsableCommand {
         try await execute {
             let id = try identify()
             let dropped = UsageCollectionOperationExecution.forgetMachine(
-                machineID: id, store: CLIEnvironment.sharedDefaults, afterDrop: {})
+                machineID: id, store: CLIEnvironment.sharedDefaults,
+                afterDrop: { IPC.post(IPC.Name.requestUsageRefresh) })
             let progress = CLIProgress.forCommand(json: json)
             let merging =
                 dropped ? await UsageMachineBridge.merge(progress: progress) : false

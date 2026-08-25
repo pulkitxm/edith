@@ -87,40 +87,40 @@ private final class CLIStreamingOutput: @unchecked Sendable {
     private let maximumBytes: Int?
     private var pending = ""
     private var complete = Data()
+    private var completeLines: [String] = []
     private var exceededLimit = false
 
     init(maximumBytes: Int?) {
         self.maximumBytes = maximumBytes
     }
 
-    func receive(_ data: Data) -> [String] {
+    func receive(_ data: Data) {
         lock.lock()
         defer { lock.unlock() }
-        guard !exceededLimit else { return [] }
+        guard !exceededLimit else { return }
         if let maximumBytes, complete.count + data.count > maximumBytes {
             complete.removeAll(keepingCapacity: false)
+            completeLines.removeAll(keepingCapacity: false)
             pending = ""
             exceededLimit = true
-            return []
+            return
         }
         complete.append(data)
-        guard let text = String(data: data, encoding: .utf8), !text.isEmpty else { return [] }
+        guard let text = String(data: data, encoding: .utf8), !text.isEmpty else { return }
         pending += text.replacingOccurrences(of: "\r", with: "\n")
-        var lines: [String] = []
         while let newline = pending.firstIndex(of: "\n") {
             let line = String(pending[..<newline])
             pending.removeSubrange(...newline)
-            if !line.isEmpty { lines.append(line) }
+            if !line.isEmpty { completeLines.append(line) }
         }
-        return lines
     }
 
     func finish() -> (lines: [String], output: Data, exceededLimit: Bool) {
         lock.lock()
         defer { lock.unlock() }
-        let lines = exceededLimit || pending.isEmpty ? [] : [pending]
+        if !exceededLimit, !pending.isEmpty { completeLines.append(pending) }
         pending = ""
-        return (lines, complete, exceededLimit)
+        return (completeLines, complete, exceededLimit)
     }
 
     var hasExceededLimit: Bool {
@@ -136,21 +136,31 @@ public enum CLICommandRunner {
     private static let processGroupScript = """
         group_file=$1
         shift
+        child=
+        stop_requested=0
+        terminate_group() {
+            trap - TERM INT
+            [ -n "$child" ] || return
+            kill -TERM -"$child" 2>/dev/null || :
+            sleep 0.1
+            kill -KILL -"$child" 2>/dev/null || :
+        }
+        request_stop() {
+            stop_requested=1
+            [ -n "$child" ] || return
+            terminate_group
+            exit 124
+        }
+        trap 'request_stop' TERM INT
         set -m
         "$@" &
         child=$!
         set +m
         printf '%s\n' "$child" > "$group_file"
-        terminate_group() {
-            kill -TERM -"$child" 2>/dev/null || :
-            sleep 0.1
-            kill -KILL -"$child" 2>/dev/null || :
-        }
-        trap 'terminate_group; exit 124' TERM INT
+        [ "$stop_requested" -eq 0 ] || { terminate_group; exit 124; }
         wait "$child"
         status=$?
         terminate_group
-        trap - TERM INT
         exit "$status"
         """
 
@@ -168,11 +178,41 @@ public enum CLICommandRunner {
         }
     }
 
+    public static func runSeparated(
+        _ request: CLICommandRequest,
+        onStandardOutputLine: @escaping @Sendable (String) -> Void,
+        onStandardErrorLine: @escaping @Sendable (String) -> Void
+    ) async throws -> CLICommandResult {
+        let worker = Task.detached(priority: .utility) {
+            try runBlockingSeparated(
+                request, onStandardOutputLine: onStandardOutputLine,
+                onStandardErrorLine: onStandardErrorLine)
+        }
+        return try await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+    }
+
     private static func runBlocking(
         _ request: CLICommandRequest,
         onLine: @escaping @Sendable (String) -> Void
     ) throws -> CLICommandResult {
+        try runBlockingSeparated(
+            request, onStandardOutputLine: onLine, onStandardErrorLine: onLine)
+    }
+    private static func runBlockingSeparated(
+        _ request: CLICommandRequest,
+        onStandardOutputLine: @escaping @Sendable (String) -> Void,
+        onStandardErrorLine: @escaping @Sendable (String) -> Void
+    ) throws -> CLICommandResult {
         let process = Process()
+        let deadline = request.timeout.map {
+            ProcessInfo.processInfo.systemUptime + max(0, $0)
+        }
+        let cancellationRequested: @Sendable () -> Bool = { Task.isCancelled }
+        let processGroupEscalationSignal = SIGKILL
         let groupFile = FileManager.default.temporaryDirectory.appendingPathComponent(
             "edith-process-\(UUID().uuidString).pid")
         defer { try? FileManager.default.removeItem(at: groupFile) }
@@ -192,31 +232,50 @@ public enum CLICommandRunner {
         let input = request.standardInputData.map { _ in Pipe() }
         process.standardInput = input ?? FileHandle.nullDevice
 
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = request.discardsStandardError ? FileHandle.nullDevice : pipe
+        let standardOutput = Pipe()
+        let standardError = Pipe()
+        process.standardOutput = standardOutput
+        process.standardError =
+            request.discardsStandardError ? FileHandle.nullDevice : standardError
         let output = CLIStreamingOutput(maximumBytes: request.maximumOutputBytes)
-        let readerFinished = DispatchSemaphore(value: 0)
+        let error = CLIStreamingOutput(maximumBytes: request.maximumOutputBytes)
+        let outputFinished = DispatchSemaphore(value: 0)
+        let errorFinished = DispatchSemaphore(value: 0)
         DispatchQueue.global(qos: .utility).async {
             while true {
-                let chunk = pipe.fileHandleForReading.readData(ofLength: 4_096)
+                let chunk = standardOutput.fileHandleForReading.readData(ofLength: 4_096)
                 guard !chunk.isEmpty else { break }
-                for line in output.receive(chunk) { onLine(line) }
+                output.receive(chunk)
             }
-            readerFinished.signal()
+            outputFinished.signal()
+        }
+        if request.discardsStandardError {
+            errorFinished.signal()
+        } else {
+            DispatchQueue.global(qos: .utility).async {
+                while true {
+                    let chunk = standardError.fileHandleForReading.readData(ofLength: 4_096)
+                    guard !chunk.isEmpty else { break }
+                    error.receive(chunk)
+                }
+                errorFinished.signal()
+            }
         }
 
         let processFinished = DispatchSemaphore(value: 0)
         process.terminationHandler = { _ in processFinished.signal() }
         do {
             try process.run()
-            try? pipe.fileHandleForWriting.close()
+            try? standardOutput.fileHandleForWriting.close()
+            try? standardError.fileHandleForWriting.close()
             try? input?.fileHandleForReading.close()
         } catch {
-            try? pipe.fileHandleForWriting.close()
+            try? standardOutput.fileHandleForWriting.close()
+            try? standardError.fileHandleForWriting.close()
             try? input?.fileHandleForReading.close()
             try? input?.fileHandleForWriting.close()
-            _ = readerFinished.wait(timeout: .now() + terminationGrace)
+            _ = drain(standardOutput, readerFinished: outputFinished)
+            _ = drain(standardError, readerFinished: errorFinished)
             throw CLICommandRunnerError.launchFailed
         }
         let inputFinished = DispatchSemaphore(value: 0)
@@ -230,16 +289,13 @@ public enum CLICommandRunner {
             inputFinished.signal()
         }
 
-        let deadline = request.timeout.map {
-            ProcessInfo.processInfo.systemUptime + max(0, $0)
-        }
         var stop: StopReason?
         while true {
-            if Task.isCancelled {
+            if cancellationRequested() {
                 stop = .cancelled
                 break
             }
-            if output.hasExceededLimit {
+            if output.hasExceededLimit || error.hasExceededLimit {
                 stop = .outputLimitExceeded
                 break
             }
@@ -252,10 +308,12 @@ public enum CLICommandRunner {
 
         if let stop {
             try? input?.fileHandleForWriting.close()
-            terminate(
+            terminateProcessGroup(
                 process, groupFile: request.terminatesProcessGroup ? groupFile : nil,
-                processFinished: processFinished)
-            drain(pipe, readerFinished: readerFinished)
+                processFinished: processFinished,
+                escalationSignal: processGroupEscalationSignal)
+            _ = drain(standardOutput, readerFinished: outputFinished)
+            _ = drain(standardError, readerFinished: errorFinished)
             _ = inputFinished.wait(timeout: .now() + terminationGrace)
             switch stop {
             case .cancelled:
@@ -267,21 +325,23 @@ public enum CLICommandRunner {
             }
         }
 
-        guard drain(pipe, readerFinished: readerFinished) else {
-            throw CLICommandRunnerError.streamFailed
-        }
+        guard drain(standardOutput, readerFinished: outputFinished),
+            drain(standardError, readerFinished: errorFinished)
+        else { throw CLICommandRunnerError.streamFailed }
         guard inputFinished.wait(timeout: .now() + terminationGrace) == .success else {
             try? input?.fileHandleForWriting.close()
             throw CLICommandRunnerError.streamFailed
         }
-        let finished = output.finish()
-        guard !finished.exceededLimit else {
+        let finishedOutput = output.finish()
+        let finishedError = error.finish()
+        guard !finishedOutput.exceededLimit, !finishedError.exceededLimit else {
             throw CLICommandRunnerError.outputLimitExceeded
         }
-        for line in finished.lines { onLine(line) }
+        for line in finishedOutput.lines { onStandardOutputLine(line) }
+        for line in finishedError.lines { onStandardErrorLine(line) }
         return CLICommandResult(
             terminationStatus: process.terminationStatus,
-            outputData: finished.output)
+            outputData: finishedOutput.output + finishedError.output)
     }
 
     private enum StopReason {
@@ -290,8 +350,9 @@ public enum CLICommandRunner {
         case outputLimitExceeded
     }
 
-    private static func terminate(
-        _ process: Process, groupFile: URL?, processFinished: DispatchSemaphore
+    private static func terminateProcessGroup(
+        _ process: Process, groupFile: URL?, processFinished: DispatchSemaphore,
+        escalationSignal: Int32
     ) {
         var group = groupFile.flatMap {
             groupIdentifier(at: $0, waitingUntil: ProcessInfo.processInfo.systemUptime + 0.05)
@@ -305,8 +366,8 @@ public enum CLICommandRunner {
         if group == nil, let groupFile {
             group = groupIdentifier(at: groupFile, waitingUntil: nil)
         }
-        if let group { _ = kill(-group, SIGKILL) }
-        if process.isRunning { _ = kill(process.processIdentifier, SIGKILL) }
+        if let group { _ = kill(-group, escalationSignal) }
+        if process.isRunning { _ = kill(process.processIdentifier, escalationSignal) }
         _ = processFinished.wait(timeout: .now() + terminationGrace)
     }
 
