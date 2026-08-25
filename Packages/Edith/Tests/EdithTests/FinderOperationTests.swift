@@ -65,6 +65,296 @@ private actor PausedFinderSearch {
     }
 }
 
+private enum FinderLoadHarnessError: Error {
+    case timedOut
+}
+
+private actor FinderLoadHarness {
+    private struct Pending {
+        let path: String
+        let continuation: CheckedContinuation<Result<[RemoteFileEntry], Error>, Never>
+    }
+
+    private var pending: [UUID: Pending] = [:]
+    private var latestID: UUID?
+    private var cancelledIDs: Set<UUID> = []
+    private var requested: [String] = []
+    private var cancelled: [String] = []
+    private var inFlight = 0
+    private var maximumInFlight = 0
+
+    func load(_ path: String) async -> Result<[RemoteFileEntry], Error> {
+        let id = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                requested.append(path)
+                if cancelledIDs.remove(id) != nil {
+                    cancelled.append(path)
+                    continuation.resume(returning: .failure(CancellationError()))
+                    return
+                }
+                inFlight += 1
+                maximumInFlight = max(maximumInFlight, inFlight)
+                pending[id] = Pending(path: path, continuation: continuation)
+                latestID = id
+            }
+        } onCancel: {
+            Task { await self.cancel(id) }
+        }
+    }
+
+    func waitForRequests(_ count: Int, timeout: Duration = .seconds(2)) async throws {
+        let deadline = ContinuousClock.now + timeout
+        while requested.count < count {
+            guard ContinuousClock.now < deadline else { throw FinderLoadHarnessError.timedOut }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    func resolveLatest(with entries: [RemoteFileEntry]) {
+        guard let latestID, let item = pending.removeValue(forKey: latestID) else { return }
+        self.latestID = nil
+        inFlight -= 1
+        item.continuation.resume(returning: Result.success(entries))
+    }
+
+    func snapshot() -> (requested: [String], cancelled: [String], maximumInFlight: Int) {
+        (requested, cancelled, maximumInFlight)
+    }
+
+    private func cancel(_ id: UUID) {
+        guard let item = pending.removeValue(forKey: id) else {
+            cancelledIDs.insert(id)
+            return
+        }
+        inFlight -= 1
+        cancelled.append(item.path)
+        item.continuation.resume(returning: .failure(CancellationError()))
+    }
+}
+
+@Suite(.serialized) @MainActor struct FinderLoadCoordinationTests {
+    @Test func rapidNavigationCancelsActiveLoadsAndPublishesOnlyTheLatestPath() async throws {
+        let harness = FinderLoadHarness()
+        let session = MachinesModel.shared.session(for: MachinesModel.localMachineID)
+        let model = FinderModel(
+            session: session, path: "/one",
+            directoryLoader: { await harness.load($0) }, freeSpaceLoader: { _ in nil })
+        let initial = Task { await model.load() }
+        try await harness.waitForRequests(1)
+
+        model.navigate(to: "/two")
+        try await harness.waitForRequests(2)
+        model.navigate(to: "/three")
+        try await harness.waitForRequests(3)
+        let latest = RemoteFileEntry(
+            name: "latest.txt", path: "/three/latest.txt", kind: .file, sizeBytes: 1)
+        await harness.resolveLatest(with: [latest])
+
+        #expect(await eventually { !model.loading })
+        await initial.value
+        let snapshot = await harness.snapshot()
+        #expect(snapshot.requested == ["/one", "/two", "/three"])
+        #expect(snapshot.cancelled == ["/one", "/two"])
+        #expect(snapshot.maximumInFlight == 1)
+        #expect(model.path == "/three")
+        #expect(model.entries == [latest])
+    }
+
+    @Test func repeatedRefreshesCoalesceIntoOneLatestPendingLoad() async throws {
+        let harness = FinderLoadHarness()
+        let session = MachinesModel.shared.session(for: MachinesModel.localMachineID)
+        let model = FinderModel(
+            session: session, path: "/one",
+            directoryLoader: { await harness.load($0) }, freeSpaceLoader: { _ in nil })
+        let initial = Task { await model.load() }
+        try await harness.waitForRequests(1)
+
+        for _ in 0..<20 { model.refresh() }
+        try await harness.waitForRequests(2)
+        let latest = RemoteFileEntry(
+            name: "fresh.txt", path: "/one/fresh.txt", kind: .file, sizeBytes: 1)
+        await harness.resolveLatest(with: [latest])
+
+        #expect(await eventually { !model.loading })
+        await initial.value
+        let snapshot = await harness.snapshot()
+        #expect(snapshot.requested == ["/one", "/one"])
+        #expect(snapshot.cancelled == ["/one"])
+        #expect(snapshot.maximumInFlight == 1)
+        #expect(model.entries == [latest])
+    }
+
+    @Test func stoppingTheFinderCancelsItsOwnedLoadWithoutPublishing() async throws {
+        let harness = FinderLoadHarness()
+        let session = MachinesModel.shared.session(for: MachinesModel.localMachineID)
+        let model = FinderModel(
+            session: session, path: "/one",
+            directoryLoader: { await harness.load($0) }, freeSpaceLoader: { _ in nil })
+        let initial = Task { await model.load() }
+        try await harness.waitForRequests(1)
+
+        model.stopLoading()
+
+        #expect(await eventually { !model.loading })
+        await initial.value
+        let snapshot = await harness.snapshot()
+        #expect(snapshot.cancelled == ["/one"])
+        #expect(model.entries.isEmpty)
+        #expect(model.errorMessage == nil)
+    }
+}
+
+private final class PreviewDecodeThreadCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Bool?
+
+    func record() {
+        lock.lock()
+        value = Thread.isMainThread
+        lock.unlock()
+    }
+
+    func wasMainThread() -> Bool? {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+}
+
+@MainActor
+private final class PreviewMaterializerCapture {
+    var entries: [RemoteFileEntry] = []
+    let url: URL
+
+    init(url: URL) {
+        self.url = url
+    }
+
+    func materialize(
+        entry: RemoteFileEntry, session: MachineSession, maximumBytes: Int64
+    ) async throws -> URL {
+        entries.append(entry)
+        return url
+    }
+}
+
+@MainActor
+private final class PausedPreviewImageLoader {
+    private var started = false
+    private var finished = false
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var imageWaiters: [CheckedContinuation<NSImage?, Never>] = []
+    private var finishWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func load() async -> NSImage? {
+        started = true
+        let pendingStarts = startWaiters
+        startWaiters.removeAll()
+        for waiter in pendingStarts { waiter.resume() }
+        let image = await withCheckedContinuation { imageWaiters.append($0) }
+        finished = true
+        let pendingFinishes = finishWaiters
+        finishWaiters.removeAll()
+        for waiter in pendingFinishes { waiter.resume() }
+        return image
+    }
+
+    func waitUntilStarted() async {
+        if started { return }
+        await withCheckedContinuation { startWaiters.append($0) }
+    }
+
+    func finish(with image: NSImage?) {
+        let pending = imageWaiters
+        imageWaiters.removeAll()
+        for waiter in pending { waiter.resume(returning: image) }
+    }
+
+    func waitUntilFinished() async {
+        if finished { return }
+        await withCheckedContinuation { finishWaiters.append($0) }
+    }
+}
+
+@Suite @MainActor struct FilePreviewPerformanceTests {
+    @Test func largeRemotePreviewWaitsForExplicitHandoff() async throws {
+        let session = MachineSession(
+            machine: Machine(name: "Box", host: "box"), observesWakeRequests: false)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("large.zip")
+        let capture = PreviewMaterializerCapture(url: url)
+        let model = FilePreviewModel { entry, session, maximumBytes in
+            try await capture.materialize(
+                entry: entry, session: session, maximumBytes: maximumBytes)
+        }
+        let entry = RemoteFileEntry(
+            name: "large.zip", path: "/remote/large.zip", kind: .file,
+            sizeBytes: RemoteFileOperationExecution.automaticPreviewLimitBytes + 1)
+
+        model.load(entry: entry, session: session)
+
+        #expect(model.content == .downloadRequired(entry, available: true))
+        #expect(capture.entries.isEmpty)
+
+        model.loadExplicitPreview(entry: entry, session: session)
+
+        #expect(await eventually { model.content == .quickLook(url) })
+        #expect(capture.entries == [entry])
+    }
+
+    @Test func filesBeyondTheCacheBudgetNeverStartPreviewTransfer() {
+        let session = MachineSession(
+            machine: Machine(name: "Box", host: "box"), observesWakeRequests: false)
+        let capture = PreviewMaterializerCapture(url: URL(fileURLWithPath: "/tmp/unused"))
+        let model = FilePreviewModel { entry, session, maximumBytes in
+            try await capture.materialize(
+                entry: entry, session: session, maximumBytes: maximumBytes)
+        }
+        let entry = RemoteFileEntry(
+            name: "huge.mov", path: "/remote/huge.mov", kind: .file,
+            sizeBytes: RemoteFileOperationExecution.cacheLimitBytes + 1)
+
+        model.load(entry: entry, session: session)
+
+        #expect(model.content == .downloadRequired(entry, available: false))
+        #expect(capture.entries.isEmpty)
+    }
+
+    @Test func imageThumbnailDecodingRunsOffTheMainThread() async {
+        let capture = PreviewDecodeThreadCapture()
+
+        let image = await RemoteImagePreview.thumbnail(at: URL(fileURLWithPath: "/tmp/image")) {
+            _, _ in
+            capture.record()
+            return nil
+        }
+
+        #expect(image == nil)
+        #expect(capture.wasMainThread() == false)
+    }
+
+    @Test func cancelledImageLoadCannotReplaceTheCurrentPreview() async {
+        let session = MachineSession(
+            machine: Machine(name: "Box", host: "box"), observesWakeRequests: false)
+        let url = URL(fileURLWithPath: "/tmp/image.png")
+        let loader = PausedPreviewImageLoader()
+        let model = FilePreviewModel(
+            materialize: { _, _, _ in url },
+            imageLoader: { _ in await loader.load() })
+        let entry = RemoteFileEntry(
+            name: "image.png", path: "/remote/image.png", kind: .file, sizeBytes: 4)
+
+        model.load(entry: entry, session: session)
+        await loader.waitUntilStarted()
+        model.load(entry: nil, session: session)
+        loader.finish(with: NSImage(size: NSSize(width: 1, height: 1)))
+        await loader.waitUntilFinished()
+        await Task.yield()
+
+        #expect(model.content == .empty)
+    }
+}
+
 @Suite(.serialized) @MainActor struct FinderRenameTests {
     @Test func renamingAFileMovesItOnDisk() async throws {
         let (model, root) = try sandbox()
@@ -404,6 +694,19 @@ private actor PausedFinderSearch {
 }
 
 @Suite(.serialized) @MainActor struct FinderContextMenuTests {
+    @Test func remoteFileSelectionOffersReveal() {
+        let session = MachineSession(
+            machine: Machine(name: "Box", host: "box"), observesWakeRequests: false)
+        let model = FinderModel(session: session, path: "/tmp")
+        let entry = RemoteFileEntry(
+            name: "notes.txt", path: "/tmp/notes.txt", kind: .file, sizeBytes: 4)
+        model.entries = [entry]
+        model.selection = [entry.path]
+
+        #expect(!session.isLocal)
+        #expect(model.canRevealSelection)
+    }
+
     @Test func actingOnAnUnselectedRowTargetsThatRowNotTheOldSelection() async throws {
         let (model, root) = try sandbox()
         defer { try? FileManager.default.removeItem(at: root) }

@@ -18,6 +18,31 @@ private enum RemoteOperationTestError: Error {
     case failed
 }
 
+private actor PreviewTransferGate {
+    private var started = false
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func pause() async {
+        started = true
+        let waiters = startWaiters
+        startWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
+        await withCheckedContinuation { releaseWaiters.append($0) }
+    }
+
+    func waitUntilStarted() async {
+        if started { return }
+        await withCheckedContinuation { startWaiters.append($0) }
+    }
+
+    func release() {
+        let waiters = releaseWaiters
+        releaseWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
+    }
+}
+
 @Suite struct RemoteFileOperationTests {
     @Test func descriptorsAreUniqueAndPointAtLeafCommands() {
         let descriptors =
@@ -43,6 +68,48 @@ private enum RemoteOperationTestError: Error {
         let complete = RemoteFileOperationExecution.textPreview(Data("abc".utf8), limit: 5)
         #expect(complete.text == "abc")
         #expect(!complete.truncated)
+    }
+
+    @Test func remotePreviewPolicyRequiresIntentBeforeLargeTransfers() {
+        let small = RemoteFileEntry(
+            name: "small.pdf", path: "/tmp/small.pdf", kind: .file,
+            sizeBytes: RemoteFileOperationExecution.automaticPreviewLimitBytes)
+        let large = RemoteFileEntry(
+            name: "large.pdf", path: "/tmp/large.pdf", kind: .file,
+            sizeBytes: RemoteFileOperationExecution.automaticPreviewLimitBytes + 1)
+        let oversized = RemoteFileEntry(
+            name: "oversized.pdf", path: "/tmp/oversized.pdf", kind: .file,
+            sizeBytes: RemoteFileOperationExecution.cacheLimitBytes + 1)
+
+        #expect(
+            RemoteFileOperationExecution.automaticPreviewDecision(for: small, isLocal: false)
+                == .automatic)
+        #expect(
+            RemoteFileOperationExecution.automaticPreviewDecision(for: large, isLocal: false)
+                == .requiresExplicitDownload)
+        #expect(
+            RemoteFileOperationExecution.automaticPreviewDecision(for: oversized, isLocal: false)
+                == .downloadOnly)
+        #expect(
+            RemoteFileOperationExecution.automaticPreviewDecision(for: oversized, isLocal: true)
+                == .automatic)
+    }
+
+    @Test func materializationRejectsOversizedMetadataBeforeTransfer() async {
+        let entry = RemoteFileEntry(
+            name: "movie.mov", path: "/tmp/movie.mov", kind: .file, sizeBytes: 11)
+        var transfers = 0
+
+        await #expect(throws: RemoteFileOperationError.self) {
+            try await RemoteFileOperationExecution.materialize(
+                entry, machineID: UUID(), isLocal: false, maximumBytes: 10,
+                cacheLimit: 10
+            ) { _, _ in
+                transfers += 1
+            }
+        }
+
+        #expect(transfers == 0)
     }
 
     @Test func cachePathsAreStableAndIncludeFileIdentity() throws {
@@ -78,7 +145,8 @@ private enum RemoteOperationTestError: Error {
 
     @Test func materializationReusesTheSharedCache() async throws {
         let entry = RemoteFileEntry(
-            name: "sample.txt", path: "/tmp/sample.txt", kind: .file, sizeBytes: 4)
+            name: "sample.txt", path: "/tmp/sample.txt", kind: .file, sizeBytes: 4,
+            modified: Date(timeIntervalSince1970: 30))
         let machineID = UUID()
         let destination = try RemoteFileOperationExecution.cacheURL(
             for: entry, machineID: machineID)
@@ -98,6 +166,28 @@ private enum RemoteOperationTestError: Error {
         #expect(first == second)
         #expect(transfers == 1)
         try? FileManager.default.removeItem(at: destination.deletingLastPathComponent())
+    }
+
+    @Test func materializationRefreshesAnIncompleteIdentity() async throws {
+        let entry = RemoteFileEntry(
+            name: "sample.txt", path: "/tmp/sample.txt", kind: .file, sizeBytes: 4)
+        let machineID = UUID()
+        let destination = try RemoteFileOperationExecution.cacheURL(
+            for: entry, machineID: machineID)
+        defer { try? FileManager.default.removeItem(at: destination.deletingLastPathComponent()) }
+        try Data("old!".utf8).write(to: destination)
+        var transfers = 0
+
+        let materialized = try await RemoteFileOperationExecution.materialize(
+            entry, machineID: machineID, isLocal: false
+        ) { _, local in
+            transfers += 1
+            try Data("new!".utf8).write(to: local)
+        }
+
+        #expect(materialized == destination)
+        #expect(transfers == 1)
+        #expect(try String(contentsOf: destination, encoding: .utf8) == "new!")
     }
 
     @Test func downloadReplacesAnExistingFileWithoutLeavingTrailingBytes() async throws {
@@ -142,6 +232,93 @@ private enum RemoteOperationTestError: Error {
         #expect(try Data(contentsOf: destination) == original)
         #expect(
             try FileManager.default.contentsOfDirectory(atPath: directory.path) == ["notes.txt"])
+    }
+
+    @Test func materializationEvictsOldEntriesBeforePublishingWithinBudget() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-preview-cache-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var oldFolder = root.appendingPathComponent("old")
+        try FileManager.default.createDirectory(at: oldFolder, withIntermediateDirectories: true)
+        try Data(repeating: 1, count: 6).write(to: oldFolder.appendingPathComponent("old.bin"))
+        var oldValues = URLResourceValues()
+        oldValues.contentAccessDate = Date(timeIntervalSince1970: 1)
+        try oldFolder.setResourceValues(oldValues)
+        let entry = RemoteFileEntry(
+            name: "fresh.bin", path: "/remote/fresh.bin", kind: .file, sizeBytes: 6,
+            modified: Date(timeIntervalSince1970: 2))
+
+        let destination = try await RemoteFileOperationExecution.materialize(
+            entry, machineID: UUID(), isLocal: false, maximumBytes: 10,
+            cacheLimit: 10, cacheRoot: root
+        ) { _, staging in
+            try Data(repeating: 2, count: 6).write(to: staging)
+        }
+
+        #expect(!FileManager.default.fileExists(atPath: oldFolder.path))
+        #expect(FileManager.default.fileExists(atPath: destination.path))
+        #expect(try Data(contentsOf: destination).count == 6)
+    }
+
+    @Test func materializationRemovesAnUnexpectedlyOversizedTransfer() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-preview-cache-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let entry = RemoteFileEntry(
+            name: "lying.bin", path: "/remote/lying.bin", kind: .file, sizeBytes: 4,
+            modified: Date(timeIntervalSince1970: 2))
+        let machineID = UUID()
+        let destination = try RemoteFileOperationExecution.cacheURL(
+            for: entry, machineID: machineID, createDirectory: false, root: root)
+
+        await #expect(throws: RemoteFileOperationError.self) {
+            try await RemoteFileOperationExecution.materialize(
+                entry, machineID: machineID, isLocal: false, maximumBytes: 10,
+                cacheLimit: 10, cacheRoot: root
+            ) { _, staging in
+                try Data(repeating: 3, count: 11).write(to: staging)
+            }
+        }
+
+        #expect(!FileManager.default.fileExists(atPath: destination.path))
+    }
+
+    @Test func concurrentReservationsCannotOvercommitTheCacheBudget() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-preview-cache-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let first = RemoteFileEntry(
+            name: "first.bin", path: "/remote/first.bin", kind: .file, sizeBytes: 7,
+            modified: Date(timeIntervalSince1970: 1))
+        let second = RemoteFileEntry(
+            name: "second.bin", path: "/remote/second.bin", kind: .file, sizeBytes: 7,
+            modified: Date(timeIntervalSince1970: 1))
+        let gate = PreviewTransferGate()
+        let firstTransfer = Task {
+            try await RemoteFileOperationExecution.materialize(
+                first, machineID: UUID(), isLocal: false, maximumBytes: 10,
+                cacheLimit: 10, cacheRoot: root
+            ) { _, staging in
+                await gate.pause()
+                try Data(repeating: 1, count: 7).write(to: staging)
+            }
+        }
+        await gate.waitUntilStarted()
+
+        await #expect(throws: RemoteFileOperationError.self) {
+            try await RemoteFileOperationExecution.materialize(
+                second, machineID: UUID(), isLocal: false, maximumBytes: 10,
+                cacheLimit: 10, cacheRoot: root
+            ) { _, _ in
+                Issue.record("The overcommitted transfer started")
+            }
+        }
+
+        await gate.release()
+        _ = try await firstTransfer.value
     }
 
     @Test func forwardedURLUsesTheLocalPort() {
