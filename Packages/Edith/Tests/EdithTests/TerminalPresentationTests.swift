@@ -56,6 +56,7 @@ import Testing
         }
         await Task.yield()
 
+        #expect(holder.presentationGeneration == 20_000)
         #expect(holder.terminalView.isHidden)
         #expect(!holder.terminalView.renderingActive)
     }

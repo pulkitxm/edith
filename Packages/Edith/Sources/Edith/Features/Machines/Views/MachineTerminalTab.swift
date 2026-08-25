@@ -23,6 +23,7 @@ final class TerminalSessionHolder {
     private(set) var started = false
     private(set) var exitMessage: String?
     private(set) var themeApplicationCount = 0
+    private(set) var presentationGeneration = 0
 
     private var delegateBox: TerminalProcessDelegate?
     private var appliedPalette: TerminalPalette?
@@ -53,7 +54,9 @@ final class TerminalSessionHolder {
     }
 
     func reset() {
+        presentationGeneration += 1
         focusTask?.cancel()
+        focusTask = nil
         terminalView.terminal.resetToInitialState()
         if started { terminalView.terminate() }
         terminalView = EdithTerminalView(frame: .zero)
@@ -90,19 +93,27 @@ final class TerminalSessionHolder {
         presentationActive = active
         presentationWantsFocus = wantsFocus
         terminalView.setRenderingActive(active)
+        presentationGeneration += 1
         focusTask?.cancel()
+        focusTask = nil
         guard active, wantsFocus else { return }
         let view = terminalView
+        let generation = presentationGeneration
         focusTask = Task { @MainActor [weak self, weak view] in
             await Task.yield()
-            guard !Task.isCancelled, let self, let view,
-                self.terminalView === view,
-                self.presentationActive == true,
-                self.presentationWantsFocus
-            else { return }
-            view.window?.makeFirstResponder(view)
-            self.focusTask = nil
+            guard !Task.isCancelled, let self, let view else { return }
+            self.applyFocus(to: view, generation: generation)
         }
+    }
+
+    private func applyFocus(to view: EdithTerminalView, generation: Int) {
+        guard generation == presentationGeneration,
+            terminalView === view,
+            presentationActive == true,
+            presentationWantsFocus
+        else { return }
+        view.window?.makeFirstResponder(view)
+        focusTask = nil
     }
 
     func registerOSCHandler(code: Int, handler: @escaping @MainActor (String) -> Void) {
