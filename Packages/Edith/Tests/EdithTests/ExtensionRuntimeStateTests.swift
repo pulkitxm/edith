@@ -129,6 +129,11 @@ import Testing
         #expect(source.contains("readiness.refresh(.verify)"))
         #expect(source.contains(".onDisappear { readiness.cancel() }"))
         #expect(!source.contains("Task { await refresh() }"))
+        #expect(
+            source.components(
+                separatedBy:
+                    "if report.state.phase != .enabled, report.state.phase != .disabled"
+            ).count == 3)
         #expect(source.contains("report.state.phase.title"))
         #expect(source.contains("report.state.runtimePhase.title"))
         #expect(source.contains("ExtensionLifecycleState.loading(extensionID: entry.id)"))

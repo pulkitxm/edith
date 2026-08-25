@@ -560,12 +560,14 @@ private struct ExtensionLifecycleRows: View {
         Group {
             Section("Readiness") {
                 if let report = readiness.report {
-                    LabeledContent("State") {
-                        Label(
-                            report.state.phase.title,
-                            systemImage: phaseSymbol(report.state.phase)
-                        )
-                        .foregroundStyle(phaseColor(report.state.phase))
+                    if report.state.phase != .enabled, report.state.phase != .disabled {
+                        LabeledContent("State") {
+                            Label(
+                                report.state.phase.title,
+                                systemImage: phaseSymbol(report.state.phase)
+                            )
+                            .foregroundStyle(phaseColor(report.state.phase))
+                        }
                     }
                     LabeledContent("Runtime") {
                         Label(
@@ -574,8 +576,10 @@ private struct ExtensionLifecycleRows: View {
                         )
                         .foregroundStyle(runtimeColor(report.state.runtimePhase))
                     }
-                    Text(report.state.summary)
-                        .settingsCaption()
+                    if report.state.phase != .enabled, report.state.phase != .disabled {
+                        Text(report.state.summary)
+                            .settingsCaption()
+                    }
                     ForEach(report.checks) { check in
                         checkRow(check)
                     }
