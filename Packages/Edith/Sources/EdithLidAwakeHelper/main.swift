@@ -30,33 +30,33 @@ final class LidAwakeHelper: NSObject, NSXPCListenerDelegate, LidAwakePrivilegedP
     }
 
     func setSleepDisabled(_ disable: Bool, reply: @escaping (NSError?) -> Void) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: LidAwakeCommand.toolPath)
-        process.arguments = LidAwakeCommand.arguments(active: disable)
-
-        let errorPipe = Pipe()
-        process.standardError = errorPipe
-
         do {
-            try process.run()
+            let result = try LidAwakeCommandProcess.run(
+                executableURL: URL(fileURLWithPath: LidAwakeCommand.toolPath),
+                arguments: LidAwakeCommand.arguments(active: disable))
+            guard !result.timedOut else {
+                reply(
+                    NSError(
+                        domain: LidAwakePrivilegedService.bundleIdentifier, code: Int(ETIMEDOUT),
+                        userInfo: [NSLocalizedDescriptionKey: "pmset timed out"])
+                )
+                return
+            }
+            guard result.terminationStatus != 0 else {
+                reply(nil)
+                return
+            }
+            reply(
+                NSError(
+                    domain: LidAwakePrivilegedService.bundleIdentifier,
+                    code: Int(result.terminationStatus),
+                    userInfo: [
+                        NSLocalizedDescriptionKey: result.standardError.isEmpty
+                            ? "pmset failed" : result.standardError
+                    ]))
         } catch {
             reply(error as NSError)
-            return
         }
-
-        process.waitUntilExit()
-        guard process.terminationStatus != 0 else {
-            reply(nil)
-            return
-        }
-
-        let data = errorPipe.fileHandleForReading.readDataToEndOfFile()
-        let message = String(data: data, encoding: .utf8) ?? "pmset failed"
-        reply(
-            NSError(
-                domain: LidAwakePrivilegedService.bundleIdentifier,
-                code: Int(process.terminationStatus),
-                userInfo: [NSLocalizedDescriptionKey: message]))
     }
 
     private static func loadClientRequirement() -> SecRequirement? {
