@@ -3,7 +3,8 @@ set -euo pipefail
 
 export PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-case "$(uname -s)" in
+PLATFORM="$(uname -s)"
+case "$PLATFORM" in
   Darwin) DEFAULT_CACHE="$HOME/Library/Application Support/Edith" ;;
   *) DEFAULT_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/edith" ;;
 esac
@@ -18,8 +19,8 @@ fi
 
 OUT_DIR="${1:-$PWD/data}"
 mkdir -p "$OUT_DIR"
-OUT="$OUT_DIR/usage.json"
-MACHINES_DIR="$OUT_DIR/machines"
+OUT="${EDITH_USAGE_OUTPUT:-$OUT_DIR/usage.json}"
+MACHINES_DIR="${EDITH_USAGE_MACHINES_DIR:-$OUT_DIR/machines}"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -39,6 +40,60 @@ _note() { printf 'note\t%s\n' "$1"; }
 _summary() { printf 'summary\t%s\t%s\n' "$1" "$2"; }
 _error() { printf 'error\t%s\n' "$1"; }
 _total() { awk "BEGIN{printf \"%.2f\", $(_now)-$_t0}"; }
+
+_stage_machine() {
+  local source="$1" target="$2" maximum="$3"
+  /usr/bin/perl -MFcntl=O_CREAT,O_EXCL,O_NOFOLLOW,O_NONBLOCK,O_RDONLY,O_WRONLY -e '
+    use strict;
+    use warnings;
+    my ($source, $target, $maximum) = @ARGV;
+    my $complete = 0;
+    END { unlink $target unless $complete; }
+    sysopen(my $input, $source, O_RDONLY | O_NONBLOCK | O_NOFOLLOW) or exit 1;
+    my @before = stat($input);
+    exit 1 unless @before && ($before[2] & 0170000) == 0100000;
+    exit 1 unless $before[7] > 0 && $before[7] <= $maximum;
+    sysopen(my $output, $target, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600) or exit 1;
+    my $copied = 0;
+    while ($copied <= $maximum) {
+      my $wanted = $maximum + 1 - $copied;
+      $wanted = 65536 if $wanted > 65536;
+      my $count = sysread($input, my $buffer, $wanted);
+      if (!defined $count) {
+        next if $!{EINTR};
+        exit 1;
+      }
+      last if $count == 0;
+      my $offset = 0;
+      while ($offset < $count) {
+        my $written = syswrite($output, $buffer, $count - $offset, $offset);
+        if (!defined $written) {
+          next if $!{EINTR};
+          exit 1;
+        }
+        exit 1 if $written == 0;
+        $offset += $written;
+      }
+      $copied += $count;
+    }
+    my @after = stat($input);
+    my @staged = stat($output);
+    exit 1 unless @after && @staged;
+    exit 1 unless $before[0] == $after[0] && $before[1] == $after[1];
+    exit 1 unless $before[7] == $after[7] && $copied == $before[7];
+    exit 1 unless ($staged[2] & 0170000) == 0100000 && $staged[7] == $copied;
+    close($output) or exit 1;
+    close($input) or exit 1;
+    $complete = 1;
+  ' "$source" "$target" "$maximum" 2>/dev/null
+}
+
+_file_size() {
+  case "$PLATFORM" in
+    Darwin) stat -f %z "$1" ;;
+    *) stat -c %s "$1" ;;
+  esac
+}
 
 _hash() {
   if command -v md5 >/dev/null 2>&1; then
@@ -1074,7 +1129,29 @@ collect_cursor
 
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 HAS_MACHINES=0
-compgen -G "$MACHINES_DIR/*.json" >/dev/null 2>&1 && HAS_MACHINES=1
+MACHINE_FILES=()
+MACHINE_STAGING="$TMP/machines"
+mkdir "$MACHINE_STAGING"
+if [ -d "$MACHINES_DIR" ]; then
+  inspected=0
+  machine_bytes=0
+  while IFS= read -r -d '' candidate; do
+    inspected=$((inspected + 1))
+    [ "$inspected" -le 4000 ] || break
+    base="${candidate##*/}"
+    [[ "$base" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\.json$ ]] || continue
+    staged="$MACHINE_STAGING/$base"
+    _stage_machine "$candidate" "$staged" 67108864 || continue
+    [ -f "$staged" ] && [ ! -L "$staged" ] || { rm -f "$staged"; continue; }
+    if ! size=$(_file_size "$staged" 2>/dev/null); then size=0; fi
+    [ "$size" -gt 0 ] && [ "$size" -le 67108864 ] || continue
+    [ $((machine_bytes + size)) -le 268435456 ] || { rm -f "$staged"; break; }
+    machine_bytes=$((machine_bytes + size))
+    MACHINE_FILES+=("$staged")
+    [ "${#MACHINE_FILES[@]}" -lt 1000 ] || break
+  done < <(find "$MACHINES_DIR" -xdev ! -path "$MACHINES_DIR" -prune -print0 2>/dev/null)
+fi
+[ "${#MACHINE_FILES[@]}" -gt 0 ] && HAS_MACHINES=1
 
 if [ ! -s "$TMP/manifest.jsonl" ] && [ "$HAS_MACHINES" = "0" ]; then
   _error "no usage found from any source"
@@ -1779,7 +1856,7 @@ if [ -s "$OUT" ] && jq -e "$HISTORY_INPUT" "$OUT" >/dev/null 2>&1; then
 fi
 
 if [ "$HAS_MACHINES" = "1" ]; then
-  if ! jq -s "$FLEET" "$TMP/usage.json" "$MACHINES_DIR"/*.json >"$TMP/fleet.json"; then
+  if ! jq -s "$FLEET" "$TMP/usage.json" "${MACHINE_FILES[@]}" >"$TMP/fleet.json"; then
     _error "machine snapshot assembly failed; previous data preserved"
     exit 1
   fi
