@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 @testable import EdithKit
@@ -54,8 +55,10 @@ import Testing
         let w = LimitWindow(percent: 67.3, resetsAt: nil)
 
         var h = LimitsHistory(url: url)
-        h.append(session: s, week: w, now: now)
-        h.append(session: s, week: w, now: now.addingTimeInterval(300))
+        let firstAppend = h.append(session: s, week: w, now: now)
+        let duplicateAppend = h.append(session: s, week: w, now: now.addingTimeInterval(300))
+        #expect(firstAppend)
+        #expect(duplicateAppend)
         var text = try String(contentsOf: url, encoding: .utf8)
         #expect(text.split(separator: "\n").count == 1)
 
@@ -73,9 +76,33 @@ import Testing
             session: LimitWindow(percent: 50, resetsAt: nil), week: w,
             now: now.addingTimeInterval(900))
         let raw = try String(contentsOf: url, encoding: .utf8)
-        #expect(raw.split(separator: "\n").count == 3)
+        #expect(raw.split(separator: "\n").count == 2)
+        #expect(!raw.contains("torn"))
         let pts = LimitsHistory.parse(raw, since: .distantPast)
         #expect(pts.count == 2)
+    }
+
+    @Test func concurrentWritersPublishOnlyCompleteRows() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-tests-\(UUID().uuidString)")
+        let url = dir.appendingPathComponent("limits-history.jsonl")
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        await withTaskGroup(of: Void.self) { group in
+            for index in 0..<100 {
+                group.addTask {
+                    var history = LimitsHistory(url: url)
+                    history.append(
+                        session: LimitWindow(percent: Double(index), resetsAt: nil), week: nil,
+                        now: self.now.addingTimeInterval(Double(index)))
+                }
+            }
+        }
+
+        let text = try String(contentsOf: url, encoding: .utf8)
+        #expect(text.hasSuffix("\n"))
+        #expect(text.split(separator: "\n").count == 100)
+        #expect(LimitsHistory.parse(text, since: .distantPast).count == 100)
     }
 
     @Test func latestReadsLastValidLine() throws {
@@ -174,29 +201,111 @@ import Testing
         #expect(LimitsHistory.availableProviders(url: url) == [.codex, .claude])
     }
 
-    @Test func primedHistoryUsesTheLoadedSnapshotWithoutRescanning() throws {
+    @Test func historyAppendObservesExternalWrites() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-tests-\(UUID().uuidString)")
         let url = dir.appendingPathComponent("limits-history.jsonl")
         defer { try? FileManager.default.removeItem(at: dir) }
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let original = LimitsHistory.row(
+        var history = LimitsHistory(url: url)
+        history.append(
             provider: .claude, session: LimitWindow(percent: 42, resetsAt: nil), week: nil,
             now: now)
-        try Data(original.line.utf8).write(to: url)
-        let loaded = LimitsHistory.latestProviders(url: url)
+        #expect(LimitsHistory.loadAll(url: url).map(\.s) == [42])
         let replacement = LimitsHistory.row(
             provider: .claude, session: LimitWindow(percent: 99, resetsAt: nil), week: nil,
             now: now.addingTimeInterval(60))
         try Data(replacement.line.utf8).write(to: url)
 
-        var history = LimitsHistory(url: url)
-        history.prime(with: loaded)
         history.append(
             provider: .claude, session: LimitWindow(percent: 42, resetsAt: nil), week: nil,
             now: now.addingTimeInterval(120))
 
-        #expect(try String(contentsOf: url, encoding: .utf8) == replacement.line)
+        let points = LimitsHistory.loadAll(url: url)
+        #expect(points.map(\.s) == [99, 42])
+    }
+
+    @Test func independentWritersPreserveReturningValues() {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-tests-\(UUID().uuidString)")
+        let url = dir.appendingPathComponent("limits-history.jsonl")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var first = LimitsHistory(url: url)
+        var second = LimitsHistory(url: url)
+
+        first.append(
+            provider: .claude, session: LimitWindow(percent: 42, resetsAt: nil), week: nil,
+            now: now)
+        second.append(
+            provider: .claude, session: LimitWindow(percent: 99, resetsAt: nil), week: nil,
+            now: now.addingTimeInterval(60))
+        first.append(
+            provider: .claude, session: LimitWindow(percent: 42, resetsAt: nil), week: nil,
+            now: now.addingTimeInterval(120))
+
+        #expect(LimitsHistory.loadAll(url: url).map(\.s) == [42, 99, 42])
+    }
+
+    @Test func oversizedUncertainTailNeverErasesValidHistory() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-tests-\(UUID().uuidString)")
+        let url = dir.appendingPathComponent("limits-history.jsonl")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let valid = LimitsHistory.row(
+            provider: .claude, session: LimitWindow(percent: 42, resetsAt: nil), week: nil,
+            now: now)
+        var contents = Data(valid.line.utf8)
+        contents.append(Data(repeating: UInt8(ascii: "x"), count: 1_048_577))
+        try contents.write(to: url)
+
+        var history = LimitsHistory(url: url)
+        history.append(
+            provider: .claude, session: LimitWindow(percent: 99, resetsAt: nil), week: nil,
+            now: now.addingTimeInterval(60))
+
+        let after = try Data(contentsOf: url)
+        #expect(after.starts(with: contents))
+        #expect(LimitsHistory.loadAll(url: url).map(\.s) == [42, 99])
+    }
+
+    @Test func appendRejectsSymlinkWithoutChangingItsTarget() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-tests-\(UUID().uuidString)")
+        let url = dir.appendingPathComponent("limits-history.jsonl")
+        let target = dir.appendingPathComponent("outside.jsonl")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let original = Data("preserve this torn tail".utf8)
+        try original.write(to: target)
+        try FileManager.default.createSymbolicLink(at: url, withDestinationURL: target)
+
+        var history = LimitsHistory(url: url)
+        let appended = history.append(
+            provider: .claude, session: LimitWindow(percent: 99, resetsAt: nil), week: nil,
+            now: now)
+
+        #expect(!appended)
+        #expect(try Data(contentsOf: target) == original)
+    }
+
+    @Test func appendRejectsFifoWithoutBlocking() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-tests-\(UUID().uuidString)")
+        let url = dir.appendingPathComponent("limits-history.jsonl")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        #expect(mkfifo(url.path, mode_t(S_IRUSR | S_IWUSR)) == 0)
+
+        var history = LimitsHistory(url: url)
+        let appended = history.append(
+            provider: .claude, session: LimitWindow(percent: 99, resetsAt: nil), week: nil,
+            now: now)
+
+        #expect(!appended)
+        var metadata = stat()
+        #expect(lstat(url.path, &metadata) == 0)
+        #expect(metadata.st_mode & S_IFMT == S_IFIFO)
     }
 
     @Test func snapshotResolvesTheAvailableProviderAndMatchingPoints() async throws {

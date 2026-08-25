@@ -178,6 +178,10 @@ public enum MachineUsageSelection {
 }
 
 public enum MachineUsageStore {
+    public static let maximumMachineDocuments = 1_000
+    public static let maximumInspectedMachineEntries = 4_000
+    public static let maximumMachineDocumentBytesPerScan = 256 * 1_024 * 1_024
+
     private struct StoredDocument: Decodable {
         struct MachineBlock: Decodable {
             let id: String?
@@ -202,10 +206,9 @@ public enum MachineUsageStore {
     public static func summaries(in directory: URL = UsageCollector.machinesDirectory)
         -> [MachineUsageSummary]
     {
-        let contents = try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: nil)
-        let files: [URL] = (contents ?? []).filter { $0.pathExtension == "json" }
-        let found: [MachineUsageSummary] = files.compactMap { summary(at: $0) }
+        let found: [MachineUsageSummary] = storedDocumentURLs(in: directory).compactMap {
+            summary(at: $0)
+        }
         return found.sorted {
             $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
@@ -218,8 +221,15 @@ public enum MachineUsageStore {
     }
 
     public static func summary(at url: URL) -> MachineUsageSummary? {
-        guard let data = try? Data(contentsOf: url),
-            let document = try? JSONDecoder().decode(StoredDocument.self, from: data),
+        guard
+            let data = try? UsageDataFiles.readRegularFile(
+                at: url, maximumBytes: UsageDataFiles.maximumMachineDocumentBytes)
+        else { return nil }
+        return summary(data: data)
+    }
+
+    private static func summary(data: Data) -> MachineUsageSummary? {
+        guard let document = try? JSONDecoder().decode(StoredDocument.self, from: data),
             let block = document.machine,
             let id = block.id.flatMap(UUID.init(uuidString:))
         else { return nil }
@@ -241,7 +251,8 @@ public enum MachineUsageStore {
         document: Data, machine: Machine, slug: String, host: String, collectedAt: Date,
         in directory: URL = UsageCollector.machinesDirectory
     ) throws -> MachineUsageSummary {
-        guard var object = try? JSONSerialization.jsonObject(with: document) as? [String: Any],
+        guard document.count <= UsageDataFiles.maximumMachineDocumentBytes,
+            var object = try? JSONSerialization.jsonObject(with: document) as? [String: Any],
             object["daily"] is [Any]
         else { throw MachineUsageError.documentUnreadable(machine.name) }
         object["machine"] = [
@@ -252,12 +263,13 @@ public enum MachineUsageStore {
             "collectedAt": EdithDate.isoString(collectedAt),
         ]
         let encoded = try JSONSerialization.data(withJSONObject: object)
+        guard encoded.count <= UsageDataFiles.maximumMachineDocumentBytes,
+            let summary = summary(data: encoded)
+        else { throw MachineUsageError.documentUnreadable(machine.name) }
         let file = UsageCollector.machineFile(id: machine.id, in: directory)
-        try FileManager.default.createDirectory(
-            at: directory, withIntermediateDirectories: true)
-        try encoded.write(to: file, options: .atomic)
-        guard let summary = summary(at: file) else {
-            throw MachineUsageError.documentUnreadable(machine.name)
+        try UsageDataLock.withLock(dataDirectory: dataDirectory(for: directory)) {
+            try bumpGeneration(in: directory)
+            try UsageDurableFile.write(encoded, to: file)
         }
         return summary
     }
@@ -265,9 +277,12 @@ public enum MachineUsageStore {
     public static func prune(
         keeping machineIDs: [UUID], in directory: URL = UsageCollector.machinesDirectory
     ) {
-        let known = Set(machineIDs)
-        for id in storedIDs(in: directory) where !known.contains(id) {
-            forget(machineID: id, in: directory)
+        try? UsageDataLock.withLock(dataDirectory: dataDirectory(for: directory)) {
+            let known = Set(machineIDs)
+            let stale = storedIDs(in: directory).filter { !known.contains($0) }
+            guard !stale.isEmpty else { return }
+            try bumpGeneration(in: directory)
+            for id in stale { _ = removeUnlocked(machineID: id, in: directory) }
         }
     }
 
@@ -276,44 +291,116 @@ public enum MachineUsageStore {
         _ machines: [Machine], in directory: URL = UsageCollector.machinesDirectory
     ) -> [UUID] {
         let slugs = MachineUsageSlug.slugs(for: machines)
-        let byID = Dictionary(machines.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let byID = Dictionary(
+            machines.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var changed: [UUID] = []
         for id in storedIDs(in: directory) {
             guard let machine = byID[id], let slug = slugs[id] else { continue }
             let file = UsageCollector.machineFile(id: id, in: directory)
-            guard let data = try? Data(contentsOf: file),
-                var object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                var block = object["machine"] as? [String: Any]
-            else { continue }
-            guard block["name"] as? String != machine.name || block["slug"] as? String != slug
-            else { continue }
-            block["name"] = machine.name
-            block["slug"] = slug
-            object["machine"] = block
-            guard let encoded = try? JSONSerialization.data(withJSONObject: object) else {
-                continue
-            }
-            try? encoded.write(to: file, options: .atomic)
-            changed.append(id)
+            let didChange =
+                (try? UsageDataLock.withLock(
+                    dataDirectory: dataDirectory(for: directory)
+                ) {
+                    guard
+                        let data = try? UsageDataFiles.readRegularFile(
+                            at: file, maximumBytes: UsageDataFiles.maximumMachineDocumentBytes),
+                        var object = try? JSONSerialization.jsonObject(with: data)
+                            as? [String: Any],
+                        var block = object["machine"] as? [String: Any]
+                    else { return false }
+                    guard
+                        block["name"] as? String != machine.name || block["slug"] as? String != slug
+                    else { return false }
+                    block["name"] = machine.name
+                    block["slug"] = slug
+                    object["machine"] = block
+                    guard let encoded = try? JSONSerialization.data(withJSONObject: object),
+                        encoded.count <= UsageDataFiles.maximumMachineDocumentBytes
+                    else { return false }
+                    try bumpGeneration(in: directory)
+                    try UsageDurableFile.write(encoded, to: file)
+                    return true
+                }) ?? false
+            if didChange { changed.append(id) }
         }
         return changed
     }
 
     public static func storedIDs(in directory: URL = UsageCollector.machinesDirectory) -> [UUID] {
-        let contents = try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: nil)
-        let names = (contents ?? []).filter { $0.pathExtension == "json" }
-        return names.compactMap { UUID(uuidString: $0.deletingPathExtension().lastPathComponent) }
+        storedDocumentURLs(in: directory).compactMap {
+            UUID(uuidString: $0.deletingPathExtension().lastPathComponent)
+        }
     }
 
     @discardableResult
     public static func forget(
         machineID: UUID, in directory: URL = UsageCollector.machinesDirectory
     ) -> Bool {
+        (try? UsageDataLock.withLock(dataDirectory: dataDirectory(for: directory)) {
+            let file = UsageCollector.machineFile(id: machineID, in: directory)
+            guard FileManager.default.fileExists(atPath: file.path) else { return false }
+            try bumpGeneration(in: directory)
+            return removeUnlocked(machineID: machineID, in: directory)
+        }) ?? false
+    }
+
+    private static func dataDirectory(for machinesDirectory: URL) -> URL {
+        UsageDataLock.dataDirectory(containingMachinesDirectory: machinesDirectory)
+    }
+
+    static func generation(in machinesDirectory: URL) throws -> Data? {
+        try UsageDataFiles.readRegularFile(
+            at: generationURL(in: machinesDirectory), maximumBytes: 128)
+    }
+
+    private static func generationURL(in machinesDirectory: URL) -> URL {
+        dataDirectory(for: machinesDirectory).appendingPathComponent("machines.generation")
+    }
+
+    private static func bumpGeneration(in machinesDirectory: URL) throws {
+        try UsageDurableFile.write(
+            Data(UUID().uuidString.utf8), to: generationURL(in: machinesDirectory))
+    }
+
+    private static func removeUnlocked(machineID: UUID, in directory: URL) -> Bool {
         let file = UsageCollector.machineFile(id: machineID, in: directory)
         guard FileManager.default.fileExists(atPath: file.path) else { return false }
-        try? FileManager.default.removeItem(at: file)
-        return true
+        do {
+            try FileManager.default.removeItem(at: file)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private static func storedDocumentURLs(in directory: URL) -> [URL] {
+        guard
+            let enumerator = FileManager.default.enumerator(
+                at: directory,
+                includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey],
+                options: [.skipsSubdirectoryDescendants, .skipsHiddenFiles])
+        else { return [] }
+        var urls: [URL] = []
+        var inspected = 0
+        var acceptedBytes = 0
+        while inspected < maximumInspectedMachineEntries, urls.count < maximumMachineDocuments,
+            let url = enumerator.nextObject() as? URL
+        {
+            inspected += 1
+            guard url.pathExtension == "json",
+                UUID(uuidString: url.deletingPathExtension().lastPathComponent) != nil,
+                let values = try? url.resourceValues(forKeys: [
+                    .fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey,
+                ]),
+                values.isRegularFile == true, values.isSymbolicLink != true,
+                let fileSize = values.fileSize, fileSize >= 0,
+                fileSize <= UsageDataFiles.maximumMachineDocumentBytes,
+                acceptedBytes + fileSize <= maximumMachineDocumentBytesPerScan
+            else { continue }
+            acceptedBytes += fileSize
+            urls.append(url)
+        }
+        return urls.sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 }
 
@@ -374,7 +461,10 @@ public enum MachineUsageCollector {
             .appendingPathComponent("edith-usage-\(machine.id.uuidString).json")
         defer { try? FileManager.default.removeItem(at: scratch) }
         try await connection.download(remotePath: documentPath(home: home), to: scratch)
-        let document = try Data(contentsOf: scratch)
+        guard
+            let document = try UsageDataFiles.readRegularFile(
+                at: scratch, maximumBytes: UsageDataFiles.maximumMachineDocumentBytes)
+        else { throw MachineUsageError.documentUnreadable(machine.name) }
         let summary = try MachineUsageStore.save(
             document: document, machine: machine, slug: slug, host: host, collectedAt: now)
         return MachineUsageCollection(summary: summary, log: run.combinedText)

@@ -1,6 +1,8 @@
-import EdithKit
+import Darwin
 import Foundation
 import Testing
+
+import EdithKit
 
 @Suite struct FileTailTests {
     private func tempDir() -> URL {
@@ -49,6 +51,27 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
         let url = dir.appendingPathComponent("absent.txt")
         #expect(FileTail.read(url, maxBytes: 1024) == "")
+    }
+
+    @Test func readersRejectSymlinksAndFifosWithoutBlocking() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let target = dir.appendingPathComponent("target")
+        let symlink = dir.appendingPathComponent("symlink")
+        let fifo = dir.appendingPathComponent("fifo")
+        try Data("secret".utf8).write(to: target)
+        try FileManager.default.createSymbolicLink(at: symlink, withDestinationURL: target)
+        #expect(mkfifo(fifo.path, mode_t(S_IRUSR | S_IWUSR)) == 0)
+
+        for url in [symlink, fifo] {
+            #expect(FileTail.read(url, maxBytes: 1024).isEmpty)
+            var lines: [Data] = []
+            FileTail.scanLinesReversed(url) { line in
+                lines.append(line)
+                return true
+            }
+            #expect(lines.isEmpty)
+        }
     }
 
     @Test func reversedScanCrossesChunkBoundariesAndKeepsUnterminatedTail() throws {
