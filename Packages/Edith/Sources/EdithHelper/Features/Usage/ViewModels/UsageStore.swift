@@ -410,8 +410,8 @@ final class UsageStore: FeatureModule {
             diag(msg)
             return
         } catch FetchError.unauthorized {
-            diag("401 unauthorized - re-reading credentials and refreshing token")
-            Log.usage.error("401 unauthorized - re-reading credentials and refreshing token")
+            diag("401 unauthorized - resolving credentials once more")
+            Log.usage.error("401 unauthorized - resolving credentials once more")
         } catch {
             report(error)
             return

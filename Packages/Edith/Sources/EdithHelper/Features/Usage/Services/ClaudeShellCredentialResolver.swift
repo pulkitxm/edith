@@ -46,13 +46,34 @@ private final class ClaudeShellOutputBuffer: @unchecked Sendable {
 
 enum ClaudeShellProcessRunner {
     private static let terminationGrace: TimeInterval = 0.25
+    private static let processGroupScript = """
+        set -m
+        "$@" &
+        child=$!
+        set +m
+        terminate_group() {
+            if kill -TERM -"$child" 2>/dev/null; then
+                sleep 0.1
+                kill -KILL -"$child" 2>/dev/null || :
+            fi
+        }
+        trap 'terminate_group; exit 124' TERM INT
+        wait "$child"
+        status=$?
+        terminate_group
+        trap - TERM INT
+        exit "$status"
+        """
 
     static func run(
         _ invocation: ClaudeShellInvocation, timeout: TimeInterval, maximumOutputBytes: Int
     ) -> ClaudeShellProcessResult {
         let process = Process()
-        process.executableURL = invocation.executable
-        process.arguments = invocation.arguments
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments =
+            [
+                "-c", processGroupScript, "credential-resolver", invocation.executable.path,
+            ] + invocation.arguments
         process.environment = invocation.environment
         process.currentDirectoryURL = invocation.currentDirectory
         process.standardInput = FileHandle.nullDevice
