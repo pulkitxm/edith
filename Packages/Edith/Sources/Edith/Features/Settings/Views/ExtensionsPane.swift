@@ -9,48 +9,36 @@ import SwiftUI
     }
 }
 
+@propertyWrapper
+struct ExtensionEnablementStorage: DynamicProperty {
+    private let defaultsKey: String
+    private let store: UserDefaults
+    @AppStorage private var storedValue: Bool
+
+    init(defaultsKey: String, store: UserDefaults = SharedDefaults.store) {
+        self.defaultsKey = defaultsKey
+        self.store = store
+        _storedValue = AppStorage(wrappedValue: false, defaultsKey, store: store)
+    }
+
+    init(entry: ExtensionRegistryEntry, store: UserDefaults = SharedDefaults.store) {
+        self.init(defaultsKey: entry.defaultsKey, store: store)
+    }
+
+    var wrappedValue: Bool {
+        get {
+            let observedValue = storedValue
+            return store.object(forKey: defaultsKey) as? Bool ?? observedValue
+        }
+        nonmutating set { storedValue = newValue }
+    }
+
+    var projectedValue: Binding<Bool> {
+        $storedValue
+    }
+}
+
 struct ExtensionsPane: View {
-    @AppStorage(AppStorageKeys.Tabs.attentionEnabled, store: SharedDefaults.store) private
-        var attentionEnabled = false
-    @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
-        var usageEnabled = false
-    @AppStorage(AppStorageKeys.Tabs.herdrEnabled, store: SharedDefaults.store) private
-        var herdrEnabled = false
-    @AppStorage(AppStorageKeys.Tabs.quinjetEnabled, store: SharedDefaults.store) private
-        var quinjetEnabled = false
-    @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
-        var musicEnabled = false
-    @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
-        var calendarEnabled =
-        false
-    @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
-        var systemEnabled = false
-    @AppStorage(AppStorageKeys.Tabs.machinesEnabled, store: SharedDefaults.store) private
-        var machinesEnabled =
-        false
-    @AppStorage(AppStorageKeys.Tabs.companionEnabled, store: SharedDefaults.store) private
-        var companionEnabled =
-        false
-    @AppStorage(AppStorageKeys.MenuBar.systemStats, store: SharedDefaults.store) private
-        var systemStats = false
-    @AppStorage(AppStorageKeys.Notch.shelfEnabled, store: SharedDefaults.store) private
-        var notchShelfEnabled =
-        false
-    @AppStorage(AppStorageKeys.Clipboard.enabled, store: SharedDefaults.store) private
-        var clipboardEnabled =
-        false
-    @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var focusDimEnabled =
-        false
-    @AppStorage(AppStorageKeys.Mic.muteEnabled, store: SharedDefaults.store) private
-        var micMuteEnabled = false
-    @AppStorage(AppStorageKeys.ColorPicker.enabled, store: SharedDefaults.store) private
-        var colorPickerEnabled =
-        false
-    @AppStorage(LidAwakeState.enabledKey, store: SharedDefaults.store) private
-        var lidAwakeEnabled = false
-    @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
-        var presenterEnabled =
-        false
     @State private var query = ""
     @State private var category = ExtensionMarketplaceCategory.all
     @State private var selectedEntry: ExtensionRegistryEntry?
@@ -169,9 +157,9 @@ struct ExtensionsPane: View {
                 ForEach(filteredEntries) { entry in
                     ExtensionMarketplaceCard(
                         entry: entry,
-                        enabled: permissionAwareBinding(for: entry),
                         dark: colorScheme == .dark,
-                        open: { openSettings(for: entry) }
+                        open: { openSettings(for: entry) },
+                        setEnabled: { setEnabled($0, for: entry) }
                     )
                     .id(entry.id)
                 }
@@ -209,45 +197,17 @@ struct ExtensionsPane: View {
         }
     }
 
-    private func enabledBinding(for entry: ExtensionRegistryEntry) -> Binding<Bool> {
-        switch entry.defaultsKey {
-        case AppStorageKeys.Tabs.attentionEnabled: $attentionEnabled
-        case AppStorageKeys.Tabs.usageEnabled: $usageEnabled
-        case AppStorageKeys.Tabs.herdrEnabled: $herdrEnabled
-        case AppStorageKeys.Tabs.quinjetEnabled: $quinjetEnabled
-        case AppStorageKeys.Tabs.systemEnabled: $systemEnabled
-        case AppStorageKeys.Tabs.machinesEnabled: $machinesEnabled
-        case AppStorageKeys.Tabs.companionEnabled: $companionEnabled
-        case AppStorageKeys.MenuBar.systemStats: $systemStats
-        case AppStorageKeys.Mic.muteEnabled: $micMuteEnabled
-        case AppStorageKeys.Tabs.musicEnabled: $musicEnabled
-        case AppStorageKeys.Tabs.calendarEnabled: $calendarEnabled
-        case AppStorageKeys.Notch.shelfEnabled: $notchShelfEnabled
-        case AppStorageKeys.Clipboard.enabled: $clipboardEnabled
-        case FocusDimState.enabledKey: $focusDimEnabled
-        case AppStorageKeys.Presenter.enabled: $presenterEnabled
-        case AppStorageKeys.ColorPicker.enabled: $colorPickerEnabled
-        case LidAwakeState.enabledKey: $lidAwakeEnabled
-        default: .constant(false)
+    private func setEnabled(_ newValue: Bool, for entry: ExtensionRegistryEntry) {
+        let coordinator = ExtensionModalCoordinator(
+            entry: entry, mutationCenter: .application)
+        grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
+        switch coordinator.setEnabled(newValue) {
+        case let .applied(_, missingRequiredTools):
+            if !missingRequiredTools.isEmpty { provisioningEntry = entry }
+        case let .needsPermissions(plan):
+            permissionRequest = ExtensionPermissionRequest(
+                entry: entry, required: plan.required, optional: plan.optional)
         }
-    }
-
-    private func permissionAwareBinding(for entry: ExtensionRegistryEntry) -> Binding<Bool> {
-        let enabled = enabledBinding(for: entry)
-        return Binding(
-            get: { enabled.wrappedValue },
-            set: { newValue in
-                let coordinator = ExtensionModalCoordinator(
-                    entry: entry, mutationCenter: .application)
-                grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
-                switch coordinator.setEnabled(newValue) {
-                case let .applied(_, missingRequiredTools):
-                    if !missingRequiredTools.isEmpty { provisioningEntry = entry }
-                case let .needsPermissions(plan):
-                    permissionRequest = ExtensionPermissionRequest(
-                        entry: entry, required: plan.required, optional: plan.optional)
-                }
-            })
     }
 
     private func markEnabledExtensionsSeen() {
@@ -293,10 +253,22 @@ struct ExtensionsPane: View {
 
 private struct ExtensionMarketplaceCard: View {
     let entry: ExtensionRegistryEntry
-    @Binding var enabled: Bool
+    @ExtensionEnablementStorage private var enabled: Bool
     let dark: Bool
     let open: () -> Void
+    let setEnabled: (Bool) -> Void
     @State private var hovering = false
+
+    init(
+        entry: ExtensionRegistryEntry, dark: Bool, open: @escaping () -> Void,
+        setEnabled: @escaping (Bool) -> Void
+    ) {
+        self.entry = entry
+        self.dark = dark
+        self.open = open
+        self.setEnabled = setEnabled
+        _enabled = ExtensionEnablementStorage(entry: entry)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(9)) {
@@ -327,7 +299,7 @@ private struct ExtensionMarketplaceCard: View {
                     PermissionInfoButton(permissions: permissions)
                 }
                 Spacer(minLength: 0)
-                Toggle("", isOn: $enabled)
+                Toggle("", isOn: enabledBinding)
                     .labelsHidden()
                     .toggleStyle(.switch)
                     .controlSize(.small)
@@ -369,6 +341,10 @@ private struct ExtensionMarketplaceCard: View {
     private var permissions: [ExtensionPermission] {
         entry.requiredPermissions + entry.optionalPermissions
     }
+
+    private var enabledBinding: Binding<Bool> {
+        Binding(get: { enabled }, set: setEnabled)
+    }
 }
 
 struct ExtensionSettingsHeader: View {
@@ -398,7 +374,7 @@ private struct ExtensionSettingsSheet: View {
     let entry: ExtensionRegistryEntry
     let coordinator: ExtensionModalCoordinator
     @Environment(\.dismiss) private var dismiss
-    @State private var enabled: Bool
+    @ExtensionEnablementStorage private var enabled: Bool
     @State private var grantedPermissions: [ExtensionPermission: Bool]
     @State private var permissionRequest: ExtensionPermissionRequest?
     @State private var provisioningEntry: ExtensionRegistryEntry?
@@ -409,7 +385,7 @@ private struct ExtensionSettingsSheet: View {
             entry: entry, mutationCenter: .application)
         self.entry = entry
         self.coordinator = coordinator
-        _enabled = State(initialValue: coordinator.isEnabled)
+        _enabled = ExtensionEnablementStorage(entry: entry)
         _grantedPermissions = State(
             initialValue: ExtensionPermissionState.readGrantedPermissions())
     }

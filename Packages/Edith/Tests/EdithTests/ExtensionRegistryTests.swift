@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import Edith
 @testable import EdithCore
 @testable import EdithKit
 
@@ -71,6 +72,66 @@ import Testing
         let defaultsKeys = ExtensionRegistry.entries.map(\.defaultsKey)
         #expect(Set(defaultsKeys).count == defaultsKeys.count)
         #expect(Set(defaultsKeys) == knownDefaultsKeys)
+    }
+
+    @Test func dynamicEnablementStorageWritesASyntheticDefaultsKey() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let key = "syntheticExtensionEnabled"
+        let storage = ExtensionEnablementStorage(defaultsKey: key, store: defaults)
+
+        #expect(defaults.object(forKey: key) == nil)
+        #expect(!storage.wrappedValue)
+        storage.projectedValue.wrappedValue = true
+        #expect(defaults.object(forKey: key) as? Bool == true)
+        storage.projectedValue.wrappedValue = false
+        #expect(defaults.object(forKey: key) as? Bool == false)
+    }
+
+    @Test func dynamicEnablementStorageWritesEveryCurrentRegistryKey() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        for entry in ExtensionRegistry.entries {
+            let storage = ExtensionEnablementStorage(entry: entry, store: defaults)
+            storage.projectedValue.wrappedValue = true
+            #expect(defaults.object(forKey: entry.defaultsKey) as? Bool == true)
+            storage.projectedValue.wrappedValue = false
+            #expect(defaults.object(forKey: entry.defaultsKey) as? Bool == false)
+        }
+    }
+
+    @Test func cardAndModalStorageShareOneObservedValue() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let key = "sharedExtensionEnabled"
+        let card = ExtensionEnablementStorage(defaultsKey: key, store: defaults)
+        let modal = ExtensionEnablementStorage(defaultsKey: key, store: defaults)
+
+        card.projectedValue.wrappedValue = true
+        #expect(modal.wrappedValue)
+        modal.projectedValue.wrappedValue = false
+        #expect(!card.wrappedValue)
+    }
+
+    @Test func cardsAndSheetsUseDynamicStorageWithoutAConstantFallback() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent(
+                "Sources/Edith/Features/Settings/Views/ExtensionsPane.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        #expect(!source.contains("default: .constant(false)"))
+        #expect(!source.contains("enabledBinding(for entry:"))
+        #expect(source.contains("Toggle(\"\", isOn: enabledBinding)"))
+        #expect(source.contains("setEnabled: { setEnabled($0, for: entry) }"))
+        #expect(source.components(separatedBy: "coordinator.setEnabled(").count == 3)
+        #expect(
+            source.components(
+                separatedBy: "ExtensionEnablementStorage(entry: entry)"
+            ).count == 3)
     }
 
     @Test func featuredEntriesArePresent() {
