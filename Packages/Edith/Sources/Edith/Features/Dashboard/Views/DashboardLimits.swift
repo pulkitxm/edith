@@ -290,20 +290,11 @@ struct LimitsCardView: View {
 
     private func rebuildVisible() {
         let now = all.last?.date ?? Date()
-        let ms = ranges.first { $0.0 == range }?.1 ?? nil
-        let pts =
-            ms.map { m in downsampled.filter { $0.date >= now.addingTimeInterval(-m) } }
-            ?? downsampled
-        visible = pts
-        let start = pts.first?.date ?? now
-        let spanDays = now.timeIntervalSince(start) / 86400
-        marks = LimitsHistory.resetMarkers(pts).filter { !$0.session || spanDays <= 7 }
-        samples = pts.flatMap { p -> [Sample] in
-            [
-                p.s.map { Sample(t: p.date, v: $0, series: "Session") },
-                p.w.map { Sample(t: p.date, v: $0, series: "Weekly") },
-            ].compactMap { $0 }
-        }
+        let window = ranges.first { $0.0 == range }?.1 ?? nil
+        let display = LimitsChartDisplay.build(downsampled, now: now, window: window)
+        visible = display.visible
+        marks = display.marks
+        samples = display.samples
     }
 
     private var segmented: some View {
@@ -329,11 +320,7 @@ struct LimitsCardView: View {
     }
 
     private var readout: some View {
-        let point = selected.flatMap { d in
-            visible.min(by: {
-                abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d))
-            })
-        }
+        let point = selected.flatMap { LimitsChartDisplay.nearest(in: visible, to: $0) }
         return Group {
             if let point {
                 HStack(spacing: UIScale.pt(10)) {
@@ -425,5 +412,103 @@ struct LimitsCardView: View {
             return String(format: "%02d:00", cal.component(.hour, from: d))
         }
         return "\(cal.component(.month, from: d))/\(cal.component(.day, from: d))"
+    }
+}
+
+private enum LimitsChartDisplay {
+    static let maxPointsPerSeries = 400
+
+    struct Output {
+        let visible: [LimitPoint]
+        let marks: [LimitResetMarker]
+        let samples: [LimitsCardView.Sample]
+    }
+
+    static func build(_ points: [LimitPoint], now: Date, window: TimeInterval?) -> Output {
+        var pts = points
+        if let window {
+            let cutoff = now.addingTimeInterval(-window)
+            pts = Array(points[firstIndex(in: points, onOrAfter: cutoff)...])
+        }
+        let start = pts.first?.date ?? now
+        let spanDays = now.timeIntervalSince(start) / 86400
+        var marks: [LimitResetMarker] = []
+        for mark in LimitsHistory.resetMarkers(pts) where !mark.session || spanDays <= 7 {
+            marks.append(mark)
+        }
+        let capped = cap(pts, start: start, end: now)
+        var samples: [LimitsCardView.Sample] = []
+        samples.reserveCapacity(capped.count * 2)
+        for point in capped {
+            if let s = point.s {
+                samples.append(LimitsCardView.Sample(t: point.date, v: s, series: "Session"))
+            }
+            if let w = point.w {
+                samples.append(LimitsCardView.Sample(t: point.date, v: w, series: "Weekly"))
+            }
+        }
+        return Output(visible: capped, marks: marks, samples: samples)
+    }
+
+    static func firstIndex(in points: [LimitPoint], onOrAfter cutoff: Date) -> Int {
+        var low = 0
+        var high = points.count
+        while low < high {
+            let mid = (low + high) / 2
+            if points[mid].date < cutoff { low = mid + 1 } else { high = mid }
+        }
+        return low
+    }
+
+    static func cap(_ points: [LimitPoint], start: Date, end: Date) -> [LimitPoint] {
+        guard points.count > maxPointsPerSeries else { return points }
+        let span = max(end.timeIntervalSince(start), 1)
+        let width = span / Double(maxPointsPerSeries)
+        var out: [LimitPoint] = []
+        out.reserveCapacity(maxPointsPerSeries + 1)
+        var bucket = Int.min
+        var date = start
+        var maxSession: Double?
+        var maxWeekly: Double?
+        var sessionReset: Date?
+        var weekReset: Date?
+        func flush() {
+            guard bucket != Int.min else { return }
+            out.append(
+                LimitPoint(
+                    date: date, s: maxSession, w: maxWeekly, sessionReset: sessionReset,
+                    weekReset: weekReset))
+        }
+        for point in points {
+            let index = Int(point.date.timeIntervalSince(start) / width)
+            if index != bucket {
+                flush()
+                bucket = index
+                date = point.date
+                maxSession = point.s
+                maxWeekly = point.w
+                sessionReset = point.sessionReset
+                weekReset = point.weekReset
+                continue
+            }
+            if let s = point.s { maxSession = max(maxSession ?? s, s) }
+            if let w = point.w { maxWeekly = max(maxWeekly ?? w, w) }
+            if let reset = point.sessionReset { sessionReset = reset }
+            if let reset = point.weekReset { weekReset = reset }
+        }
+        flush()
+        return out
+    }
+
+    static func nearest(in points: [LimitPoint], to date: Date) -> LimitPoint? {
+        guard !points.isEmpty else { return nil }
+        let index = firstIndex(in: points, onOrAfter: date)
+        if index == points.count { return points[points.count - 1] }
+        if index == 0 { return points[0] }
+        let after = points[index]
+        let before = points[index - 1]
+        let beforeGap = date.timeIntervalSince(before.date)
+        let afterGap = after.date.timeIntervalSince(date)
+        return beforeGap <= afterGap ? before : after
     }
 }

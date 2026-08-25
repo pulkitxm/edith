@@ -38,9 +38,7 @@ struct ComboChart: View {
                     x: .value("Day", p.label),
                     y: .value("Tokens", p.tokens)
                 )
-                .foregroundStyle(
-                    barColor.opacity(selected == nil || selected == p.label ? 0.7 : 0.28)
-                )
+                .foregroundStyle(barColor.opacity(0.7))
                 .cornerRadius(2)
             }
             ForEach(points) { p in
@@ -53,6 +51,8 @@ struct ComboChart: View {
                 .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1.5)))
             }
             if let p = selectedPoint {
+                RectangleMark(x: .value("Day", p.label))
+                    .foregroundStyle(.primary.opacity(0.06))
                 RuleMark(x: .value("Day", p.label))
                     .foregroundStyle(.primary.opacity(0.18))
                     .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [3, 3]))
@@ -173,7 +173,6 @@ struct StackedChart: View {
                     y: .value("Tokens", d.value)
                 )
                 .foregroundStyle(by: .value("Series", d.series))
-                .opacity(selected == nil || selected == d.x ? 1 : 0.35)
             }
             ForEach(costLine) { p in
                 LineMark(
@@ -185,6 +184,8 @@ struct StackedChart: View {
                 .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1.2)))
             }
             if let p = selectedPoint {
+                RectangleMark(x: .value("Day", p.label))
+                    .foregroundStyle(.primary.opacity(0.06))
                 RuleMark(x: .value("Day", p.label))
                     .foregroundStyle(.primary.opacity(0.18))
                     .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [3, 3]))

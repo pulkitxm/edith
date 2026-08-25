@@ -55,9 +55,6 @@ struct DashboardView: View {
                                 charts(compact: compact)
                             }
                             .pageContent(compact)
-                            .animation(
-                                Motion.animation(Motion.settle, reduceMotion: reduceMotion),
-                                value: model.revision)
                         } else if !model.loadAttempted {
                             ProgressView("Loading usage data…")
                                 .controlSize(.small)
@@ -90,6 +87,9 @@ struct DashboardView: View {
             if automaticActionsEnabled, !updating {
                 Task { await model.load() }
             }
+        }
+        .onChange(of: showLog) { _, shown in
+            refresh.setLogVisible(shown)
         }
     }
 
@@ -726,6 +726,11 @@ private struct FilterChip: ViewModifier {
     }
 }
 
+private struct HeatHover: Identifiable {
+    let id: String
+    let detail: HeatDay
+}
+
 struct ActivityHeatmap: View {
     let days: [DayPoint]
     let cuts: [Double]
@@ -733,7 +738,7 @@ struct ActivityHeatmap: View {
     let dark: Bool
     var blur = false
     var blurTokens = false
-    @State private var hoveredDay: String?
+    @State private var hovered: HeatHover?
 
     var body: some View {
         let weeks = stride(from: 0, to: days.count, by: 7).map {
@@ -751,7 +756,7 @@ struct ActivityHeatmap: View {
             }
             .padding(.top, UIScale.pt(15))
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: UIScale.pt(3)) {
+                LazyHStack(alignment: .top, spacing: UIScale.pt(3)) {
                     ForEach(Array(weeks.enumerated()), id: \.offset) { index, week in
                         VStack(spacing: UIScale.pt(3)) {
                             Text(monthLabel(for: weeks, at: index))
@@ -759,36 +764,22 @@ struct ActivityHeatmap: View {
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .frame(height: UIScale.pt(12))
                             ForEach(week) { day in
-                                RoundedRectangle(cornerRadius: UIScale.pt(3))
-                                    .fill(cellColor(day.cost, cuts: cuts))
-                                    .frame(width: UIScale.pt(14), height: UIScale.pt(14))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: UIScale.pt(3))
-                                            .strokeBorder(
-                                                DashSkin.ink(dark).opacity(
-                                                    hoveredDay == day.id ? 0.5 : 0),
-                                                lineWidth: UIScale.pt(1))
-                                    )
-                                    .onHover { inside in
-                                        if inside {
-                                            hoveredDay =
-                                                model.heatDetail[day.id] != nil ? day.id : nil
-                                        } else if hoveredDay == day.id {
-                                            hoveredDay = nil
-                                        }
-                                    }
-                                    .popover(
-                                        isPresented: Binding(
-                                            get: { hoveredDay == day.id },
-                                            set: { if !$0 { hoveredDay = nil } }),
-                                        arrowEdge: .trailing
-                                    ) {
+                                HeatCellView(
+                                    fill: cellColor(day.cost, cuts: cuts),
+                                    stroke: DashSkin.ink(dark).opacity(
+                                        hovered?.id == day.id ? 0.5 : 0)
+                                )
+                                .onHover { inside in
+                                    if inside {
                                         if let detail = model.heatDetail[day.id] {
-                                            HeatCard(
-                                                detail: detail, model: model, dark: dark,
-                                                blur: blur, blurTokens: blurTokens)
+                                            hovered = HeatHover(id: day.id, detail: detail)
+                                        } else {
+                                            hovered = nil
                                         }
+                                    } else if hovered?.id == day.id {
+                                        hovered = nil
                                     }
+                                }
                             }
                         }
                     }
@@ -797,6 +788,11 @@ struct ActivityHeatmap: View {
             .defaultScrollAnchor(weeks.count > 18 ? .trailing : .leading)
         }
         .frame(height: UIScale.pt(137))
+        .popover(item: $hovered, arrowEdge: .trailing) { item in
+            HeatCard(
+                detail: item.detail, model: model, dark: dark,
+                blur: blur, blurTokens: blurTokens)
+        }
     }
 
     private func monthLabel(for weeks: [[DayPoint]], at index: Int) -> String {
@@ -816,5 +812,20 @@ struct ActivityHeatmap: View {
         if cost <= cuts[1] { return DashSkin.heat(1, dark) }
         if cost <= cuts[2] { return DashSkin.heat(2, dark) }
         return DashSkin.heat(3, dark)
+    }
+}
+
+private struct HeatCellView: View {
+    let fill: Color
+    let stroke: Color
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: UIScale.pt(3))
+            .fill(fill)
+            .frame(width: UIScale.pt(14), height: UIScale.pt(14))
+            .overlay(
+                RoundedRectangle(cornerRadius: UIScale.pt(3))
+                    .strokeBorder(stroke, lineWidth: UIScale.pt(1))
+            )
     }
 }

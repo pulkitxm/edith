@@ -11,6 +11,8 @@ public final class DashboardRefreshBridge {
     private let logURL: URL
     private let requestUsageRefresh: () -> Void
     @ObservationIgnored private nonisolated(unsafe) var tailTimer: Timer?
+    @ObservationIgnored private nonisolated(unsafe) var reloadTask: Task<Void, Never>?
+    @ObservationIgnored private var logVisible = false
 
     public init(
         logURL: URL = Repo.dataDir.appendingPathComponent("refresh.log"),
@@ -28,11 +30,11 @@ public final class DashboardRefreshBridge {
             IPC.observe(IPC.Name.usageRefreshFinished) { [weak self] in
                 self?.endTail()
             })
-        reloadLog()
     }
 
     deinit {
         tailTimer?.invalidate()
+        reloadTask?.cancel()
         for token in tokens { IPC.stopObserving(token) }
     }
 
@@ -40,9 +42,33 @@ public final class DashboardRefreshBridge {
         requestUsageRefresh()
     }
 
+    public func setLogVisible(_ visible: Bool) {
+        guard visible != logVisible else { return }
+        logVisible = visible
+        if visible {
+            reloadLog()
+            if updating { startTailTimer() }
+        } else {
+            stopTailTimer()
+            reloadTask?.cancel()
+            reloadTask = nil
+        }
+    }
+
     private func beginTail() {
         updating = true
+        guard logVisible else { return }
         reloadLog()
+        startTailTimer()
+    }
+
+    private func endTail() {
+        stopTailTimer()
+        updating = false
+        if logVisible { reloadLog() }
+    }
+
+    private func startTailTimer() {
         tailTimer?.invalidate()
         let t = Timer(timeInterval: 0.4, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.reloadLog() }
@@ -52,14 +78,21 @@ public final class DashboardRefreshBridge {
         tailTimer = t
     }
 
-    private func endTail() {
+    private func stopTailTimer() {
         tailTimer?.invalidate()
         tailTimer = nil
-        updating = false
-        reloadLog()
     }
 
     private func reloadLog() {
-        log = FileTail.read(logURL, maxBytes: 64 * 1024)
+        reloadTask?.cancel()
+        let url = logURL
+        reloadTask = Task { [weak self] in
+            let text = await Task.detached(priority: .utility) {
+                FileTail.read(url, maxBytes: 64 * 1024)
+            }.value
+            guard !Task.isCancelled else { return }
+            guard let self, text != self.log else { return }
+            self.log = text
+        }
     }
 }
