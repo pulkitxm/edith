@@ -1,6 +1,7 @@
-import EdithKit
 import Foundation
 import Testing
+
+@testable import EdithKit
 
 @Suite struct UsageRefreshTests {
     private func tempDir() -> URL {
@@ -8,6 +9,43 @@ import Testing
             .appendingPathComponent("edith-refresh-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base
+    }
+
+    private func usage(period: String, source: String) throws -> Data {
+        let hours: [[String: Any]] = (0..<24).map {
+            ["hour": $0, "cost": 0, "tokens": 0, "bySource": [:], "byPath": [:]]
+        }
+        return try JSONSerialization.data(
+            withJSONObject: [
+                "schemaVersion": 8,
+                "generatedAt": "2026-08-25T00:00:00Z",
+                "sources": [source],
+                "defaultSources": [source],
+                "sourceMeta": [source: ["label": source]],
+                "machines": [],
+                "totals": [
+                    "cost": 1, "tokens": 1, "inputTokens": 1, "outputTokens": 0,
+                    "cacheCreationTokens": 0, "cacheReadTokens": 0,
+                    "bySource": [source: ["cost": 1, "tokens": 1]],
+                ],
+                "daily": [
+                    [
+                        "period": period,
+                        "bySource": [
+                            source: [
+                                [
+                                    "modelName": "model", "inputTokens": 1,
+                                    "outputTokens": 0, "cacheCreationTokens": 0,
+                                    "cacheReadTokens": 0, "cost": 1,
+                                ]
+                            ]
+                        ],
+                        "hours": hours,
+                        "projects": [],
+                    ]
+                ],
+                "sessions": [],
+            ])
     }
 
     @Test func parsesEveryEventTheScriptEmits() {
@@ -85,6 +123,89 @@ import Testing
         held?.release()
         #expect(UsageRefreshLock.isHeld(at: url) == false)
         #expect(UsageRefreshLock.acquire(at: url) != nil)
+    }
+
+    @Test func publicationReplacesTheBaselineWithoutRestoringRemovedHistory() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let live = dir.appendingPathComponent("usage.json")
+        let staged = dir.appendingPathComponent("staged.json")
+        let fresh = try usage(period: "2026-08-24", source: "fresh")
+        let baseline = try usage(period: "2026-08-20", source: "forgotten-machine")
+        try fresh.write(to: staged)
+        try baseline.write(to: live)
+
+        try UsageRefreshRunner.publish(
+            stagedUsage: staged, baseline: UsageRefreshBaseline(usage: baseline, machines: nil),
+            dataDir: dir)
+
+        #expect(try Data(contentsOf: live) == fresh)
+    }
+
+    @Test func publicationRejectsAConcurrentLiveReplacement() async throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let live = dir.appendingPathComponent("usage.json")
+        let staged = dir.appendingPathComponent("staged.json")
+        let baseline = try usage(period: "2026-08-20", source: "old")
+        let concurrent = try usage(period: "2026-08-22", source: "during")
+        try usage(period: "2026-08-24", source: "fresh").write(to: staged)
+        try baseline.write(to: live)
+        let held = try UsageDataLock.acquire(dataDirectory: dir)
+        let publication = Task.detached {
+            try UsageRefreshRunner.publish(
+                stagedUsage: staged,
+                baseline: UsageRefreshBaseline(usage: baseline, machines: nil), dataDir: dir)
+        }
+        await Task.yield()
+        try UsageDataFiles.write(concurrent, to: live)
+
+        held.release()
+        await #expect(throws: UsageDataFileError.self) {
+            try await publication.value
+        }
+        #expect(try Data(contentsOf: live) == concurrent)
+    }
+
+    @Test func publicationRejectsMachineHistoryChangedDuringRefresh() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let live = dir.appendingPathComponent("usage.json")
+        let staged = dir.appendingPathComponent("staged.json")
+        let generation = dir.appendingPathComponent("machines.generation")
+        let baseline = try usage(period: "2026-08-20", source: "old")
+        try baseline.write(to: live)
+        try usage(period: "2026-08-24", source: "fresh").write(to: staged)
+        try Data("new-generation".utf8).write(to: generation)
+
+        #expect(throws: UsageDataFileError.self) {
+            try UsageRefreshRunner.publish(
+                stagedUsage: staged,
+                baseline: UsageRefreshBaseline(usage: baseline, machines: nil), dataDir: dir)
+        }
+        #expect(try Data(contentsOf: live) == baseline)
+    }
+
+    @Test func staleOwnedRefreshStagesAreScavengedWithoutFollowingLinks() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let old = dir.appendingPathComponent("old.json")
+        let current = dir.appendingPathComponent("current.json")
+        let target = dir.appendingPathComponent("target.txt")
+        let link = dir.appendingPathComponent("linked.json")
+        try Data("old".utf8).write(to: old)
+        try Data("current".utf8).write(to: current)
+        try Data("preserve".utf8).write(to: target)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        try FileManager.default.setAttributes(
+            [.modificationDate: now.addingTimeInterval(-90_000)], ofItemAtPath: old.path)
+
+        UsageRefreshRunner.cleanupStaleStages(in: dir, now: now)
+
+        #expect(!FileManager.default.fileExists(atPath: old.path))
+        #expect(FileManager.default.fileExists(atPath: current.path))
+        #expect(try Data(contentsOf: target) == Data("preserve".utf8))
     }
 
     @Test func followerReadsEventsWrittenByAnotherProcess() throws {

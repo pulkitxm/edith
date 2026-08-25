@@ -97,7 +97,7 @@
         },
         {
           "path": "Packages/Edith/Sources/EdithKit/Features/Usage/Services/UsageRefreshRunner.swift",
-          "contains": "process.qualityOfService = .utility"
+          "contains": "CLICommandRunner.runSeparated("
         },
         {
           "path": "Packages/Edith/Sources/EdithKit/Features/Usage/Services/UsageCollectionOperations.swift",
@@ -182,10 +182,10 @@
       "evidence": [
         {
           "path": "Packages/Edith/Sources/EdithKit/Features/Usage/Services/UsageRefreshRunner.swift",
-          "contains": "process.qualityOfService = .utility"
+          "contains": "CLICommandRunner.runSeparated("
         },
         {
-          "path": "Packages/Edith/Sources/EdithKit/Features/Usage/Services/UsageRefreshRunner.swift",
+          "path": "Packages/Edith/Sources/EdithKit/Core/Processes/ToolProvisioner.swift",
           "contains": "withTaskCancellationHandler"
         }
       ]

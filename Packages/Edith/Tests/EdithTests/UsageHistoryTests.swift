@@ -47,6 +47,45 @@ import Testing
         return try! JSONSerialization.data(withJSONObject: obj)
     }
 
+    private func canonicalUsage(
+        period: String = "2026-08-25", source: String = "cli",
+        tokens: Double = 1, cost: Double = 0
+    ) throws -> Data {
+        let hours: [[String: Any]] = (0..<24).map {
+            ["hour": $0, "cost": 0, "tokens": 0, "bySource": [:], "byPath": [:]]
+        }
+        return try JSONSerialization.data(
+            withJSONObject: [
+                "schemaVersion": 8,
+                "generatedAt": "2026-08-25T00:00:00Z",
+                "sources": [source],
+                "defaultSources": [source],
+                "sourceMeta": [source: ["label": source]],
+                "sessions": [],
+                "totals": [
+                    "cost": cost, "tokens": tokens, "inputTokens": tokens,
+                    "outputTokens": 0, "cacheCreationTokens": 0, "cacheReadTokens": 0,
+                    "bySource": [source: ["cost": cost, "tokens": tokens]],
+                ],
+                "daily": [
+                    [
+                        "period": period,
+                        "bySource": [
+                            source: [
+                                [
+                                    "modelName": "m", "inputTokens": tokens,
+                                    "outputTokens": 0, "cacheCreationTokens": 0,
+                                    "cacheReadTokens": 0, "cost": cost,
+                                ]
+                            ]
+                        ],
+                        "hours": hours,
+                        "projects": [],
+                    ]
+                ],
+            ])
+    }
+
     private func model(
         _ name: String = "m", input: Double, output: Double = 0,
         cacheCreation: Double = 0, cacheRead: Double = 0, cost: Double
@@ -59,6 +98,46 @@ import Testing
             "cacheReadTokens": cacheRead,
             "cost": cost,
         ]
+    }
+
+    @Test func documentValidationMatchesConsumedFieldTypes() throws {
+        let valid = try canonicalUsage()
+        #expect(UsageHistory.isValidDocument(valid))
+        #expect(!UsageHistory.isValidDocument(Data(#"{"daily":[]}"#.utf8)))
+
+        var wrongGeneratedAt = decode(valid)
+        wrongGeneratedAt["generatedAt"] = 7
+        #expect(
+            !UsageHistory.isValidDocument(
+                try JSONSerialization.data(withJSONObject: wrongGeneratedAt)))
+
+        var wrongProjects = decode(valid)
+        var days = wrongProjects["daily"] as! [[String: Any]]
+        days[0]["projects"] = ["not": "an array"]
+        wrongProjects["daily"] = days
+        #expect(
+            !UsageHistory.isValidDocument(
+                try JSONSerialization.data(withJSONObject: wrongProjects)))
+
+        var negativeMetrics = decode(valid)
+        days = negativeMetrics["daily"] as! [[String: Any]]
+        var bySource = days[0]["bySource"] as! [String: [[String: Any]]]
+        var rows = bySource["cli"]!
+        rows[0]["inputTokens"] = -1.0
+        bySource["cli"] = rows
+        days[0]["bySource"] = bySource
+        negativeMetrics["daily"] = days
+        #expect(
+            !UsageHistory.isValidDocument(
+                try JSONSerialization.data(withJSONObject: negativeMetrics)))
+
+        var undeclaredSource = decode(valid)
+        undeclaredSource["sources"] = []
+        undeclaredSource["defaultSources"] = []
+        undeclaredSource["sourceMeta"] = [:]
+        #expect(
+            !UsageHistory.isValidDocument(
+                try JSONSerialization.data(withJSONObject: undeclaredSource)))
     }
 
     private func day(

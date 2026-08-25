@@ -1,6 +1,312 @@
 import Foundation
 
 public enum UsageHistory {
+    public static func isValidDocument(_ data: Data) -> Bool {
+        guard let document = try? JSONDecoder().decode(ValidationDocument.self, from: data)
+        else { return false }
+        guard document.schemaVersion == 8,
+            Set(document.sources).count == document.sources.count,
+            Set(document.defaultSources).isSubset(of: Set(document.sources)),
+            document.sourceReferences.isSubset(of: Set(document.sources)),
+            document.daily.map(\.period) == document.daily.map(\.period).sorted(),
+            Set(document.daily.map(\.period)).count == document.daily.count,
+            document.daily.allSatisfy(\.isValid)
+        else { return false }
+        var totals = ValidationTotals.zero
+        for day in document.daily {
+            for (source, rows) in day.bySource {
+                for row in rows { totals.add(row, source: source) }
+            }
+        }
+        return document.totals.matches(totals)
+    }
+
+    private struct ValidationDocument: Decodable {
+        let generatedAt: String
+        let schemaVersion: Int
+        let sources: [String]
+        let defaultSources: [String]
+        let sourceMeta: [String: ValidationSourceMeta]
+        let sessions: [ValidationSession]
+        let machines: [ValidationMachine]?
+        let totals: ValidationTotals
+        let daily: [ValidationDay]
+
+        var sourceReferences: Set<String> {
+            var result = Set(sourceMeta.keys)
+            result.formUnion(totals.bySource.keys)
+            result.formUnion(sessions.compactMap(\.source))
+            result.formUnion(machines?.flatMap { $0.sources ?? [] } ?? [])
+            for day in daily { result.formUnion(day.sourceReferences) }
+            return result
+        }
+    }
+
+    private struct ValidationDay: Decodable {
+        let period: String
+        let bySource: [String: [ValidationRow]]
+        let hours: [ValidationDetailNode]
+        let projects: [ValidationProject]
+
+        var isValid: Bool {
+            guard !period.isEmpty, hours.count == 24,
+                bySource.values.flatMap({ $0 }).allSatisfy(\.hasValidMetrics),
+                hours.allSatisfy(\.isValid), projects.allSatisfy(\.isValid)
+            else { return false }
+            let authoritative = summarizeRows(bySource)
+            let hourly = summarizeBreakdowns(hours.map(\.bySource))
+            let project = summarizeBreakdowns(projects.map(\.bySource))
+            return bounded(hourly, by: authoritative) && bounded(project, by: authoritative)
+                && hours.allSatisfy { hour in
+                    bounded(
+                        summarizeBreakdowns(hour.byPath?.values.map(\.bySource) ?? []),
+                        by: hour.bySource.mapValues(\.measure))
+                }
+        }
+
+        var sourceReferences: Set<String> {
+            var result = Set(bySource.keys)
+            for hour in hours { result.formUnion(hour.sourceReferences) }
+            for project in projects { result.formUnion(project.sourceReferences) }
+            return result
+        }
+    }
+
+    private struct ValidationRow: Decodable {
+        let modelName: String?
+        let inputTokens: Double
+        let outputTokens: Double
+        let cacheCreationTokens: Double
+        let cacheReadTokens: Double
+        let cost: Double
+
+        var hasValidMetrics: Bool {
+            [inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens, cost]
+                .allSatisfy { $0.isFinite && $0 >= 0 }
+        }
+
+        var tokens: Double {
+            inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens
+        }
+    }
+
+    private struct ValidationSourceMeta: Decodable {
+        let label: String?
+        let tool: String?
+        let machine: String?
+        let machineID: String?
+        let machineHost: String?
+    }
+
+    private struct ValidationSession: Decodable {
+        let id: String?
+        let source: String?
+        let project: String?
+        let model: String?
+        let models: [String]?
+        let startedAt: String?
+        let lastActivity: String?
+        let lastTs: Double?
+        let totalCost: Double?
+        let totalTokens: Double?
+    }
+
+    private struct ValidationMachine: Decodable {
+        let id: String?
+        let name: String?
+        let slug: String?
+        let host: String?
+        let collectedAt: String?
+        let sources: [String]?
+    }
+
+    private struct ValidationTotals: Decodable {
+        var cost: Double
+        var tokens: Double
+        var inputTokens: Double
+        var outputTokens: Double
+        var cacheCreationTokens: Double
+        var cacheReadTokens: Double
+        var bySource: [String: ValidationMeasure]
+
+        static let zero = ValidationTotals(
+            cost: 0, tokens: 0, inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0,
+            cacheReadTokens: 0, bySource: [:])
+
+        mutating func add(_ row: ValidationRow, source: String) {
+            cost += row.cost
+            tokens += row.tokens
+            inputTokens += row.inputTokens
+            outputTokens += row.outputTokens
+            cacheCreationTokens += row.cacheCreationTokens
+            cacheReadTokens += row.cacheReadTokens
+            bySource[source, default: .zero].add(cost: row.cost, tokens: row.tokens)
+        }
+
+        func matches(_ other: ValidationTotals) -> Bool {
+            near(cost, other.cost) && near(tokens, other.tokens)
+                && near(inputTokens, other.inputTokens) && near(outputTokens, other.outputTokens)
+                && near(cacheCreationTokens, other.cacheCreationTokens)
+                && near(cacheReadTokens, other.cacheReadTokens)
+                && [cost, tokens, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens]
+                    .allSatisfy { $0.isFinite && $0 >= 0 }
+                && bySource.keys.sorted() == other.bySource.keys.sorted()
+                && bySource.allSatisfy { source, measure in
+                    guard let expected = other.bySource[source] else { return false }
+                    return measure.matches(expected)
+                }
+        }
+    }
+
+    private struct ValidationMeasure: Decodable {
+        var cost: Double
+        var tokens: Double
+
+        static let zero = ValidationMeasure(cost: 0, tokens: 0)
+
+        var isValid: Bool {
+            cost.isFinite && cost >= 0 && tokens.isFinite && tokens >= 0
+        }
+
+        mutating func add(cost: Double, tokens: Double) {
+            self.cost += cost
+            self.tokens += tokens
+        }
+
+        func matches(_ other: ValidationMeasure) -> Bool {
+            isValid && other.isValid && near(cost, other.cost) && near(tokens, other.tokens)
+        }
+    }
+
+    private struct ValidationSourceBreakdown: Decodable {
+        let cost: Double
+        let tokens: Double
+        let byModel: [String: ValidationMeasure]
+
+        var isValid: Bool {
+            let models = byModel.values
+            return models.allSatisfy(\.isValid)
+                && near(cost, models.reduce(0) { $0 + $1.cost })
+                && near(tokens, models.reduce(0) { $0 + $1.tokens })
+        }
+
+        var measure: ValidationMeasure {
+            ValidationMeasure(cost: cost, tokens: tokens)
+        }
+    }
+
+    private struct ValidationDetailNode: Decodable {
+        let hour: Int?
+        let cost: Double
+        let tokens: Double
+        let bySource: [String: ValidationSourceBreakdown]
+        let byPath: [String: ValidationDetailNode]?
+
+        var isValid: Bool {
+            let sources = bySource.values
+            return sources.allSatisfy(\.isValid)
+                && near(cost, sources.reduce(0) { $0 + $1.cost })
+                && near(tokens, sources.reduce(0) { $0 + $1.tokens })
+                && (byPath?.values.allSatisfy(\.isValid) ?? true)
+        }
+
+        var sourceReferences: Set<String> {
+            var result = Set(bySource.keys)
+            for path in byPath?.values ?? Dictionary<String, ValidationDetailNode>().values {
+                result.formUnion(path.sourceReferences)
+            }
+            return result
+        }
+    }
+
+    private struct ValidationProject: Decodable {
+        let projectName: String?
+        let repositoryID: String
+        let repositoryName: String
+        let repositoryURL: String?
+        let folderName: String
+        let path: String
+        let machineName: String?
+        let machineID: String?
+        let cost: Double
+        let tokens: Double
+        let bySource: [String: ValidationSourceBreakdown]
+        let chats: [ValidationChat]
+        let worktrees: [ValidationWorktree]
+
+        var isValid: Bool {
+            let sources = bySource.values
+            return !repositoryID.isEmpty && !repositoryName.isEmpty && !folderName.isEmpty
+                && !path.isEmpty && sources.allSatisfy(\.isValid)
+                && near(cost, sources.reduce(0) { $0 + $1.cost })
+                && near(tokens, sources.reduce(0) { $0 + $1.tokens })
+        }
+
+        var sourceReferences: Set<String> {
+            var result = Set(bySource.keys)
+            result.formUnion(chats.compactMap(\.source))
+            for worktree in worktrees {
+                result.formUnion(
+                    worktree.bySource?.keys ?? Dictionary<String, ValidationSourceBreakdown>().keys)
+                result.formUnion(worktree.chats?.compactMap(\.source) ?? [])
+            }
+            return result
+        }
+    }
+
+    private struct ValidationChat: Decodable {
+        let id: String?
+        let title: String?
+        let path: String?
+        let source: String?
+        let cost: Double?
+        let tokens: Double?
+        let lastTs: Double?
+    }
+
+    private struct ValidationWorktree: Decodable {
+        let name: String?
+        let path: String?
+        let cost: Double?
+        let tokens: Double?
+        let bySource: [String: ValidationSourceBreakdown]?
+        let chats: [ValidationChat]?
+    }
+
+    private static func near(_ left: Double, _ right: Double) -> Bool {
+        abs(left - right) <= 0.000_001
+    }
+
+    private static func summarizeRows(
+        _ sources: [String: [ValidationRow]]
+    ) -> [String: ValidationMeasure] {
+        sources.mapValues { rows in
+            rows.reduce(into: ValidationMeasure.zero) { measure, row in
+                measure.add(cost: row.cost, tokens: row.tokens)
+            }
+        }
+    }
+
+    private static func summarizeBreakdowns(
+        _ breakdowns: [[String: ValidationSourceBreakdown]]
+    ) -> [String: ValidationMeasure] {
+        breakdowns.reduce(into: [:]) { result, breakdown in
+            for (source, value) in breakdown {
+                result[source, default: .zero].add(cost: value.cost, tokens: value.tokens)
+            }
+        }
+    }
+
+    private static func bounded(
+        _ detail: [String: ValidationMeasure], by authoritative: [String: ValidationMeasure]
+    ) -> Bool {
+        detail.allSatisfy { source, measure in
+            guard let limit = authoritative[source] else { return false }
+            return measure.tokens <= limit.tokens
+                && (measure.cost <= limit.cost || near(measure.cost, limit.cost))
+        }
+    }
+
     public static func merge(local: Data?, cloud: Data?) -> Data? {
         let rawLocal = local.flatMap(decode)
         let rawCloud = cloud.flatMap(decode)

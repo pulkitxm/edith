@@ -1,9 +1,12 @@
+import Darwin
 import Foundation
 
 public enum UsageRefreshFailure: Error, CustomStringConvertible, Equatable {
     case scriptMissing
     case busy
     case launchFailed(String)
+    case timedOut
+    case outputLimitExceeded
     case reported(String)
     case exited(Int32, String)
 
@@ -15,6 +18,10 @@ public enum UsageRefreshFailure: Error, CustomStringConvertible, Equatable {
             return "a usage refresh is already running"
         case let .launchFailed(reason):
             return "could not start the usage refresh: \(reason)"
+        case .timedOut:
+            return "usage refresh timed out"
+        case .outputLimitExceeded:
+            return "usage refresh produced too much output"
         case let .reported(message):
             return message
         case let .exited(status, output):
@@ -33,6 +40,8 @@ public enum UsageRefreshFailure: Error, CustomStringConvertible, Equatable {
             return "wait for it to finish, or run `ed usage refresh --follow`"
         case .launchFailed:
             return "check that /bin/bash is available"
+        case .timedOut, .outputLimitExceeded:
+            return "the pipeline output is in data/refresh.log"
         case .reported(let message) where message.contains("bun or npx"):
             return "install bun (`brew install oven-sh/bun/bun`) and retry"
         case .reported, .exited:
@@ -60,14 +69,27 @@ public struct UsageRefreshResult: Sendable {
     }
 }
 
+struct UsageRefreshBaseline: Equatable, Sendable {
+    let usage: Data?
+    let machines: Data?
+}
+
 public final class UsageRefreshLock {
+    private let stateLock = NSLock()
     private var descriptor: Int32
 
     private init(descriptor: Int32) { self.descriptor = descriptor }
 
     public static func acquire(at url: URL) -> UsageRefreshLock? {
-        let fd = open(url.path, O_CREAT | O_RDWR, 0o644)
+        let fd = open(
+            url.path, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK,
+            mode_t(S_IRUSR | S_IWUSR))
         guard fd >= 0 else { return nil }
+        var metadata = stat()
+        guard fstat(fd, &metadata) == 0, metadata.st_mode & S_IFMT == S_IFREG else {
+            close(fd)
+            return nil
+        }
         guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
             close(fd)
             return nil
@@ -82,10 +104,15 @@ public final class UsageRefreshLock {
     }
 
     public func release() {
-        guard descriptor >= 0 else { return }
-        flock(descriptor, LOCK_UN)
-        close(descriptor)
-        descriptor = -1
+        let released = stateLock.withLock { () -> Int32 in
+            guard descriptor >= 0 else { return -1 }
+            let value = descriptor
+            descriptor = -1
+            return value
+        }
+        guard released >= 0 else { return }
+        flock(released, LOCK_UN)
+        close(released)
     }
 
     deinit { release() }
@@ -96,6 +123,10 @@ public enum UsageRefreshRunner {
 
     public static func lockURL(dataDir: URL = Repo.dataDir) -> URL {
         dataDir.appendingPathComponent("refresh.lock")
+    }
+
+    public static func transactionURL(dataDir: URL = Repo.dataDir) -> URL {
+        dataDir.appendingPathComponent("usage-transaction.lock")
     }
 
     public static func eventsURL(dataDir: URL = Repo.dataDir) -> URL {
@@ -121,6 +152,25 @@ public enum UsageRefreshRunner {
             throw UsageRefreshFailure.busy
         }
         defer { lock.release() }
+        guard let transaction = UsageRefreshLock.acquire(at: transactionURL(dataDir: dataDir))
+        else {
+            throw UsageRefreshFailure.busy
+        }
+        defer { transaction.release() }
+
+        let stagingDirectory = dataDir.appendingPathComponent(".refresh-staging")
+        try? FileManager.default.createDirectory(
+            at: stagingDirectory, withIntermediateDirectories: true)
+        cleanupStaleStages(in: stagingDirectory)
+        let stagedUsage = stagingDirectory.appendingPathComponent("\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: stagedUsage) }
+        let baseline: UsageRefreshBaseline
+        do {
+            baseline = try stageCurrentUsage(at: stagedUsage, dataDir: dataDir)
+        } catch {
+            throw UsageRefreshFailure.reported(
+                "usage refresh staging failed; previous data preserved")
+        }
 
         let startedAt = Date()
         let sink = UsageRefreshSink(dataDir: dataDir, startedAt: startedAt)
@@ -128,68 +178,129 @@ public enum UsageRefreshRunner {
         IPC.post(IPC.Name.usageRefreshStarted)
         defer { IPC.post(IPC.Name.usageRefreshFinished) }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = [script.path, dataDir.path]
-        process.currentDirectoryURL = workingDirectory
-        process.qualityOfService = .utility
-
-        let out = Pipe()
-        let err = Pipe()
-        process.standardOutput = out
-        process.standardError = err
+        var environment = ProcessInfo.processInfo.environment
+        environment["EDITH_USAGE_OUTPUT"] = stagedUsage.path
+        environment["EDITH_USAGE_MACHINES_DIR"] = dataDir.appendingPathComponent("machines").path
 
         let collector = UsageRefreshCollector(sink: sink, onEvent: onEvent)
-        out.fileHandleForReading.readabilityHandler = { handle in
-            PipeReading.consume(handle, receive: collector.ingestStandardOutput)
-        }
-        err.fileHandleForReading.readabilityHandler = { handle in
-            PipeReading.consume(handle, receive: collector.ingestStandardError)
+        defer {
+            collector.flush()
+            sink.finish()
         }
 
+        let result: CLICommandResult
         do {
-            try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation {
-                    (continuation: CheckedContinuation<Void, Error>) in
-                    process.terminationHandler = { _ in
-                        out.fileHandleForReading.readabilityHandler = nil
-                        err.fileHandleForReading.readabilityHandler = nil
-                        collector.ingestStandardOutput(
-                            out.fileHandleForReading.availableData)
-                        collector.ingestStandardError(err.fileHandleForReading.availableData)
-                        collector.flush()
-                        continuation.resume()
-                    }
-                    do {
-                        try process.run()
-                    } catch {
-                        out.fileHandleForReading.readabilityHandler = nil
-                        err.fileHandleForReading.readabilityHandler = nil
-                        continuation.resume(
-                            throwing: UsageRefreshFailure.launchFailed(
-                                error.localizedDescription))
-                    }
-                }
-            } onCancel: {
-                if process.isRunning { process.terminate() }
+            result = try await CLICommandRunner.runSeparated(
+                CLICommandRequest(
+                    executableURL: URL(fileURLWithPath: "/bin/bash"),
+                    arguments: [script.path, dataDir.path], environment: environment,
+                    currentDirectoryURL: workingDirectory, timeout: 900,
+                    maximumOutputBytes: 2 * 1_024 * 1_024,
+                    terminatesProcessGroup: true),
+                onStandardOutputLine: {
+                    collector.ingestStandardOutput(Data(($0 + "\n").utf8))
+                },
+                onStandardErrorLine: {
+                    collector.ingestStandardError(Data(($0 + "\n").utf8))
+                })
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as CLICommandRunnerError {
+            switch error {
+            case .timedOut:
+                throw UsageRefreshFailure.timedOut
+            case .outputLimitExceeded:
+                throw UsageRefreshFailure.outputLimitExceeded
+            case .launchFailed:
+                throw UsageRefreshFailure.launchFailed("process launch failed")
+            case .streamFailed:
+                throw UsageRefreshFailure.launchFailed("process output stream failed")
             }
         } catch {
-            sink.finish()
-            throw error
+            throw UsageRefreshFailure.launchFailed(error.localizedDescription)
         }
-
-        sink.finish()
 
         if let message = collector.reportedFailure {
             throw UsageRefreshFailure.reported(message)
         }
-        let status = process.terminationStatus
+        let status = result.terminationStatus
         guard status == 0 else {
             throw UsageRefreshFailure.exited(status, collector.diagnosticTail)
+        }
+        do {
+            try publish(stagedUsage: stagedUsage, baseline: baseline, dataDir: dataDir)
+        } catch {
+            throw UsageRefreshFailure.reported(
+                "usage refresh publication failed; previous data preserved")
         }
         let elapsed = collector.totalSeconds ?? Date().timeIntervalSince(startedAt)
         return UsageRefreshResult(
             events: collector.events, seconds: elapsed, startedAt: startedAt)
+    }
+
+    static func publish(
+        stagedUsage: URL, baseline: UsageRefreshBaseline, dataDir: URL
+    ) throws {
+        guard
+            let fresh = try UsageDataFiles.readRegularFile(
+                at: stagedUsage, maximumBytes: UsageDataFiles.maximumUsageDocumentBytes),
+            UsageHistory.isValidDocument(fresh)
+        else { throw UsageDataFileError.unsafe(stagedUsage.path) }
+        try UsageDataLock.withLock(dataDirectory: dataDir) {
+            let current = try UsageDataFiles.readRegularFile(
+                at: dataDir.appendingPathComponent("usage.json"),
+                maximumBytes: UsageDataFiles.maximumUsageDocumentBytes)
+            let machines = try MachineUsageStore.generation(
+                in: dataDir.appendingPathComponent("machines"))
+            guard current == baseline.usage, machines == baseline.machines else {
+                throw UsageDataFileError.unsafe(stagedUsage.path)
+            }
+            try UsageDataFiles.write(fresh, to: dataDir.appendingPathComponent("usage.json"))
+        }
+    }
+
+    static func stageCurrentUsage(
+        at stagedUsage: URL, dataDir: URL
+    ) throws -> UsageRefreshBaseline {
+        let baseline = try UsageDataLock.withLock(dataDirectory: dataDir) {
+            let usage = try UsageDataFiles.readRegularFile(
+                at: dataDir.appendingPathComponent("usage.json"),
+                maximumBytes: UsageDataFiles.maximumUsageDocumentBytes)
+            let machines = try MachineUsageStore.generation(
+                in: dataDir.appendingPathComponent("machines"))
+            return UsageRefreshBaseline(usage: usage, machines: machines)
+        }
+        if let usage = baseline.usage { try UsageDataFiles.write(usage, to: stagedUsage) }
+        return baseline
+    }
+
+    static func cleanupStaleStages(
+        in directory: URL, now: Date = Date(), maximumAge: TimeInterval = 86_400
+    ) {
+        guard
+            let enumerator = FileManager.default.enumerator(
+                at: directory,
+                includingPropertiesForKeys: [
+                    .contentModificationDateKey, .isRegularFileKey, .isSymbolicLinkKey,
+                ], options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants])
+        else { return }
+        var inspected = 0
+        var removed = 0
+        while inspected < 4_000, removed < 1_000,
+            let url = enumerator.nextObject() as? URL
+        {
+            inspected += 1
+            guard url.pathExtension == "json" else { continue }
+            guard
+                let values = try? url.resourceValues(forKeys: [
+                    .contentModificationDateKey, .isRegularFileKey, .isSymbolicLinkKey,
+                ]),
+                values.isRegularFile == true, values.isSymbolicLink != true,
+                now.timeIntervalSince(values.contentModificationDate ?? now) >= maximumAge
+            else { continue }
+            try? FileManager.default.removeItem(at: url)
+            removed += 1
+        }
     }
 }
 
