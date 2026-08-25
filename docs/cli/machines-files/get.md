@@ -53,9 +53,9 @@ nothing until `--yes` is also present.
 
 The remote file first lands in an isolated staging directory, then a complete
 copy is staged beside the local destination. A confirmed file replacement is
-published atomically. Directory replacement keeps a rollback name until the new
-file is in place. A failed download or publication preserves the old destination
-and removes its new staging data.
+published atomically. Directories are not accepted as download sources or
+replacement targets. A failed download or publication preserves the old
+destination and removes its new staging data.
 
 The human output reports the resolved source and destination:
 

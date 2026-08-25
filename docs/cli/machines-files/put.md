@@ -60,7 +60,7 @@ path:
 
 ```
 $ ed machines files put tuf ./clip.mov /tmp/no-such-dir/clip.mov
-error: upload failed: bash: line 1: /tmp/no-such-dir/clip.mov: No such file or directory
+error: Could not read /tmp/no-such-dir on Asus TUF 7.
 ```
 
 The JSON `items` plan is identical before and after execution, so automation can
