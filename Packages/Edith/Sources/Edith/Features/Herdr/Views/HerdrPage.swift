@@ -11,6 +11,7 @@ struct HerdrPage: View {
     @AppStorage(AppStorageKeys.Presenter.blurAgents, store: SharedDefaults.store) private
         var presenterBlurAgents = true
     private var presenterState = PresenterState.shared
+    @State private var draggingTab: String?
 
     @MainActor init(store: HerdrStore? = nil) {
         _store = State(initialValue: store ?? .shared)
@@ -19,20 +20,19 @@ struct HerdrPage: View {
     private var dark: Bool { scheme == .dark }
     private var hideAgents: Bool { presenterState.active && presenterBlurAgents }
     private var onBoard: Bool { store.selectedTab == HerdrStore.boardID }
-    private var listedAgents: [HerdrAgent] {
-        store.filteredAgents.isEmpty ? store.agents : store.filteredAgents
-    }
+    private var listedAgents: [HerdrAgent] { store.listedAgents }
+    private var machineTerminals: [HerdrAgent] { store.machineTerminals }
 
     var body: some View {
         VStack(spacing: 0) {
             header
             tabBar
             HStack(spacing: 0) {
-                if !onBoard {
+                if !onBoard, store.railOpen {
                     agentList
                     Divider().opacity(0.35)
                 }
-                ZStack(alignment: .topTrailing) {
+                ZStack(alignment: .topLeading) {
                     board.opacity(onBoard ? 1 : 0)
                         .allowsHitTesting(onBoard)
                     ForEach(store.tabs) { tab in
@@ -46,6 +46,7 @@ struct HerdrPage: View {
                     }
                     if !onBoard {
                         detailToggle
+                            .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -53,6 +54,7 @@ struct HerdrPage: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
+        .background(tabShortcuts)
         .navigationTitle("Herdr")
         .task(id: automaticActions) {
             if automaticActions {
@@ -102,6 +104,64 @@ struct HerdrPage: View {
         .padding(.trailing, UIScale.pt(8))
         .zIndex(1)
         .accessibilityLabel(store.detailOpen ? "Hide details" : "Show details")
+    }
+
+    private var tabShortcuts: some View {
+        ZStack {
+            ForEach(1...9, id: \.self) { number in
+                Button("") { store.selectTab(number: number) }
+                    .keyboardShortcut(
+                        KeyEquivalent(Character("\(number)")), modifiers: .option)
+            }
+        }
+        .opacity(0)
+        .allowsHitTesting(false)
+    }
+
+    private var railToggle: some View {
+        Button {
+            withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
+                store.setRailOpen(!store.railOpen)
+            }
+        } label: {
+            Image(systemName: "sidebar.left")
+                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+        }
+        .buttonStyle(.plain)
+        .padding(UIScale.pt(4))
+        .widgetBar(cornerRadius: 8, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
+        .pointerCursor()
+        .help(store.railOpen ? "Hide the list" : "Show the list")
+        .accessibilityLabel(store.railOpen ? "Hide the list" : "Show the list")
+    }
+
+    private func viewModes(for tab: HerdrOpenTab) -> some View {
+        HStack(spacing: 0) {
+            ForEach([HerdrAgentView.agent, .split, .diff], id: \.self) { mode in
+                let selected = tab.view == mode
+                Button {
+                    store.setView(mode, for: tab.id)
+                } label: {
+                    Text(mode.shortTitle)
+                        .font(
+                            .system(
+                                size: UIScale.pt(11), weight: selected ? .semibold : .medium)
+                        )
+                        .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
+                        .padding(.horizontal, UIScale.pt(10))
+                        .padding(.vertical, UIScale.pt(6))
+                        .background(
+                            selected ? DashSkin.accent(dark).opacity(0.18) : Color.clear)
+                }
+                .buttonStyle(.plain)
+                .pointerCursor()
+                .accessibilityAddTraits(selected ? .isSelected : [])
+                .help(mode.title)
+            }
+        }
+        .widgetBar(cornerRadius: 8, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
     }
 
     private var filters: some View {
@@ -164,18 +224,30 @@ struct HerdrPage: View {
             Rectangle()
                 .fill(DashSkin.lineStrong(dark))
                 .frame(height: 1)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: UIScale.pt(6)) {
-                    tabButton(id: HerdrStore.boardID, title: "Board", closable: false)
-                    ForEach(store.tabs) { tab in
-                        tabButton(
-                            id: tab.id,
-                            title: hideAgents ? tab.agent.kind : tab.agent.title,
-                            closable: true, agent: tab.agent)
-                    }
+            HStack(spacing: UIScale.pt(8)) {
+                if !onBoard {
+                    railToggle
+                        .padding(.leading, PageMetrics.gutter(compact))
                 }
-                .padding(.horizontal, PageMetrics.gutter(compact))
-                .padding(.vertical, UIScale.pt(8))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: UIScale.pt(6)) {
+                        tabButton(id: HerdrStore.boardID, title: "Board", closable: false)
+                        ForEach(store.tabs) { tab in
+                            tabButton(
+                                id: tab.id,
+                                title: hideAgents ? tab.agent.kind : tab.agent.title,
+                                closable: true, agent: tab.agent)
+                        }
+                    }
+                    .padding(.leading, onBoard ? PageMetrics.gutter(compact) : 0)
+                    .padding(.vertical, UIScale.pt(8))
+                }
+                if let tab = store.tabs.first(where: { $0.id == store.selectedTab }),
+                    !tab.agent.isTerminal
+                {
+                    viewModes(for: tab)
+                        .padding(.trailing, PageMetrics.gutter(compact))
+                }
             }
             Rectangle()
                 .fill(DashSkin.lineStrong(dark))
@@ -193,9 +265,6 @@ struct HerdrPage: View {
         } label: {
             HStack(spacing: UIScale.pt(6)) {
                 if let agent {
-                    Circle()
-                        .fill(HerdrStatusColor.color(agent.status, dark: dark))
-                        .frame(width: UIScale.pt(6), height: UIScale.pt(6))
                     HerdrKindMark(kind: agent.kind, size: UIScale.pt(13))
                         .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
                 } else {
@@ -204,6 +273,12 @@ struct HerdrPage: View {
                 Text(title)
                     .font(.system(size: UIScale.pt(12), weight: selected ? .semibold : .medium))
                     .lineLimit(1)
+                if let agent, agent.isTerminal {
+                    Text(agent.machineName)
+                        .font(DashSkin.mono(9))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .lineLimit(1)
+                }
                 if let agent {
                     Button {
                         store.copyAttachCommand(for: agent)
@@ -236,15 +311,29 @@ struct HerdrPage: View {
             .padding(.vertical, UIScale.pt(6))
             .widgetBar(
                 cornerRadius: 8,
-                fill: selected
-                    ? DashSkin.paper2(dark) : DashSkin.paper2(dark).opacity(0.55),
-                stroke: selected ? DashSkin.lineStrong(dark) : DashSkin.line(dark),
+                fill: agent.map { HerdrStatusColor.fill($0, dark: dark, selected: selected) }
+                    ?? (selected
+                        ? DashSkin.paper2(dark) : DashSkin.paper2(dark).opacity(0.55)),
+                stroke: agent.map { HerdrStatusColor.stroke($0, dark: dark, selected: selected) }
+                    ?? (selected ? DashSkin.lineStrong(dark) : DashSkin.line(dark)),
                 strokeWidth: selected ? 1.4 : 1)
         }
         .buttonStyle(.plain)
         .pointerCursor()
+        .onDrag {
+            draggingTab = id
+            return NSItemProvider(object: id as NSString)
+        }
+        .onDrop(
+            of: [.text],
+            delegate: HerdrTabDrop(target: id, store: store, dragging: $draggingTab)
+        )
         .contextMenu { tabContextMenu(id: id, closable: closable) }
-        .help(agent.map { "\($0.kind) · \($0.machineName)" } ?? "Board")
+        .help(
+            agent.map {
+                "\($0.isTerminal ? HerdrMachineTerminal.title : $0.kind) · \($0.machineName)"
+            }
+                ?? "Board")
     }
 
     @ViewBuilder
@@ -288,14 +377,14 @@ struct HerdrPage: View {
                         }
                     }
                     .pageContent(compact)
-                    .padding(.top, UIScale.pt(16))
+                    .padding(.top, UIScale.pt(46))
                 }
             }
         }
     }
 
     private func column(_ status: HerdrAgentStatus) -> some View {
-        let cards = store.filteredAgents.filter { $0.status == status }
+        let cards = listedAgents.filter { $0.status == status }
         return VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             HStack(spacing: UIScale.pt(8)) {
                 Circle()
@@ -346,6 +435,8 @@ struct HerdrPage: View {
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 HStack(spacing: UIScale.pt(6)) {
                     HerdrKindMark(kind: agent.kind, size: UIScale.pt(13))
+                        .foregroundStyle(
+                            agent.isTerminal ? DashSkin.gold : DashSkin.inkSoft(dark))
                     Text(agent.kind)
                         .font(.system(size: UIScale.pt(10.5), weight: .semibold))
                     Spacer(minLength: 0)
@@ -383,8 +474,10 @@ struct HerdrPage: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .widgetBar(
                 cornerRadius: 12,
-                fill: DashSkin.paper2(dark),
-                stroke: open ? DashSkin.accent(dark).opacity(0.45) : DashSkin.line(dark))
+                fill: HerdrStatusColor.fill(agent, dark: dark, selected: false),
+                stroke: open
+                    ? DashSkin.accent(dark).opacity(0.45)
+                    : HerdrStatusColor.stroke(agent, dark: dark, selected: false))
         }
         .buttonStyle(.plain)
         .pointerCursor()
@@ -392,19 +485,9 @@ struct HerdrPage: View {
 
     private var agentList: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: UIScale.pt(8)) {
-                Text("Agents")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
-                Text("\(listedAgents.count)")
-                    .font(DashSkin.mono(10, weight: .medium))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-            }
-            .padding(.horizontal, UIScale.pt(14))
-            .padding(.vertical, UIScale.pt(10))
-            Divider().opacity(0.35)
             ScrollView {
-                LazyVStack(spacing: UIScale.pt(2)) {
+                LazyVStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    railHeader("Agents", count: listedAgents.count)
                     ForEach(listedAgents) { agent in
                         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                             agentRow(agent)
@@ -419,6 +502,10 @@ struct HerdrPage: View {
                             }
                         }
                     }
+                    railHeader("Terminals", count: machineTerminals.count)
+                    ForEach(machineTerminals) { terminal in
+                        agentRow(terminal)
+                    }
                 }
                 .padding(.horizontal, UIScale.pt(6))
                 .padding(.vertical, UIScale.pt(6))
@@ -429,23 +516,36 @@ struct HerdrPage: View {
         .background(DashSkin.paper(dark))
     }
 
+    private func railHeader(_ title: String, count: Int) -> some View {
+        HStack(spacing: UIScale.pt(8)) {
+            Text(title)
+                .font(.system(size: UIScale.pt(11), weight: .semibold))
+                .foregroundStyle(DashSkin.ink(dark))
+            Text("\(count)")
+                .font(DashSkin.mono(10, weight: .medium))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, UIScale.pt(8))
+        .padding(.top, UIScale.pt(10))
+        .padding(.bottom, UIScale.pt(4))
+    }
+
     private func agentRow(_ agent: HerdrAgent) -> some View {
         let selected = store.selectedTab == agent.id
         return Button {
             openAgent(agent)
         } label: {
             HStack(alignment: .top, spacing: UIScale.pt(8)) {
-                Circle()
-                    .fill(HerdrStatusColor.color(agent.status, dark: dark))
-                    .frame(width: UIScale.pt(7), height: UIScale.pt(7))
-                    .padding(.top, UIScale.pt(5))
                 HerdrKindMark(kind: agent.kind, size: UIScale.pt(13))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .foregroundStyle(
+                        agent.isTerminal ? DashSkin.gold : DashSkin.inkSoft(dark)
+                    )
                     .padding(.top, UIScale.pt(2))
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     if hideAgents {
                         hiddenLine
-                        Text("\(agent.kind) · \(agent.machineName)")
+                        Text(agent.machineName)
                             .font(DashSkin.mono(9.5))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .lineLimit(1)
@@ -458,7 +558,7 @@ struct HerdrPage: View {
                             .foregroundStyle(DashSkin.ink(dark))
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
-                        Text("\(agent.kind) · \(agent.machineName) · \(agent.pane)")
+                        Text(rowDetail(agent))
                             .font(DashSkin.mono(9.5))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .lineLimit(1)
@@ -468,14 +568,22 @@ struct HerdrPage: View {
             }
             .padding(.horizontal, UIScale.pt(8))
             .padding(.vertical, UIScale.pt(8))
-            .background(
-                selected ? DashSkin.accent(dark).opacity(0.16) : Color.clear,
-                in: RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
+            .widgetBar(
+                cornerRadius: 8,
+                fill: HerdrStatusColor.fill(agent, dark: dark, selected: selected),
+                stroke: selected
+                    ? HerdrStatusColor.stroke(agent, dark: dark, selected: true) : .clear,
+                strokeWidth: selected ? 1.4 : 0
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .pointerCursor()
+    }
+
+    private func rowDetail(_ agent: HerdrAgent) -> String {
+        agent.isTerminal
+            ? agent.machineName : "\(agent.kind) · \(agent.machineName) · \(agent.pane)"
     }
 
     private func openAgent(_ agent: HerdrAgent) {
@@ -515,6 +623,46 @@ enum HerdrStatusColor {
         case .done: DashSkin.sage
         case .idle: DashSkin.inkSoft(dark)
         }
+    }
+
+    static func tone(_ agent: HerdrAgent, dark: Bool) -> Color {
+        agent.isTerminal ? DashSkin.gold : color(agent.status, dark: dark)
+    }
+
+    static func fill(_ agent: HerdrAgent, dark: Bool, selected: Bool) -> Color {
+        let base = tone(agent, dark: dark)
+        if agent.status == .idle || agent.status == .unknown, !agent.isTerminal {
+            return DashSkin.paper2(dark).opacity(selected ? 1 : 0.55)
+        }
+        return base.opacity(selected ? (dark ? 0.26 : 0.2) : (dark ? 0.16 : 0.12))
+    }
+
+    static func stroke(_ agent: HerdrAgent, dark: Bool, selected: Bool) -> Color {
+        let base = tone(agent, dark: dark)
+        if agent.status == .idle || agent.status == .unknown, !agent.isTerminal {
+            return selected ? DashSkin.lineStrong(dark) : DashSkin.line(dark)
+        }
+        return base.opacity(selected ? 0.65 : 0.4)
+    }
+}
+
+private struct HerdrTabDrop: DropDelegate {
+    let target: String
+    let store: HerdrStore
+    @Binding var dragging: String?
+
+    func dropEntered(info: DropInfo) {
+        guard let dragging, dragging != target else { return }
+        store.moveTab(dragging, toIndexOf: target)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        dragging = nil
+        return true
     }
 }
 

@@ -23,6 +23,7 @@ final class HerdrStore {
     var refreshing = false
     var copiedID: String?
     var detailOpen = true
+    var railOpen = true
 
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
@@ -36,9 +37,28 @@ final class HerdrStore {
     ) {
         self.defaults = defaults
         self.liveWatcher = liveWatcher
+        railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
     }
 
     var agents: [HerdrAgent] { hosts.flatMap(\.agents) }
+
+    var listedAgents: [HerdrAgent] {
+        filteredAgents.isEmpty && kindFilter.isEmpty ? agents : filteredAgents
+    }
+
+    var machineTerminals: [HerdrAgent] {
+        var terminals: [HerdrAgent] = []
+        for host in hosts where host.herdrPresent {
+            let terminal = HerdrMachineTerminal.agent(for: host)
+            switch machineFilter {
+            case "all": terminals.append(terminal)
+            case "local" where terminal.machineIsLocal: terminals.append(terminal)
+            case terminal.machineID: terminals.append(terminal)
+            default: break
+            }
+        }
+        return terminals
+    }
 
     var machineChoices: [(id: String, name: String)] {
         [("all", "All machines"), ("local", "This Mac")]
@@ -92,6 +112,20 @@ final class HerdrStore {
     }
 
     var columns: [HerdrAgentStatus] { HerdrAgentStatus.allCases }
+
+    func setRailOpen(_ open: Bool) {
+        guard railOpen != open else { return }
+        railOpen = open
+        defaults.set(open, forKey: AppStorageKeys.Herdr.railOpen)
+    }
+
+    func splitFraction(for id: String) -> Double {
+        HerdrSplitFraction.fraction(for: id, defaults)
+    }
+
+    func setSplitFraction(_ fraction: Double, for id: String) {
+        HerdrSplitFraction.set(fraction, for: id, defaults)
+    }
 
     var openIDs: Set<String> { Set(tabs.map(\.id)) }
 
@@ -150,12 +184,14 @@ final class HerdrStore {
             agent.machineIsLocal
             ? nil
             : MachineRegistry.machines().first { $0.id.uuidString == agent.machineID }
-        let resolved = view ?? HerdrAgentViews.view(for: agent.id, defaults)
+        var resolved = view ?? HerdrAgentViews.view(for: agent.id, defaults)
+        if agent.isTerminal { resolved = .agent }
         tabs.append(
             HerdrOpenTab(
                 agent: agent, machine: machine, view: resolved,
                 holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession()))
         if view != nil { HerdrAgentViews.set(resolved, for: agent.id, defaults) }
+        if resolved == .split { detailOpen = false }
         selectedTab = agent.id
     }
 
@@ -175,6 +211,7 @@ final class HerdrStore {
         guard tabs[index].view != view else { return }
         tabs[index].view = view
         HerdrAgentViews.set(view, for: tabs[index].id, defaults)
+        if view == .split { detailOpen = false }
     }
 
     func close(_ id: String) {
@@ -240,6 +277,36 @@ final class HerdrStore {
         selectedTab = Self.boardID
     }
 
+    var orderedTabIDs: [String] { [Self.boardID] + tabs.map(\.id) }
+
+    func moveTab(_ id: String, toIndexOf target: String) {
+        guard id != target, id != Self.boardID else { return }
+        guard let from = tabs.firstIndex(where: { $0.id == id }) else { return }
+        let to: Int
+        if target == Self.boardID {
+            to = 0
+        } else if let index = tabs.firstIndex(where: { $0.id == target }) {
+            to = index
+        } else {
+            return
+        }
+        guard from != to else { return }
+        let tab = tabs.remove(at: from)
+        tabs.insert(tab, at: min(to, tabs.count))
+    }
+
+    func selectTab(number: Int) {
+        let ids = orderedTabIDs
+        guard !ids.isEmpty else { return }
+        guard number != 9 else {
+            selectedTab = ids[ids.count - 1]
+            return
+        }
+        let index = number - 1
+        guard index >= 0, index < ids.count else { return }
+        selectedTab = ids[index]
+    }
+
     func connection(for machine: Machine) async throws -> SSHConnection {
         if let existing = connections[machine.id] {
             try await existing.connect()
@@ -274,6 +341,10 @@ final class HerdrStore {
         for tab: HerdrOpenTab, environment: [String],
         localExecutable: URL? = HerdrCollector.executable()
     ) async throws -> TerminalLaunchRequest {
+        if tab.agent.isTerminal {
+            return HerdrMachineTerminal.launchRequest(
+                for: tab.agent, environment: environment, executable: localExecutable)
+        }
         if tab.agent.machineIsLocal {
             return HerdrOperationExecution.localAttachRequest(
                 for: tab.agent, environment: environment, executable: localExecutable)

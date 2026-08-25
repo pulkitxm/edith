@@ -149,7 +149,11 @@ public enum HerdrCollector {
     }
 
     private static func run(_ runner: Runner, herdr arguments: String) async -> CommandResult {
-        let command = "export PATH=\"\(pathPrefix)\"; herdr \(arguments)"
+        await runShell(runner, command: "herdr \(arguments)")
+    }
+
+    private static func runShell(_ runner: Runner, command body: String) async -> CommandResult {
+        let command = "export PATH=\"\(pathPrefix)\"; \(body)"
         switch runner {
         case .local:
             return await runLocal(command)

@@ -12,6 +12,7 @@ struct HerdrSessionView: View {
     @Environment(\.compactLayout) private var compact
     @State private var connectError: String?
     @State private var starting = false
+    @State private var dragFraction: Double?
 
     private var dark: Bool { scheme == .dark }
     private var agent: HerdrAgent { tab.agent }
@@ -19,15 +20,8 @@ struct HerdrSessionView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            ZStack {
-                sessionPane
-                    .opacity(tab.view == .agent ? 1 : 0)
-                    .allowsHitTesting(tab.view == .agent)
-                diffPane
-                    .opacity(tab.view == .diff ? 1 : 0)
-                    .allowsHitTesting(tab.view == .diff)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             if store.detailOpen {
                 Divider().opacity(0.35)
                 sidebar
@@ -38,6 +32,76 @@ struct HerdrSessionView: View {
         .task(id: diffRequest) { await prepareDiffIfNeeded() }
     }
 
+    @ViewBuilder
+    private var content: some View {
+        if tab.view == .split, !agent.isTerminal {
+            GeometryReader { proxy in
+                let total = proxy.size.width
+                HStack(spacing: 0) {
+                    sessionPane
+                        .frame(width: sessionWidth(in: total))
+                    splitHandle(total: total)
+                    diffPane
+                        .frame(maxWidth: .infinity)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        } else {
+            ZStack {
+                sessionPane
+                    .opacity(tab.view == .agent ? 1 : 0)
+                    .allowsHitTesting(tab.view == .agent)
+                diffPane
+                    .opacity(tab.view == .diff ? 1 : 0)
+                    .allowsHitTesting(tab.view == .diff)
+            }
+        }
+    }
+
+    private var fraction: Double {
+        dragFraction ?? store.splitFraction(for: tab.id)
+    }
+
+    private func sessionWidth(in total: CGFloat) -> CGFloat {
+        let minimum = UIScale.pt(220)
+        let handle = UIScale.pt(6)
+        guard total > minimum * 2 + handle else { return max(0, (total - handle) / 2) }
+        return min(total - minimum - handle, max(minimum, total * fraction))
+    }
+
+    private func splitHandle(total: CGFloat) -> some View {
+        ZStack {
+            DashSkin.lineStrong(dark)
+                .frame(width: 1)
+        }
+        .frame(width: UIScale.pt(6))
+        .frame(maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    guard total > 0 else { return }
+                    let base = store.splitFraction(for: tab.id)
+                    dragFraction = HerdrSplitFraction.clamp(
+                        base + Double(value.translation.width / total))
+                }
+                .onEnded { _ in
+                    if let dragFraction {
+                        store.setSplitFraction(dragFraction, for: tab.id)
+                    }
+                    dragFraction = nil
+                }
+        )
+        .onHover { inside in
+            if inside {
+                NSCursor.resizeLeftRight.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .accessibilityLabel("Resize the split")
+    }
+
     private var diffRequest: String {
         "\(tab.id)|\(tab.view.rawValue)|\(dark)"
     }
@@ -46,7 +110,7 @@ struct HerdrSessionView: View {
         ZStack {
             TerminalPane(
                 holder: tab.holder, palette: .edith(dark: dark),
-                active: presented && tab.view == .agent
+                active: presented && tab.view.showsAgent
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             if let connectError {
@@ -69,7 +133,7 @@ struct HerdrSessionView: View {
             Color(nsColor: palette.background)
             TerminalPane(
                 holder: tab.quinjet.holder, palette: palette,
-                active: presented && tab.view == .diff && tab.quinjet.live
+                active: presented && tab.view.showsDiff && tab.quinjet.live
             )
             .id(tab.quinjet.holder.generation)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -121,7 +185,7 @@ struct HerdrSessionView: View {
     }
 
     private func prepareDiffIfNeeded() async {
-        guard tab.view == .diff else { return }
+        guard tab.view.showsDiff else { return }
         await prepareDiff(restarting: false)
     }
 
@@ -152,13 +216,13 @@ struct HerdrSessionView: View {
                     .font(DashSkin.serif(20))
                     .foregroundStyle(hideAgents ? DashSkin.inkFaint(dark) : DashSkin.ink(dark))
                     .padding(.trailing, UIScale.pt(36))
-                viewSection
+                if !agent.isTerminal { viewSection }
                 kindRow
-                metaRow("Status", agent.status.title)
+                if !agent.isTerminal { metaRow("Status", agent.status.title) }
                 metaRow("Machine", agent.machineName)
                 if !hideAgents {
-                    metaRow("Session", agent.session)
-                    metaRow("Pane", agent.pane)
+                    if !agent.session.isEmpty { metaRow("Session", agent.session) }
+                    if !agent.pane.isEmpty { metaRow("Pane", agent.pane) }
                     if !agent.workspace.isEmpty { metaRow("Workspace", agent.workspace) }
                     if !agent.cwd.isEmpty { metaRow("Directory", agent.cwd) }
                     VStack(alignment: .leading, spacing: UIScale.pt(6)) {
@@ -175,7 +239,8 @@ struct HerdrSessionView: View {
                             Label(
                                 store.copiedID == agent.id
                                     ? "Copied"
-                                    : (agent.machineIsLocal ? "Copy command" : "Copy SSH"),
+                                    : (agent.machineIsLocal || agent.isTerminal
+                                        ? "Copy command" : "Copy SSH"),
                                 systemImage: store.copiedID == agent.id
                                     ? "checkmark" : "doc.on.doc")
                         }
@@ -197,7 +262,7 @@ struct HerdrSessionView: View {
             HerdrAgentViewToggle(selection: tab.view) { option in
                 store.setView(option, for: tab.id)
             }
-            if tab.view == .diff, let branch = tab.quinjet.branch {
+            if tab.view.showsDiff, let branch = tab.quinjet.branch {
                 Text(branch)
                     .font(DashSkin.mono(10))
                     .foregroundStyle(DashSkin.inkFaint(dark))
@@ -214,7 +279,7 @@ struct HerdrSessionView: View {
                 .foregroundStyle(DashSkin.inkFaint(dark))
             HStack(spacing: UIScale.pt(8)) {
                 HerdrKindMark(kind: agent.kind, size: UIScale.pt(14))
-                Text(agent.kind)
+                Text(agent.isTerminal ? HerdrMachineTerminal.title : agent.kind)
                     .font(.system(size: UIScale.pt(12.5)))
                     .textSelection(.enabled)
             }

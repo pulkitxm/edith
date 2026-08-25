@@ -168,7 +168,7 @@ public enum HerdrListParser {
             status = parsed
         }
         let title: String
-        if let incoming = record.title, incoming != record.pane {
+        if let incoming = record.title, !incoming.isEmpty, incoming != record.pane {
             title = incoming
         } else if let previous, previous.title != previous.pane, !previous.title.isEmpty {
             title = previous.title

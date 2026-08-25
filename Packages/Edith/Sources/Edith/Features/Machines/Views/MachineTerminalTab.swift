@@ -18,7 +18,7 @@ extension EnvironmentValues {
 @MainActor
 @Observable
 final class TerminalSessionHolder {
-    private(set) var terminalView = EdithTerminalView(frame: .zero)
+    private(set) var terminalView = EdithTerminalView.make()
     private(set) var generation = 0
     private(set) var started = false
     private(set) var exitMessage: String?
@@ -59,7 +59,7 @@ final class TerminalSessionHolder {
         focusTask = nil
         terminalView.terminal.resetToInitialState()
         if started { terminalView.terminate() }
-        terminalView = EdithTerminalView(frame: .zero)
+        terminalView = EdithTerminalView.make()
         generation += 1
         started = false
         exitMessage = nil
@@ -125,6 +125,13 @@ final class TerminalSessionHolder {
 }
 
 final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResponder {
+    static let scrollback = 10000
+
+    static func make() -> EdithTerminalView {
+        EdithTerminalView(
+            frame: .zero, font: nil, options: TerminalOptions(scrollback: scrollback))
+    }
+
     private(set) var renderingActive = true
     private(set) var deferredDisplayPasses = 0
     private(set) var reactivationDisplayPasses = 0
@@ -163,6 +170,45 @@ final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResp
         guard !hasDeferredDisplay else { return }
         hasDeferredDisplay = true
         deferredDisplayPasses += 1
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard event.type == .keyDown, window?.firstResponder === self else {
+            return super.performKeyEquivalent(with: event)
+        }
+        switch command(for: event) {
+        case .newline:
+            send([0x1b, 0x0d])
+            return true
+        case .copy:
+            copy(self)
+            return true
+        case .paste:
+            paste(self)
+            return true
+        case .none:
+            return super.performKeyEquivalent(with: event)
+        }
+    }
+
+    enum DirectCommand {
+        case newline
+        case copy
+        case paste
+        case none
+    }
+
+    func command(for event: NSEvent) -> DirectCommand {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if flags == .shift, event.keyCode == 36 || event.keyCode == 76 {
+            return getTerminal().keyboardEnhancementFlags.isEmpty ? .newline : .none
+        }
+        guard flags == .command else { return .none }
+        switch event.charactersIgnoringModifiers?.lowercased() {
+        case "c": return selectionActive ? .copy : .none
+        case "v": return .paste
+        default: return .none
+        }
     }
 }
 

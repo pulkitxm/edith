@@ -38,7 +38,7 @@ import Testing
         #expect(view.isHidden)
         #expect(view.hasDeferredDisplay)
         #expect(view.deferredDisplayPasses == 1)
-        #expect(view.terminal.getBufferAsData().count < 128 * 1024)
+        #expect(view.terminal.getBufferAsData().count < 512 * 1024)
 
         holder.updatePresentation(active: true, wantsFocus: false)
 

@@ -37,6 +37,8 @@ public enum HerdrAgentStatus: String, CaseIterable, Codable, Sendable, Equatable
 }
 
 public enum HerdrKind {
+    public static let terminalLabel = "Terminal"
+
     public static let filterLabels = [
         "Claude Code", "Codex", "OpenCode", "Cursor Agent", "Copilot CLI", "Pi", "Gemini", "Grok",
         "Cline", "FX.sh",
@@ -128,6 +130,18 @@ public enum HerdrKind {
     }
 }
 
+public enum HerdrPaneCategory: String, Sendable, Hashable, CaseIterable {
+    case agent
+    case terminal
+
+    public var title: String {
+        switch self {
+        case .agent: "Agent"
+        case .terminal: "Terminal"
+        }
+    }
+}
+
 public struct HerdrAgent: Identifiable, Equatable, Hashable, Sendable {
     public var id: String
     public var machineID: String
@@ -141,11 +155,13 @@ public struct HerdrAgent: Identifiable, Equatable, Hashable, Sendable {
     public var title: String
     public var workspace: String
     public var cwd: String
+    public var category: HerdrPaneCategory
 
     public init(
         id: String, machineID: String, machineName: String, machineIsLocal: Bool,
         sshTarget: String?, session: String, pane: String, kind: String,
-        status: HerdrAgentStatus, title: String, workspace: String, cwd: String
+        status: HerdrAgentStatus, title: String, workspace: String, cwd: String,
+        category: HerdrPaneCategory = .agent
     ) {
         self.id = id
         self.machineID = machineID
@@ -159,19 +175,22 @@ public struct HerdrAgent: Identifiable, Equatable, Hashable, Sendable {
         self.title = title
         self.workspace = workspace
         self.cwd = cwd
+        self.category = category
     }
 
     public static func make(
         machineID: String, machineName: String, machineIsLocal: Bool, sshTarget: String?,
         session: String, pane: String, kind: String, status: HerdrAgentStatus, title: String,
-        workspace: String, cwd: String
+        workspace: String, cwd: String, category: HerdrPaneCategory = .agent
     ) -> HerdrAgent {
         HerdrAgent(
             id: "\(machineID)|\(session)|\(pane)",
             machineID: machineID, machineName: machineName, machineIsLocal: machineIsLocal,
             sshTarget: sshTarget, session: session, pane: pane, kind: kind, status: status,
-            title: title, workspace: workspace, cwd: cwd)
+            title: title, workspace: workspace, cwd: cwd, category: category)
     }
+
+    public var isTerminal: Bool { category == .terminal }
 }
 
 public struct HerdrHostSnapshot: Identifiable, Equatable, Sendable {
