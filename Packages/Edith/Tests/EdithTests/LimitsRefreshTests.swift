@@ -27,6 +27,27 @@ private actor UsageReloadPublicationHarness {
     }
 }
 
+private final class MutableHistoryURL: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current: URL
+
+    init(_ url: URL) {
+        current = url
+    }
+
+    func resolve() -> URL {
+        lock.lock()
+        defer { lock.unlock() }
+        return current
+    }
+
+    func update(_ url: URL) {
+        lock.lock()
+        current = url
+        lock.unlock()
+    }
+}
+
 @Suite struct LimitsRefreshTests {
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
 
@@ -35,6 +56,21 @@ private actor UsageReloadPublicationHarness {
         #expect(UsageStore.enabledLimitProviders(claude: true, codex: false) == [.claude])
         #expect(UsageStore.enabledLimitProviders(claude: false, codex: true) == [.codex])
         #expect(UsageStore.enabledLimitProviders(claude: false, codex: false).isEmpty)
+    }
+
+    @Test func onlyTheCurrentLimitsRefreshCanPublish() {
+        #expect(
+            UsageStore.canPublishLimitsRefresh(
+                generation: 4, currentGeneration: 4, terminating: false, cancelled: false))
+        #expect(
+            !UsageStore.canPublishLimitsRefresh(
+                generation: 3, currentGeneration: 4, terminating: false, cancelled: false))
+        #expect(
+            !UsageStore.canPublishLimitsRefresh(
+                generation: 4, currentGeneration: 4, terminating: true, cancelled: false))
+        #expect(
+            !UsageStore.canPublishLimitsRefresh(
+                generation: 4, currentGeneration: 4, terminating: false, cancelled: true))
     }
 
     @Test func startsWhenNothingIsInFlight() {
@@ -182,5 +218,53 @@ private actor UsageReloadPublicationHarness {
         await older.value
 
         #expect(await harness.publishedValue() == "newer")
+    }
+
+    @Test func historyPersistenceRetainsFailuresAndRetriesWithinTheRequestedBound() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-history-persistence-\(UUID().uuidString)")
+        let historyURL = root.appendingPathComponent("limits-history.jsonl")
+        let target = root.appendingPathComponent("outside.jsonl")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("preserve".utf8).write(to: target)
+        try FileManager.default.createSymbolicLink(at: historyURL, withDestinationURL: target)
+        let worker = UsageHistoryPersistenceWorker(historyURL: historyURL)
+        let entry = UsageHistoryPersistenceEntry(
+            provider: .claude, session: LimitWindow(percent: 42, resetsAt: nil), week: nil,
+            fable: nil)
+
+        #expect(await worker.persist([entry]) == false)
+        #expect(await worker.drain(maxAttempts: 2, retryNanoseconds: 0) == false)
+        #expect(await worker.pendingCount() == 1)
+        #expect(try Data(contentsOf: target) == Data("preserve".utf8))
+
+        try FileManager.default.removeItem(at: historyURL)
+        #expect(await worker.drain(maxAttempts: 1, retryNanoseconds: 0))
+        #expect(await worker.pendingCount() == 0)
+        #expect(LimitsHistory.latest(url: historyURL)?.session?.percent == 42)
+    }
+
+    @Test func historyPersistenceResolvesTheRuntimePathForEveryWrite() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-history-path-\(UUID().uuidString)")
+        let first = root.appendingPathComponent("first/limits-history.jsonl")
+        let second = root.appendingPathComponent("second/limits-history.jsonl")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let resolver = MutableHistoryURL(first)
+        let worker = UsageHistoryPersistenceWorker(historyURLResolver: { resolver.resolve() })
+        let firstEntry = UsageHistoryPersistenceEntry(
+            provider: .claude, session: LimitWindow(percent: 21, resetsAt: nil), week: nil,
+            fable: nil)
+        let secondEntry = UsageHistoryPersistenceEntry(
+            provider: .claude, session: LimitWindow(percent: 84, resetsAt: nil), week: nil,
+            fable: nil)
+
+        #expect(await worker.persist([firstEntry]))
+        resolver.update(second)
+        #expect(await worker.persist([secondEntry]))
+
+        #expect(LimitsHistory.latest(url: first)?.session?.percent == 21)
+        #expect(LimitsHistory.latest(url: second)?.session?.percent == 84)
     }
 }
