@@ -98,14 +98,16 @@ import Testing
         let line = HerdrTerminalOperationExecution.shellLine(
             for: HerdrTerminalRequest(session: "default", label: "site dev server"))
         #expect(line.contains("'site dev server'"))
-        #expect(HerdrTerminalOperationExecution.remoteShellLine(for: .init()).hasPrefix("export PATH="))
+        #expect(
+            HerdrTerminalOperationExecution.remoteShellLine(for: .init()).hasPrefix("export PATH="))
     }
 
     @Test func aTerminalAttachesWithTheHerdrClient() {
         let local = terminal(machineIsLocal: true, sshTarget: nil)
         #expect(HerdrAttachCommand.line(for: local) == "herdr --session default")
         let remote = terminal(machineIsLocal: false, sshTarget: "tuf-wired")
-        #expect(HerdrAttachCommand.line(for: remote) == "herdr --remote tuf-wired --session default")
+        #expect(
+            HerdrAttachCommand.line(for: remote) == "herdr --remote tuf-wired --session default")
     }
 
     @Test func anAgentStillAttachesToItsOwnPane() {

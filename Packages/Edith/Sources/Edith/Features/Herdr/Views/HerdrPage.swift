@@ -132,7 +132,8 @@ struct HerdrPage: View {
             .buttonStyle(.plain)
             .padding(UIScale.pt(4))
             .widgetBar(
-                cornerRadius: 8, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
+                cornerRadius: 8, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark)
+            )
             .pointerCursor()
             .help(store.railOpen ? "Hide the list" : "Show the list")
             .accessibilityLabel(store.railOpen ? "Hide the list" : "Show the list")
@@ -627,7 +628,8 @@ struct HerdrPage: View {
                 fill: HerdrStatusColor.fill(agent, dark: dark, selected: selected),
                 stroke: selected
                     ? HerdrStatusColor.stroke(agent, dark: dark, selected: true) : .clear,
-                strokeWidth: selected ? 1.4 : 0)
+                strokeWidth: selected ? 1.4 : 0
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
