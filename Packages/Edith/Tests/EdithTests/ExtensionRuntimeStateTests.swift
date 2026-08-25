@@ -166,23 +166,23 @@ import Testing
             .deletingLastPathComponent()
             .appendingPathComponent("Sources/Edith/Features/Settings/Views/ExtensionsPane.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let headerStart = try #require(source.range(of: "struct ExtensionSettingsHeader"))
         let sheetStart = try #require(source.range(of: "private struct ExtensionSettingsSheet"))
+        let headerSource = String(source[headerStart.lowerBound..<sheetStart.lowerBound])
         let sheetEnd = try #require(
             source.range(
                 of: "private struct ExtensionLifecycleRows",
                 range: sheetStart.upperBound..<source.endIndex))
         let sheet = String(source[sheetStart.lowerBound..<sheetEnd.lowerBound])
-        let header = try #require(sheet.range(of: "HStack {"))
-        let title = try #require(sheet.range(of: "Text(entry.title)"))
-        let toggle = try #require(sheet.range(of: "Toggle(isOn: enabledBinding)"))
+        let header = try #require(
+            sheet.range(of: "ExtensionSettingsHeader(title: entry.title, enabled: enabledBinding)"))
         let form = try #require(sheet.range(of: "Form {"))
 
-        #expect(header.lowerBound < title.lowerBound)
-        #expect(title.lowerBound < toggle.lowerBound)
-        #expect(toggle.lowerBound < form.lowerBound)
-        #expect(sheet.contains(".labelsHidden()"))
-        #expect(sheet.contains(".accessibilityLabel(\"\\(entry.title) enabled\")"))
-        #expect(sheet.components(separatedBy: "Toggle(").count == 2)
+        #expect(header.lowerBound < form.lowerBound)
+        #expect(headerSource.contains("Toggle(isOn: $enabled)"))
+        #expect(headerSource.contains(".labelsHidden()"))
+        #expect(headerSource.contains(".accessibilityLabel(\"\\(title) enabled\")"))
+        #expect(headerSource.components(separatedBy: "Toggle(").count == 2)
         #expect(!sheet.contains(".navigationTitle(entry.title)"))
         #expect(!sheet.contains("ToolbarItem(placement: .primaryAction)"))
         #expect(!sheet.contains("Section(\"Extension\")"))

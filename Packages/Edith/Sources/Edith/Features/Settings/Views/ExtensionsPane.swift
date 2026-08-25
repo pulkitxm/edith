@@ -371,6 +371,29 @@ private struct ExtensionMarketplaceCard: View {
     }
 }
 
+struct ExtensionSettingsHeader: View {
+    let title: String
+    @Binding var enabled: Bool
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
+            Spacer()
+            Toggle(isOn: $enabled) {
+                Text("\(title) enabled")
+            }
+            .labelsHidden()
+            .toggleStyle(.switch)
+            .accessibilityLabel("\(title) enabled")
+            .pointerCursor()
+        }
+        .padding(.horizontal, UIScale.pt(28))
+        .padding(.vertical, UIScale.pt(18))
+    }
+}
+
 private struct ExtensionSettingsSheet: View {
     let entry: ExtensionRegistryEntry
     let coordinator: ExtensionModalCoordinator
@@ -393,21 +416,7 @@ private struct ExtensionSettingsSheet: View {
 
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
-            HStack {
-                Text(entry.title)
-                    .font(.headline)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer()
-                Toggle(isOn: enabledBinding) {
-                    Text("\(entry.title) enabled")
-                }
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .accessibilityLabel("\(entry.title) enabled")
-                .pointerCursor()
-            }
-            .padding(.horizontal, UIScale.pt(28))
-            .padding(.vertical, UIScale.pt(18))
+            ExtensionSettingsHeader(title: entry.title, enabled: enabledBinding)
 
             Divider()
 
