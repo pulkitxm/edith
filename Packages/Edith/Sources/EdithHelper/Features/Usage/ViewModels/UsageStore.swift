@@ -719,6 +719,8 @@ final class UsageStore: FeatureModule {
             Log.usage.notice("token read from keychain (security CLI)")
         case .file:
             Log.usage.notice("token read from ~/.claude/.credentials.json")
+        case .shell:
+            Log.usage.notice("token read from login shell environment")
         }
         cachedClaudeCredential = credential
         return credential

@@ -3,6 +3,7 @@ import Foundation
 enum ClaudeCredentialSource: Equatable {
     case keychain
     case file(URL)
+    case shell
 }
 
 struct ClaudeOAuthCredential {
@@ -26,6 +27,21 @@ struct ClaudeOAuthCredential {
             refreshTokenExpiresAt: millisecondsDate(oauth["refreshTokenExpiresAt"]),
             source: source,
             document: document)
+    }
+
+    static func transient(accessToken: String, maximumBytes: Int = 8_192)
+        -> ClaudeOAuthCredential?
+    {
+        guard !accessToken.isEmpty, accessToken.utf8.count <= maximumBytes,
+            accessToken.unicodeScalars.allSatisfy({ 0x21...0x7E ~= $0.value })
+        else { return nil }
+        return ClaudeOAuthCredential(
+            accessToken: accessToken,
+            refreshToken: nil,
+            expiresAt: nil,
+            refreshTokenExpiresAt: nil,
+            source: .shell,
+            document: [:])
     }
 
     func shouldRefresh(at now: Date, leeway: TimeInterval = 60) -> Bool {
@@ -83,11 +99,14 @@ struct ClaudeOAuthRefreshResponse: Decodable, Sendable {
 
 enum ClaudeCredentialStoreError: LocalizedError {
     case keychainUpdateFailed(Int32)
+    case transientCredential
 
     var errorDescription: String? {
         switch self {
         case .keychainUpdateFailed(let status):
             return "Keychain update failed with status \(status)"
+        case .transientCredential:
+            return "Transient credentials cannot be persisted"
         }
     }
 }
@@ -115,6 +134,8 @@ enum ClaudeCredentialStore {
             try data.write(to: url, options: .atomic)
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o600], ofItemAtPath: url.path)
+        case .shell:
+            throw ClaudeCredentialStoreError.transientCredential
         }
     }
 
