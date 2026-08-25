@@ -22,6 +22,10 @@ completion walks the same command tree used by parity checks, including nested
 routes and typed values, so it is also a reliable discovery surface outside the
 app.
 
+Use `ed status --json` to inspect the command-line links and shell completion
+installation without opening Settings. `ed completions source` prints the
+fallback startup-file line without changing anything.
+
 For extension automation, start with `ed extensions status --json`. Preview setup
 with `ed extensions setup <id> --dry-run --json`, apply it with
 `--install-tools` when required, then run `ed extensions verify <id> --json`.

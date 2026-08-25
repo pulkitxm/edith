@@ -21,6 +21,7 @@ be running.
 
 | Command | What it does |
 | --- | --- |
+| `ed status` | Inspect the CLI links, shell completions, and fallback source line |
 | `ed install` | Link `ed`, `edh` and `edith` into a directory on `PATH` |
 | `ed uninstall` | Remove those three links again, and nothing else |
 | `ed help <command>` | Show the same detailed help reached through `<command> --help` |
@@ -30,6 +31,7 @@ be running.
 | `ed version` | Print the CLI version, and with `--json` whether the app is running |
 | `ed completions` | The completion group; with no subcommand it runs `install` |
 | `ed completions install` | Write completion scripts for the shells found on this Mac |
+| `ed completions source` | Print the fallback line that loads one completion script |
 | `ed completions zsh` | Print the zsh completion script on stdout |
 | `ed completions bash` | Print the bash completion script on stdout |
 | `ed completions fish` | Print the fish completion script on stdout |
@@ -66,6 +68,7 @@ rather than from a link is the part that matters, for the reason in
 
 ## Commands
 
+- [`ed status`](./status.md)
 - [`ed install`](./install.md)
 - [`ed uninstall`](./uninstall.md)
 - [`ed guide`](./guide.md)
@@ -73,6 +76,7 @@ rather than from a link is the part that matters, for the reason in
 - [`ed version`](./version.md)
 - [`ed completions`](./completions.md)
 - [`ed completions install`](./completions-install.md)
+- [`ed completions source`](./completions-source.md)
 - [`ed completions zsh`](./completions-zsh.md)
 - [`ed completions bash`](./completions-bash.md)
 - [`ed completions fish`](./completions-fish.md)
@@ -202,7 +206,7 @@ Only the codes this page's commands produce.
 | Code | What produced it |
 | --- | --- |
 | 0 | The command did what it says, including `ed uninstall` finding nothing to remove, and `--help` or `--version` on any command but `__complete`, which captures both as words and still exits 0 |
-| 1 | `ed install` when no `ed` binary can be found near the running executable, or a write that fails while `ed completions install` is creating a script |
+| 1 | A tool link cannot be changed, or any detected shell fails during `ed completions install` |
 | 2 | The command line was wrong: an unknown flag, a missing value, or a positional the command does not take, such as `ed completions install zsh` |
 | 3 | `ed guide <topic>` for any topic other than `claude`, or `ed completions install --shell <anything but zsh, bash or fish>` |
 

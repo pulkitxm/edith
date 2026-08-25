@@ -18,6 +18,8 @@ struct ClipboardPanelView: View {
     @State private var lastMouse = NSEvent.mouseLocation
     @State private var rowFrames: [String: CGRect] = [:]
     @State private var listHeight: CGFloat = 0
+    @State private var pendingClearPlan: ClipboardClearPlan?
+    @State private var showingClearConfirmation = false
     @FocusState private var searchFocused: Bool
     @AppStorage(AppStorageKeys.Clipboard.showFooter, store: SharedDefaults.store) private
         var showFooter = true
@@ -169,6 +171,26 @@ struct ClipboardPanelView: View {
         .onChange(of: store.revision) { _, _ in refreshVisible() }
         .onChange(of: pinTo) { _, _ in refreshVisible() }
         .onChange(of: showFooter) { _, _ in reportHeight() }
+        .confirmationDialog(
+            pendingClearPlan?.confirmationTitle ?? "Clear clipboard history?",
+            isPresented: $showingClearConfirmation,
+            presenting: pendingClearPlan
+        ) { plan in
+            Button("Clear", role: .destructive) { store.clear(plan) }
+            Button("Cancel", role: .cancel) {}
+        } message: { plan in
+            Text(plan.confirmationMessage)
+        }
+        .alert(
+            "Clipboard update failed",
+            isPresented: Binding(
+                get: { store.mutationError != nil },
+                set: { if !$0 { store.dismissMutationError() } })
+        ) {
+            Button("OK") { store.dismissMutationError() }
+        } message: {
+            Text(store.mutationError ?? "The clipboard history could not be updated.")
+        }
     }
 
     private var searchField: some View {
@@ -354,7 +376,7 @@ struct ClipboardPanelView: View {
             Divider()
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
-            footerRow("Clear", shortcut: "⌥⌘⌫") { clear() }
+            footerRow("Clear unpinned", shortcut: "⌥⌘⌫") { requestClear() }
             footerRow("Preferences…", shortcut: "⌘,") { openPreferences() }
         }
         .padding(.horizontal, 5)
@@ -427,7 +449,7 @@ struct ClipboardPanelView: View {
         }
         if press.key == .delete {
             if press.modifiers.contains([.option, .command]) {
-                clear()
+                requestClear()
                 return .handled
             }
             if press.modifiers.contains(.option) {
@@ -470,12 +492,11 @@ struct ClipboardPanelView: View {
         reportHeight()
     }
 
-    private func clear() {
-        store.clear()
-        arranged = []
-        visible = []
-        selectedID = nil
-        reportHeight()
+    private func requestClear() {
+        let plan = ClipboardOperationExecution.clearPlan(entries: store.entries, keepPinned: true)
+        guard plan.removed > 0 else { return }
+        pendingClearPlan = plan
+        showingClearConfirmation = true
     }
 
     private func openPreferences() {

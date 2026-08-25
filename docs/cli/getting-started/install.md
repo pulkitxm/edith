@@ -50,11 +50,10 @@ standardising both, so a match is exact rather than textual. When it is false
 the human output adds `note: <directory> is not on PATH` on stderr and still
 exits 0, because the links were made either way.
 
-`message` is the one failure this command reports: when no `ed` binary can be
-found near the running executable it says `the ed binary is not present in this
-build`. With `--json` that lands in the `message` field and the command exits 0;
-without `--json` it becomes an error and exits 1. Read `message` if you are
-gating on this in a script.
+`message` is null on success. A missing bundled binary, an occupied unmanaged
+path, or a failed link is reported on stderr and exits 1 before a success
+document is emitted. The Install button in Terminal settings calls the same
+typed operation and shows the same failure.
 
 The installer finds the binaries to link by walking up from the directory of the
 executable that is running and taking the first directory that holds an

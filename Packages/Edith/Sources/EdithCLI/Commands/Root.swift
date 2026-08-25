@@ -41,6 +41,7 @@ public struct EdRoot: AsyncParsableCommand {
             GuideCommand.self,
             SchemaCommand.self,
             VersionCommand.self,
+            StatusCommand.self,
             CompletionsCommand.self,
             InstallCommand.self,
             UninstallCommand.self,
@@ -174,6 +175,42 @@ struct VersionCommand: AsyncParsableCommand {
     }
 }
 
+struct StatusCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "status",
+        abstract: "Inspect command-line tools and shell completions.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let status = TerminalToolingOperationExecution.status()
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "tools": toolStatusJSON(status.tools),
+                        "completions": .array(status.completions.map(completionStatusJSON)),
+                        "fallbackSource": .string(status.fallbackSourceLine),
+                    ]))
+                return
+            }
+            let linked =
+                status.tools.linked.isEmpty
+                ? "none" : status.tools.linked.joined(separator: ", ")
+            CLIOut.out("tools: \(linked)")
+            CLIOut.out("directory: \(status.tools.directory)")
+            CLIOut.out("on PATH: \(status.tools.onPath ? "yes" : "no")")
+            for completion in status.completions {
+                CLIOut.out(
+                    "\(completion.shell.rawValue): \(completion.state.rawValue) \(completion.path.path)"
+                )
+            }
+            CLIOut.out("fallback: \(status.fallbackSourceLine)")
+        }
+    }
+}
+
 struct CompletionsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "completions",
@@ -181,6 +218,7 @@ struct CompletionsCommand: AsyncParsableCommand {
         subcommands: [
             CompletionsZshCommand.self, CompletionsBashCommand.self,
             CompletionsFishCommand.self, CompletionsInstallCommand.self,
+            CompletionsSourceCommand.self,
         ],
         defaultSubcommand: CompletionsInstallCommand.self)
 }
@@ -212,6 +250,35 @@ struct CompletionsFishCommand: AsyncParsableCommand {
     }
 }
 
+struct CompletionsSourceCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "source",
+        abstract: "Print the fallback line that loads a completion script.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Option(help: "Print the line for this shell.")
+    var shell = "zsh"
+
+    func run() async throws {
+        try await execute {
+            guard let selected = CompletionScripts.Shell(rawValue: shell.lowercased()) else {
+                throw CLIFailure.notFound("\(shell) is not a supported shell")
+            }
+            let line = TerminalToolingOperationExecution.fallbackSource(for: selected)
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "shell": .string(selected.rawValue), "source": .string(line),
+                    ]))
+                return
+            }
+            CLIOut.out(line)
+        }
+    }
+}
+
 struct CompletionsInstallCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "install",
@@ -234,30 +301,20 @@ struct CompletionsInstallCommand: AsyncParsableCommand {
             } else {
                 shells = CompletionScripts.detectShells()
             }
-            var installed: [JSONValue] = []
-            for value in shells {
-                let file = try CompletionScripts.install(value)
-                let directory = file.deletingLastPathComponent()
-                installed.append(
-                    .object([
-                        "shell": .string(value.rawValue),
-                        "path": .string(file.path),
-                        "hint": .optional(
-                            CompletionScripts.rcHint(for: value, directory: directory)),
-                    ]))
-            }
+            let outcome = TerminalToolingOperationExecution.installCompletions(shells: shells)
             guard !json else {
-                CLIOut.json(.object(["installed": .array(installed)]))
+                CLIOut.json(completionInstallJSON(outcome))
+                if !outcome.succeeded { throw ExitCode.failure }
                 return
             }
-            for entry in installed {
-                guard case let .object(fields) = entry,
-                    case let .string(shell)? = fields["shell"],
-                    case let .string(path)? = fields["path"]
-                else { continue }
-                CLIOut.out("\(shell): \(path)")
-                if case let .string(hint)? = fields["hint"] { CLIOut.out("  \(hint)") }
+            for installed in outcome.installed {
+                CLIOut.out("\(installed.shell.rawValue): \(installed.path.path)")
+                if let hint = installed.hint { CLIOut.out("  \(hint)") }
             }
+            for failure in outcome.failures {
+                CLIOut.note("error: \(failure.shell.rawValue): \(failure.message)")
+            }
+            if !outcome.succeeded { throw ExitCode.failure }
         }
     }
 }
@@ -278,25 +335,27 @@ struct InstallCommand: AsyncParsableCommand {
             let target = directory.map {
                 URL(fileURLWithPath: $0.expandingTilde())
             }
-            let result = CLIInstaller.install(into: target)
+            let outcome = TerminalToolingOperationExecution.install(into: target)
+            let result = outcome.result
             if let message = result.message {
                 throw CLIFailure(message)
             }
-            let onPath = CLIInstaller.isOnPath(
-                URL(fileURLWithPath: result.directory), entries: CLIInstaller.pathEntries())
             guard !json else {
                 CLIOut.json(
                     .object([
                         "directory": .string(result.directory),
                         "linked": .strings(result.linked),
                         "skipped": .strings(result.skipped),
-                        "onPath": .bool(onPath),
+                        "onPath": .bool(outcome.onPath),
                         "message": .optional(result.message),
                     ]))
                 return
             }
-            CLIOut.out("linked \(result.linked.joined(separator: ", ")) in \(result.directory)")
-            if !onPath {
+            CLIOut.out(
+                result.linked.isEmpty
+                    ? "already installed in \(result.directory)"
+                    : "linked \(result.linked.joined(separator: ", ")) in \(result.directory)")
+            if !outcome.onPath {
                 CLIOut.note("note: \(result.directory) is not on PATH")
             }
         }
@@ -311,7 +370,8 @@ struct UninstallCommand: AsyncParsableCommand {
     var json = false
 
     func run() async throws {
-        let result = CLIInstaller.uninstall()
+        let result = TerminalToolingOperationExecution.remove().result
+        if let message = result.message { throw CLIFailure(message) }
         guard !json else {
             CLIOut.json(
                 .object([
@@ -325,6 +385,46 @@ struct UninstallCommand: AsyncParsableCommand {
                 ? "nothing to remove in \(result.directory)"
                 : "removed \(result.linked.joined(separator: ", ")) from \(result.directory)")
     }
+}
+
+private func toolStatusJSON(_ status: CLIToolStatus) -> JSONValue {
+    .object([
+        "directory": .string(status.directory),
+        "linked": .strings(status.linked),
+        "missing": .strings(status.missing),
+        "onPath": .bool(status.onPath),
+        "bundled": .bool(status.bundled),
+        "complete": .bool(status.isComplete),
+    ])
+}
+
+private func completionStatusJSON(_ status: CompletionStatus) -> JSONValue {
+    .object([
+        "shell": .string(status.shell.rawValue),
+        "state": .string(status.state.rawValue),
+        "path": .string(status.path.path),
+        "hint": .optional(status.hint),
+    ])
+}
+
+private func completionInstallJSON(_ outcome: TerminalCompletionInstallOutcome) -> JSONValue {
+    .object([
+        "installed": .array(
+            outcome.installed.map {
+                .object([
+                    "shell": .string($0.shell.rawValue),
+                    "path": .string($0.path.path),
+                    "hint": .optional($0.hint),
+                ])
+            }),
+        "failures": .array(
+            outcome.failures.map {
+                .object([
+                    "shell": .string($0.shell.rawValue),
+                    "message": .string($0.message),
+                ])
+            }),
+    ])
 }
 
 struct CompleteCommand: AsyncParsableCommand {

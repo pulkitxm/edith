@@ -41,6 +41,7 @@ public enum Guide {
         ed usage sources            the agents that produced your usage history
         ed schema                   JSON Schema for the config document
         ed version                  the CLI version, and whether the app is up
+        ed status                   command-line links and shell completions
         ed guide                    this text
         ed guide claude             a CLAUDE.md snippet making a repo ed-aware
         ```

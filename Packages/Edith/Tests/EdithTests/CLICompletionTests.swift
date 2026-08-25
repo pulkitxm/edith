@@ -928,6 +928,30 @@ import Testing
         let parsed = try EdRoot.parseAsRoot(["completions", "install"])
         #expect(type(of: parsed).configuration.commandName == "install")
     }
+
+    @Test func statusAndFallbackSourceAreDiscoverableLeaves() throws {
+        let status = try EdRoot.parseAsRoot(["status", "--json"])
+        let source = try EdRoot.parseAsRoot([
+            "completions", "source", "--shell", "fish", "--json",
+        ])
+        #expect(type(of: status).configuration.commandName == "status")
+        #expect(type(of: source).configuration.commandName == "source")
+    }
+
+    @Test func statusAndFallbackSourceEmitStructuredDocuments() async {
+        let status = await CLIProbe.run(["status", "--json"])
+        let source = await CLIProbe.run([
+            "completions", "source", "--shell", "fish", "--json",
+        ])
+
+        #expect(status.code == ExitCodes.success)
+        #expect(status.object?["tools"] != nil)
+        #expect(status.object?["completions"] != nil)
+        #expect(status.object?["fallbackSource"] != nil)
+        #expect(source.code == ExitCodes.success)
+        #expect(source.object?["shell"] as? String == "fish")
+        #expect((source.object?["source"] as? String)?.contains("ed.fish") == true)
+    }
 }
 
 @Suite struct RemoteDirectoryCompletionTests {

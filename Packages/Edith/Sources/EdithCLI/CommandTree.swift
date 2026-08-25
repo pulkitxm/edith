@@ -116,10 +116,15 @@ public enum CommandTree {
             CommandNode("schema", "Print the JSON Schema for the config document.", options: []),
             CommandNode("version", "Print the Edith CLI version.", options: common),
             CommandNode(
+                "status", "Inspect command-line tools and shell completions.", options: common),
+            CommandNode(
                 "completions", "Generate or install shell completions.",
                 children: [
                     CommandNode(
                         "install", "Install completions for the detected shells.",
+                        options: ["--json", "--shell"], optionValues: ["--shell": .shell]),
+                    CommandNode(
+                        "source", "Print a fallback completion source line.",
                         options: ["--json", "--shell"], optionValues: ["--shell": .shell]),
                     CommandNode("zsh", "Print the zsh completion script."),
                     CommandNode("bash", "Print the bash completion script."),

@@ -1,5 +1,12 @@
 import Testing
+import Foundation
+
 @testable import EdithHelper
+@testable import EdithKit
+
+private struct ClipboardMutationFailure: LocalizedError {
+    var errorDescription: String? { "The clipboard index is read-only." }
+}
 
 @Suite struct ClipboardPanelNavigationTests {
     @Test func commandDownTargetsTheBottomShownRow() {
@@ -28,5 +35,22 @@ import Testing
             itemCount: 500, top: true, shownEdgeIndex: nil, renderedCount: 80)
 
         #expect(target == 0)
+    }
+
+    @Test @MainActor func clearSurfacesPersistenceFailure() async throws {
+        let store = ClipboardStore { _ in throw ClipboardMutationFailure() }
+        defer { store.shutdown() }
+        let entry = ClipboardEntry(
+            id: "target", sha256: "target", types: ["public.utf8-plain-text"], ext: "txt",
+            sourceApp: nil, sourceBundleID: nil, size: 1, preview: "target")
+        let plan = ClipboardOperationExecution.clearPlan(
+            entries: [entry], keepPinned: true)
+
+        store.clear(plan)
+        for _ in 0..<100 where store.mutationError == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(store.mutationError == "The clipboard index is read-only.")
     }
 }
