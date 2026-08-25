@@ -195,17 +195,6 @@ public struct LimitsHistory {
         }
     }
 
-    public static func loadAllAsync(
-        provider: LimitProvider = .claude, url: URL = LimitsHistory.url
-    ) async -> [LimitPoint] {
-        let load = Task.detached(priority: .utility) { points(provider: provider, url: url) }
-        return await withTaskCancellationHandler {
-            await load.value
-        } onCancel: {
-            load.cancel()
-        }
-    }
-
     public static func loadSnapshot(
         preferredProvider: LimitProvider, url: URL = LimitsHistory.url
     ) async -> Snapshot {
@@ -232,18 +221,6 @@ public struct LimitsHistory {
             return rows.count < providers.count
         }
         return rows
-    }
-
-    private static func points(provider: LimitProvider, url: URL) -> [LimitPoint] {
-        var points: [LimitPoint] = []
-        FileTail.scanLinesReversed(url, shouldContinue: { !Task.isCancelled }) { data in
-            guard let row = try? decoder.decode(Row.self, from: data),
-                let date = EdithDate.parseISO(row.ts), (row.p ?? .claude) == provider
-            else { return true }
-            points.append(point(row: row, date: date))
-            return true
-        }
-        return points.sorted { $0.date < $1.date }
     }
 
     private static func snapshot(preferredProvider: LimitProvider, url: URL) -> Snapshot {

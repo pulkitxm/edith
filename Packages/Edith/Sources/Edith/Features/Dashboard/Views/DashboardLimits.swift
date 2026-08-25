@@ -271,19 +271,17 @@ struct LimitsCardView: View {
     }
 
     private func reloadAll() {
-        let provider = selectedProvider
+        let preferred = LimitProvider(rawValue: selectedProviderRaw) ?? .claude
         reloadGeneration += 1
         let generation = reloadGeneration
         reloadJob?.cancel()
         reloadJob = Task {
-            async let latest = LimitsHistory.loadLatestProviders()
-            async let points = LimitsHistory.loadAllAsync(provider: provider)
-            let (loadedLatest, loadedPoints) = await (latest, points)
+            let snapshot = await LimitsHistory.loadSnapshot(preferredProvider: preferred)
             guard !Task.isCancelled, generation == reloadGeneration,
-                provider == selectedProvider
+                preferred == (LimitProvider(rawValue: selectedProviderRaw) ?? .claude)
             else { return }
-            providers = LimitProvider.allCases.filter { loadedLatest[$0] != nil }
-            all = loadedPoints
+            providers = snapshot.providers
+            all = snapshot.points
             let now = all.last?.date ?? Date()
             downsampled = LimitsHistory.downsample(all, now: now)
             rebuildVisible()
