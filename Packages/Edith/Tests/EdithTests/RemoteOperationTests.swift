@@ -246,6 +246,79 @@ private enum RemoteOperationTestError: Error {
     }
 }
 
+@Suite struct HerdrOperationTests {
+    @Test func descriptorsCoverCommandAndAttach() {
+        let descriptors = HerdrOperation.allCases.map(\.descriptor)
+        #expect(descriptors.map(\.cli) == [["herdr", "command"], ["herdr", "attach"]])
+        #expect(HerdrOperation.attach.descriptor.effect == .interactive)
+        #expect(HerdrSessionOperation.list.descriptor.cli == ["herdr", "ls"])
+    }
+
+    @Test func localAttachUsesTheSameArgumentsAsThePrintedCommand() {
+        let agent = Self.agent(local: true)
+        let request = HerdrOperationExecution.localAttachRequest(
+            for: agent, environment: ["TERM=xterm"],
+            executable: URL(fileURLWithPath: "/opt/homebrew/bin/herdr"))
+        #expect(request.executable == "/opt/homebrew/bin/herdr")
+        #expect(request.arguments == ["--session", "work", "agent", "attach", "w3:p1N"])
+        #expect(request.environment == ["TERM=xterm"])
+    }
+
+    @Test func missingLocalToolFallsBackToTheSharedShellLine() {
+        let request = HerdrOperationExecution.localAttachRequest(
+            for: Self.agent(local: true), environment: [], executable: nil)
+        #expect(request.executable == "/bin/zsh")
+        #expect(
+            request.arguments == [
+                "-c", HerdrAttachCommand.remoteShellLine(session: "work", pane: "w3:p1N"),
+            ])
+    }
+
+    @Test func remoteAttachUsesTheConnectionTransportAndSharedShellLine() {
+        let machine = Machine(name: "Box", host: "box.example", port: 2222, username: "dev")
+        let connection = SSHConnection(machine: machine)
+        let request = HerdrOperationExecution.remoteAttachRequest(
+            for: Self.agent(local: false), connection: connection,
+            environment: ["TERM=xterm"])
+        #expect(request.executable == SSHConnection.executable.path)
+        #expect(
+            request.arguments.last
+                == HerdrAttachCommand.remoteShellLine(session: "work", pane: "w3:p1N"))
+        #expect(request.arguments.contains("dev@box.example"))
+        #expect(request.environment.first == "TERM=xterm")
+    }
+
+    @Test func hostJSONReportsReachabilitySeparatelyFromToolPresence() {
+        let host = HerdrHostSnapshot(
+            id: UUID().uuidString, name: "Offline", isLocal: false,
+            herdrPresent: false, reachable: false, error: "connection timed out")
+        let json = JSONSerializer.string(HerdrCLI.hostJSON(host), pretty: false)
+
+        #expect(json.contains(#""herdr":false"#))
+        #expect(json.contains(#""reachable":false"#))
+        #expect(json.contains(#""error":"connection timed out""#))
+    }
+
+    static func agent(local: Bool) -> HerdrAgent {
+        HerdrAgent.make(
+            machineID: local ? HerdrHostSnapshot.localID : UUID().uuidString,
+            machineName: local ? "This Mac" : "Box", machineIsLocal: local,
+            sshTarget: local ? nil : "dev@box.example", session: "work", pane: "w3:p1N",
+            kind: "agent", status: .working, title: "Test", workspace: "", cwd: "")
+    }
+
+    @Test func terminalLauncherRunsTheExactProcessEnvironment() async {
+        await CLIProbe.inWorld { _ in
+            let status = CLIEnvironment.launchTerminal(
+                TerminalLaunchRequest(
+                    executable: "/bin/zsh",
+                    arguments: ["-c", "test \"$EDITH_REMOTE_OPERATION_TEST\" = ready"],
+                    environment: ["EDITH_REMOTE_OPERATION_TEST=ready"]))
+            #expect(status == 0)
+        }
+    }
+}
+
 @Suite struct CLIRemotePresentationTests {
     @Test func forwardOpenUsesTheSharedURLAndStableJSON() async {
         await CLIProbe.inWorld { _ in

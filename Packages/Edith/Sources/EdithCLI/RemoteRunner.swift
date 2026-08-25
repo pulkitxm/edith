@@ -50,24 +50,12 @@ public struct RemoteRunner {
     }
 
     public func interactive(_ command: String?) -> Int32 {
-        let process = Process()
-        process.executableURL = SSHConnection.executable
-        process.arguments = connection.terminalArguments(remoteCommand: command)
-        process.environment = connection.terminalEnvironment().reduce(into: [String: String]()) {
-            partial, entry in
-            guard let index = entry.firstIndex(of: "=") else { return }
-            partial[String(entry[entry.startIndex..<index])] =
-                String(entry[entry.index(after: index)...])
-        }
-        process.standardInput = FileHandle.standardInput
-        process.standardOutput = FileHandle.standardOutput
-        process.standardError = FileHandle.standardError
-        guard (try? process.run()) != nil else {
-            CLIOut.note("error: could not start ssh")
-            return 1
-        }
-        process.waitUntilExit()
-        return process.terminationStatus
+        ForegroundProcess.run(
+            executable: SSHConnection.executable,
+            arguments: connection.terminalArguments(remoteCommand: command),
+            environment: ForegroundProcess.environment(
+                assignments: connection.terminalEnvironment(), inheriting: false),
+            failureNote: "error: could not start ssh")
     }
 
     public func passthrough(_ command: String) async -> Int32 {
@@ -100,5 +88,37 @@ public struct RemoteRunner {
             process: process, stdinData: stdin, onLine: onLine, onExit: { _ in })
         try stream.start()
         return stream
+    }
+}
+
+public enum ForegroundProcess {
+    public static func environment(
+        assignments: [String], inheriting: Bool
+    ) -> [String: String] {
+        let base = inheriting ? ProcessInfo.processInfo.environment : [:]
+        return assignments.reduce(into: base) { partial, entry in
+            guard let index = entry.firstIndex(of: "=") else { return }
+            partial[String(entry[entry.startIndex..<index])] =
+                String(entry[entry.index(after: index)...])
+        }
+    }
+
+    public static func run(
+        executable: URL, arguments: [String], environment: [String: String],
+        failureNote: String
+    ) -> Int32 {
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = arguments
+        process.environment = environment
+        process.standardInput = FileHandle.standardInput
+        process.standardOutput = FileHandle.standardOutput
+        process.standardError = FileHandle.standardError
+        guard (try? process.run()) != nil else {
+            CLIOut.note(failureNote)
+            return 1
+        }
+        process.waitUntilExit()
+        return process.terminationStatus
     }
 }

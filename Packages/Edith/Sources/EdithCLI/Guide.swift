@@ -336,6 +336,7 @@ public enum Guide {
         ed calendar open                open the Calendar application
         ed presenter status | start | stop
         ed herdr ls                     live Herdr sessions here and over SSH
+        ed herdr attach w3:p1N          attach this terminal to a live pane
         ed permissions ls
         ed permissions request calendar
         ed permissions settings screenRecording
@@ -354,7 +355,8 @@ public enum Guide {
 
         `ed herdr ls` asks `herdr` on this Mac and on every configured SSH machine.
         A missing binary is an empty host, not an error. `ed herdr command <pane>`
-        prints the attach line, `ssh -tt` when the pane is remote.
+        prints the attach line, `ssh -tt` when the pane is remote. `attach` runs
+        that same launch request in the current terminal.
 
         ## Attention and focus
 

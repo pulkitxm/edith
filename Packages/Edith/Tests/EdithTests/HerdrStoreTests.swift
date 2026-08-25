@@ -1,11 +1,120 @@
-import EdithKit
 import Foundation
 import Testing
 
 @testable import Edith
+@testable import EdithKit
+
+private actor HerdrFleetConcurrencyHarness {
+    private var active: Set<UUID> = []
+    private var visited: Set<UUID> = []
+    private var maximumActive = 0
+    private var duplicateActive = false
+
+    func collect(_ machine: Machine) async -> HerdrHostSnapshot {
+        enter(machine)
+        try? await Task.sleep(for: .milliseconds(15))
+        leave(machine)
+        return snapshot(machine)
+    }
+
+    func watch(_ machine: Machine) async {
+        enter(machine)
+        try? await Task.sleep(for: .milliseconds(25))
+        leave(machine)
+    }
+
+    func waitForUniqueVisits(_ count: Int, timeout: Duration = .seconds(2)) async -> Bool {
+        let deadline = ContinuousClock.now + timeout
+        while visited.count < count, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        return visited.count >= count
+    }
+
+    func result() -> (maximumActive: Int, duplicateActive: Bool, visits: Int) {
+        (maximumActive, duplicateActive, visited.count)
+    }
+
+    private func enter(_ machine: Machine) {
+        if active.contains(machine.id) { duplicateActive = true }
+        active.insert(machine.id)
+        visited.insert(machine.id)
+        maximumActive = max(maximumActive, active.count)
+    }
+
+    private func leave(_ machine: Machine) {
+        active.remove(machine.id)
+    }
+
+    private func snapshot(_ machine: Machine) -> HerdrHostSnapshot {
+        HerdrHostSnapshot(
+            id: machine.id.uuidString, name: machine.name, isLocal: false,
+            sshTarget: machine.sshTarget, herdrPresent: true, reachable: true)
+    }
+}
+
+private actor HerdrWatchHarness {
+    private var callbacks: [@Sendable ([HerdrHostSnapshot]) -> Void] = []
+
+    func watch(_ callback: @escaping @Sendable ([HerdrHostSnapshot]) -> Void) async {
+        callbacks.append(callback)
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    func waitForCallbacks(_ count: Int) async {
+        while callbacks.count < count {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    func send(_ hosts: [HerdrHostSnapshot], through index: Int) {
+        callbacks[index](hosts)
+    }
+}
 
 @MainActor
 @Suite struct HerdrStoreTests {
+    @Test func fleetCollectionPreservesOrderWithinTheConcurrencyLimit() async {
+        let machines = (0..<24).map { Machine(name: "machine-\($0)", host: "host-\($0)") }
+        let harness = HerdrFleetConcurrencyHarness()
+
+        let snapshots = await HerdrCollector.collectRemotes(
+            machines, maximumInFlight: 3
+        ) { machine in
+            await harness.collect(machine)
+        }
+
+        let result = await harness.result()
+        #expect(snapshots.map(\.id) == machines.map { $0.id.uuidString })
+        #expect(result.maximumActive == 3)
+        #expect(!result.duplicateActive)
+        #expect(result.visits == machines.count)
+    }
+
+    @Test func liveFleetWatchersAreBoundedFairAndCancellationOwned() async {
+        let machines = (0..<17).map { Machine(name: "machine-\($0)", host: "host-\($0)") }
+        let harness = HerdrFleetConcurrencyHarness()
+        let watching = Task {
+            await HerdrLive.watchRemotes(machines, maximumInFlight: 4) { machine in
+                await harness.watch(machine)
+            }
+        }
+
+        #expect(await harness.waitForUniqueVisits(machines.count))
+        let cancellationStarted = ContinuousClock.now
+        watching.cancel()
+        await watching.value
+        let cancellationElapsed = ContinuousClock.now - cancellationStarted
+
+        let result = await harness.result()
+        #expect(result.maximumActive == 4)
+        #expect(!result.duplicateActive)
+        #expect(result.visits == machines.count)
+        #expect(cancellationElapsed < .seconds(1))
+    }
+
     @Test func kindPillsAccumulateLikeCheckboxes() {
         let store = HerdrStore()
         store.selectKind("Claude Code", exclusive: false)
@@ -101,6 +210,47 @@ import Testing
         ])
         #expect(store.hosts.first?.agents.map(\.id) == [updated.id])
         #expect(store.tabs.contains { $0.agent.id == updated.id && $0.agent.kind == "Claude Code" })
+    }
+
+    @Test func stoppedAndReplacedWatchersCannotPublish() async {
+        let harness = HerdrWatchHarness()
+        let store = HerdrStore { callback in await harness.watch(callback) }
+        defer { store.stopWatching() }
+        let old = HerdrHostSnapshot.local(
+            herdrPresent: true, agents: [agent("Codex", pane: "old")])
+        let fresh = HerdrHostSnapshot.local(
+            herdrPresent: true, agents: [agent("Codex", pane: "fresh")])
+
+        await store.watch()
+        await harness.waitForCallbacks(1)
+        store.stopWatching()
+        await harness.send([old], through: 0)
+        try? await Task.sleep(for: .milliseconds(20))
+        #expect(store.hosts.isEmpty)
+
+        await store.watch()
+        await harness.waitForCallbacks(2)
+        await harness.send([old], through: 0)
+        await harness.send([fresh], through: 1)
+        try? await Task.sleep(for: .milliseconds(20))
+        #expect(store.hosts.first?.agents.first?.pane == "fresh")
+    }
+
+    @Test func localTabAttachmentUsesTheSharedRequest() async throws {
+        let store = HerdrStore()
+        let selected = agent("Codex", pane: "pane-1")
+        store.open(selected)
+        let tab = try #require(store.tabs.first)
+        let executable = URL(fileURLWithPath: "/tmp/herdr")
+        let environment = ["TERM=xterm-256color"]
+
+        let request = try await store.attachRequest(
+            for: tab, environment: environment, localExecutable: executable)
+
+        #expect(
+            request
+                == HerdrOperationExecution.localAttachRequest(
+                    for: selected, environment: environment, executable: executable))
     }
 
     @Test func openingADiffRemembersItForThatAgent() {

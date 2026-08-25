@@ -1,15 +1,28 @@
 import Foundation
 
 public enum HerdrLive {
+    static let remoteLeaseDuration = Duration.seconds(20)
+
     public static func watch(_ yield: @escaping @Sendable ([HerdrHostSnapshot]) -> Void) async {
         let fleet = FleetBag(yield: yield)
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await watchLocal(fleet) }
-            for machine in MachineRegistry.machines() {
-                group.addTask { await watchRemote(machine, fleet) }
+            group.addTask {
+                await watchRemotes(MachineRegistry.machines()) { machine in
+                    await watchRemoteLease(machine, fleet)
+                }
             }
             await group.waitForAll()
         }
+    }
+
+    static func watchRemotes(
+        _ machines: [Machine],
+        maximumInFlight: Int = HerdrFleetScheduler.defaultMaximumInFlight,
+        watcher: @escaping @Sendable (Machine) async -> Void
+    ) async {
+        await HerdrFleetScheduler.cycle(
+            machines, maximumInFlight: maximumInFlight, operation: watcher)
     }
 
     private static func watchLocal(_ fleet: FleetBag) async {
@@ -37,36 +50,55 @@ public enum HerdrLive {
         }
     }
 
-    private static func watchRemote(_ machine: Machine, _ fleet: FleetBag) async {
-        while !Task.isCancelled {
-            let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
-            do {
-                try await connection.connect()
-            } catch {
-                fleet.put(
-                    HerdrHostSnapshot(
-                        id: machine.id.uuidString, name: machine.name, isLocal: false,
-                        sshTarget: machine.sshTarget, herdrPresent: false, reachable: false,
-                        error: error.localizedDescription))
-                try? await Task.sleep(for: .seconds(5))
-                continue
+    private static func watchRemoteLease(_ machine: Machine, _ fleet: FleetBag) async {
+        let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
+        do {
+            try await connection.connect()
+        } catch {
+            fleet.put(
+                HerdrHostSnapshot(
+                    id: machine.id.uuidString, name: machine.name, isLocal: false,
+                    sshTarget: machine.sshTarget, herdrPresent: false, reachable: false,
+                    error: error.localizedDescription))
+            try? await Task.sleep(for: .seconds(5))
+            return
+        }
+        guard !Task.isCancelled else { return }
+        let sockets = await remoteSockets(connection)
+        guard !Task.isCancelled else { return }
+        if sockets.isEmpty {
+            let collected = await HerdrCollector.collect(.machine(machine))
+            if let host = collected.first { fleet.put(host) }
+            try? await Task.sleep(for: .seconds(8))
+            return
+        }
+        await runHostLease(
+            sockets: sockets,
+            connect: { try HerdrSocketClient.ssh(connection, socketPath: $0) },
+            machineID: machine.id.uuidString,
+            machineName: machine.name,
+            machineIsLocal: false,
+            sshTarget: machine.sshTarget,
+            fleet: fleet)
+    }
+
+    private static func runHostLease(
+        sockets: [(name: String, path: String)],
+        connect: @escaping (String) throws -> HerdrSocketClient,
+        machineID: String, machineName: String, machineIsLocal: Bool, sshTarget: String?,
+        fleet: FleetBag
+    ) async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                await runHost(
+                    sockets: sockets, connect: connect, machineID: machineID,
+                    machineName: machineName, machineIsLocal: machineIsLocal,
+                    sshTarget: sshTarget, fleet: fleet)
             }
-            let sockets = await remoteSockets(connection)
-            if sockets.isEmpty {
-                let collected = await HerdrCollector.collect(.machine(machine))
-                if let host = collected.first { fleet.put(host) }
-                try? await Task.sleep(for: .seconds(8))
-                continue
-            }
-            await runHost(
-                sockets: sockets,
-                connect: { try HerdrSocketClient.ssh(connection, socketPath: $0) },
-                machineID: machine.id.uuidString,
-                machineName: machine.name,
-                machineIsLocal: false,
-                sshTarget: machine.sshTarget,
-                fleet: fleet)
-            try? await Task.sleep(for: .seconds(1))
+            group.addTask { try? await Task.sleep(for: remoteLeaseDuration) }
+            await group.next()
+            group.cancelAll()
+            await group.waitForAll()
         }
     }
 

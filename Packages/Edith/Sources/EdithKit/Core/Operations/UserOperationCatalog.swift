@@ -169,6 +169,9 @@ public enum UserOperationCatalog {
         registrations += MountedFileSystemOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        registrations += HerdrOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         return registrations
     }()
 
@@ -1270,6 +1273,18 @@ private extension DockerBrowserOperation {
 private extension MountedFileSystemOperation {
     var interfaceExposure: UserOperationExposure {
         userInterface("Machine tools", "reveal the mounted disk", ["box"])
+    }
+}
+
+private extension HerdrOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .command:
+            userInterface(
+                "Herdr session tab", "copy the attach command for a pane", ["w3:p1N"])
+        case .attach:
+            userInterface("Herdr board", "attach to a live pane", ["w3:p1N"])
+        }
     }
 }
 

@@ -4,6 +4,11 @@ import Observation
 import SwiftTerm
 import SwiftUI
 
+typealias HerdrLiveWatcher =
+    @Sendable (
+        @escaping @Sendable ([HerdrHostSnapshot]) -> Void
+    ) async -> Void
+
 @MainActor
 @Observable
 final class HerdrStore {
@@ -20,11 +25,17 @@ final class HerdrStore {
     var detailOpen = true
 
     private let defaults: UserDefaults
+    private let liveWatcher: HerdrLiveWatcher
     private var connections: [UUID: SSHConnection] = [:]
     private var watchTask: Task<Void, Never>?
+    private var watchGeneration = 0
 
-    init(defaults: UserDefaults = SharedDefaults.store) {
+    init(
+        defaults: UserDefaults = SharedDefaults.store,
+        liveWatcher: @escaping HerdrLiveWatcher = { yield in await HerdrLive.watch(yield) }
+    ) {
         self.defaults = defaults
+        self.liveWatcher = liveWatcher
     }
 
     var agents: [HerdrAgent] { hosts.flatMap(\.agents) }
@@ -86,16 +97,25 @@ final class HerdrStore {
 
     func watch() async {
         guard watchTask == nil else { return }
+        watchGeneration += 1
+        let generation = watchGeneration
+        let liveWatcher = liveWatcher
+        watchTask?.cancel()
         watchTask = Task { [weak self] in
-            await HerdrLive.watch { hosts in
+            await liveWatcher { hosts in
                 Task { @MainActor in
-                    self?.apply(hosts)
+                    guard !Task.isCancelled else { return }
+                    guard let self, self.watchGeneration == generation, self.watchTask != nil else {
+                        return
+                    }
+                    self.apply(hosts)
                 }
             }
         }
     }
 
     func stopWatching() {
+        watchGeneration += 1
         watchTask?.cancel()
         watchTask = nil
     }
@@ -248,6 +268,22 @@ final class HerdrStore {
         configuration.terminal = .embedded
         configuration.appearance = appearance
         return configuration
+    }
+
+    func attachRequest(
+        for tab: HerdrOpenTab, environment: [String],
+        localExecutable: URL? = HerdrCollector.executable()
+    ) async throws -> TerminalLaunchRequest {
+        if tab.agent.machineIsLocal {
+            return HerdrOperationExecution.localAttachRequest(
+                for: tab.agent, environment: environment, executable: localExecutable)
+        }
+        guard let machine = tab.machine else {
+            throw HerdrQuinjetError.machineUnavailable
+        }
+        let connection = try await connection(for: machine)
+        return HerdrOperationExecution.remoteAttachRequest(
+            for: tab.agent, connection: connection, environment: environment)
     }
 
     func copyAttachCommand(for agent: HerdrAgent) {

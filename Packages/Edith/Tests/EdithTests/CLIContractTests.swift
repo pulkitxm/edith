@@ -121,6 +121,8 @@ enum JSONContract {
             "ed tools install", ["tools", "install", "yt-dlp", "--json"],
             mutatesTheMachine: true),
         JSONCase(
+            "ed herdr attach", ["herdr", "attach", "nowhere-at-all", "--json"]),
+        JSONCase(
             "ed machines broadcast",
             ["machines", "broadcast", "--json", "--only", "nowhere-at-all", "--", "true"]),
         JSONCase("ed apps ls", ["apps", "ls", "--json"]),

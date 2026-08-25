@@ -303,9 +303,6 @@ enum UIParity {
         UICapability(
             "Rate limit cards", "refresh the limits now", ["usage", "limits", "--refresh"]),
         UICapability(
-            "Herdr session tab", "copy the attach command for a pane",
-            ["herdr", "command", "w3:p1N"]),
-        UICapability(
             "Quinjet page", "list recent review projects", ["quinjet", "projects"]),
         UICapability(
             "Quinjet project picker", "list project worktrees",
@@ -391,7 +388,6 @@ enum UIParity {
         "ed companion ingest /tmp/note.md",
         "ed companion ingest /tmp/notes",
         "ed companion ingest /tmp/voice-memo.wav",
-        "ed herdr command w3:p1N",
         "ed machines files cp box /a /b",
         "ed machines files mv box /a /b",
         "ed machines files put box ./x /tmp/x",
