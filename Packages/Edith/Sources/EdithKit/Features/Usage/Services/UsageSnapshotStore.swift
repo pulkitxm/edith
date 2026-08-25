@@ -152,6 +152,11 @@ public actor UsageSnapshotStore {
         let data: Data
     }
 
+    private struct MachineCandidate {
+        let file: URL
+        let identifier: UUID
+    }
+
     private let source: UsageSnapshotSource
     private let root: URL
     private let hooks: UsageSnapshotHooks
@@ -254,29 +259,58 @@ public actor UsageSnapshotStore {
         guard directoryValues.isDirectory == true, directoryValues.isSymbolicLink != true else {
             throw UsageSnapshotError.unsafeFile(source.machinesDirectory.path)
         }
-        let files = try manager.contentsOfDirectory(
-            at: source.machinesDirectory,
-            includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-        return try files.sorted { $0.lastPathComponent < $1.lastPathComponent }.compactMap {
-            file in
+        guard
+            let enumerator = manager.enumerator(
+                at: source.machinesDirectory,
+                includingPropertiesForKeys: [
+                    .fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey,
+                ], options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants])
+        else { throw UsageSnapshotError.unsafeFile(source.machinesDirectory.path) }
+        var candidates: [MachineCandidate] = []
+        var inspected = 0
+        while inspected < bounds.maximumInspectedMachineEntries,
+            let file = enumerator.nextObject() as? URL
+        {
+            inspected += 1
             guard file.pathExtension == "json",
-                let identifier = UUID(uuidString: file.deletingPathExtension().lastPathComponent)
-            else { return nil }
-            let data = try regularFileData(at: file, maximumBytes: bounds.maximumMachineBytes)
+                let identifier = UUID(uuidString: file.deletingPathExtension().lastPathComponent),
+                let values = try? file.resourceValues(forKeys: [
+                    .fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey,
+                ]),
+                values.isRegularFile == true, values.isSymbolicLink != true,
+                let size = values.fileSize, size >= 0, size <= bounds.maximumMachineBytes
+            else { continue }
+            candidates.append(MachineCandidate(file: file, identifier: identifier))
+        }
+        candidates.sort { $0.file.lastPathComponent < $1.file.lastPathComponent }
+        var payloads: [Payload] = []
+        var aggregateBytes = 0
+        for candidate in candidates where payloads.count < bounds.maximumMachineDocuments {
+            let data = try regularFileData(
+                at: candidate.file, maximumBytes: bounds.maximumMachineBytes)
+            guard aggregateBytes <= bounds.maximumMachineAggregateBytes,
+                data.count <= bounds.maximumMachineAggregateBytes - aggregateBytes
+            else { continue }
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                 let machine = object["machine"] as? [String: Any],
                 let embedded = machine["id"] as? String,
-                UUID(uuidString: embedded) == identifier,
+                UUID(uuidString: embedded) == candidate.identifier,
                 let collectedAt = machine["collectedAt"] as? String,
                 EdithDate.parseISO(collectedAt) != nil,
                 let projected = Self.projectUsage(data, requiresMachine: true)
             else {
                 throw UsageSnapshotError.invalidMachine(
-                    source.machinesDirectory.appendingPathComponent(file.lastPathComponent).path)
+                    source.machinesDirectory.appendingPathComponent(
+                        candidate.file.lastPathComponent
+                    ).path)
             }
-            return Payload(
-                path: "machines/\(identifier.uuidString.lowercased()).json", data: projected)
+            aggregateBytes += data.count
+            payloads.append(
+                Payload(
+                    path: "machines/\(candidate.identifier.uuidString.lowercased()).json",
+                    data: projected))
         }
+        return payloads
     }
 
     private func regularFileData(at url: URL, maximumBytes: Int) throws -> Data {

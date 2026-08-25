@@ -186,6 +186,64 @@ private final class UsageSnapshotPublishGate: @unchecked Sendable {
         #expect(permissions?.intValue == 0o700)
     }
 
+    @Test func machineEnumerationHonorsEverySaturationBound() async throws {
+        let fixture = try Self.fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        try Self.populate(fixture)
+        for index in 0..<3 {
+            let machine = Machine(
+                id: UUID(), name: "machine-\(index)", host: "machine-\(index).local")
+            _ = try MachineUsageStore.save(
+                document: Self.usage, machine: machine, slug: machine.name, host: machine.host,
+                collectedAt: Date(timeIntervalSince1970: 1_777_248_120),
+                in: fixture.source.machinesDirectory)
+        }
+        #expect(
+            UsageSnapshotBounds.live.maximumInspectedMachineEntries
+                == MachineUsageStore.maximumInspectedMachineEntries)
+        #expect(
+            UsageSnapshotBounds.live.maximumMachineDocuments
+                == MachineUsageStore.maximumMachineDocuments)
+        #expect(
+            UsageSnapshotBounds.live.maximumMachineAggregateBytes
+                == MachineUsageStore.maximumMachineDocumentBytesPerScan)
+
+        var documentBounds = UsageSnapshotBounds.live
+        documentBounds.maximumMachineDocuments = 2
+        let documentStore = UsageSnapshotStore(
+            source: fixture.source,
+            root: fixture.snapshots.appendingPathComponent("document-bound"),
+            bounds: documentBounds)
+        let documentPublication = try await documentStore.publish(generation: UUID())
+        #expect(
+            documentPublication.manifest.files.filter { $0.path.hasPrefix("machines/") }.count
+                == 2)
+
+        var inspectionBounds = UsageSnapshotBounds.live
+        inspectionBounds.maximumInspectedMachineEntries = 0
+        let inspectionStore = UsageSnapshotStore(
+            source: fixture.source,
+            root: fixture.snapshots.appendingPathComponent("inspection-bound"),
+            bounds: inspectionBounds)
+        let inspectionPublication = try await inspectionStore.publish(generation: UUID())
+        #expect(
+            inspectionPublication.manifest.files.allSatisfy {
+                !$0.path.hasPrefix("machines/")
+            })
+
+        var aggregateBounds = UsageSnapshotBounds.live
+        aggregateBounds.maximumMachineAggregateBytes = 0
+        let aggregateStore = UsageSnapshotStore(
+            source: fixture.source,
+            root: fixture.snapshots.appendingPathComponent("aggregate-bound"),
+            bounds: aggregateBounds)
+        let aggregatePublication = try await aggregateStore.publish(generation: UUID())
+        #expect(
+            aggregatePublication.manifest.files.allSatisfy {
+                !$0.path.hasPrefix("machines/")
+            })
+    }
+
     @Test func corruptUsageAndMachineInputsNeverMoveThePointer() async throws {
         let fixture = try Self.fixture()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
