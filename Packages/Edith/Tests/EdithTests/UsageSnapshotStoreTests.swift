@@ -241,6 +241,35 @@ private final class UsageSnapshotPublishGate: @unchecked Sendable {
         #expect(try await store.current() == first)
     }
 
+    @Test func oversizedPreservedLimitTailDoesNotBlockLaterPublication() async throws {
+        let fixture = try Self.fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        try Self.populate(fixture)
+        let oversized = Data(repeating: UInt8(ascii: "x"), count: 1_048_577)
+        let handle = try FileHandle(forWritingTo: fixture.source.limitsFile)
+        _ = try handle.seekToEnd()
+        try handle.write(contentsOf: oversized)
+        try handle.close()
+        var history = LimitsHistory(url: fixture.source.limitsFile)
+        history.append(
+            provider: .claude, session: LimitWindow(percent: 75, resetsAt: nil), week: nil,
+            now: Date(timeIntervalSince1970: 1_777_248_900))
+        let source = try Data(contentsOf: fixture.source.limitsFile)
+        #expect(source.range(of: oversized) != nil)
+
+        let store = UsageSnapshotStore(source: fixture.source, root: fixture.snapshots)
+        let publication = try await store.publish(generation: UUID())
+        let text = try String(
+            contentsOf: publication.directory.appendingPathComponent("limits-history.jsonl"),
+            encoding: .utf8)
+
+        #expect(LimitsHistory.isValidDocument(text))
+        #expect(text.utf8.count < oversized.count)
+        #expect(LimitsHistory.parse(text, provider: .claude).map(\.s) == [25, 75])
+        #expect(LimitsHistory.parse(text, provider: .codex).map(\.w) == [50])
+        #expect(try await store.current() == publication)
+    }
+
     @Test func stagingAndPointerInterruptionsPreserveThePublishedGeneration() async throws {
         let fixture = try Self.fixture()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
