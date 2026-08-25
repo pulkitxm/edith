@@ -197,11 +197,10 @@ public struct RemoteTransferEndpoint: Sendable {
     }
 
     private static func removeRemoteStage(_ path: String, connection: SSHConnection) async {
-        let cleanup = Task.detached {
+        _ = await Task.detached {
             try? await connection.run(
                 "rm -f \(ShellQuote.quote(path))", timeout: 30)
-        }
-        _ = await cleanup.value
+        }.value
     }
 
     static func remoteStoreCommand(
