@@ -414,4 +414,13 @@ mod tests {
         assert_eq!(insertion_batch_count(251), 2);
         assert_eq!(insertion_batch_count(6000), 24);
     }
+
+    #[tokio::test]
+    async fn connector_clones_share_the_resolved_login() {
+        let connector = super::GithubConnector::with_token("token");
+        connector.login.set("octocat".to_owned()).unwrap();
+        let clone = connector.clone();
+
+        assert_eq!(clone.login("unused").await.unwrap(), "octocat");
+    }
 }
