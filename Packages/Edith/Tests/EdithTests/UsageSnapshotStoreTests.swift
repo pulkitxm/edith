@@ -3,6 +3,43 @@ import Testing
 
 @testable import EdithKit
 
+private final class UsageSnapshotPublishGate: @unchecked Sendable {
+    private let firstCaptured = DispatchSemaphore(value: 0)
+    private let releaseFirst = DispatchSemaphore(value: 0)
+    private let secondReachedPointer = DispatchSemaphore(value: 0)
+
+    func blockFirstCapture() throws {
+        firstCaptured.signal()
+        guard releaseFirst.wait(timeout: .now() + 5) == .success else {
+            throw CocoaError(.userCancelled)
+        }
+    }
+
+    func waitForFirstCapture() async -> Bool {
+        await Task.detached { self.waitForFirstCaptureSynchronously() }.value
+    }
+
+    func release() {
+        releaseFirst.signal()
+    }
+
+    func markSecondPointer() {
+        secondReachedPointer.signal()
+    }
+
+    func secondReachedPointerEarly() async -> Bool {
+        await Task.detached { self.secondReachedPointerSynchronously() }.value
+    }
+
+    private func waitForFirstCaptureSynchronously() -> Bool {
+        firstCaptured.wait(timeout: .now() + 5) == .success
+    }
+
+    private func secondReachedPointerSynchronously() -> Bool {
+        secondReachedPointer.wait(timeout: .now() + 1) == .success
+    }
+}
+
 @Suite struct UsageSnapshotStoreTests {
     private enum InjectedFailure: Error {
         case stop
@@ -18,14 +55,17 @@ import Testing
         }
     }
 
-    private static let usage: Data = {
+    private static let usage = usageDocument(
+        generatedAt: "2026-08-25T00:00:00Z", period: "2026-08-25")
+
+    private static func usageDocument(generatedAt: String, period: String) -> Data {
         let hours: [[String: Any]] = (0..<24).map {
             ["hour": $0, "cost": 0, "tokens": 0, "bySource": [:], "byPath": [:]]
         }
         return try! JSONSerialization.data(
             withJSONObject: [
                 "schemaVersion": 8,
-                "generatedAt": "2026-08-25T00:00:00Z",
+                "generatedAt": generatedAt,
                 "sources": ["codex"],
                 "defaultSources": ["codex"],
                 "sourceMeta": ["codex": ["label": "Codex", "tool": "codex"]],
@@ -37,7 +77,7 @@ import Testing
                 ],
                 "daily": [
                     [
-                        "period": "2026-08-25",
+                        "period": period,
                         "bySource": [
                             "codex": [
                                 [
@@ -51,7 +91,7 @@ import Testing
                     ]
                 ],
             ])
-    }()
+    }
 
     private static func fixture() throws -> Fixture {
         let directory = FileManager.default.temporaryDirectory
@@ -228,6 +268,98 @@ import Testing
                 == Set(identifiers.suffix(2).map { $0.uuidString.lowercased() }))
     }
 
+    @Test func blockedFirstPublisherOwnsCaptureThroughPublication() async throws {
+        let fixture = try Self.fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        try Self.populate(fixture)
+        let gate = UsageSnapshotPublishGate()
+        defer { gate.release() }
+        let firstID = UUID()
+        let secondID = UUID()
+        let firstStore = UsageSnapshotStore(
+            source: fixture.source, root: fixture.snapshots,
+            hooks: UsageSnapshotHooks(afterCapture: { try gate.blockFirstCapture() }))
+        let secondStore = UsageSnapshotStore(
+            source: fixture.source, root: fixture.snapshots,
+            hooks: UsageSnapshotHooks(
+                beforePointerPublication: { gate.markSecondPointer() }))
+        let firstTask = Task.detached {
+            try await firstStore.publish(generation: firstID)
+        }
+        #expect(await gate.waitForFirstCapture())
+        let replacement = Self.usageDocument(
+            generatedAt: "2026-08-26T00:00:00Z", period: "2026-08-26")
+        try replacement.write(to: fixture.source.usageFile)
+        let secondTask = Task.detached {
+            try await secondStore.publish(generation: secondID)
+        }
+        let secondReachedPointerEarly = await gate.secondReachedPointerEarly()
+        #expect(!secondReachedPointerEarly)
+        gate.release()
+        let first = try await firstTask.value
+        let second = try await secondTask.value
+
+        #expect(try await secondStore.current() == second)
+        #expect(first.manifest.generation == firstID.uuidString.lowercased())
+        #expect(second.previousGeneration == firstID.uuidString.lowercased())
+        #expect(
+            try String(
+                contentsOf: first.directory.appendingPathComponent("usage.json"),
+                encoding: .utf8
+            ).contains("2026-08-25"))
+        #expect(
+            try String(
+                contentsOf: second.directory.appendingPathComponent("usage.json"),
+                encoding: .utf8
+            ).contains("2026-08-26"))
+    }
+
+    @Test func corruptCurrentFallsBackAndRepairsThePointer() async throws {
+        let fixture = try Self.fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        try Self.populate(fixture)
+        let store = UsageSnapshotStore(source: fixture.source, root: fixture.snapshots)
+        let first = try await store.publish(generation: UUID())
+        let second = try await store.publish(generation: UUID())
+        try Data("corrupt".utf8).write(
+            to: second.directory.appendingPathComponent("usage.json"))
+
+        let recovered = try #require(try await store.current())
+
+        #expect(recovered.manifest.generation == first.manifest.generation)
+        #expect(recovered.previousGeneration == nil)
+        let pointerData = try Data(
+            contentsOf: fixture.snapshots.appendingPathComponent("current.json"))
+        let pointer = try JSONDecoder().decode(UsageSnapshotPointer.self, from: pointerData)
+        #expect(pointer.current == first.manifest.generation)
+        #expect(pointer.previous == nil)
+        let generations = try FileManager.default.contentsOfDirectory(
+            at: fixture.snapshots.appendingPathComponent("generations"),
+            includingPropertiesForKeys: nil)
+        #expect(generations.map(\.lastPathComponent) == [first.manifest.generation])
+    }
+
+    @Test func generationDirectorySymlinkIsRejectedWithoutTouchingItsVictim() async throws {
+        let fixture = try Self.fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        try Self.populate(fixture)
+        let store = UsageSnapshotStore(source: fixture.source, root: fixture.snapshots)
+        let publication = try await store.publish(generation: UUID())
+        let outside = fixture.directory.appendingPathComponent("outside-generation")
+        try FileManager.default.moveItem(at: publication.directory, to: outside)
+        let victim = outside.appendingPathComponent("victim")
+        try Data("safe".utf8).write(to: victim)
+        try FileManager.default.createSymbolicLink(
+            at: publication.directory, withDestinationURL: outside)
+
+        await #expect(throws: UsageSnapshotError.self) {
+            try await store.current()
+        }
+        #expect(try String(contentsOf: victim, encoding: .utf8) == "safe")
+        let values = try publication.directory.resourceValues(forKeys: [.isSymbolicLinkKey])
+        #expect(values.isSymbolicLink == true)
+    }
+
     @Test func currentGenerationDetectsPayloadCorruptionAndUnexpectedFiles() async throws {
         let fixture = try Self.fixture()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
@@ -305,6 +437,7 @@ import Testing
             try await store.publish(generation: UUID())
         }
         refresh.release()
+        try FileManager.default.removeItem(at: fixture.snapshots)
 
         let outside = fixture.directory.appendingPathComponent("outside")
         try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)

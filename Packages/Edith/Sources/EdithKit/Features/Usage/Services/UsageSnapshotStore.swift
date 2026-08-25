@@ -107,13 +107,16 @@ public enum UsageSnapshotError: LocalizedError, Equatable, Sendable {
 }
 
 public struct UsageSnapshotHooks: Sendable {
+    public var afterCapture: @Sendable () throws -> Void
     public var afterStagingFile: @Sendable (String) throws -> Void
     public var beforePointerPublication: @Sendable () throws -> Void
 
     public init(
+        afterCapture: @escaping @Sendable () throws -> Void = {},
         afterStagingFile: @escaping @Sendable (String) throws -> Void = { _ in },
         beforePointerPublication: @escaping @Sendable () throws -> Void = {}
     ) {
+        self.afterCapture = afterCapture
         self.afterStagingFile = afterStagingFile
         self.beforePointerPublication = beforePointerPublication
     }
@@ -147,23 +150,19 @@ public actor UsageSnapshotStore {
     public func publish(
         generation identifier: UUID = UUID(), createdAt: Date = Date()
     ) throws -> UsageSnapshotPublication {
-        let payloads = try capture()
         let generation = identifier.uuidString.lowercased()
         try ensureDirectory(root)
         return try withSnapshotLock {
-            try publishLocked(payloads, generation: generation, createdAt: createdAt)
+            let payloads = try capture()
+            try hooks.afterCapture()
+            return try publishLocked(payloads, generation: generation, createdAt: createdAt)
         }
     }
 
     public func current() throws -> UsageSnapshotPublication? {
         try ensureDirectory(root)
         let publication: UsageSnapshotPublication? = try withSnapshotLock {
-            guard let pointer = try readPointer() else { return nil }
-            let directory = generationsDirectory.appendingPathComponent(pointer.current)
-            let manifest = try validateGeneration(at: directory, expected: pointer.current)
-            return UsageSnapshotPublication(
-                directory: try canonicalURL(directory), manifest: manifest,
-                previousGeneration: pointer.previous)
+            try validatedPublication()
         }
         return publication
     }
@@ -276,12 +275,11 @@ public actor UsageSnapshotStore {
         guard !manager.fileExists(atPath: destination.path) else {
             throw UsageSnapshotError.generationExists(generation)
         }
-        let existing = try readPointer()
-        if let existing {
-            let current = generationsDirectory.appendingPathComponent(existing.current)
-            guard manager.fileExists(atPath: current.path) else {
-                throw UsageSnapshotError.invalidPointer
-            }
+        let existing: UsageSnapshotPublication?
+        do {
+            existing = try validatedPublication()
+        } catch is UsageSnapshotError {
+            existing = nil
         }
         let staging = generationsDirectory.appendingPathComponent(".pending-\(generation)")
         try? manager.removeItem(at: staging)
@@ -317,7 +315,7 @@ public actor UsageSnapshotStore {
         try hooks.beforePointerPublication()
         let pointer = UsageSnapshotPointer(
             formatVersion: Self.formatVersion, current: generation,
-            previous: existing?.current)
+            previous: existing?.manifest.generation)
         try UsageDurableFile.write(try Self.encode(pointer), to: pointerFile)
         cleanupGenerations(keeping: Set([pointer.current, pointer.previous].compactMap { $0 }))
         return UsageSnapshotPublication(
@@ -336,10 +334,42 @@ public actor UsageSnapshotStore {
         return pointer
     }
 
+    private func validatedPublication() throws -> UsageSnapshotPublication? {
+        guard let pointer = try readPointer() else { return nil }
+        do {
+            return try publication(
+                generation: pointer.current, previousGeneration: pointer.previous)
+        } catch let currentError {
+            guard let previous = pointer.previous else { throw currentError }
+            do {
+                let recovered = try publication(
+                    generation: previous, previousGeneration: nil)
+                let repaired = UsageSnapshotPointer(
+                    formatVersion: Self.formatVersion, current: previous, previous: nil)
+                try UsageDurableFile.write(try Self.encode(repaired), to: pointerFile)
+                cleanupGenerations(keeping: Set([previous]))
+                return recovered
+            } catch {
+                throw currentError
+            }
+        }
+    }
+
+    private func publication(
+        generation: String, previousGeneration: String?
+    ) throws -> UsageSnapshotPublication {
+        let directory = generationsDirectory.appendingPathComponent(generation)
+        let manifest = try validateGeneration(at: directory, expected: generation)
+        return UsageSnapshotPublication(
+            directory: try canonicalURL(directory), manifest: manifest,
+            previousGeneration: previousGeneration)
+    }
+
     private func validateGeneration(at directory: URL, expected generation: String) throws
         -> UsageSnapshotManifest
     {
         do {
+            try validateDirectory(directory)
             let data = try regularFileData(at: directory.appendingPathComponent("manifest.json"))
             let manifest = try Self.decode(UsageSnapshotManifest.self, from: data)
             guard manifest.formatVersion == Self.formatVersion,
@@ -471,6 +501,13 @@ public actor UsageSnapshotStore {
             try manager.createDirectory(at: url, withIntermediateDirectories: true)
         }
         try manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
+    }
+
+    private func validateDirectory(_ url: URL) throws {
+        var metadata = stat()
+        guard lstat(url.path, &metadata) == 0, metadata.st_mode & S_IFMT == S_IFDIR else {
+            throw UsageSnapshotError.unsafeFile(url.path)
+        }
     }
 
     private func canonicalURL(_ url: URL) throws -> URL {
