@@ -273,6 +273,36 @@ final class HerdrStore {
         selectedTab = Self.boardID
     }
 
+    var orderedTabIDs: [String] { [Self.boardID] + tabs.map(\.id) }
+
+    func moveTab(_ id: String, toIndexOf target: String) {
+        guard id != target, id != Self.boardID else { return }
+        guard let from = tabs.firstIndex(where: { $0.id == id }) else { return }
+        let to: Int
+        if target == Self.boardID {
+            to = 0
+        } else if let index = tabs.firstIndex(where: { $0.id == target }) {
+            to = index
+        } else {
+            return
+        }
+        guard from != to else { return }
+        let tab = tabs.remove(at: from)
+        tabs.insert(tab, at: min(to, tabs.count))
+    }
+
+    func selectTab(number: Int) {
+        let ids = orderedTabIDs
+        guard !ids.isEmpty else { return }
+        guard number != 9 else {
+            selectedTab = ids[ids.count - 1]
+            return
+        }
+        let index = number - 1
+        guard index >= 0, index < ids.count else { return }
+        selectedTab = ids[index]
+    }
+
     func connection(for machine: Machine) async throws -> SSHConnection {
         if let existing = connections[machine.id] {
             try await existing.connect()

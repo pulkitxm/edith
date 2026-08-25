@@ -11,6 +11,7 @@ struct HerdrPage: View {
     @AppStorage(AppStorageKeys.Presenter.blurAgents, store: SharedDefaults.store) private
         var presenterBlurAgents = true
     private var presenterState = PresenterState.shared
+    @State private var draggingTab: String?
 
     @MainActor init(store: HerdrStore? = nil) {
         _store = State(initialValue: store ?? .shared)
@@ -44,7 +45,6 @@ struct HerdrPage: View {
                         .allowsHitTesting(tab.id == store.selectedTab)
                     }
                     if !onBoard {
-                        floatingControls
                         detailToggle
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     }
@@ -54,6 +54,7 @@ struct HerdrPage: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
+        .background(tabShortcuts)
         .navigationTitle("Herdr")
         .task(id: automaticActions) {
             if automaticActions {
@@ -105,30 +106,35 @@ struct HerdrPage: View {
         .accessibilityLabel(store.detailOpen ? "Hide details" : "Show details")
     }
 
-    private var floatingControls: some View {
-        Group {
-            Button {
-                withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
-                    store.setRailOpen(!store.railOpen)
-                }
-            } label: {
-                Image(systemName: "sidebar.left")
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+    private var tabShortcuts: some View {
+        ZStack {
+            ForEach(1...9, id: \.self) { number in
+                Button("") { store.selectTab(number: number) }
+                    .keyboardShortcut(
+                        KeyEquivalent(Character("\(number)")), modifiers: .option)
             }
-            .buttonStyle(.plain)
-            .padding(UIScale.pt(4))
-            .widgetBar(
-                cornerRadius: 8, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark)
-            )
-            .pointerCursor()
-            .help(store.railOpen ? "Hide the list" : "Show the list")
-            .accessibilityLabel(store.railOpen ? "Hide the list" : "Show the list")
         }
-        .padding(.top, UIScale.pt(8))
-        .padding(.leading, UIScale.pt(8))
-        .zIndex(1)
+        .opacity(0)
+        .allowsHitTesting(false)
+    }
+
+    private var railToggle: some View {
+        Button {
+            withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
+                store.setRailOpen(!store.railOpen)
+            }
+        } label: {
+            Image(systemName: "sidebar.left")
+                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+        }
+        .buttonStyle(.plain)
+        .padding(UIScale.pt(4))
+        .widgetBar(cornerRadius: 8, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
+        .pointerCursor()
+        .help(store.railOpen ? "Hide the list" : "Show the list")
+        .accessibilityLabel(store.railOpen ? "Hide the list" : "Show the list")
     }
 
     private func viewModes(for tab: HerdrOpenTab) -> some View {
@@ -219,6 +225,10 @@ struct HerdrPage: View {
                 .fill(DashSkin.lineStrong(dark))
                 .frame(height: 1)
             HStack(spacing: UIScale.pt(8)) {
+                if !onBoard {
+                    railToggle
+                        .padding(.leading, PageMetrics.gutter(compact))
+                }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: UIScale.pt(6)) {
                         tabButton(id: HerdrStore.boardID, title: "Board", closable: false)
@@ -229,7 +239,7 @@ struct HerdrPage: View {
                                 closable: true, agent: tab.agent)
                         }
                     }
-                    .padding(.leading, PageMetrics.gutter(compact))
+                    .padding(.leading, onBoard ? PageMetrics.gutter(compact) : 0)
                     .padding(.vertical, UIScale.pt(8))
                 }
                 if let tab = store.tabs.first(where: { $0.id == store.selectedTab }),
@@ -310,6 +320,14 @@ struct HerdrPage: View {
         }
         .buttonStyle(.plain)
         .pointerCursor()
+        .onDrag {
+            draggingTab = id
+            return NSItemProvider(object: id as NSString)
+        }
+        .onDrop(
+            of: [.text],
+            delegate: HerdrTabDrop(target: id, store: store, dragging: $draggingTab)
+        )
         .contextMenu { tabContextMenu(id: id, closable: closable) }
         .help(
             agent.map {
@@ -625,6 +643,26 @@ enum HerdrStatusColor {
             return selected ? DashSkin.lineStrong(dark) : DashSkin.line(dark)
         }
         return base.opacity(selected ? 0.65 : 0.4)
+    }
+}
+
+private struct HerdrTabDrop: DropDelegate {
+    let target: String
+    let store: HerdrStore
+    @Binding var dragging: String?
+
+    func dropEntered(info: DropInfo) {
+        guard let dragging, dragging != target else { return }
+        store.moveTab(dragging, toIndexOf: target)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        dragging = nil
+        return true
     }
 }
 

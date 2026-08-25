@@ -44,6 +44,49 @@ import Testing
         #expect(store.view(for: terminal.id) == .agent)
     }
 
+    @Test func tabsReorderTheWayTheyAreDragged() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.apply([host, remote])
+        let first = HerdrMachineTerminal.agent(for: host)
+        let second = HerdrMachineTerminal.agent(for: remote)
+        store.open(agent)
+        store.open(first)
+        store.open(second)
+        #expect(store.tabs.map(\.id) == [agent.id, first.id, second.id])
+        store.moveTab(second.id, toIndexOf: agent.id)
+        #expect(store.tabs.map(\.id) == [second.id, agent.id, first.id])
+        store.moveTab(second.id, toIndexOf: HerdrStore.boardID)
+        #expect(store.tabs.map(\.id) == [second.id, agent.id, first.id])
+        store.moveTab(agent.id, toIndexOf: first.id)
+        #expect(store.tabs.map(\.id) == [second.id, first.id, agent.id])
+    }
+
+    @Test func theBoardNeverMovesAndUnknownTabsAreIgnored() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.apply([host])
+        store.open(agent)
+        store.moveTab(HerdrStore.boardID, toIndexOf: agent.id)
+        store.moveTab("nowhere", toIndexOf: agent.id)
+        store.moveTab(agent.id, toIndexOf: "nowhere")
+        #expect(store.tabs.map(\.id) == [agent.id])
+    }
+
+    @Test func optionNumbersWalkTheTabsAndNineIsTheLast() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.apply([host, remote])
+        store.open(agent)
+        store.open(HerdrMachineTerminal.agent(for: host))
+        store.open(HerdrMachineTerminal.agent(for: remote))
+        store.selectTab(number: 1)
+        #expect(store.selectedTab == HerdrStore.boardID)
+        store.selectTab(number: 3)
+        #expect(store.selectedTab == store.tabs[1].id)
+        store.selectTab(number: 9)
+        #expect(store.selectedTab == store.tabs[2].id)
+        store.selectTab(number: 8)
+        #expect(store.selectedTab == store.tabs[2].id)
+    }
+
     @Test func theRailRemembersWhetherItWasCollapsed() {
         let store = defaults()
         let first = HerdrStore(defaults: store, liveWatcher: { _ in })
