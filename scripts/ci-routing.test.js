@@ -116,6 +116,23 @@ test("automatic releases ignore changes outside shipped artifacts", () => {
   }
 });
 
+test("main push release routing compares against the latest release tag", () => {
+  expect(ciWorkflow).toContain(
+    'if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ]',
+  );
+  expect(ciWorkflow).toContain("./scripts/release-artifact-changed.sh");
+  expect(ciWorkflow).toContain(
+    'echo "release_artifact=true" >> "$GITHUB_OUTPUT"',
+  );
+  expect(ciWorkflow).toContain(
+    'echo "release_artifact=false" >> "$GITHUB_OUTPUT"',
+  );
+  expect(ciWorkflow).toContain(
+    "./scripts/release-artifact-changed.sh || release_status=$?",
+  );
+  expect(ciWorkflow).toContain('exit "$release_status"');
+});
+
 test("embedded companion runtime changes run their focused guard", () => {
   const swiftTest = ciWorkflow.slice(
     ciWorkflow.indexOf("\n  swift-test:"),

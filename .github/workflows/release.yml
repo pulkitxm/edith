@@ -125,6 +125,7 @@ jobs:
     name: Build DMG
     needs: version
     runs-on: macos-26
+    timeout-minutes: 60
     outputs:
       superseded: ${{ steps.release_build.outputs.superseded }}
     env:
