@@ -15,7 +15,7 @@ ed extensions info <id> [--json]
 | `--json` | flag | off | Emit JSON on stdout instead of the indented block |
 
 The human form is the title, the lifecycle value, then labelled rows and the
-shared workflow, setup, verification and documentation guidance. The
+shared workflow, setup, verification, recovery and documentation guidance. The
 `needs` row appears only when the extension has required permissions and the
 `asks for` row only when it has optional ones. `state` is the computed lifecycle
 phase, not just the stored on or off switch:
