@@ -90,6 +90,44 @@ import Testing
         #expect(!UsageStore.pollingAllowed(locked: true, sleeping: true))
     }
 
+    @MainActor
+    @Test func credentialLookupFailuresStayActionableAndSecretSafe() {
+        let missing = UsageStore.credentialLookupFailurePresentation(for: .missing)
+        let rejected = UsageStore.credentialLookupFailurePresentation(for: .rejected)
+        let malformed = UsageStore.credentialLookupFailurePresentation(for: .malformed)
+        let oversized = UsageStore.credentialLookupFailurePresentation(for: .oversized)
+
+        #expect(missing.message == "Claude Code token not found")
+        #expect(!missing.schedulesQuickRetry)
+        #expect(rejected.message.contains("re-login"))
+        #expect(rejected.notifiesExpiredSession)
+        #expect(malformed.message.contains("invalid"))
+        #expect(oversized.message.contains("too large"))
+        #expect(!malformed.schedulesQuickRetry)
+        #expect(!oversized.schedulesQuickRetry)
+        for presentation in [missing, rejected, malformed, oversized] {
+            #expect(!presentation.message.contains("token-value"))
+            #expect(!presentation.diagnostic.contains("token-value"))
+        }
+        for presentation in [malformed, oversized] {
+            #expect(!presentation.message.lowercased().contains("shell"))
+            #expect(!presentation.diagnostic.lowercased().contains("shell"))
+        }
+    }
+
+    @MainActor
+    @Test func transientCredentialLookupFailuresScheduleBoundedRetry() {
+        let timedOut = UsageStore.credentialLookupFailurePresentation(for: .timedOut)
+        let failed = UsageStore.credentialLookupFailurePresentation(for: .failed)
+
+        #expect(timedOut.schedulesQuickRetry)
+        #expect(failed.schedulesQuickRetry)
+        #expect(!timedOut.notifiesExpiredSession)
+        #expect(!failed.notifiesExpiredSession)
+        #expect(!timedOut.message.lowercased().contains("shell"))
+        #expect(!failed.message.lowercased().contains("shell"))
+    }
+
     @Test func historyWritesWaitForSeedAndFlushOncePerProvider() {
         var gate = HistoryWriteGate()
         let firstClaude = gate.record(.claude)

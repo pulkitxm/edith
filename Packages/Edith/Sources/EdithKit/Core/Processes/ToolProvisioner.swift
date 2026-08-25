@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Observation
 
@@ -5,16 +6,29 @@ public struct CLICommandRequest: Equatable, Sendable {
     public let executableURL: URL
     public let arguments: [String]
     public let environment: [String: String]
+    public let currentDirectoryURL: URL?
     public let timeout: TimeInterval?
+    public let maximumOutputBytes: Int?
+    public let standardInputData: Data?
+    public let discardsStandardError: Bool
+    public let terminatesProcessGroup: Bool
 
     public init(
         executableURL: URL, arguments: [String], environment: [String: String],
-        timeout: TimeInterval? = nil
+        currentDirectoryURL: URL? = nil, timeout: TimeInterval? = nil,
+        maximumOutputBytes: Int? = nil,
+        standardInputData: Data? = nil,
+        discardsStandardError: Bool = false, terminatesProcessGroup: Bool = false
     ) {
         self.executableURL = executableURL
         self.arguments = arguments
         self.environment = environment
+        self.currentDirectoryURL = currentDirectoryURL
         self.timeout = timeout
+        self.maximumOutputBytes = maximumOutputBytes
+        self.standardInputData = standardInputData
+        self.discardsStandardError = discardsStandardError
+        self.terminatesProcessGroup = terminatesProcessGroup
     }
 }
 
@@ -38,12 +52,25 @@ public enum ToolVersionProbe {
 
 public struct CLICommandResult: Equatable, Sendable {
     public let terminationStatus: Int32
-    public let output: String
+    public let outputData: Data
+    public var output: String { String(decoding: outputData, as: UTF8.self) }
 
     public init(terminationStatus: Int32, output: String) {
         self.terminationStatus = terminationStatus
-        self.output = output
+        self.outputData = Data(output.utf8)
     }
+
+    public init(terminationStatus: Int32, outputData: Data) {
+        self.terminationStatus = terminationStatus
+        self.outputData = outputData
+    }
+}
+
+public enum CLICommandRunnerError: Error, Equatable, Sendable {
+    case launchFailed
+    case timedOut
+    case outputLimitExceeded
+    case streamFailed
 }
 
 public enum CLIToolProvisionState: Equatable, Sendable {
@@ -57,14 +84,27 @@ public enum CLIToolProvisionState: Equatable, Sendable {
 
 private final class CLIStreamingOutput: @unchecked Sendable {
     private let lock = NSLock()
+    private let maximumBytes: Int?
     private var pending = ""
-    private var complete = ""
+    private var complete = Data()
+    private var exceededLimit = false
+
+    init(maximumBytes: Int?) {
+        self.maximumBytes = maximumBytes
+    }
 
     func receive(_ data: Data) -> [String] {
-        guard let text = String(data: data, encoding: .utf8), !text.isEmpty else { return [] }
         lock.lock()
         defer { lock.unlock() }
-        complete += text
+        guard !exceededLimit else { return [] }
+        if let maximumBytes, complete.count + data.count > maximumBytes {
+            complete.removeAll(keepingCapacity: false)
+            pending = ""
+            exceededLimit = true
+            return []
+        }
+        complete.append(data)
+        guard let text = String(data: data, encoding: .utf8), !text.isEmpty else { return [] }
         pending += text.replacingOccurrences(of: "\r", with: "\n")
         var lines: [String] = []
         while let newline = pending.firstIndex(of: "\n") {
@@ -75,84 +115,221 @@ private final class CLIStreamingOutput: @unchecked Sendable {
         return lines
     }
 
-    func finish() -> (lines: [String], output: String) {
+    func finish() -> (lines: [String], output: Data, exceededLimit: Bool) {
         lock.lock()
         defer { lock.unlock() }
-        let lines = pending.isEmpty ? [] : [pending]
+        let lines = exceededLimit || pending.isEmpty ? [] : [pending]
         pending = ""
-        return (lines, complete)
-    }
-}
-
-private final class CLIProcessTimeout: @unchecked Sendable {
-    private let condition = NSCondition()
-    private var finished = false
-
-    func schedule(_ process: Process, after timeout: TimeInterval) {
-        let deadline = Date(timeIntervalSinceNow: max(0.01, timeout))
-        let thread = Thread { [self, process] in
-            condition.lock()
-            while !finished, condition.wait(until: deadline) {}
-            let shouldTerminate = !finished
-            finished = true
-            condition.unlock()
-            if shouldTerminate, process.isRunning { process.terminate() }
-        }
-        thread.qualityOfService = .userInteractive
-        thread.start()
+        return (lines, complete, exceededLimit)
     }
 
-    func finish() {
-        condition.lock()
-        finished = true
-        condition.broadcast()
-        condition.unlock()
+    var hasExceededLimit: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return exceededLimit
     }
 }
 
 public enum CLICommandRunner {
+    private static let terminationGrace: TimeInterval = 0.25
+    private static let lifecyclePoll: TimeInterval = 0.01
+    private static let processGroupScript = """
+        group_file=$1
+        shift
+        set -m
+        "$@" &
+        child=$!
+        set +m
+        printf '%s\n' "$child" > "$group_file"
+        terminate_group() {
+            kill -TERM -"$child" 2>/dev/null || :
+            sleep 0.1
+            kill -KILL -"$child" 2>/dev/null || :
+        }
+        trap 'terminate_group; exit 124' TERM INT
+        wait "$child"
+        status=$?
+        terminate_group
+        trap - TERM INT
+        exit "$status"
+        """
+
     public static func run(
         _ request: CLICommandRequest,
         onLine: @escaping @Sendable (String) -> Void
     ) async throws -> CLICommandResult {
-        try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            let pipe = Pipe()
-            let output = CLIStreamingOutput()
-            let processTimeout = CLIProcessTimeout()
+        let worker = Task.detached(priority: .utility) {
+            try runBlocking(request, onLine: onLine)
+        }
+        return try await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+    }
+
+    private static func runBlocking(
+        _ request: CLICommandRequest,
+        onLine: @escaping @Sendable (String) -> Void
+    ) throws -> CLICommandResult {
+        let process = Process()
+        let groupFile = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-process-\(UUID().uuidString).pid")
+        defer { try? FileManager.default.removeItem(at: groupFile) }
+        if request.terminatesProcessGroup {
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            process.arguments =
+                [
+                    "-c", processGroupScript, "edith-process", groupFile.path,
+                    request.executableURL.path,
+                ] + request.arguments
+        } else {
             process.executableURL = request.executableURL
             process.arguments = request.arguments
-            process.environment = request.environment
-            process.standardOutput = pipe
-            process.standardError = pipe
-            process.standardInput = FileHandle.nullDevice
-            pipe.fileHandleForReading.readabilityHandler = { handle in
-                PipeReading.consume(handle) { data in
-                    for line in output.receive(data) { onLine(line) }
-                }
+        }
+        process.environment = request.environment
+        process.currentDirectoryURL = request.currentDirectoryURL
+        let input = request.standardInputData.map { _ in Pipe() }
+        process.standardInput = input ?? FileHandle.nullDevice
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = request.discardsStandardError ? FileHandle.nullDevice : pipe
+        let output = CLIStreamingOutput(maximumBytes: request.maximumOutputBytes)
+        let readerFinished = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .utility).async {
+            while true {
+                let chunk = pipe.fileHandleForReading.readData(ofLength: 4_096)
+                guard !chunk.isEmpty else { break }
+                for line in output.receive(chunk) { onLine(line) }
             }
-            process.terminationHandler = { completedProcess in
-                processTimeout.finish()
-                pipe.fileHandleForReading.readabilityHandler = nil
-                let remaining = pipe.fileHandleForReading.readDataToEndOfFile()
-                for line in output.receive(remaining) { onLine(line) }
-                let finished = output.finish()
-                for line in finished.lines { onLine(line) }
-                continuation.resume(
-                    returning: CLICommandResult(
-                        terminationStatus: completedProcess.terminationStatus,
-                        output: finished.output))
+            readerFinished.signal()
+        }
+
+        let processFinished = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in processFinished.signal() }
+        do {
+            try process.run()
+            try? pipe.fileHandleForWriting.close()
+            try? input?.fileHandleForReading.close()
+        } catch {
+            try? pipe.fileHandleForWriting.close()
+            try? input?.fileHandleForReading.close()
+            try? input?.fileHandleForWriting.close()
+            _ = readerFinished.wait(timeout: .now() + terminationGrace)
+            throw CLICommandRunnerError.launchFailed
+        }
+        let inputFinished = DispatchSemaphore(value: 0)
+        if let data = request.standardInputData, let input {
+            DispatchQueue.global(qos: .utility).async {
+                try? input.fileHandleForWriting.write(contentsOf: data)
+                try? input.fileHandleForWriting.close()
+                inputFinished.signal()
             }
-            do {
-                try process.run()
-                if let timeout = request.timeout {
-                    processTimeout.schedule(process, after: timeout)
-                }
-            } catch {
-                pipe.fileHandleForReading.readabilityHandler = nil
-                continuation.resume(throwing: error)
+        } else {
+            inputFinished.signal()
+        }
+
+        let deadline = request.timeout.map {
+            ProcessInfo.processInfo.systemUptime + max(0, $0)
+        }
+        var stop: StopReason?
+        while true {
+            if Task.isCancelled {
+                stop = .cancelled
+                break
+            }
+            if output.hasExceededLimit {
+                stop = .outputLimitExceeded
+                break
+            }
+            if let deadline, ProcessInfo.processInfo.systemUptime >= deadline {
+                stop = .timedOut
+                break
+            }
+            if processFinished.wait(timeout: .now() + lifecyclePoll) == .success { break }
+        }
+
+        if let stop {
+            try? input?.fileHandleForWriting.close()
+            terminate(
+                process, groupFile: request.terminatesProcessGroup ? groupFile : nil,
+                processFinished: processFinished)
+            drain(pipe, readerFinished: readerFinished)
+            _ = inputFinished.wait(timeout: .now() + terminationGrace)
+            switch stop {
+            case .cancelled:
+                throw CancellationError()
+            case .timedOut:
+                throw CLICommandRunnerError.timedOut
+            case .outputLimitExceeded:
+                throw CLICommandRunnerError.outputLimitExceeded
             }
         }
+
+        guard drain(pipe, readerFinished: readerFinished) else {
+            throw CLICommandRunnerError.streamFailed
+        }
+        guard inputFinished.wait(timeout: .now() + terminationGrace) == .success else {
+            try? input?.fileHandleForWriting.close()
+            throw CLICommandRunnerError.streamFailed
+        }
+        let finished = output.finish()
+        guard !finished.exceededLimit else {
+            throw CLICommandRunnerError.outputLimitExceeded
+        }
+        for line in finished.lines { onLine(line) }
+        return CLICommandResult(
+            terminationStatus: process.terminationStatus,
+            outputData: finished.output)
+    }
+
+    private enum StopReason {
+        case cancelled
+        case timedOut
+        case outputLimitExceeded
+    }
+
+    private static func terminate(
+        _ process: Process, groupFile: URL?, processFinished: DispatchSemaphore
+    ) {
+        var group = groupFile.flatMap {
+            groupIdentifier(at: $0, waitingUntil: ProcessInfo.processInfo.systemUptime + 0.05)
+        }
+        if let group {
+            _ = kill(-group, SIGTERM)
+        } else if process.isRunning {
+            process.terminate()
+        }
+        _ = processFinished.wait(timeout: .now() + terminationGrace)
+        if group == nil, let groupFile {
+            group = groupIdentifier(at: groupFile, waitingUntil: nil)
+        }
+        if let group { _ = kill(-group, SIGKILL) }
+        if process.isRunning { _ = kill(process.processIdentifier, SIGKILL) }
+        _ = processFinished.wait(timeout: .now() + terminationGrace)
+    }
+
+    private static func groupIdentifier(at url: URL, waitingUntil deadline: TimeInterval?) -> Int32?
+    {
+        repeat {
+            if let data = try? Data(contentsOf: url),
+                let text = String(data: data, encoding: .utf8)?.trimmingCharacters(
+                    in: .whitespacesAndNewlines),
+                let value = Int32(text), value > 1
+            {
+                return value
+            }
+            guard let deadline, ProcessInfo.processInfo.systemUptime < deadline else { return nil }
+            usleep(5_000)
+        } while true
+    }
+
+    @discardableResult
+    private static func drain(_ pipe: Pipe, readerFinished: DispatchSemaphore) -> Bool {
+        if readerFinished.wait(timeout: .now() + terminationGrace) == .success { return true }
+        try? pipe.fileHandleForReading.close()
+        return readerFinished.wait(timeout: .now() + terminationGrace) == .success
     }
 }
 

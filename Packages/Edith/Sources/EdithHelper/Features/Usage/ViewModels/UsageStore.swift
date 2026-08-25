@@ -31,6 +31,13 @@ struct RangeStat: Identifiable {
     let cost: Double
 }
 
+struct CredentialLookupFailurePresentation: Equatable {
+    let message: String
+    let diagnostic: String
+    let schedulesQuickRetry: Bool
+    let notifiesExpiredSession: Bool
+}
+
 @MainActor
 @Observable
 final class UsageStore: FeatureModule {
@@ -61,7 +68,7 @@ final class UsageStore: FeatureModule {
     private var daily: [DailyRow] = []
     private var billingDay = 26
 
-    private var cachedClaudeCredential: ClaudeOAuthCredential?
+    private var claudeCredentialSession = ClaudeCredentialSession()
     private var retryNotBefore: Date?
     private var usageMtime: Date?
     private var timer: Timer?
@@ -392,10 +399,14 @@ final class UsageStore: FeatureModule {
     }
 
     private func fetchLimitsOnce() async {
-        guard var credential = currentClaudeCredential() else {
-            limitsError = "Claude Code token not found"
-            diag("token not found (keychain + credentials file both empty)")
-            keepOrBlankMenuBar()
+        var credential: ClaudeOAuthCredential
+        switch await currentClaudeCredential() {
+        case .credential(let resolved):
+            credential = resolved
+        case .failure(let failure):
+            handleCredentialLookupFailure(failure)
+            return
+        case .cancelled:
             return
         }
         do {
@@ -410,23 +421,30 @@ final class UsageStore: FeatureModule {
             diag(msg)
             return
         } catch FetchError.unauthorized {
-            diag("401 unauthorized - re-reading credentials and refreshing token")
-            Log.usage.error("401 unauthorized - re-reading credentials and refreshing token")
-            cachedClaudeCredential = nil
+            diag("401 unauthorized - resolving credentials once more")
+            Log.usage.error("401 unauthorized - resolving credentials once more")
         } catch {
             report(error)
             return
         }
 
-        guard let latest = currentClaudeCredential() else {
-            limitsError = "Claude Code token not found"
-            diag("token re-read failed - keychain + credentials file both empty")
-            keepOrBlankMenuBar()
+        let latest: ClaudeOAuthCredential
+        switch await currentClaudeCredential(
+            reload: true, rejectingAccessToken: credential.accessToken)
+        {
+        case .credential(let resolved):
+            latest = resolved
+        case .failure(let failure):
+            handleCredentialLookupFailure(failure)
+            return
+        case .cancelled:
             return
         }
         do {
             let fresh: ClaudeOAuthCredential
-            if latest.accessToken != credential.accessToken,
+            if latest.source == .shell {
+                fresh = latest
+            } else if latest.accessToken != credential.accessToken,
                 !latest.shouldRefresh(at: Date())
             {
                 fresh = latest
@@ -475,6 +493,16 @@ final class UsageStore: FeatureModule {
             guard !Task.isCancelled else { return }
             await self?.refreshLimits()
         }
+    }
+
+    private func handleCredentialLookupFailure(_ failure: ClaudeCredentialLookupFailure) {
+        let presentation = Self.credentialLookupFailurePresentation(for: failure)
+        limitsError = presentation.message
+        Log.usage.error("\(presentation.diagnostic, privacy: .public)")
+        diag(presentation.diagnostic)
+        keepOrBlankMenuBar()
+        if presentation.notifiesExpiredSession { notifier.notifyTokenExpired() }
+        if presentation.schedulesQuickRetry { scheduleQuickRetry() }
     }
 
     private func diag(_ message: String) {
@@ -708,20 +736,60 @@ final class UsageStore: FeatureModule {
         }
     }
 
-    private func currentClaudeCredential() -> ClaudeOAuthCredential? {
-        if let cachedClaudeCredential { return cachedClaudeCredential }
-        guard let credential = ClaudeCredentialStore.read() else {
-            Log.usage.error("no token found - keychain and credentials file both empty")
-            return nil
-        }
+    private func currentClaudeCredential(
+        reload: Bool = false, rejectingAccessToken: String? = nil
+    ) async -> ClaudeCredentialLookup {
+        let lookup =
+            reload
+            ? await claudeCredentialSession.reload(rejectingAccessToken: rejectingAccessToken)
+            : await claudeCredentialSession.current()
+        guard case .credential(let credential) = lookup else { return lookup }
         switch credential.source {
         case .keychain:
             Log.usage.notice("token read from keychain (security CLI)")
         case .file:
             Log.usage.notice("token read from ~/.claude/.credentials.json")
+        case .shell:
+            Log.usage.notice("token read from login shell environment")
         }
-        cachedClaudeCredential = credential
-        return credential
+        return lookup
+    }
+
+    static func credentialLookupFailurePresentation(
+        for failure: ClaudeCredentialLookupFailure
+    ) -> CredentialLookupFailurePresentation {
+        switch failure {
+        case .missing:
+            CredentialLookupFailurePresentation(
+                message: "Claude Code token not found",
+                diagnostic: "token not found in keychain, credentials file, or login shell",
+                schedulesQuickRetry: false, notifiesExpiredSession: false)
+        case .rejected:
+            CredentialLookupFailurePresentation(
+                message: "Claude session expired - run claude to re-login",
+                diagnostic: "rejected credential remained unchanged across available sources",
+                schedulesQuickRetry: false, notifiesExpiredSession: true)
+        case .malformed:
+            CredentialLookupFailurePresentation(
+                message: "Credential data is invalid",
+                diagnostic: "credential data was malformed",
+                schedulesQuickRetry: false, notifiesExpiredSession: false)
+        case .timedOut:
+            CredentialLookupFailurePresentation(
+                message: "Credential lookup timed out",
+                diagnostic: "credential lookup timed out",
+                schedulesQuickRetry: true, notifiesExpiredSession: false)
+        case .oversized:
+            CredentialLookupFailurePresentation(
+                message: "Credential data is too large",
+                diagnostic: "credential data exceeded its safe limit",
+                schedulesQuickRetry: false, notifiesExpiredSession: false)
+        case .failed:
+            CredentialLookupFailurePresentation(
+                message: "Could not read credentials",
+                diagnostic: "credential lookup failed",
+                schedulesQuickRetry: true, notifiesExpiredSession: false)
+        }
     }
 
     private func refreshClaudeCredential(_ credential: ClaudeOAuthCredential) async throws
@@ -734,11 +802,11 @@ final class UsageStore: FeatureModule {
         diag("refreshing Claude access token")
         let response = try await Self.fetchRefreshedClaudeToken(refreshToken: refreshToken)
         let data = try credential.updatedData(with: response, now: now)
-        try ClaudeCredentialStore.persist(data, source: credential.source)
+        try await ClaudeCredentialStore.persist(data, source: credential.source)
         guard let refreshed = ClaudeOAuthCredential.decode(data, source: credential.source) else {
             throw FetchError.unauthorized
         }
-        cachedClaudeCredential = refreshed
+        claudeCredentialSession.store(refreshed)
         Log.usage.notice("Claude access token refreshed and saved")
         diag("Claude access token refreshed and saved")
         return refreshed
