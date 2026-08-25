@@ -232,14 +232,12 @@ final class AppServices {
     }
 
     private func reconcileAttentionService() {
-        let extensionEnabled = Self.extensionEnabled(AppStorageKeys.Tabs.attentionEnabled)
-        let attentionSettings = extensionEnabled ? AttentionRepository().loadSettings() : nil
-        let attentionOn =
-            attentionSettings.map {
-                Self.attentionEnabled(extensionEnabled: extensionEnabled, settings: $0)
-            } ?? false
+        let attentionSettings = AttentionRepository().loadSettings()
+        let attentionOn = Self.attentionEnabled(
+            extensionEnabled: Self.extensionEnabled(AppStorageKeys.Tabs.attentionEnabled),
+            settings: attentionSettings)
         if attentionOn, attention == nil { attention = AttentionTrackingService() }
-        if let attentionSettings, attentionOn { attention?.sync(attentionSettings) }
+        if attentionOn { attention?.sync(attentionSettings) }
         if !attentionOn, let service = attention {
             service.shutdown()
             attention = nil
