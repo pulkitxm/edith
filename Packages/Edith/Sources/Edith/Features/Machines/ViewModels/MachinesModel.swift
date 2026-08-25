@@ -18,6 +18,8 @@ final class MachinesModel {
     let localMachine = Machine.local
 
     private var machinesObserver: NSObjectProtocol?
+    private var mutationJob: Task<Void, Never>?
+    private var mutationSequence = 0
 
     private init() {
         machinesObserver = IPC.observe(IPC.Name.machinesChanged) { [weak self] in
@@ -67,44 +69,68 @@ final class MachinesModel {
     }
 
     func add(_ machine: Machine, secrets: MachineSecretChanges = MachineSecretChanges()) {
-        MachineMutationOperationExecution.perform(
-            .add, machine: machine, secrets: secrets,
-            notify: { IPC.post(IPC.Name.machinesChanged) })
-        store.reload()
-        selection = machine.id
-        let session = session(for: machine.id)
-        session.start()
-        reconcileSSHClipboard(machine, connection: session.connectionRef)
+        enqueueMutation(.add, machine: machine, secrets: secrets) { [weak self] in
+            guard let self else { return }
+            self.store.reload()
+            self.selection = machine.id
+            let session = self.session(for: machine.id)
+            session.start()
+            self.reconcileSSHClipboard(machine, connection: session.connectionRef)
+        }
     }
 
     func update(_ machine: Machine, secrets: MachineSecretChanges = MachineSecretChanges()) {
         let previous = store.machine(id: machine.id)
-        MachineMutationOperationExecution.perform(
-            .edit, machine: machine, secrets: secrets,
-            notify: { IPC.post(IPC.Name.machinesChanged) })
-        store.reload()
-        if let session = sessions[machine.id] {
-            session.stop()
-            sessions[machine.id] = nil
+        enqueueMutation(.edit, machine: machine, secrets: secrets) { [weak self] in
+            guard let self else { return }
+            self.store.reload()
+            if let session = self.sessions[machine.id] {
+                session.stop()
+                self.sessions[machine.id] = nil
+            }
+            let session = self.session(for: machine.id)
+            self.reconcileSSHClipboard(
+                machine, replacing: previous,
+                connection: machine.sshClipboardEnabled ? session.connectionRef : nil)
         }
-        let session = session(for: machine.id)
-        reconcileSSHClipboard(
-            machine, replacing: previous,
-            connection: machine.sshClipboardEnabled ? session.connectionRef : nil)
     }
 
     func remove(id: UUID) {
         guard let machine = store.machine(id: id) else { return }
-        sessions[id]?.stop()
-        sessions[id] = nil
-        MachineMutationOperationExecution.perform(
-            .remove, machine: machine,
-            notify: { IPC.post(IPC.Name.machinesChanged) })
-        store.reload()
-        var disabled = machine
-        disabled.sshClipboardEnabled = false
-        reconcileSSHClipboard(disabled, replacing: disabled)
-        ensureSelection()
+        enqueueMutation(.remove, machine: machine) { [weak self] in
+            guard let self else { return }
+            self.sessions[id]?.stop()
+            self.sessions[id] = nil
+            self.store.reload()
+            var disabled = machine
+            disabled.sshClipboardEnabled = false
+            self.reconcileSSHClipboard(disabled, replacing: disabled)
+            self.ensureSelection()
+        }
+    }
+
+    private func enqueueMutation(
+        _ operation: MachineMutationOperation, machine: Machine,
+        secrets: MachineSecretChanges = MachineSecretChanges(),
+        completion: @escaping @MainActor () -> Void
+    ) {
+        let predecessor = mutationJob
+        mutationSequence += 1
+        let sequence = mutationSequence
+        mutationJob = Task { [weak self] in
+            await predecessor?.value
+            guard !Task.isCancelled else { return }
+            _ = await Task.detached(priority: .utility) {
+                MachineMutationOperationExecution.perform(
+                    operation, machine: machine, secrets: secrets,
+                    notify: { IPC.post(IPC.Name.machinesChanged) })
+            }.value
+            guard !Task.isCancelled, let self else { return }
+            completion()
+            if self.mutationSequence == sequence {
+                self.mutationJob = nil
+            }
+        }
     }
 
     func performConnection(_ operation: MachineConnectionOperation, for session: MachineSession) {

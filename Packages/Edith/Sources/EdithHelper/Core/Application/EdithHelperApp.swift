@@ -40,7 +40,13 @@ func migratedServices() -> AppServices {
     return AppServices()
 }
 
+@MainActor
 final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
+    private var terminationPending = false
+    private var terminationReplySent = false
+    private var terminationFlushTask: Task<Void, Never>?
+    private var terminationTimeoutTask: Task<Void, Never>?
+
     func applicationWillFinishLaunching(_ notification: Notification) {
         if anEarlierInstanceIsRunning() { exit(0) }
         NSApp.setActivationPolicy(.accessory)
@@ -52,6 +58,32 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
         PanelController.shared = PanelController(services: AppState.services)
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !terminationPending else { return .terminateLater }
+        terminationPending = true
+        AppState.services.usage?.prepareForTermination()
+        SettingsBackup.shared.prepareForTermination()
+        terminationFlushTask = Task { [weak self] in
+            await AppState.services.usage?.drainHistoryPersistence()
+            await SettingsBackup.shared.flushForTermination()
+            self?.finishTermination(sender)
+        }
+        terminationTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.finishTermination(sender)
+        }
+        return .terminateLater
+    }
+
+    private func finishTermination(_ sender: NSApplication) {
+        guard !terminationReplySent else { return }
+        terminationReplySent = true
+        terminationFlushTask?.cancel()
+        terminationTimeoutTask?.cancel()
+        sender.reply(toApplicationShouldTerminate: true)
+    }
 }
 
 private func anEarlierInstanceIsRunning() -> Bool {

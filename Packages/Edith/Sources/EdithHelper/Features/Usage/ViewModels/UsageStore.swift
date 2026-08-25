@@ -2,6 +2,67 @@ import AppKit
 import EdithKit
 import Foundation
 
+struct UsageHistoryPersistenceEntry: Sendable {
+    let provider: LimitProvider
+    let session: LimitWindow?
+    let week: LimitWindow?
+    let fable: LimitWindow?
+}
+
+actor UsageHistoryPersistenceWorker {
+    static let shared = UsageHistoryPersistenceWorker()
+    private let resolveHistoryURL: @Sendable () -> URL
+    private var pending: [UsageHistoryPersistenceEntry] = []
+
+    init() {
+        self.resolveHistoryURL = { LimitsHistory.url }
+    }
+
+    init(historyURL: URL) {
+        self.resolveHistoryURL = { historyURL }
+    }
+
+    init(historyURLResolver: @escaping @Sendable () -> URL) {
+        self.resolveHistoryURL = historyURLResolver
+    }
+
+    @discardableResult
+    func persist(_ entries: [UsageHistoryPersistenceEntry]) -> Bool {
+        pending.append(contentsOf: entries)
+        return persistPendingOnce()
+    }
+
+    func drain(maxAttempts: Int = 3, retryNanoseconds: UInt64 = 50_000_000) async -> Bool {
+        guard !pending.isEmpty else { return true }
+        for attempt in 0..<max(0, maxAttempts) {
+            guard !Task.isCancelled else { return false }
+            if persistPendingOnce() { return true }
+            guard attempt + 1 < maxAttempts else { break }
+            do {
+                try await Task.sleep(nanoseconds: retryNanoseconds)
+            } catch {
+                return false
+            }
+        }
+        return pending.isEmpty
+    }
+
+    func pendingCount() -> Int {
+        pending.count
+    }
+
+    private func persistPendingOnce() -> Bool {
+        let historyURL = resolveHistoryURL()
+        pending = pending.filter { entry in
+            var history = LimitsHistory(url: historyURL)
+            return !history.append(
+                provider: entry.provider, session: entry.session, week: entry.week,
+                fable: entry.fable)
+        }
+        return pending.isEmpty
+    }
+}
+
 struct HistoryWriteGate {
     private var waitingForSeed = true
     private var pending: Set<LimitProvider> = []
@@ -21,6 +82,23 @@ struct HistoryWriteGate {
 
     mutating func cancel() {
         pending = []
+    }
+}
+
+struct UsageReloadGenerationState: Sendable {
+    private var generation = 0
+
+    mutating func begin() -> Int {
+        generation += 1
+        return generation
+    }
+
+    mutating func invalidate() {
+        generation += 1
+    }
+
+    func accepts(_ generation: Int) -> Bool {
+        self.generation == generation
     }
 }
 
@@ -85,7 +163,10 @@ final class UsageStore: FeatureModule {
     private var refreshRequestObserver: NSObjectProtocol?
     private var refreshStartedObserver: NSObjectProtocol?
     private var limitsRefreshObserver: NSObjectProtocol?
+    private var usageRestoreObserver: NSObjectProtocol?
+    private var limitsRestoreObserver: NSObjectProtocol?
     private var hasLiveLimits = false
+    private var hasLiveCodexLimits = false
     private var limitsRefreshStartedAt: Date?
     private var limitsRefreshGeneration = 0
     private var quickRetries = 0
@@ -94,11 +175,18 @@ final class UsageStore: FeatureModule {
     private var historySeedJob: Task<Void, Never>?
     private var historySeedGeneration = 0
     private var historyWriteGate = HistoryWriteGate()
-    private var pendingMachineMerge = false
+    private var pendingRefresh = false
+    private var refreshGeneration = 0
+    private var terminating = false
+    private var terminationPendingHistory: [LimitProvider] = []
+    private var usageRestoreReloadGeneration = UsageReloadGenerationState()
+    private var limitsRestoreReloadGeneration = UsageReloadGenerationState()
+    private var statsReloadGeneration = UsageReloadGenerationState()
     let notifier = LimitNotifier()
-    private var history = LimitsHistory()
     private(set) var limitPoints: [LimitPoint] = []
     private var historyMtime: Date?
+    private var limitHistoryProvider = LimitProvider.claude
+    private var limitHistoryGeneration = 0
     private var statusItem: LimitsStatusItem?
 
     var availableProviders: [LimitProvider] {
@@ -134,6 +222,12 @@ final class UsageStore: FeatureModule {
         }
     }
 
+    nonisolated static func canPublishLimitsRefresh(
+        generation: Int, currentGeneration: Int, terminating: Bool, cancelled: Bool
+    ) -> Bool {
+        !terminating && !cancelled && generation == currentGeneration
+    }
+
     init() {
         historySeedGeneration += 1
         let generation = historySeedGeneration
@@ -143,10 +237,10 @@ final class UsageStore: FeatureModule {
                 return
             }
             let pendingProviders = self.historyWriteGate.finish()
-            self.history.prime(with: latest)
             self.seedFromHistory(latest, excluding: Set(pendingProviders))
+            await self.flushPendingHistory(pendingProviders)
+            guard !Task.isCancelled, self.historySeedGeneration == generation else { return }
             self.historySeedJob = nil
-            self.flushPendingHistory(pendingProviders)
             self.startPolling()
         }
 
@@ -232,6 +326,20 @@ final class UsageStore: FeatureModule {
         limitsRefreshObserver = IPC.observe(IPC.Name.requestLimitsRefresh) { [weak self] in
             Task { @MainActor in await self?.refreshLimits(force: true) }
         }
+        usageRestoreObserver = NotificationCenter.default.addObserver(
+            forName: .usageBackupRestored, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.scheduleRestoredUsageReload()
+            }
+        }
+        limitsRestoreObserver = NotificationCenter.default.addObserver(
+            forName: .limitsBackupRestored, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.scheduleRestoredLimitsReload()
+            }
+        }
     }
 
     private func seedFromHistory(
@@ -254,7 +362,8 @@ final class UsageStore: FeatureModule {
     }
 
     private func startPolling() {
-        guard Self.pollingAllowed(locked: locked, sleeping: sleeping), timer == nil else { return }
+        guard !terminating, Self.pollingAllowed(locked: locked, sleeping: sleeping), timer == nil
+        else { return }
         let t = Timer(timeInterval: 300, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.refreshLimits()
@@ -284,6 +393,11 @@ final class UsageStore: FeatureModule {
     }
 
     func shutdown() {
+        terminating = true
+        limitsRefreshGeneration += 1
+        usageRestoreReloadGeneration.invalidate()
+        limitsRestoreReloadGeneration.invalidate()
+        statsReloadGeneration.invalidate()
         stopPolling()
         for obs in lockObservers { DistributedNotificationCenter.default().removeObserver(obs) }
         lockObservers = []
@@ -297,6 +411,9 @@ final class UsageStore: FeatureModule {
         }
         refreshTask?.cancel()
         refreshTask = nil
+        refreshGeneration += 1
+        pendingRefresh = false
+        updating = false
         refreshEvents = []
         daily = []
         stats = []
@@ -325,6 +442,14 @@ final class UsageStore: FeatureModule {
         if let limitsRefreshObserver {
             IPC.stopObserving(limitsRefreshObserver)
             self.limitsRefreshObserver = nil
+        }
+        if let usageRestoreObserver {
+            NotificationCenter.default.removeObserver(usageRestoreObserver)
+            self.usageRestoreObserver = nil
+        }
+        if let limitsRestoreObserver {
+            NotificationCenter.default.removeObserver(limitsRestoreObserver)
+            self.limitsRestoreObserver = nil
         }
         quickRetryTask?.cancel()
         quickRetryTask = nil
@@ -361,6 +486,7 @@ final class UsageStore: FeatureModule {
     }
 
     func refreshLimits(force: Bool = false) async {
+        guard !terminating else { return }
         let now = Date()
         switch LimitsRefreshGate.decide(
             force: force, inFlightSince: limitsRefreshStartedAt, retryNotBefore: retryNotBefore,
@@ -390,21 +516,32 @@ final class UsageStore: FeatureModule {
         let providers = Self.enabledLimitProviders(
             claude: providerEnabled(.claude), codex: providerEnabled(.codex))
         for provider in providers {
+            guard !Task.isCancelled, !terminating, generation == limitsRefreshGeneration else {
+                return
+            }
             switch provider {
-            case .claude: await fetchLimitsOnce()
-            case .codex: await fetchCodexLimitsOnce()
+            case .claude: await fetchLimitsOnce(generation: generation)
+            case .codex: await fetchCodexLimitsOnce(generation: generation)
             }
         }
         try? await Task.sleep(nanoseconds: 400_000_000)
     }
 
-    private func fetchLimitsOnce() async {
+    private func canPublishLimitsRefresh(_ generation: Int) -> Bool {
+        Self.canPublishLimitsRefresh(
+            generation: generation, currentGeneration: limitsRefreshGeneration,
+            terminating: terminating, cancelled: Task.isCancelled)
+    }
+
+    private func fetchLimitsOnce(generation: Int) async {
+        guard canPublishLimitsRefresh(generation) else { return }
         var credential: ClaudeOAuthCredential
         switch await currentClaudeCredential() {
         case .credential(let resolved):
+            guard canPublishLimitsRefresh(generation) else { return }
             credential = resolved
         case .failure(let failure):
-            handleCredentialLookupFailure(failure)
+            handleCredentialLookupFailure(failure, generation: generation)
             return
         case .cancelled:
             return
@@ -412,19 +549,21 @@ final class UsageStore: FeatureModule {
         do {
             if credential.shouldRefresh(at: Date()) {
                 credential = try await refreshClaudeCredential(credential)
+                guard canPublishLimitsRefresh(generation) else { return }
             }
             let usage = try await Self.fetchUsage(token: credential.accessToken)
-            apply(usage)
+            guard await apply(usage, generation: generation) else { return }
             let msg =
                 "usage ok: session=\(Int((session?.percent ?? 0).rounded()))% week=\(Int((week?.percent ?? 0).rounded()))% fable=\(fableWeek.map { "\(Int($0.percent.rounded()))%" } ?? "n/a")"
             Log.usage.notice("\(msg, privacy: .public)")
             diag(msg)
             return
         } catch FetchError.unauthorized {
+            guard canPublishLimitsRefresh(generation) else { return }
             diag("401 unauthorized - resolving credentials once more")
             Log.usage.error("401 unauthorized - resolving credentials once more")
         } catch {
-            report(error)
+            report(error, generation: generation)
             return
         }
 
@@ -433,9 +572,10 @@ final class UsageStore: FeatureModule {
             reload: true, rejectingAccessToken: credential.accessToken)
         {
         case .credential(let resolved):
+            guard canPublishLimitsRefresh(generation) else { return }
             latest = resolved
         case .failure(let failure):
-            handleCredentialLookupFailure(failure)
+            handleCredentialLookupFailure(failure, generation: generation)
             return
         case .cancelled:
             return
@@ -450,17 +590,19 @@ final class UsageStore: FeatureModule {
                 fresh = latest
             } else {
                 fresh = try await refreshClaudeCredential(latest)
+                guard canPublishLimitsRefresh(generation) else { return }
             }
             let usage = try await Self.fetchUsage(token: fresh.accessToken)
-            apply(usage)
+            guard await apply(usage, generation: generation) else { return }
             Log.usage.notice("recovered after token refresh")
             diag("recovered after token refresh")
         } catch {
-            report(error)
+            report(error, generation: generation)
         }
     }
 
-    private func report(_ error: Error) {
+    private func report(_ error: Error, generation: Int) {
+        guard canPublishLimitsRefresh(generation) else { return }
         let msg: String
         switch error {
         case FetchError.unauthorized:
@@ -495,7 +637,10 @@ final class UsageStore: FeatureModule {
         }
     }
 
-    private func handleCredentialLookupFailure(_ failure: ClaudeCredentialLookupFailure) {
+    private func handleCredentialLookupFailure(
+        _ failure: ClaudeCredentialLookupFailure, generation: Int
+    ) {
+        guard canPublishLimitsRefresh(generation) else { return }
         let presentation = Self.credentialLookupFailurePresentation(for: failure)
         limitsError = presentation.message
         Log.usage.error("\(presentation.diagnostic, privacy: .public)")
@@ -529,7 +674,8 @@ final class UsageStore: FeatureModule {
         statusItem?.update(availableProviders.map(limits(for:)))
     }
 
-    private func apply(_ usage: ClaudeUsageParser.Result) {
+    private func apply(_ usage: ClaudeUsageParser.Result, generation: Int) async -> Bool {
+        guard canPublishLimitsRefresh(generation) else { return false }
         session = usage.session
         week = usage.week
         fableWeek = usage.fable
@@ -540,52 +686,117 @@ final class UsageStore: FeatureModule {
         quickRetryTask?.cancel()
         quickRetryTask = nil
         notifier.evaluate(session: session, week: week)
-        recordHistory(.claude)
-        SettingsBackup.shared.syncLimits()
         updateStatusItem()
-        IPC.post(IPC.Name.limitsUpdated)
+        await recordHistory(.claude, generation: generation)
+        return canPublishLimitsRefresh(generation)
     }
 
-    private func fetchCodexLimitsOnce() async {
+    private func fetchCodexLimitsOnce(generation: Int) async {
+        guard canPublishLimitsRefresh(generation) else { return }
         do {
             let limits = try await Task.detached(priority: .utility) {
                 try Self.readCodexLimits()
             }.value
+            guard canPublishLimitsRefresh(generation) else { return }
             codexSession = limits.session
             codexWeek = limits.week
+            hasLiveCodexLimits = true
             limitsUpdatedAt = Date()
-            recordHistory(.codex)
-            SettingsBackup.shared.syncLimits()
             updateStatusItem()
-            IPC.post(IPC.Name.limitsUpdated)
+            await recordHistory(.codex, generation: generation)
+            guard canPublishLimitsRefresh(generation) else { return }
             diag(
                 "codex usage ok: session=\(Int((codexSession?.percent ?? 0).rounded()))% week=\(Int((codexWeek?.percent ?? 0).rounded()))%"
             )
         } catch {
+            guard canPublishLimitsRefresh(generation) else { return }
             diag("codex limits unavailable: \(error.localizedDescription)")
             keepOrBlankMenuBar()
         }
     }
 
-    private func recordHistory(_ provider: LimitProvider) {
-        guard historyWriteGate.record(provider) else { return }
-        appendHistory(provider)
-    }
-
-    private func flushPendingHistory(_ providers: [LimitProvider]) {
-        for provider in providers { appendHistory(provider) }
-        guard !providers.isEmpty else { return }
-        SettingsBackup.shared.syncLimits()
+    private func recordHistory(_ provider: LimitProvider, generation: Int) async {
+        guard canPublishLimitsRefresh(generation) else { return }
+        if historyWriteGate.record(provider) {
+            guard await persistHistory([historyEntry(for: provider)]) else { return }
+        }
+        guard canPublishLimitsRefresh(generation) else { return }
         IPC.post(IPC.Name.limitsUpdated)
     }
 
-    private func appendHistory(_ provider: LimitProvider) {
+    private func flushPendingHistory(_ providers: [LimitProvider]) async {
+        guard !providers.isEmpty else { return }
+        if await persistHistory(providers.map(historyEntry)) {
+            IPC.post(IPC.Name.limitsUpdated)
+        }
+    }
+
+    private func historyEntry(for provider: LimitProvider) -> UsageHistoryPersistenceEntry {
         switch provider {
         case .claude:
-            history.append(provider: provider, session: session, week: week, fable: fableWeek)
+            return UsageHistoryPersistenceEntry(
+                provider: provider, session: session, week: week, fable: fableWeek)
         case .codex:
-            history.append(provider: provider, session: codexSession, week: codexWeek)
+            return UsageHistoryPersistenceEntry(
+                provider: provider, session: codexSession, week: codexWeek, fable: nil)
         }
+    }
+
+    @discardableResult
+    private func persistHistory(_ entries: [UsageHistoryPersistenceEntry]) async -> Bool {
+        guard await UsageHistoryPersistenceWorker.shared.persist(entries) else { return false }
+        _ = await SettingsBackup.shared.syncLimits()
+        return true
+    }
+
+    func drainHistoryPersistence() async {
+        let pending = terminationPendingHistory.map(historyEntry)
+        if !pending.isEmpty {
+            _ = await UsageHistoryPersistenceWorker.shared.persist(pending)
+        }
+        let persisted = await UsageHistoryPersistenceWorker.shared.drain()
+        guard persisted else { return }
+        terminationPendingHistory = []
+        _ = await SettingsBackup.shared.syncLimits()
+        if !pending.isEmpty { IPC.post(IPC.Name.limitsUpdated) }
+    }
+
+    func prepareForTermination() {
+        terminationPendingHistory = historyWriteGate.finish()
+        shutdown()
+    }
+
+    private func scheduleRestoredUsageReload() {
+        guard !terminating else { return }
+        let generation = usageRestoreReloadGeneration.begin()
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.loadStats()
+            guard !self.terminating,
+                self.usageRestoreReloadGeneration.accepts(generation)
+            else { return }
+            NotificationCenter.default.post(name: .usageDataChanged, object: nil)
+        }
+    }
+
+    private func scheduleRestoredLimitsReload() {
+        guard !terminating else { return }
+        let generation = limitsRestoreReloadGeneration.begin()
+        Task { @MainActor [weak self] in
+            await self?.reloadRestoredLimits(generation: generation)
+        }
+    }
+
+    private func reloadRestoredLimits(generation: Int) async {
+        let latest = await LimitsHistory.loadLatestProviders()
+        guard !terminating, limitsRestoreReloadGeneration.accepts(generation) else { return }
+        var protected: Set<LimitProvider> = []
+        if hasLiveLimits { protected.insert(.claude) }
+        if hasLiveCodexLimits { protected.insert(.codex) }
+        seedFromHistory(latest, excluding: protected)
+        await loadLimitHistory(provider: limitHistoryProvider)
+        guard !terminating, limitsRestoreReloadGeneration.accepts(generation) else { return }
+        updateStatusItem()
     }
 
     private struct CodexWindow: Decodable {
@@ -877,6 +1088,8 @@ final class UsageStore: FeatureModule {
     }
 
     func loadStats() async {
+        guard !terminating else { return }
+        let generation = statsReloadGeneration.begin()
         let url = Repo.usageJSON
         let mtime =
             (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate])
@@ -886,13 +1099,20 @@ final class UsageStore: FeatureModule {
         let parsed: UsageFile
         do {
             parsed = try await Task.detached(priority: .utility) {
-                try JSONDecoder().decode(UsageFile.self, from: Data(contentsOf: url))
+                guard
+                    let data = try UsageDataFiles.readRegularFile(
+                        at: url, maximumBytes: UsageDataFiles.maximumUsageDocumentBytes)
+                else { throw CocoaError(.fileReadNoSuchFile) }
+                return try JSONDecoder().decode(UsageFile.self, from: data)
             }.value
         } catch {
+            guard !terminating, statsReloadGeneration.accepts(generation) else { return }
             statsError = "usage.json missing - hit reload"
             diag("usage.json decode failed: \(error.localizedDescription)")
             return
         }
+
+        guard !terminating, statsReloadGeneration.accepts(generation) else { return }
 
         usageMtime = mtime
         statsError = nil
@@ -979,6 +1199,10 @@ final class UsageStore: FeatureModule {
     }
 
     func loadLimitHistory(provider: LimitProvider = .claude) async {
+        guard !terminating else { return }
+        limitHistoryProvider = provider
+        limitHistoryGeneration += 1
+        let generation = limitHistoryGeneration
         let url = LimitsHistory.url
         let mtime =
             (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate])
@@ -986,21 +1210,36 @@ final class UsageStore: FeatureModule {
         historyMtime = mtime
         let since = Date().addingTimeInterval(-24 * 3600)
         let points = await Task.detached(priority: .utility) {
-            guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+            guard
+                let data = try? UsageDataFiles.readRegularFile(
+                    at: url, maximumBytes: UsageDataFiles.maximumLimitsHistoryBytes)
+            else {
                 return [LimitPoint]()
             }
-            return LimitsHistory.parse(text, since: since, provider: provider)
+            return LimitsHistory.parse(
+                String(decoding: data, as: UTF8.self), since: since, provider: provider)
         }.value
+        guard !terminating, limitHistoryGeneration == generation else { return }
         limitPoints = points
     }
 
     func runUpdate(collectMachines: Bool = true) {
+        guard !terminating else { return }
         if collectMachines { collectFromMachines(force: false) }
-        guard !updating else { return }
-        MachineUsageStore.prune(keeping: MachineRegistry.machines().map(\.id))
+        guard !updating else {
+            pendingRefresh = true
+            return
+        }
+        let machineIDs = MachineRegistry.machines().map(\.id)
         beginTranscript()
+        refreshGeneration += 1
+        let generation = refreshGeneration
         refreshTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            await Task.detached(priority: .utility) {
+                MachineUsageStore.prune(keeping: machineIDs)
+            }.value
+            guard !Task.isCancelled else { return }
             do {
                 if UsageRefreshRunner.isRunning {
                     _ = try await UsageRefreshFollower.follow { event in
@@ -1016,7 +1255,7 @@ final class UsageStore: FeatureModule {
             } catch {
                 self.append(.failure(error.localizedDescription))
             }
-            await self.finishRefresh()
+            await self.finishRefresh(generation: generation)
         }
     }
 
@@ -1033,21 +1272,29 @@ final class UsageStore: FeatureModule {
             refreshEvents, startedAt: refreshStartedAt ?? Date())
     }
 
-    private func finishRefresh() async {
+    private func finishRefresh(generation: Int) async {
+        guard !Task.isCancelled, refreshGeneration == generation else { return }
+        _ = await SettingsBackup.shared.syncUsage()
+        guard !Task.isCancelled, refreshGeneration == generation else { return }
+        await loadStats()
+        guard !Task.isCancelled, refreshGeneration == generation else { return }
+        NotificationCenter.default.post(name: .usageDataChanged, object: nil)
         updating = false
         refreshTask = nil
-        SettingsBackup.shared.syncUsage()
-        await loadStats()
-        NotificationCenter.default.post(name: .usageDataChanged, object: nil)
-        if pendingMachineMerge {
-            pendingMachineMerge = false
+        if pendingRefresh {
+            pendingRefresh = false
             runUpdate(collectMachines: false)
         }
     }
 
     private func adoptExternalRefresh() {
-        guard !updating else { return }
+        guard !updating else {
+            pendingRefresh = true
+            return
+        }
         beginTranscript()
+        refreshGeneration += 1
+        let generation = refreshGeneration
         refreshTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
@@ -1059,22 +1306,29 @@ final class UsageStore: FeatureModule {
             } catch {
                 self.append(.failure(error.localizedDescription))
             }
-            await self.finishRefresh()
+            await self.finishRefresh(generation: generation)
         }
     }
 
     private func collectFromMachines(force: Bool) {
         guard machineTask == nil else { return }
-        let due = MachineUsageRound.due(force: force)
-        guard !due.isEmpty else { return }
-        diag("collecting usage from \(due.count) machine(s)")
         machineTask = Task { [weak self] in
+            let due = await Task.detached(priority: .utility) {
+                MachineUsageRound.due(force: force)
+            }.value
+            guard !Task.isCancelled else { return }
+            guard !due.isEmpty else {
+                self?.finishedCollecting(changed: false)
+                return
+            }
+            self?.diag("collecting usage from \(due.count) machine(s)")
             let result = await MachineUsageRound.collect(due) { event in
                 let lines = UsageRefreshTranscript.lines(for: event)
                 Task { @MainActor in
                     for line in lines { self?.noteMachine(line) }
                 }
             }
+            guard !Task.isCancelled else { return }
             self?.finishedCollecting(changed: result.changedAnything)
         }
     }
@@ -1088,7 +1342,7 @@ final class UsageStore: FeatureModule {
         machineTask = nil
         guard changed else { return }
         guard !updating else {
-            pendingMachineMerge = true
+            pendingRefresh = true
             return
         }
         runUpdate(collectMachines: false)
