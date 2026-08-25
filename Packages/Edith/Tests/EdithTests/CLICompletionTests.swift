@@ -42,6 +42,11 @@ import Testing
         #expect(Self.plan(["ed", "guide", "--j"], 2).candidates == ["--json"])
     }
 
+    @Test func guideCompletionDoesNotOfferMutuallyExclusiveForms() {
+        #expect(Self.plan(["ed", "guide", "--json", ""], 3).candidates.isEmpty)
+        #expect(Self.plan(["ed", "guide", "agent", "--j"], 3).candidates.isEmpty)
+    }
+
     @Test func everyCommandAliasCompletesAtEveryDepth() {
         var missing: [String] = []
         Self.checkAliases(node: CommandTree.root, words: ["ed"], missing: &missing)
