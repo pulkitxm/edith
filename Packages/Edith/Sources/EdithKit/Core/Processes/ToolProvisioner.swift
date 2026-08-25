@@ -119,20 +119,29 @@ private final class CLIStreamingOutput: @unchecked Sendable {
         pending = ""
         return (lines, complete, exceededLimit)
     }
+
+    var hasExceededLimit: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return exceededLimit
+    }
 }
 
 public enum CLICommandRunner {
     private static let terminationGrace: TimeInterval = 0.25
+    private static let lifecyclePoll: TimeInterval = 0.01
     private static let processGroupScript = """
+        group_file=$1
+        shift
         set -m
         "$@" &
         child=$!
         set +m
+        printf '%s\n' "$child" > "$group_file"
         terminate_group() {
-            if kill -TERM -"$child" 2>/dev/null; then
-                sleep 0.1
-                kill -KILL -"$child" 2>/dev/null || :
-            fi
+            kill -TERM -"$child" 2>/dev/null || :
+            sleep 0.1
+            kill -KILL -"$child" 2>/dev/null || :
         }
         trap 'terminate_group; exit 124' TERM INT
         wait "$child"
@@ -146,9 +155,14 @@ public enum CLICommandRunner {
         _ request: CLICommandRequest,
         onLine: @escaping @Sendable (String) -> Void
     ) async throws -> CLICommandResult {
-        try await Task.detached(priority: .utility) {
+        let worker = Task.detached(priority: .utility) {
             try runBlocking(request, onLine: onLine)
-        }.value
+        }
+        return try await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
     }
 
     private static func runBlocking(
@@ -156,11 +170,15 @@ public enum CLICommandRunner {
         onLine: @escaping @Sendable (String) -> Void
     ) throws -> CLICommandResult {
         let process = Process()
+        let groupFile = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-process-\(UUID().uuidString).pid")
+        defer { try? FileManager.default.removeItem(at: groupFile) }
         if request.terminatesProcessGroup {
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
             process.arguments =
                 [
-                    "-c", processGroupScript, "edith-process", request.executableURL.path,
+                    "-c", processGroupScript, "edith-process", groupFile.path,
+                    request.executableURL.path,
                 ] + request.arguments
         } else {
             process.executableURL = request.executableURL
@@ -195,23 +213,42 @@ public enum CLICommandRunner {
             throw CLICommandRunnerError.launchFailed
         }
 
-        if let timeout = request.timeout,
-            processFinished.wait(timeout: .now() + max(0, timeout)) == .timedOut
-        {
-            process.terminate()
-            if processFinished.wait(timeout: .now() + terminationGrace) == .timedOut,
-                process.isRunning
-            {
-                kill(process.processIdentifier, SIGKILL)
-                _ = processFinished.wait(timeout: .now() + terminationGrace)
+        let deadline = request.timeout.map {
+            ProcessInfo.processInfo.systemUptime + max(0, $0)
+        }
+        var stop: StopReason?
+        while true {
+            if Task.isCancelled {
+                stop = .cancelled
+                break
             }
-            _ = readerFinished.wait(timeout: .now() + terminationGrace)
-            throw CLICommandRunnerError.timedOut
-        } else if request.timeout == nil {
-            processFinished.wait()
+            if output.hasExceededLimit {
+                stop = .outputLimitExceeded
+                break
+            }
+            if let deadline, ProcessInfo.processInfo.systemUptime >= deadline {
+                stop = .timedOut
+                break
+            }
+            if processFinished.wait(timeout: .now() + lifecyclePoll) == .success { break }
         }
 
-        guard readerFinished.wait(timeout: .now() + terminationGrace) == .success else {
+        if let stop {
+            terminate(
+                process, groupFile: request.terminatesProcessGroup ? groupFile : nil,
+                processFinished: processFinished)
+            drain(pipe, readerFinished: readerFinished)
+            switch stop {
+            case .cancelled:
+                throw CancellationError()
+            case .timedOut:
+                throw CLICommandRunnerError.timedOut
+            case .outputLimitExceeded:
+                throw CLICommandRunnerError.outputLimitExceeded
+            }
+        }
+
+        guard drain(pipe, readerFinished: readerFinished) else {
             throw CLICommandRunnerError.streamFailed
         }
         let finished = output.finish()
@@ -222,6 +259,54 @@ public enum CLICommandRunner {
         return CLICommandResult(
             terminationStatus: process.terminationStatus,
             outputData: finished.output)
+    }
+
+    private enum StopReason {
+        case cancelled
+        case timedOut
+        case outputLimitExceeded
+    }
+
+    private static func terminate(
+        _ process: Process, groupFile: URL?, processFinished: DispatchSemaphore
+    ) {
+        var group = groupFile.flatMap {
+            groupIdentifier(at: $0, waitingUntil: ProcessInfo.processInfo.systemUptime + 0.05)
+        }
+        if let group {
+            _ = kill(-group, SIGTERM)
+        } else if process.isRunning {
+            process.terminate()
+        }
+        _ = processFinished.wait(timeout: .now() + terminationGrace)
+        if group == nil, let groupFile {
+            group = groupIdentifier(at: groupFile, waitingUntil: nil)
+        }
+        if let group { _ = kill(-group, SIGKILL) }
+        if process.isRunning { _ = kill(process.processIdentifier, SIGKILL) }
+        _ = processFinished.wait(timeout: .now() + terminationGrace)
+    }
+
+    private static func groupIdentifier(at url: URL, waitingUntil deadline: TimeInterval?) -> Int32?
+    {
+        repeat {
+            if let data = try? Data(contentsOf: url),
+                let text = String(data: data, encoding: .utf8)?.trimmingCharacters(
+                    in: .whitespacesAndNewlines),
+                let value = Int32(text), value > 1
+            {
+                return value
+            }
+            guard let deadline, ProcessInfo.processInfo.systemUptime < deadline else { return nil }
+            usleep(5_000)
+        } while true
+    }
+
+    @discardableResult
+    private static func drain(_ pipe: Pipe, readerFinished: DispatchSemaphore) -> Bool {
+        if readerFinished.wait(timeout: .now() + terminationGrace) == .success { return true }
+        try? pipe.fileHandleForReading.close()
+        return readerFinished.wait(timeout: .now() + terminationGrace) == .success
     }
 }
 
