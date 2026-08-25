@@ -185,6 +185,7 @@ final class HerdrStore {
                 agent: agent, machine: machine, view: resolved,
                 holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession()))
         if view != nil { HerdrAgentViews.set(resolved, for: agent.id, defaults) }
+        if resolved == .split { detailOpen = false }
         selectedTab = agent.id
     }
 
