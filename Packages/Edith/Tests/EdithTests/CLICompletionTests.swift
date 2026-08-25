@@ -641,6 +641,9 @@ import Testing
         let copy = Self.discoveredCommand(["clipboard", "copy"], in: catalog.object ?? [:])
         let workspace = Self.discoveredCommand(
             ["machines", "workspace"], in: catalog.object ?? [:])
+        #expect(Self.discoveredCommand(["status"], in: catalog.object ?? [:]) != nil)
+        #expect(
+            Self.discoveredCommand(["completions", "source"], in: catalog.object ?? [:]) != nil)
         #expect(
             Self.discoveredOptionNames(copy ?? [:]).isSuperset(of: [
                 "json", "plain", "version", "h", "help",
