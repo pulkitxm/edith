@@ -771,23 +771,23 @@ final class UsageStore: FeatureModule {
                 schedulesQuickRetry: false, notifiesExpiredSession: true)
         case .malformed:
             CredentialLookupFailurePresentation(
-                message: "Login shell credential output is invalid",
-                diagnostic: "login shell credential output was malformed",
+                message: "Credential data is invalid",
+                diagnostic: "credential data was malformed",
                 schedulesQuickRetry: false, notifiesExpiredSession: false)
         case .timedOut:
             CredentialLookupFailurePresentation(
-                message: "Login shell credential lookup timed out",
-                diagnostic: "login shell credential lookup timed out",
+                message: "Credential lookup timed out",
+                diagnostic: "credential lookup timed out",
                 schedulesQuickRetry: true, notifiesExpiredSession: false)
         case .oversized:
             CredentialLookupFailurePresentation(
-                message: "Login shell credential output is too large",
-                diagnostic: "login shell credential output exceeded its safe limit",
+                message: "Credential data is too large",
+                diagnostic: "credential data exceeded its safe limit",
                 schedulesQuickRetry: false, notifiesExpiredSession: false)
         case .failed:
             CredentialLookupFailurePresentation(
-                message: "Could not read login shell credentials",
-                diagnostic: "login shell credential lookup failed",
+                message: "Could not read credentials",
+                diagnostic: "credential lookup failed",
                 schedulesQuickRetry: true, notifiesExpiredSession: false)
         }
     }

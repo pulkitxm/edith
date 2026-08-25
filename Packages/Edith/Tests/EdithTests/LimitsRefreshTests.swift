@@ -109,6 +109,10 @@ import Testing
             #expect(!presentation.message.contains("token-value"))
             #expect(!presentation.diagnostic.contains("token-value"))
         }
+        for presentation in [malformed, oversized] {
+            #expect(!presentation.message.lowercased().contains("shell"))
+            #expect(!presentation.diagnostic.lowercased().contains("shell"))
+        }
     }
 
     @MainActor
@@ -120,6 +124,8 @@ import Testing
         #expect(failed.schedulesQuickRetry)
         #expect(!timedOut.notifiesExpiredSession)
         #expect(!failed.notifiesExpiredSession)
+        #expect(!timedOut.message.lowercased().contains("shell"))
+        #expect(!failed.message.lowercased().contains("shell"))
     }
 
     @Test func historyWritesWaitForSeedAndFlushOncePerProvider() {

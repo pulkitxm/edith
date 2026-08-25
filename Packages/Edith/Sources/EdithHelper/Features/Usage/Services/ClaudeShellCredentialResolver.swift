@@ -178,7 +178,7 @@ enum ClaudeCredentialLookup {
 
 @MainActor
 final class ClaudeCredentialSession {
-    typealias PersistedReader = () async -> ClaudeOAuthCredential?
+    typealias PersistedReader = () async -> ClaudeCredentialLookup
     typealias ShellReader = () async -> ClaudeShellCredentialResolution
 
     private var cached: ClaudeOAuthCredential?
@@ -213,8 +213,17 @@ final class ClaudeCredentialSession {
     }
 
     private func load() async -> ClaudeCredentialLookup {
-        if let credential = await persistedReader(), credential.accessToken != rejectedAccessToken {
-            return accept(credential)
+        let persistedFailure: ClaudeCredentialLookupFailure?
+        switch await persistedReader() {
+        case .credential(let credential):
+            if credential.accessToken != rejectedAccessToken {
+                return accept(credential)
+            }
+            persistedFailure = .rejected
+        case .failure(let failure):
+            persistedFailure = failure
+        case .cancelled:
+            return .cancelled
         }
         switch await shellReader() {
         case .credential(let credential):
@@ -225,7 +234,7 @@ final class ClaudeCredentialSession {
         case .cancelled:
             return .cancelled
         case .missing:
-            return rejectedAccessToken == nil ? .failure(.missing) : .failure(.rejected)
+            return .failure(persistedFailure ?? .missing)
         case .malformed:
             return .failure(.malformed)
         case .timedOut:

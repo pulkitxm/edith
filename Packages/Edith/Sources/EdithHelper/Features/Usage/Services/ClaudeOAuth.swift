@@ -1,5 +1,6 @@
 import EdithKit
 import Foundation
+import Security
 
 enum ClaudeCredentialSource: Equatable {
     case keychain
@@ -112,6 +113,15 @@ enum ClaudeCredentialStoreError: LocalizedError, Equatable {
     }
 }
 
+enum ClaudeCredentialDataLookup: Equatable {
+    case data(Data)
+    case missing
+    case cancelled
+    case timedOut
+    case oversized
+    case failed
+}
+
 enum ClaudeCredentialStore {
     typealias CommandRunner = @Sendable (CLICommandRequest) async throws -> CLICommandResult
 
@@ -120,8 +130,10 @@ enum ClaudeCredentialStore {
     private static let processTimeout: TimeInterval = 3
     private static let maximumCredentialBytes = 65_536
     private static let maximumStatusBytes = 1_024
+    private static let itemNotFoundExitStatus = Int32(
+        UInt8(truncatingIfNeeded: errSecItemNotFound))
 
-    static func read() async -> ClaudeOAuthCredential? {
+    static func read() async -> ClaudeCredentialLookup {
         let keychain = await keychainData(
             securityExecutable: securityURL, timeout: processTimeout,
             maximumOutputBytes: maximumCredentialBytes,
@@ -130,23 +142,51 @@ enum ClaudeCredentialStore {
             })
         return read(
             home: FileManager.default.homeDirectoryForCurrentUser,
-            keychainData: { keychain },
-            fileData: { try? Data(contentsOf: $0) })
+            keychainData: keychain,
+            fileData: { credentialFileData(at: $0) })
     }
 
     static func read(
         home: URL,
-        keychainData: () -> Data?,
-        fileData: (URL) -> Data?
-    ) -> ClaudeOAuthCredential? {
-        if let data = keychainData(),
-            let credential = ClaudeOAuthCredential.decode(data, source: .keychain)
-        {
-            return credential
+        keychainData: ClaudeCredentialDataLookup,
+        fileData: (URL) -> ClaudeCredentialDataLookup
+    ) -> ClaudeCredentialLookup {
+        let keychainFailure: ClaudeCredentialLookupFailure?
+        switch keychainData {
+        case .data(let data):
+            if let credential = ClaudeOAuthCredential.decode(data, source: .keychain) {
+                return .credential(credential)
+            }
+            keychainFailure = .malformed
+        case .missing:
+            keychainFailure = nil
+        case .cancelled:
+            return .cancelled
+        case .timedOut:
+            keychainFailure = .timedOut
+        case .oversized:
+            keychainFailure = .oversized
+        case .failed:
+            keychainFailure = .failed
         }
         let url = home.appendingPathComponent(".claude/.credentials.json")
-        guard let data = fileData(url) else { return nil }
-        return ClaudeOAuthCredential.decode(data, source: .file(url))
+        switch fileData(url) {
+        case .data(let data):
+            guard let credential = ClaudeOAuthCredential.decode(data, source: .file(url)) else {
+                return .failure(.malformed)
+            }
+            return .credential(credential)
+        case .missing:
+            return .failure(keychainFailure ?? .missing)
+        case .cancelled:
+            return .cancelled
+        case .timedOut:
+            return .failure(.timedOut)
+        case .oversized:
+            return .failure(.oversized)
+        case .failed:
+            return .failure(.failed)
+        }
     }
 
     static func persist(
@@ -179,15 +219,46 @@ enum ClaudeCredentialStore {
         runCommand: @escaping CommandRunner = { request in
             try await CLICommandRunner.run(request) { _ in }
         }
-    ) async -> Data? {
+    ) async -> ClaudeCredentialDataLookup {
         let request = securityRequest(
             executable: securityExecutable,
             arguments: ["find-generic-password", "-s", keychainService, "-w"],
             timeout: timeout, maximumOutputBytes: maximumOutputBytes)
-        guard let result = try? await runCommand(request), result.terminationStatus == 0 else {
-            return nil
+        do {
+            let result = try await runCommand(request)
+            switch result.terminationStatus {
+            case 0:
+                return .data(result.outputData)
+            case itemNotFoundExitStatus:
+                return .missing
+            default:
+                return .failed
+            }
+        } catch is CancellationError {
+            return .cancelled
+        } catch CLICommandRunnerError.timedOut {
+            return .timedOut
+        } catch CLICommandRunnerError.outputLimitExceeded {
+            return .oversized
+        } catch {
+            return .failed
         }
-        return result.outputData
+    }
+
+    static func credentialFileData(
+        at url: URL, maximumOutputBytes: Int = maximumCredentialBytes
+    ) -> ClaudeCredentialDataLookup {
+        guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
+        guard maximumOutputBytes >= 0, maximumOutputBytes < Int.max else { return .failed }
+        do {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            let data = try handle.read(upToCount: maximumOutputBytes + 1) ?? Data()
+            guard data.count <= maximumOutputBytes else { return .oversized }
+            return .data(data)
+        } catch {
+            return .failed
+        }
     }
 
     private static func updateKeychain(

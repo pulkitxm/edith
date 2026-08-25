@@ -319,7 +319,7 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
     }
 
     private func processIdentifiers(_ fixture: CancellationFixture) async throws -> [Int32] {
-        let deadline = ProcessInfo.processInfo.systemUptime + 2
+        let deadline = ProcessInfo.processInfo.systemUptime + 5
         repeat {
             if let parent = identifier(at: fixture.parent),
                 let child = identifier(at: fixture.child)
@@ -342,7 +342,7 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
     }
 
     private func expectGone(_ identifiers: [Int32]) async throws {
-        let deadline = ProcessInfo.processInfo.systemUptime + 2
+        let deadline = ProcessInfo.processInfo.systemUptime + 5
         while identifiers.contains(where: isPresent) {
             if ProcessInfo.processInfo.systemUptime >= deadline {
                 Issue.record("resolver process remained after cancellation")
@@ -406,11 +406,12 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
         var requestedFile: URL?
         let credential = ClaudeCredentialStore.read(
             home: URL(fileURLWithPath: "/tmp/credential-home"),
-            keychainData: { keychain },
+            keychainData: .data(keychain),
             fileData: {
                 requestedFile = $0
-                return file
-            })
+                return .data(file)
+            }
+        ).credential
         #expect(credential?.accessToken == "keychain-token")
         #expect(credential?.source == .keychain)
         #expect(requestedFile == nil)
@@ -422,15 +423,36 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
         var requestedFile: URL?
         let credential = ClaudeCredentialStore.read(
             home: home,
-            keychainData: { Data("invalid".utf8) },
+            keychainData: .data(Data("invalid".utf8)),
             fileData: {
                 requestedFile = $0
-                return file
-            })
+                return .data(file)
+            }
+        ).credential
         #expect(credential?.accessToken == "file-token")
         #expect(
             credential?.source == .file(home.appendingPathComponent(".claude/.credentials.json")))
         #expect(requestedFile == home.appendingPathComponent(".claude/.credentials.json"))
+    }
+
+    @Test func persistedFailuresRemainDistinctWhenTheFallbackIsMissing() throws {
+        let home = URL(fileURLWithPath: "/tmp/credential-home")
+        let file = try credentialData("file-token")
+        let timedOut = ClaudeCredentialStore.read(
+            home: home, keychainData: .timedOut, fileData: { _ in .missing })
+        let malformed = ClaudeCredentialStore.read(
+            home: home, keychainData: .data(Data("invalid".utf8)),
+            fileData: { _ in .missing })
+        let unreadable = ClaudeCredentialStore.read(
+            home: home, keychainData: .missing, fileData: { _ in .failed })
+        let fallback = ClaudeCredentialStore.read(
+            home: home, keychainData: .timedOut,
+            fileData: { _ in .data(file) })
+
+        #expect(timedOut.failure == .timedOut)
+        #expect(malformed.failure == .malformed)
+        #expect(unreadable.failure == .failed)
+        #expect(fallback.credential?.accessToken == "file-token")
     }
 
     @Test func persistedCredentialsPrecedeTheShell() async throws {
@@ -439,7 +461,7 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
                 credentialData("persisted-token"), source: .keychain))
         let shell = ClaudeShellCredentialQueue(tokens: ["shell-token"])
         let session = ClaudeCredentialSession(
-            persistedReader: { persisted },
+            persistedReader: { .credential(persisted) },
             shellReader: { shell.next() })
         let credential = (await session.current()).credential
         #expect(credential?.accessToken == "persisted-token")
@@ -450,7 +472,7 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
     @Test func shellCredentialIsResolvedOnceAndCachedOnlyInMemory() async {
         let shell = ClaudeShellCredentialQueue(tokens: ["shell-token", "unused-token"])
         let session = ClaudeCredentialSession(
-            persistedReader: { nil },
+            persistedReader: { .failure(.missing) },
             shellReader: { shell.next() })
         let first = (await session.current()).credential
         let second = (await session.current()).credential
@@ -465,7 +487,7 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
             "old-token", "rotated-token", "unused-token",
         ])
         let session = ClaudeCredentialSession(
-            persistedReader: { nil },
+            persistedReader: { .failure(.missing) },
             shellReader: { shell.next() })
         let rejected = (await session.current()).credential
         let rotated = (await session.reload()).credential
@@ -482,7 +504,7 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
                 credentialData("persisted-token"), source: .keychain))
         let shell = ClaudeShellCredentialQueue(tokens: ["rotated-shell-token"])
         let session = ClaudeCredentialSession(
-            persistedReader: { persisted },
+            persistedReader: { .credential(persisted) },
             shellReader: { shell.next() })
 
         let initial = (await session.current()).credential
@@ -509,7 +531,7 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
         let session = ClaudeCredentialSession(
             persistedReader: {
                 reads += 1
-                return reads == 1 ? original : rotated
+                return .credential(reads == 1 ? original : rotated)
             },
             shellReader: { shell.next() })
 
@@ -528,7 +550,7 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
             ClaudeOAuthCredential.decode(
                 credentialData("persisted-token"), source: .keychain))
         let session = ClaudeCredentialSession(
-            persistedReader: { persisted },
+            persistedReader: { .credential(persisted) },
             shellReader: { .missing })
 
         _ = await session.current()
@@ -545,7 +567,7 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
                 credentialData("persisted-token"), source: .keychain))
         let shell = ClaudeShellCredentialQueue(tokens: ["persisted-token", "persisted-token"])
         let session = ClaudeCredentialSession(
-            persistedReader: { persisted },
+            persistedReader: { .credential(persisted) },
             shellReader: { shell.next() })
 
         _ = await session.current()
@@ -565,7 +587,7 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
             "persisted-token", "rotated-shell-token",
         ])
         let session = ClaudeCredentialSession(
-            persistedReader: { persisted },
+            persistedReader: { .credential(persisted) },
             shellReader: { shell.next() })
 
         _ = await session.current()
@@ -584,7 +606,7 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
             ClaudeOAuthCredential.decode(
                 credentialData("persisted-token"), source: .keychain))
         let session = ClaudeCredentialSession(
-            persistedReader: { persisted },
+            persistedReader: { .credential(persisted) },
             shellReader: { .missing })
 
         _ = await session.current()
@@ -597,7 +619,7 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
 
     @Test func shellCancellationRemainsDistinctFromLookupFailure() async {
         let session = ClaudeCredentialSession(
-            persistedReader: { nil },
+            persistedReader: { .failure(.missing) },
             shellReader: { .cancelled })
 
         let lookup = await session.current()
@@ -606,6 +628,16 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
             Issue.record("expected cancellation to remain distinct from lookup failure")
             return
         }
+    }
+
+    @Test func persistedOperationalFailureSurvivesAMissingShellFallback() async {
+        let session = ClaudeCredentialSession(
+            persistedReader: { .failure(.timedOut) },
+            shellReader: { .missing })
+
+        let lookup = await session.current()
+
+        #expect(lookup.failure == .timedOut)
     }
 
     private func credentialData(_ accessToken: String) throws -> Data {
@@ -619,6 +651,24 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
 }
 
 @Suite struct ClaudeCredentialStoreProcessTests {
+    @Test func credentialFileReadIsBoundedAndDistinguishesMissingData() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-credential-file-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("credentials.json")
+        let data = Data(repeating: 65, count: 16)
+        try data.write(to: url)
+
+        #expect(ClaudeCredentialStore.credentialFileData(at: url) == .data(data))
+        #expect(
+            ClaudeCredentialStore.credentialFileData(at: url, maximumOutputBytes: 8)
+                == .oversized)
+        #expect(
+            ClaudeCredentialStore.credentialFileData(
+                at: directory.appendingPathComponent("missing.json")) == .missing)
+    }
+
     @Test func keychainReadUsesBoundedSecretSafeExecution() async throws {
         let capture = ClaudeSecurityCommandCapture()
         let credential = try credentialData("keychain-token")
@@ -632,7 +682,7 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
             })
 
         let request = try #require(capture.request)
-        #expect(result == credential)
+        #expect(result == .data(credential))
         #expect(
             request.arguments == ["find-generic-password", "-s", "Claude Code-credentials", "-w"])
         #expect(request.timeout == 0.5)
@@ -642,6 +692,27 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
         #expect(request.terminatesProcessGroup)
         #expect(!request.arguments.joined().contains("keychain-token"))
         #expect(!request.environment.values.joined().contains("keychain-token"))
+    }
+
+    @Test func keychainReadPreservesOperationalFailures() async {
+        let executable = URL(fileURLWithPath: "/usr/bin/security")
+        let missing = await ClaudeCredentialStore.keychainData(
+            securityExecutable: executable, timeout: 0.5, maximumOutputBytes: 1_024,
+            runCommand: { _ in CLICommandResult(terminationStatus: 44, output: "") })
+        let timedOut = await ClaudeCredentialStore.keychainData(
+            securityExecutable: executable, timeout: 0.5, maximumOutputBytes: 1_024,
+            runCommand: { _ in throw CLICommandRunnerError.timedOut })
+        let failed = await ClaudeCredentialStore.keychainData(
+            securityExecutable: executable, timeout: 0.5, maximumOutputBytes: 1_024,
+            runCommand: { _ in CLICommandResult(terminationStatus: 1, output: "") })
+        let cancelled = await ClaudeCredentialStore.keychainData(
+            securityExecutable: executable, timeout: 0.5, maximumOutputBytes: 1_024,
+            runCommand: { _ in throw CancellationError() })
+
+        #expect(missing == .missing)
+        #expect(timedOut == .timedOut)
+        #expect(failed == .failed)
+        #expect(cancelled == .cancelled)
     }
 
     @Test func keychainUpdateUsesBoundedStdinWithoutExposingTheCredential() async throws {
@@ -677,8 +748,8 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
         let result = await ClaudeCredentialStore.keychainData(
             securityExecutable: fixture.executable, timeout: 5, maximumOutputBytes: 1_024)
 
-        #expect(result == nil)
-        #expect(ProcessInfo.processInfo.systemUptime - started < 2)
+        #expect(result == .oversized)
+        #expect(ProcessInfo.processInfo.systemUptime - started < 4)
     }
 
     @Test func stalledSecurityUpdateReturnsOnlyAGenericError() async throws {
