@@ -92,12 +92,16 @@ public enum DockerBrowserOperationExecution {
         for machine: Machine, configHosts: [SSHConfigHost]? = nil
     ) -> String? {
         let direct = machine.host.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !direct.isEmpty { return direct }
-        guard case let .sshConfigAlias(alias) = machine.source else { return nil }
+        guard case let .sshConfigAlias(alias) = machine.source else {
+            return direct.isEmpty ? nil : direct
+        }
         let resolved = (configHosts ?? SSHConfigFile.concreteHosts()).first {
             $0.alias.compare(alias, options: .caseInsensitive) == .orderedSame
         }?.hostName?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return resolved.flatMap { $0.isEmpty ? nil : $0 } ?? alias
+        if let resolved, !resolved.isEmpty { return resolved }
+        guard !direct.isEmpty, direct.compare(alias, options: .caseInsensitive) != .orderedSame
+        else { return nil }
+        return direct
     }
 
     public static func container(
@@ -137,32 +141,57 @@ public enum DockerBrowserOperationExecution {
     }
 
     public static func url(for port: DockerPortMapping, host: String = "localhost") -> URL? {
-        guard let hostPort = port.hostPort, port.proto == "tcp" else { return nil }
-        guard let trimmed = targetHost(bindAddress: port.hostIP, fallback: host) else { return nil }
-        let normalized =
-            trimmed.contains(":") && !trimmed.hasPrefix("[") ? "[\(trimmed)]" : trimmed
-        var components = URLComponents()
-        components.scheme = "http"
-        components.host = normalized
-        components.port = hostPort
-        return components.url
+        url(for: port, host: host, allowsLoopback: nil)
     }
 
     public static func url(
         for port: DockerPortMapping, machine: Machine, configHosts: [SSHConfigHost]? = nil
     ) -> URL? {
         guard let host = browserHost(for: machine, configHosts: configHosts) else { return nil }
-        return url(for: port, host: host)
+        return url(for: port, host: host, allowsLoopback: machine.id == Machine.localID)
     }
 
-    private static func targetHost(bindAddress: String?, fallback: String) -> String? {
+    public static func reachablePorts(
+        in container: DockerContainer, for machine: Machine,
+        configHosts: [SSHConfigHost]? = nil
+    ) -> [DockerPortMapping] {
+        guard let host = browserHost(for: machine, configHosts: configHosts) else { return [] }
+        let allowsLoopback = machine.id == Machine.localID
+        return container.ports.filter {
+            url(for: $0, host: host, allowsLoopback: allowsLoopback) != nil
+        }
+    }
+
+    private static func url(
+        for port: DockerPortMapping, host: String, allowsLoopback: Bool?
+    ) -> URL? {
+        guard
+            let hostPort = port.hostPort, port.proto == "tcp",
+            let target = targetHost(
+                bindAddress: port.hostIP, fallback: host, allowsLoopback: allowsLoopback)
+        else { return nil }
+        return url(host: target, port: hostPort)
+    }
+
+    private static func targetHost(
+        bindAddress: String?, fallback: String, allowsLoopback: Bool? = nil
+    ) -> String? {
         let fallback = unwrapped(fallback.trimmingCharacters(in: .whitespacesAndNewlines))
         guard !fallback.isEmpty else { return nil }
         guard let bindAddress else { return fallback }
         let bind = unwrapped(bindAddress.trimmingCharacters(in: .whitespacesAndNewlines))
         guard !bind.isEmpty, bind != "0.0.0.0", bind != "::" else { return fallback }
-        guard !isLoopback(bind) || isLoopback(fallback) else { return nil }
+        guard !isLoopback(bind) || (allowsLoopback ?? isLoopback(fallback)) else { return nil }
         return bind
+    }
+
+    private static func url(host: String, port: Int) -> URL? {
+        let normalized = host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host
+        var components = URLComponents()
+        components.scheme = "http"
+        components.host = normalized
+        components.port = port
+        return components.url
     }
 
     private static func unwrapped(_ host: String) -> String {

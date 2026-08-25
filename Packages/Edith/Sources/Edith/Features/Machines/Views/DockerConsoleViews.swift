@@ -142,6 +142,10 @@ private struct DockerContainerRow: View {
     let onRemove: () -> Void
     @State private var hovering = false
 
+    private var browserPorts: [DockerPortMapping] {
+        DockerBrowserOperationExecution.reachablePorts(in: container, for: machine)
+    }
+
     private var stateColor: Color {
         switch container.state {
         case .running: return container.health == .unhealthy ? DashSkin.warn : DashSkin.ok
@@ -242,7 +246,7 @@ private struct DockerContainerRow: View {
     @ViewBuilder
     private var portsView: some View {
         HStack(spacing: UIScale.pt(4)) {
-            ForEach(container.ports.prefix(2), id: \.self) { port in
+            ForEach(browserPorts.prefix(2), id: \.self) { port in
                 if let url = DockerBrowserOperationExecution.url(for: port, machine: machine) {
                     Button {
                         RemoteFileOperationExecution.present([url], action: .open) { urls, _ in
@@ -258,13 +262,6 @@ private struct DockerContainerRow: View {
                     }
                     .buttonStyle(.plain)
                     .pointerCursor()
-                } else {
-                    Text(port.displayName)
-                        .font(DashSkin.mono(9.5))
-                        .padding(.horizontal, UIScale.pt(5))
-                        .padding(.vertical, UIScale.pt(2))
-                        .background(DashSkin.line(dark), in: Capsule())
-                        .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
         }

@@ -32,6 +32,7 @@ being the usual example.
 | `ed machines docker logs` | Streams one container's logs, with timestamps. |
 | `ed machines docker inspect` | Reads structured image, command, environment, mount and network details. |
 | `ed machines docker top` | Reads the processes running inside a container. |
+| `ed machines docker open` | Opens one browser-reachable published TCP port. |
 | `ed machines docker start` | Starts one or more containers. |
 | `ed machines docker stop` | Stops one or more containers, with a 10 second grace period. |
 | `ed machines docker restart` | Restarts one or more containers, with a 10 second grace period. |
@@ -105,7 +106,7 @@ and exit 0.
 | 1 | Docker ran and refused, failed, or returned invalid structured output: no such container, an image still in use, a volume still attached, a compose file compose could not find, or an empty `inspect`/`top` result. The message names the verb and the machine, and docker's own stderr is the hint. Also a remote command that outran its timeout, and a `logs` stream whose `ssh` would not start. |
 | 2 | `--tail` was negative, or the command line was wrong in the ordinary way: an unknown flag, a missing `<machine>` or `<container>`, a `--tail` that is not a number. |
 | 3 | The machine name matched nothing or matched several; `<what>` was not one of the five prune targets; `<project>` was not in `compose ls`. |
-| 4 | The machine could not be reached, docker on it is not usable (not installed, the daemon down, or this user cannot talk to the socket), or `ssh` itself could not be launched for a non-streaming command. |
+| 4 | The machine could not be reached, docker on it is not usable (not installed, the daemon down, or this user cannot talk to the socket), `ssh` itself could not be launched for a non-streaming command, or `open` selected a binding the browser cannot reach. |
 | other | `shell`, `logs` and `compose logs` propagate the remote process's own exit code verbatim, so anything docker or SSH returns reaches you unchanged. |
 
 The docker availability failures all read the same way, with the specific reason
@@ -134,9 +135,11 @@ something unrecognisable, `docker reported an unknown state`.
   buildx ls`, `ed tuf docker exec -it api sh`.
 - `ed machines docker <machine>` with no verb is `ps`, and
   `ed machines docker compose <machine>` with no verb is `compose ls`.
-- `ed machines docker open <machine> <container>` opens its only published TCP
-  port in the browser. Pass `--port <host-or-container-port>` when it has more
-  than one. `--json` performs the open and reports the resolved machine URL.
+- `ed machines docker open <machine> <container>` opens its only browser-reachable
+  published TCP port. Pass `--port <host-or-container-port>` when it has more
+  than one. A loopback-only binding on a remote machine exits 4 because it points
+  at that machine, not this Mac. Publish it on a reachable address or add an SSH
+  port forward. `--json` performs the open and reports the resolved machine URL.
 - `ed machines docker shell <machine> <container>` is the Docker window's shell
   button. Both use the same quoted container target and choose `bash` when it is
   available inside the container, falling back to `sh`.
@@ -159,9 +162,9 @@ something unrecognisable, `docker reported an unknown state`.
 - `--json` output is one document per invocation, keys sorted, two space indent.
   Nothing on this page streams JSON, and nothing here takes `--json --follow`.
 - Three verbs have no `--json` at all: `shell`, `logs` and `compose logs`.
-- The container id you pass is never resolved by `ed`. Names, short ids and full
-  ids all go to docker as typed, so docker's own matching rules apply, including
-  its refusal when a short id is ambiguous.
+- Direct Docker verbs pass the container selector to docker as typed, so docker's
+  own name and id matching rules apply. `docker open` resolves an exact name,
+  short id or full id from the parsed container list before selecting a port.
 - `ps --json` drops two fields it collects. Network rx and tx bytes are parsed
   out of `docker stats` and never reach the document; only CPU and memory do.
 - Volume sizes are never reported by `volumes`. Use `df`.

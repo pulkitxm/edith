@@ -148,9 +148,15 @@ private actor SnippetCancellationGate {
         #expect(
             DockerBrowserOperationExecution.url(for: loopbackIPv4)?.absoluteString
                 == "http://127.0.0.1:8084")
+        #expect(
+            DockerBrowserOperationExecution.url(for: loopbackIPv4, machine: .local)?
+                .absoluteString == "http://127.0.0.1:8084")
+        #expect(
+            DockerBrowserOperationExecution.url(
+                for: loopbackIPv4, machine: Machine(name: "Tunnel", host: "127.0.0.1")) == nil)
 
         let machine = Machine(
-            name: "Box", host: "", source: .sshConfigAlias("box-alias"))
+            name: "Box", host: "old.example", source: .sshConfigAlias("box-alias"))
         let config = [SSHConfigHost(alias: "box-alias", hostName: "box.example")]
         #expect(
             DockerBrowserOperationExecution.browserHost(for: machine, configHosts: config)
@@ -159,6 +165,24 @@ private actor SnippetCancellationGate {
             DockerBrowserOperationExecution.url(
                 for: wildcardIPv4, machine: machine, configHosts: config)?.absoluteString
                 == "http://box.example:8080")
+        #expect(
+            DockerBrowserOperationExecution.browserHost(
+                for: Machine(
+                    name: "Alias", host: "box-alias", source: .sshConfigAlias("box-alias")),
+                configHosts: []) == nil)
+
+        let filtered = DockerContainer(
+            id: "web", names: ["web"], image: "web", command: "", state: .running,
+            status: "Up",
+            ports: [
+                DockerPortMapping(
+                    hostIP: "0.0.0.0", hostPort: 5353, containerPort: 53, proto: "udp"),
+                loopbackIPv4,
+                wildcardIPv6,
+            ])
+        #expect(
+            DockerBrowserOperationExecution.reachablePorts(
+                in: filtered, for: machine, configHosts: config) == [wildcardIPv6])
     }
 
     @Test func savedSnippetSelectionAndExecutionUseStoredCommand() async throws {

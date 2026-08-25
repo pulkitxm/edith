@@ -40,6 +40,12 @@ final class DockerDetailModel {
     private var inspectRequest = 0
     private var processesRequest = 0
 
+    func activate(session: MachineSession, container: DockerContainer) -> Bool {
+        guard detailContainerID != container.id else { return false }
+        startLogs(session: session, container: container)
+        return true
+    }
+
     var logPlainText: String {
         visibleLogs.map { line in
             guard showTimestamps, let stamp = line.timestamp else { return line.text }
@@ -122,6 +128,14 @@ final class DockerDetailModel {
         stream = nil
     }
 
+    func stop() {
+        stopLogs()
+        detailContainerID = nil
+        inspectRequest &+= 1
+        processesRequest &+= 1
+        fileToken &+= 1
+    }
+
     private func enqueue(_ line: DockerLogLine) {
         pending.append(line)
         guard flushTask == nil else { return }
@@ -155,7 +169,9 @@ final class DockerDetailModel {
         inspectFailed = false
         let result = await DockerDetailOperationExecution.inspect(
             containerID: container.id, using: run)
-        guard detailContainerID == container.id, inspectRequest == request else { return }
+        guard
+            !Task.isCancelled, detailContainerID == container.id, inspectRequest == request
+        else { return }
         guard case let .success(summary) = result else {
             inspect = nil
             inspectFailed = true
@@ -179,7 +195,9 @@ final class DockerDetailModel {
         processesFailed = false
         let result = await DockerDetailOperationExecution.processes(
             containerID: container.id, using: run)
-        guard detailContainerID == container.id, processesRequest == request else { return }
+        guard
+            !Task.isCancelled, detailContainerID == container.id, processesRequest == request
+        else { return }
         guard case let .success(rows) = result else {
             processes = []
             processesFailed = true
@@ -203,12 +221,50 @@ final class DockerDetailModel {
         filePath = path
         let result = await run(
             DockerCommands.listFiles(containerID: container.id, path: path), 30)
-        guard detailContainerID == container.id, token == fileToken else { return }
+        guard !Task.isCancelled, detailContainerID == container.id, token == fileToken else {
+            return
+        }
         guard case let .success(output) = result else {
             files = []
             return
         }
         files = FileListing.parse(output: output, parent: path)
+    }
+
+    func loadDetails(
+        session: MachineSession, container: DockerContainer, tab: DockerDetailTab, filePath: String
+    ) async {
+        await loadDetails(container: container, tab: tab, filePath: filePath) { command, timeout in
+            await session.runCommand(command, timeout: timeout)
+        }
+    }
+
+    func loadDetails(
+        container: DockerContainer, tab: DockerDetailTab, filePath: String,
+        using run: @escaping DockerDetailOperationExecution.Run
+    ) async {
+        if tab == .inspect {
+            await loadInspect(container: container, using: run)
+            return
+        }
+        if inspect == nil, !inspectFailed {
+            async let inspection: Void = loadInspect(container: container, using: run)
+            await loadActiveDetail(container: container, tab: tab, filePath: filePath, using: run)
+            await inspection
+        } else {
+            await loadActiveDetail(container: container, tab: tab, filePath: filePath, using: run)
+        }
+    }
+
+    private func loadActiveDetail(
+        container: DockerContainer, tab: DockerDetailTab, filePath: String,
+        using run: DockerDetailOperationExecution.Run
+    ) async {
+        switch tab {
+        case .processes: await loadProcesses(container: container, using: run)
+        case .files: await loadFiles(container: container, path: filePath, using: run)
+        default: break
+        }
     }
 
     func record(container: DockerContainer) {
@@ -220,6 +276,13 @@ final class DockerDetailModel {
                 Double(used) / Double(limit) * 100, to: memHistory)
         }
     }
+}
+
+private struct DockerDetailLoadRequest: Equatable {
+    let containerID: String
+    let tab: DockerDetailTab
+    let filePath: String
+    let generation: Int
 }
 
 struct DockerContainerDetail: View {
@@ -234,6 +297,8 @@ struct DockerContainerDetail: View {
 
     @State private var model = DockerDetailModel()
     @State private var tab = DockerDetailTab.logs
+    @State private var requestedFilePath = "/"
+    @State private var loadGeneration = 0
 
     private var live: DockerContainer {
         session.containers.first { $0.id == container.id } ?? container
@@ -245,6 +310,16 @@ struct DockerContainerDetail: View {
             .sorted { $0.displayName < $1.displayName }
     }
 
+    private var loadRequest: DockerDetailLoadRequest {
+        DockerDetailLoadRequest(
+            containerID: container.id, tab: tab, filePath: requestedFilePath,
+            generation: loadGeneration)
+    }
+
+    private var browserPorts: [DockerPortMapping] {
+        DockerBrowserOperationExecution.reachablePorts(in: live, for: session.machine)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -254,13 +329,16 @@ struct DockerContainerDetail: View {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .task(id: container.id) {
-            model.startLogs(session: session, container: container)
-            await model.loadInspect(session: session, container: container)
-            guard tab != .inspect else { return }
-            await load(tab)
+        .task(id: loadRequest) {
+            let switched = model.activate(session: session, container: container)
+            if switched, requestedFilePath != "/" {
+                requestedFilePath = "/"
+                return
+            }
+            await model.loadDetails(
+                session: session, container: container, tab: tab, filePath: requestedFilePath)
         }
-        .onDisappear { model.stopLogs() }
+        .onDisappear { model.stop() }
         .onChange(of: session.containers) { _, _ in model.record(container: live) }
     }
 
@@ -294,7 +372,7 @@ struct DockerContainerDetail: View {
                 }
                 Button("Shell", action: onShell).disabled(!live.state.isRunning)
                 Spacer(minLength: 0)
-                ForEach(live.ports.prefix(3), id: \.self) { port in
+                ForEach(browserPorts.prefix(3), id: \.self) { port in
                     if let url = DockerBrowserOperationExecution.url(
                         for: port, machine: session.machine)
                     {
@@ -368,7 +446,6 @@ struct DockerContainerDetail: View {
             ForEach(DockerDetailTab.allCases) { item in
                 Button {
                     tab = item
-                    Task { await load(item) }
                 } label: {
                     Text(item.title)
                         .font(.system(size: UIScale.pt(12), weight: .medium))
@@ -430,15 +507,6 @@ struct DockerContainerDetail: View {
         }
         .padding(.horizontal, UIScale.pt(16))
         .padding(.vertical, UIScale.pt(7))
-    }
-
-    private func load(_ item: DockerDetailTab) async {
-        switch item {
-        case .inspect: await model.loadInspect(session: session, container: container)
-        case .processes: await model.loadProcesses(session: session, container: container)
-        case .files: await model.loadFiles(session: session, container: container, path: "/")
-        default: break
-        }
     }
 
     @ViewBuilder
@@ -513,7 +581,7 @@ struct DockerContainerDetail: View {
                             .font(.system(size: UIScale.pt(12)))
                             .foregroundStyle(DashSkin.inkSoft(dark))
                         Button("Retry") {
-                            Task { await model.loadInspect(session: session, container: live) }
+                            loadGeneration &+= 1
                         }
                         .pointerCursor()
                         .font(.system(size: UIScale.pt(11), weight: .medium))
@@ -636,7 +704,7 @@ struct DockerContainerDetail: View {
                         .font(.system(size: UIScale.pt(12)))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                     Button("Retry") {
-                        Task { await model.loadProcesses(session: session, container: live) }
+                        loadGeneration &+= 1
                     }
                     .pointerCursor()
                     .font(.system(size: UIScale.pt(11), weight: .medium))
@@ -680,10 +748,7 @@ struct DockerContainerDetail: View {
             HStack(spacing: UIScale.pt(8)) {
                 Button {
                     let parent = FileListing.parentPath(of: model.filePath) ?? "/"
-                    Task {
-                        await model.loadFiles(
-                            session: session, container: container, path: parent)
-                    }
+                    requestedFilePath = parent
                 } label: {
                     Image(systemName: "chevron.up")
                 }
@@ -719,10 +784,7 @@ struct DockerContainerDetail: View {
                         .contentShape(Rectangle())
                         .onTapGesture(count: 2) {
                             guard entry.isDirectory else { return }
-                            Task {
-                                await model.loadFiles(
-                                    session: session, container: container, path: entry.path)
-                            }
+                            requestedFilePath = entry.path
                         }
                     }
                 }

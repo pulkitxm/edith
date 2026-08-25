@@ -80,7 +80,7 @@ struct DockerOpenCommand: AsyncParsableCommand {
             }
             guard
                 let url = DockerBrowserOperationExecution.url(
-                    for: selected, host: browserHost)
+                    for: selected, machine: runner.machine)
             else {
                 let binding = selected.hostIP ?? browserHost
                 throw CLIFailure.unavailable(

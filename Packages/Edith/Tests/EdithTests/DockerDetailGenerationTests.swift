@@ -32,6 +32,36 @@ private actor DockerDetailRunHarness {
     }
 }
 
+private actor DockerDetailCommandHarness {
+    private var inspectContinuation: CheckedContinuation<String, Never>?
+    private var processStarted = false
+    private var processWaiter: CheckedContinuation<Void, Never>?
+
+    func run(_ command: String) async -> Result<String, Error> {
+        if command.contains(" inspect ") {
+            return .success(
+                await withCheckedContinuation { inspectContinuation = $0 })
+        }
+        if command.contains(" top ") {
+            processStarted = true
+            processWaiter?.resume()
+            processWaiter = nil
+            return .success("PID USER %CPU %MEM RSS COMMAND\n2 root 0 0 1 ready")
+        }
+        return .failure(MachineDetailOperationError.invalidProcesses("unexpected"))
+    }
+
+    func waitForProcess() async {
+        if processStarted { return }
+        await withCheckedContinuation { processWaiter = $0 }
+    }
+
+    func resolveInspect(_ output: String) {
+        inspectContinuation?.resume(returning: output)
+        inspectContinuation = nil
+    }
+}
+
 @Suite @MainActor struct DockerDetailGenerationTests {
     @Test func olderContainerInspectCannotReplaceTheCurrentContainer() async throws {
         let model = DockerDetailModel()
@@ -111,6 +141,63 @@ private actor DockerDetailRunHarness {
         await first.value
 
         #expect(model.files.map(\.name) == ["current.txt"])
+    }
+
+    @Test func activeProcessesLoadWhileInspectIsStillPending() async {
+        let model = DockerDetailModel()
+        let session = MachineSession(machine: .local, local: true, observesWakeRequests: false)
+        let container = Self.container(id: "api")
+        let harness = DockerDetailCommandHarness()
+        model.startLogs(session: session, container: container)
+
+        let task = Task {
+            await model.loadDetails(container: container, tab: .processes, filePath: "/") {
+                command, _ in await harness.run(command)
+            }
+        }
+        await harness.waitForProcess()
+        for _ in 0..<20 where model.processes.isEmpty { await Task.yield() }
+
+        #expect(model.processes.map(\.command) == ["ready"])
+        #expect(model.inspect == nil)
+
+        await harness.resolveInspect(Self.inspect("api"))
+        await task.value
+        #expect(model.inspect?.image == "api")
+    }
+
+    @Test func cancelledProcessAndFileLoadsCannotPublish() async {
+        let model = DockerDetailModel()
+        let session = MachineSession(machine: .local, local: true, observesWakeRequests: false)
+        let container = Self.container(id: "api")
+        model.startLogs(session: session, container: container)
+        model.processes = [
+            DockerProcess(pid: "1", user: "root", cpu: "0", memory: "0", command: "kept")
+        ]
+        model.files = FileListing.parse(output: Self.file(named: "kept.txt"), parent: "/")
+
+        let processHarness = DockerDetailRunHarness()
+        let processTask = Task {
+            await model.loadProcesses(container: container) { _, _ in await processHarness.run() }
+        }
+        await processHarness.waitUntilStarted(1)
+        processTask.cancel()
+        await processHarness.resolve(0, with: Self.process(pid: "2", command: "replaced"))
+        await processTask.value
+
+        let fileHarness = DockerDetailRunHarness()
+        let fileTask = Task {
+            await model.loadFiles(container: container, path: "/next") { _, _ in
+                await fileHarness.run()
+            }
+        }
+        await fileHarness.waitUntilStarted(1)
+        fileTask.cancel()
+        await fileHarness.resolve(0, with: Self.file(named: "replaced.txt"))
+        await fileTask.value
+
+        #expect(model.processes.map(\.command) == ["kept"])
+        #expect(model.files.map(\.name) == ["kept.txt"])
     }
 
     private static func container(id: String) -> DockerContainer {

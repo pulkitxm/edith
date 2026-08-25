@@ -49,7 +49,7 @@ before connecting. A nonzero remote exit reports both streams as diagnostics.
 
 ```
 ed machines snippets run box 1
-ed machines snippets run box 1 --json | jq -r '.output'
+ed machines snippets run box 1 --json | jq -r '.stdout'
 ```
 
 ## Where to go next
