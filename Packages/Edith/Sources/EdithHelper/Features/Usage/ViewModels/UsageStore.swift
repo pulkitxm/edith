@@ -406,6 +406,8 @@ final class UsageStore: FeatureModule {
         case .failure(let failure):
             handleCredentialLookupFailure(failure)
             return
+        case .cancelled:
+            return
         }
         do {
             if credential.shouldRefresh(at: Date()) {
@@ -434,6 +436,8 @@ final class UsageStore: FeatureModule {
             latest = resolved
         case .failure(let failure):
             handleCredentialLookupFailure(failure)
+            return
+        case .cancelled:
             return
         }
         do {

@@ -4,6 +4,7 @@ import Foundation
 
 enum ClaudeShellProcessResult: Equatable, Sendable {
     case output(Data)
+    case cancelled
     case timedOut
     case oversized
     case failed
@@ -33,6 +34,8 @@ enum ClaudeShellProcessRunner {
             let result = try await CLICommandRunner.run(request) { _ in }
             guard result.terminationStatus == 0 else { return .failed }
             return .output(result.outputData)
+        } catch is CancellationError {
+            return .cancelled
         } catch CLICommandRunnerError.timedOut {
             return .timedOut
         } catch CLICommandRunnerError.outputLimitExceeded {
@@ -45,6 +48,7 @@ enum ClaudeShellProcessRunner {
 
 enum ClaudeShellCredentialResolution {
     case credential(ClaudeOAuthCredential)
+    case cancelled
     case missing
     case malformed
     case timedOut
@@ -100,6 +104,8 @@ struct ClaudeShellCredentialResolver: Sendable {
         switch result {
         case .output(let data):
             return parse(data)
+        case .cancelled:
+            return .cancelled
         case .timedOut:
             return .timedOut
         case .oversized:
@@ -167,6 +173,7 @@ enum ClaudeCredentialLookupFailure: Equatable {
 enum ClaudeCredentialLookup {
     case credential(ClaudeOAuthCredential)
     case failure(ClaudeCredentialLookupFailure)
+    case cancelled
 }
 
 @MainActor
@@ -215,6 +222,8 @@ final class ClaudeCredentialSession {
                 return .failure(.rejected)
             }
             return accept(credential)
+        case .cancelled:
+            return .cancelled
         case .missing:
             return rejectedAccessToken == nil ? .failure(.missing) : .failure(.rejected)
         case .malformed:

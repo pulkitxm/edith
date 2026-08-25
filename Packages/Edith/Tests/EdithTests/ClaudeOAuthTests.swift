@@ -273,8 +273,12 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
         let identifiers = try await processIdentifiers(fixture)
 
         task.cancel()
-        _ = await task.value
+        let resolution = await task.value
 
+        guard case .cancelled = resolution else {
+            Issue.record("expected cancellation to remain distinct from failure")
+            return
+        }
         try await expectGone(identifiers)
     }
 
@@ -589,6 +593,19 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
         let restored = (await session.current()).credential
 
         #expect(restored?.accessToken == "persisted-token")
+    }
+
+    @Test func shellCancellationRemainsDistinctFromLookupFailure() async {
+        let session = ClaudeCredentialSession(
+            persistedReader: { nil },
+            shellReader: { .cancelled })
+
+        let lookup = await session.current()
+
+        guard case .cancelled = lookup else {
+            Issue.record("expected cancellation to remain distinct from lookup failure")
+            return
+        }
     }
 
     private func credentialData(_ accessToken: String) throws -> Data {
