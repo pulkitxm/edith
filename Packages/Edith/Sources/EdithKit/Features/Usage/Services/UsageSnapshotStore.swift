@@ -1,5 +1,6 @@
 import CryptoKit
 import Darwin
+import Dispatch
 import Foundation
 
 public struct UsageSnapshotSource: Sendable {
@@ -162,6 +163,12 @@ public actor UsageSnapshotStore {
     private let hooks: UsageSnapshotHooks
     private let bounds: UsageSnapshotBounds
     private let manager = FileManager.default
+    private let fileQueue = DispatchSerialQueue(
+        label: "page.pulkit.edith.usage-snapshot", qos: .utility)
+
+    public nonisolated var unownedExecutor: UnownedSerialExecutor {
+        fileQueue.asUnownedSerialExecutor()
+    }
 
     public init(
         source: UsageSnapshotSource = UsageSnapshotSource(),
