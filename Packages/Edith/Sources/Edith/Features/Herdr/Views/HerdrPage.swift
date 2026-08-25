@@ -118,7 +118,7 @@ struct HerdrPage: View {
     }
 
     private var floatingControls: some View {
-        HStack(spacing: UIScale.pt(6)) {
+        Group {
             Button {
                 withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
                     store.setRailOpen(!store.railOpen)
@@ -137,11 +137,6 @@ struct HerdrPage: View {
             .pointerCursor()
             .help(store.railOpen ? "Hide the list" : "Show the list")
             .accessibilityLabel(store.railOpen ? "Hide the list" : "Show the list")
-            if let tab = store.tabs.first(where: { $0.id == store.selectedTab }),
-                !tab.agent.isTerminal
-            {
-                viewModes(for: tab)
-            }
         }
         .padding(.top, UIScale.pt(8))
         .padding(.leading, UIScale.pt(8))
@@ -241,18 +236,26 @@ struct HerdrPage: View {
             Rectangle()
                 .fill(DashSkin.lineStrong(dark))
                 .frame(height: 1)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: UIScale.pt(6)) {
-                    tabButton(id: HerdrStore.boardID, title: "Board", closable: false)
-                    ForEach(store.tabs) { tab in
-                        tabButton(
-                            id: tab.id,
-                            title: hideAgents ? tab.agent.kind : tab.agent.title,
-                            closable: true, agent: tab.agent)
+            HStack(spacing: UIScale.pt(8)) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: UIScale.pt(6)) {
+                        tabButton(id: HerdrStore.boardID, title: "Board", closable: false)
+                        ForEach(store.tabs) { tab in
+                            tabButton(
+                                id: tab.id,
+                                title: hideAgents ? tab.agent.kind : tab.agent.title,
+                                closable: true, agent: tab.agent)
+                        }
                     }
+                    .padding(.leading, PageMetrics.gutter(compact))
+                    .padding(.vertical, UIScale.pt(8))
                 }
-                .padding(.horizontal, PageMetrics.gutter(compact))
-                .padding(.vertical, UIScale.pt(8))
+                if let tab = store.tabs.first(where: { $0.id == store.selectedTab }),
+                    !tab.agent.isTerminal
+                {
+                    viewModes(for: tab)
+                        .padding(.trailing, PageMetrics.gutter(compact))
+                }
             }
             Rectangle()
                 .fill(DashSkin.lineStrong(dark))
