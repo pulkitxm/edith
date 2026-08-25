@@ -160,40 +160,6 @@ public enum NameConflicts {
         }
     }
 
-    public static func command(
-        intent: DropIntent, destination: String, resolutions: [String: NameConflictResolution],
-        existing: [RemoteFileEntry], caseInsensitive: Bool = true
-    ) -> String? {
-        var parts: [String] = []
-        var taken = Set(existing.map { NameFolding.key($0.name, caseInsensitive: caseInsensitive) })
-        for path in intent.paths {
-            let name = (path as NSString).lastPathComponent
-            let resolution = resolutions[name] ?? .keepBoth
-            guard resolution != .skip else { continue }
-            let targetName =
-                resolution == .keepBoth
-                ? claim(name, taken: &taken, caseInsensitive: caseInsensitive) : name
-            let target = FileListing.join(parent: destination, name: targetName)
-            let quotedSource = ShellQuote.quote(path)
-            let quotedTarget = ShellQuote.quote(target)
-            let verb: String
-            switch intent {
-            case .moveWithinMachine: verb = "mv"
-            case .copyWithinMachine: verb = "cp -a"
-            case .transferBetweenMachines, .uploadLocalFiles: return nil
-            }
-            if resolution == .replace {
-                let staged = ShellQuote.quote(target + stagingSuffix)
-                parts.append(
-                    "\(verb) \(quotedSource) \(staged) && rm -rf \(quotedTarget)"
-                        + " && mv \(staged) \(quotedTarget)")
-            } else {
-                parts.append("\(verb) \(quotedSource) \(quotedTarget)")
-            }
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: "; ")
-    }
-
 }
 
 public struct FileOperationProgress: Equatable, Sendable {

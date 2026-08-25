@@ -662,7 +662,7 @@ struct FinderConflictSheet: View {
                 }
                 .frame(maxHeight: UIScale.pt(120))
             }
-            Text("Choose what to do with the items you are moving.")
+            Text("Choose what to do with these items.")
                 .font(.system(size: UIScale.pt(11.5)))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Spacer(minLength: 0)

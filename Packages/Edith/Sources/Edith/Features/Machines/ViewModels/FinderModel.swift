@@ -821,25 +821,7 @@ final class FinderModel {
     }
 
     func upload(_ urls: [URL]) async {
-        guard let connection = session.connectionRef else {
-            for url in urls {
-                let target = FileListing.join(parent: path, name: url.lastPathComponent)
-                try? FileManager.default.copyItem(at: url, to: URL(fileURLWithPath: target))
-            }
-            await load()
-            return
-        }
-        for url in urls {
-            statusMessage = "Uploading \(url.lastPathComponent)…"
-            let target = FileListing.join(parent: path, name: url.lastPathComponent)
-            do {
-                try await connection.upload(localURL: url, toRemotePath: target)
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
-        flash("Upload finished")
-        await load()
+        await uploadPaths(urls, into: path, resolutions: [:])
     }
 
     func searchQueryChanged() {
@@ -901,16 +883,6 @@ final class FinderModel {
         await searchTask?.value
     }
 
-    private func run(_ command: String, reload: Bool) async {
-        let result = await session.runCommand(command, timeout: 120)
-        var failureMessage: String?
-        if case let .failure(failure) = result {
-            failureMessage = failure.localizedDescription
-        }
-        if reload { await load() }
-        if let failureMessage { errorMessage = failureMessage }
-    }
-
     func dragPayload() -> MachineItemsPayload {
         MachineItemsPayload(
             machineID: session.machine.id, paths: selectedEntries.map(\.path),
@@ -947,11 +919,13 @@ final class FinderModel {
     }
 
     private func destinationEntries(_ destination: String) async -> [RemoteFileEntry]? {
-        if destination == path { return entries }
-        switch await session.listFiles(path: destination) {
-        case let .success(items):
-            return items
-        case let .failure(error):
+        guard let endpoint = transferEndpoint(for: session) else {
+            errorMessage = FinderTransferError.notConnected.localizedDescription
+            return nil
+        }
+        do {
+            return try await endpoint.list(destination)
+        } catch {
             errorMessage = error.localizedDescription
             return nil
         }
@@ -961,6 +935,7 @@ final class FinderModel {
         guard DropResolver.isDropAllowed(paths: intent.paths, destination: destination) else {
             return
         }
+        errorMessage = nil
         let names = intent.paths.map { ($0 as NSString).lastPathComponent }
         guard let existing = await destinationEntries(destination) else { return }
         let clashes = NameConflicts.conflicting(names: names, existing: existing)
@@ -978,30 +953,46 @@ final class FinderModel {
     ) async {
         switch intent {
         case .moveWithinMachine, .copyWithinMachine:
+            errorMessage = nil
             guard let existing = await destinationEntries(destination) else { return }
+            let plan = RemoteTransferOperationExecution.plan(
+                paths: intent.paths, destination: destination, existing: existing,
+                resolutions: resolutions)
             guard
-                let command = NameConflicts.command(
-                    intent: intent, destination: destination, resolutions: resolutions,
-                    existing: existing)
+                let command = RemoteTransferOperationExecution.withinMachineCommand(
+                    plan, moving: intent.isMove)
             else { return }
             progress = FileOperationProgress(
-                title: intent.isMove ? "Moving" : "Copying", total: intent.paths.count)
-            await run(command, reload: true)
+                title: intent.isMove ? "Moving" : "Copying", total: plan.items.count)
+            let result = await session.runCommand(command, timeout: 120)
             progress = nil
-            if intent.isMove, errorMessage == nil {
+            let operationError: String?
+            switch result {
+            case .success:
+                operationError = nil
+            case .failure where Task.isCancelled:
+                operationError = nil
+            case let .failure(error) where error is CancellationError:
+                operationError = nil
+            case let .failure(error):
+                operationError = error.localizedDescription
+            }
+            await load()
+            if let operationError { errorMessage = operationError }
+            if intent.isMove, case .success = result {
                 recordUndo(
                     FinderUndoStep(
                         label: "Move",
-                        moves: intent.paths.map {
+                        moves: plan.items.map {
                             FinderUndoStep.Move(
-                                from: $0,
-                                to: FileListing.join(
-                                    parent: destination,
-                                    name: ($0 as NSString).lastPathComponent))
+                                from: $0.sourcePath,
+                                to: $0.destinationPath)
                         }))
             }
         case let .uploadLocalFiles(paths):
-            await uploadPaths(paths.map { URL(fileURLWithPath: $0) }, into: destination)
+            await uploadPaths(
+                paths.map { URL(fileURLWithPath: $0) }, into: destination,
+                resolutions: resolutions)
         case let .transferBetweenMachines(from, paths):
             await transfer(
                 paths: paths, fromMachine: from, into: destination,
@@ -1081,28 +1072,44 @@ final class FinderModel {
             : "\(outcome.failures.count) of \(completed + outcome.failures.count) items failed. \(detail)"
     }
 
-    private func uploadPaths(_ urls: [URL], into destination: String) async {
+    private func uploadPaths(
+        _ urls: [URL], into destination: String,
+        resolutions: [String: NameConflictResolution]
+    ) async {
         guard !urls.isEmpty else { return }
-        progress = FileOperationProgress(title: "Uploading", total: urls.count)
-        if session.isLocal {
-            for url in urls {
-                let target = FileListing.join(
-                    parent: destination, name: url.lastPathComponent)
-                try? FileManager.default.copyItem(at: url, to: URL(fileURLWithPath: target))
+        errorMessage = nil
+        guard let target = transferEndpoint(for: session) else {
+            errorMessage = FinderTransferError.notConnected.localizedDescription
+            return
+        }
+        let source = RemoteTransferEndpoint.local(
+            machineID: session.machine.id, name: "This Mac")
+        do {
+            let existing = try await target.list(destination)
+            let plan = RemoteTransferOperationExecution.plan(
+                paths: urls.map(\.path), destination: destination, existing: existing,
+                resolutions: resolutions)
+            guard !plan.items.isEmpty else {
+                flash("Nothing uploaded")
+                return
             }
-        } else if let connection = session.connectionRef {
-            var completed = 0
-            for url in urls {
-                let target = FileListing.join(
-                    parent: destination, name: url.lastPathComponent)
-                try? await connection.upload(localURL: url, toRemotePath: target)
-                completed += 1
-                progress = FileOperationProgress(
-                    title: "Uploading", completed: completed, total: urls.count)
+            progress = FileOperationProgress(title: "Uploading", total: plan.items.count)
+            let outcome = try await RemoteTransferOperationExecution.execute(
+                plan, from: source, to: target,
+                confirmsReplacement: !plan.replacements.isEmpty
+            ) { [weak self] processed, total in
+                await self?.setTransferProgress(
+                    title: "Uploading", processed: processed, total: total)
             }
+            finishTransfer(outcome, verb: "Uploaded")
+        } catch is CancellationError {
+        } catch {
+            errorMessage = error.localizedDescription
         }
         progress = nil
+        let transferError = errorMessage
         await load()
+        if let transferError { errorMessage = transferError }
     }
 
     func moveSelection(into destination: String) async {
