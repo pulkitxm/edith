@@ -103,6 +103,30 @@ import Testing
         #expect(scan(completeURL) == ["after", "before"])
         #expect(scan(tornURL) == ["before"])
     }
+
+    @Test func reversedScanCancelsWhileDiscardingANewlineFreeLine() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("cancel.txt")
+        try ("before\n" + String(repeating: "x", count: 10_000)).write(
+            to: url, atomically: true, encoding: .utf8)
+        var checks = 0
+        var lines: [String] = []
+
+        FileTail.scanLinesReversed(
+            url, chunkBytes: 31, maxLineBytes: 128,
+            shouldContinue: {
+                checks += 1
+                return checks <= 4
+            }
+        ) { data in
+            lines.append(String(decoding: data, as: UTF8.self))
+            return true
+        }
+
+        #expect(checks == 5)
+        #expect(lines.isEmpty)
+    }
 }
 
 @Suite @MainActor struct DashboardRefreshBridgeTests {

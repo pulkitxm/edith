@@ -3,6 +3,7 @@ import Foundation
 public enum FileTail {
     public static func scanLinesReversed(
         _ url: URL, chunkBytes: Int = 64 * 1024, maxLineBytes: Int = 1024 * 1024,
+        shouldContinue: () -> Bool = { true },
         _ visit: (Data) -> Bool
     ) {
         guard chunkBytes > 0, maxLineBytes > 0,
@@ -13,6 +14,7 @@ public enum FileTail {
         var pending = Data()
         var discardingOversizedLine = false
         while offset > 0 {
+            guard shouldContinue() else { return }
             let count = min(UInt64(chunkBytes), offset)
             offset -= count
             guard (try? handle.seek(toOffset: offset)) != nil,
@@ -22,6 +24,7 @@ public enum FileTail {
             if !discardingOversizedLine { block.append(pending) }
             var upper = block.endIndex
             while let newline = block[..<upper].lastIndex(of: UInt8(ascii: "\n")) {
+                guard shouldContinue() else { return }
                 let start = block.index(after: newline)
                 if discardingOversizedLine {
                     discardingOversizedLine = false

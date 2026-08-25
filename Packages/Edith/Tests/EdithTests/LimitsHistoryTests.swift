@@ -198,6 +198,28 @@ import Testing
 
         #expect(try String(contentsOf: url, encoding: .utf8) == replacement.line)
     }
+
+    @Test func snapshotResolvesTheAvailableProviderAndMatchingPoints() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-tests-\(UUID().uuidString)")
+        let url = dir.appendingPathComponent("limits-history.jsonl")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let first = LimitsHistory.row(
+            provider: .codex, session: LimitWindow(percent: 12, resetsAt: nil), week: nil,
+            now: now)
+        let second = LimitsHistory.row(
+            provider: .codex, session: LimitWindow(percent: 34, resetsAt: nil), week: nil,
+            now: now.addingTimeInterval(60))
+        try Data((first.line + second.line).utf8).write(to: url)
+
+        let snapshot = await LimitsHistory.loadSnapshot(preferredProvider: .claude, url: url)
+
+        #expect(snapshot.providers == [.codex])
+        #expect(snapshot.provider == .codex)
+        #expect(snapshot.latest[.codex]?.session?.percent == 34)
+        #expect(snapshot.points.map(\.s) == [12, 34])
+    }
 }
 
 @Suite struct LimitsHistoryFableTests {
