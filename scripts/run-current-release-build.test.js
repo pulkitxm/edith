@@ -116,7 +116,7 @@ function advanceMain(fixture) {
   git(mover, "push", "origin", "main");
 }
 
-function unreliableGit(fixture, failCalls, warnCalls = []) {
+function unreliableGit(fixture, failCalls, warnCalls = [], hangCalls = []) {
   const directory = join(fixture.root, `git-shim-${Date.now()}`);
   const executable = join(directory, "git");
   const state = join(directory, "calls");
@@ -136,6 +136,15 @@ if [[ "\${1:-}" == "ls-remote" ]]; then
   case ",$RELEASE_TEST_GIT_WARN_CALLS," in
     *,$calls,*) echo "warning: simulated remote warning" >&2 ;;
   esac
+  case ",$RELEASE_TEST_GIT_HANG_CALLS," in
+    *,$calls,*)
+      trap "" TERM
+      printf '%s' "$$" > "$RELEASE_TEST_GIT_STATE.parent.$calls"
+      bash -c 'trap "" TERM; printf "%s" "$$" > "$1"; while :; do sleep 1; done' \
+        -- "$RELEASE_TEST_GIT_STATE.descendant.$calls" &
+      wait
+      ;;
+  esac
 fi
 exec "$RELEASE_TEST_REAL_GIT" "$@"
 `,
@@ -144,6 +153,7 @@ exec "$RELEASE_TEST_REAL_GIT" "$@"
   return {
     PATH: `${directory}:${process.env.PATH}`,
     RELEASE_TEST_GIT_FAIL_CALLS: failCalls.join(","),
+    RELEASE_TEST_GIT_HANG_CALLS: hangCalls.join(","),
     RELEASE_TEST_GIT_WARN_CALLS: warnCalls.join(","),
     RELEASE_TEST_GIT_STATE: state,
     RELEASE_TEST_REAL_GIT: command(fixture.checkout, "which", ["git"]),
@@ -159,6 +169,8 @@ function run(fixture, args, values = {}) {
       RELEASE_CHECK_INTERVAL_SECONDS: "1",
       RELEASE_REMOTE_RETRY_ATTEMPTS: "3",
       RELEASE_REMOTE_RETRY_DELAY_SECONDS: "0",
+      RELEASE_REMOTE_TERMINATION_GRACE_TICKS: "2",
+      RELEASE_REMOTE_TIMEOUT_SECONDS: "1",
       RELEASE_SUPERSEDED_FILE: join(fixture.root, "superseded"),
       RELEASE_TERMINATION_GRACE_TICKS: "2",
       ...values,
@@ -249,6 +261,31 @@ test("an unavailable remote exhausts retries without starting a build", async ()
   expect(Number(readFileSync(shim.state, "utf8"))).toBe(3);
   expect(await new Response(child.stderr).text()).toContain(
     "release build blocked: could not resolve refs/heads/main",
+  );
+});
+
+test("a stalled remote attempt is killed with its descendants and retried", async () => {
+  const fixture = createFixture();
+  const marker = join(fixture.root, "completed");
+  const shim = unreliableGit(fixture, [], [], [1]);
+  const child = run(
+    fixture,
+    ["bash", "-c", 'printf complete > "$1"', "--", marker],
+    shim,
+  );
+  processes.push(child);
+
+  expect(await child.exited).toBe(0);
+  expect(readFileSync(marker, "utf8")).toBe("complete");
+  const parentPid = Number(readFileSync(`${shim.state}.parent.1`, "utf8"));
+  const descendantPid = Number(
+    readFileSync(`${shim.state}.descendant.1`, "utf8"),
+  );
+  spawnedPids.push(parentPid, descendantPid);
+  await waitForExit(parentPid);
+  await waitForExit(descendantPid);
+  expect(await new Response(child.stderr).text()).toContain(
+    "release remote check timed out after 1s",
   );
 });
 
@@ -393,6 +430,24 @@ test("stopping a stale build terminates its parent and grandchild", async () => 
   await waitForExit(grandchildPid);
 });
 
+test("a successful leader cannot leave its process group running", async () => {
+  const fixture = createFixture();
+  const descendantFile = join(fixture.root, "descendant-pid");
+  const child = run(fixture, [
+    "bash",
+    "-c",
+    'bash -c \'trap "" TERM; printf "%s" "$$" > "$1"; while :; do sleep 1; done\' -- "$1" & while [ ! -s "$1" ]; do sleep 0.01; done',
+    "--",
+    descendantFile,
+  ]);
+  processes.push(child);
+
+  expect(await child.exited).toBe(0);
+  const descendantPid = Number(readFileSync(descendantFile, "utf8"));
+  spawnedPids.push(descendantPid);
+  await waitForExit(descendantPid);
+});
+
 test("a final main advance after child exit supersedes the build", async () => {
   const fixture = createFixture();
   const mover = prepareMainAdvance(fixture);
@@ -420,6 +475,39 @@ test("a final remote outage fails closed after a successful build", async () => 
   expect(readFileSync(artifact, "utf8")).toBe("built");
   expect(existsSync(join(fixture.root, "superseded"))).toBe(false);
   expect(Number(readFileSync(shim.state, "utf8"))).toBe(4);
+  expect(await new Response(child.stderr).text()).toContain(
+    "release build blocked: could not resolve refs/heads/main",
+  );
+});
+
+test("a stalled final remote check fails closed without live transport processes", async () => {
+  const fixture = createFixture();
+  const artifact = join(fixture.root, "artifact");
+  const shim = unreliableGit(fixture, [], [], [2, 3]);
+  const child = run(
+    fixture,
+    ["bash", "-c", 'printf built > "$1"', "--", artifact],
+    {
+      ...shim,
+      RELEASE_REMOTE_RETRY_ATTEMPTS: "2",
+    },
+  );
+  processes.push(child);
+
+  expect(await child.exited).toBe(1);
+  expect(readFileSync(artifact, "utf8")).toBe("built");
+  for (const call of [2, 3]) {
+    const parentPid = Number(
+      readFileSync(`${shim.state}.parent.${call}`, "utf8"),
+    );
+    const descendantPid = Number(
+      readFileSync(`${shim.state}.descendant.${call}`, "utf8"),
+    );
+    spawnedPids.push(parentPid, descendantPid);
+    await waitForExit(parentPid);
+    await waitForExit(descendantPid);
+  }
+  expect(existsSync(join(fixture.root, "superseded"))).toBe(false);
   expect(await new Response(child.stderr).text()).toContain(
     "release build blocked: could not resolve refs/heads/main",
   );
@@ -461,7 +549,10 @@ test("invalid remote retry configuration stays fatal", async () => {
   const delay = run(fixture, ["true"], {
     RELEASE_REMOTE_RETRY_DELAY_SECONDS: "later",
   });
-  processes.push(attempts, delay);
+  const timeout = run(fixture, ["true"], {
+    RELEASE_REMOTE_TIMEOUT_SECONDS: "0",
+  });
+  processes.push(attempts, delay, timeout);
 
   expect(await attempts.exited).toBe(1);
   expect(await new Response(attempts.stderr).text()).toContain(
@@ -470,5 +561,9 @@ test("invalid remote retry configuration stays fatal", async () => {
   expect(await delay.exited).toBe(1);
   expect(await new Response(delay.stderr).text()).toContain(
     "release build blocked: remote retry delay must be a non-negative integer",
+  );
+  expect(await timeout.exited).toBe(1);
+  expect(await new Response(timeout.stderr).text()).toContain(
+    "release build blocked: remote timeout must be a positive integer",
   );
 });
