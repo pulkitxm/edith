@@ -161,6 +161,22 @@ exec "${command(root, "which", ["git"])}" "$@"
   );
 });
 
+test("renaming a shipped file outside shipped paths still dispatches", () => {
+  const root = repository();
+  commit(root, "Resources/Retired.plist", "released resource");
+  git(root, "tag", "v0.0.139");
+  mkdirSync(join(root, "archive"));
+  git(root, "mv", "Resources/Retired.plist", "archive/Retired.plist");
+  git(root, "commit", "-m", "Move retired resource");
+
+  const result = changed(root);
+
+  expect(result.exitCode).toBe(0);
+  expect(result.stderr.toString()).toContain(
+    "release artifact changed: Resources/Retired.plist",
+  );
+});
+
 test.each([
   "Packages/Edith/Sources/Edith/App.swift",
   "Resources/Info.plist",

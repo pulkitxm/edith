@@ -24,7 +24,7 @@ while IFS= read -r tag; do
   fi
 done <<< "$TAGS"
 [[ -n "$LATEST_TAG" ]] || inspection_failed "no release tag is available"
-CHANGED="$(git diff --name-only "$LATEST_TAG" "$HEAD_SHA")" \
+CHANGED="$(git diff --no-renames --name-only "$LATEST_TAG" "$HEAD_SHA")" \
   || inspection_failed "could not compare $LATEST_TAG with $HEAD_REF"
 echo "release artifact comparison: $LATEST_TAG..$HEAD_REF" >&2
 
