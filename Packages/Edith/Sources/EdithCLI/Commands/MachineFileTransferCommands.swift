@@ -1,4 +1,5 @@
 import ArgumentParser
+import EdithCore
 import EdithKit
 import Foundation
 
@@ -19,14 +20,14 @@ enum RemoteTransferCLI {
     }
 
     static func reportPlan(
-        operation: RemoteTransferOperation, verb: String, source: String,
+        operation: UserOperationID, verb: String, source: String,
         destinationMachine: String?,
         plan: RemoteTransferPlan, dryRun: Bool, confirmationMissing: Bool, json: Bool
     ) {
         guard !json else {
             CLIOut.json(
                 .object([
-                    "operation": .string(operation.descriptor.id.rawValue),
+                    "operation": .string(operation.rawValue),
                     "sourceMachine": .string(source),
                     "destinationMachine": .optional(destinationMachine),
                     "destination": .string(plan.destination),
@@ -53,14 +54,14 @@ enum RemoteTransferCLI {
     }
 
     static func reportOutcome(
-        operation: RemoteTransferOperation, completedVerb: String, source: String,
+        operation: UserOperationID, completedVerb: String, source: String,
         destinationMachine: String?,
         plan: RemoteTransferPlan, outcome: RemoteTransferOutcome, json: Bool
     ) throws {
         guard !json else {
             CLIOut.json(
                 .object([
-                    "operation": .string(operation.descriptor.id.rawValue),
+                    "operation": .string(operation.rawValue),
                     "sourceMachine": .string(source),
                     "destinationMachine": .optional(destinationMachine),
                     "destination": .string(plan.destination),
@@ -88,6 +89,30 @@ enum RemoteTransferCLI {
                 "\(failure.sourcePath) -> \(failure.destination): \(failure.message)")
         }
         if !outcome.failures.isEmpty { throw ExitCode.failure }
+    }
+
+    static func reportApplied(
+        operation: UserOperationID, completedVerb: String, machine: String,
+        plan: RemoteTransferPlan, json: Bool
+    ) {
+        guard !json else {
+            CLIOut.json(
+                .object([
+                    "operation": .string(operation.rawValue),
+                    "machine": .string(machine),
+                    "destination": .string(plan.destination),
+                    "dryRun": .bool(false),
+                    "executed": .bool(true),
+                    "requiresConfirmation": .bool(false),
+                    "items": .array(plan.items.map(planItem)),
+                    "skipped": .strings(plan.skipped),
+                ]))
+            return
+        }
+        CLIOut.out("\(completedVerb) \(plan.items.count) item(s)")
+        for item in plan.items {
+            CLIOut.out("  \(item.sourcePath) -> \(item.destinationPath)")
+        }
     }
 
     private static func planItem(_ item: RemoteTransferPlanItem) -> JSONValue {
@@ -154,7 +179,8 @@ struct MachineFilesGetManyCommand: AsyncParsableCommand {
                 plan, dryRun: dryRun, replace: replace, yes: yes)
             {
                 RemoteTransferCLI.reportPlan(
-                    operation: .downloadSelection, verb: "download", source: source.machine.name,
+                    operation: RemoteTransferOperation.downloadSelection.descriptor.id,
+                    verb: "download", source: source.machine.name,
                     destinationMachine: nil, plan: plan, dryRun: dryRun,
                     confirmationMissing: confirmationMissing, json: json)
                 return
@@ -175,7 +201,8 @@ struct MachineFilesGetManyCommand: AsyncParsableCommand {
             }
             progress.end()
             try RemoteTransferCLI.reportOutcome(
-                operation: .downloadSelection, completedVerb: "downloaded",
+                operation: RemoteTransferOperation.downloadSelection.descriptor.id,
+                completedVerb: "downloaded",
                 source: source.machine.name,
                 destinationMachine: nil, plan: plan, outcome: outcome, json: json)
         }
@@ -236,7 +263,8 @@ struct MachineFilesTransferCommand: AsyncParsableCommand {
                 plan, dryRun: dryRun, replace: replace, yes: yes)
             {
                 RemoteTransferCLI.reportPlan(
-                    operation: .transferBetweenMachines, verb: "transfer",
+                    operation: RemoteTransferOperation.transferBetweenMachines.descriptor.id,
+                    verb: "transfer",
                     source: sourceTarget.machine.name,
                     destinationMachine: destinationTarget.machine.name, plan: plan,
                     dryRun: dryRun, confirmationMissing: confirmationMissing, json: json)
@@ -258,7 +286,8 @@ struct MachineFilesTransferCommand: AsyncParsableCommand {
             }
             progress.end()
             try RemoteTransferCLI.reportOutcome(
-                operation: .transferBetweenMachines, completedVerb: "transferred",
+                operation: RemoteTransferOperation.transferBetweenMachines.descriptor.id,
+                completedVerb: "transferred",
                 source: sourceTarget.machine.name,
                 destinationMachine: destinationTarget.machine.name, plan: plan,
                 outcome: outcome, json: json)
