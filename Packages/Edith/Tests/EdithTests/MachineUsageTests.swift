@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 
@@ -268,6 +269,90 @@ import Testing
         #expect(MachineUsageStore.forget(machineID: machine.id, in: dir))
         #expect(MachineUsageStore.summary(machineID: machine.id, in: dir) == nil)
         #expect(!MachineUsageStore.forget(machineID: machine.id, in: dir))
+    }
+
+    @Test func concurrentSavesAndForgetsLeaveCompleteMachineDocuments() async throws {
+        let dir = directory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let machines = (0..<60).map {
+            Machine(id: UUID(), name: "machine-\($0)", host: "host-\($0)")
+        }
+        let payload = document
+        for machine in machines.prefix(20) {
+            try MachineUsageStore.save(
+                document: payload, machine: machine, slug: machine.name, host: machine.host,
+                collectedAt: Date(), in: dir)
+        }
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for machine in machines.prefix(20) {
+                group.addTask {
+                    guard MachineUsageStore.forget(machineID: machine.id, in: dir) else {
+                        throw MachineUsageError.documentUnreadable(machine.name)
+                    }
+                }
+            }
+            for machine in machines.dropFirst(20) {
+                group.addTask {
+                    _ = try MachineUsageStore.save(
+                        document: payload, machine: machine, slug: machine.name,
+                        host: machine.host, collectedAt: Date(), in: dir)
+                }
+            }
+            try await group.waitForAll()
+        }
+
+        #expect(Set(MachineUsageStore.storedIDs(in: dir)) == Set(machines.dropFirst(20).map(\.id)))
+        #expect(MachineUsageStore.summaries(in: dir).count == 40)
+    }
+
+    @Test func restampRejectsSymlinkedMachineDocuments() throws {
+        let dir = directory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let machine = Machine(id: UUID(), name: "renamed", host: "host")
+        let target = dir.appendingPathComponent("outside.json")
+        let file = UsageCollector.machineFile(id: machine.id, in: dir)
+        let original = Data("preserve".utf8)
+        try original.write(to: target)
+        try FileManager.default.createSymbolicLink(at: file, withDestinationURL: target)
+
+        #expect(MachineUsageStore.restamp([machine], in: dir).isEmpty)
+        #expect(try Data(contentsOf: target) == original)
+    }
+
+    @Test func restampRejectsFifoMachineDocumentsWithoutBlocking() throws {
+        let dir = directory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let machine = Machine(id: UUID(), name: "renamed", host: "host")
+        let file = UsageCollector.machineFile(id: machine.id, in: dir)
+        #expect(mkfifo(file.path, mode_t(S_IRUSR | S_IWUSR)) == 0)
+
+        #expect(MachineUsageStore.restamp([machine], in: dir).isEmpty)
+        var metadata = stat()
+        #expect(lstat(file.path, &metadata) == 0)
+        #expect(metadata.st_mode & S_IFMT == S_IFIFO)
+    }
+
+    @Test func everyStoredFleetMutationAdvancesTheRefreshGeneration() throws {
+        let dir = directory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let machine = Machine(id: UUID(), name: "tuf", host: "h")
+        #expect(try MachineUsageStore.generation(in: dir) == nil)
+
+        try MachineUsageStore.save(
+            document: document, machine: machine, slug: "tuf", host: "h", collectedAt: Date(),
+            in: dir)
+        let saved = try #require(try MachineUsageStore.generation(in: dir))
+
+        var renamed = machine
+        renamed.name = "renamed"
+        #expect(MachineUsageStore.restamp([renamed], in: dir) == [machine.id])
+        let restamped = try #require(try MachineUsageStore.generation(in: dir))
+        #expect(restamped != saved)
+
+        #expect(MachineUsageStore.forget(machineID: machine.id, in: dir))
+        let forgotten = try #require(try MachineUsageStore.generation(in: dir))
+        #expect(forgotten != restamped)
     }
 }
 

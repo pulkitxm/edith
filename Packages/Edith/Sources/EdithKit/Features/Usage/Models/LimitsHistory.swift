@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 public struct LimitsHistory {
@@ -6,7 +7,6 @@ public struct LimitsHistory {
         public let session: LimitWindow?
         public let week: LimitWindow?
         public let fable: LimitWindow?
-        fileprivate let key: String
     }
 
     public struct Snapshot: Sendable {
@@ -24,9 +24,6 @@ public struct LimitsHistory {
         self.fileURL = url
     }
 
-    private var lastKeys: [LimitProvider: String] = [:]
-    private var seeded = false
-
     private struct Row: Codable {
         let ts: String
         let p: LimitProvider?
@@ -40,6 +37,18 @@ public struct LimitsHistory {
 
     private static let iso = ISO8601DateFormatter()
     private static let decoder = JSONDecoder()
+    private static let maximumTailScanBytes = 16 * 1_024 * 1_024
+
+    public static func isValidDocument(_ text: String) -> Bool {
+        let lines = text.split(separator: "\n")
+        guard !lines.isEmpty else { return false }
+        return lines.allSatisfy { line in
+            guard let row = try? decoder.decode(Row.self, from: Data(line.utf8)) else {
+                return false
+            }
+            return EdithDate.parseISO(row.ts) != nil
+        }
+    }
 
     public static func row(
         provider: LimitProvider = .claude, session: LimitWindow?, week: LimitWindow?,
@@ -63,49 +72,81 @@ public struct LimitsHistory {
         return (key, String(decoding: data, as: UTF8.self) + "\n")
     }
 
+    @discardableResult
     public mutating func append(
         provider: LimitProvider = .claude, session: LimitWindow?, week: LimitWindow?,
         fable: LimitWindow? = nil, now: Date = Date()
-    ) {
-        if !seeded { seed() }
+    ) -> Bool {
         let (key, line) = Self.row(
             provider: provider, session: session, week: week, fable: fable, now: now)
-        guard key != lastKeys[provider] else { return }
-        lastKeys[provider] = key
-        let url = fileURL
-        let fm = FileManager.default
-        try? fm.createDirectory(
-            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if !fm.fileExists(atPath: url.path) {
-            try? Data(line.utf8).write(to: url)
-            return
-        }
-        if let handle = try? FileHandle(forWritingTo: url) {
-            defer { try? handle.close() }
-            var payload = Data(line.utf8)
-            if let end = try? handle.seekToEnd(), end > 0 {
-                try? handle.seek(toOffset: end - 1)
-                let last = (try? handle.read(upToCount: 1)) ?? nil
-                if last != Data("\n".utf8) {
-                    payload.insert(UInt8(ascii: "\n"), at: 0)
-                }
+        do {
+            try UsageDataLock.withLock(dataDirectory: fileURL.deletingLastPathComponent()) {
+                let needsNewline = try Self.repairTrailingRow(at: fileURL)
+                guard Self.latestKey(provider: provider, url: fileURL) != key else { return }
+                var payload = Data(line.utf8)
+                if needsNewline { payload.insert(UInt8(ascii: "\n"), at: 0) }
+                try UsageDurableFile.append(payload, to: fileURL)
             }
-            try? handle.write(contentsOf: payload)
+            return true
+        } catch {
+            return false
         }
     }
 
-    private mutating func seed() {
-        seeded = true
-        for (provider, row) in Self.latestRows(
-            url: fileURL, providers: Set(LimitProvider.allCases))
+    public mutating func prime(with _: [LimitProvider: Latest]) {}
+
+    private static func latestKey(provider: LimitProvider, url: URL) -> String? {
+        var result: String?
+        FileTail.scanLinesReversed(url, maxScanBytes: maximumTailScanBytes) { data in
+            guard let row = try? decoder.decode(Row.self, from: data),
+                EdithDate.parseISO(row.ts) != nil,
+                (row.p ?? .claude) == provider
+            else { return true }
+            result = key(for: row)
+            return false
+        }
+        return result
+    }
+
+    private static func key(for row: Row) -> String {
+        let provider = row.p ?? .claude
+        return
+            "\(provider.rawValue)|\(row.s ?? -1)|\(row.w ?? -1)|\(row.f ?? -1)|\(row.sr ?? "-")|\(row.wr ?? "-")|\(row.fr ?? "-")"
+    }
+
+    private static func repairTrailingRow(at url: URL) throws -> Bool {
+        let descriptor = open(url.path, O_RDWR | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
+        if descriptor < 0, errno == ENOENT { return false }
+        guard descriptor >= 0 else { throw UsageDataFileError.unsafe(url.path) }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        defer { try? handle.close() }
+        var metadata = stat()
+        guard fstat(descriptor, &metadata) == 0, metadata.st_mode & S_IFMT == S_IFREG else {
+            throw UsageDataFileError.unsafe(url.path)
+        }
+        let end = try handle.seekToEnd()
+        guard end > 0 else { return false }
+        try handle.seek(toOffset: end - 1)
+        if try handle.read(upToCount: 1) == Data("\n".utf8) { return false }
+        let maximum = UInt64(1_048_576)
+        let start = end > maximum ? end - maximum : 0
+        try handle.seek(toOffset: start)
+        let tail = try handle.readToEnd() ?? Data()
+        let newline = tail.lastIndex(of: UInt8(ascii: "\n"))
+        if start > 0, newline == nil { return true }
+        let rowStart = newline.map { tail.index(after: $0) } ?? tail.startIndex
+        let rowData = Data(tail[rowStart...])
+        if (start == 0 || newline != nil),
+            let row = try? decoder.decode(Row.self, from: rowData),
+            EdithDate.parseISO(row.ts) != nil
         {
-            lastKeys[provider] = Self.key(provider: provider, row: row)
+            return true
         }
-    }
-
-    public mutating func prime(with latest: [LimitProvider: Latest]) {
-        seeded = true
-        lastKeys = latest.mapValues(\.key)
+        let repairedEnd =
+            newline.map { start + UInt64(tail.distance(from: tail.startIndex, to: $0)) + 1 } ?? 0
+        try handle.truncate(atOffset: repairedEnd)
+        try handle.synchronize()
+        return false
     }
 
     public static func latest(
@@ -153,8 +194,11 @@ public struct LimitsHistory {
     public static func loadAll(
         provider: LimitProvider = .claude, url: URL = LimitsHistory.url
     ) -> [LimitPoint] {
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
-        return parse(text, provider: provider)
+        guard
+            let data = try? UsageDataFiles.readRegularFile(
+                at: url, maximumBytes: UsageDataFiles.maximumLimitsHistoryBytes)
+        else { return [] }
+        return parse(String(decoding: data, as: UTF8.self), provider: provider)
     }
 
     public static func loadLatestPoint(
@@ -177,7 +221,7 @@ public struct LimitsHistory {
     ) -> [LimitProvider: Latest] {
         latestRows(url: url, providers: providers).reduce(into: [:]) { result, item in
             let (provider, row) = item
-            result[provider] = latest(provider: provider, row: row)
+            result[provider] = latest(row: row)
         }
     }
 
@@ -212,7 +256,10 @@ public struct LimitsHistory {
         url: URL, providers: Set<LimitProvider>
     ) -> [LimitProvider: Row] {
         var rows: [LimitProvider: Row] = [:]
-        FileTail.scanLinesReversed(url, shouldContinue: { !Task.isCancelled }) { data in
+        FileTail.scanLinesReversed(
+            url, maxScanBytes: maximumTailScanBytes,
+            shouldContinue: { !Task.isCancelled }
+        ) { data in
             guard let row = try? decoder.decode(Row.self, from: data),
                 EdithDate.parseISO(row.ts) != nil
             else { return true }
@@ -226,13 +273,16 @@ public struct LimitsHistory {
     private static func snapshot(preferredProvider: LimitProvider, url: URL) -> Snapshot {
         var latest: [LimitProvider: Latest] = [:]
         var points: [LimitProvider: [LimitPoint]] = [:]
-        FileTail.scanLinesReversed(url, shouldContinue: { !Task.isCancelled }) { data in
+        FileTail.scanLinesReversed(
+            url, maxScanBytes: maximumTailScanBytes,
+            shouldContinue: { !Task.isCancelled }
+        ) { data in
             guard let row = try? decoder.decode(Row.self, from: data),
                 let date = EdithDate.parseISO(row.ts)
             else { return true }
             let provider = row.p ?? .claude
             if latest[provider] == nil {
-                latest[provider] = self.latest(provider: provider, row: row)
+                latest[provider] = self.latest(row: row)
             }
             points[provider, default: []].append(point(row: row, date: date))
             return true
@@ -247,7 +297,7 @@ public struct LimitsHistory {
             points: points[provider, default: []].sorted { $0.date < $1.date })
     }
 
-    private static func latest(provider: LimitProvider, row: Row) -> Latest? {
+    private static func latest(row: Row) -> Latest? {
         guard let date = EdithDate.parseISO(row.ts) else { return nil }
         return Latest(
             date: date,
@@ -259,12 +309,7 @@ public struct LimitsHistory {
             },
             fable: row.f.map {
                 LimitWindow(percent: $0, resetsAt: row.fr.flatMap(EdithDate.parseISO))
-            },
-            key: key(provider: provider, row: row))
-    }
-
-    private static func key(provider: LimitProvider, row: Row) -> String {
-        "\(provider.rawValue)|\(row.s ?? -1)|\(row.w ?? -1)|\(row.f ?? -1)|\(row.sr ?? "-")|\(row.wr ?? "-")|\(row.fr ?? "-")"
+            })
     }
 
     private static func point(row: Row, date: Date) -> LimitPoint {

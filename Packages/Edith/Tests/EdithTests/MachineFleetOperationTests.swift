@@ -16,6 +16,15 @@ import Testing
         )
     }
 
+    private func waitForFile(_ file: URL, timeout: TimeInterval = 5) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if FileManager.default.fileExists(atPath: file.path) { return true }
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        return FileManager.default.fileExists(atPath: file.path)
+    }
+
     @Test func descriptorsCoverTheEightFleetLifecycleOperations() {
         let descriptors =
             MachineMutationOperation.allCases.map(\.descriptor)
@@ -102,6 +111,98 @@ import Testing
         #expect(MachineRegistry.forwards(files).map(\.machineID) == [other.id])
         #expect(MachineRegistry.snippets(files).isEmpty)
         #expect(notified)
+    }
+
+    @Test func everyRegistryWriterWaitsForTheCrossProcessLock() throws {
+        let (files, root) = files()
+        defer { try? FileManager.default.removeItem(at: root) }
+        var machineToUpdate = Machine(name: "Update", host: "update")
+        let machineToRemove = Machine(name: "Remove", host: "remove")
+        let machineToAdd = Machine(name: "Add", host: "add")
+        let forwardToRemove = PortForward(
+            machineID: machineToUpdate.id, localPort: 8000, remotePort: 80)
+        let forwardRemovedWithMachine = PortForward(
+            machineID: machineToRemove.id, localPort: 8001, remotePort: 81)
+        let forwardToAdd = PortForward(
+            machineID: machineToUpdate.id, localPort: 8002, remotePort: 82)
+        var snippetToUpdate = CommandSnippet(
+            machineID: machineToUpdate.id, title: "Update", command: "before")
+        let snippetToRemove = CommandSnippet(
+            machineID: machineToUpdate.id, title: "Remove", command: "remove")
+        let snippetRemovedWithMachine = CommandSnippet(
+            machineID: machineToRemove.id, title: "Cascade", command: "cascade")
+        let snippetToAdd = CommandSnippet(
+            machineID: machineToUpdate.id, title: "Add", command: "add")
+        MachineRegistry.add(machineToUpdate, files)
+        MachineRegistry.add(machineToRemove, files)
+        MachineRegistry.addForward(forwardToRemove, files)
+        MachineRegistry.addForward(forwardRemovedWithMachine, files)
+        MachineRegistry.addSnippet(snippetToUpdate, files)
+        MachineRegistry.addSnippet(snippetToRemove, files)
+        MachineRegistry.addSnippet(snippetRemovedWithMachine, files)
+        machineToUpdate.name = "Updated"
+        snippetToUpdate.command = "after"
+        let updatedMachine = machineToUpdate
+        let updatedSnippet = snippetToUpdate
+
+        let ready = root.appendingPathComponent("lock-ready")
+        let release = root.appendingPathComponent("lock-release")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ruby")
+        process.arguments = [
+            "-e",
+            """
+            lock = File.open(ARGV.fetch(0), File::RDWR | File::CREAT, 0600)
+            lock.flock(File::LOCK_EX)
+            File.write(ARGV.fetch(1), "ready")
+            sleep 0.01 until File.exist?(ARGV.fetch(2))
+            """,
+            MachineRegistry.lockURL(files).path, ready.path, release.path,
+        ]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        defer {
+            try? Data().write(to: release)
+            if process.isRunning {
+                process.terminate()
+                process.waitUntilExit()
+            }
+        }
+        try #require(waitForFile(ready))
+
+        let completed = DispatchSemaphore(value: 0)
+        let operations: [@Sendable () -> Void] = [
+            { _ = MachineRegistry.add(machineToAdd, files) },
+            { _ = MachineRegistry.update(updatedMachine, files) },
+            { _ = MachineRegistry.remove(id: machineToRemove.id, files) },
+            { _ = MachineRegistry.addForward(forwardToAdd, files) },
+            { _ = MachineRegistry.removeForward(id: forwardToRemove.id, files) },
+            { _ = MachineRegistry.addSnippet(snippetToAdd, files) },
+            { _ = MachineRegistry.updateSnippet(updatedSnippet, files) },
+            { _ = MachineRegistry.removeSnippet(id: snippetToRemove.id, files) },
+        ]
+        for operation in operations {
+            DispatchQueue.global().async {
+                operation()
+                completed.signal()
+            }
+        }
+
+        #expect(completed.wait(timeout: .now() + .milliseconds(300)) == .timedOut)
+        try Data().write(to: release)
+        for _ in operations {
+            #expect(completed.wait(timeout: .now() + .seconds(5)) == .success)
+        }
+        process.waitUntilExit()
+
+        let contents = MachineRegistry.load(files)
+        #expect(Set(contents.machines.map(\.id)) == [updatedMachine.id, machineToAdd.id])
+        #expect(contents.machines.first(where: { $0.id == updatedMachine.id })?.name == "Updated")
+        #expect(contents.forwards.map(\.id) == [forwardToAdd.id])
+        #expect(Set(contents.snippets.map(\.id)) == [updatedSnippet.id, snippetToAdd.id])
+        #expect(
+            contents.snippets.first(where: { $0.id == updatedSnippet.id })?.command == "after")
     }
 
     @Test func powerBuildsThePrivilegedCommandOnce() async throws {
