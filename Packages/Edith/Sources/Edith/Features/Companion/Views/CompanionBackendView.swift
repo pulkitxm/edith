@@ -5,11 +5,13 @@ import UniformTypeIdentifiers
 
 struct CompanionBackendScreen: View {
     @Bindable var model: CompanionBackendModel
+    var isActive = true
     var openSetup: () -> Void = {}
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Environment(\.companionGeneration) private var generation
+    @State private var refreshedGeneration = -1
     @State private var exporting = false
     @State private var importing = false
     @State private var confirmingDestroy = false
@@ -32,7 +34,11 @@ struct CompanionBackendScreen: View {
                 .pageContent(compact)
             }
         }
-        .task(id: generation) { if requestsEnabled { await model.refresh() } }
+        .task(id: isActive ? generation : -1) {
+            guard isActive, requestsEnabled, refreshedGeneration != generation else { return }
+            await model.refresh()
+            if !Task.isCancelled { refreshedGeneration = generation }
+        }
         .fileExporter(
             isPresented: $exporting,
             document: CompanionConfigDocument(data: model.exportBundle() ?? Data()),
@@ -276,12 +282,12 @@ struct CompanionBackendScreen: View {
     private func secretField(
         _ label: String, kind: CompanionSecretKind, text: Binding<String>
     ) -> some View {
-        CompanionSecureField(
-            label: label, placeholder: model.secretHint(kind), text: text,
-            detail: model.secretHint(kind) == "not set" ? "not set" : "stored",
-            detailEmphasis: model.secretHint(kind) != "not set",
-            clear: model.secretHint(kind) == "not set"
-                ? nil : { model.clearSecret(kind) },
+        let hint = model.secretHint(kind)
+        return CompanionSecureField(
+            label: label, placeholder: hint, text: text,
+            detail: hint == "not set" ? "not set" : "stored",
+            detailEmphasis: hint != "not set",
+            clear: hint == "not set" ? nil : { model.clearSecret(kind) },
             onSubmit: { model.saveSecrets() })
     }
 

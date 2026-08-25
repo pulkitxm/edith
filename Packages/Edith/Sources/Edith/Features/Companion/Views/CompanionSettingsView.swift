@@ -273,12 +273,14 @@ final class CompanionSettingsModel {
 struct CompanionSettingsScreen: View {
     @Bindable var model: CompanionSettingsModel
     let home: CompanionHomeModel
+    var isActive = true
     @AppStorage(AppStorageKeys.Companion.endpoint, store: SharedDefaults.store)
     private var endpoint = CompanionClient.defaultEndpointString
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Environment(\.companionGeneration) private var generation
+    @State private var refreshedGeneration = -1
     @State private var endpointDraft = ""
     @State private var endpointLoaded = false
     @State private var destructiveOperation: CompanionSettingsOperation?
@@ -320,8 +322,10 @@ struct CompanionSettingsScreen: View {
                 .pageContent(compact)
             }
         }
-        .task(id: generation) {
-            if requestsEnabled { await model.load() }
+        .task(id: isActive ? generation : -1) {
+            guard isActive, requestsEnabled, refreshedGeneration != generation else { return }
+            await model.load()
+            if !Task.isCancelled { refreshedGeneration = generation }
         }
         .onAppear {
             guard !endpointLoaded else { return }
@@ -591,6 +595,7 @@ struct CompanionSettingsScreen: View {
         let trimmed = endpointDraft.trimmingCharacters(in: .whitespaces)
         guard trimmed != endpoint else { return }
         $endpoint.configured(AppStorageKeys.Companion.endpoint).wrappedValue = trimmed
+        CompanionClient.invalidateEndpointCache()
         if endpoint == trimmed { endpointDraft = trimmed }
     }
 
