@@ -1,7 +1,7 @@
 import EdithCore
 
 public enum UserOperationCatalog {
-    public static let registrations =
+    private static let machineRegistrations: [RegisteredUserOperation] =
         MachineControlOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -47,7 +47,9 @@ public enum UserOperationCatalog {
         + MachineDockerPauseOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + AppInspectionOperation.allCases.map {
+
+    private static let applicationRegistrations: [RegisteredUserOperation] =
+        AppInspectionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         + ExtensionInspectionOperation.allCases.map {
@@ -89,7 +91,9 @@ public enum UserOperationCatalog {
         + PresenterRuntimeOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + UsageProjectOperation.allCases.map {
+
+    private static let featureRegistrations: [RegisteredUserOperation] =
+        UsageProjectOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         + ConfigurationOperation.allCases.map {
@@ -125,7 +129,9 @@ public enum UserOperationCatalog {
         + WorkspaceOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + UsageCollectionOperation.allCases.map {
+
+    private static let remoteFileRegistrations: [RegisteredUserOperation] =
+        UsageCollectionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         + QuinjetOperation.allCases.map {
@@ -134,18 +140,26 @@ public enum UserOperationCatalog {
         + QuinjetSessionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + CompanionChatLibraryOperation.allCases.map {
+
+    private static let remoteActionRegistrations: [RegisteredUserOperation] = {
+        var registrations = CompanionChatLibraryOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineFileOperation.allCases.map {
+        registrations += MachineFileOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + CompanionMindRuntimeOperation.allCases.map {
+        registrations += CompanionMindRuntimeOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + HerdrSessionOperation.allCases.map {
+        registrations += HerdrSessionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        return registrations
+    }()
+
+    public static let registrations =
+        machineRegistrations + applicationRegistrations + featureRegistrations
+        + remoteFileRegistrations + remoteActionRegistrations
 
     public static let descriptors = registrations.map(\.descriptor)
 
