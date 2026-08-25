@@ -610,6 +610,18 @@ enum JSONContract {
             "ed machines files get",
             ["machines", "files", "get", "nowhere-at-all", "/etc/hosts", "--json"]),
         JSONCase(
+            "ed machines files get-many",
+            [
+                "machines", "files", "get-many", "nowhere-at-all", "/tmp/x",
+                "--to", "/tmp", "--dry-run", "--json",
+            ]),
+        JSONCase(
+            "ed machines files transfer",
+            [
+                "machines", "files", "transfer", "nowhere-at-all", "also-nowhere", "/tmp/x",
+                "--into", "/tmp", "--dry-run", "--json",
+            ]),
+        JSONCase(
             "ed machines files put",
             ["machines", "files", "put", "nowhere-at-all", "/etc/hosts", "/tmp/x", "--json"]),
         JSONCase(
@@ -730,7 +742,7 @@ enum JSONContract {
         }
     }
 
-    @Test func anyFailureLeavesStdoutEmptyAndUsesADocumentedCode() async {
+    @Test func failuresUseDocumentedCodesAndOnlyPartialResultsReachStdout() async {
         let documented: Set<Int32> = [0, 1, 2, 3, 4]
         for probe in JSONContract.cases where !probe.mutatesTheMachine {
             let result = await CLIProbe.run(probe.arguments)
@@ -738,7 +750,10 @@ enum JSONContract {
                 documented.contains(result.code),
                 "\(probe.label) exited \(result.code), which the guide does not document")
             guard result.code != 0 else { continue }
-            #expect(result.stdout.isEmpty, "\(probe.label) failed but still printed stdout")
+            guard !result.stdout.isEmpty else { continue }
+            let failures = result.object?["failures"] as? [Any]
+            #expect(result.object?["executed"] as? Bool == true)
+            #expect(failures?.isEmpty == false)
         }
     }
 

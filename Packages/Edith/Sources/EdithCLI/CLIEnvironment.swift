@@ -122,6 +122,14 @@ public enum CLIEnvironment {
                 failureNote: "error: could not start the terminal")
         }
 
+    nonisolated(unsafe) static var remoteTransferTarget:
+        @Sendable (String) async throws -> CLITransferTarget = { query in
+            let runner = try await MachineResolver.runner(query)
+            return CLITransferTarget(
+                machine: runner.machine,
+                endpoint: .remote(machine: runner.machine, connection: runner.ssh))
+        }
+
     private static func detectedInstalledAppURL() -> URL? {
         let bundled = Bundle.main.bundleURL
             .deletingLastPathComponent()
@@ -218,6 +226,12 @@ public enum CLIEnvironment {
                 environment: ForegroundProcess.environment(
                     assignments: request.environment, inheriting: true),
                 failureNote: "error: could not start the terminal")
+        }
+        remoteTransferTarget = { query in
+            let runner = try await MachineResolver.runner(query)
+            return CLITransferTarget(
+                machine: runner.machine,
+                endpoint: .remote(machine: runner.machine, connection: runner.ssh))
         }
         QuinjetCLIEnvironment.reset()
     }

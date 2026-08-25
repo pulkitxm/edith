@@ -124,6 +124,8 @@ public enum Guide {
         ed tuf uptime                           the same thing, shorter
         ed machines tuf files ls /var/log
         ed machines tuf files get /etc/os-release ./os-release
+        ed machines files get-many tuf /etc/hosts /etc/services --to ./system-files
+        ed machines files transfer tuf box /srv/report.txt --into /archive --dry-run
         ed machines tuf files put ./deploy.sh /tmp/deploy.sh
         ed machines tuf files preview /etc/os-release
         ed machines tuf files launch /srv/reports/latest.pdf
