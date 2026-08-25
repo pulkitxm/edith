@@ -190,6 +190,11 @@ public enum HerdrLive {
     ) async throws {
         let line = try await client.snapshot()
         fleet.put(sessions.applySnapshot(session: session, text: line))
+        let panes = sessions.terminalPanes(session: session)
+        guard !panes.isEmpty else { return }
+        let names = await client.processNames(panes: panes)
+        guard !names.isEmpty else { return }
+        fleet.put(sessions.applyProcessNames(session: session, names: names))
     }
 }
 
@@ -238,6 +243,19 @@ private final class SessionBag: @unchecked Sendable {
         _ = cache.applySnapshot(text)
         lock.lock()
         errors[session] = nil
+        let host = hostLocked()
+        lock.unlock()
+        return host
+    }
+
+    func terminalPanes(session: String) -> [String] {
+        lockedCache(for: session).terminalPanes
+    }
+
+    func applyProcessNames(session: String, names: [String: String]) -> HerdrHostSnapshot {
+        let cache = lockedCache(for: session)
+        _ = cache.applyProcessNames(names)
+        lock.lock()
         let host = hostLocked()
         lock.unlock()
         return host

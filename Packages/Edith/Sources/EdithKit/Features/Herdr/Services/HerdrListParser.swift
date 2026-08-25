@@ -64,10 +64,18 @@ public enum HerdrListParser {
             guard let id = string(in: workspace, keys: ["workspace_id", "id"]) else { continue }
             labels[id] = string(in: workspace, keys: ["label", "name"]) ?? id
         }
+        var tabLabels: [String: String] = [:]
+        for value in snapshot["tabs"] as? [Any] ?? [] {
+            guard let tab = value as? [String: Any] else { continue }
+            guard let id = string(in: tab, keys: ["tab_id", "id"]) else { continue }
+            guard let label = string(in: tab, keys: ["label", "name", "title"]) else { continue }
+            tabLabels[id] = label
+        }
         let paneValues = snapshot["panes"] as? [Any]
         let agentValues = snapshot["agents"] as? [Any] ?? []
         return HerdrSnapshotBoard(
             labels: labels,
+            tabLabels: tabLabels,
             panes: (paneValues ?? []).compactMap { paneRecord(from: $0) },
             agents: agentValues.compactMap { paneRecord(from: $0) },
             hasPaneList: paneValues != nil)
@@ -122,6 +130,27 @@ public enum HerdrListParser {
         return string(in: data, keys: ["final_status"])
     }
 
+    public static func processName(in text: String) -> String? {
+        guard let json = firstJSON(in: text) as? [String: Any] else { return nil }
+        let payload = unwrap(json) as? [String: Any] ?? json
+        guard let info = payload["process_info"] as? [String: Any] else { return nil }
+        let processes = info["foreground_processes"] as? [Any] ?? []
+        for value in processes.reversed() {
+            guard let process = value as? [String: Any] else { continue }
+            guard let name = string(in: process, keys: ["name", "argv0"]) else { continue }
+            let trimmed = name.hasPrefix("-") ? String(name.dropFirst()) : name
+            if !trimmed.isEmpty { return trimmed }
+        }
+        return nil
+    }
+
+    public static func eventTab(in text: String) -> (id: String, label: String?)? {
+        guard let data = eventData(in: text) else { return nil }
+        let object = data["tab"] as? [String: Any] ?? data
+        guard let id = string(in: object, keys: ["tab_id", "id"]) else { return nil }
+        return (id, string(in: object, keys: ["label", "name", "title"]))
+    }
+
     public static func eventWorkspace(in text: String) -> (id: String, label: String?)? {
         guard let data = eventData(in: text) else { return nil }
         let object = data["workspace"] as? [String: Any] ?? data
@@ -142,15 +171,28 @@ public enum HerdrListParser {
             title: string(
                 in: object, keys: ["terminal_title_stripped", "title", "terminal_title"]),
             workspaceID: string(in: object, keys: ["workspace_id"]),
-            cwd: string(in: object, keys: ["foreground_cwd", "cwd", "working_directory"]))
+            cwd: string(in: object, keys: ["foreground_cwd", "cwd", "working_directory"]),
+            tabID: string(in: object, keys: ["tab_id"]))
+    }
+
+    public static func category(
+        for record: HerdrPaneRecord, previous: HerdrAgent? = nil
+    ) -> HerdrPaneCategory {
+        if record.looksLikeAgent { return .agent }
+        if let previous, previous.category == .agent, record.statusRaw == nil { return .agent }
+        return .terminal
     }
 
     public static func agent(
         from record: HerdrPaneRecord, context: HerdrBoardContext,
-        workspaceLabels: [String: String], previous: HerdrAgent? = nil
+        workspaceLabels: [String: String], tabLabels: [String: String] = [:],
+        previous: HerdrAgent? = nil
     ) -> HerdrAgent {
+        let category = category(for: record, previous: previous)
         let kind: String
-        if let raw = record.kindRaw, !raw.isEmpty {
+        if category == .terminal {
+            kind = HerdrKind.terminalLabel
+        } else if let raw = record.kindRaw, !raw.isEmpty {
             let named = HerdrKind.displayName(for: raw)
             if named == "Unknown", let previous, previous.kind != "Unknown" {
                 kind = previous.kind
@@ -167,13 +209,22 @@ public enum HerdrListParser {
         } else {
             status = parsed
         }
+        let tabLabel = record.tabID.flatMap { tabLabels[$0] }
         let title: String
-        if let incoming = record.title, incoming != record.pane {
+        if let incoming = record.title, !incoming.isEmpty, incoming != record.pane {
             title = incoming
         } else if let previous, previous.title != previous.pane, !previous.title.isEmpty {
             title = previous.title
+        } else if let tabLabel, !tabLabel.isEmpty {
+            title = tabLabel
         } else {
             title = record.title ?? previous?.title ?? record.pane
+        }
+        let process: String
+        if let incoming = record.process, !incoming.isEmpty {
+            process = incoming
+        } else {
+            process = previous?.process ?? ""
         }
         let workspaceID = record.workspaceID ?? ""
         let workspace: String
@@ -194,7 +245,7 @@ public enum HerdrListParser {
             machineID: context.machineID, machineName: context.machineName,
             machineIsLocal: context.machineIsLocal, sshTarget: context.sshTarget,
             session: context.session, pane: record.pane, kind: kind, status: status, title: title,
-            workspace: workspace, cwd: cwd)
+            workspace: workspace, cwd: cwd, category: category, process: process)
     }
 
     public static func agents(
@@ -206,7 +257,7 @@ public enum HerdrListParser {
             machineIsLocal: machineIsLocal, sshTarget: sshTarget)
         guard let board = snapshotBoard(from: text) else { return [] }
         var records: [String: HerdrPaneRecord] = [:]
-        for record in board.panes where record.looksLikeAgent {
+        for record in board.panes {
             records[record.pane] = record
         }
         for record in board.agents {
@@ -215,7 +266,7 @@ public enum HerdrListParser {
         return records.keys.sorted().map { pane in
             agent(
                 from: records[pane]!, context: context, workspaceLabels: board.labels,
-                previous: nil)
+                tabLabels: board.tabLabels, previous: nil)
         }
     }
 

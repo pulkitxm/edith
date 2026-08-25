@@ -117,6 +117,19 @@ final class HerdrSocketClient: @unchecked Sendable {
         try await request(method: "session.snapshot", params: [:])
     }
 
+    func processNames(panes: [String]) async -> [String: String] {
+        var names: [String: String] = [:]
+        for pane in panes {
+            guard
+                let line = try? await request(
+                    method: "pane.process_info", params: ["pane_id": pane]),
+                let name = HerdrListParser.processName(in: line)
+            else { continue }
+            names[pane] = name
+        }
+        return names
+    }
+
     func subscribeBoard() async throws {
         let line = try await request(
             method: "events.subscribe",
