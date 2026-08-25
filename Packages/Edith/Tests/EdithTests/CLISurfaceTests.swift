@@ -360,10 +360,10 @@ import Testing
         #expect(missing.isEmpty, "the guide never shows: \(missing)")
     }
 
-    @Test func theClaudeSnippetStaysShortAndActionable() {
-        #expect(Guide.claudeSnippet.contains("--json"))
-        #expect(Guide.claudeSnippet.contains("ed guide"))
-        #expect(Guide.claudeSnippet.count < 3000)
+    @Test func theAgentSnippetStaysShortAndActionable() {
+        #expect(Guide.agentSnippet.contains("--json"))
+        #expect(Guide.agentSnippet.contains("ed guide"))
+        #expect(Guide.agentSnippet.count < 3000)
     }
 
     @Test func extensionRecoveryIsDiscoverableInEveryGuide() {
@@ -372,7 +372,7 @@ import Testing
             "ed extensions verify", "ed extensions doctor",
         ]
         let fields = ["verified", "state.phase", "state.runtimePhase", "checks", "remediation"]
-        for guide in [Guide.text, Guide.claudeSnippet] {
+        for guide in [Guide.text, Guide.agentSnippet] {
             for command in commands {
                 #expect(guide.contains(command), "the guide never shows \(command)")
             }
@@ -389,8 +389,8 @@ import Testing
         #expect(result.stderr.isEmpty)
     }
 
-    @Test func theClaudeTopicIsPrintedOnStdout() async {
-        let result = await CLIProbe.run(["guide", "claude"])
+    @Test func theAgentTopicIsPrintedOnStdout() async {
+        let result = await CLIProbe.run(["guide", "agent"])
         #expect(result.code == 0)
         #expect(result.stdout.contains("Edith, from the command line"))
     }

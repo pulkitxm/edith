@@ -209,6 +209,7 @@ public enum CompletionEngine {
         case .machineOrLocal: return UsageMachineFilter.localNames + machines
         case .appPath: return AppPathID.allCases.map(\.rawValue)
         case .appLink: return appLinks
+        case .guideTopic: return ["agent"]
         case .configKey: return configKeys
         case .configValue:
             guard let previous, let definition = ConfigCatalog.definition(for: previous) else {

@@ -26,7 +26,8 @@ be running.
 | `ed uninstall` | Remove those three links again, and nothing else |
 | `ed help <command>` | Show the same detailed help reached through `<command> --help` |
 | `ed guide` | Print the built-in manual, written for agents and humans alike |
-| `ed guide claude` | Print a `CLAUDE.md` snippet that makes another repo `ed`-aware |
+| `ed guide agent` | Print repository instructions that make an automation agent `ed`-aware |
+| `ed guide --json` | Print the complete parser command catalog as JSON |
 | `ed schema` | Print the JSON Schema for the configuration document |
 | `ed version` | Print the CLI version, and with `--json` whether the app is running |
 | `ed completions` | The completion group; with no subcommand it runs `install` |
@@ -102,7 +103,7 @@ What `__complete` offers, in the order it decides:
 - If the word being completed starts with `-`, the candidates are that command's
   long and short options, including options accepted through a default
   subcommand, plus inherited `-h`, `--help` and `--version`.
-- Otherwise the candidates are the subcommand names at that point, plus every
+- Otherwise the candidates are the subcommand names and aliases at that point, plus every
   configured machine name at the top level, plus the values for whichever
   positional slot the cursor is in.
 

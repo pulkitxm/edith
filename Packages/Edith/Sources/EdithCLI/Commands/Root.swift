@@ -127,19 +127,32 @@ struct GuideCommand: AsyncParsableCommand {
         commandName: "guide",
         abstract: "Print the built-in manual, written for agents and humans alike.")
 
-    @Argument(help: "Pass `claude` for a CLAUDE.md snippet that makes a repo ed-aware.")
+    @Flag(name: .long, help: "Emit the complete command and argument catalog as JSON.")
+    var json = false
+
+    @Argument(help: "Pass `agent` for a repository instruction snippet.")
     var topic: String?
 
     func run() async throws {
         try await execute {
+            if json {
+                guard topic == nil else {
+                    throw CLIFailure.usage(
+                        "--json does not take a guide topic",
+                        hint: "run `ed guide --json` for the command catalog")
+                }
+                CLIOut.raw(EdRoot._dumpHelp())
+                return
+            }
             switch topic?.lowercased() {
             case nil:
                 CLIOut.out(Guide.text)
-            case "claude":
-                CLIOut.out(Guide.claudeSnippet)
+            case "agent":
+                CLIOut.out(Guide.agentSnippet)
             case let other?:
                 throw CLIFailure.notFound(
-                    "no guide topic named \(other)", hint: "try `ed guide` or `ed guide claude`")
+                    "no guide topic named \(other)",
+                    hint: "try `ed guide`, `ed guide agent`, or `ed guide --json`")
             }
         }
     }

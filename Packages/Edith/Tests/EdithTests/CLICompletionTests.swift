@@ -37,6 +37,11 @@ import Testing
         #expect(result.candidates == ["machines"])
     }
 
+    @Test func guideTopicsAndStructuredDiscoveryComplete() {
+        #expect(Self.plan(["ed", "guide", "ag"], 2).candidates == ["agent"])
+        #expect(Self.plan(["ed", "guide", "--j"], 2).candidates == ["--json"])
+    }
+
     @Test func everyCommandAliasCompletesAtEveryDepth() {
         var missing: [String] = []
         Self.checkAliases(node: CommandTree.root, words: ["ed"], missing: &missing)
@@ -296,7 +301,7 @@ import Testing
     }
 
     @Test func completionNeverAddsGlobalsTheParserRejects() {
-        for words in [["ed", "--j"], ["ed", "guide", "--j"], ["ed", "schema", "--j"]] {
+        for words in [["ed", "--j"], ["ed", "schema", "--j"]] {
             #expect(Self.plan(words, words.count - 1).candidates.isEmpty)
         }
     }
@@ -479,6 +484,12 @@ import Testing
         ShellCompletionScenario(
             words: ["ed", "machines", "docker", "compose", "pull", "--v"],
             expected: ["--version"], requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "guide", "ag"], expected: ["agent"],
+            requiresExactMatch: true),
+        ShellCompletionScenario(
+            words: ["ed", "guide", "--j"], expected: ["--json"],
+            requiresExactMatch: true),
     ]
 
     static let bashAndZshCompletionInvocations = [
@@ -503,6 +514,27 @@ import Testing
             .appendingPathComponent("edith-completion-process-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
+    }
+
+    static func discoveredCommand(_ path: [String], in catalog: [String: Any]) -> [String: Any]? {
+        guard var command = catalog["command"] as? [String: Any] else { return nil }
+        for name in path {
+            guard
+                let children = command["subcommands"] as? [[String: Any]],
+                let child = children.first(where: { $0["commandName"] as? String == name })
+            else { return nil }
+            command = child
+        }
+        return command
+    }
+
+    static func discoveredOptionNames(_ command: [String: Any]) -> Set<String> {
+        Set(
+            (command["arguments"] as? [[String: Any]] ?? []).flatMap { argument in
+                (argument["names"] as? [[String: Any]] ?? []).compactMap {
+                    $0["name"] as? String
+                }
+            })
     }
 
     @Test func completionWorksOutsideARepositoryAndRejectsInvalidGlobals() throws {
@@ -595,6 +627,35 @@ import Testing
         #expect(result.code == 0)
         #expect(result.stdoutLines == AppPathID.allCases.map(\.rawValue))
         #expect(result.stderr.isEmpty)
+    }
+
+    @Test func agentDiscoveryWorksOutsideARepository() throws {
+        let outside = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let catalog = try CLIProcessProbe.run(["guide", "--json"], currentDirectory: outside)
+        let instructions = try CLIProcessProbe.run(["guide", "agent"], currentDirectory: outside)
+
+        #expect(catalog.code == 0)
+        #expect(catalog.object?["serializationVersion"] as? Int == 0)
+        #expect((catalog.object?["command"] as? [String: Any])?["commandName"] as? String == "ed")
+        let copy = Self.discoveredCommand(["clipboard", "copy"], in: catalog.object ?? [:])
+        let workspace = Self.discoveredCommand(
+            ["machines", "workspace"], in: catalog.object ?? [:])
+        #expect(
+            Self.discoveredOptionNames(copy ?? [:]).isSuperset(of: [
+                "json", "plain", "version", "h", "help",
+            ]))
+        #expect((workspace?["aliases"] as? [String]) == ["workspaces"])
+        #expect(catalog.stderr.isEmpty)
+        #expect(instructions.code == 0)
+        #expect(instructions.stdout.contains("ed guide --json"))
+        #expect(instructions.stderr.isEmpty)
+
+        let invalid = try CLIProcessProbe.run(
+            ["guide", "agent", "--json"], currentDirectory: outside)
+        #expect(invalid.code == ExitCodes.usage)
+        #expect(invalid.stdout.isEmpty)
+        #expect(invalid.stderr.contains("--json does not take a guide topic"))
     }
 
     @Test func requiredFishCompletionDependencyIsAvailable() {
