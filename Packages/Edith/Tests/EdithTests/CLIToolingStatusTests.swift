@@ -119,7 +119,7 @@ import Testing
         let status = TerminalToolingOperationExecution.status(
             home: home, environment: ["PATH": "/usr/bin"], store: makeStore())
 
-        #expect(status.tools.directory.contains(home.path))
+        #expect(status.tools.directory == CLIInstaller.preferredDirectory(home: home).path)
         #expect(status.completions.map(\.shell).contains(.zsh))
         #expect(status.completions.map(\.shell).contains(.bash))
         #expect(status.fallbackSourceLine.hasPrefix("source "))
