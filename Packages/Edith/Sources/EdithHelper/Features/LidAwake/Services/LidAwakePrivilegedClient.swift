@@ -48,7 +48,6 @@ final class LidAwakePrivilegedClient {
     private let service = SMAppService.daemon(
         plistName: LidAwakePrivilegedService.plistName)
     private let fingerprint = LidAwakePrivilegedClient.helperFingerprint()
-    private var connection: NSXPCConnection?
     private var approvalRequired = false
     private var registrationInFlight = false
     private let requestTimeout: Duration
@@ -153,41 +152,35 @@ final class LidAwakePrivilegedClient {
             }
             throw LidAwakePrivilegedClientError.helperUnavailable(currentState)
         }
-        let connection = connection ?? makeConnection()
-        self.connection = connection
+        let connection = makeConnection()
+        defer { connection.invalidate() }
         let connectionBox = LidAwakeXPCConnectionBox(connection)
         let reply = LidAwakePrivilegedReply()
-        do {
-            try await reply.wait(
-                timeout: requestTimeout,
-                cancel: { connectionBox.connection.invalidate() },
-                send: { requestReply in
-                    guard
-                        let proxy = connection.remoteObjectProxyWithErrorHandler({ error in
-                            requestReply.resume(
-                                throwing: LidAwakePrivilegedClientError.connectionFailed(
-                                    error.localizedDescription))
-                        }) as? LidAwakePrivilegedProtocol
-                    else {
+        try await reply.wait(
+            timeout: requestTimeout,
+            cancel: { connectionBox.connection.invalidate() },
+            send: { requestReply in
+                guard
+                    let proxy = connection.remoteObjectProxyWithErrorHandler({ error in
                         requestReply.resume(
                             throwing: LidAwakePrivilegedClientError.connectionFailed(
-                                "The helper proxy is unavailable."))
-                        return
+                                error.localizedDescription))
+                    }) as? LidAwakePrivilegedProtocol
+                else {
+                    requestReply.resume(
+                        throwing: LidAwakePrivilegedClientError.connectionFailed(
+                            "The helper proxy is unavailable."))
+                    return
+                }
+                proxy.setSleepDisabled(disable) { error in
+                    if let error {
+                        requestReply.resume(
+                            throwing: LidAwakePrivilegedClientError.remoteError(error))
+                    } else {
+                        requestReply.resume()
                     }
-                    proxy.setSleepDisabled(disable) { error in
-                        if let error {
-                            requestReply.resume(
-                                throwing: LidAwakePrivilegedClientError.remoteError(error))
-                        } else {
-                            requestReply.resume()
-                        }
-                    }
-                })
-        } catch {
-            if self.connection === connection { self.connection = nil }
-            connection.invalidate()
-            throw error
-        }
+                }
+            })
     }
 
     private func makeConnection() -> NSXPCConnection {
@@ -196,24 +189,8 @@ final class LidAwakePrivilegedClient {
             options: .privileged)
         connection.remoteObjectInterface = NSXPCInterface(
             with: LidAwakePrivilegedProtocol.self)
-        connection.invalidationHandler = { [weak self, weak connection] in
-            Task { @MainActor [weak self, weak connection] in
-                guard let self, let connection else { return }
-                self.clearConnection(connection)
-            }
-        }
-        connection.interruptionHandler = { [weak self, weak connection] in
-            Task { @MainActor [weak self, weak connection] in
-                guard let self, let connection else { return }
-                self.clearConnection(connection)
-            }
-        }
         connection.resume()
         return connection
-    }
-
-    private func clearConnection(_ invalidatedConnection: NSXPCConnection) {
-        if connection === invalidatedConnection { connection = nil }
     }
 
     private static func helperFingerprint() -> String? {

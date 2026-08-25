@@ -39,11 +39,14 @@ public enum LidAwakeCommandProcess {
                 terminationStatus: SIGTERM, standardOutput: "", standardError: "",
                 timedOut: false, cancelled: true)
         }
-        let captureID = UUID().uuidString
-        let outputURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("edith-lid-awake-\(captureID).stdout")
-        let errorURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("edith-lid-awake-\(captureID).stderr")
+        let captureDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-lid-awake-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: captureDirectory, withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700])
+        defer { try? FileManager.default.removeItem(at: captureDirectory) }
+        let outputURL = captureDirectory.appendingPathComponent("stdout")
+        let errorURL = captureDirectory.appendingPathComponent("stderr")
         guard FileManager.default.createFile(atPath: outputURL.path, contents: nil),
             FileManager.default.createFile(atPath: errorURL.path, contents: nil),
             let outputCapture = FileHandle(forWritingAtPath: outputURL.path),
@@ -54,8 +57,6 @@ public enum LidAwakeCommandProcess {
         defer {
             try? outputCapture.close()
             try? errorCapture.close()
-            try? FileManager.default.removeItem(at: outputURL)
-            try? FileManager.default.removeItem(at: errorURL)
         }
 
         let processID = try spawn(

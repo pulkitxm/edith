@@ -412,6 +412,36 @@ enum CatalogSamples {
         try? FileManager.default.removeItem(at: url)
     }
 
+    @Test func importSkipsOutOfRangeIntegersBeforeApplyingOtherSettings() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ed-invalid-range-\(UUID().uuidString).json")
+        try Data(#"{"lidAwakeBatteryThreshold": 101, "warnPercent": 72}"#.utf8).write(to: url)
+        await CLIProbe.inWorld { world in
+            let result = await CLIProbe.capture([
+                "config", "import", url.path, "--dry-run", "--json",
+            ])
+            #expect(result.code == 0)
+            #expect((result.object?["applied"] as? [String]) == ["warnPercent"])
+            #expect(
+                (result.object?["skipped"] as? [String]) == ["lidAwakeBatteryThreshold"])
+            #expect(world.shared.persistentDomain(forName: world.suite)?["warnPercent"] == nil)
+            #expect(
+                world.shared.persistentDomain(forName: world.suite)?[
+                    LidAwakeState.batteryThresholdKey] == nil)
+
+            let applied = await CLIProbe.capture(["config", "import", url.path, "--json"])
+            #expect(applied.code == 0)
+            #expect((applied.object?["applied"] as? [String]) == ["warnPercent"])
+            #expect(
+                (applied.object?["skipped"] as? [String]) == ["lidAwakeBatteryThreshold"])
+            #expect(world.shared.integer(forKey: "warnPercent") == 72)
+            #expect(
+                world.shared.persistentDomain(forName: world.suite)?[
+                    LidAwakeState.batteryThresholdKey] == nil)
+        }
+        try? FileManager.default.removeItem(at: url)
+    }
+
     @Test func describeAndGetAgreeOnTheFacts() async {
         await CLIProbe.inWorld { _ in
             _ = await CLIProbe.capture(["config", "set", "limitsProvider", "codex"])

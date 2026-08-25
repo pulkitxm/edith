@@ -273,6 +273,7 @@ struct ConfigImportCommand: AsyncParsableCommand {
             var applied: [String] = []
             var skipped: [String] = []
             var unchanged: [String] = []
+            var pending: [(SettingDefinition, JSONValue)] = []
             for key in object.keys.sorted() {
                 guard let found = ConfigCatalog.definition(for: key), !found.readOnly else {
                     skipped.append(key)
@@ -286,8 +287,13 @@ struct ConfigImportCommand: AsyncParsableCommand {
                     unchanged.append(key)
                     continue
                 }
-                if !dryRun { try store.set(value, for: found, announce: false) }
+                pending.append((found, value))
                 applied.append(key)
+            }
+            if !dryRun {
+                for (definition, value) in pending {
+                    try store.set(value, for: definition, announce: false)
+                }
             }
             if !dryRun, !applied.isEmpty { ConfigStore.announceChange() }
             guard !json else {

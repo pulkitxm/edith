@@ -64,6 +64,25 @@ import Testing
         }
     }
 
+    @Test func integerImportCoercionRejectsLossyAndOutOfRangeNumbers() throws {
+        let definition = try #require(
+            ConfigCatalog.definition(for: LidAwakeState.batteryThresholdKey))
+
+        #expect(try ConfigurationValueParser.coerce(100, to: definition) == .int(100))
+        #expect(throws: ConfigurationError.self) {
+            try ConfigurationValueParser.coerce(true, to: definition)
+        }
+        #expect(throws: ConfigurationError.self) {
+            try ConfigurationValueParser.coerce(20.5, to: definition)
+        }
+        #expect(throws: ConfigurationError.self) {
+            try ConfigurationValueParser.coerce(101, to: definition)
+        }
+        #expect(throws: ConfigurationError.self) {
+            try ConfigurationValueParser.coerce(Double.greatestFiniteMagnitude, to: definition)
+        }
+    }
+
     @Test func groupedWritesValidateBeforeChangingAnyKey() throws {
         let (shared, standard) = Self.stores("grouped")
         let executor = ConfigurationExecutor(
