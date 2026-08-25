@@ -414,6 +414,23 @@ func settingsBackupReadSettingsFile(
     }
 }
 
+func settingsBackupReadCloudSettingsFile(
+    at url: URL, maximumBytes: Int = settingsBackupMaximumSettingsBytes
+) -> Data? {
+    guard maximumBytes >= 0, maximumBytes < Int.max else { return nil }
+    var metadata = stat()
+    guard lstat(url.path, &metadata) == 0, metadata.st_mode & S_IFMT == S_IFREG,
+        metadata.st_size >= 0, UInt64(metadata.st_size) <= UInt64(maximumBytes)
+    else { return nil }
+    do {
+        return try settingsBackupCoordinateCloud(at: url, writing: false) { coordinatedURL in
+            settingsBackupReadSettingsFile(at: coordinatedURL, maximumBytes: maximumBytes)
+        }
+    } catch {
+        return nil
+    }
+}
+
 @MainActor
 func settingsBackupAwaitFinalSettingsExport(
     after previousExport: Task<Void, Never>?, generation: Int,
@@ -1680,7 +1697,7 @@ final class SettingsBackup {
             finishSettingsRestore()
             return
         }
-        guard let data = try? Data(contentsOf: cloudFile),
+        guard let data = settingsBackupReadCloudSettingsFile(at: cloudFile),
             let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
             awaitSettingsDownload()

@@ -570,7 +570,7 @@ import Testing
         #expect(UsageHistory.isValidDocument(try Data(contentsOf: cloudUsage)))
     }
 
-    @Test func settingsComparisonRejectsFIFOWithoutBlocking() throws {
+    @Test func cloudSettingsImportRejectsFIFOWithoutBlocking() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "edith-settings-backup-\(UUID().uuidString)")
         let fifo = root.appendingPathComponent("settings.json")
@@ -580,11 +580,11 @@ import Testing
         let clock = ContinuousClock()
         let started = clock.now
 
-        #expect(settingsBackupReadSettingsFile(at: fifo, maximumBytes: 64) == nil)
+        #expect(settingsBackupReadCloudSettingsFile(at: fifo, maximumBytes: 64) == nil)
         #expect(started.duration(to: clock.now) < .seconds(1))
     }
 
-    @Test func settingsComparisonNeverFollowsSymlinks() throws {
+    @Test func cloudSettingsImportNeverFollowsSymlinks() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "edith-settings-backup-\(UUID().uuidString)")
         let target = root.appendingPathComponent("target.json")
@@ -594,10 +594,10 @@ import Testing
         try Data("target".utf8).write(to: target)
         try #require(symlink(target.path, link.path) == 0)
 
-        #expect(settingsBackupReadSettingsFile(at: link, maximumBytes: 64) == nil)
+        #expect(settingsBackupReadCloudSettingsFile(at: link, maximumBytes: 64) == nil)
     }
 
-    @Test func settingsComparisonRejectsOversizedFiles() throws {
+    @Test func cloudSettingsImportRejectsOversizedFiles() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "edith-settings-backup-\(UUID().uuidString)")
         let file = root.appendingPathComponent("settings.json")
@@ -605,7 +605,26 @@ import Testing
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try Data(repeating: 1, count: 65).write(to: file)
 
-        #expect(settingsBackupReadSettingsFile(at: file, maximumBytes: 64) == nil)
+        #expect(settingsBackupReadCloudSettingsFile(at: file, maximumBytes: 64) == nil)
+    }
+
+    @Test func cloudSettingsImportReadsABoundedRegularDocument() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-settings-backup-\(UUID().uuidString)")
+        let file = root.appendingPathComponent("settings.json")
+        let expected = try JSONSerialization.data(
+            withJSONObject: ["onboardingCompleted": true], options: [.sortedKeys])
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try expected.write(to: file)
+
+        let data = try #require(
+            settingsBackupReadCloudSettingsFile(at: file, maximumBytes: 64))
+        let document = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [String: Bool])
+
+        #expect(data == expected)
+        #expect(document == ["onboardingCompleted": true])
     }
 
     @Test @MainActor func finalSettingsExportPublishesAfterCancelledOlderExport() async throws {
