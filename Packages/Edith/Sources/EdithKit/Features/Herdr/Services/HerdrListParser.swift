@@ -201,6 +201,13 @@ public enum HerdrListParser {
             tabID: string(in: object, keys: ["tab_id"]))
     }
 
+    public static func tabTitle(_ label: String?) -> String? {
+        guard let label else { return nil }
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.allSatisfy(\.isNumber) else { return nil }
+        return trimmed
+    }
+
     public static func category(
         for record: HerdrPaneRecord, previous: HerdrAgent? = nil
     ) -> HerdrPaneCategory {
@@ -241,8 +248,8 @@ public enum HerdrListParser {
             title = incoming
         } else if let previous, previous.title != previous.pane, !previous.title.isEmpty {
             title = previous.title
-        } else if let tabLabel, !tabLabel.isEmpty, !tabLabel.allSatisfy(\.isNumber) {
-            title = tabLabel
+        } else if let named = tabTitle(tabLabel) {
+            title = named
         } else {
             title = record.title ?? previous?.title ?? record.pane
         }

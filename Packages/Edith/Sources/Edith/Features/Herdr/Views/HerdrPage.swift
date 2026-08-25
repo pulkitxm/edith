@@ -372,7 +372,7 @@ struct HerdrPage: View {
                         }
                     }
                     .pageContent(compact)
-                    .padding(.top, UIScale.pt(16))
+                    .padding(.top, UIScale.pt(46))
                 }
             }
         }

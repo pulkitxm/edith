@@ -114,6 +114,43 @@ import Testing
         #expect(names == ["w2:p6": "bun"])
     }
 
+    @Test func aNumberedTabIsNeverATitleEvenWhenTheTabIsRenamed() {
+        let cache = HerdrBoardCache(context: context)
+        cache.applySnapshot(snapshot)
+        let renamed = cache.applyEvent(
+            """
+            {"event":"tab.renamed","data":{"tab":{"tab_id":"w2:t6","label":"7"}}}
+            """)
+        #expect(renamed.first { $0.pane == "w2:p6" }?.title == "site dev server")
+        let named = cache.applyEvent(
+            """
+            {"event":"tab.renamed","data":{"tab":{"tab_id":"w2:t6","label":"api watch"}}}
+            """)
+        #expect(named.first { $0.pane == "w2:p6" }?.title == "api watch")
+    }
+
+    @Test func aSnapshotDropsPanesThatAreNoLongerThere() {
+        let cache = HerdrBoardCache(context: context)
+        cache.applySnapshot(snapshot)
+        cache.applyEvent(
+            """
+            {"event":"pane.created","data":{"pane":{"pane_id":"w2:p9","agent_status":"unknown","tab_id":"w2:t9","workspace_id":"w2"}}}
+            """)
+        #expect(cache.agents.map(\.pane).contains("w2:p9"))
+        let reconciled = cache.applySnapshot(snapshot)
+        #expect(!reconciled.map(\.pane).contains("w2:p9"))
+        #expect(reconciled.map(\.pane) == ["w2:p1", "w2:p6"])
+    }
+
+    @Test func onlyTerminalsMissingANameAreLookedUp() {
+        let cache = HerdrBoardCache(context: context)
+        cache.applySnapshot(snapshot)
+        #expect(cache.unnamedTerminalPanes == ["w2:p6"])
+        cache.applyProcessNames(["w2:p6": "bun"])
+        #expect(cache.unnamedTerminalPanes.isEmpty)
+        #expect(cache.terminalPanes == ["w2:p6"])
+    }
+
     @Test func createdPaneIsReadFromTheRootPane() {
         let payload = """
             {"id":"cli:tab:create","result":{"root_pane":{"pane_id":"w2:p7","tab_id":"w2:t7","workspace_id":"w2"},"tab":{"label":"probe","tab_id":"w2:t7"},"type":"tab_created"}}

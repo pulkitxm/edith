@@ -108,6 +108,7 @@ public final class HerdrBoardCache: @unchecked Sendable {
                 tabLabels[tab.id] = label
                 relabelTabs()
             }
+            return listed()
         case "tab_closed":
             if let tab = HerdrListParser.eventTab(in: text) { tabLabels[tab.id] = nil }
         case "workspace_created", "workspace_updated", "workspace_renamed":
@@ -153,9 +154,8 @@ public final class HerdrBoardCache: @unchecked Sendable {
     private func relabelTabs() {
         for pane in agentsByPane.keys {
             guard let agent = agentsByPane[pane], agent.category == .terminal else { continue }
-            guard let id = paneTab[pane], let label = tabLabels[id], !label.isEmpty else {
-                continue
-            }
+            guard let id = paneTab[pane] else { continue }
+            guard let label = HerdrListParser.tabTitle(tabLabels[id]) else { continue }
             agentsByPane[pane]?.title = label
         }
     }
@@ -164,6 +164,14 @@ public final class HerdrBoardCache: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return agentsByPane.values.filter { $0.category == .terminal }.map(\.pane).sorted()
+    }
+
+    public var unnamedTerminalPanes: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return agentsByPane.values
+            .filter { $0.category == .terminal && $0.process.isEmpty }
+            .map(\.pane).sorted()
     }
 
     @discardableResult
