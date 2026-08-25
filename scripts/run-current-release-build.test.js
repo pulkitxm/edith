@@ -1,5 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -108,12 +116,45 @@ function advanceMain(fixture) {
   git(mover, "push", "origin", "main");
 }
 
+function unreliableGit(fixture, failCalls) {
+  const directory = join(fixture.root, `git-shim-${Date.now()}`);
+  const executable = join(directory, "git");
+  const state = join(directory, "calls");
+  mkdirSync(directory);
+  writeFileSync(
+    executable,
+    `#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "ls-remote" ]]; then
+  calls=0
+  [[ ! -f "$RELEASE_TEST_GIT_STATE" ]] || read -r calls < "$RELEASE_TEST_GIT_STATE"
+  calls=$((calls + 1))
+  printf '%s\n' "$calls" > "$RELEASE_TEST_GIT_STATE"
+  case ",$RELEASE_TEST_GIT_FAIL_CALLS," in
+    *,$calls,*) echo "fatal: simulated remote outage" >&2; exit 128 ;;
+  esac
+fi
+exec "$RELEASE_TEST_REAL_GIT" "$@"
+`,
+  );
+  chmodSync(executable, 0o755);
+  return {
+    PATH: `${directory}:${process.env.PATH}`,
+    RELEASE_TEST_GIT_FAIL_CALLS: failCalls.join(","),
+    RELEASE_TEST_GIT_STATE: state,
+    RELEASE_TEST_REAL_GIT: command(fixture.checkout, "which", ["git"]),
+    state,
+  };
+}
+
 function run(fixture, args, values = {}) {
   return Bun.spawn(["bash", script, ...args], {
     cwd: fixture.checkout,
     env: environment({
       BUILT_SHA: fixture.expectedSha,
       RELEASE_CHECK_INTERVAL_SECONDS: "1",
+      RELEASE_REMOTE_RETRY_ATTEMPTS: "3",
+      RELEASE_REMOTE_RETRY_DELAY_SECONDS: "0",
       RELEASE_SUPERSEDED_FILE: join(fixture.root, "superseded"),
       RELEASE_TERMINATION_GRACE_TICKS: "2",
       ...values,
@@ -165,6 +206,46 @@ test("a current release build keeps command failures fatal", async () => {
   processes.push(child);
 
   expect(await child.exited).toBe(23);
+});
+
+test("a transient remote outage recovers before the build starts", async () => {
+  const fixture = createFixture();
+  const marker = join(fixture.root, "completed");
+  const shim = unreliableGit(fixture, [1, 2]);
+  const child = run(
+    fixture,
+    ["bash", "-c", 'printf complete > "$1"', "--", marker],
+    shim,
+  );
+  processes.push(child);
+
+  expect(await child.exited).toBe(0);
+  expect(readFileSync(marker, "utf8")).toBe("complete");
+  expect(Number(readFileSync(shim.state, "utf8"))).toBeGreaterThanOrEqual(4);
+  expect(await new Response(child.stderr).text()).toContain(
+    "release remote check unavailable: retrying (1/3)",
+  );
+});
+
+test("an unavailable remote exhausts retries without starting a build", async () => {
+  const fixture = createFixture();
+  const marker = join(fixture.root, "unexpected");
+  const superseded = join(fixture.root, "superseded");
+  const shim = unreliableGit(fixture, [1, 2, 3]);
+  const child = run(
+    fixture,
+    ["bash", "-c", 'printf started > "$1"', "--", marker],
+    shim,
+  );
+  processes.push(child);
+
+  expect(await child.exited).toBe(1);
+  expect(existsSync(marker)).toBe(false);
+  expect(existsSync(superseded)).toBe(false);
+  expect(Number(readFileSync(shim.state, "utf8"))).toBe(3);
+  expect(await new Response(child.stderr).text()).toContain(
+    "release build blocked: could not resolve refs/heads/main",
+  );
 });
 
 test("a current release build does not reinterpret child status 75", async () => {

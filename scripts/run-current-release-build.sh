@@ -12,6 +12,8 @@ REMOTE_NAME="${RELEASE_REMOTE_NAME:-origin}"
 REMOTE_REF="${RELEASE_REMOTE_REF:-refs/heads/main}"
 CHECK_INTERVAL="${RELEASE_CHECK_INTERVAL_SECONDS:-15}"
 TERMINATION_GRACE_TICKS="${RELEASE_TERMINATION_GRACE_TICKS:-50}"
+REMOTE_RETRY_ATTEMPTS="${RELEASE_REMOTE_RETRY_ATTEMPTS:-4}"
+REMOTE_RETRY_DELAY="${RELEASE_REMOTE_RETRY_DELAY_SECONDS:-5}"
 SUPERSEDED_FILE="${RELEASE_SUPERSEDED_FILE:?release build blocked: RELEASE_SUPERSEDED_FILE is required}"
 
 case "$CHECK_INTERVAL" in
@@ -20,9 +22,32 @@ esac
 case "$TERMINATION_GRACE_TICKS" in
   ''|*[!0-9]*|0) echo "release build blocked: termination grace must be a positive integer" >&2; exit 1 ;;
 esac
+case "$REMOTE_RETRY_ATTEMPTS" in
+  ''|*[!0-9]*|0) echo "release build blocked: remote retry attempts must be a positive integer" >&2; exit 1 ;;
+esac
+case "$REMOTE_RETRY_DELAY" in
+  ''|*[!0-9]*) echo "release build blocked: remote retry delay must be a non-negative integer" >&2; exit 1 ;;
+esac
 
 current_sha() {
-  git ls-remote --exit-code "$REMOTE_NAME" "$REMOTE_REF" | awk 'NR == 1 { print $1 }'
+  local attempt output sha
+  for ((attempt = 1; attempt <= REMOTE_RETRY_ATTEMPTS; attempt += 1)); do
+    output=""
+    if output="$(git ls-remote --exit-code "$REMOTE_NAME" "$REMOTE_REF" 2>&1)"; then
+      sha="$(printf '%s\n' "$output" | awk 'NR == 1 { print $1 }')"
+      if [[ -n "$sha" ]]; then
+        printf '%s\n' "$sha"
+        return 0
+      fi
+    fi
+    if [[ "$attempt" -eq "$REMOTE_RETRY_ATTEMPTS" ]]; then
+      [[ -z "$output" ]] || printf '%s\n' "$output" >&2
+      return 1
+    fi
+    echo "release remote check unavailable: retrying ($attempt/$REMOTE_RETRY_ATTEMPTS)" >&2
+    [[ "$REMOTE_RETRY_DELAY" -eq 0 ]] || sleep "$REMOTE_RETRY_DELAY"
+  done
+  return 1
 }
 
 release_superseded() {
