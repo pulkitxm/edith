@@ -62,23 +62,15 @@ public enum HerdrCollector {
             agents: listed.agents, error: listed.error)
     }
 
-    private static func collectRemotes(_ machines: [Machine]) async -> [HerdrHostSnapshot] {
-        await withTaskGroup(of: HerdrHostSnapshot.self, returning: [HerdrHostSnapshot].self) {
-            group in
-            for machine in machines {
-                group.addTask { await collectRemote(machine) }
-            }
-            var snapshots: [HerdrHostSnapshot] = []
-            snapshots.reserveCapacity(machines.count)
-            for await snapshot in group { snapshots.append(snapshot) }
-            let order = Dictionary(
-                uniqueKeysWithValues: machines.enumerated().map {
-                    ($0.element.id.uuidString, $0.offset)
-                })
-            return snapshots.sorted { lhs, rhs in
-                (order[lhs.id] ?? .max) < (order[rhs.id] ?? .max)
-            }
+    static func collectRemotes(
+        _ machines: [Machine],
+        maximumInFlight: Int = HerdrFleetScheduler.defaultMaximumInFlight,
+        collector: @escaping @Sendable (Machine) async -> HerdrHostSnapshot = { machine in
+            await collectRemote(machine)
         }
+    ) async -> [HerdrHostSnapshot] {
+        await HerdrFleetScheduler.map(
+            machines, maximumInFlight: maximumInFlight, operation: collector)
     }
 
     private enum Runner {

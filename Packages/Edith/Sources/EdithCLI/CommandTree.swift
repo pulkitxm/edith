@@ -460,6 +460,10 @@ public enum CommandTree {
                         "command", "Print the command that attaches to a pane.",
                         options: common + ["--machine", "--session"],
                         arguments: [.free]),
+                    CommandNode(
+                        "attach", "Attach this terminal to a live pane.",
+                        options: common + ["--machine", "--session"],
+                        arguments: [.free]),
                 ]),
             CommandNode(
                 "tools", "Command line tools the extensions rely on.",

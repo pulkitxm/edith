@@ -112,6 +112,16 @@ public enum CLIEnvironment {
             }
         }
 
+    nonisolated(unsafe) public static var launchTerminal:
+        @Sendable (TerminalLaunchRequest) -> Int32 = { request in
+            ForegroundProcess.run(
+                executable: URL(fileURLWithPath: request.executable),
+                arguments: request.arguments,
+                environment: ForegroundProcess.environment(
+                    assignments: request.environment, inheriting: true),
+                failureNote: "error: could not start the terminal")
+        }
+
     private static func detectedInstalledAppURL() -> URL? {
         let bundled = Bundle.main.bundleURL
             .deletingLastPathComponent()
@@ -201,6 +211,14 @@ public enum CLIEnvironment {
         appContributors = { Contributors.cached() }
         installedAppURL = { detectedInstalledAppURL() }
         updateHistoryURL = { UpdateCheckLog.url }
+        launchTerminal = { request in
+            ForegroundProcess.run(
+                executable: URL(fileURLWithPath: request.executable),
+                arguments: request.arguments,
+                environment: ForegroundProcess.environment(
+                    assignments: request.environment, inheriting: true),
+                failureNote: "error: could not start the terminal")
+        }
         QuinjetCLIEnvironment.reset()
     }
 

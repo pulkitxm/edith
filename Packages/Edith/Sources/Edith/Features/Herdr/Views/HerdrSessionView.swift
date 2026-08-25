@@ -238,42 +238,15 @@ struct HerdrSessionView: View {
         guard launchEnabled, !tab.holder.started else { return }
         starting = true
         defer { starting = false }
-        if agent.machineIsLocal {
-            startLocal()
-            return
-        }
-        guard let machine = tab.machine else {
-            connectError = "That machine is no longer in Edith."
-            return
-        }
         do {
-            let connection = try await store.connection(for: machine)
+            let request = try await store.attachRequest(
+                for: tab,
+                environment: Terminal.getEnvironmentVariables(termName: "xterm-256color"))
             tab.holder.start(
-                executable: SSHConnection.executable.path,
-                arguments: connection.terminalArguments(
-                    remoteCommand: HerdrAttachCommand.remoteShellLine(
-                        session: agent.session, pane: agent.pane)),
-                environment: Terminal.getEnvironmentVariables(termName: "xterm-256color")
-                    + connection.terminalEnvironment())
+                executable: request.executable, arguments: request.arguments,
+                environment: request.environment)
         } catch {
             connectError = error.localizedDescription
         }
-    }
-
-    private func startLocal() {
-        let environment = Terminal.getEnvironmentVariables(termName: "xterm-256color")
-        if let executable = HerdrCollector.executable() {
-            tab.holder.start(
-                executable: executable.path,
-                arguments: HerdrAttachCommand.arguments(session: agent.session, pane: agent.pane),
-                environment: environment)
-            return
-        }
-        tab.holder.start(
-            executable: "/bin/zsh",
-            arguments: [
-                "-c", HerdrAttachCommand.remoteShellLine(session: agent.session, pane: agent.pane),
-            ],
-            environment: environment)
     }
 }

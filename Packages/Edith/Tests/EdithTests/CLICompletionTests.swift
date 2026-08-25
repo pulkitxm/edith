@@ -217,6 +217,8 @@ import Testing
         #expect(files.candidates.contains("reveal"))
         let forwards = Self.plan(["ed", "machines", "forwards", "op"], 3)
         #expect(forwards.candidates == ["open"])
+        let herdr = Self.plan(["ed", "herdr", "at"], 2)
+        #expect(herdr.candidates == ["attach"])
     }
 
     @Test func remoteDirectoryLeavesCompleteMachinesAndFlags() {

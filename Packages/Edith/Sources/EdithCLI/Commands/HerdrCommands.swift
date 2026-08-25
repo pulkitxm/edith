@@ -11,7 +11,9 @@ struct HerdrCommand: AsyncParsableCommand {
             binaries are reported rather than treated as a failure, so a Mac without
             Herdr still lists the machines that have it.
             """,
-        subcommands: [HerdrListCommand.self, HerdrAttachLineCommand.self],
+        subcommands: [
+            HerdrListCommand.self, HerdrAttachLineCommand.self, HerdrAttachCommandCLI.self,
+        ],
         defaultSubcommand: HerdrListCommand.self)
 }
 
@@ -42,6 +44,7 @@ enum HerdrCLI {
             "name": .string(host.name),
             "local": .bool(host.isLocal),
             "herdr": .bool(host.herdrPresent),
+            "reachable": .bool(host.reachable),
             "error": .optional(host.error),
         ])
     }
@@ -106,9 +109,15 @@ struct HerdrListCommand: AsyncParsableCommand {
                 CLIOut.json(HerdrCLI.json(hosts))
                 return
             }
+            let failures = hosts.filter {
+                $0.error != nil && (!$0.reachable || $0.herdrPresent)
+            }
+            for host in failures {
+                CLIOut.note("\(host.name): \(host.error ?? "inspection failed")")
+            }
             if agents.isEmpty {
                 let missing = hosts.filter { !$0.herdrPresent }.map(\.name)
-                if missing.count == hosts.count {
+                if failures.isEmpty, missing.count == hosts.count {
                     CLIOut.note(
                         "herdr is not installed on "
                             + missing.joined(separator: ", "))
@@ -126,6 +135,58 @@ struct HerdrListCommand: AsyncParsableCommand {
             CLIOut.out(
                 TextTable.render(
                     headers: ["MACHINE", "KIND", "STATUS", "PANE", "TITLE"], rows: rows))
+        }
+    }
+}
+
+struct HerdrAttachCommandCLI: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "attach", abstract: "Attach this terminal to a live pane.")
+
+    @Argument(help: "The pane id, for example w3:p1N.")
+    var pane: String
+
+    @Option(help: "Only this machine, or local for this Mac.")
+    var machine: String?
+
+    @Option(help: "Herdr session name when more than one pane matches.")
+    var session: String?
+
+    @Flag(name: .long, help: "Resolve the launch as JSON without attaching.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let hosts = try await HerdrCLI.collect(machine)
+            let agent = try HerdrCLI.matching(pane: pane, session: session, hosts: hosts)
+            let environment = ProcessInfo.processInfo.environment.keys.sorted().map {
+                "\($0)=\(ProcessInfo.processInfo.environment[$0] ?? "")"
+            }
+            let request: TerminalLaunchRequest
+            if agent.machineIsLocal {
+                request = HerdrOperationExecution.localAttachRequest(
+                    for: agent, environment: environment)
+            } else {
+                let runner = try await MachineResolver.runner(agent.machineID)
+                request = HerdrOperationExecution.remoteAttachRequest(
+                    for: agent, connection: runner.ssh, environment: environment)
+            }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "arguments": .strings(request.arguments),
+                        "attached": .bool(false),
+                        "command": .string(HerdrAttachCommand.line(for: agent)),
+                        "executable": .string(request.executable),
+                        "local": .bool(agent.machineIsLocal),
+                        "machine": .string(agent.machineName),
+                        "pane": .string(agent.pane),
+                        "session": .string(agent.session),
+                    ]))
+                return
+            }
+            let status = CLIEnvironment.launchTerminal(request)
+            guard status == 0 else { throw ExitCode(status) }
         }
     }
 }

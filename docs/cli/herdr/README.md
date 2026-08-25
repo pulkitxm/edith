@@ -6,8 +6,10 @@ every configured machine. Reach for it when you want a list of panes, or the
 exact attach line the Herdr page copies.
 
 A missing `herdr` binary is not a failure. That host is listed with `herdr`
-false and an empty agent list, and the command still exits 0. Unknown machines
-are the only not-found case.
+false and an empty agent list. Each JSON host also reports `reachable`, so a
+connection failure is distinct from a machine that was reached without Herdr.
+Both cases keep the aggregate listing at exit 0. Unknown machines are the only
+not-found case.
 
 The Herdr extension does not have to be on for these commands to run. They talk
 to the `herdr` CLI, not to the Edith window.
@@ -19,6 +21,7 @@ to the `herdr` CLI, not to the Edith window.
 | `ed herdr` | Runs `ls`, which is the default subcommand |
 | `ed herdr ls` | Live sessions on this Mac and every SSH machine |
 | `ed herdr command <pane>` | The attach line for one pane |
+| `ed herdr attach <pane>` | Attach this terminal to one pane |
 
 `ed herdr list` is an alias for `ed herdr ls`.
 
@@ -26,6 +29,7 @@ to the `herdr` CLI, not to the Edith window.
 
 - [`ed herdr ls`](./ls.md)
 - [`ed herdr command`](./command.md)
+- [`ed herdr attach`](./attach.md)
 
 ## Exit codes
 
@@ -36,7 +40,8 @@ to the `herdr` CLI, not to the Edith window.
 | 3 | `--machine` named no configured machine, or `command` named no pane |
 
 Nothing in this group exits 1 or 4. A down SSH machine is an error string on
-that host, not an unavailable CLI.
+that host and `reachable: false`, not an unavailable CLI. Plain output prints
+the host error instead of describing the tool as missing.
 
 ## Notes and gotchas
 
