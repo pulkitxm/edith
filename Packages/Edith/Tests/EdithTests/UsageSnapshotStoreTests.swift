@@ -3,6 +3,28 @@ import Testing
 
 @testable import EdithKit
 
+private func awaitingBlockingWork<T: Sendable>(
+    _ body: @escaping @Sendable () -> T
+) async -> T {
+    await withCheckedContinuation { continuation in
+        DispatchQueue.global(qos: .userInitiated).async {
+            continuation.resume(returning: body())
+        }
+    }
+}
+
+private func awaitingThrowingBlockingWork<T: Sendable>(
+    _ body: @escaping @Sendable () throws -> T
+) async throws -> T {
+    try await withCheckedThrowingContinuation { continuation in
+        DispatchQueue.global(qos: .userInitiated).async {
+            continuation.resume(with: Result { try body() })
+        }
+    }
+}
+
+private struct UsageSnapshotCrashDriverTimeout: Error {}
+
 private final class UsageSnapshotPublishGate: @unchecked Sendable {
     private let firstCaptured = DispatchSemaphore(value: 0)
     private let releaseFirst = DispatchSemaphore(value: 0)
@@ -18,7 +40,7 @@ private final class UsageSnapshotPublishGate: @unchecked Sendable {
     }
 
     func waitForFirstCapture() async -> Bool {
-        await Task.detached { self.waitForFirstCaptureSynchronously() }.value
+        await awaitingBlockingWork { self.waitForFirstCaptureSynchronously() }
     }
 
     func release() {
@@ -30,7 +52,7 @@ private final class UsageSnapshotPublishGate: @unchecked Sendable {
     }
 
     func secondReachedPointerEarly() async -> Bool {
-        await Task.detached { self.secondReachedPointerSynchronously() }.value
+        await awaitingBlockingWork { self.secondReachedPointerSynchronously() }
     }
 
     private func waitForFirstCaptureSynchronously() -> Bool {
@@ -50,13 +72,11 @@ private final class UsageSnapshotPublishGate: @unchecked Sendable {
     }
 
     func waitForMutationStarts(_ count: Int) async -> Bool {
-        await Task.detached { self.waitForMutationStartsSynchronously(count) }.value
+        await awaitingBlockingWork { self.waitForMutationStartsSynchronously(count) }
     }
 
     func mutationFinishedEarly() async -> Bool {
-        await Task.detached {
-            self.mutationFinishedSynchronously()
-        }.value
+        await awaitingBlockingWork { self.mutationFinishedSynchronously() }
     }
 
     private func waitForMutationStartsSynchronously(_ count: Int) -> Bool {
@@ -671,11 +691,11 @@ private final class UsageSnapshotPublishGate: @unchecked Sendable {
             let first = try await store.publish(generation: UUID())
             let interruptedID = UUID()
 
-            let termination = try await Task.detached {
+            let termination = try await awaitingThrowingBlockingWork {
                 try Self.runCrashDriver(
                     dataDirectory: fixture.data, root: fixture.snapshots,
                     generation: interruptedID, point: point)
-            }.value
+            }
 
             #expect(termination.reason == .uncaughtSignal)
             #expect(termination.status == SIGKILL)
@@ -705,12 +725,12 @@ private final class UsageSnapshotPublishGate: @unchecked Sendable {
             try await store.publish(generation: identifier)
         }
         let transactionLock = UsageRefreshRunner.transactionURL(dataDir: fixture.data)
-        for _ in 0..<1_000 where !UsageRefreshLock.isHeld(at: transactionLock) {
-            await Task.yield()
+        for _ in 0..<600 where !UsageRefreshLock.isHeld(at: transactionLock) {
+            try await Task.sleep(for: .milliseconds(10))
         }
         #expect(UsageRefreshLock.isHeld(at: transactionLock))
 
-        let appendTask = Task.detached {
+        async let appendTask: Void = awaitingBlockingWork {
             gate.markMutationStarted()
             defer { gate.markMutationFinished() }
             var history = LimitsHistory(url: fixture.source.limitsFile)
@@ -718,14 +738,14 @@ private final class UsageSnapshotPublishGate: @unchecked Sendable {
                 session: LimitWindow(percent: 75, resetsAt: nil), week: nil,
                 now: Date(timeIntervalSince1970: 1_777_249_000))
         }
-        let saveTask = Task.detached {
+        async let saveTask: Void = awaitingThrowingBlockingWork {
             gate.markMutationStarted()
             defer { gate.markMutationFinished() }
             _ = try MachineUsageStore.save(
                 document: Self.usage, machine: saved, slug: saved.name, host: saved.host,
                 collectedAt: Date(), in: fixture.source.machinesDirectory)
         }
-        let forgetTask = Task.detached {
+        async let forgetTask: Void = awaitingBlockingWork {
             gate.markMutationStarted()
             defer { gate.markMutationFinished() }
             MachineUsageStore.forget(
@@ -736,9 +756,9 @@ private final class UsageSnapshotPublishGate: @unchecked Sendable {
         #expect(!mutationFinishedEarly)
         held.release()
         let publication = try await publicationTask.value
-        await appendTask.value
-        _ = try await saveTask.value
-        _ = await forgetTask.value
+        await appendTask
+        try await saveTask
+        await forgetTask
 
         #expect(publication.manifest.generation == identifier.uuidString.lowercased())
         #expect(try await store.current() == publication)
@@ -803,6 +823,15 @@ private final class UsageSnapshotPublishGate: @unchecked Sendable {
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
+        let deadline = Date().addingTimeInterval(60)
+        while process.isRunning && Date() < deadline {
+            usleep(5_000)
+        }
+        if process.isRunning {
+            process.terminate()
+            process.waitUntilExit()
+            throw UsageSnapshotCrashDriverTimeout()
+        }
         process.waitUntilExit()
         return (process.terminationReason, process.terminationStatus)
     }
