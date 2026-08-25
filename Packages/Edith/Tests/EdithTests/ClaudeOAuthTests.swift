@@ -1,8 +1,21 @@
+import Darwin
 import EdithKit
 import Foundation
 import Testing
 
 @testable import EdithHelper
+
+private extension ClaudeCredentialLookup {
+    var credential: ClaudeOAuthCredential? {
+        guard case .credential(let credential) = self else { return nil }
+        return credential
+    }
+
+    var failure: ClaudeCredentialLookupFailure? {
+        guard case .failure(let failure) = self else { return nil }
+        return failure
+    }
+}
 
 private final class ClaudeShellInvocationCapture: @unchecked Sendable {
     private let lock = NSLock()
@@ -246,11 +259,98 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
         #expect(credential.source == .shell)
     }
 
+    @Test func cancellationStopsTheLiveShellAndItsDescendant() async throws {
+        let fixture = try cancellationFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let resolver = ClaudeShellCredentialResolver(
+            shell: fixture.executable,
+            home: fixture.directory,
+            username: "tester",
+            timeout: 10,
+            maximumOutputBytes: 4_096,
+            marker: marker)
+        let task = Task { await resolver.resolve() }
+        let identifiers = try await processIdentifiers(fixture)
+
+        task.cancel()
+        _ = await task.value
+
+        try await expectGone(identifiers)
+    }
+
     private enum ExpectedResolution {
         case missing
         case timedOut
         case oversized
         case failed
+    }
+
+    private struct CancellationFixture {
+        let directory: URL
+        let executable: URL
+        let parent: URL
+        let child: URL
+    }
+
+    private func cancellationFixture() throws -> CancellationFixture {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-shell-cancel-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let executable = directory.appendingPathComponent("fixture-shell")
+        let parent = directory.appendingPathComponent("parent.pid")
+        let child = directory.appendingPathComponent("child.pid")
+        let script = """
+            #!/bin/sh
+            printf '%s\n' "$$" > "\(parent.path)"
+            trap '' TERM
+            /bin/sleep 30 &
+            printf '%s\n' "$!" > "\(child.path)"
+            wait
+            """
+        try Data(script.utf8).write(to: executable, options: .atomic)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        return CancellationFixture(
+            directory: directory, executable: executable, parent: parent, child: child)
+    }
+
+    private func processIdentifiers(_ fixture: CancellationFixture) async throws -> [Int32] {
+        let deadline = ProcessInfo.processInfo.systemUptime + 2
+        repeat {
+            if let parent = identifier(at: fixture.parent),
+                let child = identifier(at: fixture.child)
+            {
+                return [parent, child]
+            }
+            if ProcessInfo.processInfo.systemUptime >= deadline {
+                throw CocoaError(.fileReadUnknown)
+            }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        } while true
+    }
+
+    private func identifier(at url: URL) -> Int32? {
+        guard let data = try? Data(contentsOf: url),
+            let text = String(data: data, encoding: .utf8)?.trimmingCharacters(
+                in: .whitespacesAndNewlines)
+        else { return nil }
+        return Int32(text)
+    }
+
+    private func expectGone(_ identifiers: [Int32]) async throws {
+        let deadline = ProcessInfo.processInfo.systemUptime + 2
+        while identifiers.contains(where: isPresent) {
+            if ProcessInfo.processInfo.systemUptime >= deadline {
+                Issue.record("resolver process remained after cancellation")
+                return
+            }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
+    private func isPresent(_ identifier: Int32) -> Bool {
+        errno = 0
+        return kill(identifier, 0) == 0 || errno != ESRCH
     }
 
     private func makeResolver(
@@ -337,7 +437,7 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
         let session = ClaudeCredentialSession(
             persistedReader: { persisted },
             shellReader: { shell.next() })
-        let credential = await session.current()
+        let credential = (await session.current()).credential
         #expect(credential?.accessToken == "persisted-token")
         #expect(credential?.source == .keychain)
         #expect(shell.calls == 0)
@@ -348,8 +448,8 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
         let session = ClaudeCredentialSession(
             persistedReader: { nil },
             shellReader: { shell.next() })
-        let first = await session.current()
-        let second = await session.current()
+        let first = (await session.current()).credential
+        let second = (await session.current()).credential
         #expect(first?.accessToken == "shell-token")
         #expect(second?.accessToken == "shell-token")
         #expect(first?.source == .shell)
@@ -363,9 +463,9 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
         let session = ClaudeCredentialSession(
             persistedReader: { nil },
             shellReader: { shell.next() })
-        let rejected = await session.current()
-        let rotated = await session.reload()
-        let cached = await session.current()
+        let rejected = (await session.current()).credential
+        let rotated = (await session.reload()).credential
+        let cached = (await session.current()).credential
         #expect(rejected?.accessToken == "old-token")
         #expect(rotated?.accessToken == "rotated-token")
         #expect(cached?.accessToken == "rotated-token")
@@ -381,9 +481,10 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
             persistedReader: { persisted },
             shellReader: { shell.next() })
 
-        let initial = await session.current()
-        let recovered = await session.reload(rejectingAccessToken: "persisted-token")
-        let cached = await session.current()
+        let initial = (await session.current()).credential
+        let recovered =
+            (await session.reload(rejectingAccessToken: "persisted-token")).credential
+        let cached = (await session.current()).credential
 
         #expect(initial?.accessToken == "persisted-token")
         #expect(recovered?.accessToken == "rotated-shell-token")
@@ -408,8 +509,9 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
             },
             shellReader: { shell.next() })
 
-        let initial = await session.current()
-        let recovered = await session.reload(rejectingAccessToken: "persisted-token")
+        let initial = (await session.current()).credential
+        let recovered =
+            (await session.reload(rejectingAccessToken: "persisted-token")).credential
 
         #expect(initial?.accessToken == "persisted-token")
         #expect(recovered?.accessToken == "rotated-persisted-token")
@@ -417,7 +519,7 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
         #expect(shell.calls == 0)
     }
 
-    @Test func persistedRejectionIsLimitedToOneLoad() async throws {
+    @Test func rejectedCredentialStaysRejectedAcrossLoads() async throws {
         let persisted = try #require(
             ClaudeOAuthCredential.decode(
                 credentialData("persisted-token"), source: .keychain))
@@ -429,8 +531,64 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
         let rejected = await session.reload(rejectingAccessToken: "persisted-token")
         let nextLoad = await session.current()
 
-        #expect(rejected == nil)
-        #expect(nextLoad?.accessToken == "persisted-token")
+        #expect(rejected.failure == .rejected)
+        #expect(nextLoad.failure == .rejected)
+    }
+
+    @Test func rejectedPersistedTokenIsAlsoRejectedFromTheShell() async throws {
+        let persisted = try #require(
+            ClaudeOAuthCredential.decode(
+                credentialData("persisted-token"), source: .keychain))
+        let shell = ClaudeShellCredentialQueue(tokens: ["persisted-token", "persisted-token"])
+        let session = ClaudeCredentialSession(
+            persistedReader: { persisted },
+            shellReader: { shell.next() })
+
+        _ = await session.current()
+        let rejected = await session.reload(rejectingAccessToken: "persisted-token")
+        let repeated = await session.current()
+
+        #expect(rejected.failure == .rejected)
+        #expect(repeated.failure == .rejected)
+        #expect(shell.calls == 2)
+    }
+
+    @Test func rotatedShellTokenClearsTheRejection() async throws {
+        let persisted = try #require(
+            ClaudeOAuthCredential.decode(
+                credentialData("persisted-token"), source: .keychain))
+        let shell = ClaudeShellCredentialQueue(tokens: [
+            "persisted-token", "rotated-shell-token",
+        ])
+        let session = ClaudeCredentialSession(
+            persistedReader: { persisted },
+            shellReader: { shell.next() })
+
+        _ = await session.current()
+        let rejected = await session.reload(rejectingAccessToken: "persisted-token")
+        let rotated = (await session.current()).credential
+        let cached = (await session.current()).credential
+
+        #expect(rejected.failure == .rejected)
+        #expect(rotated?.accessToken == "rotated-shell-token")
+        #expect(cached?.accessToken == "rotated-shell-token")
+        #expect(shell.calls == 2)
+    }
+
+    @Test func explicitStoreClearsTheRejection() async throws {
+        let persisted = try #require(
+            ClaudeOAuthCredential.decode(
+                credentialData("persisted-token"), source: .keychain))
+        let session = ClaudeCredentialSession(
+            persistedReader: { persisted },
+            shellReader: { .missing })
+
+        _ = await session.current()
+        _ = await session.reload(rejectingAccessToken: "persisted-token")
+        session.store(persisted)
+        let restored = (await session.current()).credential
+
+        #expect(restored?.accessToken == "persisted-token")
     }
 
     private func credentialData(_ accessToken: String) throws -> Data {

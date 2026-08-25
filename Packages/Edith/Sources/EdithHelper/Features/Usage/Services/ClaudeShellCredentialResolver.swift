@@ -96,9 +96,7 @@ struct ClaudeShellCredentialResolver: Sendable {
         let runner = runner
         let timeout = timeout
         let maximumOutputBytes = maximumOutputBytes
-        let result = await Task.detached(priority: .utility) {
-            await runner(invocation, timeout, maximumOutputBytes)
-        }.value
+        let result = await runner(invocation, timeout, maximumOutputBytes)
         switch result {
         case .output(let data):
             return parse(data)
@@ -157,12 +155,27 @@ struct ClaudeShellCredentialResolver: Sendable {
     }
 }
 
+enum ClaudeCredentialLookupFailure: Equatable {
+    case missing
+    case rejected
+    case malformed
+    case timedOut
+    case oversized
+    case failed
+}
+
+enum ClaudeCredentialLookup {
+    case credential(ClaudeOAuthCredential)
+    case failure(ClaudeCredentialLookupFailure)
+}
+
 @MainActor
 final class ClaudeCredentialSession {
     typealias PersistedReader = () async -> ClaudeOAuthCredential?
     typealias ShellReader = () async -> ClaudeShellCredentialResolution
 
     private var cached: ClaudeOAuthCredential?
+    private var rejectedAccessToken: String?
     private let persistedReader: PersistedReader
     private let shellReader: ShellReader
 
@@ -176,28 +189,48 @@ final class ClaudeCredentialSession {
         self.shellReader = shellReader
     }
 
-    func current() async -> ClaudeOAuthCredential? {
-        if let cached { return cached }
+    func current() async -> ClaudeCredentialLookup {
+        if let cached { return .credential(cached) }
         return await load()
     }
 
-    func reload(rejectingAccessToken: String? = nil) async -> ClaudeOAuthCredential? {
+    func reload(rejectingAccessToken: String? = nil) async -> ClaudeCredentialLookup {
         cached = nil
-        return await load(rejectingAccessToken: rejectingAccessToken)
+        if let rejectingAccessToken { rejectedAccessToken = rejectingAccessToken }
+        return await load()
     }
 
     func store(_ credential: ClaudeOAuthCredential) {
+        rejectedAccessToken = nil
         cached = credential
     }
 
-    private func load(rejectingAccessToken: String? = nil) async -> ClaudeOAuthCredential? {
-        if let credential = await persistedReader(), credential.accessToken != rejectingAccessToken
-        {
-            cached = credential
-            return credential
+    private func load() async -> ClaudeCredentialLookup {
+        if let credential = await persistedReader(), credential.accessToken != rejectedAccessToken {
+            return accept(credential)
         }
-        guard case .credential(let credential) = await shellReader() else { return nil }
+        switch await shellReader() {
+        case .credential(let credential):
+            guard credential.accessToken != rejectedAccessToken else {
+                return .failure(.rejected)
+            }
+            return accept(credential)
+        case .missing:
+            return rejectedAccessToken == nil ? .failure(.missing) : .failure(.rejected)
+        case .malformed:
+            return .failure(.malformed)
+        case .timedOut:
+            return .failure(.timedOut)
+        case .oversized:
+            return .failure(.oversized)
+        case .failed:
+            return .failure(.failed)
+        }
+    }
+
+    private func accept(_ credential: ClaudeOAuthCredential) -> ClaudeCredentialLookup {
+        rejectedAccessToken = nil
         cached = credential
-        return credential
+        return .credential(credential)
     }
 }
