@@ -34,6 +34,11 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
     return rep.pixelsWide > 0 && rep.pixelsHigh > 0
 }
 
+@MainActor
+private func descendantViews(of view: NSView) -> [NSView] {
+    view.subviews + view.subviews.flatMap { descendantViews(of: $0) }
+}
+
 @MainActor private func smokeUpdater() -> UpdaterModel {
     UpdaterModel(
         logURL: URL(fileURLWithPath: NSTemporaryDirectory())
@@ -92,6 +97,27 @@ private func renders(_ view: some View, width: CGFloat = 900, height: CGFloat = 
 
     @Test func extensionsPaneRenders() {
         #expect(renders(ExtensionsPane()))
+    }
+
+    @Test func extensionSettingsHeaderRendersTrailingSwitch() throws {
+        let host = NSHostingView(
+            rootView: ExtensionSettingsHeader(title: "Lid Awake", enabled: .constant(false)))
+        host.frame = NSRect(x: 0, y: 0, width: 560, height: 64)
+        let window = NSWindow(
+            contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        defer { window.orderOut(nil) }
+        window.contentView = host
+        window.layoutIfNeeded()
+        host.layoutSubtreeIfNeeded()
+
+        let switches = descendantViews(of: host).compactMap { $0 as? NSSwitch }
+        #expect(switches.count == 1)
+        let toggle = try #require(switches.first)
+        let frame = host.convert(toggle.bounds, from: toggle)
+
+        #expect(!toggle.isHidden)
+        #expect(toggle.isEnabled)
+        #expect(frame.midX > host.bounds.midX)
     }
 
     @Test func closedSidebarIsCoveredByDetailBackground() throws {

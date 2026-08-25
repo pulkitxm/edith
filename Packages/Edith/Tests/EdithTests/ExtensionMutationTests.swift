@@ -243,6 +243,29 @@ private struct ExtensionMutationWorld {
         #expect(world.recorder.announcementCount == ExtensionRegistry.entries.count * 2)
     }
 
+    @MainActor @Test func modalEnablementPreservesRequiredToolProvisioning() throws {
+        let world = ExtensionMutationWorld()
+        defer { world.cleanUp() }
+        let entry = try #require(ExtensionRegistry.entries.first { $0.id == "quinjet" })
+        let coordinator = ExtensionModalCoordinator(entry: entry, mutationCenter: world.center())
+
+        guard case let .applied(enabled, tools) = coordinator.setEnabled(true) else {
+            Issue.record("Quinjet should enable before required tool provisioning")
+            return
+        }
+        #expect(enabled.enabled)
+        #expect(tools.map(\.id) == ["quinjet"])
+        #expect(coordinator.isEnabled)
+
+        guard case let .applied(disabled, remaining) = coordinator.setEnabled(false) else {
+            Issue.record("Quinjet should disable without a provisioning prompt")
+            return
+        }
+        #expect(!disabled.enabled)
+        #expect(remaining.isEmpty)
+        #expect(!coordinator.isEnabled)
+    }
+
     @MainActor @Test func modalDefersPermissionBlockedEnablementWithoutChangingState() throws {
         let world = ExtensionMutationWorld()
         defer { world.cleanUp() }
