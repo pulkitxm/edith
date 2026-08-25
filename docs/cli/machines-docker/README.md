@@ -30,7 +30,8 @@ being the usual example.
 | `ed machines docker networks` | Lists networks with their driver and scope. |
 | `ed machines docker df` | Disk usage by object type, with what is reclaimable. |
 | `ed machines docker logs` | Streams one container's logs, with timestamps. |
-| `ed machines docker inspect` | Prints docker's own `inspect` JSON, untouched. |
+| `ed machines docker inspect` | Reads structured image, command, environment, mount and network details. |
+| `ed machines docker top` | Reads the processes running inside a container. |
 | `ed machines docker start` | Starts one or more containers. |
 | `ed machines docker stop` | Stops one or more containers, with a 10 second grace period. |
 | `ed machines docker restart` | Restarts one or more containers, with a 10 second grace period. |
@@ -79,6 +80,7 @@ and exit 0.
 - [`ed machines docker df`](./df.md)
 - [`ed machines docker logs`](./logs.md)
 - [`ed machines docker inspect`](./inspect.md)
+- [`ed machines docker top`](./top.md)
 - [`ed machines docker start`](./start.md)
 - [`ed machines docker stop`](./stop.md)
 - [`ed machines docker restart`](./restart.md)
@@ -134,7 +136,7 @@ something unrecognisable, `docker reported an unknown state`.
   `ed machines docker compose <machine>` with no verb is `compose ls`.
 - `ed machines docker open <machine> <container>` opens its only published TCP
   port in the browser. Pass `--port <host-or-container-port>` when it has more
-  than one. `--json` performs the open and reports the resolved localhost URL.
+  than one. `--json` performs the open and reports the resolved machine URL.
 - `ed machines docker shell <machine> <container>` is the Docker window's shell
   button. Both use the same quoted container target and choose `bash` when it is
   available inside the container, falling back to `sh`.
@@ -148,7 +150,7 @@ something unrecognisable, `docker reported an unknown state`.
   reach this page, which is why the compose verbs pass a project name rather
   than a directory.
 - The timeouts are per command: 25 seconds for the version probe, 45 for `ps`,
-  `images`, `volumes` and `df`, 30 for `networks`, `inspect` and `compose ls`,
+  `images`, `volumes` and `df`, 30 for `networks`, `inspect`, `top` and `compose ls`,
   120 for every container lifecycle verb and for `rmi` and `volume-rm`, 300 for
   `prune` and for `compose up`, `down` and `restart`, 900 for `compose pull`.
   `shell`, `logs` and `compose logs` have none. A command that outruns its ceiling has
@@ -156,8 +158,7 @@ something unrecognisable, `docker reported an unknown state`.
   exit 1 while the work carries on unsupervised on the machine.
 - `--json` output is one document per invocation, keys sorted, two space indent.
   Nothing on this page streams JSON, and nothing here takes `--json --follow`.
-- Four verbs have no `--json` at all: `shell`, `logs`, `inspect` and `compose logs`.
-  `inspect` does not need one, since its output is already docker's JSON.
+- Three verbs have no `--json` at all: `shell`, `logs` and `compose logs`.
 - The container id you pass is never resolved by `ed`. Names, short ids and full
   ids all go to docker as typed, so docker's own matching rules apply, including
   its refusal when a short id is ambiguous.

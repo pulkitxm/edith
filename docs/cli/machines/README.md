@@ -70,6 +70,7 @@ the process state between metric records.
 | `ed machines snippets ls` | Lists the snippets a machine offers, its own and the shared ones. |
 | `ed machines snippets add` | Saves a command against one machine, or against every machine with `--shared`. |
 | `ed machines snippets rm` | Forgets one snippet. |
+| `ed machines snippets run` | Runs one saved command on its selected machine. |
 | `ed machines metrics` | Samples CPU, memory, load, disk and network on a machine, once or continuously. |
 | `ed machines exec` | Runs a command there, passing both streams and the remote exit code through. |
 | `ed machines connect` | Opens the shared SSH connection and reports the round trip time. |
@@ -155,6 +156,7 @@ reads and writes.
 - [`ed machines snippets ls`](./snippets-ls.md)
 - [`ed machines snippets add`](./snippets-add.md)
 - [`ed machines snippets rm`](./snippets-rm.md)
+- [`ed machines snippets run`](./snippets-run.md)
 - [`ed machines metrics`](./metrics.md)
 - [`ed machines exec`](./exec.md)
 - [`ed machines connect`](./connect.md)
