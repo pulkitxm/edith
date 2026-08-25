@@ -111,6 +111,7 @@ final class UsageStore: FeatureModule {
             guard !Task.isCancelled, let self, self.historySeedGeneration == generation else {
                 return
             }
+            self.history.prime(with: latest)
             self.seedFromHistory(latest)
             self.historySeedJob = nil
             self.startPolling()

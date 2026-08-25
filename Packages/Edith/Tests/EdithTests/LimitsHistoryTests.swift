@@ -173,6 +173,31 @@ import Testing
         #expect(LimitsHistory.loadLatestPoint(provider: .claude, url: url)?.s == 42)
         #expect(LimitsHistory.availableProviders(url: url) == [.codex, .claude])
     }
+
+    @Test func primedHistoryUsesTheLoadedSnapshotWithoutRescanning() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-tests-\(UUID().uuidString)")
+        let url = dir.appendingPathComponent("limits-history.jsonl")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let original = LimitsHistory.row(
+            provider: .claude, session: LimitWindow(percent: 42, resetsAt: nil), week: nil,
+            now: now)
+        try Data(original.line.utf8).write(to: url)
+        let loaded = LimitsHistory.latestProviders(url: url)
+        let replacement = LimitsHistory.row(
+            provider: .claude, session: LimitWindow(percent: 99, resetsAt: nil), week: nil,
+            now: now.addingTimeInterval(60))
+        try Data(replacement.line.utf8).write(to: url)
+
+        var history = LimitsHistory(url: url)
+        history.prime(with: loaded)
+        history.append(
+            provider: .claude, session: LimitWindow(percent: 42, resetsAt: nil), week: nil,
+            now: now.addingTimeInterval(120))
+
+        #expect(try String(contentsOf: url, encoding: .utf8) == replacement.line)
+    }
 }
 
 @Suite struct LimitsHistoryFableTests {

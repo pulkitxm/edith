@@ -6,6 +6,7 @@ public struct LimitsHistory {
         public let session: LimitWindow?
         public let week: LimitWindow?
         public let fable: LimitWindow?
+        fileprivate let key: String
     }
 
     public static var url: URL { Repo.limitsJSONL }
@@ -91,9 +92,13 @@ public struct LimitsHistory {
         for (provider, row) in Self.latestRows(
             url: fileURL, providers: Set(LimitProvider.allCases))
         {
-            lastKeys[provider] =
-                "\(provider.rawValue)|\(row.s ?? -1)|\(row.w ?? -1)|\(row.f ?? -1)|\(row.sr ?? "-")|\(row.wr ?? "-")|\(row.fr ?? "-")"
+            lastKeys[provider] = Self.key(provider: provider, row: row)
         }
+    }
+
+    public mutating func prime(with latest: [LimitProvider: Latest]) {
+        seeded = true
+        lastKeys = latest.mapValues(\.key)
     }
 
     public static func latest(
@@ -165,18 +170,7 @@ public struct LimitsHistory {
     ) -> [LimitProvider: Latest] {
         latestRows(url: url, providers: providers).reduce(into: [:]) { result, item in
             let (provider, row) = item
-            guard let date = EdithDate.parseISO(row.ts) else { return }
-            result[provider] = Latest(
-                date: date,
-                session: row.s.map {
-                    LimitWindow(percent: $0, resetsAt: row.sr.flatMap(EdithDate.parseISO))
-                },
-                week: row.w.map {
-                    LimitWindow(percent: $0, resetsAt: row.wr.flatMap(EdithDate.parseISO))
-                },
-                fable: row.f.map {
-                    LimitWindow(percent: $0, resetsAt: row.fr.flatMap(EdithDate.parseISO))
-                })
+            result[provider] = latest(provider: provider, row: row)
         }
     }
 
@@ -219,6 +213,26 @@ public struct LimitsHistory {
             return rows.count < providers.count
         }
         return rows
+    }
+
+    private static func latest(provider: LimitProvider, row: Row) -> Latest? {
+        guard let date = EdithDate.parseISO(row.ts) else { return nil }
+        return Latest(
+            date: date,
+            session: row.s.map {
+                LimitWindow(percent: $0, resetsAt: row.sr.flatMap(EdithDate.parseISO))
+            },
+            week: row.w.map {
+                LimitWindow(percent: $0, resetsAt: row.wr.flatMap(EdithDate.parseISO))
+            },
+            fable: row.f.map {
+                LimitWindow(percent: $0, resetsAt: row.fr.flatMap(EdithDate.parseISO))
+            },
+            key: key(provider: provider, row: row))
+    }
+
+    private static func key(provider: LimitProvider, row: Row) -> String {
+        "\(provider.rawValue)|\(row.s ?? -1)|\(row.w ?? -1)|\(row.f ?? -1)|\(row.sr ?? "-")|\(row.wr ?? "-")|\(row.fr ?? "-")"
     }
 
     public static func downsample(
