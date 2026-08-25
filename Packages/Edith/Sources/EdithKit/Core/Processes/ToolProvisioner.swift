@@ -9,6 +9,7 @@ public struct CLICommandRequest: Equatable, Sendable {
     public let currentDirectoryURL: URL?
     public let timeout: TimeInterval?
     public let maximumOutputBytes: Int?
+    public let standardInputData: Data?
     public let discardsStandardError: Bool
     public let terminatesProcessGroup: Bool
 
@@ -16,6 +17,7 @@ public struct CLICommandRequest: Equatable, Sendable {
         executableURL: URL, arguments: [String], environment: [String: String],
         currentDirectoryURL: URL? = nil, timeout: TimeInterval? = nil,
         maximumOutputBytes: Int? = nil,
+        standardInputData: Data? = nil,
         discardsStandardError: Bool = false, terminatesProcessGroup: Bool = false
     ) {
         self.executableURL = executableURL
@@ -24,6 +26,7 @@ public struct CLICommandRequest: Equatable, Sendable {
         self.currentDirectoryURL = currentDirectoryURL
         self.timeout = timeout
         self.maximumOutputBytes = maximumOutputBytes
+        self.standardInputData = standardInputData
         self.discardsStandardError = discardsStandardError
         self.terminatesProcessGroup = terminatesProcessGroup
     }
@@ -186,7 +189,8 @@ public enum CLICommandRunner {
         }
         process.environment = request.environment
         process.currentDirectoryURL = request.currentDirectoryURL
-        process.standardInput = FileHandle.nullDevice
+        let input = request.standardInputData.map { _ in Pipe() }
+        process.standardInput = input ?? FileHandle.nullDevice
 
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -207,10 +211,23 @@ public enum CLICommandRunner {
         do {
             try process.run()
             try? pipe.fileHandleForWriting.close()
+            try? input?.fileHandleForReading.close()
         } catch {
             try? pipe.fileHandleForWriting.close()
+            try? input?.fileHandleForReading.close()
+            try? input?.fileHandleForWriting.close()
             _ = readerFinished.wait(timeout: .now() + terminationGrace)
             throw CLICommandRunnerError.launchFailed
+        }
+        let inputFinished = DispatchSemaphore(value: 0)
+        if let data = request.standardInputData, let input {
+            DispatchQueue.global(qos: .utility).async {
+                try? input.fileHandleForWriting.write(contentsOf: data)
+                try? input.fileHandleForWriting.close()
+                inputFinished.signal()
+            }
+        } else {
+            inputFinished.signal()
         }
 
         let deadline = request.timeout.map {
@@ -234,10 +251,12 @@ public enum CLICommandRunner {
         }
 
         if let stop {
+            try? input?.fileHandleForWriting.close()
             terminate(
                 process, groupFile: request.terminatesProcessGroup ? groupFile : nil,
                 processFinished: processFinished)
             drain(pipe, readerFinished: readerFinished)
+            _ = inputFinished.wait(timeout: .now() + terminationGrace)
             switch stop {
             case .cancelled:
                 throw CancellationError()
@@ -249,6 +268,10 @@ public enum CLICommandRunner {
         }
 
         guard drain(pipe, readerFinished: readerFinished) else {
+            throw CLICommandRunnerError.streamFailed
+        }
+        guard inputFinished.wait(timeout: .now() + terminationGrace) == .success else {
+            try? input?.fileHandleForWriting.close()
             throw CLICommandRunnerError.streamFailed
         }
         let finished = output.finish()

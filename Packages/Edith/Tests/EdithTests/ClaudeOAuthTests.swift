@@ -1,5 +1,7 @@
+import EdithKit
 import Foundation
 import Testing
+
 @testable import EdithHelper
 
 private final class ClaudeShellInvocationCapture: @unchecked Sendable {
@@ -44,6 +46,23 @@ private final class ClaudeShellCredentialQueue: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return storedCalls
+    }
+}
+
+private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: CLICommandRequest?
+
+    func record(_ request: CLICommandRequest) {
+        lock.lock()
+        stored = request
+        lock.unlock()
+    }
+
+    var request: CLICommandRequest? {
+        lock.lock()
+        defer { lock.unlock() }
+        return stored
     }
 }
 
@@ -92,14 +111,14 @@ private final class ClaudeShellCredentialQueue: @unchecked Sendable {
         #expect(mcp["preserved"] as? Bool == true)
     }
 
-    @Test func transientTokensStayMemoryOnly() throws {
+    @Test func transientTokensStayMemoryOnly() async throws {
         let credential = try #require(
             ClaudeOAuthCredential.transient(accessToken: "shell-access"))
         #expect(credential.source == .shell)
         #expect(credential.refreshToken == nil)
         #expect(credential.expiresAt == nil)
-        #expect(throws: ClaudeCredentialStoreError.self) {
-            try ClaudeCredentialStore.persist(Data("secret".utf8), source: .shell)
+        await #expect(throws: ClaudeCredentialStoreError.self) {
+            try await ClaudeCredentialStore.persist(Data("secret".utf8), source: .shell)
         }
     }
 
@@ -420,6 +439,110 @@ private final class ClaudeShellCredentialQueue: @unchecked Sendable {
                 "accessToken": accessToken,
                 "refreshToken": "refresh-token",
             ]
+        ])
+    }
+}
+
+@Suite struct ClaudeCredentialStoreProcessTests {
+    @Test func keychainReadUsesBoundedSecretSafeExecution() async throws {
+        let capture = ClaudeSecurityCommandCapture()
+        let credential = try credentialData("keychain-token")
+
+        let result = await ClaudeCredentialStore.keychainData(
+            securityExecutable: URL(fileURLWithPath: "/usr/bin/security"), timeout: 0.5,
+            maximumOutputBytes: 4_096,
+            runCommand: { request in
+                capture.record(request)
+                return CLICommandResult(terminationStatus: 0, outputData: credential)
+            })
+
+        let request = try #require(capture.request)
+        #expect(result == credential)
+        #expect(
+            request.arguments == ["find-generic-password", "-s", "Claude Code-credentials", "-w"])
+        #expect(request.timeout == 0.5)
+        #expect(request.maximumOutputBytes == 4_096)
+        #expect(request.standardInputData == nil)
+        #expect(request.discardsStandardError)
+        #expect(request.terminatesProcessGroup)
+        #expect(!request.arguments.joined().contains("keychain-token"))
+        #expect(!request.environment.values.joined().contains("keychain-token"))
+    }
+
+    @Test func keychainUpdateUsesBoundedStdinWithoutExposingTheCredential() async throws {
+        let capture = ClaudeSecurityCommandCapture()
+        let credential = try credentialData("private-token")
+
+        try await ClaudeCredentialStore.persist(
+            credential, source: .keychain,
+            securityExecutable: URL(fileURLWithPath: "/usr/bin/security"), timeout: 0.5,
+            maximumOutputBytes: 512,
+            runCommand: { request in
+                capture.record(request)
+                return CLICommandResult(terminationStatus: 0, output: "")
+            })
+
+        let request = try #require(capture.request)
+        #expect(request.timeout == 0.5)
+        #expect(request.maximumOutputBytes == 512)
+        #expect(request.discardsStandardError)
+        #expect(request.terminatesProcessGroup)
+        #expect(!request.arguments.joined().contains("private-token"))
+        #expect(!request.environment.values.joined().contains("private-token"))
+        #expect(
+            request.standardInputData == credential + Data("\n".utf8) + credential + Data("\n".utf8)
+        )
+    }
+
+    @Test func oversizedSecurityOutputIsStoppedAndRejected() async throws {
+        let fixture = try shim("while :; do printf '01234567890123456789012345678901'; done")
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let started = ProcessInfo.processInfo.systemUptime
+
+        let result = await ClaudeCredentialStore.keychainData(
+            securityExecutable: fixture.executable, timeout: 5, maximumOutputBytes: 1_024)
+
+        #expect(result == nil)
+        #expect(ProcessInfo.processInfo.systemUptime - started < 2)
+    }
+
+    @Test func stalledSecurityUpdateReturnsOnlyAGenericError() async throws {
+        let fixture = try shim("trap '' TERM\n/bin/sleep 30")
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let credential = try credentialData("private-token")
+        let started = ProcessInfo.processInfo.systemUptime
+
+        do {
+            try await ClaudeCredentialStore.persist(
+                credential, source: .keychain, securityExecutable: fixture.executable,
+                timeout: 0.1, maximumOutputBytes: 1_024)
+            Issue.record("expected keychain failure")
+        } catch let error as ClaudeCredentialStoreError {
+            #expect(error == .keychainUpdateFailed)
+            #expect(error.localizedDescription == "Keychain update failed")
+        }
+        #expect(ProcessInfo.processInfo.systemUptime - started < 2)
+    }
+
+    private struct ShimFixture {
+        let directory: URL
+        let executable: URL
+    }
+
+    private func shim(_ body: String) throws -> ShimFixture {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-security-shim-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let executable = directory.appendingPathComponent("security")
+        try Data("#!/bin/sh\n\(body)\n".utf8).write(to: executable)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700], ofItemAtPath: executable.path)
+        return ShimFixture(directory: directory, executable: executable)
+    }
+
+    private func credentialData(_ accessToken: String) throws -> Data {
+        try JSONSerialization.data(withJSONObject: [
+            "claudeAiOauth": ["accessToken": accessToken, "refreshToken": "refresh-token"]
         ])
     }
 }

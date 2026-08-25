@@ -159,7 +159,7 @@ struct ClaudeShellCredentialResolver: Sendable {
 
 @MainActor
 final class ClaudeCredentialSession {
-    typealias PersistedReader = () -> ClaudeOAuthCredential?
+    typealias PersistedReader = () async -> ClaudeOAuthCredential?
     typealias ShellReader = () async -> ClaudeShellCredentialResolution
 
     private var cached: ClaudeOAuthCredential?
@@ -191,7 +191,8 @@ final class ClaudeCredentialSession {
     }
 
     private func load(rejectingAccessToken: String? = nil) async -> ClaudeOAuthCredential? {
-        if let credential = persistedReader(), credential.accessToken != rejectingAccessToken {
+        if let credential = await persistedReader(), credential.accessToken != rejectingAccessToken
+        {
             cached = credential
             return credential
         }

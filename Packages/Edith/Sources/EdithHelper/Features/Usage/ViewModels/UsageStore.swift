@@ -744,7 +744,7 @@ final class UsageStore: FeatureModule {
         diag("refreshing Claude access token")
         let response = try await Self.fetchRefreshedClaudeToken(refreshToken: refreshToken)
         let data = try credential.updatedData(with: response, now: now)
-        try ClaudeCredentialStore.persist(data, source: credential.source)
+        try await ClaudeCredentialStore.persist(data, source: credential.source)
         guard let refreshed = ClaudeOAuthCredential.decode(data, source: credential.source) else {
             throw FetchError.unauthorized
         }

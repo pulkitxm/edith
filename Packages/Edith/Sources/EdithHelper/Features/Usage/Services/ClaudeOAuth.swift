@@ -1,3 +1,4 @@
+import EdithKit
 import Foundation
 
 enum ClaudeCredentialSource: Equatable {
@@ -97,14 +98,14 @@ struct ClaudeOAuthRefreshResponse: Decodable, Sendable {
     }
 }
 
-enum ClaudeCredentialStoreError: LocalizedError {
-    case keychainUpdateFailed(Int32)
+enum ClaudeCredentialStoreError: LocalizedError, Equatable {
+    case keychainUpdateFailed
     case transientCredential
 
     var errorDescription: String? {
         switch self {
-        case .keychainUpdateFailed(let status):
-            return "Keychain update failed with status \(status)"
+        case .keychainUpdateFailed:
+            return "Keychain update failed"
         case .transientCredential:
             return "Transient credentials cannot be persisted"
         }
@@ -112,12 +113,24 @@ enum ClaudeCredentialStoreError: LocalizedError {
 }
 
 enum ClaudeCredentialStore {
-    private static let keychainService = "Claude Code-credentials"
+    typealias CommandRunner = @Sendable (CLICommandRequest) async throws -> CLICommandResult
 
-    static func read() -> ClaudeOAuthCredential? {
-        read(
+    private static let keychainService = "Claude Code-credentials"
+    private static let securityURL = URL(fileURLWithPath: "/usr/bin/security")
+    private static let processTimeout: TimeInterval = 3
+    private static let maximumCredentialBytes = 65_536
+    private static let maximumStatusBytes = 1_024
+
+    static func read() async -> ClaudeOAuthCredential? {
+        let keychain = await keychainData(
+            securityExecutable: securityURL, timeout: processTimeout,
+            maximumOutputBytes: maximumCredentialBytes,
+            runCommand: { request in
+                try await CLICommandRunner.run(request) { _ in }
+            })
+        return read(
             home: FileManager.default.homeDirectoryForCurrentUser,
-            keychainData: keychainData,
+            keychainData: { keychain },
             fileData: { try? Data(contentsOf: $0) })
     }
 
@@ -136,10 +149,22 @@ enum ClaudeCredentialStore {
         return ClaudeOAuthCredential.decode(data, source: .file(url))
     }
 
-    static func persist(_ data: Data, source: ClaudeCredentialSource) throws {
+    static func persist(
+        _ data: Data, source: ClaudeCredentialSource,
+        securityExecutable: URL = securityURL, timeout: TimeInterval = processTimeout,
+        maximumOutputBytes: Int = maximumStatusBytes,
+        runCommand: @escaping CommandRunner = { request in
+            try await CLICommandRunner.run(request) { _ in }
+        }
+    ) async throws {
         switch source {
         case .keychain:
-            try updateKeychain(data)
+            guard data.count <= maximumCredentialBytes else {
+                throw ClaudeCredentialStoreError.keychainUpdateFailed
+            }
+            try await updateKeychain(
+                data, securityExecutable: securityExecutable, timeout: timeout,
+                maximumOutputBytes: maximumOutputBytes, runCommand: runCommand)
         case .file(let url):
             try data.write(to: url, options: .atomic)
             try FileManager.default.setAttributes(
@@ -149,38 +174,65 @@ enum ClaudeCredentialStore {
         }
     }
 
-    private static func keychainData() -> Data? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        process.arguments = ["find-generic-password", "-s", keychainService, "-w"]
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = Pipe()
-        guard (try? process.run()) != nil else { return nil }
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else { return nil }
-        return output.fileHandleForReading.readDataToEndOfFile()
+    static func keychainData(
+        securityExecutable: URL, timeout: TimeInterval, maximumOutputBytes: Int,
+        runCommand: @escaping CommandRunner = { request in
+            try await CLICommandRunner.run(request) { _ in }
+        }
+    ) async -> Data? {
+        let request = securityRequest(
+            executable: securityExecutable,
+            arguments: ["find-generic-password", "-s", keychainService, "-w"],
+            timeout: timeout, maximumOutputBytes: maximumOutputBytes)
+        guard let result = try? await runCommand(request), result.terminationStatus == 0 else {
+            return nil
+        }
+        return result.outputData
     }
 
-    private static func updateKeychain(_ data: Data) throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        process.arguments = [
-            "add-generic-password", "-U", "-a", NSUserName(), "-s", keychainService, "-w",
-        ]
-        let input = Pipe()
-        process.standardInput = input
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        try process.run()
-        input.fileHandleForWriting.write(data)
-        input.fileHandleForWriting.write(Data("\n".utf8))
-        input.fileHandleForWriting.write(data)
-        input.fileHandleForWriting.write(Data("\n".utf8))
-        try? input.fileHandleForWriting.close()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            throw ClaudeCredentialStoreError.keychainUpdateFailed(process.terminationStatus)
+    private static func updateKeychain(
+        _ data: Data, securityExecutable: URL, timeout: TimeInterval,
+        maximumOutputBytes: Int, runCommand: @escaping CommandRunner
+    ) async throws {
+        var input = data
+        input.append(UInt8(ascii: "\n"))
+        input.append(data)
+        input.append(UInt8(ascii: "\n"))
+        let request = securityRequest(
+            executable: securityExecutable,
+            arguments: [
+                "add-generic-password", "-U", "-a", NSUserName(), "-s", keychainService, "-w",
+            ], timeout: timeout, maximumOutputBytes: maximumOutputBytes, standardInputData: input)
+        do {
+            let result = try await runCommand(request)
+            guard result.terminationStatus == 0 else {
+                throw ClaudeCredentialStoreError.keychainUpdateFailed
+            }
+        } catch {
+            throw ClaudeCredentialStoreError.keychainUpdateFailed
         }
+    }
+
+    private static func securityRequest(
+        executable: URL, arguments: [String], timeout: TimeInterval,
+        maximumOutputBytes: Int, standardInputData: Data? = nil
+    ) -> CLICommandRequest {
+        let username = NSUserName()
+        return CLICommandRequest(
+            executableURL: executable,
+            arguments: arguments,
+            environment: [
+                "HOME": FileManager.default.homeDirectoryForCurrentUser.path,
+                "LANG": "en_US.UTF-8",
+                "LOGNAME": username,
+                "PATH": "/usr/bin:/bin",
+                "USER": username,
+            ],
+            currentDirectoryURL: FileManager.default.homeDirectoryForCurrentUser,
+            timeout: timeout,
+            maximumOutputBytes: maximumOutputBytes,
+            standardInputData: standardInputData,
+            discardsStandardError: true,
+            terminatesProcessGroup: true)
     }
 }
