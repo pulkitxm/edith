@@ -158,7 +158,7 @@ enum CatalogSamples {
     @Test func everyDescribedSettingCarriesTheSameFields() {
         let suite = Self.scratch()
         let store = ConfigStore(shared: suite.defaults, standard: suite.defaults)
-        let expected: Set<String> = [
+        let common: Set<String> = [
             "key", "type", "group", "scope", "summary", "allowed", "readOnly", "isSet",
             "value", "default",
         ]
@@ -167,9 +167,17 @@ enum CatalogSamples {
                 Issue.record("\(definition.key) did not describe as an object")
                 continue
             }
-            #expect(Set(fields.keys) == expected, "\(definition.key) described oddly")
+            let rangeFields: Set<String> =
+                definition.integerRange == nil ? [] : ["minimum", "maximum"]
+            #expect(
+                Set(fields.keys) == common.union(rangeFields),
+                "\(definition.key) described oddly")
             #expect(fields["key"] == .string(definition.key))
             #expect(fields["type"] == .string(definition.type.rawValue))
+            if let range = definition.integerRange {
+                #expect(fields["minimum"] == .int(range.lowerBound))
+                #expect(fields["maximum"] == .int(range.upperBound))
+            }
         }
     }
 
@@ -207,6 +215,10 @@ enum CatalogSamples {
                 "\(definition.key) schema says \(fields["type"] ?? .null)")
             if !definition.allowed.isEmpty {
                 #expect(fields["enum"] == .strings(definition.allowed))
+            }
+            if let range = definition.integerRange {
+                #expect(fields["minimum"] == .int(range.lowerBound))
+                #expect(fields["maximum"] == .int(range.upperBound))
             }
         }
     }

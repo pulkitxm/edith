@@ -204,6 +204,9 @@ struct ConfigDescribeCommand: AsyncParsableCommand {
             if !found.allowed.isEmpty {
                 CLIOut.out("  allowed  " + found.allowed.joined(separator: ", "))
             }
+            if let range = found.integerRange {
+                CLIOut.out("  range    \(range.lowerBound)...\(range.upperBound)")
+            }
             CLIOut.out("  default  " + text(found.fallback))
             CLIOut.out("  value    " + text(store.value(for: found)))
             if found.readOnly { CLIOut.out("  read only") }

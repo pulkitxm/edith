@@ -117,6 +117,12 @@ public enum ConfigurationValueParser {
                 "\(text) is not a valid value",
                 hint: "allowed: " + definition.allowed.joined(separator: ", "))
         }
+        if case let .int(number) = value, let range = definition.integerRange,
+            !range.contains(number)
+        {
+            throw ConfigurationError(
+                "\(definition.key) must be from \(range.lowerBound) through \(range.upperBound)")
+        }
         if definition.type == .stringList, case let .array(items) = value,
             items.contains(where: {
                 guard case .string = $0 else { return true }
@@ -278,13 +284,18 @@ public struct ConfigurationExecutor {
     }
 
     public func describe(_ definition: SettingDefinition) -> JSONValue {
-        .object([
+        var fields: [String: JSONValue] = [
             "key": .string(definition.key), "type": .string(definition.type.rawValue),
             "group": .string(definition.group), "scope": .string(definition.scope.rawValue),
             "summary": .string(definition.summary), "allowed": .strings(definition.allowed),
             "readOnly": .bool(definition.readOnly), "isSet": .bool(isSet(definition)),
             "value": value(for: definition), "default": definition.fallback,
-        ])
+        ]
+        if let range = definition.integerRange {
+            fields["minimum"] = .int(range.lowerBound)
+            fields["maximum"] = .int(range.upperBound)
+        }
+        return .object(fields)
     }
 
     public func notifyChange() { announceChange() }

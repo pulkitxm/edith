@@ -51,6 +51,10 @@ public enum ConfigSchema {
         if !definition.allowed.isEmpty {
             fields["enum"] = .strings(definition.allowed)
         }
+        if let range = definition.integerRange {
+            fields["minimum"] = .int(range.lowerBound)
+            fields["maximum"] = .int(range.upperBound)
+        }
         if definition.fallback != .null {
             fields["default"] = definition.fallback
         }
