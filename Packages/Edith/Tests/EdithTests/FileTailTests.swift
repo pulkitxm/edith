@@ -127,6 +127,29 @@ import Testing
         #expect(checks == 5)
         #expect(lines.isEmpty)
     }
+
+    @Test func reversedScanChecksCancellationBeforeTheLeadingLine() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("leading.txt")
+        try "single line".write(to: url, atomically: true, encoding: .utf8)
+        var checks = 0
+        var lines: [String] = []
+
+        FileTail.scanLinesReversed(
+            url,
+            shouldContinue: {
+                checks += 1
+                return checks == 1
+            }
+        ) { data in
+            lines.append(String(decoding: data, as: UTF8.self))
+            return true
+        }
+
+        #expect(checks == 2)
+        #expect(lines.isEmpty)
+    }
 }
 
 @Suite @MainActor struct DashboardRefreshBridgeTests {

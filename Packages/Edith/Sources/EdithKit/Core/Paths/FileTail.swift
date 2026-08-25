@@ -44,7 +44,7 @@ public enum FileTail {
                 }
             }
         }
-        if !discardingOversizedLine, !pending.isEmpty { _ = visit(pending) }
+        if shouldContinue(), !discardingOversizedLine, !pending.isEmpty { _ = visit(pending) }
     }
 
     public static func read(_ url: URL, maxBytes: Int) -> String {
