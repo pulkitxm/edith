@@ -146,6 +146,9 @@ public enum UserOperationCatalog {
         + RemoteDirectoryOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + RemoteTransferOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
 
     private static let remoteActionRegistrations: [RegisteredUserOperation] = {
         var registrations = CompanionChatLibraryOperation.allCases.map {
@@ -1252,6 +1255,21 @@ private extension RemoteDirectoryOperation {
                     surface: "Machine finder", action: "make a folder",
                     exampleArguments: ["box", "/a"]),
             ])
+        }
+    }
+}
+
+private extension RemoteTransferOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .downloadSelection:
+            userInterface(
+                "Machine finder", "download several selected files",
+                ["box", "/etc/hosts", "/etc/services", "--to", "/tmp", "--dry-run"])
+        case .transferBetweenMachines:
+            userInterface(
+                "Machine finder", "drag files between machines",
+                ["box", "server", "/tmp/a", "--into", "/srv", "--dry-run"])
         }
     }
 }

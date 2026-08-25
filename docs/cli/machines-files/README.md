@@ -23,6 +23,8 @@ to Edith Files.
 | --- | --- |
 | `ed machines files ls` | List a remote directory. The default subcommand. Aliased `list`. |
 | `ed machines files get` | Download one file from the machine. |
+| `ed machines files get-many` | Safely download several files into a local directory. |
+| `ed machines files transfer` | Copy several files between two machines. |
 | `ed machines files preview` | Print the first 400 KiB of a remote text file. |
 | `ed machines files launch` | Download a remote file and open it in its default Mac app. |
 | `ed machines files reveal` | Download a remote file and reveal it in Finder. |
@@ -80,6 +82,8 @@ Files window opens where the shell in that terminal left off.
 
 - [`ed machines files ls`](./ls.md)
 - [`ed machines files get`](./get.md)
+- [`ed machines files get-many`](./get-many.md)
+- [`ed machines files transfer`](./transfer.md)
 - [`ed machines files preview`](./preview.md)
 - [`ed machines files launch`](./launch.md)
 - [`ed machines files reveal`](./reveal.md)

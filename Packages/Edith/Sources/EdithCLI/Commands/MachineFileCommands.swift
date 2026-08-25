@@ -15,6 +15,7 @@ struct MachinesFilesCommand: AsyncParsableCommand {
             MachinesFilesDuplicateCommand.self, MachinesFilesUndoCommand.self,
             MachinesFilesOpenCommand.self, MachineFilesPreviewCommand.self,
             MachineFilesLaunchCommand.self, MachineFilesRevealCommand.self,
+            MachineFilesGetManyCommand.self, MachineFilesTransferCommand.self,
         ],
         defaultSubcommand: MachineFilesListCommand.self)
 }

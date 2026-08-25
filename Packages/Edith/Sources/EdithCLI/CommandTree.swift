@@ -940,6 +940,22 @@ public enum CommandTree {
                                 "reveal", "Reveal a downloaded remote file in Finder.",
                                 options: common, arguments: [.machine, .remotePath]),
                             CommandNode(
+                                "get-many", "Download multiple files.",
+                                options: [
+                                    "--json", "--help", "--dry-run", "--replace", "--yes", "--to",
+                                ], optionValues: ["--to": .localPath],
+                                arguments: [.machine, .remotePath],
+                                repeatingArgument: .remotePath,
+                                destructivePolicy: .previewThenYes),
+                            CommandNode(
+                                "transfer", "Transfer files between two machines.",
+                                options: [
+                                    "--json", "--help", "--dry-run", "--replace", "--yes", "--into",
+                                ], optionValues: ["--into": .remotePath],
+                                arguments: [.machine, .machine, .remotePath],
+                                repeatingArgument: .remotePath,
+                                destructivePolicy: .previewThenYes),
+                            CommandNode(
                                 "put", "Upload a file.", options: ["--json"],
                                 arguments: [.machine, .localPath, .remotePath]),
                             CommandNode(
