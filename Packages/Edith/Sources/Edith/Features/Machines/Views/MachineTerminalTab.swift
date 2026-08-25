@@ -125,7 +125,7 @@ final class TerminalSessionHolder {
 }
 
 final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResponder {
-    static let scrollback = 20000
+    static let scrollback = 10000
 
     static func make() -> EdithTerminalView {
         EdithTerminalView(

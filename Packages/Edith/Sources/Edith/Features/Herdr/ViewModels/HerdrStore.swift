@@ -47,13 +47,17 @@ final class HerdrStore {
     }
 
     var machineTerminals: [HerdrAgent] {
-        hosts.filter(\.herdrPresent).map(HerdrMachineTerminal.agent(for:)).filter { terminal in
+        var terminals: [HerdrAgent] = []
+        for host in hosts where host.herdrPresent {
+            let terminal = HerdrMachineTerminal.agent(for: host)
             switch machineFilter {
-            case "all": true
-            case "local": terminal.machineIsLocal
-            default: terminal.machineID == machineFilter
+            case "all": terminals.append(terminal)
+            case "local" where terminal.machineIsLocal: terminals.append(terminal)
+            case terminal.machineID: terminals.append(terminal)
+            default: break
             }
         }
+        return terminals
     }
 
     var machineChoices: [(id: String, name: String)] {
