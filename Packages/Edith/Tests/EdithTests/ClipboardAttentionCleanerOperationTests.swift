@@ -18,15 +18,41 @@ import Testing
         #expect(
             descriptors.map(\.cli) == [
                 ["clipboard", "stats"], ["clipboard", "copy"], ["clipboard", "pin"],
-                ["clipboard", "unpin"], ["clipboard", "rm"],
+                ["clipboard", "unpin"], ["clipboard", "rm"], ["clipboard", "clear"],
                 ["attention", "focus", "start"], ["attention", "focus", "stop"],
                 ["cleaner", "scan"], ["cleaner", "clean"],
             ])
         #expect(
             Set(descriptors.filter(\.requiresPreview).map(\.id)) == [
                 ClipboardOperation.remove.descriptor.id,
+                ClipboardOperation.clear.descriptor.id,
                 CleanerOperation.clean.descriptor.id,
             ])
+    }
+
+    @Test func clipboardClearPlanPreservesPinnedEntriesAndExactTargets() async throws {
+        try await CLIProbe.inWorld { world in
+            try CLIClipboardTests.seed(world, count: 3)
+            let entries = ClipboardActions.listed(defaults: world.shared)
+            let pinned = try #require(entries.first { $0.pinned })
+            let plan = ClipboardOperationExecution.clearPlan(
+                entries: entries, keepPinned: true)
+
+            #expect(plan.targetIDs == entries.filter { !$0.pinned }.map(\.id))
+            #expect(plan.pinnedKept == 1)
+            #expect(plan.remaining == 1)
+            #expect(plan.confirmationMessage.contains("1 pinned entry will be kept"))
+
+            let later = ClipboardEntry(
+                id: "later", sha256: "later", types: ["public.utf8-plain-text"], ext: "txt",
+                sourceApp: nil, sourceBundleID: nil, lastCopiedAt: Date(), size: 5,
+                preview: "later", pinned: false)
+            try ClipboardRepository.saveEntries(entries + [later])
+            let outcome = try ClipboardOperationExecution.clear(plan)
+            #expect(outcome.changed == plan.removed)
+            #expect(outcome.entries.map(\.id).contains(pinned.id))
+            #expect(outcome.entries.map(\.id).contains(later.id))
+        }
     }
 
     @Test func clipboardExecutorOwnsStatsPinningAndRemoval() async throws {

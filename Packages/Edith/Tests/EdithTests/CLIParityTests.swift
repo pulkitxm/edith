@@ -47,7 +47,6 @@ enum UIParity {
         "ed uninstall": "the app links the CLI on launch; unlinking has no button either",
         "ed completions install": "shell completion has no UI at all",
         "ed config import": "the app restores from iCloud rather than from a JSON file",
-        "ed clipboard clear": "the clipboard panel no longer offers a clear-history action",
         "ed color clear": "the colour picker no longer offers a clear-history action",
         "ed companion machines add":
             "the companion setup no longer adds deployment machines from the app",
@@ -86,6 +85,9 @@ enum UIParity {
         UICapability("Clipboard panel", "unpin an entry", ["clipboard", "unpin", "1"]),
         UICapability(
             "Clipboard panel", "delete an entry", ["clipboard", "rm", "1", "--yes"]),
+        UICapability(
+            "Clipboard panel", "clear unpinned entries",
+            ["clipboard", "clear", "--keep-pinned", "--yes"]),
         UICapability(
             "Clipboard settings", "see how many entries and how big", ["clipboard", "stats"]),
         UICapability("Color Picker menu", "copy a recent colour", ["color", "copy", "1"]),

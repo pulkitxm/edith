@@ -980,6 +980,9 @@ private extension ClipboardOperation {
             userInterface("Clipboard panel", "unpin an entry", ["1"])
         case .remove:
             userInterface("Clipboard panel", "delete an entry", ["1", "--yes"])
+        case .clear:
+            userInterface(
+                "Clipboard panel", "clear unpinned entries", ["--keep-pinned", "--yes"])
         }
     }
 }

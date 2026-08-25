@@ -8,6 +8,7 @@ final class ClipboardStore: FeatureModule {
     private(set) var entries: [ClipboardEntry] = []
     private(set) var revision = 0
     private(set) var skippedOversizeAt: Date?
+    private(set) var mutationError: String?
 
     private var loaded = false
     private var timer: DispatchSourceTimer?
@@ -18,11 +19,19 @@ final class ClipboardStore: FeatureModule {
     private var wakeObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
     private var clipboardChangedObserver: NSObjectProtocol?
+    private let clearOperation: @Sendable (ClipboardClearPlan) throws -> ClipboardActions.Outcome
 
     private static let diskQueue = DispatchQueue(
         label: "com.edith.clipboard.disk", qos: .userInitiated)
 
-    init() {
+    required convenience init() {
+        self.init(clearOperation: { try ClipboardOperationExecution.clear($0) })
+    }
+
+    init(
+        clearOperation: @escaping @Sendable (ClipboardClearPlan) throws -> ClipboardActions.Outcome
+    ) {
+        self.clearOperation = clearOperation
         reloadFromDisk(initial: true)
 
         let dnc = DistributedNotificationCenter.default()
@@ -231,10 +240,13 @@ final class ClipboardStore: FeatureModule {
         }
     }
 
-    func clear(includingPinned: Bool = false) {
-        mutateOnDisk(requireChange: false) {
-            try ClipboardActions.clear(keepingPinned: !includingPinned)
-        }
+    func clear(_ plan: ClipboardClearPlan) {
+        let clearOperation = clearOperation
+        mutateOnDisk(requireChange: false) { try clearOperation(plan) }
+    }
+
+    func dismissMutationError() {
+        mutationError = nil
     }
 
     func delete(_ id: String) {
@@ -249,11 +261,18 @@ final class ClipboardStore: FeatureModule {
         _ action: @escaping @Sendable () throws -> ClipboardActions.Outcome
     ) {
         Self.diskQueue.async { [weak self] in
-            guard let outcome = try? action(), outcome.changed > 0 || !requireChange else {
+            let outcome: ClipboardActions.Outcome
+            do {
+                outcome = try action()
+            } catch {
+                let message = error.localizedDescription
+                Task { @MainActor in self?.mutationError = message }
                 return
             }
+            guard outcome.changed > 0 || !requireChange else { return }
             Task { @MainActor in
                 guard let self else { return }
+                self.mutationError = nil
                 self.adopt(outcome.entries)
                 if scheduleBackup { SettingsBackup.shared.scheduleClipboardBackup() }
                 self.postChanged()
