@@ -43,9 +43,6 @@ enum UIParity {
     ]
 
     static let notReachableFromTheUI: [String: String] = [
-        "ed install": "the app links the CLI itself on launch; there is no button for it",
-        "ed uninstall": "the app links the CLI on launch; unlinking has no button either",
-        "ed completions install": "shell completion has no UI at all",
         "ed config import": "the app restores from iCloud rather than from a JSON file",
         "ed color clear": "the colour picker no longer offers a clear-history action",
         "ed companion machines add":
@@ -79,6 +76,16 @@ enum UIParity {
         UICapability(
             "Permissions pane", "open the relevant System Settings pane",
             ["permissions", "settings", "calendar"]),
+        UICapability(
+            "Terminal settings", "inspect command-line tools and shell completions",
+            ["status", "--json"]),
+        UICapability("Terminal settings", "install command-line tools", ["install"]),
+        UICapability("Terminal settings", "remove command-line tools", ["uninstall"]),
+        UICapability(
+            "Terminal settings", "install shell completions", ["completions", "install"]),
+        UICapability(
+            "Terminal settings", "copy the fallback completion source line",
+            ["completions", "source"]),
 
         UICapability("Clipboard panel", "click an entry to copy it", ["clipboard", "copy", "1"]),
         UICapability("Clipboard panel", "pin an entry", ["clipboard", "pin", "1"]),

@@ -41,8 +41,9 @@ directory `install` would have chosen, so links you placed elsewhere with
 Only symlinks are removed, and any symlink at one of those three names goes
 whatever it points at. A regular file called `ed` is left alone.
 
-Nothing about it can fail: an empty directory prints `nothing to remove in
-<directory>` and exits 0.
+An empty directory prints `nothing to remove in <directory>` and exits 0. A
+link that cannot be removed is reported on stderr and exits 1. The Remove button
+in Terminal settings calls the same typed operation and shows the same failure.
 
 ## Where to go next
 

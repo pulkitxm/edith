@@ -226,8 +226,12 @@ public enum CompletionScripts {
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         let file = directory.appendingPathComponent(shell.scriptName)
         try Data(contents(for: shell).utf8).write(to: file, options: .atomic)
+        if let profile = ShellProfile.file(for: shell, home: home) {
+            let line = sourceLine(forScript: file, home: home)
+            try ShellProfile.install(
+                line: line, into: profile, script: file.path, fileManager: fileManager)
+        }
         record(file, for: shell, store: store)
-        linkFromProfile(shell, script: file, home: home, fileManager: fileManager)
         forgetProbedShellDirectories()
         return file
     }
