@@ -72,8 +72,8 @@ outright, with `Bind for 127.0.0.1:6379 failed: port is already allocated`, and
 sometimes exits 0 having left the container `running` with no network attached
 and no ports published at all. `ps` reports that container as running with an
 empty `ports` array, so a group that looks healthy can still have a service
-nothing can reach. `ed machines docker inspect <container>` settles it: an empty
-`NetworkSettings.Networks` is a container that came up without its network.
+nothing can reach. `ed machines docker inspect <machine> <container>` settles it:
+an empty `networks` row is a container that came up without its network.
 
 This is the Docker window's start button, running the same command, and naming
 several containers is what the play button on a group header does. That button

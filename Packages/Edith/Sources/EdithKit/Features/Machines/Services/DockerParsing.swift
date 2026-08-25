@@ -48,7 +48,6 @@ public enum DockerParsing {
     }
 
     public static func parsePorts(_ text: String) -> [DockerPortMapping] {
-        var seen = Set<DockerPortMapping>()
         var mappings: [DockerPortMapping] = []
         for entry in text.split(separator: ",") {
             let part = entry.trimmingCharacters(in: .whitespaces)
@@ -71,9 +70,22 @@ public enum DockerParsing {
             }
             let mapping = DockerPortMapping(
                 hostIP: hostIP, hostPort: hostPort, containerPort: containerPort, proto: proto)
-            let dedupeKey = DockerPortMapping(
-                hostIP: nil, hostPort: hostPort, containerPort: containerPort, proto: proto)
-            if seen.insert(dedupeKey).inserted {
+            let matching = mappings.indices.filter {
+                mappings[$0].hostPort == mapping.hostPort
+                    && mappings[$0].containerPort == mapping.containerPort
+                    && mappings[$0].proto == mapping.proto
+            }
+            if let wildcard = matching.first(where: { isWildcardPublishedBind(mappings[$0]) }) {
+                if isWildcardPublishedBind(mapping),
+                    normalizedBind(mapping.hostIP) < normalizedBind(mappings[wildcard].hostIP)
+                {
+                    mappings[wildcard] = mapping
+                }
+                for index in matching.dropFirst().reversed() { mappings.remove(at: index) }
+            } else if isWildcardPublishedBind(mapping), let first = matching.first {
+                mappings[first] = mapping
+                for index in matching.dropFirst().reversed() { mappings.remove(at: index) }
+            } else {
                 mappings.append(mapping)
             }
         }
@@ -81,6 +93,18 @@ public enum DockerParsing {
             (lhs.hostPort ?? Int.max, lhs.containerPort)
                 < (rhs.hostPort ?? Int.max, rhs.containerPort)
         }
+    }
+
+    private static func isWildcardPublishedBind(_ mapping: DockerPortMapping) -> Bool {
+        guard mapping.hostPort != nil else { return false }
+        let bind = normalizedBind(mapping.hostIP)
+        return bind.isEmpty || bind == "0.0.0.0" || bind == "::"
+    }
+
+    private static func normalizedBind(_ hostIP: String?) -> String {
+        let value = hostIP?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        guard value.hasPrefix("["), value.hasSuffix("]") else { return value }
+        return String(value.dropFirst().dropLast())
     }
 
     public static func parseLabels(_ text: String) -> [String: String] {

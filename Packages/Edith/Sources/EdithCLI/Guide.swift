@@ -159,6 +159,7 @@ public enum Guide {
         ed machines forwards add box --local 8080 --remote 80
         ed machines forwards open box 1          open localhost:8080 in a browser
         ed machines snippets add box logs journalctl -xe
+        ed machines snippets run box 1
         ```
 
         Power, units and processes. Restart and shut down need --yes, and report
@@ -194,6 +195,8 @@ public enum Guide {
         ed machines tuf docker ps --json        parsed, stable field names
         ed machines tuf docker images
         ed machines tuf docker logs api --tail 100 --follow
+        ed machines tuf docker inspect api --json
+        ed machines tuf docker top api --json
         ed machines tuf docker start|stop|restart|rm api
         ed machines tuf docker prune images --yes
         ed machines tuf docker compose ls

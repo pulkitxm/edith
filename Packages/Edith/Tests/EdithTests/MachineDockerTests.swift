@@ -76,6 +76,26 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
         #expect(ports[0].browserURL?.absoluteString == "http://localhost:5432")
     }
 
+    @Test func wildcardBindingWinsOverLoopbackForTheSamePublishedPort() {
+        let loopbackFirst = DockerParsing.parsePorts(
+            "127.0.0.1:8080->80/tcp, [::]:8080->80/tcp")
+        let wildcardFirst = DockerParsing.parsePorts(
+            "0.0.0.0:8080->80/tcp, [::1]:8080->80/tcp")
+
+        #expect(loopbackFirst.count == 1)
+        #expect(loopbackFirst[0].hostIP == "[::]")
+        #expect(wildcardFirst.count == 1)
+        #expect(wildcardFirst[0].hostIP == "0.0.0.0")
+    }
+
+    @Test func samePortSpecificBindingsRemainAvailableForHostAwareSelection() {
+        let ports = DockerParsing.parsePorts(
+            "198.51.100.8:8080->80/tcp, 192.0.2.8:8080->80/tcp")
+
+        #expect(ports.count == 2)
+        #expect(ports.map(\.hostIP) == ["198.51.100.8", "192.0.2.8"])
+    }
+
     @Test func parsesUnpublishedPorts() {
         let ports = DockerParsing.parsePorts("80/tcp, 443/tcp")
         #expect(ports.map(\.containerPort) == [80, 443])

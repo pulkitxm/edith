@@ -69,7 +69,7 @@ Not every command takes `--json`, and the ones that do not fall into two groups.
 `ed schema` and `ed config export` are already JSON and always have been, so
 there is nothing to switch on. Plain `ed guide`, `ed completions zsh`,
 `ed completions bash`, `ed completions fish`, `ed machines exec`, `ed machines docker logs`,
-`ed machines docker inspect` and `ed machines docker compose logs` emit
+and `ed machines docker compose logs` emit
 something that is not Edith's to shape: a manual, a shell script, or another
 program's own output.
 

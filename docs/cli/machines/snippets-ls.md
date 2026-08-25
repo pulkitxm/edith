@@ -60,9 +60,8 @@ ed machines snippets ls tuf --json | jq -r '.[] | select(.sharedAcrossMachines) 
 
 ## Behaviour notes
 
-Read only, straight out of `snippets.json`, with no connection opened. A snippet
-is a saved string; nothing here runs it. To run one, pass it to
-`ed machines exec` or the `ed <machine> ...` shorthand.
+Read only, straight out of `snippets.json`, with no connection opened. Run an
+entry by its displayed number with `ed machines snippets run <machine> <index>`.
 
 ## Where to go next
 

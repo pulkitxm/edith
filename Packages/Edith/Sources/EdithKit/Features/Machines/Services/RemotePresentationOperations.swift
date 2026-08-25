@@ -365,10 +365,7 @@ public enum LocalBrowserOperationExecution {
     public static func publishedPorts(
         in container: DockerContainer, matching requestedPort: Int?
     ) -> [DockerPortMapping] {
-        container.ports.filter { port in
-            guard port.browserURL != nil else { return false }
-            guard let requestedPort else { return true }
-            return port.hostPort == requestedPort || port.containerPort == requestedPort
-        }
+        DockerBrowserOperationExecution.publishedPorts(
+            in: container, matching: requestedPort)
     }
 }

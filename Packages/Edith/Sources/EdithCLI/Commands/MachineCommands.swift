@@ -52,7 +52,11 @@ enum MachineResolver {
     }
 
     static func runner(_ query: String) async throws -> RemoteRunner {
-        let runner = RemoteRunner(machine: try machine(query))
+        try await runner(machine(query))
+    }
+
+    static func runner(_ machine: Machine) async throws -> RemoteRunner {
+        let runner = RemoteRunner(machine: machine)
         try await runner.connect()
         return runner
     }
