@@ -392,7 +392,25 @@ private struct ExtensionSettingsSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: UIScale.pt(0)) {
+            HStack {
+                Text(entry.title)
+                    .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer()
+                Toggle(isOn: enabledBinding) {
+                    Text("\(entry.title) enabled")
+                }
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .accessibilityLabel("\(entry.title) enabled")
+                .pointerCursor()
+            }
+            .padding(.horizontal, UIScale.pt(28))
+            .padding(.vertical, UIScale.pt(18))
+
+            Divider()
+
             Form {
                 ExtensionDetailRows(entry: entry)
                 if enabled, !coordinator.missingRequiredTools.isEmpty {
@@ -410,31 +428,19 @@ private struct ExtensionSettingsSheet: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle(entry.title)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Toggle(isOn: enabledBinding) {
-                        Text("\(entry.title) enabled")
-                    }
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .accessibilityLabel("\(entry.title) enabled")
-                    .pointerCursor()
+        }
+        .safeAreaInset(edge: .bottom, spacing: UIScale.pt(0)) {
+            VStack(spacing: UIScale.pt(0)) {
+                Divider()
+                HStack {
+                    Spacer()
+                    Button("Done") { dismiss() }
+                        .keyboardShortcut(.defaultAction)
+                        .pointerCursor()
                 }
-            }
-            .safeAreaInset(edge: .bottom, spacing: UIScale.pt(0)) {
-                VStack(spacing: UIScale.pt(0)) {
-                    Divider()
-                    HStack {
-                        Spacer()
-                        Button("Done") { dismiss() }
-                            .keyboardShortcut(.defaultAction)
-                            .pointerCursor()
-                    }
-                    .padding(.horizontal, UIScale.pt(18))
-                    .padding(.vertical, UIScale.pt(12))
-                    .background(.bar)
-                }
+                .padding(.horizontal, UIScale.pt(18))
+                .padding(.vertical, UIScale.pt(12))
+                .background(.bar)
             }
         }
         .onChange(of: grantedPermissions) {
