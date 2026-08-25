@@ -23,6 +23,9 @@ final class HerdrStore {
     var refreshing = false
     var copiedID: String?
     var detailOpen = true
+    var railOpen = true
+    var creating = false
+    var createError: String?
 
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
@@ -36,9 +39,18 @@ final class HerdrStore {
     ) {
         self.defaults = defaults
         self.liveWatcher = liveWatcher
+        railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
     }
 
     var agents: [HerdrAgent] { hosts.flatMap(\.agents) }
+
+    var listedAgents: [HerdrAgent] { filtered.filter { !$0.isTerminal } }
+
+    var listedTerminals: [HerdrAgent] { filtered.filter(\.isTerminal) }
+
+    private var filtered: [HerdrAgent] {
+        filteredAgents.isEmpty && kindFilter.isEmpty ? agents : filteredAgents
+    }
 
     var machineChoices: [(id: String, name: String)] {
         [("all", "All machines"), ("local", "This Mac")]
@@ -47,9 +59,11 @@ final class HerdrStore {
 
     var kindChoices: [String] {
         var labels = HerdrKind.filterLabels
-        for kind in Set(agents.map(\.kind)).sorted() where !labels.contains(kind) {
+        let live = Set(agents.filter { !$0.isTerminal }.map(\.kind)).sorted()
+        for kind in live where !labels.contains(kind) {
             labels.append(kind)
         }
+        labels.append(HerdrKind.terminalLabel)
         return labels
     }
 
@@ -92,6 +106,20 @@ final class HerdrStore {
     }
 
     var columns: [HerdrAgentStatus] { HerdrAgentStatus.allCases }
+
+    func setRailOpen(_ open: Bool) {
+        guard railOpen != open else { return }
+        railOpen = open
+        defaults.set(open, forKey: AppStorageKeys.Herdr.railOpen)
+    }
+
+    func splitFraction(for id: String) -> Double {
+        HerdrSplitFraction.fraction(for: id, defaults)
+    }
+
+    func setSplitFraction(_ fraction: Double, for id: String) {
+        HerdrSplitFraction.set(fraction, for: id, defaults)
+    }
 
     var openIDs: Set<String> { Set(tabs.map(\.id)) }
 
@@ -150,7 +178,8 @@ final class HerdrStore {
             agent.machineIsLocal
             ? nil
             : MachineRegistry.machines().first { $0.id.uuidString == agent.machineID }
-        let resolved = view ?? HerdrAgentViews.view(for: agent.id, defaults)
+        var resolved = view ?? HerdrAgentViews.view(for: agent.id, defaults)
+        if agent.isTerminal { resolved = .agent }
         tabs.append(
             HerdrOpenTab(
                 agent: agent, machine: machine, view: resolved,
@@ -175,6 +204,7 @@ final class HerdrStore {
         guard tabs[index].view != view else { return }
         tabs[index].view = view
         HerdrAgentViews.set(view, for: tabs[index].id, defaults)
+        if view == .split { detailOpen = false }
     }
 
     func close(_ id: String) {
@@ -270,10 +300,62 @@ final class HerdrStore {
         return configuration
     }
 
+    func createTerminal(
+        on machine: Machine?, request: HerdrTerminalRequest
+    ) async -> HerdrAgent? {
+        guard !creating else { return nil }
+        creating = true
+        createError = nil
+        defer { creating = false }
+        do {
+            let pane: String
+            let machineID: String
+            if let machine {
+                let connection = try await connection(for: machine)
+                pane = try await HerdrTerminalOperationExecution.createRemotely(
+                    request, connection: connection)
+                machineID = machine.id.uuidString
+            } else {
+                pane = try await HerdrTerminalOperationExecution.createLocally(request)
+                machineID = HerdrHostSnapshot.localID
+            }
+            await refresh()
+            let id = "\(machineID)|\(request.session)|\(pane)"
+            if let created = agents.first(where: { $0.id == id }) {
+                open(created)
+                return created
+            }
+            let placeholder = HerdrAgent.make(
+                machineID: machineID, machineName: machine?.name ?? "This Mac",
+                machineIsLocal: machine == nil, sshTarget: machine?.sshTarget,
+                session: request.session, pane: pane, kind: HerdrKind.terminalLabel,
+                status: .unknown, title: request.label ?? pane, workspace: "",
+                cwd: request.cwd ?? "", category: .terminal)
+            open(placeholder)
+            return placeholder
+        } catch {
+            createError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func workspaceChoices(for machineID: String) -> [(id: String, name: String)] {
+        var seen: [String: String] = [:]
+        for agent in agents where agent.machineID == machineID {
+            guard !agent.workspace.isEmpty else { continue }
+            seen[agent.workspace] = agent.workspace
+        }
+        return seen.keys.sorted().map { ($0, $0) }
+    }
+
     func attachRequest(
         for tab: HerdrOpenTab, environment: [String],
         localExecutable: URL? = HerdrCollector.executable()
     ) async throws -> TerminalLaunchRequest {
+        if tab.agent.isTerminal {
+            return try await terminalRequest(
+                for: tab, environment: environment, localExecutable: localExecutable)
+        }
         if tab.agent.machineIsLocal {
             return HerdrOperationExecution.localAttachRequest(
                 for: tab.agent, environment: environment, executable: localExecutable)
@@ -284,6 +366,26 @@ final class HerdrStore {
         let connection = try await connection(for: machine)
         return HerdrOperationExecution.remoteAttachRequest(
             for: tab.agent, connection: connection, environment: environment)
+    }
+
+    private func terminalRequest(
+        for tab: HerdrOpenTab, environment: [String], localExecutable: URL?
+    ) async throws -> TerminalLaunchRequest {
+        let focus = HerdrTerminalOperationExecution.focusShellLine(
+            session: tab.agent.session, pane: tab.agent.pane)
+        if tab.agent.machineIsLocal {
+            _ = await LocalMachineCommandExecution.run(focus, timeout: 6)
+            return HerdrTerminalOperationExecution.localClientRequest(
+                for: tab.agent, environment: environment, executable: localExecutable)
+        }
+        guard let machine = tab.machine else {
+            throw HerdrQuinjetError.machineUnavailable
+        }
+        let connection = try await connection(for: machine)
+        _ = try? await connection.run(focus, timeout: 6)
+        return HerdrTerminalOperationExecution.remoteClientRequest(
+            for: tab.agent, target: machine.sshTarget, environment: environment,
+            executable: localExecutable)
     }
 
     func copyAttachCommand(for agent: HerdrAgent) {
