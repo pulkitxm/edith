@@ -61,6 +61,8 @@ final class UsageStore: FeatureModule {
     private var quickRetries = 0
     private var quickRetryTask: Task<Void, Never>?
     private var machineTask: Task<Void, Never>?
+    private var historySeedJob: Task<Void, Never>?
+    private var historySeedGeneration = 0
     private var pendingMachineMerge = false
     let notifier = LimitNotifier()
     private var history = LimitsHistory()
@@ -102,8 +104,17 @@ final class UsageStore: FeatureModule {
     }
 
     init() {
-        seedFromHistory()
-        startPolling()
+        historySeedGeneration += 1
+        let generation = historySeedGeneration
+        historySeedJob = Task { [weak self] in
+            let latest = await LimitsHistory.loadLatestProviders()
+            guard !Task.isCancelled, let self, self.historySeedGeneration == generation else {
+                return
+            }
+            self.seedFromHistory(latest)
+            self.historySeedJob = nil
+            self.startPolling()
+        }
 
         sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
@@ -179,14 +190,14 @@ final class UsageStore: FeatureModule {
         }
     }
 
-    private func seedFromHistory() {
-        if let last = LimitsHistory.latest(provider: .claude) {
+    private func seedFromHistory(_ latest: [LimitProvider: LimitsHistory.Latest]) {
+        if let last = latest[.claude] {
             session = Self.fresh(last.session)
             week = Self.fresh(last.week)
             fableWeek = Self.fresh(last.fable)
             limitsUpdatedAt = last.date
         }
-        if let last = LimitsHistory.latest(provider: .codex) {
+        if let last = latest[.codex] {
             codexSession = Self.fresh(last.session)
             codexWeek = Self.fresh(last.week)
             limitsUpdatedAt = max(limitsUpdatedAt ?? .distantPast, last.date)
@@ -269,6 +280,9 @@ final class UsageStore: FeatureModule {
         quickRetryTask = nil
         machineTask?.cancel()
         machineTask = nil
+        historySeedGeneration += 1
+        historySeedJob?.cancel()
+        historySeedJob = nil
     }
 
     func syncStatusItem() {

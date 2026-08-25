@@ -80,6 +80,29 @@ import Testing
 
         #expect(lines == ["three", "two"])
     }
+
+    @Test func reversedScanDropsOversizedCompleteAndTornLines() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let completeURL = dir.appendingPathComponent("complete.txt")
+        let tornURL = dir.appendingPathComponent("torn.txt")
+        let oversized = String(repeating: "x", count: 10_000)
+        try "before\n\(oversized)\nafter\n".write(
+            to: completeURL, atomically: true, encoding: .utf8)
+        try "before\n\(oversized)".write(to: tornURL, atomically: true, encoding: .utf8)
+
+        func scan(_ url: URL) -> [String] {
+            var lines: [String] = []
+            FileTail.scanLinesReversed(url, chunkBytes: 31, maxLineBytes: 128) { data in
+                lines.append(String(decoding: data, as: UTF8.self))
+                return true
+            }
+            return lines
+        }
+
+        #expect(scan(completeURL) == ["after", "before"])
+        #expect(scan(tornURL) == ["before"])
+    }
 }
 
 @Suite @MainActor struct DashboardRefreshBridgeTests {

@@ -164,10 +164,12 @@ import Testing
         }
         try Data((claude.line + codexRows.joined() + "{\"ts\":\"torn").utf8).write(to: url)
 
-        let latest = try #require(LimitsHistory.latest(provider: .claude, url: url))
+        let providers = LimitsHistory.latestProviders(url: url)
+        let latest = try #require(providers[.claude])
 
         #expect(latest.session?.percent == 42)
         #expect(latest.week?.percent == 68)
+        #expect(providers[.codex]?.week?.percent == 99)
         #expect(LimitsHistory.loadLatestPoint(provider: .claude, url: url)?.s == 42)
         #expect(LimitsHistory.availableProviders(url: url) == [.codex, .claude])
     }

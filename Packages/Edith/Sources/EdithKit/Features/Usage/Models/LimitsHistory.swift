@@ -1,6 +1,13 @@
 import Foundation
 
 public struct LimitsHistory {
+    public struct Latest: Sendable {
+        public let date: Date
+        public let session: LimitWindow?
+        public let week: LimitWindow?
+        public let fable: LimitWindow?
+    }
+
     public static var url: URL { Repo.limitsJSONL }
 
     private let fileURL: URL
@@ -94,21 +101,10 @@ public struct LimitsHistory {
     ) -> (
         date: Date, session: LimitWindow?, week: LimitWindow?, fable: LimitWindow?
     )? {
-        guard let row = latestRows(url: url, providers: [provider])[provider],
-            let date = EdithDate.parseISO(row.ts)
-        else { return nil }
-        return (
-            date: date,
-            session: row.s.map {
-                LimitWindow(percent: $0, resetsAt: row.sr.flatMap(EdithDate.parseISO))
-            },
-            week: row.w.map {
-                LimitWindow(percent: $0, resetsAt: row.wr.flatMap(EdithDate.parseISO))
-            },
-            fable: row.f.map {
-                LimitWindow(percent: $0, resetsAt: row.fr.flatMap(EdithDate.parseISO))
-            }
-        )
+        guard let latest = latestProviders(providers: [provider], url: url)[provider] else {
+            return nil
+        }
+        return (latest.date, latest.session, latest.week, latest.fable)
     }
 
     public static func parse(
@@ -128,6 +124,7 @@ public struct LimitsHistory {
     ) -> [LimitPoint] {
         var out: [LimitPoint] = []
         for line in text.split(separator: "\n") {
+            if Task.isCancelled { break }
             guard let row = try? Self.decoder.decode(Row.self, from: Data(line.utf8)),
                 let date = EdithDate.parseISO(row.ts), since.map({ date >= $0 }) ?? true,
                 (row.p ?? .claude) == provider
@@ -158,8 +155,54 @@ public struct LimitsHistory {
     }
 
     public static func availableProviders(url: URL = LimitsHistory.url) -> [LimitProvider] {
-        let found = Set(latestRows(url: url, providers: Set(LimitProvider.allCases)).keys)
+        let found = Set(latestProviders(url: url).keys)
         return LimitProvider.allCases.filter(found.contains)
+    }
+
+    public static func latestProviders(
+        providers: Set<LimitProvider> = Set(LimitProvider.allCases),
+        url: URL = LimitsHistory.url
+    ) -> [LimitProvider: Latest] {
+        latestRows(url: url, providers: providers).reduce(into: [:]) { result, item in
+            let (provider, row) = item
+            guard let date = EdithDate.parseISO(row.ts) else { return }
+            result[provider] = Latest(
+                date: date,
+                session: row.s.map {
+                    LimitWindow(percent: $0, resetsAt: row.sr.flatMap(EdithDate.parseISO))
+                },
+                week: row.w.map {
+                    LimitWindow(percent: $0, resetsAt: row.wr.flatMap(EdithDate.parseISO))
+                },
+                fable: row.f.map {
+                    LimitWindow(percent: $0, resetsAt: row.fr.flatMap(EdithDate.parseISO))
+                })
+        }
+    }
+
+    public static func loadLatestProviders(
+        providers: Set<LimitProvider> = Set(LimitProvider.allCases),
+        url: URL = LimitsHistory.url
+    ) async -> [LimitProvider: Latest] {
+        let load = Task.detached(priority: .utility) {
+            latestProviders(providers: providers, url: url)
+        }
+        return await withTaskCancellationHandler {
+            await load.value
+        } onCancel: {
+            load.cancel()
+        }
+    }
+
+    public static func loadAllAsync(
+        provider: LimitProvider = .claude, url: URL = LimitsHistory.url
+    ) async -> [LimitPoint] {
+        let load = Task.detached(priority: .utility) { loadAll(provider: provider, url: url) }
+        return await withTaskCancellationHandler {
+            await load.value
+        } onCancel: {
+            load.cancel()
+        }
     }
 
     private static func latestRows(
@@ -167,6 +210,7 @@ public struct LimitsHistory {
     ) -> [LimitProvider: Row] {
         var rows: [LimitProvider: Row] = [:]
         FileTail.scanLinesReversed(url) { data in
+            guard !Task.isCancelled else { return false }
             guard let row = try? decoder.decode(Row.self, from: data),
                 EdithDate.parseISO(row.ts) != nil
             else { return true }
@@ -252,7 +296,7 @@ public struct LimitsHistory {
     }
 }
 
-public struct LimitPoint: Identifiable, Equatable {
+public struct LimitPoint: Identifiable, Equatable, Sendable {
     public let date: Date
     public let s: Double?
     public let w: Double?
