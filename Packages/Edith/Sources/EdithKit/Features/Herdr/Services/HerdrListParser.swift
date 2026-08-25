@@ -142,6 +142,20 @@ public enum HerdrListParser {
         return string(in: payload, keys: ["pane_id", "root_pane_id"])
     }
 
+    public static func processNames(in text: String) -> [String: String] {
+        var names: [String: String] = [:]
+        for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
+            let row = String(line)
+            guard let json = firstJSON(in: row) as? [String: Any] else { continue }
+            let payload = unwrap(json) as? [String: Any] ?? json
+            guard let info = payload["process_info"] as? [String: Any] else { continue }
+            guard let pane = string(in: info, keys: ["pane_id", "pane"]) else { continue }
+            guard let name = processName(in: row) else { continue }
+            names[pane] = name
+        }
+        return names
+    }
+
     public static func processName(in text: String) -> String? {
         guard let json = firstJSON(in: text) as? [String: Any] else { return nil }
         let payload = unwrap(json) as? [String: Any] ?? json
@@ -227,7 +241,7 @@ public enum HerdrListParser {
             title = incoming
         } else if let previous, previous.title != previous.pane, !previous.title.isEmpty {
             title = previous.title
-        } else if let tabLabel, !tabLabel.isEmpty {
+        } else if let tabLabel, !tabLabel.isEmpty, !tabLabel.allSatisfy(\.isNumber) {
             title = tabLabel
         } else {
             title = record.title ?? previous?.title ?? record.pane

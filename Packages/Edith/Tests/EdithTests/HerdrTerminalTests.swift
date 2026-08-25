@@ -67,6 +67,34 @@ import Testing
         #expect(HerdrListParser.processName(in: payload) == "zsh")
     }
 
+    @Test func oneCommandAsksForEveryTerminalProcess() {
+        let command = HerdrCollector.processInfoCommand(
+            session: "default", panes: ["w1:pA", "w2:p7"])
+        #expect(command.contains("for pane in w1:pA w2:p7"))
+        #expect(command.contains("herdr --session default pane process-info --pane"))
+        let risky = HerdrCollector.processInfoCommand(session: "a b", panes: ["x; rm -rf /"])
+        #expect(risky.contains("'x; rm -rf /'"))
+    }
+
+    @Test func processNamesAreReadPerPaneFromABatch() {
+        let batch = """
+            {"id":"a","result":{"process_info":{"foreground_processes":[{"name":"bun"}],"pane_id":"w2:p6"},"type":"pane_process_info"}}
+            {"id":"b","result":{"process_info":{"foreground_processes":[{"name":"-zsh"}],"pane_id":"w1:pA"},"type":"pane_process_info"}}
+            """
+        let names = HerdrListParser.processNames(in: batch)
+        #expect(names == ["w2:p6": "bun", "w1:pA": "zsh"])
+    }
+
+    @Test func aNumberedTabNeverBecomesATerminalTitle() {
+        let json = """
+            {"id":"s","result":{"type":"session_snapshot","snapshot":{"panes":[{"pane_id":"w1:pA","agent_status":"unknown","tab_id":"w1:tA","workspace_id":"w1"}],"agents":[],"workspaces":[],"tabs":[{"tab_id":"w1:tA","label":"2","workspace_id":"w1"}]}}}
+            """
+        let agents = HerdrListParser.agents(
+            fromSnapshot: json, session: "default", machineID: "local", machineName: "This Mac",
+            machineIsLocal: true, sshTarget: nil)
+        #expect(agents[0].title == "w1:pA")
+    }
+
     @Test func createdPaneIsReadFromTheRootPane() {
         let payload = """
             {"id":"cli:tab:create","result":{"root_pane":{"pane_id":"w2:p7","tab_id":"w2:t7","workspace_id":"w2"},"tab":{"label":"probe","tab_id":"w2:t7"},"type":"tab_created"}}
