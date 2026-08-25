@@ -102,6 +102,9 @@ enum MainNavigationFallback {
 
 enum Brand {
     static let icon: NSImage? = {
+        if let image = NSApp?.applicationIconImage {
+            return image
+        }
         if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
             let image = NSImage(contentsOf: url)
         {
@@ -333,6 +336,7 @@ struct MainWindowView: View {
     @AppStorage(AppStorageKeys.General.editMainWindowFullScreen) private var windowFullScreen =
         false
     @State private var dragBaseWidth: Double?
+    @State private var liveSidebarWidth: Double?
     @State private var musicKeyMonitor: Any?
     @State private var windowKeyMonitor: Any?
     @State private var commandHintMonitor: Any?
@@ -362,7 +366,7 @@ struct MainWindowView: View {
     private static let fullScreenControlsInset = 12.0
 
     private var clampedSidebarWidth: Double {
-        min(Self.maxSidebarWidth, max(Self.minSidebarWidth, sidebarWidth))
+        min(Self.maxSidebarWidth, max(Self.minSidebarWidth, liveSidebarWidth ?? sidebarWidth))
     }
 
     private var displaySidebarWidth: Double { UIScale.pt(clampedSidebarWidth) }
@@ -1053,13 +1057,17 @@ struct MainWindowView: View {
                             .onChanged { value in
                                 let base = dragBaseWidth ?? displaySidebarWidth
                                 dragBaseWidth = base
-                                sidebarWidth = min(
+                                liveSidebarWidth = min(
                                     Self.maxSidebarWidth,
                                     max(
                                         Self.minSidebarWidth,
                                         (base + value.translation.width) / UIScale.current))
                             }
-                            .onEnded { _ in dragBaseWidth = nil }
+                            .onEnded { _ in
+                                if let width = liveSidebarWidth { sidebarWidth = width }
+                                liveSidebarWidth = nil
+                                dragBaseWidth = nil
+                            }
                     )
                     .onTapGesture(count: 2) { sidebarWidth = Self.defaultSidebarWidth }
             }
