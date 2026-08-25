@@ -26,6 +26,12 @@ public struct SSHConnectFailure: Equatable, Sendable {
     }
 }
 
+struct SSHUploadAttempt: Sendable {
+    let sent: Int64
+    let status: Int32
+    let writeSucceeded: Bool
+}
+
 public enum SSHConnectionError: LocalizedError {
     case connectFailed(SSHConnectFailure)
     case commandFailed(command: String, status: Int32, stderr: String)
@@ -286,24 +292,17 @@ public actor SSHConnection {
         }
         try process.run()
         let reader = stdoutPipe.fileHandleForReading
-        var written: Int64 = 0
-        while true {
-            let chunk = reader.readData(ofLength: 128 * 1024)
-            if chunk.isEmpty { break }
-            if Task.isCancelled {
-                process.terminate()
-                try? output.close()
-                try? FileManager.default.removeItem(at: localURL)
-                throw CancellationError()
-            }
-            output.write(chunk)
-            written += Int64(chunk.count)
-            progress?(written)
+        let status: Int32
+        do {
+            status = try await Self.receiveDownload(
+                process: process, reader: reader, output: output, localURL: localURL,
+                progress: progress)
+        } catch {
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            throw error
         }
-        try? output.close()
-        process.waitUntilExit()
         stderrPipe.fileHandleForReading.readabilityHandler = nil
-        guard process.terminationStatus == 0 else {
+        guard status == 0 else {
             try? FileManager.default.removeItem(at: localURL)
             let message = String(decoding: stderrBuffer.snapshot(), as: UTF8.self)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -312,11 +311,42 @@ public actor SSHConnection {
         }
     }
 
+    static func receiveDownload(
+        process: Process, reader: FileHandle, output: FileHandle, localURL: URL,
+        progress: (@Sendable (Int64) -> Void)? = nil
+    ) async throws -> Int32 {
+        do {
+            return try await withTaskCancellationHandler {
+                var written: Int64 = 0
+                while true {
+                    try Task.checkCancellation()
+                    let chunk = reader.readData(ofLength: 128 * 1024)
+                    if chunk.isEmpty { break }
+                    try Task.checkCancellation()
+                    output.write(chunk)
+                    written += Int64(chunk.count)
+                    progress?(written)
+                }
+                try? output.close()
+                process.waitUntilExit()
+                try Task.checkCancellation()
+                return process.terminationStatus
+            } onCancel: {
+                if process.isRunning { process.terminate() }
+                try? reader.close()
+            }
+        } catch {
+            try? output.close()
+            if process.isRunning { process.terminate() }
+            try? FileManager.default.removeItem(at: localURL)
+            throw error
+        }
+    }
+
     public func upload(
         localURL: URL, toRemotePath remotePath: String,
         progress: (@Sendable (Int64) -> Void)? = nil
     ) async throws {
-        signal(SIGPIPE, SIG_IGN)
         guard let input = try? FileHandle(forReadingFrom: localURL) else {
             throw SSHConnectionError.transferFailed("Could not read the local file.")
         }
@@ -336,54 +366,78 @@ public actor SSHConnection {
         }
         try process.run()
         let writer = stdinPipe.fileHandleForWriting
-        var sent: Int64 = 0
-        var writeFailure: Error?
-        while true {
-            let chunk = input.readData(ofLength: 128 * 1024)
-            if chunk.isEmpty { break }
-            if Task.isCancelled {
-                process.terminate()
-                try? input.close()
-                try? writer.close()
-                await discard(remotePath)
-                throw CancellationError()
-            }
-            do {
-                try writer.write(contentsOf: chunk)
-            } catch {
-                writeFailure = error
-                break
-            }
-            sent += Int64(chunk.count)
-            progress?(sent)
+        let attempt: SSHUploadAttempt
+        do {
+            attempt = try await Self.sendUpload(
+                process: process, input: input, writer: writer, progress: progress)
+        } catch {
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            await discard(remotePath)
+            throw error
         }
-        try? writer.close()
-        try? input.close()
-        process.waitUntilExit()
         stderrPipe.fileHandleForReading.readabilityHandler = nil
         let reported = String(decoding: stderrBuffer.snapshot(), as: UTF8.self)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard writeFailure == nil else {
+        guard attempt.writeSucceeded else {
             await discard(remotePath)
             throw SSHConnectionError.transferFailed(
                 reported.isEmpty
-                    ? "The machine stopped accepting the file after \(sent) bytes."
+                    ? "The machine stopped accepting the file after \(attempt.sent) bytes."
                     : reported)
         }
-        guard process.terminationStatus == 0 else {
+        guard attempt.status == 0 else {
             await discard(remotePath)
             throw SSHConnectionError.transferFailed(reported.isEmpty ? "Upload failed." : reported)
         }
-        guard expected < 0 || sent == expected else {
+        guard expected < 0 || attempt.sent == expected else {
             await discard(remotePath)
             throw SSHConnectionError.transferFailed(
-                "Only \(sent) of \(expected) bytes were sent.")
+                "Only \(attempt.sent) of \(expected) bytes were sent.")
         }
-        guard let landed = await remoteSize(remotePath), landed == sent else {
+        guard let landed = await remoteSize(remotePath), landed == attempt.sent else {
             await discard(remotePath)
             throw SSHConnectionError.transferFailed(
                 "The machine kept a different file than the one that was sent.")
+        }
+    }
+
+    static func sendUpload(
+        process: Process, input: FileHandle, writer: FileHandle,
+        timeout: TimeInterval = 15 * 60, progress: (@Sendable (Int64) -> Void)? = nil
+    ) async throws -> SSHUploadAttempt {
+        signal(SIGPIPE, SIG_IGN)
+        return try await withTaskCancellationHandler {
+            var sent: Int64 = 0
+            var writeSucceeded = true
+            while true {
+                try Task.checkCancellation()
+                let chunk = input.readData(ofLength: 128 * 1024)
+                if chunk.isEmpty { break }
+                do {
+                    try writer.write(contentsOf: chunk)
+                } catch {
+                    writeSucceeded = false
+                    break
+                }
+                sent += Int64(chunk.count)
+                progress?(sent)
+            }
+            try? writer.close()
+            try? input.close()
+            if Task.isCancelled {
+                if process.isRunning { process.terminate() }
+                _ = await waitForExit(process, timeout: 1, killDelay: 1)
+                throw CancellationError()
+            }
+            let status = await waitForExit(process, timeout: timeout)
+            try Task.checkCancellation()
+            return SSHUploadAttempt(
+                sent: sent, status: status, writeSucceeded: writeSucceeded)
+        } onCancel: {
+            try? input.close()
+            try? writer.close()
+            if process.isRunning { process.terminate() }
         }
     }
 
@@ -507,7 +561,9 @@ public actor SSHConnection {
         MachineSSHEnvironment.make(for: machine)
     }
 
-    static func waitForExit(_ process: Process, timeout: TimeInterval) async -> Int32 {
+    static func waitForExit(
+        _ process: Process, timeout: TimeInterval, killDelay: TimeInterval = 2
+    ) async -> Int32 {
         await withCheckedContinuation { continuation in
             let gate = ResumeGate()
             let resumeOnce: @Sendable (Int32) -> Void = { status in
@@ -522,7 +578,7 @@ public actor SSHConnection {
             let timeoutWorkItem = DispatchWorkItem {
                 if process.isRunning {
                     process.terminate()
-                    processTimeoutQueue.asyncAfter(deadline: .now() + 2) {
+                    processTimeoutQueue.asyncAfter(deadline: .now() + killDelay) {
                         if process.isRunning {
                             kill(process.processIdentifier, SIGKILL)
                         }

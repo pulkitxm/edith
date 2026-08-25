@@ -1078,6 +1078,64 @@ private actor ProcessReadProbe {
             #expect(await SSHConnection.waitForExit(process, timeout: 30) == 0)
         }
     }
+
+    @Test func cancellingAStalledDownloadTerminatesItsProcessAndRemovesThePartialFile() async throws
+    {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", "exec sleep 300"]
+        process.standardInput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        let localURL = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-stalled-download-\(UUID().uuidString)")
+        FileManager.default.createFile(atPath: localURL.path, contents: nil)
+        let output = try FileHandle(forWritingTo: localURL)
+        try process.run()
+        let task = Task {
+            try await SSHConnection.receiveDownload(
+                process: process, reader: pipe.fileHandleForReading, output: output,
+                localURL: localURL)
+        }
+
+        try await Task.sleep(for: .milliseconds(50))
+        task.cancel()
+
+        await #expect(throws: CancellationError.self) { try await task.value }
+        #expect(!process.isRunning)
+        #expect(!FileManager.default.fileExists(atPath: localURL.path))
+    }
+
+    @Test func cancellingABlockedUploadClosesItsPipeAndTerminatesItsProcess() async throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", "exec sleep 300"]
+        let pipe = Pipe()
+        process.standardInput = pipe
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        let localURL = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-stalled-upload-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: localURL) }
+        try Data(repeating: 1, count: 2 * 1024 * 1024).write(to: localURL)
+        let input = try FileHandle(forReadingFrom: localURL)
+        try process.run()
+        let clock = ContinuousClock()
+        let started = clock.now
+        let task = Task {
+            try await SSHConnection.sendUpload(
+                process: process, input: input, writer: pipe.fileHandleForWriting,
+                timeout: 30)
+        }
+
+        try await Task.sleep(for: .milliseconds(50))
+        task.cancel()
+
+        await #expect(throws: CancellationError.self) { try await task.value }
+        #expect(!process.isRunning)
+        #expect(clock.now - started < .seconds(3))
+    }
 }
 
 @Suite struct PipeReadingTests {
