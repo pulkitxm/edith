@@ -103,11 +103,21 @@ public enum ExitCodes {
     }
 }
 
+enum MachineDirectoryCache {
+    nonisolated(unsafe) private static var loaded: [Machine]?
+
+    static func machines() -> [Machine] {
+        if let loaded { return loaded }
+        let machines = MachineDirectory.load()
+        loaded = machines
+        return machines
+    }
+}
+
 public enum EdithCLIMain {
     public static func run() async {
         let raw = Array(CommandLine.arguments.dropFirst())
-        let machines = MachineDirectory.names(from: MachineDirectory.load())
-        let arguments = ArgumentRewriting.rewrite(raw, machines: machines)
+        let arguments = rewritten(raw)
         do {
             var command = try EdRoot.parseAsRoot(arguments)
             if var runnable = command as? AsyncParsableCommand {
@@ -119,6 +129,16 @@ public enum EdithCLIMain {
             ExitCodes.report(error)
             exit(ExitCodes.code(for: error))
         }
+    }
+
+    static func rewritten(_ raw: [String]) -> [String] {
+        guard let first = raw.first, !first.hasPrefix("-") else { return raw }
+        if first == ArgumentRewriting.machinesGroup {
+            return ArgumentRewriting.rewrite(raw, machines: [])
+        }
+        guard !ArgumentRewriting.reserved.contains(first) else { return raw }
+        return ArgumentRewriting.rewrite(
+            raw, machines: MachineDirectory.names(from: MachineDirectoryCache.machines()))
     }
 }
 
@@ -456,10 +476,16 @@ struct CompleteCommand: AsyncParsableCommand {
     var words: [String] = []
 
     func run() async throws {
-        let machines = MachineDirectory.load()
+        let machines = MachineDirectoryCache.machines()
         let request = CompletionRequest(
             words: CompletionRequest.stripSeparator(words), index: index)
-        let shelfItems = ((try? ShelfBridge.items()) ?? []).indices.map { String($0 + 1) }
+        let shelfItems: [String]
+        if request.leading.first == "shelf" {
+            let items = ShelfMutationExecution.snapshotIfUncontended()?.items ?? []
+            shelfItems = items.indices.map { String($0 + 1) }
+        } else {
+            shelfItems = []
+        }
         let musicTracks: [String]
         if request.leading.starts(with: ["music", "favorite"])
             || request.leading.starts(with: ["music", "favourite"])
@@ -492,7 +518,8 @@ struct CompleteCommand: AsyncParsableCommand {
         } else {
             quinjetSessions = []
         }
-        let usageDocument = try? UsageDocument.load()
+        let usageDocument =
+            request.leading.first == "usage" ? (try? UsageDocument.load()) : nil
         let usageChatIDs =
             request.leading.starts(with: ["usage", "projects", "copy-chat"])
             ? UsageAnalysis.chatIDs(usageDocument?.daily ?? []) : []
@@ -501,6 +528,15 @@ struct CompleteCommand: AsyncParsableCommand {
                 || request.leading.starts(with: ["usage", "projects", "open"])
                 || request.leading.starts(with: ["usage", "projects", "copy-link"])
             ? UsageAnalysis.projectSelectors(usageDocument?.daily ?? []) : []
+        let runningApps =
+            request.leading.first == "apps"
+            ? RunningAppOperationCenter().completionValues() : []
+        let appLinks =
+            request.leading.first == "app"
+            ? AppInspectionCLI.center.links(
+                contributors: AppInspectionCLI.contributors
+            ).map(\.id)
+            : []
         let result = CompletionEngine.plan(
             request, machines: MachineDirectory.names(from: machines),
             configKeys: ConfigCatalog.keys,
@@ -508,10 +544,8 @@ struct CompleteCommand: AsyncParsableCommand {
             musicTracks: musicTracks, calendarEvents: calendarEvents,
             toolIDs: ToolProvisioning.all.map(\.id),
             usageSources: usageDocument?.sources?.sorted() ?? [],
-            runningApps: RunningAppOperationCenter().completionValues(),
-            appLinks: AppInspectionCLI.center.links(
-                contributors: AppInspectionCLI.contributors
-            ).map(\.id), usageChatIDs: usageChatIDs, usageProjects: usageProjects,
+            runningApps: runningApps,
+            appLinks: appLinks, usageChatIDs: usageChatIDs, usageProjects: usageProjects,
             quinjetSessions: quinjetSessions)
         if let name = result.remoteMachine,
             let machine = try? MachineDirectory.resolve(

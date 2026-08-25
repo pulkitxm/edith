@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 public enum CompletionScripts {
@@ -143,14 +144,25 @@ public enum CompletionScripts {
     }
 
     static func searchedZshDirectory(home: URL) -> URL? {
-        fpathProbeCache.directory(forHome: home.path) { probeZshDirectory(home: home) }
+        fpathProbeCache.directory(forHome: home.path) { rememberedZshDirectory(home: home) }
     }
 
     public static func forgetProbedShellDirectories() {
         fpathProbeCache.forgetEverything()
+        FpathProbeStore.forgetEverything()
     }
 
     static let fpathProbeCache = FpathProbeCache()
+
+    private static func rememberedZshDirectory(home: URL) -> URL? {
+        let key = FpathProbeStore.key(forHome: home)
+        if let remembered = FpathProbeStore.remembered(forKey: key) {
+            return remembered.directory.map { URL(fileURLWithPath: $0) }
+        }
+        let found = probeZshDirectory(home: home)
+        FpathProbeStore.remember(found, forKey: key)
+        return found
+    }
 
     private static func probeZshDirectory(home: URL) -> URL? {
         let process = Process()
@@ -361,5 +373,50 @@ final class FpathProbeCache: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         probed.removeAll()
+    }
+}
+
+enum FpathProbeStore {
+    struct Remembered: Codable {
+        let directory: String?
+        let expiresAt: Double
+    }
+
+    static let lifetime: TimeInterval = 24 * 60 * 60
+
+    nonisolated(unsafe) static var storeURL: URL = AppData.supportDir
+        .appendingPathComponent("zsh-fpath-probe.json")
+
+    static func key(forHome home: URL, fileManager: FileManager = .default) -> String {
+        let attributes = try? fileManager.attributesOfItem(
+            atPath: home.appendingPathComponent(".zshrc").path)
+        let modified = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let seed = home.path + "\n" + String(modified)
+        return SHA256.hash(data: Data(seed.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func remembered(forKey key: String) -> Remembered? {
+        guard let entry = load()[key], entry.expiresAt > Date().timeIntervalSince1970
+        else { return nil }
+        return entry
+    }
+
+    static func remember(_ directory: URL?, forKey key: String) {
+        let now = Date().timeIntervalSince1970
+        var entries = load().filter { $0.value.expiresAt > now }
+        entries[key] = Remembered(directory: directory?.path, expiresAt: now + lifetime)
+        guard let data = try? JSONEncoder().encode(entries) else { return }
+        try? data.write(to: storeURL, options: .atomic)
+    }
+
+    static func forgetEverything() {
+        try? FileManager.default.removeItem(at: storeURL)
+    }
+
+    private static func load() -> [String: Remembered] {
+        guard let data = try? Data(contentsOf: storeURL),
+            let entries = try? JSONDecoder().decode([String: Remembered].self, from: data)
+        else { return [:] }
+        return entries
     }
 }
