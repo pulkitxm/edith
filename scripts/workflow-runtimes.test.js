@@ -50,6 +50,7 @@ const workflows = readdirSync(".github/workflows")
   }));
 const lockfile = readFileSync("bun.lock", "utf8");
 const packageManifest = JSON.parse(readFileSync("package.json", "utf8"));
+const linkConfig = readFileSync("lychee.toml", "utf8");
 
 test("workflow actions use approved immutable revisions", () => {
   const seen = new Set();
@@ -87,4 +88,13 @@ test("the repository installs no local Git hooks", () => {
   expect(packageManifest.scripts?.prepare).toBeUndefined();
   expect(packageManifest.devDependencies?.lefthook).toBeUndefined();
   expect(lockfile).not.toContain('"lefthook');
+});
+
+test("link checks isolate the volatile GitHub avatar CDN", () => {
+  expect(linkConfig).toContain(
+    '"^https://avatars\\\\.githubusercontent\\\\.com/"',
+  );
+  expect(linkConfig).not.toContain('"^https://github\\\\.com/"');
+  const hygiene = workflows.find(({ name }) => name === "hygiene.yml")?.text;
+  expect(hygiene).toContain("args: --config lychee.toml './**/*.md'");
 });

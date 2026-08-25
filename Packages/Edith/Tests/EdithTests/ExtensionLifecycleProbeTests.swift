@@ -99,14 +99,18 @@ import EdithCore
         }
     }
 
-    @Test func disabledExtensionsSkipReadinessChecks() async throws {
+    @Test func disabledExtensionsStillReportTheirRealRuntime() async throws {
         let entry = try #require(ExtensionRegistry.entries.first { $0.id == "quinjet" })
-        let report = await probe(enabled: false).report(for: entry)
+        let installed = await probe(enabled: false, tools: ["quinjet"]).report(for: entry)
+        let missing = await probe(enabled: false).report(for: entry)
 
-        #expect(report.state.phase == .disabled)
-        #expect(report.state.runtimePhase == .uninstalled)
-        #expect(report.checks.map(\.status) == [.skipped])
-        #expect(report.checks.first?.recoveryCommand == "ed extensions setup quinjet")
+        #expect(installed.state.phase == .disabled)
+        #expect(installed.state.runtimePhase == .installed)
+        #expect(installed.checks.first?.status == .skipped)
+        #expect(installed.checks.first?.recoveryCommand == "ed extensions setup quinjet")
+        #expect(installed.checks.contains { $0.id == "tool.quinjet" && $0.status == .passed })
+        #expect(missing.state.phase == .disabled)
+        #expect(missing.state.runtimePhase == .uninstalled)
     }
 
     @Test func aSupportedExtensionWithItsToolIsReady() async throws {
@@ -208,8 +212,20 @@ import EdithCore
             ])
         #expect(
             states.map(\.phase) == [
-                .disabled, .ready, .needsSetup, .checking, .unavailable, .failed,
+                .disabled, .ready, .ready, .checking, .unavailable, .failed,
             ])
+    }
+
+    @Test func emptyInstalledRuntimeIsReadyWithoutClaimingContent() async throws {
+        let herdr = try #require(ExtensionRegistry.entries.first { $0.id == "herdr" })
+
+        let report = await probe(adapter: .empty("No sessions.")).report(for: herdr)
+
+        #expect(report.state.phase == .ready)
+        #expect(report.state.runtimePhase == .empty)
+        #expect(report.state.summary.contains("no content or sessions"))
+        #expect(report.checks.first { $0.id == "adapter.herdr" }?.status == .passed)
+        #expect(report.state.issues.isEmpty)
     }
 
     @Test func optionalMusicWorkflowDoesNotBlockCoreInstallation() async throws {

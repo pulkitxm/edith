@@ -55,6 +55,14 @@ The deterministic harness can be verified without a running app:
 make ci-performance
 ```
 
+The same gate compares changed Swift production files with the selected base revision. It
+rejects newly introduced blocking file or process work on the main actor, fire-and-forget
+detached tasks, direct process launches, unbounded process capture and remote fan-out,
+unguarded state publication after suspension, and unbounded main-actor projection chains.
+Existing occurrences are a ratcheted baseline, so unchanged or removed legacy code does not
+require a path or symbol allowlist. New subprocess work should reuse a bounded runner, and
+repeated UI work should own and cancel its task before applying only the latest result.
+
 Further refactors should follow captured regressions. The first candidates are
 shared extension-probe snapshots and moving dashboard aggregation off the main
 actor if their intervals show material cost.

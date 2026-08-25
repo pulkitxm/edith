@@ -768,7 +768,8 @@ enum JSONContract {
             #expect((lifecycle?["verification"] as? [Any])?.isEmpty == false)
             #expect(state?["extensionID"] as? String == "quinjet")
             #expect(state?["phase"] as? String == "disabled")
-            #expect((state?["issues"] as? [Any])?.isEmpty == true)
+            #expect(state?["runtimePhase"] as? String == "uninstalled")
+            #expect((state?["issues"] as? [Any])?.isEmpty == false)
         }
     }
 
