@@ -70,8 +70,17 @@ import Testing
             .appendingPathComponent("Sources/Edith/Features/Settings/Views/ExtensionsPane.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-        #expect(source.contains("var quinjetEnabled = false"))
-        #expect(source.contains("case AppStorageKeys.Tabs.quinjetEnabled: $quinjetEnabled"))
+        let entry = try #require(ExtensionRegistry.entries.first { $0.id == "quinjet" })
+        #expect(entry.defaultsKey == AppStorageKeys.Tabs.quinjetEnabled)
+        #expect(ExtensionDetailRoute(rawValue: entry.id) == .quinjet)
+        #expect(
+            source.components(
+                separatedBy: "@ExtensionEnablementStorage private var enabled: Bool"
+            ).count == 3)
+        #expect(
+            source.components(
+                separatedBy: "_enabled = ExtensionEnablementStorage(entry: entry)"
+            ).count == 3)
         #expect(source.contains("case .quinjet: QuinjetRows()"))
         #expect(source.contains("private struct QuinjetRows: View"))
         #expect(source.contains("CLIToolStatusSection(tools: [.quinjet]"))
@@ -101,8 +110,14 @@ import Testing
             ).map(\.id) == ["attention"])
         #expect(entry.defaultsKey == AppStorageKeys.Tabs.attentionEnabled)
         #expect(ExtensionDetailRoute(rawValue: entry.id) == .attention)
-        #expect(pane.contains("case AppStorageKeys.Tabs.attentionEnabled: $attentionEnabled"))
-        #expect(pane.contains("var attentionEnabled = false"))
+        #expect(
+            pane.components(
+                separatedBy: "@ExtensionEnablementStorage private var enabled: Bool"
+            ).count == 3)
+        #expect(
+            pane.components(
+                separatedBy: "_enabled = ExtensionEnablementStorage(entry: entry)"
+            ).count == 3)
         #expect(pane.contains("case .attention: AttentionRows()"))
         #expect(pane.contains("private struct AttentionRows: View"))
         #expect(navigation.contains("case .attention: attentionEnabled"))
