@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import EdithCLI
+@testable import EdithCore
 @testable import EdithKit
 
 @Suite struct CLIDestructiveSafetyTests {
@@ -166,6 +167,24 @@ import Testing
             #expect(node?.destructivePolicy == .previewThenYes)
             #expect(node?.options.contains("--yes") == true)
         }
+    }
+
+    @Test func destructiveLifecycleRecoveryCommandsRequireConfirmation() {
+        var destructiveCommands: [String] = []
+        for descriptor in ExtensionLifecycleCatalog.descriptors {
+            for command in descriptor.recovery.compactMap(\.command) {
+                let words = command.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+                var node = Optional(CommandTree.root)
+                for word in words.dropFirst() {
+                    guard let child = node?.child(word) else { break }
+                    node = child
+                }
+                guard node?.destructivePolicy == .previewThenYes else { continue }
+                destructiveCommands.append(command)
+                #expect(words.contains("--yes"), "\(command) only previews its recovery")
+            }
+        }
+        #expect(!destructiveCommands.isEmpty)
     }
 
     @Test func clipboardPreviewPreservesIndexAndBlobsThenConfirmationRemovesOnlyTargets()

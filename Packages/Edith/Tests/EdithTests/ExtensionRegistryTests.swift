@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import EdithCore
 @testable import EdithKit
 
 @Suite struct ExtensionRegistryTests {
@@ -27,6 +28,43 @@ import Testing
     @Test func registryIdentifiersAreUnique() {
         let identifiers = ExtensionRegistry.entries.map(\.id)
         #expect(Set(identifiers).count == identifiers.count)
+    }
+
+    @Test func lifecycleCatalogCoversEveryRegistryEntry() throws {
+        let identifiers = ExtensionRegistry.entries.map(\.id)
+        #expect(ExtensionLifecycleCatalog.descriptors.map(\.id) == identifiers)
+
+        for entry in ExtensionRegistry.entries {
+            let lifecycle = try #require(entry.lifecycle)
+            #expect(lifecycle.id == entry.id)
+            #expect(!lifecycle.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            #expect(!lifecycle.workflows.isEmpty)
+            #expect(!lifecycle.prerequisites.isEmpty)
+            #expect(!lifecycle.cliExamples.isEmpty)
+            #expect(!lifecycle.documentation.isEmpty)
+            #expect(!lifecycle.recovery.isEmpty)
+            #expect(!lifecycle.verification.isEmpty)
+            #expect(lifecycle.recovery.allSatisfy { $0.command?.isEmpty == false })
+            #expect(lifecycle.verification.allSatisfy { $0.command?.isEmpty == false })
+        }
+    }
+
+    @Test func lifecycleDocumentationTargetsExist() {
+        let repository = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+
+        for descriptor in ExtensionLifecycleCatalog.descriptors {
+            for document in descriptor.documentation {
+                let target = repository.appendingPathComponent(document.path)
+                #expect(
+                    FileManager.default.fileExists(atPath: target.path),
+                    "\(descriptor.id) documentation is missing at \(document.path)")
+            }
+        }
     }
 
     @Test func registryDefaultsKeysAreUniqueAndComplete() {

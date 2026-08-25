@@ -1,10 +1,33 @@
+import ArgumentParser
 import Foundation
 import Testing
 
 @testable import EdithCLI
+@testable import EdithCore
 @testable import EdithKit
 
 @Suite struct CLIExtensionLifecycleTests {
+    @Test func everyLifecycleCommandParsesThroughTheProductionRoot() {
+        var commands: [String] = []
+        for descriptor in ExtensionLifecycleCatalog.descriptors {
+            commands += descriptor.cliExamples
+            commands += descriptor.prerequisites.compactMap(\.command)
+            commands += descriptor.recovery.compactMap(\.command)
+            commands += descriptor.verification.compactMap(\.command)
+        }
+
+        for command in commands {
+            let words = command.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+            #expect(words.first == "ed")
+            do {
+                _ = try EdRoot.parseAsRoot(Array(words.dropFirst()))
+            } catch is CleanExit {
+            } catch {
+                Issue.record("\(command) does not parse: \(error.localizedDescription)")
+            }
+        }
+    }
+
     @Test func statusReportsAllExtensionsInRegistryOrder() async {
         await CLIProbe.inWorld { world in
             for entry in ExtensionRegistry.entries {
@@ -155,6 +178,18 @@ import Testing
                 checks?.first { $0["id"] as? String == "adapter.quinjet" }?["status"] as? String
                     == "passed")
             #expect(result.object?["verified"] as? Bool == true)
+        }
+    }
+
+    @Test func plainInfoIncludesVerificationAndRecoveryCommands() async {
+        await CLIProbe.inWorld { _ in
+            let result = await CLIProbe.capture(["extensions", "info", "notchShelf"])
+
+            #expect(result.code == 0)
+            #expect(result.stdout.contains("  verify\n"))
+            #expect(result.stdout.contains("    ed shelf ls --json\n"))
+            #expect(result.stdout.contains("  recover\n"))
+            #expect(result.stdout.contains("    ed shelf clear --yes --json\n"))
         }
     }
 }
