@@ -8,6 +8,7 @@ struct UsageMachineRows: View {
     @State private var counted: Set<UUID> = []
     @State private var summaries: [UUID: MachineUsageSummary] = [:]
     @State private var collecting: Task<Void, Never>?
+    @State private var reloadTask: Task<Void, Never>?
     @State private var status = ""
 
     var body: some View {
@@ -47,6 +48,7 @@ struct UsageMachineRows: View {
         .disabled(!extensionEnabled)
         .opacity(extensionEnabled ? 1 : 0.5)
         .onAppear(perform: reload)
+        .onDisappear { reloadTask?.cancel() }
     }
 
     private var footnote: String {
@@ -90,9 +92,18 @@ struct UsageMachineRows: View {
     private func reload() {
         machines = MachineRegistry.machines()
         counted = MachineUsageSelection.machineIDs()
-        var found: [UUID: MachineUsageSummary] = [:]
-        for summary in MachineUsageStore.summaries() { found[summary.machineID] = summary }
-        summaries = found
+        reloadTask?.cancel()
+        reloadTask = Task {
+            let found = await Task.detached(priority: .utility) {
+                Dictionary(
+                    uniqueKeysWithValues: MachineUsageStore.summaries().map {
+                        ($0.machineID, $0)
+                    })
+            }.value
+            guard !Task.isCancelled else { return }
+            summaries = found
+            reloadTask = nil
+        }
     }
 
     private func toggle(_ machine: Machine) {
@@ -102,8 +113,12 @@ struct UsageMachineRows: View {
     }
 
     private func forget(_ machine: Machine) {
-        UsageCollectionOperationExecution.forgetMachine(machineID: machine.id)
-        reload()
+        Task {
+            _ = await Task.detached(priority: .utility) {
+                UsageCollectionOperationExecution.forgetMachine(machineID: machine.id)
+            }.value
+            reload()
+        }
     }
 
     private func collect() {
