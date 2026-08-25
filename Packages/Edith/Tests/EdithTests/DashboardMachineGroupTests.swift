@@ -234,4 +234,39 @@ import Testing
             MachineUsageRows.outcome(MachineUsageRoundResult(skippedBecauseBusy: true))
                 == "another collection is already running")
     }
+
+    @Test func duplicateEmbeddedMachineIDsChooseTheNewestSummary() throws {
+        let id = UUID(uuidString: "01010101-0101-0101-0101-010101010101")!
+        let older = MachineUsageSummary(
+            machineID: id, name: "Older", slug: "older", host: "old",
+            collectedAt: Date(timeIntervalSince1970: 1), sources: ["cli"], days: 1,
+            cost: 1, tokens: 1)
+        let newer = MachineUsageSummary(
+            machineID: id, name: "Newer", slug: "newer", host: "new",
+            collectedAt: Date(timeIntervalSince1970: 2), sources: ["cli"], days: 2,
+            cost: 2, tokens: 2)
+
+        let forward = MachineUsageRows.summariesByMachineID([older, newer])
+        let reverse = MachineUsageRows.summariesByMachineID([newer, older])
+
+        #expect(try #require(forward[id]).name == "Newer")
+        #expect(try #require(reverse[id]).name == "Newer")
+    }
+
+    @Test func equalDateDuplicateSummariesUseAStableTieBreak() throws {
+        let id = UUID(uuidString: "02020202-0202-0202-0202-020202020202")!
+        let date = Date(timeIntervalSince1970: 1)
+        let alpha = MachineUsageSummary(
+            machineID: id, name: "Alpha", slug: "alpha", host: "a", collectedAt: date,
+            sources: ["cli"], days: 1, cost: 1, tokens: 1)
+        let zulu = MachineUsageSummary(
+            machineID: id, name: "Zulu", slug: "zulu", host: "z", collectedAt: date,
+            sources: ["cli"], days: 1, cost: 1, tokens: 1)
+
+        let forward = MachineUsageRows.summariesByMachineID([alpha, zulu])
+        let reverse = MachineUsageRows.summariesByMachineID([zulu, alpha])
+
+        #expect(try #require(forward[id]).name == "Alpha")
+        #expect(try #require(reverse[id]).name == "Alpha")
+    }
 }
