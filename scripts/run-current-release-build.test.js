@@ -116,7 +116,7 @@ function advanceMain(fixture) {
   git(mover, "push", "origin", "main");
 }
 
-function unreliableGit(fixture, failCalls) {
+function unreliableGit(fixture, failCalls, warnCalls = []) {
   const directory = join(fixture.root, `git-shim-${Date.now()}`);
   const executable = join(directory, "git");
   const state = join(directory, "calls");
@@ -133,6 +133,9 @@ if [[ "\${1:-}" == "ls-remote" ]]; then
   case ",$RELEASE_TEST_GIT_FAIL_CALLS," in
     *,$calls,*) echo "fatal: simulated remote outage" >&2; exit 128 ;;
   esac
+  case ",$RELEASE_TEST_GIT_WARN_CALLS," in
+    *,$calls,*) echo "warning: simulated remote warning" >&2 ;;
+  esac
 fi
 exec "$RELEASE_TEST_REAL_GIT" "$@"
 `,
@@ -141,6 +144,7 @@ exec "$RELEASE_TEST_REAL_GIT" "$@"
   return {
     PATH: `${directory}:${process.env.PATH}`,
     RELEASE_TEST_GIT_FAIL_CALLS: failCalls.join(","),
+    RELEASE_TEST_GIT_WARN_CALLS: warnCalls.join(","),
     RELEASE_TEST_GIT_STATE: state,
     RELEASE_TEST_REAL_GIT: command(fixture.checkout, "which", ["git"]),
     state,
@@ -211,7 +215,7 @@ test("a current release build keeps command failures fatal", async () => {
 test("a transient remote outage recovers before the build starts", async () => {
   const fixture = createFixture();
   const marker = join(fixture.root, "completed");
-  const shim = unreliableGit(fixture, [1, 2]);
+  const shim = unreliableGit(fixture, [1, 2], [3, 4]);
   const child = run(
     fixture,
     ["bash", "-c", 'printf complete > "$1"', "--", marker],
@@ -312,6 +316,58 @@ test("a main advance stops an active release build", async () => {
   );
 });
 
+test("a transient monitoring outage does not interrupt a current build", async () => {
+  const fixture = createFixture();
+  const started = join(fixture.root, "started");
+  const completed = join(fixture.root, "completed");
+  const shim = unreliableGit(fixture, [2, 3]);
+  const child = run(
+    fixture,
+    [
+      "bash",
+      "-c",
+      'printf started > "$1"; sleep 3; printf complete > "$2"',
+      "--",
+      started,
+      completed,
+    ],
+    shim,
+  );
+  processes.push(child);
+
+  await waitForFile(started);
+  expect(await child.exited).toBe(0);
+  expect(readFileSync(completed, "utf8")).toBe("complete");
+  expect(Number(readFileSync(shim.state, "utf8"))).toBeGreaterThanOrEqual(5);
+  expect(await new Response(child.stderr).text()).toContain(
+    "release remote check unavailable: retrying (2/3)",
+  );
+});
+
+test("a main advance found after monitoring retries stops the build", async () => {
+  const fixture = createFixture();
+  const started = join(fixture.root, "started");
+  const shim = unreliableGit(fixture, [2, 3]);
+  const child = run(
+    fixture,
+    [
+      "bash",
+      "-c",
+      'printf started > "$1"; while :; do sleep 1; done',
+      "--",
+      started,
+    ],
+    shim,
+  );
+  processes.push(child);
+  await waitForFile(started);
+  advanceMain(fixture);
+
+  expect(await child.exited).toBe(75);
+  expect(existsSync(join(fixture.root, "superseded"))).toBe(true);
+  expect(Number(readFileSync(shim.state, "utf8"))).toBe(4);
+});
+
 test("stopping a stale build terminates its parent and grandchild", async () => {
   const fixture = createFixture();
   const parentFile = join(fixture.root, "parent-pid");
@@ -349,6 +405,41 @@ test("a final main advance after child exit supersedes the build", async () => {
   expect(existsSync(join(fixture.root, "superseded"))).toBe(true);
 });
 
+test("a final remote outage fails closed after a successful build", async () => {
+  const fixture = createFixture();
+  const artifact = join(fixture.root, "artifact");
+  const shim = unreliableGit(fixture, [2, 3, 4]);
+  const child = run(
+    fixture,
+    ["bash", "-c", 'printf built > "$1"', "--", artifact],
+    shim,
+  );
+  processes.push(child);
+
+  expect(await child.exited).toBe(1);
+  expect(readFileSync(artifact, "utf8")).toBe("built");
+  expect(existsSync(join(fixture.root, "superseded"))).toBe(false);
+  expect(Number(readFileSync(shim.state, "utf8"))).toBe(4);
+  expect(await new Response(child.stderr).text()).toContain(
+    "release build blocked: could not resolve refs/heads/main",
+  );
+});
+
+test("a final retry still detects a superseded build", async () => {
+  const fixture = createFixture();
+  const mover = prepareMainAdvance(fixture);
+  const shim = unreliableGit(fixture, [2, 3]);
+  const child = run(fixture, ["git", "-C", mover, "push", "origin", "main"], {
+    ...shim,
+    RELEASE_CHECK_INTERVAL_SECONDS: "60",
+  });
+  processes.push(child);
+
+  expect(await child.exited).toBe(75);
+  expect(existsSync(join(fixture.root, "superseded"))).toBe(true);
+  expect(Number(readFileSync(shim.state, "utf8"))).toBe(4);
+});
+
 test("invalid monitoring configuration stays fatal", async () => {
   const fixture = createFixture();
   const child = run(fixture, ["true"], {
@@ -359,5 +450,25 @@ test("invalid monitoring configuration stays fatal", async () => {
   expect(await child.exited).toBe(1);
   expect(await new Response(child.stderr).text()).toContain(
     "release build blocked: check interval must be a positive integer",
+  );
+});
+
+test("invalid remote retry configuration stays fatal", async () => {
+  const fixture = createFixture();
+  const attempts = run(fixture, ["true"], {
+    RELEASE_REMOTE_RETRY_ATTEMPTS: "0",
+  });
+  const delay = run(fixture, ["true"], {
+    RELEASE_REMOTE_RETRY_DELAY_SECONDS: "later",
+  });
+  processes.push(attempts, delay);
+
+  expect(await attempts.exited).toBe(1);
+  expect(await new Response(attempts.stderr).text()).toContain(
+    "release build blocked: remote retry attempts must be a positive integer",
+  );
+  expect(await delay.exited).toBe(1);
+  expect(await new Response(delay.stderr).text()).toContain(
+    "release build blocked: remote retry delay must be a non-negative integer",
   );
 });

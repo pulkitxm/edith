@@ -33,7 +33,7 @@ current_sha() {
   local attempt output sha
   for ((attempt = 1; attempt <= REMOTE_RETRY_ATTEMPTS; attempt += 1)); do
     output=""
-    if output="$(git ls-remote --exit-code "$REMOTE_NAME" "$REMOTE_REF" 2>&1)"; then
+    if output="$(git ls-remote --exit-code "$REMOTE_NAME" "$REMOTE_REF")"; then
       sha="$(printf '%s\n' "$output" | awk 'NR == 1 { print $1 }')"
       if [[ -n "$sha" ]]; then
         printf '%s\n' "$sha"
@@ -41,7 +41,6 @@ current_sha() {
       fi
     fi
     if [[ "$attempt" -eq "$REMOTE_RETRY_ATTEMPTS" ]]; then
-      [[ -z "$output" ]] || printf '%s\n' "$output" >&2
       return 1
     fi
     echo "release remote check unavailable: retrying ($attempt/$REMOTE_RETRY_ATTEMPTS)" >&2
