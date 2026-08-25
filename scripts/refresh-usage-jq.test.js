@@ -109,6 +109,7 @@ function runCollectorFixture({
   legacyDeletedWorktree = false,
   deletedWorktreeBaseRepository = false,
   existingUsage,
+  mutateMachineBeforeFleet = false,
 }) {
   const root = mkdtempSync(join(tmpdir(), "edith-refresh-usage-"));
   const home = join(root, "home");
@@ -185,10 +186,15 @@ function runCollectorFixture({
   }
   const existing = existingUsage ?? '{"sentinel":"preserved"}\n';
   writeFileSync(join(output, "usage.json"), existing);
+  const originalMachine = join(
+    output,
+    "machines",
+    "11111111-1111-1111-1111-111111111111.json",
+  );
   if (machineJSON !== undefined) {
     const machines = join(output, "machines");
     mkdirSync(machines, { recursive: true });
-    writeFileSync(join(machines, "machine.json"), machineJSON);
+    writeFileSync(originalMachine, machineJSON);
   }
   const bunPath = join(bin, "bun");
   writeFileSync(bunPath, '#!/bin/sh\nexec "$@"\n');
@@ -219,7 +225,7 @@ fi
 `,
   );
   chmodSync(ccusagePath, 0o755);
-  if (failDetails) {
+  if (failDetails || mutateMachineBeforeFleet) {
     const realJQ = Bun.which("jq");
     expect(realJQ).not.toBeNull();
     const jqPath = join(bin, "jq");
@@ -228,12 +234,15 @@ fi
       `#!/bin/sh
 has_usage=0
 has_records=0
+has_machine=0
 for argument in "$@"; do
   [ "$argument" = "usage" ] && has_usage=1
   case "$argument" in
     */recs.json) has_records=1 ;;
+    */machines/11111111-1111-1111-1111-111111111111.json) has_machine=1 ;;
   esac
 done
+[ "\${MUTATE_MACHINE_BEFORE_FLEET:-0}" = "1" ] && [ "$has_machine" = "1" ] && printf '{"machine":' >"$ORIGINAL_MACHINE"
 [ "$has_usage" = "1" ] && [ "$has_records" = "1" ] && exit 86
 exec "$REAL_JQ" "$@"
 `,
@@ -249,6 +258,8 @@ exec "$REAL_JQ" "$@"
       FAIL_CLAUDE_DAILY: failClaudeDaily ? "1" : "0",
       MALFORMED_CLAUDE_DAILY: malformedClaudeDaily ? "1" : "0",
       FAIL_NORMALIZATION: failNormalization ? "1" : "0",
+      MUTATE_MACHINE_BEFORE_FLEET: mutateMachineBeforeFleet ? "1" : "0",
+      ORIGINAL_MACHINE: originalMachine,
       REAL_JQ: Bun.which("jq") ?? "jq",
     },
   });
@@ -2524,6 +2535,18 @@ describe("collector failure handling", () => {
     expect(result.output).toBe(result.existing);
   }, 15_000);
 
+  test("machine fleet assembly reads the bounded staged snapshot", () => {
+    const result = runCollectorFixture({
+      hasLocalUsage: false,
+      machineJSON: JSON.stringify(machineDoc()),
+      mutateMachineBeforeFleet: true,
+    });
+    expect(result.exitCode).toBe(0);
+    const report = JSON.parse(result.output);
+    expect(report.machines.map((machine) => machine.name)).toEqual(["tuf"]);
+    expect(report.sources).toContain(tufCLI);
+  }, 15_000);
+
   test("detail assembly failure preserves the existing report", () => {
     const result = runCollectorFixture({
       hasLocalUsage: true,
@@ -2536,6 +2559,19 @@ describe("collector failure handling", () => {
 });
 
 describe("collector configuration", () => {
+  test("imports every staging open flag explicitly", () => {
+    expect(script).toContain(
+      "-MFcntl=O_CREAT,O_EXCL,O_NOFOLLOW,O_NONBLOCK,O_RDONLY,O_WRONLY",
+    );
+  });
+
+  test("selects the staged file size command by platform", () => {
+    expect(script).toContain('PLATFORM="$(uname -s)"');
+    expect(script).toContain('Darwin) stat -f %z "$1"');
+    expect(script).toContain('*) stat -c %s "$1"');
+    expect(script).not.toContain('stat -f %z "$staged" 2>/dev/null || stat -c');
+  });
+
   test("uses one pinned ccusage version for bun and npx", () => {
     expect(script).toContain('CCUSAGE_VERSION="20.0.19"');
     expect(script).toContain('bun add --exact "ccusage@$CCUSAGE_VERSION"');
