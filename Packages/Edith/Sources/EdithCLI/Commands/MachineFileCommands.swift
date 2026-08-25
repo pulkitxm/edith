@@ -13,7 +13,8 @@ struct MachinesFilesCommand: AsyncParsableCommand {
             MachinesFilesMakeDirectoryCommand.self, MachinesFilesRemoveCommand.self,
             MachinesFilesSearchCommand.self, MachinesFilesInfoCommand.self,
             MachinesFilesDuplicateCommand.self, MachinesFilesUndoCommand.self,
-            MachinesFilesOpenCommand.self,
+            MachinesFilesOpenCommand.self, MachineFilesPreviewCommand.self,
+            MachineFilesLaunchCommand.self, MachineFilesRevealCommand.self,
         ],
         defaultSubcommand: MachineFilesListCommand.self)
 }
@@ -36,26 +37,25 @@ struct MachineFilesListCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let runner = try await MachineResolver.runner(machine)
-            let resolved = path == "." ? try await homeDirectory(runner) : path
-            let result = try await runner.run(
-                FileListing.command(path: resolved, showHidden: true), timeout: 45)
-            var entries = FileListing.parse(output: result.stdoutText, parent: resolved)
-            if entries.isEmpty, !result.succeeded {
+            let target = try await CLIEnvironment.remoteDirectoryTarget(machine)
+            let listing: RemoteDirectoryListing
+            do {
+                listing = try await RemoteDirectoryOperationExecution.list(
+                    path: path, showHidden: all, using: target.endpoint)
+            } catch {
                 throw CLIFailure(
-                    "could not read \(resolved) on \(runner.machine.name)",
-                    hint: result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines))
+                    "could not read \(path) on \(target.machine.name)",
+                    hint: error.localizedDescription)
             }
-            if !all { entries = entries.filter { !$0.isHidden } }
             guard !json else {
                 CLIOut.json(
                     .object([
-                        "path": .string(resolved),
-                        "entries": .array(entries.map(MachineReports.file)),
+                        "path": .string(listing.path),
+                        "entries": .array(listing.entries.map(MachineReports.file)),
                     ]))
                 return
             }
-            let rows = entries.map { entry in
+            let rows = listing.entries.map { entry in
                 [
                     entry.kind == .directory ? "d" : (entry.kind == .symlink ? "l" : "-"),
                     entry.mode,
@@ -65,12 +65,6 @@ struct MachineFilesListCommand: AsyncParsableCommand {
             }
             CLIOut.out(TextTable.render(headers: ["T", "MODE", "SIZE", "NAME"], rows: rows))
         }
-    }
-
-    private func homeDirectory(_ runner: RemoteRunner) async throws -> String {
-        let output = try await runner.text("printf %s \"$HOME\"", timeout: 15)
-        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "/" : trimmed
     }
 }
 
@@ -102,8 +96,12 @@ struct MachineFilesGetCommand: AsyncParsableCommand {
                 total: expected, label: (remote as NSString).lastPathComponent)
             progress.begin(meter.text(sent: 0))
             do {
-                try await runner.ssh.download(remotePath: remote, to: destination) { written in
-                    progress.update(meter.text(sent: written))
+                try await RemoteFileOperationExecution.download(
+                    remotePath: remote, to: destination
+                ) { remotePath, localURL in
+                    try await runner.ssh.download(remotePath: remotePath, to: localURL) { written in
+                        progress.update(meter.text(sent: written))
+                    }
                 }
                 progress.end()
             } catch {
@@ -123,6 +121,129 @@ struct MachineFilesGetCommand: AsyncParsableCommand {
                 return
             }
             CLIOut.out("\(destination.path)  \(ByteFormatter.string(Int64(size)))")
+        }
+    }
+}
+
+struct MachineFilesPreviewCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "preview", abstract: "Print a text preview of a remote file.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Machine name, ssh alias or id.")
+    var machine: String
+
+    @Argument(help: "Remote file path.")
+    var path: String
+
+    func run() async throws {
+        try await execute {
+            let runner = try await MachineResolver.runner(machine)
+            let result = try await runner.run(
+                RemoteFileOperationExecution.previewCommand(path: path), timeout: 45)
+            guard result.succeeded else {
+                throw CLIFailure(
+                    "could not preview \(path) on \(runner.machine.name)",
+                    hint: result.stderrText.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            let preview = RemoteFileOperationExecution.textPreview(result.stdout)
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "machine": .string(runner.machine.name),
+                        "path": .string(path),
+                        "text": .string(preview.text),
+                        "truncated": .bool(preview.truncated),
+                    ]))
+                return
+            }
+            CLIOut.raw(preview.text)
+            if !preview.text.hasSuffix("\n") { CLIOut.raw("\n") }
+            if preview.truncated { CLIOut.note("preview stopped after 400 KiB") }
+        }
+    }
+}
+
+enum MachineFilePresentationCLI {
+    static func present(
+        action: FilePresentationAction, machine query: String, path: String, json: Bool
+    ) async throws {
+        let runner = try await MachineResolver.runner(query)
+        let entry = RemoteFileEntry(
+            name: (path as NSString).lastPathComponent, path: path, kind: .file,
+            sizeBytes: await runner.ssh.remoteFileSize(path) ?? 0)
+        let localURL: URL
+        do {
+            localURL = try await RemoteFileOperationExecution.materialize(
+                entry, machineID: runner.machine.id, isLocal: false
+            ) { remotePath, destination in
+                try await runner.ssh.download(remotePath: remotePath, to: destination)
+            }
+        } catch {
+            throw CLIFailure("could not download \(path): \(error.localizedDescription)")
+        }
+        guard
+            RemoteFileOperationExecution.present(
+                [localURL], action: action, using: CLIEnvironment.presentURLs)
+        else {
+            throw CLIFailure.unavailable(
+                action == .open ? "macOS could not open \(localURL.path)" : "Finder is unavailable")
+        }
+        let actionName = action == .open ? "opened" : "revealed"
+        guard !json else {
+            CLIOut.json(
+                .object([
+                    "action": .string(actionName),
+                    "local": .string(localURL.path),
+                    "machine": .string(runner.machine.name),
+                    "remote": .string(path),
+                ]))
+            return
+        }
+        CLIOut.out("\(actionName) \(path) from \(runner.machine.name)")
+    }
+}
+
+struct MachineFilesLaunchCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "launch", abstract: "Open a remote file in its default Mac app.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Machine name, ssh alias or id.")
+    var machine: String
+
+    @Argument(help: "Remote file path.")
+    var path: String
+
+    func run() async throws {
+        try await execute {
+            try await MachineFilePresentationCLI.present(
+                action: .open, machine: machine, path: path, json: json)
+        }
+    }
+}
+
+struct MachineFilesRevealCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "reveal", abstract: "Reveal a downloaded remote file in Finder.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Machine name, ssh alias or id.")
+    var machine: String
+
+    @Argument(help: "Remote file path.")
+    var path: String
+
+    func run() async throws {
+        try await execute {
+            try await MachineFilePresentationCLI.present(
+                action: .reveal, machine: machine, path: path, json: json)
         }
     }
 }

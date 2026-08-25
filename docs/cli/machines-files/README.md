@@ -6,6 +6,11 @@ copy, move, rename, trash, search and duplicate operations the app's Files pane
 runs. Reach for it when you want to look at or rearrange something on another
 box without opening a shell there, and when you want the result in JSON.
 
+Directory listing and creation use the same EdithKit execution layer as the
+Files pane. The CLI and app therefore resolve home directories, parse entries,
+filter hidden files, create parents, and report transport failures from one
+operation contract.
+
 Everything here except `undo` and `open` is plain shell sent over the SSH
 connection Edith already holds, so nothing is installed on the machine and Edith
 does not have to be running. Those two are the exceptions, because the history
@@ -18,6 +23,9 @@ to Edith Files.
 | --- | --- |
 | `ed machines files ls` | List a remote directory. The default subcommand. Aliased `list`. |
 | `ed machines files get` | Download one file from the machine. |
+| `ed machines files preview` | Print the first 400 KiB of a remote text file. |
+| `ed machines files launch` | Download a remote file and open it in its default Mac app. |
+| `ed machines files reveal` | Download a remote file and reveal it in Finder. |
 | `ed machines files put` | Upload one file to the machine. |
 | `ed machines files cp` | Copy paths into a directory there. |
 | `ed machines files mv` | Move paths into a directory there. |
@@ -72,6 +80,9 @@ Files window opens where the shell in that terminal left off.
 
 - [`ed machines files ls`](./ls.md)
 - [`ed machines files get`](./get.md)
+- [`ed machines files preview`](./preview.md)
+- [`ed machines files launch`](./launch.md)
+- [`ed machines files reveal`](./reveal.md)
 - [`ed machines files put`](./put.md)
 - [`ed machines files cp`](./cp.md)
 - [`ed machines files mv`](./mv.md)

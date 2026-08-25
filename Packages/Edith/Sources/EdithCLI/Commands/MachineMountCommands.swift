@@ -173,3 +173,38 @@ struct MachinesMountsCommand: AsyncParsableCommand {
         }
     }
 }
+
+struct MachinesMountRevealCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "mount-reveal", abstract: "Reveal a mounted machine file system in Finder.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Machine name, ssh alias or id.")
+    var machine: String
+
+    func run() async throws {
+        try await execute {
+            let target = try MachineResolver.machine(machine)
+            guard let mount = await MachineMounts.current(for: target) else {
+                throw CLIFailure.unavailable("\(target.name) is not mounted")
+            }
+            let url = URL(fileURLWithPath: mount.mountPoint)
+            guard
+                RemoteFileOperationExecution.present(
+                    [url], action: .reveal, using: CLIEnvironment.presentURLs)
+            else { throw CLIFailure.unavailable("Finder is unavailable") }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "machine": .string(target.name),
+                        "mountPoint": .string(mount.mountPoint),
+                        "revealed": .bool(true),
+                    ]))
+                return
+            }
+            CLIOut.out("revealed \(mount.mountPoint)")
+        }
+    }
+}

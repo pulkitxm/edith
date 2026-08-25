@@ -674,26 +674,42 @@ public final class MachineSession {
     }
 
     public func listFiles(path: String) async -> Result<[RemoteFileEntry], Error> {
-        if isLocal {
-            return .success(Self.listLocalFiles(path: path))
-        }
-        guard let connection else { return .success([]) }
+        if isLocal { return .success(Self.listLocalFiles(path: path)) }
         do {
-            let result = try await connection.run(
-                FileListing.command(path: path, showHidden: true), timeout: 45)
-            let entries = FileListing.parse(output: result.stdoutText, parent: path)
-            if entries.isEmpty, !result.succeeded {
-                let message =
-                    result.stderrText.isEmpty
-                    ? "Could not read that folder." : result.stderrText
-                return .failure(
-                    SSHConnectionError.commandFailed(
-                        command: "list", status: result.status, stderr: message))
-            }
-            return .success(entries)
+            let listing = try await RemoteDirectoryOperationExecution.list(
+                path: path, showHidden: true, using: directoryEndpoint)
+            return .success(listing.entries)
         } catch {
             return .failure(error)
         }
+    }
+
+    public func createDirectory(path: String) async -> Result<RemoteDirectoryCreation, Error> {
+        if isLocal {
+            do {
+                try FileManager.default.createDirectory(
+                    at: URL(fileURLWithPath: path), withIntermediateDirectories: true)
+                return .success(RemoteDirectoryCreation(machineName: machine.name, path: path))
+            } catch {
+                return .failure(error)
+            }
+        }
+        do {
+            return .success(
+                try await RemoteDirectoryOperationExecution.create(
+                    path: path, using: directoryEndpoint))
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    private var directoryEndpoint: RemoteDirectoryEndpoint {
+        guard let connection else {
+            return RemoteDirectoryEndpoint(
+                machineName: machine.name, home: { "/" }, list: { _ in [] },
+                create: { _ in throw SSHConnectionError.transferFailed("Not connected.") })
+        }
+        return .remote(machine: machine, connection: connection)
     }
 
     public nonisolated static func searchLocalFiles(

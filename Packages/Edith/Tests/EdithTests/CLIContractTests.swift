@@ -660,6 +660,24 @@ enum JSONContract {
         JSONCase(
             "ed machines docker compose pull",
             ["machines", "docker", "compose", "pull", "nowhere-at-all", "web", "--json"]),
+        JSONCase(
+            "ed machines forwards open",
+            ["machines", "forwards", "open", "nowhere-at-all", "1", "--json"]),
+        JSONCase(
+            "ed machines files preview",
+            ["machines", "files", "preview", "nowhere-at-all", "/tmp/a", "--json"]),
+        JSONCase(
+            "ed machines files launch",
+            ["machines", "files", "launch", "nowhere-at-all", "/tmp/a", "--json"]),
+        JSONCase(
+            "ed machines files reveal",
+            ["machines", "files", "reveal", "nowhere-at-all", "/tmp/a", "--json"]),
+        JSONCase(
+            "ed machines docker open",
+            ["machines", "docker", "open", "nowhere-at-all", "api", "--json"]),
+        JSONCase(
+            "ed machines mount-reveal",
+            ["machines", "mount-reveal", "nowhere-at-all", "--json"]),
     ]
 }
 

@@ -44,6 +44,15 @@ import Testing
         #expect(mounts.first?.isReadOnly == true)
     }
 
+    @Test func aRecordedMountNeverMovesToAnotherMachineWithTheSameTarget() {
+        let other = Machine(name: "replacement", host: machine.host, username: machine.username)
+        let record = MachineMount(
+            machineID: machine.id, target: machine.sshTarget, remotePath: "/srv",
+            mountPoint: "/Users/pulkit/Edith/tuf")
+
+        #expect(MachineMounts.mount(for: other, in: [record]) == nil)
+    }
+
     @Test func aRecordWhoseMountHasGoneIsDropped() {
         let record = MachineMount(
             machineID: machine.id, target: machine.sshTarget, remotePath: "/srv",

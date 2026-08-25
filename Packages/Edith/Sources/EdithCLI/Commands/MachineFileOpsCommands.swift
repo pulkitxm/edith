@@ -170,9 +170,25 @@ struct MachinesFilesMakeDirectoryCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            try await FileOps.apply(
-                FileOperations.makeDirectoryCommand(path: path), machine: machine,
-                describing: "made \(path)", json: json, fields: ["path": .string(path)])
+            let target = try await CLIEnvironment.remoteDirectoryTarget(machine)
+            let creation: RemoteDirectoryCreation
+            do {
+                creation = try await RemoteDirectoryOperationExecution.create(
+                    path: path, using: target.endpoint)
+            } catch {
+                throw CLIFailure(
+                    "made \(path) failed on \(target.machine.name): \(error.localizedDescription)")
+            }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "done": .bool(true),
+                        "machine": .string(creation.machineName),
+                        "path": .string(creation.path),
+                    ]))
+                return
+            }
+            CLIOut.out("made \(creation.path)")
         }
     }
 }

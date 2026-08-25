@@ -210,6 +210,24 @@ import Testing
         #expect(result.candidates.contains("logs"))
     }
 
+    @Test func remotePresentationVerbsComplete() {
+        let files = Self.plan(["ed", "machines", "files", ""], 3)
+        #expect(files.candidates.contains("preview"))
+        #expect(files.candidates.contains("launch"))
+        #expect(files.candidates.contains("reveal"))
+        let forwards = Self.plan(["ed", "machines", "forwards", "op"], 3)
+        #expect(forwards.candidates == ["open"])
+    }
+
+    @Test func remoteDirectoryLeavesCompleteMachinesAndFlags() {
+        let listMachine = Self.plan(["ed", "machines", "files", "ls", "t"], 4)
+        let createMachine = Self.plan(["ed", "machines", "files", "mkdir", "t"], 4)
+        let listFlags = Self.plan(["ed", "machines", "files", "ls", "tuf", "--a"], 5)
+        #expect(listMachine.candidates == ["tuf"])
+        #expect(createMachine.candidates == ["tuf"])
+        #expect(listFlags.candidates == ["--all"])
+    }
+
     @Test func flagsCompleteWhenTheWordStartsWithADash() {
         let result = Self.plan(["ed", "machines", "ls", "--j"], 3)
         #expect(result.candidates == ["--json"])
@@ -790,6 +808,18 @@ import Testing
             #expect(script.contains("edith"))
             #expect(script.contains("__complete"))
         }
+    }
+
+    @Test func remoteDirectoryCompletionWorksOutsideARepository() throws {
+        let outside = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let result = try CLIProcessProbe.run(
+            ["__complete", "--index", "3", "--", "ed", "machines", "files", ""],
+            currentDirectory: outside)
+
+        #expect(result.code == 0)
+        #expect(Set(result.stdoutLines).isSuperset(of: ["ls", "mkdir"]))
+        #expect(result.stderr.isEmpty)
     }
 }
 

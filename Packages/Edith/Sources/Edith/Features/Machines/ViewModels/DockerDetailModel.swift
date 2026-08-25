@@ -247,8 +247,12 @@ struct DockerContainerDetail: View {
                 Spacer(minLength: 0)
                 ForEach(live.ports.prefix(3), id: \.self) { port in
                     if let url = port.browserURL {
-                        Button(port.displayName) { NSWorkspace.shared.open(url) }
-                            .pointerCursor()
+                        Button(port.displayName) {
+                            RemoteFileOperationExecution.present([url], action: .open) { urls, _ in
+                                NSWorkspace.shared.open(urls[0])
+                            }
+                        }
+                        .pointerCursor()
                     }
                 }
                 Button("Remove", role: .destructive, action: onRemove)

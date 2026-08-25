@@ -48,7 +48,7 @@ public struct DockerPortMapping: Equatable, Hashable, Sendable {
 
     public var browserURL: URL? {
         guard let hostPort, proto == "tcp" else { return nil }
-        return URL(string: "http://localhost:\(hostPort)")
+        return LocalBrowserOperationExecution.url(port: hostPort)
     }
 }
 

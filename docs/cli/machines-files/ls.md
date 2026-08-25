@@ -68,6 +68,10 @@ second timeout, falling back to `ls -lAn --time-style=+%s` on a machine whose
 directories first, then by name case-insensitively, which is the order the app's
 pane uses.
 
+The Files pane and this command resolve the directory and decode its entries
+through the same EdithKit operation. The pane adds navigation state and the CLI
+adds the table or JSON rendering, but neither owns another listing path.
+
 `kind` is `directory`, `file`, `symlink` or `other`. `mode` is whatever the
 machine printed: `755` from the `find` path, `drwxr-xr-x` from the fallback.
 `modified` is ISO 8601, or `null` when the fallback ran and the timestamps were

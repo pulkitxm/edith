@@ -66,6 +66,7 @@ the process state between metric records.
 | `ed machines forwards rm` | Forgets one saved forward. |
 | `ed machines forwards on` | Opens a saved forward on the shared connection. |
 | `ed machines forwards off` | Closes a saved forward. |
+| `ed machines forwards open` | Opens a forwarded local port in the browser. |
 | `ed machines snippets ls` | Lists the snippets a machine offers, its own and the shared ones. |
 | `ed machines snippets add` | Saves a command against one machine, or against every machine with `--shared`. |
 | `ed machines snippets rm` | Forgets one snippet. |
@@ -76,6 +77,7 @@ the process state between metric records.
 | `ed machines mount` | Mounts a machine's whole file system on this Mac, so Finder and every local tool can read it. Run again to put a dead mount back. |
 | `ed machines unmount` | Unmounts it again and tidies the folder away. Aliased `umount`. |
 | `ed machines mounts` | Lists every machine file system Edith mounted or can see, and whether each one still answers. |
+| `ed machines mount-reveal` | Reveals a mounted machine file system in Finder. |
 | `ed machines terminal broadcast` | Sends one line to every terminal tab already open for one machine in the Edith app. |
 
 Ten more subcommands live under `ed machines` and are documented on seven
@@ -149,6 +151,7 @@ reads and writes.
 - [`ed machines forwards rm`](./forwards-rm.md)
 - [`ed machines forwards on`](./forwards-on.md)
 - [`ed machines forwards off`](./forwards-off.md)
+- [`ed machines forwards open`](./forwards-open.md)
 - [`ed machines snippets ls`](./snippets-ls.md)
 - [`ed machines snippets add`](./snippets-add.md)
 - [`ed machines snippets rm`](./snippets-rm.md)
@@ -159,6 +162,9 @@ reads and writes.
 - [`ed machines mount`](./mount.md)
 - [`ed machines unmount`](./unmount.md)
 - [`ed machines mounts`](./mounts.md)
+
+`ed machines mount-reveal <machine> [--json]` uses the same Finder reveal
+operation as the mounted-disk button. It exits 4 when the machine is not mounted.
 
 ## Exit codes
 

@@ -33,7 +33,7 @@ struct MachinesCommand: AsyncParsableCommand {
             MachinesConnectCommand.self,
             MachinesDisconnectCommand.self,
             MachinesMountCommand.self, MachinesUnmountCommand.self,
-            MachinesMountsCommand.self,
+            MachinesMountsCommand.self, MachinesMountRevealCommand.self,
         ],
         defaultSubcommand: MachinesListCommand.self)
 }

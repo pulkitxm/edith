@@ -299,7 +299,7 @@ struct MachinesForwardsCommand: AsyncParsableCommand {
         subcommands: [
             MachinesForwardsListCommand.self, MachinesForwardsAddCommand.self,
             MachinesForwardsRemoveCommand.self, MachinesForwardsToggleCommand.self,
-            MachinesForwardsOffCommand.self,
+            MachinesForwardsOffCommand.self, MachinesForwardsOpenCommand.self,
         ],
         defaultSubcommand: MachinesForwardsListCommand.self,
         aliases: ["forward"])
@@ -324,6 +324,18 @@ enum ForwardBridge {
             "remotePort": .int(forward.remotePort),
             "spec": .string(forward.forwardSpec),
         ])
+    }
+
+    static func selected(_ query: String, index: Int) throws -> (
+        machine: Machine, forward: PortForward
+    ) {
+        let found = try forwards(query)
+        guard index >= 1, index <= found.all.count else {
+            throw CLIFailure.notFound(
+                "there is no forward \(index) on \(found.machine.name)",
+                hint: "it has \(found.all.count), numbered from 1")
+        }
+        return (found.machine, found.all[index - 1])
     }
 }
 
@@ -647,6 +659,46 @@ struct MachinesForwardsOffCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await ForwardBridge.set(false, machine: machine, index: index, json: json)
+    }
+}
+
+struct MachinesForwardsOpenCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "open", abstract: "Open a forwarded service in the browser.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Machine name, ssh alias or id.")
+    var machine: String
+
+    @Argument(help: "The forward number, counting from 1.")
+    var index: Int
+
+    func run() async throws {
+        try await execute {
+            let found = try ForwardBridge.selected(machine, index: index)
+            guard let url = PortForwardBrowserOperationExecution.url(forward: found.forward) else {
+                throw CLIFailure("could not make a browser URL for forward \(index)")
+            }
+            guard
+                RemoteFileOperationExecution.present(
+                    [url], action: .open, using: CLIEnvironment.presentURLs)
+            else {
+                throw CLIFailure.unavailable("macOS could not open \(url.absoluteString)")
+            }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "index": .int(index),
+                        "machine": .string(found.machine.name),
+                        "opened": .bool(true),
+                        "url": .string(url.absoluteString),
+                    ]))
+                return
+            }
+            CLIOut.out("opened \(url.absoluteString)")
+        }
     }
 }
 
