@@ -32,6 +32,12 @@ public enum UserOperationCatalog {
         + MachineConnectionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + DockerDetailOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + SavedSnippetOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + MachineForwardOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -444,6 +450,23 @@ private extension MachineConnectionOperation {
         case .disconnect:
             userInterface("Machines", "close the shared connection", ["box"])
         }
+    }
+}
+
+private extension DockerDetailOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .inspect:
+            userInterface("Docker details", "inspect a container", ["box", "api"])
+        case .top:
+            userInterface("Docker details", "read container processes", ["box", "api"])
+        }
+    }
+}
+
+private extension SavedSnippetOperation {
+    var interfaceExposure: UserOperationExposure {
+        userInterface("Machine tools", "run a saved snippet", ["box", "1"])
     }
 }
 
