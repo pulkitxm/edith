@@ -20,6 +20,7 @@ to the `herdr` CLI, not to the Edith window.
 | --- | --- |
 | `ed herdr` | Runs `ls`, which is the default subcommand |
 | `ed herdr ls` | Live sessions on this Mac and every SSH machine |
+| `ed herdr new` | Create a terminal on this Mac or an SSH machine |
 | `ed herdr command <pane>` | The attach line for one pane |
 | `ed herdr attach <pane>` | Attach this terminal to one pane |
 
@@ -28,6 +29,7 @@ to the `herdr` CLI, not to the Edith window.
 ## Commands
 
 - [`ed herdr ls`](./ls.md)
+- [`ed herdr new`](./new.md)
 - [`ed herdr command`](./command.md)
 - [`ed herdr attach`](./attach.md)
 
@@ -38,8 +40,9 @@ to the `herdr` CLI, not to the Edith window.
 | 0 | The listing printed, including when Herdr is missing or no panes are live |
 | 2 | The command line was wrong: an unknown flag, or `command` with no pane |
 | 3 | `--machine` named no configured machine, or `command` named no pane |
+| 4 | `new` could not reach the host, or Herdr refused to create the tab |
 
-Nothing in this group exits 1 or 4. A down SSH machine is an error string on
+Nothing else in this group exits 1 or 4. A down SSH machine is an error string on
 that host and `reachable: false`, not an unavailable CLI. Plain output prints
 the host error instead of describing the tool as missing.
 

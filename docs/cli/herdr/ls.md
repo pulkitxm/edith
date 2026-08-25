@@ -19,9 +19,15 @@ exits 0. `list` is an alias for `ls`.
 ## `--json` shape
 
 A top-level object with `hosts` and `agents`. Host keys are `error`, `herdr`,
-`id`, `local` and `name`. Agent keys are `command`, `cwd`, `id`, `kind`,
-`local`, `machine`, `machineName`, `pane`, `session`, `status`, `title` and
-`workspace`. Object keys are sorted. `error` is `null` when the host answered.
+`id`, `local` and `name`. Agent keys are `category`, `command`, `cwd`, `id`,
+`kind`, `local`, `machine`, `machineName`, `pane`, `process`, `session`,
+`status`, `title` and `workspace`. Object keys are sorted. `error` is `null`
+when the host answered.
+
+`agents` lists every live pane, not only the coding agents. `category` is
+`agent` or `terminal`. A terminal reports `Terminal` as its `kind` and the
+foreground process, such as `bun` or `zsh`, as `process`. Agents report an
+empty `process` unless Herdr knows one.
 
 ```json
 {
@@ -53,7 +59,8 @@ A top-level object with `hosts` and `agents`. Host keys are `error`, `herdr`,
 }
 ```
 
-`status` is one of `blocked`, `working`, `unknown`, `done`, `idle`. `kind` is
+`status` is one of `blocked`, `working`, `unknown`, `done`, `idle`, and a plain
+terminal is usually `unknown`. `kind` is
 the label the Herdr page uses: Claude Code, Codex, OpenCode, Cursor Agent,
 Copilot CLI, or the raw Herdr name if it is none of those.
 
@@ -65,6 +72,7 @@ exits 0.
 
 ## Where to go next
 
+- [`ed herdr new`](./new.md), create a terminal on a machine
 - [`ed herdr command`](./command.md), the attach line for one pane
 - [`ed herdr`](./README.md), the rest of this group
 - [All `ed` commands](../README.md)

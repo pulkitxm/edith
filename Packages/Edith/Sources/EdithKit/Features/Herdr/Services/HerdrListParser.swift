@@ -191,7 +191,7 @@ public enum HerdrListParser {
         for record: HerdrPaneRecord, previous: HerdrAgent? = nil
     ) -> HerdrPaneCategory {
         if record.looksLikeAgent { return .agent }
-        if let previous, previous.category == .agent, record.statusRaw == nil { return .agent }
+        if let previous, previous.category == .agent { return .agent }
         return .terminal
     }
 

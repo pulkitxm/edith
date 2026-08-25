@@ -22,8 +22,8 @@ import Testing
         }
         let agents = object?["agents"] as? [[String: Any]] ?? []
         let expected: Set<String> = [
-            "command", "cwd", "id", "kind", "local", "machine", "machineName", "pane",
-            "session", "status", "title", "workspace",
+            "category", "command", "cwd", "id", "kind", "local", "machine", "machineName",
+            "pane", "process", "session", "status", "title", "workspace",
         ]
         for agent in agents {
             #expect(Set(agent.keys) == expected)
