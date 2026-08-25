@@ -63,6 +63,13 @@ final class ShelfStore {
             })
     }
 
+    func drainIndexRefreshes() async {
+        while let refresh = indexRefresh {
+            await refresh.value
+            if indexRefresh == refresh { return }
+        }
+    }
+
     private func enqueueIndexRefresh(_ operation: @escaping @Sendable () -> [ShelfItem]?) {
         let previous = indexRefresh
         indexRefresh = Task { [weak self] in

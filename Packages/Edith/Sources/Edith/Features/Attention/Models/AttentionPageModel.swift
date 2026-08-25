@@ -104,6 +104,10 @@ final class AttentionPageModel {
         }
     }
 
+    func waitForReload() async {
+        await reloadTask?.value
+    }
+
     private func publish(_ state: AttentionPageState, preserveSettings: Bool, generation: Int) {
         guard !Task.isCancelled, reloadGeneration == generation else { return }
         reloadTask = nil

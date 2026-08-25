@@ -55,6 +55,10 @@ public final class DashboardRefreshBridge {
         }
     }
 
+    public func awaitPendingLogLoad() async {
+        await reloadTask?.value
+    }
+
     private func beginTail() {
         updating = true
         guard logVisible else { return }
