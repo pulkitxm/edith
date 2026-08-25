@@ -141,7 +141,12 @@ struct GuideCommand: AsyncParsableCommand {
                         "--json does not take a guide topic",
                         hint: "run `ed guide --json` for the command catalog")
                 }
-                CLIOut.raw(EdRoot._dumpHelp())
+                let source = Data(EdRoot._dumpHelp().utf8)
+                let catalog = try JSONSerialization.jsonObject(with: source)
+                let encoded = try JSONSerialization.data(
+                    withJSONObject: catalog,
+                    options: [.sortedKeys])
+                CLIOut.out(String(decoding: encoded, as: UTF8.self))
                 return
             }
             switch topic?.lowercased() {
