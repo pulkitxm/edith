@@ -21,12 +21,14 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
     private var lastBattery: LidAwakeBatterySnapshot?
     private var terminateObserver: NSObjectProtocol?
     private var stopped = false
+    private var refreshGeneration = 0
+    private var initialRefreshPending = true
 
     init() {
         session = LidAwakeState.session()
         let savedDeadline = LidAwakeState.sessionDeadline()
         privilegedClient.register()
-        active = Self.readSystemState()
+        active = LidAwakeState.isActive()
         intent = active
         if active {
             displayWakeKeeper.prevent()
@@ -51,9 +53,10 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.shutdown()
+                self?.stopEngine(force: false, waitForRestore: true)
             }
         }
+        refreshFromSystem()
     }
 
     func shutdown() {
@@ -128,7 +131,20 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
 
     func refreshFromSystem() {
         guard !applying, !stopped else { return }
-        let system = Self.readSystemState()
+        refreshGeneration += 1
+        let generation = refreshGeneration
+        Task { [weak self] in
+            let system = await Self.readSystemState()
+            guard let self, !self.stopped, !self.applying,
+                generation == self.refreshGeneration
+            else { return }
+            self.applySystemSnapshot(system)
+        }
+    }
+
+    private func applySystemSnapshot(_ system: Bool) {
+        let initial = initialRefreshPending
+        initialRefreshPending = false
         if batterySuspended {
             active = false
         } else if system != active {
@@ -138,6 +154,9 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
                 displayWakeKeeper.allow()
                 autoOffTimer.cancel()
                 lidSession.cancel()
+            } else if initial {
+                displayWakeKeeper.prevent()
+                configureSession(session, deadline: LidAwakeState.sessionDeadline())
             }
             publishState()
         }
@@ -247,6 +266,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
         guard !applying else { return }
         applying = true
         lastError = nil
+        refreshGeneration += 1
         Task { @MainActor [weak self] in
             guard let self else { return }
             let outcome = await self.apply(systemActive: systemActive)
@@ -338,7 +358,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
         }
     }
 
-    private func stopEngine(force: Bool) {
+    private func stopEngine(force: Bool, waitForRestore: Bool = false) {
         guard !stopped else { return }
         stopped = true
         if let terminateObserver {
@@ -352,23 +372,43 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
         lidSession.cancel()
         let shouldRestore = active || batterySuspended || intent
         if shouldRestore && (force || LidAwakeState.restoresOnQuit()) {
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                let outcome = await self.apply(systemActive: false)
-                if case .applied = outcome {
-                    self.active = false
-                    self.intent = false
-                    self.batterySuspended = false
-                    LidAwakeState.setActive(false)
-                    IPC.post(IPC.Name.lidAwakeChanged)
+            if waitForRestore {
+                restoreBeforeTermination()
+            } else {
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    let outcome = await self.apply(systemActive: false)
+                    if case .applied = outcome { self.markRestored() }
                 }
             }
         } else {
-            active = false
-            intent = false
-            batterySuspended = false
-            LidAwakeState.setActive(false)
-            IPC.post(IPC.Name.lidAwakeChanged)
+            markRestored()
+        }
+    }
+
+    private func markRestored() {
+        active = false
+        intent = false
+        batterySuspended = false
+        LidAwakeState.setActive(false)
+        IPC.post(IPC.Name.lidAwakeChanged)
+    }
+
+    private final class TerminationRestoreState: @unchecked Sendable {
+        var finished = false
+    }
+
+    private func restoreBeforeTermination() {
+        let state = TerminationRestoreState()
+        Task { @MainActor [weak self] in
+            defer { state.finished = true }
+            guard let self else { return }
+            let outcome = await self.apply(systemActive: false)
+            if case .applied = outcome { self.markRestored() }
+        }
+        let deadline = Date().addingTimeInterval(1.5)
+        while !state.finished, Date() < deadline {
+            _ = RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.05))
         }
     }
 
@@ -378,21 +418,17 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
         IPC.post(IPC.Name.lidAwakeChanged)
     }
 
-    private nonisolated static func readSystemState() -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: LidAwakeCommand.toolPath)
-        process.arguments = ["-g"]
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-        } catch {
+    private nonisolated static func readSystemState() async -> Bool {
+        let request = CLICommandRequest(
+            executableURL: URL(fileURLWithPath: LidAwakeCommand.toolPath),
+            arguments: ["-g"],
+            environment: [:],
+            timeout: 10,
+            maximumOutputBytes: 1 << 20,
+            discardsStandardError: true)
+        guard let result = try? await CLICommandRunner.run(request, onLine: { _ in }) else {
             return false
         }
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return LidAwakeCommand.sleepDisabled(
-            inPowerSettings: String(data: data, encoding: .utf8) ?? "")
+        return LidAwakeCommand.sleepDisabled(inPowerSettings: result.output)
     }
 }

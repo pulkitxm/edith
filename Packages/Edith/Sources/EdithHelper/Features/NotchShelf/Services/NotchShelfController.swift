@@ -72,6 +72,8 @@ final class NotchShelfController: FeatureModule {
     private var dragMonitor: Any?
     private var moveMonitorGlobal: Any?
     private var moveMonitorLocal: Any?
+    private var interactionRects: [CGDirectDisplayID: CGRect] = [:]
+    private var pointerInsideInterest = false
     private var gateDisplay: CGDirectDisplayID?
     private var gate = NotchHoverGate(
         openDwell: NotchShelfController.openDwell, closeGrace: NotchShelfController.closeGrace)
@@ -280,7 +282,16 @@ final class NotchShelfController: FeatureModule {
             panels.removeValue(forKey: id)?.orderOut(nil)
             collapsedSizes.removeValue(forKey: id)
         }
+        refreshInteractionRects()
         updateFullScreenVisibility()
+    }
+
+    private func refreshInteractionRects() {
+        var rects: [CGDirectDisplayID: CGRect] = [:]
+        for (id, panel) in panels {
+            rects[id] = panel.frame.insetBy(dx: -40, dy: -40)
+        }
+        interactionRects = rects
     }
 
     private static let managedDisplaySpaces: () -> [[String: Any]]? = {
@@ -542,8 +553,11 @@ final class NotchShelfController: FeatureModule {
     }
 
     private func handleMouseMoved() {
-        refreshMouseTransparency()
         let point = NSEvent.mouseLocation
+        let inside = interactionRects.values.contains { $0.contains(point) }
+        if !inside, !pointerInsideInterest { return }
+        pointerInsideInterest = inside
+        refreshMouseTransparency()
         if let expandedDisplay, let frames = frames(for: expandedDisplay) {
             applyProximity(
                 NotchGeometry.proximity(
@@ -587,11 +601,11 @@ final class NotchShelfController: FeatureModule {
         guard moveMonitorGlobal == nil else { return }
         moveMonitorGlobal = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) {
             [weak self] _ in
-            Task { @MainActor in self?.handleMouseMoved() }
+            MainActor.assumeIsolated { self?.handleMouseMoved() }
         }
         moveMonitorLocal = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved]) {
             [weak self] event in
-            Task { @MainActor in self?.handleMouseMoved() }
+            MainActor.assumeIsolated { self?.handleMouseMoved() }
             return event
         }
     }
@@ -644,7 +658,6 @@ final class NotchShelfController: FeatureModule {
 
     private func purgeExpired() {
         store.purgeExpired(keep: keepDuration)
-        items = store.items
     }
 
     private func fireHaptic() {

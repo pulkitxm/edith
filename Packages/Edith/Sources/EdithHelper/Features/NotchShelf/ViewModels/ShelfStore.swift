@@ -42,11 +42,16 @@ final class ShelfStore {
     private var incomingDirectories: [UUID: ShelfIncomingDirectory] = [:]
     private var retainedActionSelection: ShelfPinnedSelection?
     private var pendingPromiseAdoptions: [PendingPromiseAdoption] = []
+    private var indexRefresh: Task<Void, Never>?
+    private var mutationGeneration = 0
     var onExternalChange: (@MainActor () -> Void)?
 
     init(root: URL = ShelfIndex.root) {
         self.root = root
-        _ = reload()
+        let indexRoot = root
+        enqueueIndexRefresh {
+            (try? ShelfMutationExecution.pinnedSelection(root: indexRoot))?.items
+        }
         changeObserver = IPC.observe(
             IPC.Name.shelfChanged,
             info: { [weak self] info in
@@ -56,6 +61,26 @@ final class ShelfStore {
                     if self.reload() { self.onExternalChange?() }
                 }
             })
+    }
+
+    private func enqueueIndexRefresh(_ operation: @escaping @Sendable () -> [ShelfItem]?) {
+        let previous = indexRefresh
+        indexRefresh = Task { [weak self] in
+            await previous?.value
+            guard let self, self.retainedActionSelection == nil else { return }
+            let generation = self.mutationGeneration
+            let refreshed = await Task.detached(priority: .utility) { operation() }.value
+            guard let refreshed, self.retainedActionSelection == nil,
+                generation == self.mutationGeneration
+            else { return }
+            self.items = refreshed
+            self.onExternalChange?()
+        }
+    }
+
+    private func publishMutation(_ newItems: [ShelfItem]) {
+        mutationGeneration += 1
+        items = newItems
     }
 
     deinit {
@@ -70,7 +95,7 @@ final class ShelfStore {
         guard let selection = try? ShelfMutationExecution.pinnedSelection(root: root) else {
             return false
         }
-        items = selection.items
+        publishMutation(selection.items)
         return true
     }
 
@@ -82,7 +107,7 @@ final class ShelfStore {
         } catch {
             throw ShelfActionSelectionError.unreadable
         }
-        items = selection.items
+        publishMutation(selection.items)
         let members = items.filter { itemIDs.contains($0.id) }
         guard members.count == itemIDs.count, !members.isEmpty else {
             throw ShelfActionSelectionError.unavailable
@@ -130,7 +155,7 @@ final class ShelfStore {
             let result = try? ShelfMutationExecution.addCopy(
                 of: source, root: root, sender: Self.senderID)
         else { return nil }
-        items = result.items
+        publishMutation(result.items)
         return result.item
     }
 
@@ -141,7 +166,7 @@ final class ShelfStore {
             let result = try? ShelfMutationExecution.addText(
                 text, root: root, sender: Self.senderID)
         else { return nil }
-        items = result.items
+        publishMutation(result.items)
         return result.item
     }
 
@@ -153,7 +178,7 @@ final class ShelfStore {
             let result = try ShelfMutationExecution.adopt(
                 fileAt: url, root: root, id: id, incoming: incoming, sender: Self.senderID)
             discardPromiseDestination(id: id)
-            items = result.items
+            publishMutation(result.items)
             return result.item
         } catch {
             return nil
@@ -207,7 +232,7 @@ final class ShelfStore {
             let result = try? ShelfMutationExecution.updatePositions(
                 positions, root: root, sender: Self.senderID)
         else { return }
-        items = result.items
+        publishMutation(result.items)
     }
 
     func setPosition(_ position: CGPoint, for item: ShelfItem) {
@@ -222,15 +247,17 @@ final class ShelfStore {
         guard retainedActionSelection == nil else { throw ShelfActionSelectionError.busy }
         let result = try ShelfMutationExecution.remove(
             ids: Set(members.map(\.id)), root: root, sender: Self.senderID)
-        items = result.items
+        publishMutation(result.items)
     }
 
     func purgeExpired(keep: ShelfKeepDuration, now: Date = Date()) {
         guard retainedActionSelection == nil else { return }
-        guard
+        let indexRoot = root
+        let sender = Self.senderID
+        enqueueIndexRefresh {
             let result = try? ShelfMutationExecution.purgeExpired(
-                keep: keep, now: now, root: root, sender: Self.senderID)
-        else { return }
-        items = result.items
+                keep: keep, now: now, root: indexRoot, sender: sender)
+            return result?.items
+        }
     }
 }

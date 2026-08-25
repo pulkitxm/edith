@@ -18,12 +18,24 @@ final class PresenterDetector: FeatureModule {
         "com.apple.QuickTimePlayerX",
     ]
 
+    private struct ScanOutcome: Sendable {
+        let windowReason: String?
+        let recordingHit: Bool
+    }
+
+    private final class ScanContext: @unchecked Sendable {
+        var titlesAvailable: Bool?
+        var titlesCheckedAt: TimeInterval = 0
+    }
+
     private var gateApps: Set<String> = []
     private var launchObserver: NSObjectProtocol?
     private var terminateObserver: NSObjectProtocol?
     private var screenParamsObserver: NSObjectProtocol?
     private var windowScanTimer: DispatchSourceTimer?
     private var sessionTimer: Timer?
+    private let scanQueue = DispatchQueue(label: "presenterDetector.scan", qos: .utility)
+    private let scanContext = ScanContext()
 
     private var debouncer = PresenterDebouncer()
     private var currentReason: String?
@@ -126,10 +138,12 @@ final class PresenterDetector: FeatureModule {
             return
         }
         guard windowScanTimer == nil else { return }
-        let timer = DispatchSource.makeTimerSource(queue: .main)
+        let timer = DispatchSource.makeTimerSource(queue: scanQueue)
         timer.schedule(deadline: .now(), repeating: 3, leeway: .seconds(1))
+        let context = scanContext
         timer.setEventHandler { [weak self] in
-            MainActor.assumeIsolated { self?.scanWindows() }
+            let outcome = PresenterDetector.scanOutcome(context: context)
+            Task { @MainActor in self?.applyScan(outcome) }
         }
         timer.resume()
         windowScanTimer = timer
@@ -156,17 +170,31 @@ final class PresenterDetector: FeatureModule {
         tickSession()
     }
 
-    private func scanWindows() {
-        let titlesAvailable = CGPreflightScreenCaptureAccess()
-        windowReason = PresenterRules.firstMatch(
-            in: titlesAvailable ? Self.currentWindows() : [], titlesAvailable: titlesAvailable)
-        windowHit = windowReason != nil
-
+    private nonisolated static func scanOutcome(context: ScanContext) -> ScanOutcome {
+        let now = ProcessInfo.processInfo.systemUptime
+        let titlesAvailable: Bool
+        if let cached = context.titlesAvailable, now - context.titlesCheckedAt < 30 {
+            titlesAvailable = cached
+        } else {
+            titlesAvailable = CGPreflightScreenCaptureAccess()
+            context.titlesAvailable = titlesAvailable
+            context.titlesCheckedAt = now
+        }
+        let windowReason = PresenterRules.firstMatch(
+            in: titlesAvailable ? currentWindows() : [], titlesAvailable: titlesAvailable)
         let detectRecording =
             SharedDefaults.store.object(forKey: AppStorageKeys.Presenter.detectRecording) as? Bool
             ?? true
-        recordingHit = detectRecording && Self.isProcessRunning(named: "screencapture")
+        return ScanOutcome(
+            windowReason: windowReason,
+            recordingHit: detectRecording && isProcessRunning(named: "screencapture"))
+    }
 
+    private func applyScan(_ outcome: ScanOutcome) {
+        guard windowScanTimer != nil else { return }
+        windowReason = outcome.windowReason
+        windowHit = outcome.windowReason != nil
+        recordingHit = outcome.recordingHit
         evaluate()
     }
 
@@ -221,7 +249,7 @@ final class PresenterDetector: FeatureModule {
         IPC.post(IPC.Name.presenterAutoActiveChanged)
     }
 
-    private static func currentWindows() -> [PresenterWindowInfo] {
+    private nonisolated static func currentWindows() -> [PresenterWindowInfo] {
         guard
             let list = CGWindowListCopyWindowInfo(
                 [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
@@ -236,7 +264,7 @@ final class PresenterDetector: FeatureModule {
         }
     }
 
-    private static func isProcessRunning(named target: String) -> Bool {
+    private nonisolated static func isProcessRunning(named target: String) -> Bool {
         var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0]
         var size = 0
         guard sysctl(&mib, 4, nil, &size, nil, 0) == 0, size > 0 else { return false }

@@ -6,6 +6,16 @@ import Foundation
 
 @MainActor
 final class AttentionTrackingService {
+    private struct HeartbeatSnapshot: Sendable {
+        let startedAt: Date
+        let duration: TimeInterval
+        let presence: AttentionPresence
+        let appName: String?
+        let bundleID: String?
+        let pid: pid_t
+        let wantsWindowTitle: Bool
+    }
+
     private let repository: AttentionRepository
     private var settings: AttentionSettings
     private var timer: Timer?
@@ -14,6 +24,7 @@ final class AttentionTrackingService {
     private var locked = false
     private var server: AttentionIngestionServer?
     private var lastBackupAt = Date.distantPast
+    private var appendTask: Task<Void, Never>?
 
     init(repository: AttentionRepository = AttentionRepository()) {
         self.repository = repository
@@ -33,6 +44,7 @@ final class AttentionTrackingService {
         let center = NSWorkspace.shared.notificationCenter
         observers.forEach(center.removeObserver)
         observers.removeAll()
+        appendTask?.cancel()
     }
 
     func sync(_ nextSettings: AttentionSettings) {
@@ -120,17 +132,25 @@ final class AttentionTrackingService {
             .combinedSessionState, eventType: CGEventType(rawValue: UInt32.max)!)
         let presence: AttentionPresence =
             locked ? .locked : idleSeconds >= settings.idleThreshold ? .idle : .active
-        let title =
-            settings.windowTitlesEnabled ? focusedWindowTitle(pid: app.processIdentifier) : nil
-        let event = AttentionEvent(
-            startedAt: lastHeartbeatAt, duration: duration, source: .application,
-            presence: presence, appName: app.localizedName, bundleID: app.bundleIdentifier,
-            windowTitle: title)
-        try? repository.append(event)
+        let snapshot = HeartbeatSnapshot(
+            startedAt: lastHeartbeatAt, duration: duration, presence: presence,
+            appName: app.localizedName, bundleID: app.bundleIdentifier,
+            pid: app.processIdentifier, wantsWindowTitle: settings.windowTitlesEnabled)
         lastHeartbeatAt = now
+        let repository = repository
+        let previous = appendTask
+        appendTask = Task.detached(priority: .utility) {
+            await previous?.value
+            let title = snapshot.wantsWindowTitle ? Self.focusedWindowTitle(pid: snapshot.pid) : nil
+            let event = AttentionEvent(
+                startedAt: snapshot.startedAt, duration: snapshot.duration, source: .application,
+                presence: snapshot.presence, appName: snapshot.appName,
+                bundleID: snapshot.bundleID, windowTitle: title)
+            try? repository.append(event)
+        }
     }
 
-    private func focusedWindowTitle(pid: pid_t) -> String? {
+    private nonisolated static func focusedWindowTitle(pid: pid_t) -> String? {
         guard AXIsProcessTrusted() else { return nil }
         let application = AXUIElementCreateApplication(pid)
         var windowValue: CFTypeRef?
