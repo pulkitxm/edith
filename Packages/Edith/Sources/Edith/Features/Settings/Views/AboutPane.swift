@@ -91,8 +91,9 @@ struct AboutPane: View {
         .padding(.horizontal, UIScale.pt(32))
         .task {
             guard automaticActionsEnabled else { return }
-            contributors = Contributors.cached()
-            contributors = await Contributors.load()
+            let cacheSnapshot = Contributors.cacheSnapshot()
+            contributors = cacheSnapshot.people
+            contributors = await Contributors.load(cacheSnapshot: cacheSnapshot)
         }
     }
 

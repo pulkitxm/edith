@@ -46,6 +46,16 @@ public struct Contributor: Codable, Equatable, Sendable, Identifiable {
 }
 
 public enum Contributors {
+    public struct CacheSnapshot: Sendable {
+        public let people: [Contributor]
+        fileprivate let modificationDate: Date?
+
+        fileprivate var isFresh: Bool {
+            guard let modificationDate else { return false }
+            return Date().timeIntervalSince(modificationDate) < Contributors.refreshInterval
+        }
+    }
+
     public static let endpoint = URL(
         string: "https://api.github.com/repos/pulkitxm/edith/contributors?per_page=100")!
 
@@ -61,29 +71,41 @@ public enum Contributors {
         directories: AppDirectories = .current,
         fileManager: FileManager = .default
     ) -> [Contributor] {
+        cachedPeople(at: cacheFile(directories), fileManager: fileManager)
+    }
+
+    public static func cacheSnapshot(
+        directories: AppDirectories = .current,
+        fileManager: FileManager = .default
+    ) -> CacheSnapshot {
         let file = cacheFile(directories)
-        guard let data = fileManager.contents(atPath: file.path) else { return [] }
-        return (try? JSONDecoder().decode([Contributor].self, from: data)) ?? []
+        let people = cachedPeople(at: file, fileManager: fileManager)
+        let modificationDate =
+            (try? fileManager.attributesOfItem(atPath: file.path)[.modificationDate]) as? Date
+        return CacheSnapshot(people: people, modificationDate: modificationDate)
     }
 
     public static func load(
         directories: AppDirectories = .current,
         fileManager: FileManager = .default,
-        session: URLSession = .shared
+        session: URLSession = .shared,
+        cacheSnapshot: CacheSnapshot? = nil
     ) async -> [Contributor] {
         let requestTrace = PerformanceTrace.begin(.github, "contributors.load")
         defer { PerformanceTrace.end(requestTrace) }
         let file = cacheFile(directories)
-        let cachedPeople = cached(directories: directories, fileManager: fileManager)
-        if isFresh(file, fileManager: fileManager), !cachedPeople.isEmpty {
+        let snapshot =
+            cacheSnapshot
+            ?? self.cacheSnapshot(directories: directories, fileManager: fileManager)
+        if snapshot.isFresh, !snapshot.people.isEmpty {
             PerformanceTrace.event(.cache, "contributors.hit")
-            return cachedPeople
+            return snapshot.people
         }
         PerformanceTrace.event(.cache, "contributors.miss")
         let networkTrace = PerformanceTrace.begin(.slowNetwork, "contributors.fetch")
         guard let fresh = try? await fetch(session: session) else {
             PerformanceTrace.end(networkTrace)
-            return cachedPeople
+            return snapshot.people
         }
         PerformanceTrace.end(networkTrace)
         store(fresh, at: file, fileManager: fileManager)
@@ -105,12 +127,10 @@ public enum Contributors {
         directories.cache.appendingPathComponent("contributors.json")
     }
 
-    private static func isFresh(_ file: URL, fileManager: FileManager) -> Bool {
-        guard
-            let modified = try? fileManager.attributesOfItem(atPath: file.path)[.modificationDate]
-                as? Date
-        else { return false }
-        return Date().timeIntervalSince(modified) < refreshInterval
+    private static func cachedPeople(at file: URL, fileManager: FileManager) -> [Contributor] {
+        fileManager.contents(atPath: file.path).flatMap {
+            try? JSONDecoder().decode([Contributor].self, from: $0)
+        } ?? []
     }
 
     private static func store(_ people: [Contributor], at file: URL, fileManager: FileManager) {

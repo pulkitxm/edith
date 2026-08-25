@@ -101,3 +101,25 @@ private final class FailingContributorURLProtocol: URLProtocol, @unchecked Senda
     #expect(people.isEmpty)
     #expect(fileManager.contentReads == 1)
 }
+
+@Test func aPresentedCacheIsReusedByTheRefresh() async throws {
+    let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let directories = AppDirectories(homeDirectory: home)
+    try directories.prepare()
+    let expected = try Contributors.people(from: Data(payload.utf8))
+    try JSONEncoder().encode(expected).write(
+        to: directories.cache.appendingPathComponent("contributors.json"))
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [FailingContributorURLProtocol.self]
+    let fileManager = CountingFileManager()
+
+    let snapshot = Contributors.cacheSnapshot(
+        directories: directories, fileManager: fileManager)
+    let people = await Contributors.load(
+        directories: directories, fileManager: fileManager,
+        session: URLSession(configuration: configuration), cacheSnapshot: snapshot)
+
+    #expect(snapshot.people == expected)
+    #expect(people == expected)
+    #expect(fileManager.contentReads == 1)
+}
