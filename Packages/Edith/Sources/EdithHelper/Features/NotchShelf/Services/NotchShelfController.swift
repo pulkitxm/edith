@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import EdithKit
 import SwiftUI
 
@@ -30,6 +31,32 @@ enum ShelfOperationRequestRouter {
 }
 
 @MainActor
+final class LidAwakeShelfOperationOwner {
+    let model: LidAwakeOperationModel
+
+    init() {
+        model = LidAwakeOperationModel()
+    }
+
+    init(model: LidAwakeOperationModel) {
+        self.model = model
+    }
+
+    @discardableResult
+    func perform(
+        _ request: LidAwakeRequest,
+        onFailure: @escaping @MainActor @Sendable (String) -> Void
+    ) -> Task<Void, Never>? {
+        guard let operation = model.perform(request) else { return nil }
+        return Task { @MainActor [model] in
+            await operation.value
+            guard !Task.isCancelled, let message = model.errorMessage else { return }
+            onFailure(message)
+        }
+    }
+}
+
+@MainActor
 @Observable
 final class NotchShelfController: FeatureModule {
     private(set) var items: [ShelfItem] = []
@@ -44,6 +71,7 @@ final class NotchShelfController: FeatureModule {
     private(set) var canPickColor = false
     private weak var lidAwakeEngine: LidAwakeEngine?
     private(set) var canToggleLidAwake = false
+    private let lidAwakeOperationOwner = LidAwakeShelfOperationOwner()
     private(set) var usageStore: UsageStore?
     private(set) var calendarStore: CalendarStore?
     private var externalVolume: Double = 0.7
@@ -59,6 +87,8 @@ final class NotchShelfController: FeatureModule {
     private weak var localMusic: MusicPlayer?
     private var externalObserving = false
     private var artworkTask: Task<Void, Never>?
+    private var lidAwakeResultTask: Task<Void, Never>?
+    private var lidAwakeErrorCancellable: AnyCancellable?
 
     private let store = ShelfStore()
     private var panels: [CGDirectDisplayID: NSPanel] = [:]
@@ -214,6 +244,8 @@ final class NotchShelfController: FeatureModule {
         externalObserving = false
         localMusic = nil
         artworkTask?.cancel()
+        lidAwakeResultTask?.cancel()
+        lidAwakeErrorCancellable?.cancel()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
         if let spaceObserver {
@@ -818,21 +850,36 @@ final class NotchShelfController: FeatureModule {
     func attachLidAwake(_ engine: LidAwakeEngine?) {
         lidAwakeEngine = engine
         canToggleLidAwake = engine != nil
+        lidAwakeErrorCancellable = engine?.$lastError
+            .compactMap { $0 }
+            .removeDuplicates()
+            .sink { [weak self] message in self?.presentLidAwakeFailure(message) }
     }
 
-    func toggleLidAwake() {
+    func performLidAwake(_ request: LidAwakeRequest) {
+        lidAwakeResultTask = lidAwakeOperationOwner.perform(request) { [weak self] message in
+            self?.presentLidAwakeFailure(message)
+        }
         collapseNow()
-        lidAwakeEngine?.toggle()
     }
 
-    func startLidAwake(_ session: LidAwakeSession) {
-        collapseNow()
-        lidAwakeEngine?.start(session: session)
+    static func lidAwakeFailureAlert(_ message: String) -> NotchAlert {
+        NotchAlert(
+            id: "lid-awake.action", icon: "exclamationmark.circle.fill", tint: "#e0664f",
+            title: "Lid Awake failed", subtitle: message, priority: .high, autoHide: 5)
     }
 
-    func stopLidAwake() {
-        collapseNow()
-        lidAwakeEngine?.stop()
+    private func presentLidAwakeFailure(_ message: String) {
+        let alert = Self.lidAwakeFailureAlert(message)
+        if currentAlert?.id == alert.id, currentAlert?.subtitle == alert.subtitle { return }
+        guard !alertsEnabled else {
+            postAlert(alert)
+            return
+        }
+        alertPinned = false
+        currentAlert = alert
+        syncFrames()
+        scheduleAlertHide(after: alert.autoHide)
     }
 
     func openNowPlayingApp() {

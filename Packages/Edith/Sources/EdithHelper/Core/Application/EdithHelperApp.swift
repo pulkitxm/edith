@@ -41,11 +41,63 @@ func migratedServices() -> AppServices {
 }
 
 @MainActor
+final class TerminationCoordinator {
+    private(set) var started = false
+    private var finished = false
+    private var safetyTask: Task<Void, Never>?
+    private var persistenceTask: Task<Void, Never>?
+    private var completionTask: Task<Void, Never>?
+    private var timeoutTask: Task<Void, Never>?
+    private var finishAction: (@MainActor () -> Void)?
+
+    func begin(
+        timeout: Duration = .seconds(5),
+        safety: @escaping @MainActor () async -> Void,
+        persistence: @escaping @MainActor () async -> Void,
+        finish: @escaping @MainActor () -> Void
+    ) {
+        guard !started else { return }
+        started = true
+        finishAction = finish
+        let safetyTask = Task { @MainActor in
+            await safety()
+        }
+        let persistenceTask = Task { @MainActor in
+            await persistence()
+        }
+        self.safetyTask = safetyTask
+        self.persistenceTask = persistenceTask
+        completionTask = Task { @MainActor [weak self] in
+            await safetyTask.value
+            await persistenceTask.value
+            self?.complete()
+        }
+        timeoutTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: timeout)
+            } catch {
+                return
+            }
+            self?.complete()
+        }
+    }
+
+    private func complete() {
+        guard !finished else { return }
+        finished = true
+        safetyTask?.cancel()
+        persistenceTask?.cancel()
+        completionTask?.cancel()
+        timeoutTask?.cancel()
+        let finishAction = finishAction
+        self.finishAction = nil
+        finishAction?()
+    }
+}
+
+@MainActor
 final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
-    private var terminationPending = false
-    private var terminationReplySent = false
-    private var terminationFlushTask: Task<Void, Never>?
-    private var terminationTimeoutTask: Task<Void, Never>?
+    private let termination = TerminationCoordinator()
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         if anEarlierInstanceIsRunning() { exit(0) }
@@ -61,30 +113,19 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard !terminationPending else { return .terminateLater }
-        terminationPending = true
+        guard !termination.started else { return .terminateLater }
         AppState.services.cancelStartup()
         AppState.services.usage?.prepareForTermination()
         SettingsBackup.shared.prepareForTermination()
-        terminationFlushTask = Task { [weak self] in
+        termination.begin {
+            await AppState.services.prepareForTermination()
+        } persistence: {
             await AppState.services.usage?.drainHistoryPersistence()
             await SettingsBackup.shared.flushForTermination()
-            self?.finishTermination(sender)
-        }
-        terminationTimeoutTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 5_000_000_000)
-            guard !Task.isCancelled else { return }
-            self?.finishTermination(sender)
+        } finish: {
+            sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
-    }
-
-    private func finishTermination(_ sender: NSApplication) {
-        guard !terminationReplySent else { return }
-        terminationReplySent = true
-        terminationFlushTask?.cancel()
-        terminationTimeoutTask?.cancel()
-        sender.reply(toApplicationShouldTerminate: true)
     }
 }
 
@@ -169,20 +210,6 @@ struct EdithApp: App {
         }
         _ = IPC.observe(IPC.Name.presenterPauseAuto) {
             services.presenter?.pauseUntilShareEnds()
-        }
-        _ = IPC.observe(IPC.Name.toggleLidAwake) {
-            services.lidAwake?.toggle()
-        }
-        _ = IPC.observe(
-            IPC.Name.setLidAwakeSession,
-            info: { info in
-                guard let rawValue = info["session"] as? String,
-                    let session = LidAwakeSession(rawValue: rawValue)
-                else { return }
-                services.lidAwake?.start(session: session)
-            })
-        _ = IPC.observe(IPC.Name.lidAwakeSettingsChanged) {
-            services.lidAwake?.syncSettings()
         }
         LidAwakeActionBridge.shared.install(services: services)
         _ = IPC.observe(

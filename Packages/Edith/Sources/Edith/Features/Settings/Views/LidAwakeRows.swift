@@ -12,9 +12,20 @@ struct LidAwakeRows: View {
     @AppStorage(LidAwakeState.batteryThresholdKey, store: SharedDefaults.store)
     private var batteryThreshold = 0
     @State private var active = SharedDefaults.store.bool(forKey: LidAwakeState.activeKey)
+    @State private var confirmingActivation = false
+    @State private var confirmingRestoreDisabled = false
+    @StateObject private var operations = LidAwakeOperationModel()
 
     private var activeBinding: Binding<Bool> {
-        Binding(get: { active }, set: { _ in IPC.post(IPC.Name.toggleLidAwake) })
+        Binding(
+            get: { active },
+            set: { wanted in
+                if wanted {
+                    confirmingActivation = true
+                } else {
+                    operations.perform(.off)
+                }
+            })
     }
 
     private var sessionBinding: Binding<LidAwakeSession> {
@@ -22,9 +33,27 @@ struct LidAwakeRows: View {
             get: { LidAwakeSession(rawValue: sessionRaw) ?? .indefinite },
             set: { session in
                 $sessionRaw.configured(LidAwakeState.sessionKey).wrappedValue = session.rawValue
-                IPC.post(
-                    IPC.Name.setLidAwakeSession,
-                    userInfo: ["session": session.rawValue])
+                if active { operations.perform(.on(session)) }
+            })
+    }
+
+    private var batteryBinding: Binding<Int> {
+        Binding(
+            get: { LidAwakeState.normalizedBatteryThreshold(batteryThreshold) },
+            set: { threshold in
+                applySetting(.setBatteryThreshold(threshold))
+            })
+    }
+
+    private var restoreBinding: Binding<Bool> {
+        Binding(
+            get: { restoreOnQuit },
+            set: { wanted in
+                if wanted {
+                    applyRestoreOnQuit(true)
+                } else {
+                    confirmingRestoreDisabled = true
+                }
             })
     }
 
@@ -50,10 +79,7 @@ struct LidAwakeRows: View {
                     }
                 }
                 .pointerCursor()
-                Picker(
-                    "Auto-pause below",
-                    selection: $batteryThreshold.configured(LidAwakeState.batteryThresholdKey)
-                ) {
+                Picker("Auto-pause below", selection: batteryBinding) {
                     Text("Off").tag(0)
                     Text("10% battery").tag(10)
                     Text("20% battery").tag(20)
@@ -64,9 +90,7 @@ struct LidAwakeRows: View {
                     "When the Mac is on battery and reaches this floor, lid awake pauses until it is charged again. Starting it manually below the floor overrides the pause for that discharge."
                 )
                 .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
-                Toggle(
-                    isOn: $restoreOnQuit.configured(LidAwakeState.restoreOnQuitKey)
-                ) {
+                Toggle(isOn: restoreBinding) {
                     HStack(spacing: UIScale.pt(6)) {
                         Text("Restore normal sleep when Edith quits")
                         InfoDot(
@@ -79,6 +103,18 @@ struct LidAwakeRows: View {
                     "While this is on the Mac stays awake with a closed lid, so it keeps drawing power and shedding heat. Do not put it in a bag like this."
                 )
                 .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                if operations.applying {
+                    HStack {
+                        ProgressView().controlSize(.small)
+                        Text("Applying system sleep state...")
+                    }
+                    .settingsCaption()
+                }
+                if let error = operations.errorMessage ?? operations.lastSnapshot?.lastError {
+                    Text(error)
+                        .settingsCaption()
+                        .foregroundStyle(.red)
+                }
             }
             Section {
                 Text(
@@ -92,15 +128,57 @@ struct LidAwakeRows: View {
             }
         }
         .disabled(!enabled)
+        .disabled(operations.applying)
         .opacity(enabled ? 1 : 0.5)
-        .onAppear { active = SharedDefaults.store.bool(forKey: LidAwakeState.activeKey) }
+        .onAppear {
+            active = SharedDefaults.store.bool(forKey: LidAwakeState.activeKey)
+            operations.refreshStatus()
+        }
         .onReceive(
             DistributedNotificationCenter.default().publisher(for: IPC.Name.lidAwakeChanged)
         ) { _ in
             active = SharedDefaults.store.bool(forKey: LidAwakeState.activeKey)
+            operations.refreshStatus()
         }
-        .onChange(of: batteryThreshold) {
-            IPC.post(IPC.Name.lidAwakeSettingsChanged)
+        .alert("Keep running with the lid closed?", isPresented: $confirmingActivation) {
+            Button("Turn On") {
+                operations.perform(.on(LidAwakeState.session()))
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                LidAwakeOperationExecution.preview(for: .on(LidAwakeState.session()))?.warning
+                    ?? "")
         }
+        .alert(
+            "Leave lid-close sleep disabled after quitting?",
+            isPresented: $confirmingRestoreDisabled
+        ) {
+            Button("Turn Off Restoration", role: .destructive) {
+                applyRestoreOnQuit(false)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                LidAwakeOperationExecution.preview(for: .setRestoreOnQuit(false))?.warning
+                    ?? "")
+        }
+    }
+
+    private func applyRestoreOnQuit(_ enabled: Bool) {
+        applySetting(.setRestoreOnQuit(enabled))
+    }
+
+    private func applySetting(_ request: LidAwakeRequest) {
+        guard LidAwakeOperationExecution.applySetting(request) else { return }
+        switch request {
+        case .setBatteryThreshold(let threshold):
+            batteryThreshold = threshold
+        case .setRestoreOnQuit(let enabled):
+            restoreOnQuit = enabled
+        case .status, .on, .off, .enableExtension, .disableExtension:
+            break
+        }
+        IPC.post(IPC.Name.settingsChanged)
     }
 }

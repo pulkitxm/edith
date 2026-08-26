@@ -19,6 +19,18 @@ final class AppServices {
     private(set) var systemStats: SystemStatsStatusItem?
     private(set) var attention: AttentionTrackingService?
     private let startup = StartupCoordinator()
+    private let lidAwakeRestorationGate = LidAwakeRestorationGate()
+    private let lidAwakeOrphanRestorer: @MainActor @Sendable () async -> LidAwakeOutcome
+    private var lidAwakeRestorationError: String?
+    private var terminating = false
+
+    init(
+        lidAwakeOrphanRestorer: @escaping @MainActor @Sendable () async -> LidAwakeOutcome = {
+            await LidAwakeEngine.restoreOrphanedState()
+        }
+    ) {
+        self.lidAwakeOrphanRestorer = lidAwakeOrphanRestorer
+    }
 
     static func preferenceOnByDefault(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? true
@@ -33,6 +45,23 @@ final class AppServices {
 
     static func extensionEnabled(_ key: String) -> Bool {
         SharedDefaults.store.object(forKey: key) as? Bool ?? false
+    }
+
+    static func lidAwakeDisableRecovery(_ outcome: LidAwakeOutcome) -> String? {
+        guard case .failed(let message) = outcome else { return nil }
+        return message
+    }
+
+    static func lidAwakeRuntimeWanted(
+        extensionEnabled: Bool, engineAvailable: Bool, restorationInFlight: Bool
+    ) -> Bool {
+        extensionEnabled && !engineAvailable && !restorationInFlight
+    }
+
+    static func lidAwakeRecoveryNeeded(
+        _ defaults: UserDefaults = SharedDefaults.store
+    ) -> Bool {
+        LidAwakeState.restorationNeeded(defaults)
     }
 
     func start() {
@@ -64,7 +93,86 @@ final class AppServices {
         ])
     }
 
+    func prepareForTermination() async {
+        startup.cancel()
+        terminating = true
+        await lidAwake?.shutdownForTermination()
+        await lidAwakeRestorationGate.wait()
+    }
+
+    var lidAwakeRestorationInFlight: Bool {
+        lidAwakeRestorationGate.isRestoring
+    }
+
+    func waitForLidAwakeRestoration() async -> LidAwakeOutcome? {
+        await lidAwakeRestorationGate.waitForOutcome()
+    }
+
+    func disableLidAwakeExtension() async -> LidAwakeOutcome {
+        if lidAwakeRestorationGate.isRestoring {
+            return await lidAwakeRestorationGate.waitForOutcome()
+                ?? .failed("The Lid Awake restoration did not finish.")
+        }
+        guard let engine = lidAwake else {
+            guard Self.lidAwakeRecoveryNeeded() else {
+                completeLidAwakeRecovery(.applied, disableExtensionOnSuccess: true)
+                return .applied
+            }
+            return await recoverOrphanedLidAwake(disableExtensionOnSuccess: true)
+        }
+        let restoration = engine.uninstall()
+        lidAwake = nil
+        notchShelf?.attachLidAwake(nil)
+        guard let restoration else {
+            completeLidAwakeRecovery(.applied, disableExtensionOnSuccess: true)
+            return .applied
+        }
+        lidAwakeRestorationGate.begin(restoration) { [weak self] outcome in
+            self?.completeLidAwakeRecovery(outcome, disableExtensionOnSuccess: true)
+        }
+        return await lidAwakeRestorationGate.waitForOutcome()
+            ?? .failed("The Lid Awake restoration did not finish.")
+    }
+
+    func recoverOrphanedLidAwake(
+        disableExtensionOnSuccess: Bool = false
+    ) async -> LidAwakeOutcome {
+        beginOrJoinLidAwakeOrphanRecovery(
+            disableExtensionOnSuccess: disableExtensionOnSuccess)
+        return await lidAwakeRestorationGate.waitForOutcome()
+            ?? .failed("The Lid Awake restoration did not finish.")
+    }
+
+    private func beginOrJoinLidAwakeOrphanRecovery(disableExtensionOnSuccess: Bool) {
+        guard !lidAwakeRestorationGate.isRestoring else { return }
+        let restoration = Task { @MainActor [lidAwakeOrphanRestorer] in
+            await lidAwakeOrphanRestorer()
+        }
+        lidAwakeRestorationGate.begin(restoration) { [weak self] outcome in
+            self?.completeLidAwakeRecovery(
+                outcome, disableExtensionOnSuccess: disableExtensionOnSuccess)
+        }
+    }
+
+    private func completeLidAwakeRecovery(
+        _ outcome: LidAwakeOutcome, disableExtensionOnSuccess: Bool
+    ) {
+        guard let entry = LidAwakeOperationExecution.extensionEntry else { return }
+        switch outcome {
+        case .applied:
+            lidAwakeRestorationError = nil
+            if disableExtensionOnSuccess {
+                _ = ExtensionMutationCenter().setEnabled(false, for: entry)
+            }
+        case .failed(let message):
+            lidAwakeRestorationError = message
+            _ = ExtensionMutationCenter().setEnabled(true, for: entry)
+        }
+        sync()
+    }
+
     func sync() {
+        guard !terminating else { return }
         startup.cancel()
         reconcileMediaServices()
         reconcileSystemServices()
@@ -213,11 +321,39 @@ final class AppServices {
         }
         micMute?.syncSettings()
 
+        reconcileLidAwakeService()
+    }
+
+    func reconcileLidAwakeService() {
         let lidAwakeOn = Self.extensionEnabled(LidAwakeState.enabledKey)
-        if lidAwakeOn, lidAwake == nil { lidAwake = LidAwakeEngine() }
+        if Self.lidAwakeRuntimeWanted(
+            extensionEnabled: lidAwakeOn, engineAvailable: lidAwake != nil,
+            restorationInFlight: lidAwakeRestorationGate.isRestoring)
+        {
+            lidAwake = LidAwakeEngine(initialError: lidAwakeRestorationError)
+            lidAwakeRestorationError = nil
+        }
         if !lidAwakeOn, let engine = lidAwake {
-            engine.uninstall()
+            let restoration = engine.uninstall()
             lidAwake = nil
+            if let restoration {
+                lidAwakeRestorationGate.begin(restoration) { [weak self] outcome in
+                    guard let self else { return }
+                    if let message = Self.lidAwakeDisableRecovery(outcome),
+                        let entry = LidAwakeOperationExecution.extensionEntry
+                    {
+                        lidAwakeRestorationError = message
+                        _ = ExtensionMutationCenter().setEnabled(true, for: entry)
+                    }
+                    sync()
+                }
+            }
+        }
+        if !lidAwakeOn, lidAwake == nil,
+            Self.lidAwakeRecoveryNeeded(),
+            !lidAwakeRestorationGate.isRestoring
+        {
+            beginOrJoinLidAwakeOrphanRecovery(disableExtensionOnSuccess: true)
         }
         notchShelf?.attachLidAwake(lidAwake)
     }

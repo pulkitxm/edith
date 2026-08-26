@@ -45,6 +45,7 @@ struct ExtensionsPane: View {
     @State private var grantedPermissions: [ExtensionPermission: Bool] = [:]
     @State private var permissionRequest: ExtensionPermissionRequest?
     @State private var provisioningEntry: ExtensionRegistryEntry?
+    @StateObject private var lidAwakeOperations = LidAwakeOperationModel()
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.compactLayout) private var compact
@@ -87,7 +88,7 @@ struct ExtensionsPane: View {
             if automaticActionsEnabled { refreshPermissionState() }
         }
         .sheet(item: $selectedEntry) { entry in
-            ExtensionSettingsSheet(entry: entry)
+            ExtensionSettingsSheet(entry: entry, lidAwakeOperations: lidAwakeOperations)
         }
         .sheet(item: $permissionRequest) { request in
             ExtensionPermissionSheet(
@@ -100,6 +101,16 @@ struct ExtensionsPane: View {
         }
         .sheet(item: $provisioningEntry) { entry in
             ToolProvisioningSheet(entry: entry)
+        }
+        .alert(
+            "Lid Awake could not change state",
+            isPresented: Binding(
+                get: { selectedEntry == nil && lidAwakeErrorMessage != nil },
+                set: { if !$0 { lidAwakeOperations.clearError() } })
+        ) {
+            Button("OK") { lidAwakeOperations.clearError() }
+        } message: {
+            Text(lidAwakeErrorMessage ?? "")
         }
     }
 
@@ -158,6 +169,8 @@ struct ExtensionsPane: View {
                     ExtensionMarketplaceCard(
                         entry: entry,
                         dark: colorScheme == .dark,
+                        switchDisabled: entry.defaultsKey == LidAwakeState.enabledKey
+                            && lidAwakeOperations.applying,
                         open: { openSettings(for: entry) },
                         setEnabled: { setEnabled($0, for: entry) }
                     )
@@ -198,6 +211,10 @@ struct ExtensionsPane: View {
     }
 
     private func setEnabled(_ newValue: Bool, for entry: ExtensionRegistryEntry) {
+        if entry.defaultsKey == LidAwakeState.enabledKey, !newValue {
+            lidAwakeOperations.perform(.disableExtension)
+            return
+        }
         let coordinator = ExtensionModalCoordinator(
             entry: entry, mutationCenter: .application)
         grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
@@ -249,22 +266,29 @@ struct ExtensionsPane: View {
         DispatchQueue.main.async { provisioningEntry = request.entry }
     }
 
+    private var lidAwakeErrorMessage: String? {
+        lidAwakeOperations.errorMessage ?? lidAwakeOperations.lastSnapshot?.lastError
+    }
+
 }
 
 private struct ExtensionMarketplaceCard: View {
     let entry: ExtensionRegistryEntry
     @ExtensionEnablementStorage private var enabled: Bool
     let dark: Bool
+    let switchDisabled: Bool
     let open: () -> Void
     let setEnabled: (Bool) -> Void
     @State private var hovering = false
 
     init(
-        entry: ExtensionRegistryEntry, dark: Bool, open: @escaping () -> Void,
+        entry: ExtensionRegistryEntry, dark: Bool, switchDisabled: Bool = false,
+        open: @escaping () -> Void,
         setEnabled: @escaping (Bool) -> Void
     ) {
         self.entry = entry
         self.dark = dark
+        self.switchDisabled = switchDisabled
         self.open = open
         self.setEnabled = setEnabled
         _enabled = ExtensionEnablementStorage(entry: entry)
@@ -304,6 +328,7 @@ private struct ExtensionMarketplaceCard: View {
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .tint(brandAccent)
+                    .disabled(switchDisabled)
                     .pointerCursor()
             }
             Button(action: open) {
@@ -350,6 +375,13 @@ private struct ExtensionMarketplaceCard: View {
 struct ExtensionSettingsHeader: View {
     let title: String
     @Binding var enabled: Bool
+    let disabled: Bool
+
+    init(title: String, enabled: Binding<Bool>, disabled: Bool = false) {
+        self.title = title
+        _enabled = enabled
+        self.disabled = disabled
+    }
 
     var body: some View {
         HStack {
@@ -362,6 +394,7 @@ struct ExtensionSettingsHeader: View {
             }
             .labelsHidden()
             .toggleStyle(.switch)
+            .disabled(disabled)
             .accessibilityLabel("\(title) enabled")
             .pointerCursor()
         }
@@ -379,12 +412,14 @@ private struct ExtensionSettingsSheet: View {
     @State private var permissionRequest: ExtensionPermissionRequest?
     @State private var provisioningEntry: ExtensionRegistryEntry?
     @State private var invalidation = 0
+    @ObservedObject private var lidAwakeOperations: LidAwakeOperationModel
 
-    init(entry: ExtensionRegistryEntry) {
+    init(entry: ExtensionRegistryEntry, lidAwakeOperations: LidAwakeOperationModel) {
         let coordinator = ExtensionModalCoordinator(
             entry: entry, mutationCenter: .application)
         self.entry = entry
         self.coordinator = coordinator
+        _lidAwakeOperations = ObservedObject(wrappedValue: lidAwakeOperations)
         _enabled = ExtensionEnablementStorage(entry: entry)
         _grantedPermissions = State(
             initialValue: ExtensionPermissionState.readGrantedPermissions())
@@ -392,7 +427,10 @@ private struct ExtensionSettingsSheet: View {
 
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
-            ExtensionSettingsHeader(title: entry.title, enabled: enabledBinding)
+            ExtensionSettingsHeader(
+                title: entry.title, enabled: enabledBinding,
+                disabled: entry.defaultsKey == LidAwakeState.enabledKey
+                    && lidAwakeOperations.applying)
 
             Divider()
 
@@ -461,6 +499,16 @@ private struct ExtensionSettingsSheet: View {
                 invalidateReadiness()
             }
         }
+        .alert(
+            "Lid Awake could not change state",
+            isPresented: Binding(
+                get: { lidAwakeErrorMessage != nil },
+                set: { if !$0 { lidAwakeOperations.clearError() } })
+        ) {
+            Button("OK") { lidAwakeOperations.clearError() }
+        } message: {
+            Text(lidAwakeErrorMessage ?? "")
+        }
         .frame(
             minWidth: UIScale.pt(520), idealWidth: 560, maxWidth: UIScale.pt(560),
             minHeight: UIScale.pt(260),
@@ -471,6 +519,10 @@ private struct ExtensionSettingsSheet: View {
         Binding(
             get: { enabled },
             set: { wanted in
+                if entry.defaultsKey == LidAwakeState.enabledKey, !wanted {
+                    disableLidAwake()
+                    return
+                }
                 grantedPermissions = ExtensionPermissionState.readGrantedPermissions()
                 switch coordinator.setEnabled(wanted) {
                 case let .applied(result, missingRequiredTools):
@@ -482,6 +534,19 @@ private struct ExtensionSettingsSheet: View {
                         entry: entry, required: plan.required, optional: plan.optional)
                 }
             })
+    }
+
+    private func disableLidAwake() {
+        guard let task = lidAwakeOperations.perform(.disableExtension) else { return }
+        Task { @MainActor in
+            await task.value
+            enabled = coordinator.isEnabled
+            invalidateReadiness()
+        }
+    }
+
+    private var lidAwakeErrorMessage: String? {
+        lidAwakeOperations.errorMessage ?? lidAwakeOperations.lastSnapshot?.lastError
     }
 
     private func refreshPermissionState() {

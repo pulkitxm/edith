@@ -120,6 +120,23 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(frame.midX > host.bounds.midX)
     }
 
+    @Test func extensionSettingsHeaderDisablesOnlyItsSwitchWhileApplying() throws {
+        let host = NSHostingView(
+            rootView: ExtensionSettingsHeader(
+                title: "Lid Awake", enabled: .constant(true), disabled: true))
+        host.frame = NSRect(x: 0, y: 0, width: 560, height: 64)
+        let window = NSWindow(
+            contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        defer { window.orderOut(nil) }
+        window.contentView = host
+        window.layoutIfNeeded()
+        host.layoutSubtreeIfNeeded()
+
+        let switches = descendantViews(of: host).compactMap { $0 as? NSSwitch }
+        #expect(switches.count == 1)
+        #expect(try !#require(switches.first).isEnabled)
+    }
+
     @Test func closedSidebarIsCoveredByDetailBackground() throws {
         let sectionKey = AppStorageKeys.General.mainWindowSection
         let sidebarKey = AppStorageKeys.General.mainSidebarOpen
