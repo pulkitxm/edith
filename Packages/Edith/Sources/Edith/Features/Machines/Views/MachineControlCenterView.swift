@@ -305,8 +305,10 @@ struct MachineControlCenterButton: View {
     @ViewBuilder
     private var batteryStatus: some View {
         if !model.hasLoaded, connectionPhase != .unavailable {
-            SkeletonBlock(width: 50, height: 24, corner: 7)
-                .accessibilityHidden(true)
+            SkeletonGroup {
+                SkeletonBlock(width: 50, height: 24, corner: 7)
+            }
+            .accessibilityHidden(true)
         } else if let level = model.snapshot?.batteryLevel {
             HStack(spacing: UIScale.pt(4)) {
                 Text("\(level)%")
@@ -478,35 +480,37 @@ struct MachineControlCenterView: View {
     }
 
     private var loadingState: some View {
-        VStack(spacing: UIScale.pt(0)) {
-            ForEach(0..<6, id: \.self) { index in
-                VStack(alignment: .leading, spacing: UIScale.pt(7)) {
-                    HStack(spacing: UIScale.pt(9)) {
-                        SkeletonBlock(width: 18, height: 18, corner: 5)
-                        SkeletonBlock(
-                            width: index.isMultiple(of: 2) ? 86 : 112,
-                            height: 10
-                        )
-                        Spacer(minLength: 0)
+        SkeletonGroup {
+            VStack(spacing: UIScale.pt(0)) {
+                ForEach(0..<6, id: \.self) { index in
+                    VStack(alignment: .leading, spacing: UIScale.pt(7)) {
+                        HStack(spacing: UIScale.pt(9)) {
+                            SkeletonBlock(width: 18, height: 18, corner: 5)
+                            SkeletonBlock(
+                                width: index.isMultiple(of: 2) ? 86 : 112,
+                                height: 10
+                            )
+                            Spacer(minLength: 0)
+                            if index < 2 {
+                                SkeletonBlock(width: 34, height: 9)
+                            } else {
+                                SkeletonBlock(width: 28, height: 16, corner: 8)
+                            }
+                        }
                         if index < 2 {
-                            SkeletonBlock(width: 34, height: 9)
-                        } else {
-                            SkeletonBlock(width: 28, height: 16, corner: 8)
+                            SkeletonBlock(height: 6, corner: 3)
+                                .padding(.leading, UIScale.pt(27))
                         }
                     }
-                    if index < 2 {
-                        SkeletonBlock(height: 6, corner: 3)
-                            .padding(.leading, UIScale.pt(27))
+                    .padding(.horizontal, UIScale.pt(8))
+                    .padding(.vertical, UIScale.pt(index < 2 ? 17 : 13))
+                    if index < 5 {
+                        Divider().padding(.leading, UIScale.pt(36))
                     }
                 }
-                .padding(.horizontal, UIScale.pt(8))
-                .padding(.vertical, UIScale.pt(index < 2 ? 17 : 13))
-                if index < 5 {
-                    Divider().padding(.leading, UIScale.pt(36))
-                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Loading available controls")
     }

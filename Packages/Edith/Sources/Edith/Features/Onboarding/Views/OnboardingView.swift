@@ -36,7 +36,7 @@ struct OnboardingView: View {
     }
 
     private var dark: Bool { colorScheme == .dark }
-    private var glide: Animation {
+    private var glide: Animation? {
         Motion.animation(Motion.glide, reduceMotion: reduceMotion)
     }
 
@@ -46,11 +46,18 @@ struct OnboardingView: View {
                 currentStep
                     .id(step)
                     .transition(
-                        .asymmetric(
-                            insertion: .move(edge: transitionDirection > 0 ? .trailing : .leading)
+                        Motion.transition(
+                            .asymmetric(
+                                insertion: .move(
+                                    edge: transitionDirection > 0 ? .trailing : .leading
+                                )
                                 .combined(with: .opacity),
-                            removal: .move(edge: transitionDirection > 0 ? .leading : .trailing)
-                                .combined(with: .opacity)))
+                                removal: .move(
+                                    edge: transitionDirection > 0 ? .leading : .trailing
+                                )
+                                .combined(with: .opacity)),
+                            reduceMotion: reduceMotion,
+                            preferCrossFade: false))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()

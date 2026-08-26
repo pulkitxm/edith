@@ -405,17 +405,19 @@ struct CompanionCardSkeleton: View {
     let dark: Bool
 
     var body: some View {
-        SkinCard(title: " ", dark: dark) {
-            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                ForEach(0..<rows, id: \.self) { index in
-                    VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                        SkeletonBlock(width: index.isMultiple(of: 2) ? 72 : 96, height: 8)
-                        SkeletonBlock(height: 26, corner: 9)
+        SkeletonGroup {
+            SkinCard(title: " ", dark: dark) {
+                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                    ForEach(0..<rows, id: \.self) { index in
+                        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                            SkeletonBlock(width: index.isMultiple(of: 2) ? 72 : 96, height: 8)
+                            SkeletonBlock(height: 26, corner: 9)
+                        }
                     }
-                }
-                HStack(spacing: UIScale.pt(8)) {
-                    SkeletonBlock(width: 64, height: 24, corner: 8)
-                    SkeletonBlock(width: 104, height: 24, corner: 8)
+                    HStack(spacing: UIScale.pt(8)) {
+                        SkeletonBlock(width: 64, height: 24, corner: 8)
+                        SkeletonBlock(width: 104, height: 24, corner: 8)
+                    }
                 }
             }
         }

@@ -14,7 +14,7 @@ public enum LimitRing {
         return okColor
     }
 
-    public static func animation(reduceMotion: Bool) -> Animation {
+    public static func animation(reduceMotion: Bool) -> Animation? {
         Motion.animation(Motion.settle, reduceMotion: reduceMotion)
     }
 }

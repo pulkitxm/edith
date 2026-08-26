@@ -823,21 +823,15 @@ private struct DriveRow: View {
 
 private struct DriveSkeleton: View {
     let dark: Bool
-    @State private var pulse = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-            RoundedRectangle(cornerRadius: UIScale.pt(4)).frame(
-                width: UIScale.pt(120), height: UIScale.pt(10))
-            RoundedRectangle(cornerRadius: UIScale.pt(3)).frame(height: UIScale.pt(5))
-        }
-        .foregroundStyle(DashSkin.inkFaint(dark).opacity(pulse ? 0.25 : 0.1))
-        .padding(UIScale.pt(10))
-        .widgetBar(cornerRadius: 10, fill: DashSkin.paper2(dark))
-        .onAppear {
-            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
-                pulse = true
+        SkeletonGroup {
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                SkeletonBlock(width: 120, height: 10, corner: 4)
+                SkeletonBlock(height: 5, corner: 3)
             }
+            .padding(UIScale.pt(10))
+            .widgetBar(cornerRadius: 10, fill: DashSkin.paper2(dark))
         }
     }
 }
