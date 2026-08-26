@@ -125,6 +125,7 @@ enum ClaudeCredentialDataLookup: Equatable {
 
 enum ClaudeCredentialStore {
     typealias CommandRunner = @Sendable (CLICommandRequest) async throws -> CLICommandResult
+    typealias KeychainUpdater = (Data) throws -> Void
 
     private static let keychainService = "Claude Code-credentials"
     private static let securityURL = URL(fileURLWithPath: "/usr/bin/security")
@@ -190,22 +191,23 @@ enum ClaudeCredentialStore {
         }
     }
 
+    static func persist(_ data: Data, source: ClaudeCredentialSource) async throws {
+        try await persist(data, source: source, keychainUpdater: updateKeychain)
+    }
+
     static func persist(
-        _ data: Data, source: ClaudeCredentialSource,
-        securityExecutable: URL = securityURL, timeout: TimeInterval = processTimeout,
-        maximumOutputBytes: Int = maximumStatusBytes,
-        runCommand: @escaping CommandRunner = { request in
-            try await CLICommandRunner.run(request) { _ in }
-        }
+        _ data: Data, source: ClaudeCredentialSource, keychainUpdater: KeychainUpdater
     ) async throws {
         switch source {
         case .keychain:
             guard data.count <= maximumCredentialBytes else {
                 throw ClaudeCredentialStoreError.keychainUpdateFailed
             }
-            try await updateKeychain(
-                data, securityExecutable: securityExecutable, timeout: timeout,
-                maximumOutputBytes: maximumOutputBytes, runCommand: runCommand)
+            do {
+                try keychainUpdater(data)
+            } catch {
+                throw ClaudeCredentialStoreError.keychainUpdateFailed
+            }
         case .file(let url):
             try data.write(to: url, options: .atomic)
             try FileManager.default.setAttributes(
@@ -267,25 +269,15 @@ enum ClaudeCredentialStore {
         }
     }
 
-    private static func updateKeychain(
-        _ data: Data, securityExecutable: URL, timeout: TimeInterval,
-        maximumOutputBytes: Int, runCommand: @escaping CommandRunner
-    ) async throws {
-        var input = data
-        input.append(UInt8(ascii: "\n"))
-        input.append(data)
-        input.append(UInt8(ascii: "\n"))
-        let request = securityRequest(
-            executable: securityExecutable,
-            arguments: [
-                "add-generic-password", "-U", "-a", NSUserName(), "-s", keychainService, "-w",
-            ], timeout: timeout, maximumOutputBytes: maximumOutputBytes, standardInputData: input)
-        do {
-            let result = try await runCommand(request)
-            guard result.terminationStatus == 0 else {
-                throw ClaudeCredentialStoreError.keychainUpdateFailed
-            }
-        } catch {
+    private static func updateKeychain(_ data: Data) throws {
+        let query: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrAccount: NSUserName(),
+            kSecAttrService: keychainService,
+        ]
+        let attributes: [CFString: Any] = [kSecValueData: data]
+        guard SecItemUpdate(query as CFDictionary, attributes as CFDictionary) == errSecSuccess
+        else {
             throw ClaudeCredentialStoreError.keychainUpdateFailed
         }
     }
