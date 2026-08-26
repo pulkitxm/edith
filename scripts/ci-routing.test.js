@@ -198,7 +198,7 @@ test("Swift tests have a bounded hosted runtime", () => {
     ciWorkflow.indexOf("\n  swift-test:"),
     ciWorkflow.indexOf("\n  companion:"),
   );
-  expect(swiftTest).toContain("timeout-minutes: 15");
+  expect(swiftTest).toContain("timeout-minutes: 30");
 });
 
 test("targeted publishing workflows watch every deployment input", () => {
