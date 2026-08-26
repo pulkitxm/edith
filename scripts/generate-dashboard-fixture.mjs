@@ -121,8 +121,14 @@ export const generateDashboardFixture = ({
   seed,
 }) => {
   const random = randomGenerator(seed);
-  const sourceIDs = Array.from({ length: sources }, (_, index) => `source-${index}`);
-  const modelIDs = Array.from({ length: models }, (_, index) => `model-${index}`);
+  const sourceIDs = Array.from(
+    { length: sources },
+    (_, index) => `source-${index}`,
+  );
+  const modelIDs = Array.from(
+    { length: models },
+    (_, index) => `model-${index}`,
+  );
   const sourceMeta = Object.fromEntries(
     sourceIDs.map((id, index) => [
       id,
