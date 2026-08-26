@@ -29,6 +29,41 @@ import Testing
         #expect(Set(afterIdle.map(\.id)).count == 2)
     }
 
+    @Test func aReplayedEventCannotBringBackAPaneThatIsGone() {
+        let cache = HerdrBoardCache(context: tuf)
+        cache.applySnapshot(tufSnapshot(agents: true, queryStatus: "idle", boardStatus: "idle"))
+        let resurrected = cache.applyEvent(
+            """
+            {"event":"pane_created","data":{"type":"pane_created","pane":{"pane_id":"w9:p9","agent":"claude","agent_status":"idle","terminal_title_stripped":"Long gone","workspace_id":"w3"}}}
+            """)
+        #expect(resurrected.map(\.pane).contains("w9:p9"))
+
+        let reconciled = cache.applySnapshot(
+            tufSnapshot(agents: true, queryStatus: "idle", boardStatus: "idle"))
+        #expect(!reconciled.map(\.pane).contains("w9:p9"))
+        #expect(reconciled.map(\.pane) == ["w3:p1N", "w3:p1Q"])
+    }
+
+    @Test func anOlderRevisionCannotUndoANewerOne() {
+        let cache = HerdrBoardCache(context: tuf)
+        cache.applySnapshot(tufSnapshot(agents: true, queryStatus: "idle", boardStatus: "idle"))
+
+        func update(_ status: String, revision: Int) -> String {
+            """
+            {"event":"pane_updated","data":{"type":"pane_updated","pane":{"pane_id":"w3:p1N","agent":"opencode","agent_status":"\(status)","revision":\(revision),"workspace_id":"w3"}}}
+            """
+        }
+
+        let newer = cache.applyEvent(update("idle", revision: 9))
+        #expect(newer.first { $0.pane == "w3:p1N" }?.status == .idle)
+
+        let stale = cache.applyEvent(update("working", revision: 4))
+        #expect(stale.first { $0.pane == "w3:p1N" }?.status == .idle)
+
+        let latest = cache.applyEvent(update("working", revision: 10))
+        #expect(latest.first { $0.pane == "w3:p1N" }?.status == .working)
+    }
+
     @Test func snapshotThatDropsAgentsKeepsTheLivePanes() {
         let cache = HerdrBoardCache(context: tuf)
         cache.applySnapshot(tufSnapshot(agents: true, queryStatus: "idle", boardStatus: "idle"))

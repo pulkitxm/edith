@@ -198,6 +198,17 @@ jobs:
       - name: Format and lint (swift-format)
         run: swift format lint --strict --parallel --recursive Sources Tests Package.swift
         working-directory: Packages/Edith
+      - name: Cache libghostty
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: Packages/Edith/vendor/GhosttyKit.xcframework
+          key: ghostty-${{ runner.os }}-${{ hashFiles('scripts/build-ghostty.sh') }}
+      - name: Build libghostty
+        run: |
+          if [ ! -d Packages/Edith/vendor/GhosttyKit.xcframework ]; then
+            command -v zig >/dev/null 2>&1 || brew install zig
+            make ghostty
+          fi
       - name: Cache resolved packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
@@ -225,6 +236,17 @@ jobs:
         run: |
           command -v fish >/dev/null 2>&1 || brew install fish
           fish --version
+      - name: Cache libghostty
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: Packages/Edith/vendor/GhosttyKit.xcframework
+          key: ghostty-${{ runner.os }}-${{ hashFiles('scripts/build-ghostty.sh') }}
+      - name: Build libghostty
+        run: |
+          if [ ! -d Packages/Edith/vendor/GhosttyKit.xcframework ]; then
+            command -v zig >/dev/null 2>&1 || brew install zig
+            make ghostty
+          fi
       - name: Cache resolved packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:

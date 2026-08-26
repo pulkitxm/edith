@@ -86,8 +86,12 @@ public enum AppStorageKeys {
 
     public enum Herdr {
         public static let agentViews = "herdrAgentViews"
+        public static let ghosttyTerminal = "herdrGhosttyTerminal"
         public static let splitFraction = "herdrSplitFraction"
         public static let railOpen = "herdrRailOpen"
+        public static let detailOpen = "herdrDetailOpen"
+        public static let agentsCollapsed = "herdrAgentsCollapsed"
+        public static let terminalsCollapsed = "herdrTerminalsCollapsed"
     }
 
     public enum Limits {

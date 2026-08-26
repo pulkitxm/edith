@@ -37,7 +37,7 @@ import Testing
             executable: URL(fileURLWithPath: "/usr/local/bin/herdr"))
         #expect(request.executable == "/usr/local/bin/herdr")
         #expect(request.arguments == ["--remote", "tuf-wired"])
-        #expect(request.environment == ["TERM=xterm-256color"])
+        #expect(request.environment.contains("TERM=xterm-256color"))
     }
 
     @Test func aMissingBinaryFallsBackToALoginShell() {
@@ -48,6 +48,33 @@ import Testing
         #expect(request.arguments.first == "-c")
         #expect(request.arguments.last?.contains("herdr --remote tuf-wired") == true)
         #expect(request.arguments.last?.hasPrefix("export PATH=") == true)
+    }
+
+    @Test func aTerminalStartedInsideHerdrDoesNotLookNested() {
+        let environment = [
+            "TERM=xterm-256color", "HERDR_ENV=1", "HERDR_PANE_ID=w2:pG",
+            "HERDR_SOCKET_PATH=/tmp/herdr.sock", "HERDR_TAB_ID=w2:tG",
+            "HERDR_WORKSPACE_ID=w2", "PATH=/usr/bin",
+        ]
+        let clean = HerdrMachineTerminal.unnested(environment)
+        #expect(clean.contains("TERM=xterm-256color"))
+        #expect(clean.contains("PATH=/usr/bin"))
+        #expect(!clean.contains("HERDR_ENV=1"))
+        #expect(!clean.contains("HERDR_PANE_ID=w2:pG"))
+        #expect(clean.contains("HERDR_SOCKET_PATH=/tmp/herdr.sock"))
+        for name in HerdrMachineTerminal.nestingVariables {
+            #expect(clean.contains("\(name)="))
+        }
+    }
+
+    @Test func theLaunchRequestCarriesTheClearedEnvironment() {
+        let local = HerdrMachineTerminal.agent(for: .local(herdrPresent: true))
+        let request = HerdrMachineTerminal.launchRequest(
+            for: local, environment: ["HERDR_ENV=1", "TERM=xterm-256color"],
+            executable: URL(fileURLWithPath: "/usr/local/bin/herdr"))
+        #expect(!request.environment.contains("HERDR_ENV=1"))
+        #expect(request.environment.contains("HERDR_ENV="))
+        #expect(request.environment.contains("TERM=xterm-256color"))
     }
 
     @Test func anAgentStillAttachesToItsOwnPane() {

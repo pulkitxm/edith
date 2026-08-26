@@ -22,13 +22,33 @@ final class HerdrStore {
     var tabs: [HerdrOpenTab] = []
     var refreshing = false
     var copiedID: String?
-    var detailOpen = true
+    var detailOpen = true {
+        didSet {
+            guard detailOpen != oldValue else { return }
+            defaults.set(detailOpen, forKey: AppStorageKeys.Herdr.detailOpen)
+        }
+    }
     var railOpen = true
+    var agentsCollapsed = false {
+        didSet {
+            guard agentsCollapsed != oldValue else { return }
+            defaults.set(agentsCollapsed, forKey: AppStorageKeys.Herdr.agentsCollapsed)
+        }
+    }
+    var terminalsCollapsed = false {
+        didSet {
+            guard terminalsCollapsed != oldValue else { return }
+            defaults.set(terminalsCollapsed, forKey: AppStorageKeys.Herdr.terminalsCollapsed)
+        }
+    }
 
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
     private var connections: [UUID: SSHConnection] = [:]
     private var watchTask: Task<Void, Never>?
+    private var settleTask: Task<Void, Never>?
+    private var pendingHosts: [HerdrHostSnapshot]?
+    private var detachedTabs: [String: HerdrOpenTab] = [:]
     private var watchGeneration = 0
 
     init(
@@ -38,6 +58,11 @@ final class HerdrStore {
         self.defaults = defaults
         self.liveWatcher = liveWatcher
         railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
+        detailOpen = defaults.object(forKey: AppStorageKeys.Herdr.detailOpen) as? Bool ?? true
+        agentsCollapsed =
+            defaults.object(forKey: AppStorageKeys.Herdr.agentsCollapsed) as? Bool ?? false
+        terminalsCollapsed =
+            defaults.object(forKey: AppStorageKeys.Herdr.terminalsCollapsed) as? Bool ?? false
     }
 
     var agents: [HerdrAgent] { hosts.flatMap(\.agents) }
@@ -131,6 +156,7 @@ final class HerdrStore {
 
     func watch() async {
         guard watchTask == nil else { return }
+        if hosts.isEmpty { settling = true }
         watchGeneration += 1
         let generation = watchGeneration
         let liveWatcher = liveWatcher
@@ -142,7 +168,7 @@ final class HerdrStore {
                     guard let self, self.watchGeneration == generation, self.watchTask != nil else {
                         return
                     }
-                    self.apply(hosts)
+                    self.settle(hosts)
                 }
             }
         }
@@ -152,6 +178,10 @@ final class HerdrStore {
         watchGeneration += 1
         watchTask?.cancel()
         watchTask = nil
+        settleTask?.cancel()
+        settleTask = nil
+        pendingHosts = nil
+        settling = false
     }
 
     func refresh() async {
@@ -161,6 +191,31 @@ final class HerdrStore {
         refreshing = false
     }
 
+    static let settleWindow = Duration.milliseconds(400)
+
+    private(set) var settling = false
+
+    func settle(_ snapshots: [HerdrHostSnapshot]) {
+        pendingHosts = snapshots
+        guard settleTask == nil else { return }
+        if !settling { flush() }
+        let generation = watchGeneration
+        settleTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.settleWindow)
+            guard !Task.isCancelled else { return }
+            guard let self, self.watchGeneration == generation else { return }
+            self.settleTask = nil
+            self.settling = false
+            self.flush()
+        }
+    }
+
+    private func flush() {
+        guard let latest = pendingHosts else { return }
+        pendingHosts = nil
+        apply(latest)
+    }
+
     func apply(_ snapshots: [HerdrHostSnapshot]) {
         hosts = snapshots
         for index in tabs.indices {
@@ -168,6 +223,31 @@ final class HerdrStore {
                 tabs[index].agent = updated
             }
         }
+    }
+
+    var detachedIDs: Set<String> { Set(detachedTabs.keys) }
+
+    func detachedTab(for agent: HerdrAgent) -> HerdrOpenTab {
+        if let existing = detachedTabs[agent.id] { return existing }
+        var resolved = HerdrAgentViews.view(for: agent.id, defaults)
+        if agent.isTerminal { resolved = .agent }
+        let tab = HerdrOpenTab(
+            agent: agent, machine: machine(for: agent), view: resolved,
+            holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession())
+        detachedTabs[agent.id] = tab
+        return tab
+    }
+
+    func reattach(_ id: String) {
+        detachedTabs[id]?.holder.stop()
+        detachedTabs[id]?.quinjet.stop()
+        detachedTabs.removeValue(forKey: id)
+    }
+
+    private func machine(for agent: HerdrAgent) -> Machine? {
+        agent.machineIsLocal
+            ? nil
+            : MachineRegistry.machines().first { $0.id.uuidString == agent.machineID }
     }
 
     func open(_ agent: HerdrAgent) {
@@ -180,10 +260,7 @@ final class HerdrStore {
             selectedTab = agent.id
             return
         }
-        let machine: Machine? =
-            agent.machineIsLocal
-            ? nil
-            : MachineRegistry.machines().first { $0.id.uuidString == agent.machineID }
+        let machine: Machine? = machine(for: agent)
         var resolved = view ?? HerdrAgentViews.view(for: agent.id, defaults)
         if agent.isTerminal { resolved = .agent }
         tabs.append(

@@ -1,5 +1,6 @@
 import AppKit
 import EdithKit
+import GhosttyTerminal
 import Observation
 import SwiftTerm
 import SwiftUI
@@ -23,6 +24,7 @@ final class TerminalSessionHolder {
     private(set) var started = false
     private(set) var exitMessage: String?
     private(set) var themeApplicationCount = 0
+    private(set) var ghosttyLaunch: GhosttyLaunch?
     private(set) var presentationGeneration = 0
 
     private var delegateBox: TerminalProcessDelegate?
@@ -38,6 +40,12 @@ final class TerminalSessionHolder {
         guard !started else { return }
         started = true
         exitMessage = nil
+        guard !GhosttyTerminals.enabled else {
+            ghosttyLaunch = GhosttyLaunch(
+                executable: executable, arguments: arguments, environment: environment,
+                workingDirectory: currentDirectory)
+            return
+        }
         let delegate = TerminalProcessDelegate { [weak self] code in
             Task { @MainActor in
                 self?.exitMessage =
@@ -67,6 +75,7 @@ final class TerminalSessionHolder {
         appliedPalette = nil
         presentationActive = nil
         presentationWantsFocus = false
+        ghosttyLaunch = nil
     }
 
     func stop() {
@@ -228,7 +237,27 @@ private final class TerminalProcessDelegate: NSObject, LocalProcessTerminalViewD
     }
 }
 
-struct TerminalPane: NSViewRepresentable {
+struct TerminalPane: View {
+    let holder: TerminalSessionHolder
+    let palette: TerminalPalette
+    var active = true
+    var wantsFocus = true
+
+    var body: some View {
+        if GhosttyTerminals.enabled {
+            if let launch = holder.ghosttyLaunch {
+                GhosttyPane(
+                    launch: launch, theme: GhosttyTheme(palette: palette),
+                    active: active, wantsFocus: wantsFocus)
+            }
+        } else {
+            SwiftTermPane(
+                holder: holder, palette: palette, active: active, wantsFocus: wantsFocus)
+        }
+    }
+}
+
+struct SwiftTermPane: NSViewRepresentable {
     let holder: TerminalSessionHolder
     let palette: TerminalPalette
     var active = true

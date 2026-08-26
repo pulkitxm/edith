@@ -108,6 +108,79 @@ import Testing
         #expect(store.tabs.map(\.id) == [terminal.id])
     }
 
+    @Test func bothPanesSurviveARestart() {
+        let suite = defaults()
+        let first = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(first.detailOpen)
+        #expect(first.railOpen)
+        first.detailOpen = false
+        first.setRailOpen(false)
+
+        let second = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(!second.detailOpen)
+        #expect(!second.railOpen)
+
+        second.detailOpen = true
+        let third = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(third.detailOpen)
+        #expect(!third.railOpen)
+    }
+
+    @Test func eachRailSectionCollapsesAndSurvivesARestart() {
+        let suite = defaults()
+        let first = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(!first.terminalsCollapsed)
+        #expect(!first.agentsCollapsed)
+        first.terminalsCollapsed = true
+
+        let second = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(second.terminalsCollapsed)
+        #expect(!second.agentsCollapsed)
+
+        second.agentsCollapsed = true
+        second.terminalsCollapsed = false
+        let third = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(third.agentsCollapsed)
+        #expect(!third.terminalsCollapsed)
+    }
+
+    @Test func aBurstOfUpdatesLandsOnceAsTheLatestState() async throws {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.settle([host])
+        store.settle([host, remote])
+        store.settle([remote])
+        #expect(store.hosts.map(\.name) == ["This Mac"])
+
+        try await Task.sleep(for: HerdrStore.settleWindow * 3)
+        #expect(store.hosts.map(\.name) == ["tuf-wired"])
+        #expect(!store.settling)
+    }
+
+    @Test func aDetachedAgentKeepsOneTabUntilItsWindowCloses() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.apply([host])
+        #expect(store.detachedIDs.isEmpty)
+
+        let first = store.detachedTab(for: agent)
+        #expect(store.detachedIDs == [agent.id])
+        let again = store.detachedTab(for: agent)
+        #expect(first.id == again.id)
+        #expect(store.detachedIDs.count == 1)
+
+        store.reattach(agent.id)
+        #expect(store.detachedIDs.isEmpty)
+    }
+
+    @Test func aTerminalCanBeDetachedTheSameWay() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.apply([host, remote])
+        let terminal = HerdrMachineTerminal.agent(for: remote)
+        let tab = store.detachedTab(for: terminal)
+        #expect(tab.agent.isTerminal)
+        #expect(tab.view == .agent)
+        #expect(store.detachedIDs == [terminal.id])
+    }
+
     @Test func theRailRemembersWhetherItWasCollapsed() {
         let store = defaults()
         let first = HerdrStore(defaults: store, liveWatcher: { _ in })

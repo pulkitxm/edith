@@ -272,10 +272,11 @@ public struct HerdrPaneRecord: Equatable, Sendable {
     public var title: String?
     public var workspaceID: String?
     public var cwd: String?
+    public var revision: Int?
 
     public init(
         pane: String, kindRaw: String? = nil, statusRaw: String? = nil, title: String? = nil,
-        workspaceID: String? = nil, cwd: String? = nil
+        workspaceID: String? = nil, cwd: String? = nil, revision: Int? = nil
     ) {
         self.pane = pane
         self.kindRaw = kindRaw
@@ -283,6 +284,7 @@ public struct HerdrPaneRecord: Equatable, Sendable {
         self.title = title
         self.workspaceID = workspaceID
         self.cwd = cwd
+        self.revision = revision
     }
 
     public var looksLikeAgent: Bool {
@@ -316,7 +318,8 @@ public struct HerdrPaneRecord: Equatable, Sendable {
             statusRaw: status,
             title: incoming.title ?? title,
             workspaceID: incoming.workspaceID ?? workspaceID,
-            cwd: incoming.cwd ?? cwd)
+            cwd: incoming.cwd ?? cwd,
+            revision: incoming.revision ?? revision)
     }
 }
 

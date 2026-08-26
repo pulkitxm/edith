@@ -12,6 +12,8 @@ struct HerdrPage: View {
         var presenterBlurAgents = true
     private var presenterState = PresenterState.shared
     @State private var draggingTab: String?
+    @State private var dragTranslation: CGFloat = 0
+    @State private var tabFrames: [String: CGRect] = [:]
     @State private var hoveredCard: String?
 
     @MainActor init(store: HerdrStore? = nil) {
@@ -53,6 +55,11 @@ struct HerdrPage: View {
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
         .background(tabShortcuts)
         .navigationTitle("Herdr")
+        .onAppear {
+            HerdrAgentWindowDelegate.shared.onClose = { id in
+                store.reattach(id)
+            }
+        }
         .task(id: automaticActions) {
             if automaticActions {
                 await store.watch()
@@ -98,6 +105,18 @@ struct HerdrPage: View {
         .pointerCursor()
         .help(store.detailOpen ? "Hide details" : "Show details")
         .accessibilityLabel(store.detailOpen ? "Hide details" : "Show details")
+    }
+
+    private func reorder(id: String, location: CGPoint) {
+        guard
+            let target = tabFrames.first(where: { entry in
+                entry.key != id && entry.key != HerdrStore.boardID
+                    && location.x >= entry.value.minX && location.x <= entry.value.maxX
+            })
+        else { return }
+        guard target.key != id else { return }
+        store.moveTab(id, toIndexOf: target.key)
+        dragTranslation = 0
     }
 
     private var tabShortcuts: some View {
@@ -248,6 +267,8 @@ struct HerdrPage: View {
                 .fill(DashSkin.lineStrong(dark))
                 .frame(height: 1)
         }
+        .coordinateSpace(name: HerdrTabFrames.space)
+        .onPreferenceChange(HerdrTabFrames.self) { tabFrames = $0 }
         .background(DashSkin.paper2(dark).opacity(0.4))
     }
 
@@ -255,73 +276,86 @@ struct HerdrPage: View {
         -> some View
     {
         let selected = store.selectedTab == id
-        return Button {
-            store.selectedTab = id
-        } label: {
-            HStack(spacing: UIScale.pt(6)) {
-                if let agent {
-                    HerdrKindMark(kind: agent.kind, size: UIScale.pt(13))
-                        .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
-                } else {
-                    AppGlyph(.herdr, size: UIScale.pt(13), weight: .semibold)
-                }
-                Text(title)
-                    .font(.system(size: UIScale.pt(12), weight: selected ? .semibold : .medium))
-                    .lineLimit(1)
-                if let agent, agent.isTerminal {
-                    Text(agent.machineName)
-                        .font(DashSkin.mono(9))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .lineLimit(1)
-                }
-                if let agent {
-                    Button {
-                        store.copyAttachCommand(for: agent)
-                    } label: {
-                        Image(
-                            systemName: store.copiedID == agent.id ? "checkmark" : "terminal"
-                        )
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(
-                            store.copiedID == agent.id
-                                ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
-                    }
-                    .buttonStyle(.plain)
-                    .help(store.copiedID == agent.id ? "Copied" : "Copy attach command")
-                }
-                if closable {
-                    Button {
-                        store.close(id)
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: UIScale.pt(9), weight: .semibold))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Close")
-                }
+        return HStack(spacing: UIScale.pt(6)) {
+            if let agent {
+                HerdrKindMark(kind: agent.kind, size: UIScale.pt(13))
+                    .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
+            } else {
+                AppGlyph(.herdr, size: UIScale.pt(13), weight: .semibold)
             }
-            .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
-            .padding(.horizontal, UIScale.pt(10))
-            .padding(.vertical, UIScale.pt(6))
-            .widgetBar(
-                cornerRadius: 8,
-                fill: agent.map { HerdrStatusColor.fill($0, dark: dark, selected: selected) }
-                    ?? (selected
-                        ? DashSkin.paper2(dark) : DashSkin.paper2(dark).opacity(0.55)),
-                stroke: agent.map { HerdrStatusColor.stroke($0, dark: dark, selected: selected) }
-                    ?? (selected ? DashSkin.lineStrong(dark) : DashSkin.line(dark)),
-                strokeWidth: selected ? 1.4 : 1)
+            Text(title)
+                .font(.system(size: UIScale.pt(12), weight: selected ? .semibold : .medium))
+                .lineLimit(1)
+            if let agent, agent.isTerminal {
+                Text(agent.machineName)
+                    .font(DashSkin.mono(9))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .lineLimit(1)
+            }
+            if let agent {
+                Button {
+                    store.copyAttachCommand(for: agent)
+                } label: {
+                    Image(
+                        systemName: store.copiedID == agent.id ? "checkmark" : "terminal"
+                    )
+                    .font(.system(size: UIScale.pt(10)))
+                    .foregroundStyle(
+                        store.copiedID == agent.id
+                            ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
+                }
+                .buttonStyle(.plain)
+                .help(store.copiedID == agent.id ? "Copied" : "Copy attach command")
+            }
+            if closable {
+                Button {
+                    store.close(id)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: UIScale.pt(9), weight: .semibold))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                }
+                .buttonStyle(.plain)
+                .help("Close")
+            }
         }
-        .buttonStyle(.plain)
+        .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
+        .padding(.horizontal, UIScale.pt(10))
+        .padding(.vertical, UIScale.pt(6))
+        .widgetBar(
+            cornerRadius: 8,
+            fill: agent.map { HerdrStatusColor.fill($0, dark: dark, selected: selected) }
+                ?? (selected
+                    ? DashSkin.paper2(dark) : DashSkin.paper2(dark).opacity(0.55)),
+            stroke: agent.map { HerdrStatusColor.stroke($0, dark: dark, selected: selected) }
+                ?? (selected ? DashSkin.lineStrong(dark) : DashSkin.line(dark)),
+            strokeWidth: selected ? 1.4 : 1
+        )
+        .contentShape(Rectangle())
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: HerdrTabFrames.self,
+                    value: [id: proxy.frame(in: .named(HerdrTabFrames.space))])
+            }
+        )
+        .offset(x: draggingTab == id ? dragTranslation : 0)
+        .zIndex(draggingTab == id ? 1 : 0)
+        .onTapGesture { store.selectedTab = id }
         .pointerCursor()
-        .onDrag {
-            draggingTab = id
-            return NSItemProvider(object: id as NSString)
-        }
-        .onDrop(
-            of: [.text],
-            delegate: HerdrTabDrop(target: id, store: store, dragging: $draggingTab)
+        .gesture(
+            id == HerdrStore.boardID
+                ? nil
+                : DragGesture(minimumDistance: 6, coordinateSpace: .named(HerdrTabFrames.space))
+                    .onChanged { value in
+                        draggingTab = id
+                        dragTranslation = value.translation.width
+                        reorder(id: id, location: value.location)
+                    }
+                    .onEnded { _ in
+                        draggingTab = nil
+                        dragTranslation = 0
+                    }
         )
         .contextMenu { tabContextMenu(id: id, closable: closable) }
         .help(
@@ -388,17 +422,23 @@ struct HerdrPage: View {
                 Text(status.title)
                     .font(.system(size: UIScale.pt(12), weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
-                Text("\(cards.count)")
-                    .font(DashSkin.mono(10, weight: .medium))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                if !store.settling {
+                    Text("\(cards.count)")
+                        .font(DashSkin.mono(10, weight: .medium))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                }
             }
             ScrollView {
                 VStack(spacing: UIScale.pt(8)) {
-                    ForEach(cards) { agent in
-                        card(agent)
-                    }
-                    if cards.isEmpty {
-                        emptyColumnSlot
+                    if store.settling {
+                        HerdrSkeleton(dark: dark, rows: status == .idle ? 3 : 1)
+                    } else {
+                        ForEach(cards) { agent in
+                            card(agent)
+                        }
+                        if cards.isEmpty {
+                            emptyColumnSlot
+                        }
                     }
                 }
             }
@@ -491,26 +531,48 @@ struct HerdrPage: View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    if !onBoard {
-                        railHeader("Agents", count: listedAgents.count)
-                        ForEach(listedAgents) { agent in
-                            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                                agentRow(agent)
-                                if store.selectedTab == agent.id {
-                                    HerdrAgentViewToggle(
-                                        selection: store.view(for: agent.id), compactStyle: true
-                                    ) { option in
-                                        store.open(agent, showing: option)
-                                    }
-                                    .padding(.horizontal, UIScale.pt(8))
-                                    .padding(.bottom, UIScale.pt(4))
-                                }
+                    railHeader(
+                        "Terminals", count: machineTerminals.count,
+                        collapsed: store.terminalsCollapsed
+                    ) {
+                        store.terminalsCollapsed.toggle()
+                    }
+                    if !store.terminalsCollapsed {
+                        if store.settling {
+                            HerdrSkeleton(dark: dark, rows: 2, card: false)
+                        } else {
+                            ForEach(machineTerminals) { terminal in
+                                agentRow(terminal)
                             }
                         }
                     }
-                    railHeader("Terminals", count: machineTerminals.count)
-                    ForEach(machineTerminals) { terminal in
-                        agentRow(terminal)
+                    if !onBoard {
+                        railHeader(
+                            "Agents", count: listedAgents.count,
+                            collapsed: store.agentsCollapsed
+                        ) {
+                            store.agentsCollapsed.toggle()
+                        }
+                        if !store.agentsCollapsed, store.settling {
+                            HerdrSkeleton(dark: dark, rows: 4, card: false)
+                        }
+                        if !store.agentsCollapsed, !store.settling {
+                            ForEach(listedAgents) { agent in
+                                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                                    agentRow(agent)
+                                    if store.selectedTab == agent.id {
+                                        HerdrAgentViewToggle(
+                                            selection: store.view(for: agent.id),
+                                            compactStyle: true
+                                        ) { option in
+                                            store.open(agent, showing: option)
+                                        }
+                                        .padding(.horizontal, UIScale.pt(8))
+                                        .padding(.bottom, UIScale.pt(4))
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, UIScale.pt(6))
@@ -522,19 +584,34 @@ struct HerdrPage: View {
         .background(DashSkin.paper(dark))
     }
 
-    private func railHeader(_ title: String, count: Int) -> some View {
-        HStack(spacing: UIScale.pt(8)) {
-            Text(title)
-                .font(.system(size: UIScale.pt(11), weight: .semibold))
-                .foregroundStyle(DashSkin.ink(dark))
-            Text("\(count)")
-                .font(DashSkin.mono(10, weight: .medium))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            Spacer(minLength: 0)
+    private func railHeader(
+        _ title: String, count: Int, collapsed: Bool, toggle: @escaping () -> Void
+    ) -> some View {
+        Button {
+            withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) { toggle() }
+        } label: {
+            HStack(spacing: UIScale.pt(6)) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: UIScale.pt(9), weight: .bold))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .rotationEffect(.degrees(collapsed ? 0 : 90))
+                Text(title)
+                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .foregroundStyle(DashSkin.ink(dark))
+                Text("\(count)")
+                    .font(DashSkin.mono(10, weight: .medium))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, UIScale.pt(8))
+            .padding(.top, UIScale.pt(10))
+            .padding(.bottom, UIScale.pt(4))
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, UIScale.pt(8))
-        .padding(.top, UIScale.pt(10))
-        .padding(.bottom, UIScale.pt(4))
+        .buttonStyle(.plain)
+        .pointerCursor()
+        .help(collapsed ? "Show \(title.lowercased())" : "Hide \(title.lowercased())")
+        .accessibilityLabel("\(title), \(collapsed ? "collapsed" : "expanded")")
     }
 
     private func agentRow(_ agent: HerdrAgent) -> some View {
@@ -593,6 +670,13 @@ struct HerdrPage: View {
     }
 
     private func openAgent(_ agent: HerdrAgent) {
+        let detaching = NSEvent.modifierFlags.contains(.command)
+        if detaching {
+            store.close(agent.id)
+            HerdrAgentWindow.open(agent: agent, store: store, launchEnabled: launchEnabled)
+            return
+        }
+        if HerdrAgentWindow.raise(agent.id) { return }
         store.open(agent)
     }
 
@@ -652,23 +736,13 @@ enum HerdrStatusColor {
     }
 }
 
-private struct HerdrTabDrop: DropDelegate {
-    let target: String
-    let store: HerdrStore
-    @Binding var dragging: String?
+private struct HerdrTabFrames: PreferenceKey {
+    static let space = "herdr.tabs"
 
-    func dropEntered(info: DropInfo) {
-        guard let dragging, dragging != target else { return }
-        store.moveTab(dragging, toIndexOf: target)
-    }
+    static let defaultValue: [String: CGRect] = [:]
 
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        dragging = nil
-        return true
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue()) { _, new in new }
     }
 }
 

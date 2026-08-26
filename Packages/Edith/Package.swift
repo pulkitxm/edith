@@ -7,6 +7,7 @@ let products: [Product] = [
     .library(name: "EdithKit", targets: ["EdithKit"]),
     .library(name: "EdithCLI", targets: ["EdithCLI"]),
     .library(name: "Highlighter", targets: ["Highlighter"]),
+    .library(name: "GhosttyTerminal", targets: ["GhosttyTerminal"]),
     .executable(name: "EdithLidAwakeHelper", targets: ["EdithLidAwakeHelper"]),
 ]
 
@@ -71,10 +72,20 @@ let targets: [Target] = [
         dependencies: ["EdithKit"],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
+    .binaryTarget(
+        name: "GhosttyKit",
+        path: "vendor/GhosttyKit.xcframework"
+    ),
+    .target(
+        name: "GhosttyTerminal",
+        dependencies: ["GhosttyKit"],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
     .target(
         name: "Edith",
         dependencies: [
             "EdithKit",
+            "GhosttyTerminal",
             .product(name: "Sparkle", package: "Sparkle"),
             .product(name: "SwiftTerm", package: "SwiftTerm"),
             "Highlighter",
