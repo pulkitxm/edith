@@ -329,6 +329,7 @@ private struct ExtensionMarketplaceCard: View {
                     .controlSize(.small)
                     .tint(brandAccent)
                     .disabled(switchDisabled)
+                    .accessibilityLabel("\(entry.title) enabled")
                     .pointerCursor()
             }
             Button(action: open) {

@@ -181,8 +181,10 @@ import Testing
             .deletingLastPathComponent()
             .appendingPathComponent("Sources/Edith/Features/Settings/Views/ExtensionsPane.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let cardStart = try #require(source.range(of: "private struct ExtensionMarketplaceCard"))
         let headerStart = try #require(source.range(of: "struct ExtensionSettingsHeader"))
         let sheetStart = try #require(source.range(of: "private struct ExtensionSettingsSheet"))
+        let cardSource = String(source[cardStart.lowerBound..<headerStart.lowerBound])
         let headerSource = String(source[headerStart.lowerBound..<sheetStart.lowerBound])
         let sheetEnd = try #require(
             source.range(
@@ -193,6 +195,8 @@ import Testing
         let form = try #require(sheet.range(of: "Form {"))
 
         #expect(header.lowerBound < form.lowerBound)
+        #expect(cardSource.contains("Toggle(\"\", isOn: enabledBinding)"))
+        #expect(cardSource.contains(".accessibilityLabel(\"\\(entry.title) enabled\")"))
         #expect(headerSource.contains("Toggle(isOn: $enabled)"))
         #expect(headerSource.contains(".labelsHidden()"))
         #expect(headerSource.contains(".disabled(disabled)"))
@@ -209,6 +213,31 @@ import Testing
         #expect(!sheet.contains(".disabled(lidAwakeOperations.applying)"))
         #expect(sheet.contains("Button(\"Set up required tools...\")"))
         #expect(sheet.contains("ToolProvisioningSheet(entry: entry)"))
+    }
+
+    @Test func micMuteShortcutControlsAreReachableWhereUsersConfigureExtensions() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Edith/Features/Settings/Views")
+        let extensions = try String(
+            contentsOf: root.appendingPathComponent("ExtensionsPane.swift"), encoding: .utf8)
+        let shortcuts = try String(
+            contentsOf: root.appendingPathComponent("ShortcutsPane.swift"), encoding: .utf8)
+        let micStart = try #require(extensions.range(of: "private struct MicMuteRows"))
+        let micEnd = try #require(
+            extensions.range(
+                of: "private struct SystemRows",
+                range: micStart.upperBound..<extensions.endIndex))
+        let micRows = String(extensions[micStart.lowerBound..<micEnd.lowerBound])
+        let recorder = "HotKeyRecorderControl(keyPrefix: \"micHotKey\", defaultLabel: \"⌘⇧M\")"
+
+        #expect(micRows.contains(recorder))
+        #expect(shortcuts.contains("case .micMute:"))
+        #expect(
+            shortcuts.contains("keyPrefix: \"micHotKey\", defaultLabel: \"⌘⇧M\"")
+        )
     }
 
     @Test func everyExtensionDetailKeepsItsDisabledStateGate() throws {
@@ -359,6 +388,8 @@ import Testing
         #expect(settings.contains("operations.perform(.off)"))
         #expect(settings.contains("operations.refreshStatus()"))
         #expect(settings.contains("operations.lastSnapshot?.lastError"))
+        #expect(settings.contains("Text(\"Keep running with lid closed\")"))
+        #expect(!settings.contains("Text(\"Lid awake\")"))
         #expect(settings.contains(".disabled(!enabled)"))
         #expect(settings.contains(".disabled(operations.applying)"))
         #expect(!settings.contains("IPC.Name.toggleLidAwake"))
