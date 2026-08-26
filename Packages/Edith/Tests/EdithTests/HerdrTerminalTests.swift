@@ -61,6 +61,7 @@ import Testing
         #expect(clean.contains("PATH=/usr/bin"))
         #expect(!clean.contains("HERDR_ENV=1"))
         #expect(!clean.contains("HERDR_PANE_ID=w2:pG"))
+        #expect(clean.contains("HERDR_SOCKET_PATH=/tmp/herdr.sock"))
         for name in HerdrMachineTerminal.nestingVariables {
             #expect(clean.contains("\(name)="))
         }

@@ -29,8 +29,7 @@ public enum HerdrMachineTerminal {
     }
 
     public static let nestingVariables = [
-        "HERDR_ENV", "HERDR_PANE_ID", "HERDR_SOCKET_PATH", "HERDR_TAB_ID",
-        "HERDR_WORKSPACE_ID",
+        "HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID",
     ]
 
     public static func unnested(_ environment: [String]) -> [String] {
