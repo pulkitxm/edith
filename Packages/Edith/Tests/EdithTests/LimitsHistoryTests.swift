@@ -30,6 +30,26 @@ import Testing
         #expect(obj["ts"] is String)
     }
 
+    @Test func unavailableSnapshotReplacesLastKnownLimits() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-tests-\(UUID().uuidString)")
+        let url = dir.appendingPathComponent("limits-history.jsonl")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var history = LimitsHistory(url: url)
+        let live = history.append(
+            session: LimitWindow(percent: 42, resetsAt: nil),
+            week: LimitWindow(percent: 17, resetsAt: nil), now: now)
+        let unavailable = history.append(
+            session: nil, week: nil, now: now.addingTimeInterval(60))
+        #expect(live)
+        #expect(unavailable)
+
+        let latest = try #require(LimitsHistory.latest(url: url))
+        #expect(latest.session == nil)
+        #expect(latest.week == nil)
+        #expect(abs(latest.date.timeIntervalSince(now.addingTimeInterval(60))) < 1)
+    }
+
     @Test func parseSkipsGarbageAndFiltersByDate() {
         let iso = ISO8601DateFormatter()
         let old = iso.string(from: now.addingTimeInterval(-100_000))
