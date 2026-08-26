@@ -180,8 +180,8 @@ Merging application changes into `main` publishes a new patch version after the
 required CI jobs pass. CI calls the reusable release workflow, which builds the
 signed DMG, notarizes it when Apple credentials are available, generates the signed
 Sparkle appcast, then publishes both assets to one GitHub Release. The versioned
-plists and cask land together in one release commit
-and tag, and the cask is mirrored to the tap. To rebuild an existing release, run
+plists and cask land together in one release commit and tag, and the cask is
+mirrored to the tap. To rebuild an existing release, run
 the Release workflow manually from `main` with its required `rebuild` input set to
 the current tag. Only the current release can be rebuilt. The rebuild replaces its
 two assets, commits a changed DMG checksum to `main` when needed, and mirrors the
@@ -198,22 +198,13 @@ point cannot cut a new release directly because it only accepts a rebuild tag.
 | `SPARKLE_PRIVATE_KEY` | Signs the appcast. Without it the workflow refuses to publish. |
 | `MACOS_CERT_P12` | Base64 of the exported signing certificate and private key. |
 | `MACOS_CERT_PASSWORD` | The password on that `.p12`. |
-| `RELEASE_PUSH_TOKEN` | Pushes the release commit and tag to a protected `main`. |
-| `TAP_PUSH_TOKEN` | Pushes the updated cask to `pulkitxm/homebrew-tap`. |
+| `PUKBOT_PRIVATE_KEY` | Authenticates the Pukbot GitHub App for release and tap writes. |
 
-`main` is protected by a ruleset that requires pull requests and status checks. The
-`GITHUB_TOKEN` an Actions run is given cannot bypass it, and the GitHub Actions app
-cannot be added to a bypass list on a personal repository. The release jobs
-therefore check out with `RELEASE_PUSH_TOKEN`, a fine grained personal access token
-scoped to this repository with read and write access to contents. It acts as its
-owner, and the ruleset already grants the repository admin role an unconditional
-bypass, so pushes made with it are accepted. Without the secret the release fails
-immediately with a message naming it, rather than building for ten minutes and
-failing at the push.
-
-`TAP_PUSH_TOKEN` is the equivalent for the Homebrew tap, scoped to
-`pulkitxm/homebrew-tap`, and is documented in
-[docs/homebrew-internals.md](docs/homebrew-internals.md).
+The `PUKBOT_CLIENT_ID` repository variable identifies the app. Pukbot must have
+Contents write access to both `pulkitxm/edith` and `pulkitxm/homebrew-tap`, and the
+active `main` rulesets must list the app as an always-allowed bypass actor. The
+publisher uses one short-lived installation token to push the release commit and
+tag, publish the GitHub Release, and mirror the cask.
 
 ### Optional notarization secrets
 

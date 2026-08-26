@@ -61,7 +61,7 @@ test("the release mirrors the bumped cask to the tap repository", () => {
 });
 
 test("the unified publisher updates and mirrors the cask", () => {
-  const tagStep = releaseWorkflow.indexOf("- name: Tag the release");
+  const tagStep = releaseWorkflow.indexOf("- name: Commit and tag the release");
   const publishStep = releaseWorkflow.indexOf("- name: Publish the release");
   const mirrorStep = releaseWorkflow.indexOf(
     "- name: Mirror the cask to the tap repository",
