@@ -24,13 +24,14 @@ import Testing
         #expect(system.contains(".accessibilityLabel(\"Dismiss status\")"))
     }
 
-    @Test func aboutUsesTheSharedLeadingReadableLayout() throws {
+    @Test func aboutPreservesTheCenteredIdentityLayout() throws {
         let source = try source("Features/Settings/Views/AboutPane.swift")
-        #expect(source.contains("PageHeader("))
-        #expect(source.contains(".pageContent(compact, width: .readable)"))
-        #expect(source.contains("PageSectionHeader("))
-        #expect(source.contains("EdithButtonStyle(.secondary, tint: theme)"))
-        #expect(!source.contains("multilineTextAlignment(.center)"))
+        #expect(source.contains("GeometryReader { proxy in"))
+        #expect(source.contains("multilineTextAlignment(.center)"))
+        #expect(source.contains(".background(theme.opacity(0.16), in: Capsule())"))
+        #expect(source.contains(".frame(maxWidth: UIScale.pt(340))"))
+        #expect(source.contains(".accessibilityLabel(\"Open \\(person.login) on GitHub\")"))
+        #expect(!source.contains("PageHeader("))
     }
 
     @Test func attentionAndDashboardUseOwnedLoadingWork() throws {
