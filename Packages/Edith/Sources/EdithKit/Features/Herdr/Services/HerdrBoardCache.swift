@@ -6,6 +6,7 @@ public final class HerdrBoardCache: @unchecked Sendable {
     private var labels: [String: String] = [:]
     private var knownPanes = Set<String>()
     private var paneWorkspace: [String: String] = [:]
+    private var paneRevision: [String: Int] = [:]
     private var agentsByPane: [String: HerdrAgent] = [:]
 
     public init(context: HerdrBoardContext) {
@@ -116,6 +117,10 @@ public final class HerdrBoardCache: @unchecked Sendable {
     }
 
     private func upsert(_ record: HerdrPaneRecord) {
+        if let incoming = record.revision {
+            if let seen = paneRevision[record.pane], incoming < seen { return }
+            paneRevision[record.pane] = incoming
+        }
         if let id = record.workspaceID { paneWorkspace[record.pane] = id }
         let previous = agentsByPane[record.pane]
         if previous == nil, !record.looksLikeAgent { return }
@@ -127,6 +132,7 @@ public final class HerdrBoardCache: @unchecked Sendable {
         knownPanes.remove(pane)
         agentsByPane[pane] = nil
         paneWorkspace[pane] = nil
+        paneRevision[pane] = nil
     }
 
     private func relabel() {

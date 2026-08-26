@@ -142,7 +142,16 @@ public enum HerdrListParser {
             title: string(
                 in: object, keys: ["terminal_title_stripped", "title", "terminal_title"]),
             workspaceID: string(in: object, keys: ["workspace_id"]),
-            cwd: string(in: object, keys: ["foreground_cwd", "cwd", "working_directory"]))
+            cwd: string(in: object, keys: ["foreground_cwd", "cwd", "working_directory"]),
+            revision: integer(in: object, keys: ["revision"]))
+    }
+
+    static func integer(in object: [String: Any], keys: [String]) -> Int? {
+        for key in keys {
+            if let value = object[key] as? Int { return value }
+            if let value = object[key] as? Double { return Int(value) }
+        }
+        return nil
     }
 
     public static func agent(
