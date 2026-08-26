@@ -8,15 +8,28 @@ private struct SplitResizeCursor: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 
     private final class CursorView: NSView {
-        override func resetCursorRects() {
-            addCursorRect(bounds, cursor: .resizeLeftRight)
-        }
-
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-        override func layout() {
-            super.layout()
-            window?.invalidateCursorRects(for: self)
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            for area in trackingAreas { removeTrackingArea(area) }
+            addTrackingArea(
+                NSTrackingArea(
+                    rect: bounds,
+                    options: [.activeInActiveApp, .cursorUpdate, .mouseEnteredAndExited],
+                    owner: self))
+        }
+
+        override func cursorUpdate(with event: NSEvent) {
+            NSCursor.resizeLeftRight.set()
+        }
+
+        override func mouseEntered(with event: NSEvent) {
+            NSCursor.resizeLeftRight.set()
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            NSCursor.arrow.set()
         }
     }
 }
