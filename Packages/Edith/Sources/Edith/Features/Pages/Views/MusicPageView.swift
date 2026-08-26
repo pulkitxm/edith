@@ -1219,23 +1219,23 @@ private struct CrumbButton: View {
     @State private var dropTargeted = false
 
     var body: some View {
-        HStack(spacing: UIScale.pt(3)) {
-            if let systemImage {
-                Image(systemName: systemImage).font(.system(size: UIScale.pt(10)))
+        Button(action: onTap) {
+            HStack(spacing: UIScale.pt(3)) {
+                if let systemImage {
+                    Image(systemName: systemImage).font(.system(size: UIScale.pt(10)))
+                }
+                Text(name).lineLimit(1)
             }
-            Text(name).lineLimit(1)
+            .font(.system(size: UIScale.pt(12), weight: isCurrent ? .semibold : .regular))
+            .foregroundStyle(isCurrent ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
+            .padding(.horizontal, UIScale.pt(7))
+            .padding(.vertical, UIScale.pt(4))
+            .background(
+                dropTargeted ? theme.opacity(0.2) : .clear,
+                in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+            )
         }
-        .font(.system(size: UIScale.pt(12), weight: isCurrent ? .semibold : .regular))
-        .foregroundStyle(isCurrent ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
-        .padding(.horizontal, UIScale.pt(7))
-        .padding(.vertical, UIScale.pt(4))
-        .background(
-            dropTargeted ? theme.opacity(0.2) : .clear,
-            in: RoundedRectangle(cornerRadius: UIScale.pt(6))
-        )
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
         .dropDestination(for: String.self) { paths, _ in
             guard !isCurrent else { return false }
             onDrop(paths)
@@ -1499,15 +1499,18 @@ private struct MusicFolderTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
-            ZStack {
-                RoundedRectangle(cornerRadius: UIScale.pt(12))
-                    .fill(theme.opacity(0.16))
-                Image(systemName: "folder.fill")
-                    .font(.system(size: UIScale.pt(34)))
-                    .foregroundStyle(theme)
-            }
-            .frame(width: MusicTile.artSize, height: MusicTile.artSize)
-            .overlay(alignment: .bottomTrailing) {
+            ZStack(alignment: .bottomTrailing) {
+                Button(action: onOpen) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: UIScale.pt(12))
+                            .fill(theme.opacity(0.16))
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: UIScale.pt(34)))
+                            .foregroundStyle(theme)
+                    }
+                    .frame(width: MusicTile.artSize, height: MusicTile.artSize)
+                }
+                .buttonStyle(.edith(.borderless))
                 Button(action: onPlay) {
                     Image(systemName: "play.circle.fill")
                         .font(.system(size: UIScale.pt(24)))
@@ -1515,14 +1518,10 @@ private struct MusicFolderTile: View {
                         .foregroundStyle(.white, theme)
                 }
                 .buttonStyle(.edith(.borderless))
-                .pointerCursor()
                 .help("Play this folder")
                 .opacity(hovering ? 1 : 0)
                 .padding(UIScale.pt(7))
             }
-            .contentShape(Rectangle())
-            .onTapGesture(perform: onOpen)
-            .pointerCursor()
 
             VStack(spacing: UIScale.pt(1)) {
                 Text(folder.name)
@@ -1587,54 +1586,52 @@ private struct MusicTrackTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
-            PageArtworkThumb(track: track, size: MusicTile.artSize)
-                .overlay(alignment: .bottomTrailing) {
-                    Image(
-                        systemName: isCurrent && isPlaying
-                            ? "pause.circle.fill" : "play.circle.fill"
-                    )
-                    .font(.system(size: UIScale.pt(24)))
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white, theme)
-                    .opacity(hovering || isCurrent ? 1 : 0)
-                    .padding(UIScale.pt(7))
+            ZStack(alignment: .topTrailing) {
+                Button(action: onToggle) {
+                    PageArtworkThumb(track: track, size: MusicTile.artSize)
+                        .overlay(alignment: .bottomTrailing) {
+                            Image(
+                                systemName: isCurrent && isPlaying
+                                    ? "pause.circle.fill" : "play.circle.fill"
+                            )
+                            .font(.system(size: UIScale.pt(24)))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, theme)
+                            .opacity(hovering || isCurrent ? 1 : 0)
+                            .padding(UIScale.pt(7))
+                        }
                 }
-                .overlay(alignment: .topTrailing) {
-                    Button(action: onToggleFavourite) {
-                        Image(systemName: isFavourite ? "heart.fill" : "heart")
-                            .font(.system(size: UIScale.pt(13), weight: .semibold))
-                            .foregroundStyle(isFavourite ? theme : .white)
-                            .shadow(color: .black.opacity(0.5), radius: UIScale.pt(2))
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.edith(.borderless))
-                    .pointerCursor()
-                    .help(isFavourite ? "Remove from favourites" : "Add to favourites")
-                    .opacity(hovering || isFavourite ? 1 : 0)
-                    .padding(UIScale.pt(7))
+                .buttonStyle(.edith(.borderless))
+                Button(action: onToggleFavourite) {
+                    Image(systemName: isFavourite ? "heart.fill" : "heart")
+                        .font(.system(size: UIScale.pt(13), weight: .semibold))
+                        .foregroundStyle(isFavourite ? theme : .white)
+                        .shadow(color: .black.opacity(0.5), radius: UIScale.pt(2))
                 }
-                .contentShape(Rectangle())
-                .onTapGesture(perform: onToggle)
-                .pointerCursor()
-
-            VStack(spacing: UIScale.pt(1)) {
-                Text(track.title)
-                    .font(.system(size: UIScale.pt(12)))
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(isCurrent ? theme : .primary)
-                    .presenterBlur(blur)
-                Text(location ?? duration ?? " ")
-                    .font(.system(size: UIScale.pt(10.5)))
-                    .monospacedDigit()
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
+                .buttonStyle(.edith(.borderless))
+                .help(isFavourite ? "Remove from favourites" : "Add to favourites")
+                .opacity(hovering || isFavourite ? 1 : 0)
+                .padding(UIScale.pt(7))
             }
-            .frame(width: MusicTile.artSize)
-            .contentShape(Rectangle())
-            .onTapGesture(perform: onOpenDetails)
-            .pointerCursor()
+
+            Button(action: onOpenDetails) {
+                VStack(spacing: UIScale.pt(1)) {
+                    Text(track.title)
+                        .font(.system(size: UIScale.pt(12)))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(isCurrent ? theme : .primary)
+                        .presenterBlur(blur)
+                    Text(location ?? duration ?? " ")
+                        .font(.system(size: UIScale.pt(10.5)))
+                        .monospacedDigit()
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
+                .frame(width: MusicTile.artSize)
+            }
+            .buttonStyle(.edith(.borderless))
             .help("Show details")
         }
         .padding(UIScale.pt(6))
@@ -2086,26 +2083,29 @@ struct MusicFooter: View {
                 PageArtworkThumb(track: track, size: 44)
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
             .help(track.isVideo ? "Watch this video" : "Show details")
-            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                Text(track.title)
-                    .font(.system(size: UIScale.pt(13), weight: .semibold))
-                    .lineLimit(1)
-                    .presenterBlur(blur)
-                Text(remote.isPlaying ? "Now playing" : "Paused")
-                    .font(.system(size: UIScale.pt(10.5)))
-                    .foregroundStyle(.secondary)
-                    .frame(width: UIScale.pt(78), alignment: .leading)
+            Button {
+                remote.reveal(track)
+            } label: {
+                HStack(spacing: UIScale.pt(11)) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                        Text(track.title)
+                            .font(.system(size: UIScale.pt(13), weight: .semibold))
+                            .lineLimit(1)
+                            .presenterBlur(blur)
+                        Text(remote.isPlaying ? "Now playing" : "Paused")
+                            .font(.system(size: UIScale.pt(10.5)))
+                            .foregroundStyle(.secondary)
+                            .frame(width: UIScale.pt(78), alignment: .leading)
+                    }
+                    PlaybackWave(
+                        playing: remote.isPlaying && visibility.visible, color: theme.opacity(0.9),
+                        maxHeight: UIScale.pt(13))
+                }
             }
-            PlaybackWave(
-                playing: remote.isPlaying && visibility.visible, color: theme.opacity(0.9),
-                maxHeight: UIScale.pt(13))
+            .buttonStyle(.edith(.borderless))
+            .help("Show this track in Music")
         }
-        .contentShape(Rectangle())
-        .onTapGesture { remote.reveal(track) }
-        .pointerCursor()
-        .help("Show this track in Music")
     }
 
     private var transport: some View {

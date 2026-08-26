@@ -481,6 +481,7 @@ private struct QuinjetMachineChipStyle: ButtonStyle {
                     .strokeBorder(
                         selected ? DashSkin.accent(dark).opacity(0.7) : DashSkin.lineStrong(dark))
             }
+            .edithButtonTarget(.selection)
             .opacity(configuration.isPressed ? 0.75 : 1)
     }
 }
@@ -501,6 +502,7 @@ private struct QuinjetFolderRowStyle: ButtonStyle {
                     .strokeBorder(
                         selected ? DashSkin.accent(dark).opacity(0.55) : DashSkin.lineStrong(dark))
             }
+            .edithButtonTarget(.selection)
             .opacity(configuration.isPressed ? 0.75 : 1)
     }
 }

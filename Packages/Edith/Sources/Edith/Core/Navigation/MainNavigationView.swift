@@ -1219,26 +1219,28 @@ struct MainWindowView: View {
     }
 
     private func presenterQuickActionToggle(_ title: String, isOn: Binding<Bool>) -> some View {
-        HStack(spacing: UIScale.pt(12)) {
-            Text(title)
-                .font(.system(size: UIScale.pt(12.5)))
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .allowsHitTesting(false)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, UIScale.pt(8))
-        .padding(.vertical, UIScale.pt(8))
-        .background(
-            hoveredPresenterQuickAction == title ? Color.primary.opacity(0.06) : Color.clear
-        )
-        .contentShape(Rectangle())
-        .onTapGesture {
+        Button {
             isOn.wrappedValue.toggle()
+        } label: {
+            HStack(spacing: UIScale.pt(12)) {
+                Text(title)
+                    .font(.system(size: UIScale.pt(12.5)))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Toggle("", isOn: isOn)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .allowsHitTesting(false)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, UIScale.pt(8))
+            .padding(.vertical, UIScale.pt(8))
+            .background(
+                hoveredPresenterQuickAction == title ? Color.primary.opacity(0.06) : Color.clear
+            )
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.edith(.borderless))
         .onHover { hovering in
             if hovering {
                 hoveredPresenterQuickAction = title
@@ -1246,7 +1248,6 @@ struct MainWindowView: View {
                 hoveredPresenterQuickAction = nil
             }
         }
-        .pointerCursor()
     }
 
     private func quickActionTile(

@@ -687,32 +687,34 @@ struct MachineControlCenterView: View {
     private func toggleRow(
         _ title: String, symbol: String, value: Bool, onChange: @escaping (Bool) -> Void
     ) -> some View {
-        HStack(spacing: UIScale.pt(9)) {
-            Image(systemName: symbol)
-                .font(.system(size: UIScale.pt(11.5)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-                .frame(width: UIScale.pt(18))
-            Text(title)
-                .font(.system(size: UIScale.pt(12.5)))
-                .foregroundStyle(DashSkin.ink(dark))
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Toggle("", isOn: .constant(value))
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .allowsHitTesting(false)
-        }
-        .padding(.horizontal, UIScale.pt(8))
-        .padding(.vertical, UIScale.pt(8))
-        .background(rowBackground(title))
-        .contentShape(Rectangle())
-        .opacity(controlsDisabled ? 0.55 : 1)
-        .onTapGesture {
+        Button {
             guard !controlsDisabled else { return }
             onChange(!value)
+        } label: {
+            HStack(spacing: UIScale.pt(9)) {
+                Image(systemName: symbol)
+                    .font(.system(size: UIScale.pt(11.5)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .frame(width: UIScale.pt(18))
+                Text(title)
+                    .font(.system(size: UIScale.pt(12.5)))
+                    .foregroundStyle(DashSkin.ink(dark))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Toggle("", isOn: .constant(value))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .allowsHitTesting(false)
+            }
+            .padding(.horizontal, UIScale.pt(8))
+            .padding(.vertical, UIScale.pt(8))
+            .background(rowBackground(title))
+            .contentShape(Rectangle())
+            .opacity(controlsDisabled ? 0.55 : 1)
         }
+        .buttonStyle(.edith(.borderless))
+        .disabled(controlsDisabled)
         .onHover { updateHover(title, hovering: $0) }
-        .pointerCursor()
     }
 
     private var coolingControls: some View {

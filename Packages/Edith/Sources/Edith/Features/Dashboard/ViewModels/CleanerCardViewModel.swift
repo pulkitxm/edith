@@ -378,7 +378,9 @@ struct CleanerCard: View {
                 Text("Scanning…").font(.system(size: UIScale.pt(12))).foregroundStyle(
                     DashSkin.inkSoft(dark))
                 Button("Cancel") { model.cancelScan() }
-                    .font(.system(size: UIScale.pt(11), weight: .medium)).buttonStyle(.edith(.borderless))
+                    .font(.system(size: UIScale.pt(11), weight: .medium)).buttonStyle(
+                        .edith(.borderless)
+                    )
                     .pointerCursor()
                     .foregroundStyle(DashSkin.accent(dark))
             } else {
@@ -428,7 +430,9 @@ struct CleanerCard: View {
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 Spacer()
                 Button("Rescan") { model.scan() }
-                    .font(.system(size: UIScale.pt(11), weight: .medium)).buttonStyle(.edith(.borderless))
+                    .font(.system(size: UIScale.pt(11), weight: .medium)).buttonStyle(
+                        .edith(.borderless)
+                    )
                     .pointerCursor()
                     .foregroundStyle(DashSkin.accent(dark)).disabled(model.scanning)
                 InfoDot("Cleaning moves items to the Trash, so it stays reversible.")
@@ -687,30 +691,33 @@ private struct CleanerCategoryRow: View {
                             category.selection == .none ? .secondary : DashSkin.accent(dark))
                 }
                 .buttonStyle(.edith(.borderless))
-                HStack(spacing: UIScale.pt(8)) {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: UIScale.pt(9))).foregroundStyle(DashSkin.inkFaint(dark))
-                    VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                        Text(category.name).font(.system(size: UIScale.pt(13), weight: .medium))
-                        Text(category.detail).font(.system(size: UIScale.pt(10.5)))
-                            .foregroundStyle(DashSkin.inkFaint(dark)).lineLimit(1)
+                Button {
+                    model.toggleExpand(category.id)
+                } label: {
+                    HStack(spacing: UIScale.pt(8)) {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: UIScale.pt(9)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                        VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                            Text(category.name).font(.system(size: UIScale.pt(13), weight: .medium))
+                            Text(category.detail).font(.system(size: UIScale.pt(10.5)))
+                                .foregroundStyle(DashSkin.inkFaint(dark)).lineLimit(1)
+                        }
+                        Spacer()
+                        Text("\(category.items.count) items")
+                            .font(.system(size: UIScale.pt(10))).foregroundStyle(
+                                DashSkin.inkFaint(dark))
+                        Text(JunkScanner.format(category.sizeBytes))
+                            .font(.system(size: UIScale.pt(12), design: .monospaced))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .frame(width: UIScale.pt(72), alignment: .trailing)
                     }
-                    Spacer()
-                    Text("\(category.items.count) items")
-                        .font(.system(size: UIScale.pt(10))).foregroundStyle(
-                            DashSkin.inkFaint(dark))
-                    Text(JunkScanner.format(category.sizeBytes))
-                        .font(.system(size: UIScale.pt(12), design: .monospaced))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .frame(width: UIScale.pt(72), alignment: .trailing)
-                    Button("Clean") { confirmClean = true }
-                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                        .buttonStyle(.edith(.borderless))
-                        .disabled(model.selectedItemCount(categoryID: category.id) == 0)
                 }
-                .contentShape(Rectangle())
-                .onTapGesture { model.toggleExpand(category.id) }
-                .pointerCursor()
+                .buttonStyle(.edith(.borderless))
+                Button("Clean") { confirmClean = true }
+                    .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                    .buttonStyle(.edith(.borderless))
+                    .disabled(model.selectedItemCount(categoryID: category.id) == 0)
             }
             .padding(.horizontal, UIScale.pt(6)).padding(.vertical, UIScale.pt(7))
             .background(
@@ -767,30 +774,33 @@ private struct CleanerItemRow: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: UIScale.pt(10)) {
-            Image(systemName: item.selected ? "checkmark.square.fill" : "square")
-                .foregroundStyle(item.selected ? DashSkin.accent(dark) : .secondary)
-            Text(item.name).font(.system(size: UIScale.pt(11))).lineLimit(1)
-                .truncationMode(.middle)
-                .foregroundStyle(DashSkin.inkSoft(dark))
-                .help(item.path.path)
-            Spacer()
-            Text(JunkScanner.format(item.sizeBytes))
-                .font(.system(size: UIScale.pt(10.5), design: .monospaced))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-                .frame(width: UIScale.pt(66), alignment: .trailing)
+        Button {
+            model.toggleItem(categoryID: categoryID, itemID: item.id)
+        } label: {
+            HStack(spacing: UIScale.pt(10)) {
+                Image(systemName: item.selected ? "checkmark.square.fill" : "square")
+                    .foregroundStyle(item.selected ? DashSkin.accent(dark) : .secondary)
+                Text(item.name).font(.system(size: UIScale.pt(11))).lineLimit(1)
+                    .truncationMode(.middle)
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .help(item.path.path)
+                Spacer()
+                Text(JunkScanner.format(item.sizeBytes))
+                    .font(.system(size: UIScale.pt(10.5), design: .monospaced))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .frame(width: UIScale.pt(66), alignment: .trailing)
+            }
+            .padding(.leading, UIScale.pt(26)).padding(.trailing, UIScale.pt(6)).padding(
+                .vertical, UIScale.pt(4)
+            )
+            .background(
+                RoundedRectangle(cornerRadius: UIScale.pt(6))
+                    .fill(hovering ? DashSkin.inkFaint(dark).opacity(0.12) : .clear)
+            )
+            .contentShape(Rectangle())
         }
-        .padding(.leading, UIScale.pt(26)).padding(.trailing, UIScale.pt(6)).padding(
-            .vertical, UIScale.pt(4)
-        )
-        .background(
-            RoundedRectangle(cornerRadius: UIScale.pt(6))
-                .fill(hovering ? DashSkin.inkFaint(dark).opacity(0.12) : .clear)
-        )
-        .contentShape(Rectangle())
+        .buttonStyle(.edith(.borderless))
         .onHover { hovering = $0 }
-        .onTapGesture { model.toggleItem(categoryID: categoryID, itemID: item.id) }
-        .pointerCursor()
     }
 }
 

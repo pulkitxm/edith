@@ -291,13 +291,17 @@ private struct ProjectRow: View {
     private var hasChildren: Bool { node.children?.isEmpty == false }
 
     var body: some View {
-        content
-            .padding(.horizontal, UIScale.pt(8))
-            .frame(height: UIScale.pt(27))
-            .background(hovering ? DashSkin.inkFaint(dark).opacity(0.14) : Color.clear)
-            .contentShape(Rectangle())
-            .onHover { hovering = $0 }
-            .onTapGesture { if hasChildren { onToggle() } }
+        Button {
+            if hasChildren { onToggle() }
+        } label: {
+            content
+                .padding(.horizontal, UIScale.pt(8))
+                .frame(height: UIScale.pt(27))
+                .background(hovering ? DashSkin.inkFaint(dark).opacity(0.14) : Color.clear)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.borderless))
+        .onHover { hovering = $0 }
     }
 
     @ViewBuilder private var content: some View {

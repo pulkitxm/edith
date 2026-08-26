@@ -809,37 +809,41 @@ private struct NotchAlertDropView: View {
 
     var body: some View {
         let tint = Color(hex: alert.tint)
-        return HStack(spacing: 11) {
-            Image(systemName: alert.icon)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(tint)
-                .frame(width: 30, height: 30)
-                .background(tint.opacity(0.2), in: RoundedRectangle(cornerRadius: 9))
-                .scaleEffect(appeared ? 1 : 0.55)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(alert.title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white).lineLimit(1)
-                if let subtitle = alert.subtitle {
-                    Text(subtitle)
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.white.opacity(0.55)).lineLimit(1)
+        return Button {
+            controller.alertTapped(alert)
+        } label: {
+            HStack(spacing: 11) {
+                Image(systemName: alert.icon)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(tint)
+                    .frame(width: 30, height: 30)
+                    .background(tint.opacity(0.2), in: RoundedRectangle(cornerRadius: 9))
+                    .scaleEffect(appeared ? 1 : 0.55)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(alert.title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white).lineLimit(1)
+                    if let subtitle = alert.subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.white.opacity(0.55)).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+                if alert.settingsTab != nil {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.4))
                 }
             }
-            Spacer(minLength: 0)
-            if alert.settingsTab != nil {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.4))
-            }
+            .padding(.horizontal, 16)
+            .padding(.top, 40)
+            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 40)
-        .padding(.bottom, 8)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
+        .buttonStyle(.edith(.borderless))
         .onHover { controller.alertHover($0) }
-        .onTapGesture { controller.alertTapped(alert) }
         .onAppear {
             withAnimation(glide.delay(0.05)) { appeared = true }
         }

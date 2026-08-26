@@ -76,6 +76,28 @@ public struct EdithButtonStyle: ButtonStyle {
     }
 }
 
+public struct EdithButtonTarget: ViewModifier {
+    public let role: EdithButtonRole
+
+    public init(_ role: EdithButtonRole) {
+        self.role = role
+    }
+
+    public func body(content: Content) -> some View {
+        let metrics = EdithButtonMetrics.metrics(for: role)
+        let fillsWidth = role == .row || role == .selection
+        return
+            content
+            .frame(
+                minWidth: UIScale.pt(metrics.minimumWidth),
+                maxWidth: fillsWidth ? .infinity : nil,
+                minHeight: UIScale.pt(metrics.minimumHeight),
+                alignment: fillsWidth ? .leading : .center
+            )
+            .contentShape(Rectangle())
+    }
+}
+
 extension ButtonStyle where Self == EdithButtonStyle {
     public static func edith(
         _ role: EdithButtonRole, selected: Bool = false, tint: Color = brandAccent
@@ -179,6 +201,10 @@ private struct EdithButtonBody<Label: View>: View {
 }
 
 extension View {
+    public func edithButtonTarget(_ role: EdithButtonRole) -> some View {
+        modifier(EdithButtonTarget(role))
+    }
+
     @ViewBuilder
     public func pointerCursor() -> some View {
         if #available(macOS 15.0, *) {

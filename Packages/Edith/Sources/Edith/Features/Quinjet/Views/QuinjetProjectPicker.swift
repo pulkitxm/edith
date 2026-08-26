@@ -312,6 +312,7 @@ struct QuinjetWorktreeCountButtonStyle: ButtonStyle {
                     .strokeBorder(
                         hovering ? DashSkin.accent(dark).opacity(0.65) : DashSkin.lineStrong(dark))
             }
+            .edithButtonTarget(.toolbar)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .onHover { hovering = $0 }
     }
@@ -334,6 +335,7 @@ private struct QuinjetWorktreeRowStyle: ButtonStyle {
                     .strokeBorder(
                         hovering ? DashSkin.accent(dark).opacity(0.3) : Color.clear)
             }
+            .edithButtonTarget(.row)
             .onHover { hovering = $0 }
     }
 }
@@ -357,6 +359,7 @@ struct QuinjetToolbarButtonStyle: ButtonStyle {
                 RoundedRectangle(cornerRadius: UIScale.pt(7))
                     .strokeBorder(DashSkin.lineStrong(dark))
             }
+            .edithButtonTarget(.toolbar)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .onHover { hovering = $0 }
     }

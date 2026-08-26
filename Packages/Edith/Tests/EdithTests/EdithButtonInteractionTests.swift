@@ -61,6 +61,26 @@ import Testing
         #expect(probe.activations == 2)
     }
 
+    @Test func delegatedFeatureStyleUsesTheCanonicalHitTarget() async throws {
+        let probe = EdithButtonProbe()
+        let harness = EdithButtonHarness(
+            rootView: EdithButtonDelegationFixture(probe: probe))
+        defer { harness.close() }
+
+        let frames = try await harness.frames(probe, role: .toolbar)
+        let points = EdithButtonTestPoints.inside(frames)
+        for point in points {
+            let before = probe.activations
+            harness.click(point)
+            #expect(probe.activations == before + 1)
+        }
+        for point in EdithButtonTestPoints.outside(frames.button) {
+            harness.click(point)
+        }
+
+        #expect(probe.activations == points.count)
+    }
+
     @Test func spaceShortcutActivatesOnce() async throws {
         let probe = EdithButtonProbe()
         let harness = EdithButtonHarness(
@@ -140,6 +160,38 @@ private struct EdithButtonInteractionFixture: View {
         .background(EdithButtonFrameReader(probe: probe))
         .disabled(disabled)
         .accessibilityLabel("Activate fixture")
+    }
+}
+
+private struct EdithButtonDelegationFixture: View {
+    let probe: EdithButtonProbe
+
+    var body: some View {
+        Button {
+            probe.activations += 1
+        } label: {
+            HStack(spacing: 18) {
+                Image(systemName: "sparkles")
+                    .frame(width: 18, height: 18)
+                Text("Activate")
+                    .frame(width: 62, alignment: .leading)
+            }
+        }
+        .buttonStyle(EdithButtonDelegatingStyle())
+        .background(EdithButtonFrameReader(probe: probe))
+        .accessibilityLabel("Delegated fixture")
+        .padding(40)
+        .frame(width: 360, height: 180)
+    }
+}
+
+private struct EdithButtonDelegatingStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Color.accentColor.opacity(configuration.isPressed ? 0.45 : 0.25))
+            .edithButtonTarget(.toolbar)
     }
 }
 

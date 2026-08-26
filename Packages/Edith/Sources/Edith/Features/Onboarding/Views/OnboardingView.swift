@@ -748,8 +748,8 @@ private struct OnboardingPrimaryButtonStyle: ButtonStyle {
                 DashSkin.accent(dark).opacity(configuration.isPressed ? 0.78 : 1),
                 in: RoundedRectangle(cornerRadius: compact ? 8 : 10)
             )
+            .edithButtonTarget(.primary)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
-            .pointerCursor()
     }
 }

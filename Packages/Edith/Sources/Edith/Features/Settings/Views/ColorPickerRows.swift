@@ -98,31 +98,36 @@ private struct ColorSwatchChip: View {
     @State private var copyError: String?
 
     var body: some View {
-        RoundedRectangle(cornerRadius: UIScale.pt(5))
-            .fill(swatch.color)
-            .frame(width: UIScale.pt(26), height: UIScale.pt(26))
-            .overlay(
-                RoundedRectangle(cornerRadius: UIScale.pt(5)).strokeBorder(.primary.opacity(0.12))
-            )
-            .contentShape(Rectangle())
-            .onTapGesture { copy(defaultFormat) }
-            .contextMenu {
-                ForEach(ColorCopyFormat.allCases, id: \.self) { format in
-                    Button(swatch.string(for: format)) { copy(format) }
-                }
+        Button {
+            copy(defaultFormat)
+        } label: {
+            RoundedRectangle(cornerRadius: UIScale.pt(5))
+                .fill(swatch.color)
+                .frame(width: UIScale.pt(26), height: UIScale.pt(26))
+                .overlay(
+                    RoundedRectangle(cornerRadius: UIScale.pt(5)).strokeBorder(
+                        .primary.opacity(0.12))
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.iconOnly))
+        .accessibilityLabel("Copy \(swatch.string(for: defaultFormat))")
+        .contextMenu {
+            ForEach(ColorCopyFormat.allCases, id: \.self) { format in
+                Button(swatch.string(for: format)) { copy(format) }
             }
-            .help(swatch.string(for: defaultFormat))
-            .pointerCursor()
-            .alert(
-                "Could not copy colour",
-                isPresented: Binding(
-                    get: { copyError != nil },
-                    set: { if !$0 { copyError = nil } })
-            ) {
-                Button("OK") { copyError = nil }
-            } message: {
-                Text(copyError ?? "The pasteboard refused the colour value.")
-            }
+        }
+        .help(swatch.string(for: defaultFormat))
+        .alert(
+            "Could not copy colour",
+            isPresented: Binding(
+                get: { copyError != nil },
+                set: { if !$0 { copyError = nil } })
+        ) {
+            Button("OK") { copyError = nil }
+        } message: {
+            Text(copyError ?? "The pasteboard refused the colour value.")
+        }
     }
 
     private func copy(_ format: ColorCopyFormat) {

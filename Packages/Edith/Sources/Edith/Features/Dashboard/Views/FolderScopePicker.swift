@@ -142,6 +142,7 @@ private struct HoverRowStyle: ButtonStyle {
                 hovering ? DashSkin.inkFaint(dark).opacity(0.14) : Color.clear,
                 in: RoundedRectangle(cornerRadius: UIScale.pt(6))
             )
+            .edithButtonTarget(.row)
             .onHover { hovering = $0 }
     }
 }

@@ -490,85 +490,98 @@ struct DownloadSheet: View {
         }
 
         return HStack(spacing: UIScale.pt(10)) {
-            Group {
-                switch item.status {
-                case .queued:
-                    Image(systemName: "clock")
-                        .font(.system(size: UIScale.pt(12)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                case .resolving:
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .scaleEffect(0.55)
-                case .downloading:
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .scaleEffect(0.55)
-                        .tint(theme)
-                case .done:
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: UIScale.pt(15)))
-                        .foregroundStyle(.green)
-                case .error:
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: UIScale.pt(15)))
-                        .foregroundStyle(.red)
-                case .interrupted:
-                    Image(systemName: "pause.circle.fill")
-                        .font(.system(size: UIScale.pt(16)))
-                        .foregroundStyle(.orange)
+            Button {
+                if case .done = item.status {
+                    downloader.openResult(item)
+                } else {
+                    logItem = item
                 }
-            }
-            .frame(width: UIScale.pt(20))
-
-            DownloadThumb(url: item.url, dark: dark, height: UIScale.pt(34))
-
-            VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                Text(item.resolvedTitle ?? displayURL(item.url))
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(
-                        isActive ? AnyShapeStyle(tint) : AnyShapeStyle(DashSkin.ink(dark))
-                    )
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-
-                switch item.status {
-                case .queued:
-                    EmptyView()
-                case .resolving:
-                    EmptyView()
-                case let .downloading(progress, videoIndex, videoCount):
-                    HStack(spacing: UIScale.pt(4)) {
-                        if videoIndex > 0, videoCount > 0 {
-                            Text("\(videoIndex)/\(videoCount)")
-                                .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                                .foregroundStyle(theme)
-                        }
-                        if !progress.isEmpty {
-                            Text(progress)
-                                .font(
-                                    .system(
-                                        size: UIScale.pt(11), weight: .medium, design: .monospaced)
-                                )
-                                .foregroundStyle(theme)
+            } label: {
+                HStack(spacing: UIScale.pt(10)) {
+                    Group {
+                        switch item.status {
+                        case .queued:
+                            Image(systemName: "clock")
+                                .font(.system(size: UIScale.pt(12)))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                        case .resolving:
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .scaleEffect(0.55)
+                        case .downloading:
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .scaleEffect(0.55)
+                                .tint(theme)
+                        case .done:
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: UIScale.pt(15)))
+                                .foregroundStyle(.green)
+                        case .error:
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: UIScale.pt(15)))
+                                .foregroundStyle(.red)
+                        case .interrupted:
+                            Image(systemName: "pause.circle.fill")
+                                .font(.system(size: UIScale.pt(16)))
+                                .foregroundStyle(.orange)
                         }
                     }
-                case let .done(output):
-                    Text(output)
-                        .font(.system(size: UIScale.pt(10.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .lineLimit(1)
-                case let .error(msg):
-                    Text(msg)
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(.red)
-                        .lineLimit(2)
-                case .interrupted:
-                    EmptyView()
-                }
-            }
+                    .frame(width: UIScale.pt(20))
 
-            Spacer(minLength: 4)
+                    DownloadThumb(url: item.url, dark: dark, height: UIScale.pt(34))
+
+                    VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                        Text(item.resolvedTitle ?? displayURL(item.url))
+                            .font(.system(size: UIScale.pt(12)))
+                            .foregroundStyle(
+                                isActive ? AnyShapeStyle(tint) : AnyShapeStyle(DashSkin.ink(dark))
+                            )
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+
+                        switch item.status {
+                        case .queued:
+                            EmptyView()
+                        case .resolving:
+                            EmptyView()
+                        case let .downloading(progress, videoIndex, videoCount):
+                            HStack(spacing: UIScale.pt(4)) {
+                                if videoIndex > 0, videoCount > 0 {
+                                    Text("\(videoIndex)/\(videoCount)")
+                                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                                        .foregroundStyle(theme)
+                                }
+                                if !progress.isEmpty {
+                                    Text(progress)
+                                        .font(
+                                            .system(
+                                                size: UIScale.pt(11), weight: .medium,
+                                                design: .monospaced)
+                                        )
+                                        .foregroundStyle(theme)
+                                }
+                            }
+                        case let .done(output):
+                            Text(output)
+                                .font(.system(size: UIScale.pt(10.5)))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                                .lineLimit(1)
+                        case let .error(msg):
+                            Text(msg)
+                                .font(.system(size: UIScale.pt(10)))
+                                .foregroundStyle(.red)
+                                .lineLimit(2)
+                        case .interrupted:
+                            EmptyView()
+                        }
+                    }
+
+                    Spacer(minLength: 4)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.edith(.borderless))
 
             switch item.status {
             case .queued, .resolving, .downloading:
@@ -580,7 +593,6 @@ struct DownloadSheet: View {
                 .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(.red)
-                .pointerCursor()
                 .help("Cancel this download")
             case .error, .interrupted:
                 Button("Retry") {
@@ -589,7 +601,6 @@ struct DownloadSheet: View {
                 .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(10), weight: .medium))
                 .foregroundStyle(theme)
-                .pointerCursor()
                 .disabled(downloader.isRunning)
             case .done:
                 HStack(spacing: UIScale.pt(4)) {
@@ -608,7 +619,6 @@ struct DownloadSheet: View {
                 }
                 .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(11)))
-                .pointerCursor()
             }
 
         }
@@ -625,14 +635,6 @@ struct DownloadSheet: View {
                     theme.opacity(0.3), lineWidth: UIScale.pt(1))
                 : nil
         )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if case .done = item.status {
-                downloader.openResult(item)
-            } else {
-                logItem = item
-            }
-        }
     }
 
     private func historyRow(_ item: YoutubeDownloader.DownloadItem) -> some View {
