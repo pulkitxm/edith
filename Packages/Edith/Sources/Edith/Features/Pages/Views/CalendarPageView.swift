@@ -1,3 +1,4 @@
+import AppKit
 import EdithKit
 import SwiftUI
 
@@ -22,11 +23,6 @@ struct CalendarPage: View {
                 CalendarPermissionPrompt(style: calendarStyle, accentColor: theme)
                     .frame(maxWidth: UIScale.pt(420))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .onReceive(
-                        Timer.publish(every: 2, on: .main, in: .common).autoconnect()
-                    ) { _ in
-                        store.refreshAuthStatus()
-                    }
             } else {
                 agenda
             }
@@ -40,6 +36,12 @@ struct CalendarPage: View {
         ) { _ in
             store.refreshAuthStatus()
         }
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) {
+            _ in
+            store.refreshAuthStatus()
+        }
     }
 
     private var pageHeader: some View {
@@ -51,7 +53,7 @@ struct CalendarPage: View {
                 } label: {
                     Label("Open Calendar", systemImage: "arrow.up.forward.app")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(EdithButtonStyle(.toolbar, tint: theme))
             })
     }
 

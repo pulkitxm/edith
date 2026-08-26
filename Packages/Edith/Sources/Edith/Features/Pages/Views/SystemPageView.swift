@@ -60,7 +60,7 @@ struct SystemPage: View {
                 } label: {
                     Label("Quit all apps", systemImage: "xmark.circle")
                 }
-                .pointerCursor()
+                .buttonStyle(EdithButtonStyle(.destructive))
                 .confirmationDialog(
                     "Quit all apps?", isPresented: $confirmQuitAll, titleVisibility: .visible
                 ) {
@@ -85,8 +85,8 @@ struct SystemPage: View {
             } label: {
                 Image(systemName: "xmark")
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            .buttonStyle(EdithButtonStyle(.iconOnly, tint: presentation.color))
+            .accessibilityLabel("Dismiss status")
             .help("Dismiss")
         }
         .foregroundStyle(presentation.color)
@@ -163,7 +163,10 @@ struct SystemPage: View {
             .foregroundStyle(model.sortKey == key ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
             .frame(width: width, alignment: alignment)
         }
-        .buttonStyle(.plain).pointerCursor()
+        .buttonStyle(
+            EdithButtonStyle(
+                .borderless, selected: model.sortKey == key, tint: DashSkin.accent(dark))
+        )
     }
 
     private var appList: some View {
@@ -230,9 +233,9 @@ private struct SystemAppRow: View {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(.secondary)
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            .buttonStyle(EdithButtonStyle(.iconOnly, tint: DashSkin.accent(dark)))
             .disabled(!canQuit)
+            .accessibilityLabel("Quit \(app.name)")
             .help(canQuit ? "Quit \(app.name)" : "\(app.name) stays open")
         }
         .padding(.horizontal, UIScale.pt(6))

@@ -9,6 +9,9 @@ enum PageMetrics {
     static let bottom = 28.0
     static let titleSize = 34.0
     static let compactTitleSize = 28.0
+    static let sectionSpacing = 16.0
+    static let cardSpacing = 12.0
+    static let readableWidth = 980.0
 
     static func gutter(_ compact: Bool) -> CGFloat {
         UIScale.pt(compact ? compactGutter : gutter)
@@ -19,13 +22,60 @@ enum PageMetrics {
     }
 }
 
+enum PageContentWidth {
+    case fluid
+    case readable
+
+    func maximum(compact: Bool) -> CGFloat? {
+        switch self {
+        case .fluid: nil
+        case .readable: compact ? nil : UIScale.pt(PageMetrics.readableWidth)
+        }
+    }
+}
+
 extension View {
     func pageGutter(_ compact: Bool) -> some View {
         padding(.horizontal, PageMetrics.gutter(compact))
     }
 
-    func pageContent(_ compact: Bool) -> some View {
-        pageGutter(compact).padding(.bottom, UIScale.pt(PageMetrics.bottom))
+    func pageContent(_ compact: Bool, width: PageContentWidth = .fluid) -> some View {
+        pageGutter(compact)
+            .padding(.bottom, UIScale.pt(PageMetrics.bottom))
+            .frame(maxWidth: width.maximum(compact: compact), alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+}
+
+struct PageSectionHeader<Trailing: View>: View {
+    let title: String
+    let subtitle: String?
+    @ViewBuilder let trailing: () -> Trailing
+
+    init(
+        _ title: String, subtitle: String? = nil,
+        @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() }
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.trailing = trailing
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                Text(title)
+                    .font(.system(size: UIScale.pt(15), weight: .semibold))
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: UIScale.pt(11)))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: UIScale.pt(8))
+            trailing()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

@@ -200,7 +200,7 @@ private struct HomeHeader: View {
     }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 60)) { context in
+        TimelineView(.periodic(from: .now, by: visibility.visible ? 1 : 60)) { context in
             let now = context.date
             PageHeader {
                 greeting(now)
@@ -239,13 +239,7 @@ private struct HomeHeader: View {
 
     private func clockBlock(_ now: Date, alignment: HorizontalAlignment) -> some View {
         VStack(alignment: alignment, spacing: UIScale.pt(2)) {
-            if visibility.visible {
-                TimelineView(.periodic(from: .now, by: 1)) { tick in
-                    clockText(tick.date)
-                }
-            } else {
-                clockText(now)
-            }
+            clockText(now)
             Text(
                 "\(Calendar.current.component(.hour, from: now) < 12 ? "AM" : "PM")"
                     + " · \(TimeZone.current.abbreviation() ?? "local")"
