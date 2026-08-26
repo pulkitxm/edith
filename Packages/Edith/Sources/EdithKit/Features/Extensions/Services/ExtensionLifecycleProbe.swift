@@ -105,7 +105,9 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
             ).health()
             return companionReadiness(health)
         } catch {
-            return .failed("Companion backend is unreachable: \(error.localizedDescription)")
+            return companionFailureReadiness(
+                error.localizedDescription,
+                configured: CompanionClient.hasConfiguredEndpointOrDeployment())
         }
     }
 
@@ -124,6 +126,17 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
                 health.failing.map { "\($0.name): \($0.detail)" }.joined(separator: "; "))
         }
         return .ready("Companion backend and dependencies are healthy.")
+    }
+
+    static func companionFailureReadiness(
+        _ detail: String, configured: Bool
+    ) -> ExtensionAdapterReadiness {
+        guard configured else {
+            return .uninstalled(
+                "Companion is not configured. Choose a host and deploy it, or save another endpoint."
+            )
+        }
+        return .failed("Companion backend is unreachable: \(detail)")
     }
 
     static func herdrReadiness(_ hosts: [HerdrHostSnapshot]) -> ExtensionAdapterReadiness {
@@ -395,6 +408,7 @@ public struct ExtensionLifecycleProbe: Sendable {
         _ entry: ExtensionRegistryEntry, readiness: ExtensionAdapterReadiness
     ) -> ExtensionLifecycleCheck {
         let recovery = entry.lifecycle?.recovery.first?.command
+        let prerequisite = entry.lifecycle?.prerequisites.first?.command
         return switch readiness {
         case let .ready(detail):
             check(
@@ -408,7 +422,8 @@ public struct ExtensionLifecycleProbe: Sendable {
             check("adapter.\(entry.id)", "Runtime adapter", .failed, detail, recovery)
         case let .uninstalled(detail):
             check(
-                "adapter.\(entry.id)", "Runtime adapter", .failed, detail, recovery,
+                "adapter.\(entry.id)", "Runtime adapter", .failed, detail,
+                prerequisite ?? recovery,
                 runtimePhase: .uninstalled)
         case let .empty(detail):
             check(

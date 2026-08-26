@@ -451,6 +451,22 @@ public struct CompanionClient: Sendable {
         CompanionEndpointCache.shared.clear()
     }
 
+    public static func hasConfiguredEndpointOrDeployment(
+        environmentEndpoint: String? = ProcessInfo.processInfo.environment[
+            "EDITH_COMPANION_URL"],
+        savedEndpoint: String? = SharedDefaults.store.object(
+            forKey: AppStorageKeys.Companion.endpoint) as? String,
+        deployment: CompanionDeployment? = CompanionDeploymentStore.load()
+    ) -> Bool {
+        for endpoint in [environmentEndpoint, savedEndpoint] {
+            if endpoint?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+                return true
+            }
+        }
+        guard let deployment else { return false }
+        return (1...65_535).contains(deployment.localPort)
+    }
+
     private static func fallbackEndpoint() -> URL {
         deployedEndpoint() ?? URL(string: defaultEndpointString)!
     }

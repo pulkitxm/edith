@@ -191,10 +191,17 @@ import EdithCore
     @Test func backendFailureIsDifferentFromIncompleteSetup() async throws {
         let entry = try #require(ExtensionRegistry.entries.first { $0.id == "companion" })
         let report = await probe(adapter: .failed("Database is unavailable.")).report(for: entry)
+        let missing = await probe(
+            adapter: .uninstalled("Companion is not configured.")
+        ).report(for: entry)
 
         #expect(report.state.phase == .failed)
         #expect(report.state.runtimePhase == .error)
         #expect(report.state.issues.first?.id == "backend.companion")
+        #expect(report.state.issues.first?.recoveryCommand == "ed companion doctor --json")
+        #expect(missing.state.phase == .needsSetup)
+        #expect(missing.state.runtimePhase == .uninstalled)
+        #expect(missing.state.issues.first?.recoveryCommand == "ed companion deploy")
     }
 
     @Test func aMissingLiveAdapterIsAnExplicitRuntimeFailure() async throws {
@@ -293,6 +300,25 @@ import EdithCore
         #expect(
             ExtensionLifecycleProbeEnvironment.companionReadiness(degraded)
                 == .degraded("whisper: not installed"))
+        #expect(
+            ExtensionLifecycleProbeEnvironment.companionFailureReadiness(
+                "connection refused", configured: false)
+                == .uninstalled(
+                    "Companion is not configured. Choose a host and deploy it, or save another endpoint."
+                ))
+        #expect(
+            ExtensionLifecycleProbeEnvironment.companionFailureReadiness(
+                "connection refused", configured: true)
+                == .failed("Companion backend is unreachable: connection refused"))
+    }
+
+    @Test func companionLifecycleStartsWithDeploymentAndKeepsDoctorRecovery() throws {
+        let entry = try #require(ExtensionRegistry.entries.first { $0.id == "companion" })
+        let lifecycle = try #require(entry.lifecycle)
+
+        #expect(lifecycle.prerequisites.first?.title == "Deploy or connect the backend")
+        #expect(lifecycle.prerequisites.first?.command == "ed companion deploy")
+        #expect(lifecycle.recovery.first?.command == "ed companion doctor --json")
     }
 
     @Test func herdrSnapshotsMapSessionAndHostHealth() {

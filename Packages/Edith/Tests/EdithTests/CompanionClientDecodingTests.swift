@@ -51,6 +51,34 @@ import Testing
         #expect(CompanionClient.longRequestTimeout > CompanionClient.defaultTimeout)
     }
 
+    @Test func explicitEndpointOrValidDeploymentCountsAsConfigured() {
+        let deployment = CompanionDeployment(
+            machineID: nil, machineName: "This Mac", tier: "cpu", localPort: 4820)
+
+        #expect(
+            !CompanionClient.hasConfiguredEndpointOrDeployment(
+                environmentEndpoint: nil, savedEndpoint: nil, deployment: nil))
+        #expect(
+            CompanionClient.hasConfiguredEndpointOrDeployment(
+                environmentEndpoint: " https://companion.example ", savedEndpoint: nil,
+                deployment: nil))
+        #expect(
+            CompanionClient.hasConfiguredEndpointOrDeployment(
+                environmentEndpoint: nil, savedEndpoint: "not a URL", deployment: nil))
+        #expect(
+            CompanionClient.hasConfiguredEndpointOrDeployment(
+                environmentEndpoint: nil, savedEndpoint: nil, deployment: deployment))
+    }
+
+    @Test func blankEndpointsAndInvalidDeploymentRemainUnconfigured() {
+        let deployment = CompanionDeployment(
+            machineID: nil, machineName: "This Mac", tier: "cpu", localPort: 0)
+
+        #expect(
+            !CompanionClient.hasConfiguredEndpointOrDeployment(
+                environmentEndpoint: "  ", savedEndpoint: "\n", deployment: deployment))
+    }
+
     @Test func healthDecodesSeverityAndSeparatesBlockingFromOptional() throws {
         let health = try decode(
             CompanionHealth.self,
