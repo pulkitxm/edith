@@ -99,7 +99,7 @@ struct TrackRow: View {
             .padding(.horizontal, 8)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .background(
             isCurrent
                 ? Color.primary.opacity(0.08) : hovering ? Color.primary.opacity(0.05) : .clear,

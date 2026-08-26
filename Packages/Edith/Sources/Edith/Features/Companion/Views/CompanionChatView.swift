@@ -342,7 +342,7 @@ struct CompanionChatScreen: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .pointerCursor()
             .disabled(model.streaming || !isActive)
             .modifier(ActiveShortcut(active: isActive, key: "n", modifiers: .command))
@@ -463,7 +463,7 @@ struct CompanionChatScreen: View {
             .shadow(color: .black.opacity(0.25), radius: UIScale.pt(8), y: 3)
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .padding(.bottom, UIScale.pt(10))
         .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -524,7 +524,7 @@ struct CompanionChatScreen: View {
                             }
                             .contentShape(Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .pointerCursor()
                 }
             }
@@ -673,7 +673,7 @@ struct CompanionChatScreen: View {
                 }
                 .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
     }
 
@@ -774,7 +774,7 @@ struct CompanionChatScreen: View {
                     .font(.system(size: UIScale.pt(24)))
                     .foregroundStyle(DashSkin.accent(dark))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .pointerCursor()
             .modifier(ActiveEscapeShortcut(active: isActive))
             .help("Stop generating (Esc)")
@@ -787,7 +787,7 @@ struct CompanionChatScreen: View {
                     .foregroundStyle(
                         draftEmpty ? DashSkin.inkFaint(dark) : DashSkin.accent(dark))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .pointerCursor()
             .disabled(draftEmpty)
             .help("Send (Return)")
@@ -961,7 +961,7 @@ private struct CitationChip: View {
             .overlay { Capsule().strokeBorder(DashSkin.line(dark)) }
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .help("Preview this citation")
         .popover(isPresented: $showing, arrowEdge: .bottom) {
@@ -1021,7 +1021,7 @@ private struct ConversationRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .pointerCursor()
             if hovering {
                 Button(action: delete) {
@@ -1030,7 +1030,7 @@ private struct ConversationRow: View {
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .pointerCursor()
                 .help("Delete conversation")
             }

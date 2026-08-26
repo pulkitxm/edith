@@ -23,7 +23,7 @@ private struct PowerIconButton: View {
                 )
                 .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(6)))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.35)
         .onHover { hovering = $0 }

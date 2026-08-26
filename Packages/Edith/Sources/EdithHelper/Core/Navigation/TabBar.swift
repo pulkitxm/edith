@@ -34,7 +34,7 @@ struct TabBar: View {
                 )
                 .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
     }
 }

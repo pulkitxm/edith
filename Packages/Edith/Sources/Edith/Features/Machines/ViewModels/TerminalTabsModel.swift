@@ -149,7 +149,7 @@ struct TerminalTabsView: View {
                                         Image(systemName: "xmark")
                                             .font(.system(size: UIScale.pt(7.5), weight: .bold))
                                     }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(.edith(.borderless))
                                 }
                             }
                             .foregroundStyle(
@@ -164,7 +164,7 @@ struct TerminalTabsView: View {
                             )
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.edith(.borderless))
                         .pointerCursor()
                     }
                 }

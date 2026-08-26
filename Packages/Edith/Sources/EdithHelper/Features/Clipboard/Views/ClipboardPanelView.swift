@@ -243,7 +243,7 @@ struct ClipboardPanelView: View {
                             .resizable()
                             .frame(width: 11, height: 11)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .pointerCursor()
                     .padding(.trailing, 5)
                 }

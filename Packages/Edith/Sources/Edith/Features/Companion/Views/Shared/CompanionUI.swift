@@ -111,7 +111,7 @@ struct CompanionButton: View {
             .opacity(inactive ? 0.55 : 1)
             .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(8)))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .disabled(inactive)
         .onHover { hovering = $0 }
@@ -141,7 +141,7 @@ struct CompanionLinkButton: View {
                 .underline(hovering && !disabled)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .disabled(disabled)
         .opacity(disabled ? 0.5 : 1)

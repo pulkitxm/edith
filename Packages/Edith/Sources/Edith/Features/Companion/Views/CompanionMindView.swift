@@ -441,7 +441,7 @@ private struct MindRow<Content: View>: View {
                 )
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .onHover { hovering = $0 }
         .help("Open the full record")
@@ -512,7 +512,7 @@ private struct MindDetailSheet: View {
                         .font(.system(size: UIScale.pt(15)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .pointerCursor()
                 .help("Close")
             }
@@ -553,7 +553,7 @@ private struct MindDetailSheet: View {
                     }
                     .foregroundStyle(DashSkin.accent(dark))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .pointerCursor()
                 .help("Open this episode in Library")
             }

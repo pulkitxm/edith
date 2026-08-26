@@ -83,7 +83,7 @@ public struct ProviderSwitchButton: View {
                 .foregroundStyle(color)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .help(
             providers.count > 1
@@ -111,7 +111,7 @@ public struct ProviderSwitchButton: View {
                         .padding(.vertical, UIScale.pt(6))
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .pointerCursor()
                 }
             }

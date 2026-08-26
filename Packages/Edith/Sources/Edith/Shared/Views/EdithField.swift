@@ -73,7 +73,7 @@ struct EdithTextField: View {
                         .font(.system(size: UIScale.pt(fontSize)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .pointerCursor()
                 .help("Clear this field")
             }

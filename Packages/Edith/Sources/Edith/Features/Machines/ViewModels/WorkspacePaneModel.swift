@@ -314,7 +314,7 @@ struct WorkspacePaneView: View {
                         .padding(UIScale.pt(2))
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .pointerCursor()
                 .help("Close this tab")
             }
@@ -327,7 +327,7 @@ struct WorkspacePaneView: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .contextMenu {
             Button("Close Tab") { closeTab(tab) }

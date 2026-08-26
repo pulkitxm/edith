@@ -166,7 +166,7 @@ struct QuinjetProjectCard: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .pointerCursor()
 
             Button {

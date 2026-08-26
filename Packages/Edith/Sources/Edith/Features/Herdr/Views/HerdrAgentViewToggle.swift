@@ -47,7 +47,7 @@ struct HerdrAgentViewToggle: View {
                 stroke: selected ? DashSkin.accent(dark).opacity(0.55) : DashSkin.line(dark),
                 strokeWidth: selected ? 1.4 : 1)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .accessibilityAddTraits(selected ? .isSelected : [])
         .help(option == .diff ? "Show the Quinjet diff" : "Show the agent session")

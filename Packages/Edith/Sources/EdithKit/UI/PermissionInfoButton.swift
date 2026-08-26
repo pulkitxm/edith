@@ -39,7 +39,7 @@ public struct PermissionInfoButton: View {
                     .font(.system(size: UIScale.pt(10)))
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .foregroundStyle(color)
         .pointerCursor()
         .accessibilityLabel("Permission details")

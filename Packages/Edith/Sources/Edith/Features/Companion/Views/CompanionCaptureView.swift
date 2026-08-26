@@ -414,7 +414,7 @@ struct CompanionCaptureScreen: View {
             }
             .contentShape(Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .help(model.phase == .recording ? "Stop recording" : "Start recording")
     }

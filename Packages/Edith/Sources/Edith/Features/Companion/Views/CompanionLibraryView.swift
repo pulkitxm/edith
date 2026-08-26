@@ -466,7 +466,7 @@ struct CompanionLibraryScreen: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
     }
 
@@ -503,7 +503,7 @@ struct CompanionLibraryScreen: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
     }
 
@@ -537,7 +537,7 @@ struct CompanionLibraryScreen: View {
                             .font(.system(size: UIScale.pt(12.5)))
                             .foregroundStyle(DashSkin.inkSoft(dark))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .pointerCursor()
                     .help("Open with the default app")
                     Button {
@@ -547,7 +547,7 @@ struct CompanionLibraryScreen: View {
                             .font(.system(size: UIScale.pt(13)))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .pointerCursor()
                     .help("Close")
                 }
@@ -692,7 +692,7 @@ struct VoicePlayerBar: View {
                     .foregroundStyle(
                         playback.loaded ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .pointerCursor()
             .disabled(!playback.loaded)
             .help(playback.playing ? "Pause" : "Play")

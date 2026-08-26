@@ -84,12 +84,12 @@ struct FilterMultiSelect: View {
                     Button("Select all") {
                         apply(MultiSelectLogic.selectAll(order: options.map(\.id)))
                     }
-                    .buttonStyle(.plain).pointerCursor()
+                    .buttonStyle(.edith(.borderless))
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                 }
                 Button("Done") { dismiss() }
-                    .buttonStyle(.plain).pointerCursor()
+                    .buttonStyle(.edith(.borderless))
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
                     .foregroundStyle(DashSkin.accent(dark))
             }
@@ -134,7 +134,7 @@ private struct FilterSelectRow: View {
             } label: {
                 checkbox
             }
-            .buttonStyle(.plain).pointerCursor()
+            .buttonStyle(.edith(.borderless))
             Button {
                 let flags = modifiers
                 onRowClick(
@@ -150,7 +150,7 @@ private struct FilterSelectRow: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain).pointerCursor()
+            .buttonStyle(.edith(.borderless))
             Button(action: onAction) {
                 Text(actionLabel)
                     .font(.system(size: UIScale.pt(10)))
@@ -166,7 +166,7 @@ private struct FilterSelectRow: View {
                             .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1))
                     )
             }
-            .buttonStyle(.plain).pointerCursor()
+            .buttonStyle(.edith(.borderless))
             .opacity(hovering ? 1 : 0)
             .allowsHitTesting(hovering)
         }

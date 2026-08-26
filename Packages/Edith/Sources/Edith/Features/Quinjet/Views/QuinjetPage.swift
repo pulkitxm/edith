@@ -229,7 +229,7 @@ private struct QuinjetTabButton: View {
                         Image(systemName: "xmark")
                             .font(.system(size: UIScale.pt(7.5), weight: .bold))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                 }
             }
             .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
@@ -241,7 +241,7 @@ private struct QuinjetTabButton: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
     }
 }
@@ -312,7 +312,7 @@ private struct QuinjetTerminalWorkspace: View {
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(DashSkin.warn)
                 Button("Restart", action: restart)
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .font(.system(size: UIScale.pt(10.5), weight: .semibold))
                     .pointerCursor()
             }

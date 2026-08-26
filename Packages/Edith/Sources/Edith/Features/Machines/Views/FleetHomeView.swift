@@ -235,7 +235,7 @@ private struct FleetMachineRow: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .onHover { hovering = $0 }
     }

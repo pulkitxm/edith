@@ -356,7 +356,7 @@ struct FinderBody: View {
                             crumb.path == model.path
                                 ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .pointerCursor()
                     if crumb.path != model.path {
                         Image(systemName: "chevron.compact.right")

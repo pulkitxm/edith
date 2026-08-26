@@ -299,7 +299,7 @@ struct DashboardView: View {
                 }
                 if !model.machineGroups.isEmpty { machineMenu }
                 Button("Reset") { model.reset() }
-                    .buttonStyle(.plain).pointerCursor().font(DashSkin.mono(11))
+                    .buttonStyle(.edith(.borderless)).font(DashSkin.mono(11))
                     .foregroundStyle(acc)
                     .padding(.vertical, UIScale.pt(5))
             }
@@ -361,7 +361,7 @@ struct DashboardView: View {
     private func rangeButton(_ title: String, _ r: DashRange) -> some View {
         let active = isActive(r)
         return Button(title) { model.range = r }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .pointerCursor()
             .font(DashSkin.mono(11, weight: active ? .semibold : .regular))
             .padding(.horizontal, UIScale.pt(11)).padding(.vertical, UIScale.pt(5))
@@ -390,7 +390,7 @@ struct DashboardView: View {
                 .font(.system(size: UIScale.pt(11)))
                 .lineLimit(1)
         }
-        .buttonStyle(.plain).pointerCursor().fixedSize()
+        .buttonStyle(.edith(.borderless)).fixedSize()
         .modifier(FilterChip(dark: dark))
         .popover(isPresented: $folderPickerOpen, arrowEdge: .bottom) {
             FolderScopePicker(model: model, dark: dark) { folderPickerOpen = false }
@@ -414,7 +414,7 @@ struct DashboardView: View {
             Label(sourceSummary, systemImage: "square.stack.3d.up")
                 .font(.system(size: UIScale.pt(11)))
         }
-        .buttonStyle(.plain).pointerCursor().fixedSize()
+        .buttonStyle(.edith(.borderless)).fixedSize()
         .modifier(FilterChip(dark: dark))
         .popover(isPresented: $sourcePickerOpen, arrowEdge: .bottom) {
             FilterMultiSelect(
@@ -444,7 +444,7 @@ struct DashboardView: View {
                 )
                 .font(.system(size: UIScale.pt(11)))
             }
-            .buttonStyle(.plain).pointerCursor().fixedSize()
+            .buttonStyle(.edith(.borderless)).fixedSize()
             .modifier(FilterChip(dark: dark))
         }
         .popover(isPresented: $machinePickerOpen, arrowEdge: .bottom) {
@@ -484,7 +484,7 @@ struct DashboardView: View {
             Label("\(model.selectedModels.count) models", systemImage: "cpu")
                 .font(.system(size: UIScale.pt(11)))
         }
-        .buttonStyle(.plain).pointerCursor().fixedSize()
+        .buttonStyle(.edith(.borderless)).fixedSize()
         .modifier(FilterChip(dark: dark))
         .popover(isPresented: $modelPickerOpen, arrowEdge: .bottom) {
             FilterMultiSelect(
@@ -692,7 +692,7 @@ struct DashboardView: View {
             .frame(width: width, alignment: width == nil ? .leading : .trailing)
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
     }
 

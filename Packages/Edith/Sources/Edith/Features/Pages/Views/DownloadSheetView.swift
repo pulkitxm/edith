@@ -357,7 +357,7 @@ struct DownloadSheet: View {
                 .background(canStart ? theme : Color.gray.opacity(0.35))
                 .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(9)))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .disabled(!canStart)
             .pointerCursor()
         }
@@ -372,7 +372,7 @@ struct DownloadSheet: View {
                     .font(.system(size: UIScale.pt(20)))
                     .foregroundStyle(canStart ? theme : Color.gray.opacity(0.4))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .disabled(!canStart)
             .pointerCursor()
             .help("Add to queue")

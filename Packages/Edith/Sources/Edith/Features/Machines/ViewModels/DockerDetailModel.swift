@@ -458,7 +458,7 @@ struct DockerContainerDetail: View {
                         )
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .pointerCursor()
             }
             Spacer(minLength: 0)
@@ -611,7 +611,7 @@ struct DockerContainerDetail: View {
                         Image(systemName: "doc.on.doc")
                             .font(.system(size: UIScale.pt(9)))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .pointerCursor()
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .help("Copy \(title)")

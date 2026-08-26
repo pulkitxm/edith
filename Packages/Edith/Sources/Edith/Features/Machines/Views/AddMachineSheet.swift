@@ -150,7 +150,7 @@ struct AddMachineSheet: View {
                         .padding(.horizontal, UIScale.pt(9))
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .pointerCursor()
                     if configHost.id != configHosts.last?.id { Divider().opacity(0.3) }
                 }

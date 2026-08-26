@@ -1070,7 +1070,7 @@ struct MainWindowView: View {
             .frame(height: UIScale.pt(28))
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .help("Show update options")
     }
@@ -1148,7 +1148,7 @@ struct MainWindowView: View {
                 .padding(.vertical, UIScale.pt(8))
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .pointerCursor()
             .help("Blur sensitive numbers and track names everywhere in Edith")
 
@@ -1165,7 +1165,7 @@ struct MainWindowView: View {
                     .frame(width: UIScale.pt(30), height: UIScale.pt(46))
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .pointerCursor()
             .help("Choose what Presenter mode blurs")
             .popover(isPresented: $presenterQuickActionsPresented, arrowEdge: .leading) {
@@ -1271,7 +1271,7 @@ struct MainWindowView: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .help(help)
     }
@@ -1322,7 +1322,7 @@ struct MainWindowView: View {
                 Button("Pulkit") {
                     _ = try? AppInspectionCenter().openLink("creator", contributors: [])
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .fontWeight(.semibold)
                 .foregroundStyle(theme)
                 .pointerCursor()
@@ -1362,7 +1362,7 @@ struct MainWindowView: View {
             .background(
                 Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
     }
 

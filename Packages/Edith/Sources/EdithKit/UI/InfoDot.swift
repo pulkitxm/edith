@@ -16,7 +16,7 @@ public struct InfoDot: View {
                 .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(.secondary)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .accessibilityLabel("More info")
         .help("More info")

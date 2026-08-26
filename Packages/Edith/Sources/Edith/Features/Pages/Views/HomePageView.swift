@@ -325,7 +325,7 @@ private struct WorldClocksCard: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .help("Add a timezone clock")
         .popover(isPresented: $showAdd, arrowEdge: .bottom) {
@@ -350,7 +350,7 @@ private struct WorldClocksCard: View {
                                 .padding(.vertical, UIScale.pt(5))
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.edith(.borderless))
                             .pointerCursor()
                         }
                         if matches.isEmpty {
@@ -397,7 +397,7 @@ private struct ClockTile: View {
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .background(Circle().fill(DashSkin.paper2(dark)))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.edith(.borderless))
                         .pointerCursor()
                         .offset(x: 5, y: -5)
                         .help("Remove clock")
@@ -648,7 +648,7 @@ private struct QuickActionsCard: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .help(sub)
     }
@@ -791,7 +791,7 @@ struct JumpLink: View {
             .font(.system(size: UIScale.pt(11.5), weight: .medium))
             .foregroundStyle(DashSkin.accentDeep(dark))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .padding(.top, UIScale.pt(10))
     }
@@ -1039,7 +1039,7 @@ private struct MusicCard: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
     }
 }

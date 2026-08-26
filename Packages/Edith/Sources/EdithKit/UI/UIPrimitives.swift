@@ -27,7 +27,7 @@ struct EdithButtonMetrics: Equatable, Sendable {
                 minimumHeight: 32, cornerRadius: 7)
         case .borderless:
             Self(
-                horizontalPadding: 5, verticalPadding: 4, minimumWidth: 28,
+                horizontalPadding: 0, verticalPadding: 0, minimumWidth: 28,
                 minimumHeight: 28, cornerRadius: 6)
         case .toolbar:
             Self(

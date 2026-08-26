@@ -301,7 +301,7 @@ struct LimitsCardView: View {
         HStack(spacing: UIScale.pt(6)) {
             ForEach(ranges, id: \.0) { name, _ in
                 Button(name) { range = name }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .pointerCursor()
                     .font(
                         .system(size: UIScale.pt(11), weight: range == name ? .semibold : .regular)

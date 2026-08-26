@@ -182,7 +182,7 @@ struct PermissionsPane: View {
             Button("Browse Extensions") {
                 mainWindowSection = MainDestination.extensions.rawValue
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .foregroundStyle(accent)
             .pointerCursor()
         }

@@ -284,7 +284,7 @@ struct GeneralPane: View {
                         }
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .pointerCursor()
             } header: {
                 Text("Access")
@@ -361,7 +361,7 @@ struct GeneralPane: View {
                 }
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
     }
 }

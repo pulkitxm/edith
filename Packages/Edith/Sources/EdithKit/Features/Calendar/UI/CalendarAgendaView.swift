@@ -411,7 +411,7 @@ private struct CalendarEventRow: View {
                         .foregroundStyle(color)
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .pointerCursor()
             .help("Join meeting at \(url.host ?? url.absoluteString)")
         }
@@ -436,7 +436,7 @@ private struct CalendarActionButton: View {
                 .background(color.opacity(hovering ? 0.17 : 0.1), in: Capsule())
                 .overlay(Capsule().strokeBorder(color.opacity(hovering ? 0.34 : 0.2), lineWidth: 1))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .onHover { hovering = $0 }
         .help(help)

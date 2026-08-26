@@ -95,7 +95,7 @@ struct HerdrPage: View {
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .padding(UIScale.pt(4))
         .widgetBar(
             cornerRadius: 8,
@@ -142,7 +142,7 @@ struct HerdrPage: View {
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .padding(UIScale.pt(4))
         .widgetBar(cornerRadius: 8, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
         .pointerCursor()
@@ -168,7 +168,7 @@ struct HerdrPage: View {
                         .background(
                             selected ? DashSkin.accent(dark).opacity(0.18) : Color.clear)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .pointerCursor()
                 .accessibilityAddTraits(selected ? .isSelected : [])
                 .help(mode.title)
@@ -223,7 +223,7 @@ struct HerdrPage: View {
                                 ? DashSkin.accent(dark).opacity(0.55) : DashSkin.line(dark),
                             strokeWidth: selected ? 1.4 : 1)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .pointerCursor()
                     .modifier(KindPillHelp(enabled: showsKindMark))
                     .accessibilityAddTraits(selected ? .isSelected : [])
@@ -304,7 +304,7 @@ struct HerdrPage: View {
                         store.copiedID == agent.id
                             ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .help(store.copiedID == agent.id ? "Copied" : "Copy attach command")
             }
             if closable {
@@ -315,7 +315,7 @@ struct HerdrPage: View {
                         .font(.system(size: UIScale.pt(9), weight: .semibold))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .help("Close")
             }
         }
@@ -515,7 +515,7 @@ struct HerdrPage: View {
                     ? DashSkin.accent(dark).opacity(hovered ? 0.7 : 0.45)
                     : HerdrStatusColor.stroke(agent, dark: dark, selected: hovered))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .onHover { inside in
             if inside {
@@ -608,7 +608,7 @@ struct HerdrPage: View {
             .padding(.bottom, UIScale.pt(4))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .help(collapsed ? "Show \(title.lowercased())" : "Hide \(title.lowercased())")
         .accessibilityLabel("\(title), \(collapsed ? "collapsed" : "expanded")")
@@ -660,7 +660,7 @@ struct HerdrPage: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
     }
 

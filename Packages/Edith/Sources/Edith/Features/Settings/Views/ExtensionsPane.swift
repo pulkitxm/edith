@@ -300,7 +300,7 @@ private struct ExtensionMarketplaceCard: View {
                         enabled ? DashSkin.accent(dark).opacity(0.1) : DashSkin.paper(dark),
                         in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .pointerCursor()
             HStack(spacing: UIScale.pt(7)) {
                 Button(action: open) {
@@ -314,7 +314,7 @@ private struct ExtensionMarketplaceCard: View {
                             .lineLimit(1)
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .pointerCursor()
                 if !permissions.isEmpty {
                     PermissionInfoButton(permissions: permissions)
@@ -336,7 +336,7 @@ private struct ExtensionMarketplaceCard: View {
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .pointerCursor()
         }
         .padding(UIScale.pt(11))
@@ -349,7 +349,7 @@ private struct ExtensionMarketplaceCard: View {
                     Color.clear
                         .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(14)))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .pointerCursor()
             }
         }

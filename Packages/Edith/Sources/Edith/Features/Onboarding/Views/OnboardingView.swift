@@ -129,7 +129,7 @@ struct OnboardingView: View {
                     OnboardingFlow.skip()
                     onFinish()
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .pointerCursor()
             }
@@ -173,7 +173,7 @@ struct OnboardingView: View {
                     .keyboardShortcut(.defaultAction)
                     .disabled(cloudChecking)
                     Button("Start fresh") { move(to: .picks, direction: 1) }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.edith(.borderless))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .pointerCursor()
                 }
@@ -299,7 +299,7 @@ struct OnboardingView: View {
                     .strokeBorder(DashSkin.lineStrong(dark), style: StrokeStyle(dash: [4, 4]))
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
     }
 
@@ -442,7 +442,7 @@ struct OnboardingView: View {
         HStack(spacing: UIScale.pt(10)) {
             if step == .restore || step == .picks || step == .permissions {
                 Button("Back") { goBack() }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .pointerCursor()
             }
@@ -630,7 +630,7 @@ private struct ExtensionChoiceCard: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .pointerCursor()
             .accessibilityLabel("\(entry.title), \(selected ? "selected" : "not selected")")
             HStack(spacing: UIScale.pt(4)) {
@@ -640,7 +640,7 @@ private struct ExtensionChoiceCard: View {
                         .foregroundStyle(selected ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                         .lineLimit(1)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .pointerCursor()
                 if !permissions.isEmpty {
                     PermissionInfoButton(permissions: permissions)

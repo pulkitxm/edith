@@ -242,7 +242,7 @@ struct FinderListView: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
     }
 }
@@ -543,7 +543,7 @@ private struct FinderSidebarRow: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
         .onHover { hovering = $0 }
         .onDrop(

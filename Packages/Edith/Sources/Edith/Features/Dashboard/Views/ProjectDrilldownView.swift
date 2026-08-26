@@ -69,7 +69,7 @@ struct ProjectDrilldownView: View {
                     Text(message).lineLimit(2)
                     Spacer(minLength: 0)
                     Button("Dismiss") { actions.dismissFailure() }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.edith(.borderless))
                         .pointerCursor()
                 }
                 .font(.system(size: UIScale.pt(11)))
@@ -141,7 +141,7 @@ struct ProjectDrilldownView: View {
             }
             .foregroundStyle(DashSkin.inkSoft(dark))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
     }
 
@@ -178,7 +178,7 @@ struct ProjectDrilldownView: View {
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
             .frame(width: width, alignment: .leading)
         }
-        .buttonStyle(.plain).pointerCursor()
+        .buttonStyle(.edith(.borderless))
     }
 
     private func sortBy(_ key: ProjSortKey) {
@@ -361,7 +361,7 @@ private struct ProjectRow: View {
                     rowLabel
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .pointerCursor()
         } else {
             iconView
@@ -395,7 +395,7 @@ private struct ProjectRow: View {
                 actions.copyChatID(chatId)
             } label: {
                 img
-            }.buttonStyle(.plain).pointerCursor()
+            }.buttonStyle(.edith(.borderless))
         } else {
             img
         }

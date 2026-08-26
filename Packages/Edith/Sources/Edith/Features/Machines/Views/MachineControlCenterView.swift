@@ -289,7 +289,7 @@ struct MachineControlCenterButton: View {
                 }
                 .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(7)))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .accessibilityLabel("Machine controls")
         .onHover {
             hovering = $0
@@ -471,7 +471,7 @@ struct MachineControlCenterView: View {
                     .frame(width: UIScale.pt(24), height: UIScale.pt(24))
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .disabled(isBusy)
             .opacity(isBusy ? 0.35 : 1)
             .pointerCursor()

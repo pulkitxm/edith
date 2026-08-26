@@ -261,7 +261,7 @@ struct DockerConsoleView: View {
                     )
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .pointerCursor()
                 .padding(.horizontal, UIScale.pt(6))
             }

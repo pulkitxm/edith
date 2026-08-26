@@ -438,7 +438,7 @@ struct CompanionSetupSheet: View {
             }
             .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(10)))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .pointerCursor()
     }
 

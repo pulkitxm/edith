@@ -3,17 +3,6 @@ import EdithKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-extension View {
-    func shelfPointer() -> some View {
-        onContinuousHover { phase in
-            switch phase {
-            case .active: NSCursor.pointingHand.set()
-            case .ended: NSCursor.arrow.set()
-            }
-        }
-    }
-}
-
 struct NotchShelfContentView: View {
     var controller: NotchShelfController
     var displayID: CGDirectDisplayID = 0
@@ -195,7 +184,7 @@ struct NotchShelfContentView: View {
                     .background(Color.white.opacity(0.07), in: Capsule())
                     .contentShape(Capsule())
             }
-            .buttonStyle(.plain).shelfPointer()
+            .buttonStyle(.edith(.borderless))
         }
         .padding(.horizontal, 16)
         .frame(height: 34)
@@ -233,7 +222,7 @@ struct NotchShelfContentView: View {
             }
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain).shelfPointer()
+        .buttonStyle(.edith(.borderless))
         .help(tab.title)
     }
 
@@ -282,8 +271,7 @@ struct NotchShelfContentView: View {
                             Image(systemName: "xmark")
                                 .font(.system(size: 9, weight: .bold))
                         }
-                        .buttonStyle(.plain)
-                        .shelfPointer()
+                        .buttonStyle(.edith(.borderless))
                     }
                     .foregroundStyle(.white)
                     .padding(.horizontal, 10)
@@ -446,7 +434,7 @@ private struct NotchHomeTab: View {
                     ? Color(red: 0.79, green: 0.56, blue: 0.31) : Color.white.opacity(0.055),
                 in: RoundedRectangle(cornerRadius: 10))
         }
-        .buttonStyle(.plain).shelfPointer()
+        .buttonStyle(.edith(.borderless))
     }
 
     private var emptyMusicCard: some View {
@@ -503,7 +491,7 @@ fileprivate struct NotchNowPlayingCard: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .pointerCursor()
                     .help(isLocal ? "Show this track in Music" : "Open the app playing this")
                     Spacer(minLength: 4)
@@ -558,7 +546,7 @@ fileprivate struct NotchNowPlayingCard: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .shadow(color: .black.opacity(0.4), radius: 6, y: 3)
         }
-        .buttonStyle(.plain).shelfPointer()
+        .buttonStyle(.edith(.borderless))
         .help("Open player")
     }
 
@@ -571,7 +559,7 @@ fileprivate struct NotchNowPlayingCard: View {
                 .frame(width: 22, height: 22)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain).shelfPointer()
+        .buttonStyle(.edith(.borderless))
     }
 }
 
@@ -662,7 +650,7 @@ private struct NotchUsageRings: View {
             .frame(width: 18, height: 18)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain).shelfPointer()
+        .buttonStyle(.edith(.borderless))
         .disabled(usage.refreshingLimits)
         .help("Refresh limits now")
     }
@@ -771,7 +759,7 @@ private struct NotchClipboardList: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain).shelfPointer()
+            .buttonStyle(.edith(.borderless))
             Button {
                 store.togglePin(entry.id)
             } label: {
@@ -781,7 +769,7 @@ private struct NotchClipboardList: View {
                     .frame(width: 18, height: 18)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain).shelfPointer()
+            .buttonStyle(.edith(.borderless))
             .help(entry.pinned ? "Unpin" : "Pin")
             Button {
                 store.delete(entry.id)
@@ -791,7 +779,7 @@ private struct NotchClipboardList: View {
                     .frame(width: 18, height: 18)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain).shelfPointer()
+            .buttonStyle(.edith(.borderless))
             .help("Delete")
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
