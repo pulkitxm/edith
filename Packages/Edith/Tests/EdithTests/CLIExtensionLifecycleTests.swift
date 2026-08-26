@@ -181,6 +181,31 @@ import Testing
         }
     }
 
+    @Test func companionStatusRoutesFreshSetupAndConfiguredRecovery() async {
+        await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Tabs.companionEnabled)
+            CLIEnvironment.companionConfigured = { false }
+            let fresh = await CLIProbe.capture([
+                "extensions", "status", "companion", "--json",
+            ])
+
+            CLIEnvironment.companionConfigured = { true }
+            let configured = await CLIProbe.capture([
+                "extensions", "status", "companion", "--json",
+            ])
+
+            #expect((fresh.object?["state"] as? [String: Any])?["phase"] as? String == "needsSetup")
+            #expect(
+                (fresh.object?["remediation"] as? [String])?.contains("ed companion deploy") == true
+            )
+            #expect(
+                (configured.object?["state"] as? [String: Any])?["phase"] as? String == "failed")
+            #expect(
+                (configured.object?["remediation"] as? [String])?.contains(
+                    "ed companion doctor --json") == true)
+        }
+    }
+
     @Test func plainInfoIncludesVerificationAndRecoveryCommands() async {
         await CLIProbe.inWorld { _ in
             let result = await CLIProbe.capture(["extensions", "info", "notchShelf"])

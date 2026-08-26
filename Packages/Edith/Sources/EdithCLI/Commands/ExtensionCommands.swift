@@ -75,6 +75,8 @@ enum ExtensionLookup {
         environment.grantedPermissions = { grantedPermissions() }
         environment.toolReadiness = CLIEnvironment.extensionToolReadiness
         environment.helperRunning = CLIEnvironment.isHelperRunning
+        environment.companionEndpoint = { CLIEnvironment.resolveCompanionEndpoint(nil) }
+        environment.companionConfigured = CLIEnvironment.companionConfigured
         let liveAdapters = ExtensionLiveAdapters.provider(
             defaults: CLIEnvironment.sharedDefaults,
             executableNamed: CLIEnvironment.executableNamed)

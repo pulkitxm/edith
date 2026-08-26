@@ -94,6 +94,15 @@ public enum CLIEnvironment {
         CompanionClient.endpoint(override: $0)
     }
 
+    nonisolated(unsafe) public static var companionConfigured: @Sendable () -> Bool = {
+        CompanionClient.hasConfiguredEndpointOrDeployment(
+            environmentEndpoint: ProcessInfo.processInfo.environment[
+                "EDITH_COMPANION_URL"],
+            savedEndpoint: sharedDefaults.object(
+                forKey: AppStorageKeys.Companion.endpoint) as? String,
+            deployment: CompanionDeploymentStore.load())
+    }
+
     nonisolated(unsafe) public static var remoteDirectoryTarget:
         @Sendable (String) async throws -> CLIRemoteDirectoryTarget = {
             try await liveRemoteDirectoryTarget($0)
@@ -203,6 +212,14 @@ public enum CLIEnvironment {
                 id, executableNamed: CLIEnvironment.executableNamed)
         }
         resolveCompanionEndpoint = { CompanionClient.endpoint(override: $0) }
+        companionConfigured = {
+            CompanionClient.hasConfiguredEndpointOrDeployment(
+                environmentEndpoint: ProcessInfo.processInfo.environment[
+                    "EDITH_COMPANION_URL"],
+                savedEndpoint: sharedDefaults.object(
+                    forKey: AppStorageKeys.Companion.endpoint) as? String,
+                deployment: CompanionDeploymentStore.load())
+        }
         remoteDirectoryTarget = { try await liveRemoteDirectoryTarget($0) }
         presentURLs = { urls, action in
             switch action {

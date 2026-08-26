@@ -212,6 +212,13 @@ import Testing
         }
     }
 
+    @Test func companionDeployPortUsesTheNetworkPortRange() async throws {
+        #expect(try ArgumentChecks.port(65_535, "--port") == 65_535)
+        let result = await CLIProbe.run(["companion", "deploy", "--port", "65536"])
+        #expect(result.code == ExitCodes.usage)
+        #expect(result.stderr.contains("--port must be between 1 and 65535"))
+    }
+
     @Test func aNegativeProcessCountIsRejected() async {
         let result = await CLIProbe.run(["system", "stats", "--processes=-4"])
         #expect(result.code == ExitCodes.usage)

@@ -59,6 +59,13 @@ public enum ArgumentChecks {
         return value
     }
 
+    public static func port(_ value: Int, _ name: String) throws -> Int {
+        guard (1...65_535).contains(value) else {
+            throw CLIFailure.usage("\(name) must be between 1 and 65535")
+        }
+        return value
+    }
+
     public static func fraction(_ value: Double, _ name: String) throws -> Double {
         guard (0...1).contains(value) else {
             throw CLIFailure.usage("\(name) must be between 0 and 1")

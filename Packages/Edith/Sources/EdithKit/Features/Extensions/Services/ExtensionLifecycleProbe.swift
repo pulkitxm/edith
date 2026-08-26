@@ -28,6 +28,8 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
     public var usesOptionalCapability: @Sendable (PlatformCapability) -> Bool
     public var machineCount: @Sendable () -> Int
     public var adapterReadiness: @Sendable (String) async -> ExtensionAdapterReadiness?
+    public var companionEndpoint: @Sendable () -> URL
+    public var companionConfigured: @Sendable () -> Bool
 
     public init(
         isEnabled: @escaping @Sendable (ExtensionRegistryEntry) -> Bool,
@@ -37,7 +39,13 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
         platformCapabilities: PlatformCapabilities,
         usesOptionalCapability: @escaping @Sendable (PlatformCapability) -> Bool = { _ in true },
         machineCount: @escaping @Sendable () -> Int,
-        adapterReadiness: @escaping @Sendable (String) async -> ExtensionAdapterReadiness?
+        adapterReadiness: @escaping @Sendable (String) async -> ExtensionAdapterReadiness?,
+        companionEndpoint: @escaping @Sendable () -> URL = {
+            CompanionClient.endpoint(override: nil)
+        },
+        companionConfigured: @escaping @Sendable () -> Bool = {
+            CompanionClient.hasConfiguredEndpointOrDeployment()
+        }
     ) {
         self.isEnabled = isEnabled
         self.grantedPermissions = grantedPermissions
@@ -47,6 +55,8 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
         self.usesOptionalCapability = usesOptionalCapability
         self.machineCount = machineCount
         self.adapterReadiness = adapterReadiness
+        self.companionEndpoint = companionEndpoint
+        self.companionConfigured = companionConfigured
     }
 
     public static let live = ExtensionLifecycleProbeEnvironment(
@@ -72,7 +82,7 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
         machineCount: { MachineRegistry.machines().count },
         adapterReadiness: { id in
             switch id {
-            case "companion": await companionReadiness()
+            case "companion": nil
             case "herdr": await herdrReadiness()
             default: await ExtensionLiveAdapters.readiness(for: id)
             }
@@ -98,16 +108,15 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
         return .installed(version: version)
     }
 
-    private static func companionReadiness() async -> ExtensionAdapterReadiness {
+    static func companionReadiness(
+        baseURL: URL, configured: Bool
+    ) async -> ExtensionAdapterReadiness {
         do {
-            let health = try await CompanionClient(
-                baseURL: CompanionClient.endpoint(override: nil)
-            ).health()
+            let health = try await CompanionClient(baseURL: baseURL).health()
             return companionReadiness(health)
         } catch {
             return companionFailureReadiness(
-                error.localizedDescription,
-                configured: CompanionClient.hasConfiguredEndpointOrDeployment())
+                error.localizedDescription, configured: configured)
         }
     }
 
@@ -244,12 +253,20 @@ public struct ExtensionLifecycleProbe: Sendable {
         if policy.requiresHelper { checks.append(helperCheck()) }
         if policy.requiresMachine { checks.append(machineCheck()) }
         if policy.adapter {
-            let readiness =
-                await environment.adapterReadiness(entry.id)
-                ?? .failed("No live runtime adapter is registered for \(entry.id).")
+            let readiness = await adapterReadiness(entry.id)
             checks.append(adapterCheck(entry, readiness: readiness))
         }
         return report(entry, enabled: enabled, checks: checks)
+    }
+
+    private func adapterReadiness(_ id: String) async -> ExtensionAdapterReadiness {
+        if let readiness = await environment.adapterReadiness(id) { return readiness }
+        guard id == "companion" else {
+            return .failed("No live runtime adapter is registered for \(id).")
+        }
+        return await ExtensionLifecycleProbeEnvironment.companionReadiness(
+            baseURL: environment.companionEndpoint(),
+            configured: environment.companionConfigured())
     }
 
     public func reports(

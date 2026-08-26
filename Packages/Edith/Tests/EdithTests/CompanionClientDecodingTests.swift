@@ -53,7 +53,7 @@ import Testing
 
     @Test func explicitEndpointOrValidDeploymentCountsAsConfigured() {
         let deployment = CompanionDeployment(
-            machineID: nil, machineName: "This Mac", tier: "cpu", localPort: 4820)
+            machineID: nil, machineName: "This Mac", tier: "cpu", localPort: 65_535)
 
         #expect(
             !CompanionClient.hasConfiguredEndpointOrDeployment(
@@ -71,12 +71,24 @@ import Testing
     }
 
     @Test func blankEndpointsAndInvalidDeploymentRemainUnconfigured() {
-        let deployment = CompanionDeployment(
+        let zeroPort = CompanionDeployment(
             machineID: nil, machineName: "This Mac", tier: "cpu", localPort: 0)
+        let oversizedPort = CompanionDeployment(
+            machineID: nil, machineName: "This Mac", tier: "cpu", localPort: 65_536)
 
         #expect(
             !CompanionClient.hasConfiguredEndpointOrDeployment(
-                environmentEndpoint: "  ", savedEndpoint: "\n", deployment: deployment))
+                environmentEndpoint: "  ", savedEndpoint: "\n", deployment: zeroPort))
+        #expect(
+            !CompanionClient.hasConfiguredEndpointOrDeployment(
+                environmentEndpoint: nil, savedEndpoint: nil, deployment: oversizedPort))
+    }
+
+    @Test func blankEnvironmentEndpointLetsSavedEndpointWin() {
+        #expect(
+            CompanionClient.explicitEndpoint(
+                environmentEndpoint: "  ", savedEndpoint: " https://companion.example ")
+                == "https://companion.example")
     }
 
     @Test func healthDecodesSeverityAndSeparatesBlockingFromOptional() throws {

@@ -458,13 +458,21 @@ public struct CompanionClient: Sendable {
             forKey: AppStorageKeys.Companion.endpoint) as? String,
         deployment: CompanionDeployment? = CompanionDeploymentStore.load()
     ) -> Bool {
-        for endpoint in [environmentEndpoint, savedEndpoint] {
-            if endpoint?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
-                return true
-            }
+        if explicitEndpoint(
+            environmentEndpoint: environmentEndpoint, savedEndpoint: savedEndpoint) != nil
+        {
+            return true
         }
         guard let deployment else { return false }
         return (1...65_535).contains(deployment.localPort)
+    }
+
+    static func explicitEndpoint(
+        environmentEndpoint: String?, savedEndpoint: String?
+    ) -> String? {
+        [environmentEndpoint, savedEndpoint]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
     }
 
     private static func fallbackEndpoint() -> URL {
@@ -472,10 +480,13 @@ public struct CompanionClient: Sendable {
     }
 
     private static func resolveEndpoint() -> URL {
-        let value =
-            ProcessInfo.processInfo.environment["EDITH_COMPANION_URL"]
-            ?? SharedDefaults.store.string(forKey: AppStorageKeys.Companion.endpoint)
-        guard let value, !value.isEmpty else { return fallbackEndpoint() }
+        guard
+            let value = explicitEndpoint(
+                environmentEndpoint: ProcessInfo.processInfo.environment[
+                    "EDITH_COMPANION_URL"],
+                savedEndpoint: SharedDefaults.store.string(
+                    forKey: AppStorageKeys.Companion.endpoint))
+        else { return fallbackEndpoint() }
         return URL(string: value) ?? fallbackEndpoint()
     }
 
