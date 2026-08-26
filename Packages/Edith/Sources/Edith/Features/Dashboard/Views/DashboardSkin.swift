@@ -43,42 +43,32 @@ enum DashSkin {
     ]
 
     static func paper(_ d: Bool) -> Color {
-        paper(d, theme: currentTheme)
+        d ? paperPair.1 : paperPair.0
     }
     static func paper(_ d: Bool, theme: AppTheme) -> Color {
         themed(
             paperPair, dark: d, theme: theme, lightFraction: 0.055, darkFraction: 0.1)
     }
     static func paper2(_ d: Bool) -> Color {
-        themed(
-            paper2Pair, dark: d, theme: currentTheme, lightFraction: 0.035,
-            darkFraction: 0.12)
+        d ? paper2Pair.1 : paper2Pair.0
     }
     static func ink(_ d: Bool) -> Color {
-        ink(d, theme: currentTheme)
+        d ? inkPair.1 : inkPair.0
     }
     static func ink(_ d: Bool, theme: AppTheme) -> Color {
         themed(inkPair, dark: d, theme: theme, lightFraction: 0.04, darkFraction: 0.025)
     }
     static func inkSoft(_ d: Bool) -> Color {
-        themed(
-            inkSoftPair, dark: d, theme: currentTheme, lightFraction: 0.08,
-            darkFraction: 0.07)
+        d ? inkSoftPair.1 : inkSoftPair.0
     }
     static func inkFaint(_ d: Bool) -> Color {
-        themed(
-            inkFaintPair, dark: d, theme: currentTheme, lightFraction: 0.12,
-            darkFraction: 0.11)
+        d ? inkFaintPair.1 : inkFaintPair.0
     }
     static func line(_ d: Bool) -> Color {
-        themed(
-            linePair, dark: d, theme: currentTheme, lightFraction: 0.13,
-            darkFraction: 0.14)
+        d ? linePair.1 : linePair.0
     }
     static func lineStrong(_ d: Bool) -> Color {
-        themed(
-            lineStrongPair, dark: d, theme: currentTheme, lightFraction: 0.2,
-            darkFraction: 0.2)
+        d ? lineStrongPair.1 : lineStrongPair.0
     }
     static func accent(_ d: Bool) -> Color {
         accent(d, theme: currentTheme)
@@ -92,9 +82,7 @@ enum DashSkin {
         return shifted(currentTheme.color, toward: d ? .white : .black, by: d ? 0.3 : 0.25)
     }
     static func grid(_ d: Bool) -> Color {
-        themed(
-            gridPair, dark: d, theme: currentTheme, lightFraction: 0.09,
-            darkFraction: 0.12)
+        d ? gridPair.1 : gridPair.0
     }
     static func heat(_ level: Int, _ d: Bool) -> Color {
         let (target, fraction) = (d ? heatStepsDark : heatSteps)[max(0, min(level, 3))]

@@ -1,8 +1,9 @@
 import EdithKit
 import SwiftUI
 import Testing
+@testable import Edith
 
-@Suite struct ThemeTests {
+@Suite(.serialized) struct ThemeTests {
     @Test func accentNameReturnsBrandAccent() {
         #expect(themeColor("accent") == brandAccent)
     }
@@ -32,6 +33,28 @@ import Testing
 
     @Test func invalidStoredThemeResolvesToTheBrandTheme() {
         #expect(AppTheme(storedName: "chartreuse") == .accent)
+    }
+
+    @Test func appSurfacesStayConstantAcrossThemes() {
+        let key = AppStorageKeys.General.theme
+        let original = SharedDefaults.store.object(forKey: key)
+        defer {
+            if let original {
+                SharedDefaults.store.set(original, forKey: key)
+            } else {
+                SharedDefaults.store.removeObject(forKey: key)
+            }
+        }
+
+        SharedDefaults.store.set(AppTheme.blue.rawValue, forKey: key)
+        let bluePaper = DashSkin.paper(true)
+        let blueCard = DashSkin.paper2(true)
+        let blueAccent = DashSkin.accent(true)
+        SharedDefaults.store.set(AppTheme.orange.rawValue, forKey: key)
+
+        #expect(DashSkin.paper(true) == bluePaper)
+        #expect(DashSkin.paper2(true) == blueCard)
+        #expect(DashSkin.accent(true) != blueAccent)
     }
 
     @Test func appViewsDoNotBypassSharedThemeTokens() throws {
