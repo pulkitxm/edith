@@ -146,6 +146,44 @@ import Testing
     }
 }
 
+@Suite struct NotchTabVisibilityTests {
+    @Test func audioRequiresBothEnablementAndPlatformSupport() {
+        #expect(
+            NotchTab.visible(
+                clipboardEnabled: false, audioMixerEnabled: false,
+                applicationAudioSupported: true)
+                == [.home, .files, .camera])
+        #expect(
+            NotchTab.visible(
+                clipboardEnabled: false, audioMixerEnabled: true,
+                applicationAudioSupported: false)
+                == [.home, .files, .camera])
+        #expect(
+            NotchTab.visible(
+                clipboardEnabled: false, audioMixerEnabled: true,
+                applicationAudioSupported: true)
+                == [.home, .files, .audio, .camera])
+    }
+
+    @Test func clipboardAndAudioKeepTheirStableOrder() {
+        #expect(
+            NotchTab.visible(
+                clipboardEnabled: true, audioMixerEnabled: true,
+                applicationAudioSupported: true)
+                == [.home, .files, .clipboard, .audio, .camera])
+    }
+
+    @Test func hiddenSelectionReturnsHome() {
+        let visible = NotchTab.visible(
+            clipboardEnabled: false, audioMixerEnabled: false,
+            applicationAudioSupported: true)
+
+        #expect(NotchTab.validSelection(.audio, visible: visible) == .home)
+        #expect(NotchTab.validSelection(.clipboard, visible: visible) == .home)
+        #expect(NotchTab.validSelection(.camera, visible: visible) == .camera)
+    }
+}
+
 @Suite struct CollapsedWingSizeTests {
     @Test func addsWingsWhenLiveActivityPresent() {
         let base = CGSize(width: 160, height: 32)
