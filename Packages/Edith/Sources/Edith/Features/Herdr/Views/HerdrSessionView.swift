@@ -1,4 +1,5 @@
 import EdithKit
+import GhosttyTerminal
 import SwiftTerm
 import SwiftUI
 
@@ -45,6 +46,9 @@ struct HerdrSessionView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var connectError: String?
     @State private var starting = false
+    @AppStorage(AppStorageKeys.Herdr.ghosttyTerminal, store: SharedDefaults.store)
+    private var ghosttyTerminal = false
+    @State private var ghosttyLaunch: GhosttyLaunch?
     @State private var dragWidth: CGFloat?
     @State private var handleHovered = false
 
@@ -165,13 +169,22 @@ struct HerdrSessionView: View {
         "\(tab.id)|\(tab.view.rawValue)|\(dark)"
     }
 
+    private var usesGhostty: Bool { ghosttyTerminal && agent.isTerminal }
+
     private var sessionPane: some View {
         ZStack {
-            TerminalPane(
-                holder: tab.holder, palette: .edith(dark: dark),
-                active: presented && tab.view.showsAgent
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if usesGhostty {
+                if let ghosttyLaunch {
+                    GhosttyPane(launch: ghosttyLaunch)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            } else {
+                TerminalPane(
+                    holder: tab.holder, palette: .edith(dark: dark),
+                    active: presented && tab.view.showsAgent
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
             if let connectError {
                 Text(connectError)
                     .font(.system(size: UIScale.pt(13)))
@@ -359,13 +372,20 @@ struct HerdrSessionView: View {
     }
 
     private func startIfNeeded() async {
-        guard launchEnabled, !tab.holder.started else { return }
+        guard launchEnabled else { return }
+        guard usesGhostty ? ghosttyLaunch == nil : !tab.holder.started else { return }
         starting = true
         defer { starting = false }
         do {
             let request = try await store.attachRequest(
                 for: tab,
                 environment: Terminal.getEnvironmentVariables(termName: "xterm-256color"))
+            guard !usesGhostty else {
+                ghosttyLaunch = GhosttyLaunch(
+                    executable: request.executable, arguments: request.arguments,
+                    environment: request.environment)
+                return
+            }
             tab.holder.start(
                 executable: request.executable, arguments: request.arguments,
                 environment: request.environment)
