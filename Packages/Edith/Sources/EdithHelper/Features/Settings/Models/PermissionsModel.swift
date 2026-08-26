@@ -19,8 +19,17 @@ final class PermissionsModel {
     private(set) var screenRecording = false
     private(set) var camera = false
 
+    private struct PreflightSnapshot: Sendable {
+        let accessibility: Bool
+        let inputMonitoring: Bool
+        let fullDisk: Bool
+        let screenRecording: Bool
+        let camera: Bool
+    }
+
     private let eventStore = EKEventStore()
     private var ipcTokens: [NSObjectProtocol] = []
+    private var lastRefreshAt = Date.distantPast
 
     func startIPCBridge() {
         guard ipcTokens.isEmpty else { return }
@@ -52,7 +61,7 @@ final class PermissionsModel {
             environment: PermissionOperationEnvironment(
                 defaults: SharedDefaults.store,
                 requestPermission: { [weak self] in self?.performRequest($0) ?? false },
-                refreshStatus: { [weak self] in self?.refresh() },
+                refreshStatus: { [weak self] in self?.performRefresh() },
                 openSettings: { NSWorkspace.shared.open($0) },
                 recordPrompt: { PermissionPromptTracker.record() }))
     }
@@ -84,11 +93,31 @@ final class PermissionsModel {
     }
 
     func refresh() {
-        accessibility = AXIsProcessTrusted()
-        inputMonitoring = CGPreflightListenEventAccess()
-        fullDisk = Self.hasFullDiskAccess()
-        screenRecording = CGPreflightScreenCaptureAccess()
-        camera = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
+        guard Date().timeIntervalSince(lastRefreshAt) >= 2 else { return }
+        performRefresh()
+    }
+
+    private func performRefresh() {
+        lastRefreshAt = Date()
+        Task { [weak self] in
+            let snapshot = await Task.detached(priority: .userInitiated) {
+                PreflightSnapshot(
+                    accessibility: AXIsProcessTrusted(),
+                    inputMonitoring: CGPreflightListenEventAccess(),
+                    fullDisk: Self.hasFullDiskAccess(),
+                    screenRecording: CGPreflightScreenCaptureAccess(),
+                    camera: AVCaptureDevice.authorizationStatus(for: .video) == .authorized)
+            }.value
+            self?.apply(snapshot)
+        }
+    }
+
+    private func apply(_ snapshot: PreflightSnapshot) {
+        accessibility = snapshot.accessibility
+        inputMonitoring = snapshot.inputMonitoring
+        fullDisk = snapshot.fullDisk
+        screenRecording = snapshot.screenRecording
+        camera = snapshot.camera
         mirrorToSharedDefaults()
         Task { @MainActor in
             let status = await UNUserNotificationCenter.current()
@@ -121,14 +150,14 @@ final class PermissionsModel {
     private func requestCalendar() {
         Task { @MainActor in
             _ = try? await eventStore.requestFullAccessToEvents()
-            refresh()
+            performRefresh()
         }
     }
 
     private func requestNotifications() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) {
             _, _ in
-            Task { @MainActor in self.refresh() }
+            Task { @MainActor in self.performRefresh() }
         }
     }
 
@@ -152,7 +181,7 @@ final class PermissionsModel {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { _ in
-                Task { @MainActor in self.refresh() }
+                Task { @MainActor in self.performRefresh() }
             }
             return false
         default:
@@ -162,15 +191,15 @@ final class PermissionsModel {
     }
 
     private func refreshAfterGrant() {
-        refresh()
+        performRefresh()
         for delay in [0.5, 2.0] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                self?.refresh()
+                self?.performRefresh()
             }
         }
     }
 
-    static func hasFullDiskAccess() -> Bool {
+    nonisolated static func hasFullDiskAccess() -> Bool {
         let tcc = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/com.apple.TCC/TCC.db")
         guard let handle = try? FileHandle(forReadingFrom: tcc) else { return false }

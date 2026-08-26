@@ -76,6 +76,7 @@ struct CompanionPage: View {
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Namespace private var tabGlow
     @State private var refreshTick = 0
+    @State private var visited: Set<CompanionTab> = []
     @State private var setupModel: CompanionSetupModel?
     @AppStorage(AppStorageKeys.Companion.setupDeclined, store: SharedDefaults.store)
     private var setupDeclined = false
@@ -293,36 +294,18 @@ struct CompanionPage: View {
     }
 
     private var screenStack: some View {
-        ZStack {
-            screen(.chat)
-                .opacity(tab == .chat ? 1 : 0)
-                .allowsHitTesting(tab == .chat)
-                .accessibilityHidden(tab != .chat)
-            screen(.capture)
-                .opacity(tab == .capture ? 1 : 0)
-                .allowsHitTesting(tab == .capture)
-                .accessibilityHidden(tab != .capture)
-            screen(.desk)
-                .opacity(tab == .desk ? 1 : 0)
-                .allowsHitTesting(tab == .desk)
-                .accessibilityHidden(tab != .desk)
-            screen(.setup)
-                .opacity(tab == .setup ? 1 : 0)
-                .allowsHitTesting(tab == .setup)
-                .accessibilityHidden(tab != .setup)
-            screen(.library)
-                .opacity(tab == .library ? 1 : 0)
-                .allowsHitTesting(tab == .library)
-                .accessibilityHidden(tab != .library)
-            screen(.mind)
-                .opacity(tab == .mind ? 1 : 0)
-                .allowsHitTesting(tab == .mind)
-                .accessibilityHidden(tab != .mind)
-            screen(.settings)
-                .opacity(tab == .settings ? 1 : 0)
-                .allowsHitTesting(tab == .settings)
-                .accessibilityHidden(tab != .settings)
+        let mounted = visited.union([tab])
+        return ZStack {
+            ForEach(CompanionTab.allCases) { item in
+                if mounted.contains(item) {
+                    screen(item)
+                        .opacity(tab == item ? 1 : 0)
+                        .allowsHitTesting(tab == item)
+                        .accessibilityHidden(tab != item)
+                }
+            }
         }
+        .onAppear { visited.insert(tab) }
     }
 
     @ViewBuilder
@@ -335,19 +318,23 @@ struct CompanionPage: View {
                     select(.library)
                     Task { await library.select(id) }
                 })
-        case .capture: CompanionCaptureScreen(model: capture, home: home)
-        case .desk: CompanionDeskScreen(model: desk)
+        case .capture:
+            CompanionCaptureScreen(model: capture, home: home, isActive: tab == .capture)
+        case .desk: CompanionDeskScreen(model: desk, isActive: tab == .desk)
         case .setup:
-            CompanionBackendScreen(model: backend, openSetup: { openSetup() })
-        case .library: CompanionLibraryScreen(model: library, home: home)
+            CompanionBackendScreen(
+                model: backend, isActive: tab == .setup, openSetup: { openSetup() })
+        case .library:
+            CompanionLibraryScreen(model: library, home: home, isActive: tab == .library)
         case .mind:
             CompanionMindScreen(
-                model: mind,
+                model: mind, isActive: tab == .mind,
                 openEpisode: { id in
                     select(.library)
                     Task { await library.select(id) }
                 })
-        case .settings: CompanionSettingsScreen(model: reason, home: home)
+        case .settings:
+            CompanionSettingsScreen(model: reason, home: home, isActive: tab == .settings)
         }
     }
 
@@ -364,6 +351,7 @@ struct CompanionPage: View {
     }
 
     private func select(_ item: CompanionTab) {
+        visited.insert(item)
         withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
             tabRaw = item.rawValue
         }

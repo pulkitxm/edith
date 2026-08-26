@@ -749,7 +749,7 @@ final class UsageStore: FeatureModule {
         return true
     }
 
-    func drainHistoryPersistence() async {
+    func drainHistoryPersistence(syncLimitsAfterDrain: Bool = true) async {
         let pending = terminationPendingHistory.map(historyEntry)
         if !pending.isEmpty {
             _ = await UsageHistoryPersistenceWorker.shared.persist(pending)
@@ -757,7 +757,9 @@ final class UsageStore: FeatureModule {
         let persisted = await UsageHistoryPersistenceWorker.shared.drain()
         guard persisted else { return }
         terminationPendingHistory = []
-        _ = await SettingsBackup.shared.syncLimits()
+        if syncLimitsAfterDrain {
+            _ = await SettingsBackup.shared.syncLimits()
+        }
         if !pending.isEmpty { IPC.post(IPC.Name.limitsUpdated) }
     }
 

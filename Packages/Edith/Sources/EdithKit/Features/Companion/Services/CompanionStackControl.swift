@@ -23,20 +23,35 @@ public enum CompanionHosts {
         deployment: CompanionDeployment?, config: CompanionStackConfig = CompanionConfigStore.load()
     ) async -> [CompanionHost] {
         let ports = CompanionHostFacts.requiredPorts(for: config)
-        let local = await localHost(ports: ports)
-        var remote: [CompanionHost] = []
-        for machine in MachineRegistry.machines() {
-            remote.append(await probe(machine, ports: ports))
+        async let local = localHost(ports: ports)
+        let machines = MachineRegistry.machines()
+        var probed: [UUID: CompanionHost] = [:]
+        await withTaskGroup(of: CompanionHost.self) { group in
+            let probeLimit = 4
+            var pending = machines.makeIterator()
+            var started = 0
+            while started < probeLimit, let machine = pending.next() {
+                group.addTask { await probe(machine, ports: ports) }
+                started += 1
+            }
+            while let host = await group.next() {
+                probed[host.id] = host
+                if let machine = pending.next() {
+                    group.addTask { await probe(machine, ports: ports) }
+                }
+            }
         }
+        let remote = machines.compactMap { probed[$0.id] }
         return CompanionHostList.ordered(
-            local: local, machines: remote, deployment: deployment)
+            local: await local, machines: remote, deployment: deployment)
     }
 
     @MainActor
     public static func localHost(
         ports: [Int] = CompanionHostFacts.requiredPorts
     ) async -> CompanionHost {
-        let output = await CompanionShell.run(CompanionHostProbe.script(ports: ports))
+        let output = await CompanionShell.run(
+            CompanionHostProbe.script(ports: ports), timeout: probeTimeout)
         return CompanionHost(
             id: CompanionHost.localID,
             name: Host.current().localizedName ?? "This Mac",
@@ -46,13 +61,15 @@ public enum CompanionHosts {
             facts: output.map(CompanionHostProbe.parse))
     }
 
+    static let probeTimeout: TimeInterval = 10
+
     @MainActor
     public static func probe(
         _ machine: Machine, ports: [Int] = CompanionHostFacts.requiredPorts
     ) async -> CompanionHost {
         let session = MachineSession(machine: machine, local: false)
         let result = await session.runCommand(
-            CompanionHostProbe.script(ports: ports), timeout: 45)
+            CompanionHostProbe.script(ports: ports), timeout: probeTimeout)
         switch result {
         case let .success(output):
             return CompanionHost(
@@ -190,8 +207,8 @@ public enum CompanionStackControl {
 }
 
 public enum CompanionShell {
-    public static func run(_ script: String) async -> String? {
-        try? await runChecked(script, stdin: nil).get()
+    public static func run(_ script: String, timeout: TimeInterval = 600) async -> String? {
+        try? await runChecked(script, stdin: nil, timeout: timeout).get()
     }
 
     public static func runChecked(

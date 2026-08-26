@@ -32,8 +32,10 @@ final class CompanionHomeModel: CompanionRefreshable {
     func refresh() async {
         do {
             let client = client
-            checks = try await client.health().checks
-            status = try await client.status()
+            async let liveness = client.health(timeout: 5)
+            async let snapshot = client.status()
+            checks = try await liveness.checks
+            status = try await snapshot
             error = nil
             if !reachable {
                 reachable = true

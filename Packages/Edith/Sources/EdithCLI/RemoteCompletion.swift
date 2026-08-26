@@ -64,7 +64,10 @@ public enum RemoteCompletion {
         let words = Array(request.words.dropFirst(2))
         let cursor = request.index - 2
         guard cursor >= 0 else { return [] }
-        guard MachineDirectory.hasLiveControlSocket(machine) else { return [] }
+        guard
+            FileManager.default.fileExists(
+                atPath: MachinePaths.socketFile(for: machine.id).path)
+        else { return [] }
         let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
         let remote: String
         if cursor == 0 {
@@ -76,7 +79,7 @@ public enum RemoteCompletion {
         }
         let command = MachineWorkingDirectory.prefixed(
             remote, directory: MachineWorkingDirectory.load(machineID: machine.id))
-        guard let result = try? await connection.run(command, timeout: 6), result.succeeded else {
+        guard let result = try? await connection.run(command, timeout: 1), result.succeeded else {
             return []
         }
         let lines = result.stdoutText.split(separator: "\n").map(String.init)

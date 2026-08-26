@@ -98,7 +98,9 @@ public enum CompanionInstaller {
         if let source = CompanionSource.locate() {
             progress?(.source, "from \(source.path)")
             log("Syncing the companion source from \(source.path)")
-            let tarball = try CompanionSource.tarball(of: source)
+            let tarball = try await Task.detached {
+                try CompanionSource.tarball(of: source)
+            }.value
             _ = try await run("tar -xzf - -C \(quoted(directory))", tarball, 300)
         } else if await !sourcePresent(deployment, run) {
             throw CompanionStackError.commandFailed(
@@ -185,7 +187,7 @@ public enum CompanionTunnel {
             MachineRegistry.addForward(forward)
         }
         let session = MachineSession(machine: machine, local: false)
-        guard case .success = await session.runCommand("true", timeout: 20) else {
+        guard case .success = await session.runCommand("true", timeout: 10) else {
             return false
         }
         return await session.setForward(forward, active: true) == nil

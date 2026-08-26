@@ -4,8 +4,18 @@ import Foundation
 public struct AttentionRepository: Sendable {
     public let root: URL
 
+    private let encoder: JSONEncoder
+    private let decoder: JSONDecoder
+
     public init(root: URL = AttentionPaths.root) {
         self.root = root
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys]
+        self.encoder = encoder
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        self.decoder = decoder
     }
 
     public var directory: URL { root.appendingPathComponent("attention") }
@@ -70,6 +80,9 @@ public struct AttentionRepository: Sendable {
                 (try? FileManager.default.contentsOfDirectory(
                     at: eventsDirectory, includingPropertiesForKeys: nil)) ?? []
             for file in files where file.pathExtension == "jsonl" {
+                guard fileDayIntersects(name: file.lastPathComponent, from: from, to: to) else {
+                    continue
+                }
                 if let data = try? Data(contentsOf: file) {
                     result.append(
                         contentsOf: decodeEvents(data).compactMap { $0.clipped(from: from, to: to) }
@@ -78,6 +91,24 @@ public struct AttentionRepository: Sendable {
             }
             return result.sorted { $0.startedAt < $1.startedAt }
         }
+    }
+
+    private func fileDayIntersects(name: String, from: Date, to: Date) -> Bool {
+        guard let dayStart = eventFileDayStart(name: name) else { return true }
+        let coverageEnd = dayStart.addingTimeInterval(172_800)
+        return dayStart < to && coverageEnd > from
+    }
+
+    private func eventFileDayStart(name: String) -> Date? {
+        let parts = name.dropLast(".jsonl".count).split(separator: "-")
+        guard parts.count == 3, let year = Int(parts[0]), let month = Int(parts[1]),
+            let day = Int(parts[2]), (1...12).contains(month), (1...31).contains(day)
+        else { return nil }
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = day
+        return AttentionPaths.utcCalendar.date(from: components)
     }
 
     public func startFocus(
@@ -189,19 +220,6 @@ public struct AttentionRepository: Sendable {
             result.append(try encoder.encode(event))
             result.append(0x0A)
         }
-    }
-
-    private var encoder: JSONEncoder {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.sortedKeys]
-        return encoder
-    }
-
-    private var decoder: JSONDecoder {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
     }
 
     private func withLock<T>(_ body: () throws -> T) rethrows -> T {

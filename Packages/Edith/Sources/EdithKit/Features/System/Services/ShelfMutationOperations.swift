@@ -387,7 +387,7 @@ fileprivate final class ShelfDirectory {
 fileprivate final class ShelfLock {
     private let descriptor: Int32
 
-    init(directory: ShelfDirectory) throws {
+    init(directory: ShelfDirectory, operation: Int32 = LOCK_EX) throws {
         let lock = directory.logicalURL.appendingPathComponent(".index.lock")
         var descriptor: Int32 = -1
         var attempt = 0
@@ -404,7 +404,7 @@ fileprivate final class ShelfLock {
             throw ShelfMutationError.lockUnavailable(
                 "\(lock.path): \(String(cString: strerror(lockError)))")
         }
-        guard flock(descriptor, LOCK_EX) == 0 else {
+        guard flock(descriptor, operation) == 0 else {
             close(descriptor)
             throw ShelfMutationError.lockUnavailable(lock.path)
         }
@@ -563,9 +563,14 @@ public enum ShelfMutationExecution {
     public static func snapshot(
         root: URL = ShelfIndex.root, fileManager: FileManager = .default
     ) throws -> ShelfMutationResult {
-        try withLock(root: root, fileManager: fileManager) { directory in
-            ShelfMutationResult(items: try load(root: directory))
-        }
+        try snapshot(root: root, fileManager: fileManager, afterOpeningRoot: {})
+    }
+
+    public static func snapshotIfUncontended(
+        root: URL = ShelfIndex.root, fileManager: FileManager = .default
+    ) -> ShelfMutationResult? {
+        try? sharedSnapshot(
+            root: root, fileManager: fileManager, waits: false, afterOpeningRoot: {})
     }
 
     public static func pinnedSelection(
@@ -590,10 +595,42 @@ public enum ShelfMutationExecution {
     static func snapshot(
         root: URL, fileManager: FileManager = .default, afterOpeningRoot: () throws -> Void
     ) throws -> ShelfMutationResult {
-        try withLock(
+        if let shared = try sharedSnapshot(
+            root: root, fileManager: fileManager, waits: true,
+            afterOpeningRoot: afterOpeningRoot)
+        {
+            return shared
+        }
+        return try withLock(
             root: root, fileManager: fileManager, afterOpeningRoot: afterOpeningRoot
         ) { directory in
             ShelfMutationResult(items: try load(root: directory))
+        }
+    }
+
+    private static func sharedSnapshot(
+        root: URL, fileManager: FileManager, waits: Bool,
+        afterOpeningRoot: () throws -> Void
+    ) throws -> ShelfMutationResult? {
+        let directory = try ShelfDirectory(opening: root, fileManager: fileManager)
+        try afterOpeningRoot()
+        let lock = try ShelfLock(
+            directory: directory, operation: waits ? LOCK_SH : LOCK_SH | LOCK_NB)
+        return try withExtendedLifetime(lock) { () -> ShelfMutationResult? in
+            let names = try directory.names()
+            let indexName = ShelfIndex.indexFile().lastPathComponent
+            let needsIndexMigration =
+                !names.contains(indexName) && names.contains(legacyIndexName)
+            guard !needsIndexMigration,
+                !names.contains(where: {
+                    $0.hasPrefix(removalPrefix) || $0.hasPrefix(removalPreparationPrefix)
+                })
+            else { return nil }
+            let items = try load(root: directory)
+            guard !items.contains(where: { directory.contains($0.id.uuidString) }) else {
+                return nil
+            }
+            return ShelfMutationResult(items: items)
         }
     }
 

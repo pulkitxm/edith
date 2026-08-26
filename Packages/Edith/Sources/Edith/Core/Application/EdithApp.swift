@@ -8,8 +8,11 @@ private let helperBundleIdentifier = MainApp.statusBarBundleIdentifier
 final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var quitObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
-    private var settingsChangeDebounce: Timer?
+    private var settingsBroadcastPending = false
+    private var lastUsageEnabled: Bool?
     private var appStarted = false
+    private var launchCleanupTask: Task<Void, Never>?
+    private var helperMaintenanceTask: Task<Void, Never>?
     private let postLaunch = StartupCoordinator()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -19,7 +22,6 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
             SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
         InputFocus.install()
         ScrollForwarding.install()
-        RetiredLicenseCleanup.run()
         FinderUndoBridge.start()
         startApp()
     }
@@ -31,7 +33,6 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         }
         appStarted = true
         ExtensionDefaultsMigration.migrate()
-        Repo.prepareStoredPaths()
         applyConfiguredActivationPolicy()
         showInitialWindow()
         PerformanceTrace.event(.mainThread, "main.initialWindow")
@@ -39,19 +40,44 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
             AppRuntimeCenter().perform(.quit) { NSApp.terminate(nil) }
         }
         CLIWindowBridge.install()
+        lastUsageEnabled =
+            SharedDefaults.store.object(forKey: AppStorageKeys.Tabs.usageEnabled) as? Bool
         settingsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: SharedDefaults.store,
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                DashboardModel.shared.syncExtensionState()
-                self?.scheduleSettingsChangedBroadcast()
+                self?.handleSettingsChange()
             }
         }
         postLaunch.start([
-            StartupPhase(name: "main.helper") { launchHelperIfNeeded() },
+            StartupPhase(name: "main.launchCleanup") { [weak self] in
+                guard let self else { return }
+                self.launchCleanupTask?.cancel()
+                self.launchCleanupTask = Task.detached(priority: .utility) {
+                    Repo.prepareStoredPaths()
+                    RetiredLicenseCleanup.run()
+                }
+            },
+            StartupPhase(name: "main.helper") { [weak self] in
+                guard let self else { return }
+                self.helperMaintenanceTask?.cancel()
+                self.helperMaintenanceTask = Task.detached(priority: .utility) {
+                    await launchHelperIfNeeded()
+                }
+            },
             StartupPhase(name: "main.sectionMenu") { SectionWindowMenu.install() },
         ])
+    }
+
+    private func handleSettingsChange() {
+        let usageEnabled =
+            SharedDefaults.store.object(forKey: AppStorageKeys.Tabs.usageEnabled) as? Bool
+        if usageEnabled != lastUsageEnabled {
+            lastUsageEnabled = usageEnabled
+            DashboardModel.shared.syncExtensionState()
+        }
+        scheduleSettingsChangedBroadcast()
     }
 
     private func applyConfiguredActivationPolicy() {
@@ -70,9 +96,14 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func scheduleSettingsChangedBroadcast() {
-        settingsChangeDebounce?.invalidate()
-        settingsChangeDebounce = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
-            IPC.post(IPC.Name.settingsChanged)
+        guard !settingsBroadcastPending else { return }
+        settingsBroadcastPending = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.settingsBroadcastPending else { return }
+                self.settingsBroadcastPending = false
+                IPC.post(IPC.Name.settingsChanged)
+            }
         }
     }
 
@@ -86,11 +117,12 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        if settingsChangeDebounce?.isValid == true {
+        if settingsBroadcastPending {
+            settingsBroadcastPending = false
             IPC.post(IPC.Name.settingsChanged)
         }
-        settingsChangeDebounce?.invalidate()
-        settingsChangeDebounce = nil
+        launchCleanupTask?.cancel()
+        helperMaintenanceTask?.cancel()
         postLaunch.cancel()
     }
 
@@ -103,11 +135,11 @@ private let retiredHelperBundleIdentifiers = [
     "com.pulkit.edith.panel", "com.pulkit.edith.bar", "com.pulkit.edith.menubar",
 ]
 
-private func launchHelperIfNeeded() {
+private func launchHelperIfNeeded() async {
     for identifier in retiredHelperBundleIdentifiers {
         let retired = SMAppService.loginItem(identifier: identifier)
         if retired.status == .enabled {
-            try? retired.unregister()
+            try? await retired.unregister()
         }
     }
     let service = SMAppService.loginItem(identifier: helperBundleIdentifier)
@@ -122,12 +154,16 @@ private func launchHelperIfNeeded() {
         guard let installedAt = helperInstalledDate(helperURL),
             let launchedAt = running.launchDate, launchedAt < installedAt
         else { return }
-        running.forceTerminate()
-        relaunchHelper(at: helperURL, after: running)
+        await MainActor.run {
+            running.forceTerminate()
+            relaunchHelper(at: helperURL, after: running)
+        }
         return
     }
-    NSWorkspace.shared.openApplication(
-        at: helperURL, configuration: NSWorkspace.OpenConfiguration())
+    await MainActor.run {
+        NSWorkspace.shared.openApplication(
+            at: helperURL, configuration: NSWorkspace.OpenConfiguration())
+    }
 }
 
 private func helperInstalledDate(_ helperURL: URL) -> Date? {

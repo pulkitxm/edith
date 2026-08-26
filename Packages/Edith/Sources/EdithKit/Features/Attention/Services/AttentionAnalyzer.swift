@@ -7,8 +7,9 @@ public struct AttentionAnalyzer: Sendable {
         events: [AttentionEvent], settings: AttentionSettings, from: Date, to: Date
     ) -> AttentionSummary {
         let primary = resolvedPrimaryIntervals(events: events, from: from, to: to)
-        let categories = Dictionary(uniqueKeysWithValues: settings.categories.map { ($0.id, $0) })
-        let fallback = categories["unclassified"] ?? AttentionSettings.defaultCategories.last!
+        let categoriesByID = Dictionary(
+            uniqueKeysWithValues: settings.categories.map { ($0.id, $0) })
+        let fallback = categoriesByID["unclassified"] ?? AttentionSettings.defaultCategories.last!
         var totals: [String: AttentionEntity] = [:]
         var activeDuration: TimeInterval = 0
         var idleDuration: TimeInterval = 0
@@ -25,7 +26,9 @@ public struct AttentionAnalyzer: Sendable {
             } else {
                 idleDuration += duration
             }
-            let resolved = resolve(event: event, settings: settings, fallback: fallback)
+            let resolved = resolve(
+                event: event, settings: settings, categoriesByID: categoriesByID,
+                fallback: fallback)
             if event.presence == .active {
                 switch resolved.category.kind {
                 case .focus: focusedDuration += duration
@@ -68,15 +71,35 @@ public struct AttentionAnalyzer: Sendable {
         }
         let boundaries = Set(candidates.flatMap { [$0.startedAt, $0.endedAt] }).sorted()
         guard boundaries.count > 1 else { return [] }
+        let slotCount = boundaries.count - 1
+        var slotByTime: [Date: Int] = [:]
+        slotByTime.reserveCapacity(boundaries.count)
+        for (slot, time) in boundaries.enumerated() { slotByTime[time] = slot }
+        let claimOrder = candidates.indices.sorted {
+            let left = priority(candidates[$0])
+            let right = priority(candidates[$1])
+            return left == right ? $0 < $1 : left > right
+        }
+        var winners = [Int?](repeating: nil, count: slotCount)
+        var nextOpenSlot = Array(0...slotCount)
+        for candidateIndex in claimOrder {
+            let candidate = candidates[candidateIndex]
+            guard let low = slotByTime[candidate.startedAt],
+                let high = slotByTime[candidate.endedAt]
+            else { continue }
+            var slot = openSlot(from: low, in: &nextOpenSlot)
+            while slot < high {
+                winners[slot] = candidateIndex
+                nextOpenSlot[slot] = slot + 1
+                slot = openSlot(from: slot + 1, in: &nextOpenSlot)
+            }
+        }
         var result: [AttentionEvent] = []
-        for index in 0..<(boundaries.count - 1) {
-            let start = boundaries[index]
-            let end = boundaries[index + 1]
-            guard end > start else { continue }
-            let matching = candidates.filter { $0.startedAt < end && $0.endedAt > start }
-            guard var selected = matching.max(by: { priority($0) < priority($1) }) else { continue }
-            selected.startedAt = start
-            selected.duration = end.timeIntervalSince(start)
+        for slot in 0..<slotCount {
+            guard let winner = winners[slot] else { continue }
+            var selected = candidates[winner]
+            selected.startedAt = boundaries[slot]
+            selected.duration = boundaries[slot + 1].timeIntervalSince(boundaries[slot])
             if let last = result.last, last.canMerge(with: selected, pulseTime: 0) {
                 result[result.count - 1] = last.merged(with: selected)
             } else {
@@ -86,6 +109,18 @@ public struct AttentionAnalyzer: Sendable {
         return result
     }
 
+    private func openSlot(from slot: Int, in nextOpenSlot: inout [Int]) -> Int {
+        var open = slot
+        while nextOpenSlot[open] != open { open = nextOpenSlot[open] }
+        var walker = slot
+        while nextOpenSlot[walker] != walker {
+            let following = nextOpenSlot[walker]
+            nextOpenSlot[walker] = open
+            walker = following
+        }
+        return open
+    }
+
     private func priority(_ event: AttentionEvent) -> Int {
         let source = event.source == .browser ? 20 : 10
         let presence = event.presence == .active ? 2 : 1
@@ -93,7 +128,8 @@ public struct AttentionAnalyzer: Sendable {
     }
 
     private func resolve(
-        event: AttentionEvent, settings: AttentionSettings, fallback: AttentionCategory
+        event: AttentionEvent, settings: AttentionSettings,
+        categoriesByID: [String: AttentionCategory], fallback: AttentionCategory
     ) -> (id: String, name: String, category: AttentionCategory) {
         let bundleID = event.bundleID?.lowercased()
         let domain = normalizedDomain(event.domain ?? event.url)
@@ -101,9 +137,8 @@ public struct AttentionAnalyzer: Sendable {
             rule.bundleIDs.contains { $0.lowercased() == bundleID }
                 || rule.domains.contains { matches(domain: domain, rule: $0) }
         }
-        let categoryByID = Dictionary(uniqueKeysWithValues: settings.categories.map { ($0.id, $0) })
         if let rule {
-            return ("identity:\(rule.id)", rule.name, categoryByID[rule.categoryID] ?? fallback)
+            return ("identity:\(rule.id)", rule.name, categoriesByID[rule.categoryID] ?? fallback)
         }
         if event.source == .browser, let domain {
             return ("web:\(domain)", domain, fallback)

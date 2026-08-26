@@ -349,6 +349,33 @@ private func settingsBackupRequestCloudDownload(_ url: URL) {
     }
 }
 
+enum SettingsBackupTransferOutcome: Sendable {
+    case done
+    case unavailable
+    case retryable
+}
+
+func settingsBackupBoundedTransfer(
+    timeout: Duration,
+    operation: @escaping @Sendable () async -> SettingsBackupTransferOutcome
+) async -> SettingsBackupTransferOutcome {
+    let (stream, continuation) = AsyncStream.makeStream(of: SettingsBackupTransferOutcome.self)
+    let work = Task {
+        continuation.yield(await operation())
+        continuation.finish()
+    }
+    let timer = Task {
+        try? await Task.sleep(for: timeout)
+        continuation.yield(.unavailable)
+        continuation.finish()
+    }
+    var iterator = stream.makeAsyncIterator()
+    let outcome = await iterator.next() ?? .unavailable
+    timer.cancel()
+    work.cancel()
+    return outcome
+}
+
 actor SettingsBackupUsageWorker {
     static let shared = SettingsBackupUsageWorker()
 
@@ -358,16 +385,29 @@ actor SettingsBackupUsageWorker {
         requireCloudAvailability: Bool = true,
         restoreToken: SettingsBackupRestoreToken? = nil
     ) -> Bool {
+        transferLimitsOutcome(
+            localURL: localURL, cloudURL: cloudURL, shouldRestore: shouldRestore,
+            shouldExport: shouldExport, backupEnabled: backupEnabled,
+            requireCloudAvailability: requireCloudAvailability,
+            restoreToken: restoreToken) == .done
+    }
+
+    func transferLimitsOutcome(
+        localURL: URL, cloudURL: URL, shouldRestore: Bool, shouldExport: Bool,
+        backupEnabled: Bool,
+        requireCloudAvailability: Bool = true,
+        restoreToken: SettingsBackupRestoreToken? = nil
+    ) -> SettingsBackupTransferOutcome {
         guard backupEnabled, !requireCloudAvailability || AppData.cloudAvailable else {
-            return false
+            return .unavailable
         }
         guard settingsBackupCloudFileIsCurrent(cloudURL) else {
             settingsBackupRequestCloudDownload(cloudURL)
-            return false
+            return .unavailable
         }
         return settingsBackupTransferLimits(
             localURL: localURL, cloudURL: cloudURL, shouldRestore: shouldRestore,
-            shouldExport: shouldExport, restoreToken: restoreToken)
+            shouldExport: shouldExport, restoreToken: restoreToken) ? .done : .retryable
     }
 
     func transferUsage(
@@ -377,17 +417,32 @@ actor SettingsBackupUsageWorker {
         willAcquireDataLock: (() -> Void)? = nil,
         restoreToken: SettingsBackupRestoreToken? = nil
     ) -> Bool {
+        transferUsageOutcome(
+            localURL: localURL, cloudURL: cloudURL, shouldRestore: shouldRestore,
+            shouldExport: shouldExport, backupEnabled: backupEnabled,
+            requireCloudAvailability: requireCloudAvailability,
+            willAcquireDataLock: willAcquireDataLock,
+            restoreToken: restoreToken) == .done
+    }
+
+    func transferUsageOutcome(
+        localURL: URL, cloudURL: URL, shouldRestore: Bool, shouldExport: Bool,
+        backupEnabled: Bool,
+        requireCloudAvailability: Bool = true,
+        willAcquireDataLock: (() -> Void)? = nil,
+        restoreToken: SettingsBackupRestoreToken? = nil
+    ) -> SettingsBackupTransferOutcome {
         guard backupEnabled, !requireCloudAvailability || AppData.cloudAvailable else {
-            return false
+            return .unavailable
         }
         guard settingsBackupCloudFileIsCurrent(cloudURL) else {
             settingsBackupRequestCloudDownload(cloudURL)
-            return false
+            return .unavailable
         }
         return settingsBackupTransferUsage(
             localURL: localURL, cloudURL: cloudURL, shouldRestore: shouldRestore,
             shouldExport: shouldExport, willAcquireDataLock: willAcquireDataLock,
-            restoreToken: restoreToken)
+            restoreToken: restoreToken) ? .done : .retryable
     }
 }
 
@@ -771,7 +826,8 @@ final class SettingsBackup {
     nonisolated static let persistenceMaintenanceTimeout: Duration = .seconds(6)
     nonisolated static let persistenceRetryInterval: Duration = .seconds(3)
     nonisolated static let terminationPersistenceRetryInterval: Duration = .milliseconds(50)
-    nonisolated static let terminationPersistenceTimeout: Duration = .seconds(4)
+    nonisolated static let terminationPersistenceTimeout: Duration = .seconds(1)
+    nonisolated static let terminationAttemptTimeout: Duration = .seconds(1)
 
     private var cloudEnabled: Bool {
         SharedDefaults.store.bool(forKey: AppStorageKeys.Backup.icloud) && AppData.cloudAvailable
@@ -1077,7 +1133,7 @@ final class SettingsBackup {
                     decision: SettingsBackupTransferDecision(
                         shouldRestore: true, shouldExport: false),
                     restore: true, export: false, requireApplicationSupportRestore: false,
-                    restoreToken: restoreToken)
+                    restoreToken: restoreToken) == .done
             else { return false }
             guard !Task.isCancelled, restoreGenerationState.accepts(generation, for: dataClass)
             else {
@@ -1091,7 +1147,7 @@ final class SettingsBackup {
                     decision: SettingsBackupTransferDecision(
                         shouldRestore: true, shouldExport: false),
                     restore: true, export: false, requireApplicationSupportRestore: false,
-                    restoreToken: restoreToken)
+                    restoreToken: restoreToken) == .done
             else { return false }
             guard !Task.isCancelled, restoreGenerationState.accepts(generation, for: dataClass)
             else {
@@ -1507,7 +1563,7 @@ final class SettingsBackup {
         let decision = transferDecision(for: .limits)
         return await transferLimits(
             decision: decision, restore: true, export: true,
-            requireApplicationSupportRestore: false)
+            requireApplicationSupportRestore: false) == .done
     }
 
     @discardableResult
@@ -1515,29 +1571,40 @@ final class SettingsBackup {
         let decision = transferDecision(for: .limits)
         return await transferLimits(
             decision: decision, restore: false, export: true,
-            requireApplicationSupportRestore: false)
+            requireApplicationSupportRestore: false) == .done
     }
 
-    @discardableResult
     private func transferLimits(
         decision: SettingsBackupTransferDecision,
         restore: Bool,
         export: Bool,
         requireApplicationSupportRestore: Bool,
-        restoreToken: SettingsBackupRestoreToken? = nil
-    ) async -> Bool {
+        restoreToken: SettingsBackupRestoreToken? = nil,
+        attemptTimeout: Duration? = nil
+    ) async -> SettingsBackupTransferOutcome {
         let backupEnabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Backup.icloud)
-        guard backupEnabled else { return false }
+        guard backupEnabled else { return .unavailable }
         let shouldRestore =
             restore && decision.shouldRestore
             && (!requireApplicationSupportRestore || isApplicationSupportURL(localLimits))
         let shouldExport = export && decision.shouldExport
-        guard shouldRestore || shouldExport else { return true }
-        return await SettingsBackupUsageWorker.shared.transferLimits(
-            localURL: localLimits, cloudURL: cloudLimits,
-            shouldRestore: shouldRestore, shouldExport: shouldExport,
-            backupEnabled: backupEnabled,
-            restoreToken: restoreToken)
+        guard shouldRestore || shouldExport else { return .done }
+        let localURL = localLimits
+        let cloudURL = cloudLimits
+        guard let attemptTimeout else {
+            return await SettingsBackupUsageWorker.shared.transferLimitsOutcome(
+                localURL: localURL, cloudURL: cloudURL,
+                shouldRestore: shouldRestore, shouldExport: shouldExport,
+                backupEnabled: backupEnabled,
+                restoreToken: restoreToken)
+        }
+        return await settingsBackupBoundedTransfer(timeout: attemptTimeout) {
+            await SettingsBackupUsageWorker.shared.transferLimitsOutcome(
+                localURL: localURL, cloudURL: cloudURL,
+                shouldRestore: shouldRestore, shouldExport: shouldExport,
+                backupEnabled: backupEnabled,
+                restoreToken: restoreToken)
+        }
     }
 
     @discardableResult
@@ -1545,7 +1612,7 @@ final class SettingsBackup {
         let decision = transferDecision(for: .usage)
         return await transferUsage(
             decision: decision, restore: true, export: true,
-            requireApplicationSupportRestore: false)
+            requireApplicationSupportRestore: false) == .done
     }
 
     @discardableResult
@@ -1553,29 +1620,40 @@ final class SettingsBackup {
         let decision = transferDecision(for: .usage)
         return await transferUsage(
             decision: decision, restore: false, export: true,
-            requireApplicationSupportRestore: false)
+            requireApplicationSupportRestore: false) == .done
     }
 
-    @discardableResult
     private func transferUsage(
         decision: SettingsBackupTransferDecision,
         restore: Bool,
         export: Bool,
         requireApplicationSupportRestore: Bool,
-        restoreToken: SettingsBackupRestoreToken? = nil
-    ) async -> Bool {
+        restoreToken: SettingsBackupRestoreToken? = nil,
+        attemptTimeout: Duration? = nil
+    ) async -> SettingsBackupTransferOutcome {
         let backupEnabled = SharedDefaults.store.bool(forKey: AppStorageKeys.Backup.icloud)
-        guard backupEnabled else { return false }
+        guard backupEnabled else { return .unavailable }
         let shouldRestore =
             restore && decision.shouldRestore
             && (!requireApplicationSupportRestore || isApplicationSupportURL(localUsage))
         let shouldExport = export && decision.shouldExport
-        guard shouldRestore || shouldExport else { return true }
-        return await SettingsBackupUsageWorker.shared.transferUsage(
-            localURL: localUsage, cloudURL: cloudUsage,
-            shouldRestore: shouldRestore, shouldExport: shouldExport,
-            backupEnabled: backupEnabled,
-            restoreToken: restoreToken)
+        guard shouldRestore || shouldExport else { return .done }
+        let localURL = localUsage
+        let cloudURL = cloudUsage
+        guard let attemptTimeout else {
+            return await SettingsBackupUsageWorker.shared.transferUsageOutcome(
+                localURL: localURL, cloudURL: cloudURL,
+                shouldRestore: shouldRestore, shouldExport: shouldExport,
+                backupEnabled: backupEnabled,
+                restoreToken: restoreToken)
+        }
+        return await settingsBackupBoundedTransfer(timeout: attemptTimeout) {
+            await SettingsBackupUsageWorker.shared.transferUsageOutcome(
+                localURL: localURL, cloudURL: cloudURL,
+                shouldRestore: shouldRestore, shouldExport: shouldExport,
+                backupEnabled: backupEnabled,
+                restoreToken: restoreToken)
+        }
     }
 
     private func queuePersistence(
@@ -1597,7 +1675,8 @@ final class SettingsBackup {
     }
 
     private func drainPersistence(
-        generation: Int, deadline: ContinuousClock.Instant?, retryInterval: Duration
+        generation: Int, deadline: ContinuousClock.Instant?, retryInterval: Duration,
+        terminationAttemptTimeout: Duration? = nil
     ) async {
         while !Task.isCancelled, persistenceMaintenanceGeneration == generation {
             let intents = pendingPersistence
@@ -1607,15 +1686,21 @@ final class SettingsBackup {
                 intents, deadline: deadline, retryInterval: retryInterval,
                 transferLimits: { [weak self] restore, export in
                     guard let self else { return false }
-                    return await self.transferLimits(
+                    let outcome = await self.transferLimits(
                         decision: self.transferDecision(for: .limits), restore: restore,
-                        export: export, requireApplicationSupportRestore: false)
+                        export: export, requireApplicationSupportRestore: false,
+                        attemptTimeout: terminationAttemptTimeout)
+                    return terminationAttemptTimeout == nil
+                        ? outcome == .done : outcome != .retryable
                 },
                 transferUsage: { [weak self] restore, export in
                     guard let self else { return false }
-                    return await self.transferUsage(
+                    let outcome = await self.transferUsage(
                         decision: self.transferDecision(for: .usage), restore: restore,
-                        export: export, requireApplicationSupportRestore: false)
+                        export: export, requireApplicationSupportRestore: false,
+                        attemptTimeout: terminationAttemptTimeout)
+                    return terminationAttemptTimeout == nil
+                        ? outcome == .done : outcome != .retryable
                 })
             pendingPersistence.formUnion(remaining)
             guard !Task.isCancelled, persistenceMaintenanceGeneration == generation else {
@@ -1629,7 +1714,8 @@ final class SettingsBackup {
 
     func flushForTermination(
         persistenceTimeout: Duration = SettingsBackup.terminationPersistenceTimeout,
-        persistenceRetryInterval: Duration = SettingsBackup.terminationPersistenceRetryInterval
+        persistenceRetryInterval: Duration = SettingsBackup.terminationPersistenceRetryInterval,
+        attemptTimeout: Duration = SettingsBackup.terminationAttemptTimeout
     ) async {
         prepareForTermination()
         let previousSettingsExport = settingsExportTask
@@ -1654,9 +1740,17 @@ final class SettingsBackup {
         await previousPersistence?.value
         guard !Task.isCancelled else { return }
         persistenceMaintenanceTask = nil
+        guard cloudEnabled else {
+            await withTaskCancellationHandler {
+                await finalSettingsExport.value
+            } onCancel: {
+                finalSettingsExport.cancel()
+            }
+            return
+        }
         pendingPersistence.formUnion(
             SettingsBackupPersistenceIntents(
-                limitsRestore: true, limitsExport: true, usageRestore: true,
+                limitsRestore: false, limitsExport: true, usageRestore: false,
                 usageExport: true))
         persistenceMaintenanceGeneration += 1
         let generation = persistenceMaintenanceGeneration
@@ -1666,7 +1760,8 @@ final class SettingsBackup {
             guard let self else { return }
             await self.drainPersistence(
                 generation: generation, deadline: deadline,
-                retryInterval: persistenceRetryInterval)
+                retryInterval: persistenceRetryInterval,
+                terminationAttemptTimeout: attemptTimeout)
         }
         persistenceMaintenanceTask = persistence
         await withTaskCancellationHandler {

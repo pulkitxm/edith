@@ -72,7 +72,7 @@ import Testing
                 atPath: copied.appendingPathComponent("link.txt").path) == "Nested/file.txt")
     }
 
-    @Test func persistsIndexAcrossInstances() throws {
+    @Test func persistsIndexAcrossInstances() async throws {
         let (store, dir) = makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -83,6 +83,7 @@ import Testing
 
         _ = store.addCopy(of: source)
         let reopened = ShelfStore(root: dir)
+        await reopened.drainIndexRefreshes()
         #expect(reopened.items.count == 1)
     }
 
@@ -128,7 +129,7 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: store.fileURL(for: second).path))
     }
 
-    @Test func migratesLegacyPerItemFoldersToFlatFiles() throws {
+    @Test func migratesLegacyPerItemFoldersToFlatFiles() async throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-shelf-tests-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -142,26 +143,29 @@ import Testing
         try JSONEncoder().encode(legacyItems).write(to: dir.appendingPathComponent("index.json"))
 
         let store = ShelfStore(root: dir)
+        await store.drainIndexRefreshes()
         let item = try #require(store.items.first)
         #expect(store.fileURL(for: item) == dir.appendingPathComponent("Note.txt"))
         #expect(try String(contentsOf: store.fileURL(for: item), encoding: .utf8) == "legacy")
         #expect(!fm.fileExists(atPath: legacyDir.path))
 
         let reopened = ShelfStore(root: dir)
+        await reopened.drainIndexRefreshes()
         #expect(reopened.items.count == 1)
     }
 
-    @Test func setPositionsPersistsAcrossInstances() throws {
+    @Test func setPositionsPersistsAcrossInstances() async throws {
         let (store, dir) = makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let item = try #require(store.addText("movable"))
         store.setPositions([item.id: CGPoint(x: 120, y: 60)])
         let reopened = ShelfStore(root: dir)
+        await reopened.drainIndexRefreshes()
         #expect(reopened.items.first?.position == CGPoint(x: 120, y: 60))
     }
 
-    @Test func purgeExpiredRemovesOnlyOnceThePolicyWindowHasPassed() throws {
+    @Test func purgeExpiredRemovesOnlyOnceThePolicyWindowHasPassed() async throws {
         let (store, dir) = makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -169,11 +173,15 @@ import Testing
         let fileURL = store.fileURL(for: item)
 
         store.purgeExpired(keep: .oneHour, now: Date())
+        await store.drainIndexRefreshes()
         #expect(store.items.map(\.id) == [item.id])
+        #expect(FileManager.default.fileExists(atPath: fileURL.path))
 
         store.purgeExpired(keep: .oneHour, now: Date().addingTimeInterval(4000))
+        await store.drainIndexRefreshes()
         #expect(store.items.isEmpty)
         #expect(!FileManager.default.fileExists(atPath: fileURL.path))
+        #expect(try ShelfMutationExecution.snapshot(root: dir).items.isEmpty)
     }
 
     @Test func failedReloadKeepsTheLastKnownItems() throws {
@@ -197,9 +205,10 @@ import Testing
         #expect(store.items.map(\.id) == [item.id])
     }
 
-    @Test func failedPromiseAdoptionPreservesTheIncomingFile() throws {
+    @Test func failedPromiseAdoptionPreservesTheIncomingFile() async throws {
         let (store, dir) = makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
+        await store.drainIndexRefreshes()
         try Data("broken".utf8).write(to: ShelfIndex.indexFile(in: dir))
         let id = UUID()
         let incoming = try #require(store.promiseDestination(id: id))

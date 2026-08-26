@@ -174,7 +174,9 @@ final class CompanionCaptureModel {
         remembering = true
         defer { remembering = false }
         do {
-            let data = try Data(contentsOf: fileURL)
+            let data = try await Task.detached {
+                try Data(contentsOf: fileURL)
+            }.value
             let outcome = try await client.ingestAudio(
                 name: fileURL.lastPathComponent, data: data, mtime: Self.isoNow())
             self.outcome =
@@ -273,10 +275,12 @@ final class CompanionCaptureModel {
 struct CompanionCaptureScreen: View {
     @Bindable var model: CompanionCaptureModel
     let home: CompanionHomeModel
+    var isActive = true
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.companionGeneration) private var generation
+    @State private var refreshedGeneration = -1
     @State private var pulsing = false
 
     private var dark: Bool { scheme == .dark }
@@ -293,9 +297,11 @@ struct CompanionCaptureScreen: View {
         }
         .pageContent(compact)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .task(id: generation) {
+        .task(id: isActive ? generation : -1) {
+            guard isActive, refreshedGeneration != generation else { return }
             model.refreshWaiting()
             if home.reachable { await model.drainOutbox() }
+            if !Task.isCancelled { refreshedGeneration = generation }
         }
     }
 
