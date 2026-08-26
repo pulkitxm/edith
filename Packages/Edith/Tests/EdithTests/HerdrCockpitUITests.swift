@@ -156,6 +156,31 @@ import Testing
         #expect(!store.settling)
     }
 
+    @Test func aDetachedAgentKeepsOneTabUntilItsWindowCloses() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.apply([host])
+        #expect(store.detachedIDs.isEmpty)
+
+        let first = store.detachedTab(for: agent)
+        #expect(store.detachedIDs == [agent.id])
+        let again = store.detachedTab(for: agent)
+        #expect(first.id == again.id)
+        #expect(store.detachedIDs.count == 1)
+
+        store.reattach(agent.id)
+        #expect(store.detachedIDs.isEmpty)
+    }
+
+    @Test func aTerminalCanBeDetachedTheSameWay() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.apply([host, remote])
+        let terminal = HerdrMachineTerminal.agent(for: remote)
+        let tab = store.detachedTab(for: terminal)
+        #expect(tab.agent.isTerminal)
+        #expect(tab.view == .agent)
+        #expect(store.detachedIDs == [terminal.id])
+    }
+
     @Test func theRailRemembersWhetherItWasCollapsed() {
         let store = defaults()
         let first = HerdrStore(defaults: store, liveWatcher: { _ in })

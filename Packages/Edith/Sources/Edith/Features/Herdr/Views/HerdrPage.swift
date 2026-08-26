@@ -55,6 +55,11 @@ struct HerdrPage: View {
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
         .background(tabShortcuts)
         .navigationTitle("Herdr")
+        .onAppear {
+            HerdrAgentWindowDelegate.shared.onClose = { id in
+                store.reattach(id)
+            }
+        }
         .task(id: automaticActions) {
             if automaticActions {
                 await store.watch()
@@ -665,6 +670,13 @@ struct HerdrPage: View {
     }
 
     private func openAgent(_ agent: HerdrAgent) {
+        let detaching = NSEvent.modifierFlags.contains(.command)
+        if detaching {
+            store.close(agent.id)
+            HerdrAgentWindow.open(agent: agent, store: store, launchEnabled: launchEnabled)
+            return
+        }
+        if HerdrAgentWindow.raise(agent.id) { return }
         store.open(agent)
     }
 
