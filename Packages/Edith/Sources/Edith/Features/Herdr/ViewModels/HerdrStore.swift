@@ -46,6 +46,8 @@ final class HerdrStore {
     private let liveWatcher: HerdrLiveWatcher
     private var connections: [UUID: SSHConnection] = [:]
     private var watchTask: Task<Void, Never>?
+    private var settleTask: Task<Void, Never>?
+    private var pendingHosts: [HerdrHostSnapshot]?
     private var watchGeneration = 0
 
     init(
@@ -164,7 +166,7 @@ final class HerdrStore {
                     guard let self, self.watchGeneration == generation, self.watchTask != nil else {
                         return
                     }
-                    self.apply(hosts)
+                    self.settle(hosts)
                 }
             }
         }
@@ -174,6 +176,9 @@ final class HerdrStore {
         watchGeneration += 1
         watchTask?.cancel()
         watchTask = nil
+        settleTask?.cancel()
+        settleTask = nil
+        pendingHosts = nil
     }
 
     func refresh() async {
@@ -181,6 +186,21 @@ final class HerdrStore {
         refreshing = true
         apply(await HerdrSessionOperationExecution.list())
         refreshing = false
+    }
+
+    static let settleWindow = Duration.milliseconds(180)
+
+    func settle(_ snapshots: [HerdrHostSnapshot]) {
+        pendingHosts = snapshots
+        guard settleTask == nil else { return }
+        settleTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.settleWindow)
+            guard let self else { return }
+            self.settleTask = nil
+            guard let latest = self.pendingHosts else { return }
+            self.pendingHosts = nil
+            self.apply(latest)
+        }
     }
 
     func apply(_ snapshots: [HerdrHostSnapshot]) {

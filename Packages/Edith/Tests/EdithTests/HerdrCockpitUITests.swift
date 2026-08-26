@@ -144,6 +144,17 @@ import Testing
         #expect(!third.terminalsCollapsed)
     }
 
+    @Test func aBurstOfUpdatesLandsOnceAsTheLatestState() async throws {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.settle([host])
+        store.settle([host, remote])
+        store.settle([remote])
+        #expect(store.hosts.isEmpty)
+
+        try await Task.sleep(for: HerdrStore.settleWindow * 3)
+        #expect(store.hosts.map(\.name) == ["tuf-wired"])
+    }
+
     @Test func theRailRemembersWhetherItWasCollapsed() {
         let store = defaults()
         let first = HerdrStore(defaults: store, liveWatcher: { _ in })
