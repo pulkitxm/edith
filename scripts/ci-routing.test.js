@@ -198,7 +198,7 @@ test("Swift tests have a bounded hosted runtime", () => {
     ciWorkflow.indexOf("\n  swift-test:"),
     ciWorkflow.indexOf("\n  companion:"),
   );
-  expect(swiftTest).toContain("timeout-minutes: 15");
+  expect(swiftTest).toContain("timeout-minutes: 30");
 });
 
 test("targeted publishing workflows watch every deployment input", () => {
@@ -234,12 +234,12 @@ test("every workflow change runs the runtime guard", () => {
   );
 });
 
-test("generated pushes cannot replace pending product validation", () => {
+test("contributor refresh pushes cannot replace pending product validation", () => {
   expect(ciWorkflow).toContain(
     "github.event_name == 'workflow_dispatch' && github.run_id",
   );
   expect(ciWorkflow).toContain(
-    "startsWith(github.event.head_commit.message, 'Release v')",
+    "startsWith(github.event.head_commit.message, 'Refresh the contributor list')",
   );
   expect(ciWorkflow).toContain("&& github.sha)");
   expect(ciWorkflow).toContain("|| 'active'");

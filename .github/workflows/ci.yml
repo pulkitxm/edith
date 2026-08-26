@@ -17,8 +17,7 @@ concurrency:
     ci-${{ github.ref }}-${{
       github.event_name == 'workflow_dispatch' && github.run_id
       || (github.event_name == 'push'
-      && (startsWith(github.event.head_commit.message, 'Release v')
-      || startsWith(github.event.head_commit.message, 'Refresh the contributor list'))
+      && startsWith(github.event.head_commit.message, 'Refresh the contributor list')
       && github.sha)
       || 'active'
     }}
@@ -32,8 +31,7 @@ jobs:
     name: changes
     if: >-
       github.event_name != 'push'
-      || (!startsWith(github.event.head_commit.message, 'Release v')
-      && !startsWith(github.event.head_commit.message, 'Refresh the contributor list'))
+      || !startsWith(github.event.head_commit.message, 'Refresh the contributor list')
     runs-on: ubuntu-latest
     outputs:
       swift: ${{ steps.areas.outputs.swift }}
@@ -227,7 +225,7 @@ jobs:
       needs.changes.outputs.swift == 'true'
       || needs.changes.outputs.workflows == 'true'
     runs-on: macos-26
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:

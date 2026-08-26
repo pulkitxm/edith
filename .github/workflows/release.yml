@@ -50,7 +50,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
           ref: ${{ inputs.rebuild && format('refs/tags/{0}', inputs.rebuild) || inputs.source_sha || github.sha }}
+          path: release-source
           fetch-depth: 0
           persist-credentials: false
 
@@ -73,53 +79,8 @@ jobs:
 
       - name: Resolve the version to release
         id: resolve
-        run: |
-          read -r VERSION BUILD <<<"$(python3 - <<'PY'
-          import plistlib
-          with open("Resources/Info.plist", "rb") as plist:
-              info = plistlib.load(plist)
-          print(info["CFBundleShortVersionString"], info["CFBundleVersion"])
-          PY
-          )"
-
-          if [ -n "$REBUILD" ]; then
-            git rev-parse "refs/tags/$REBUILD^{commit}" >/dev/null \
-              || { echo "release blocked: $REBUILD is not a release tag" >&2; exit 1; }
-            test "v$VERSION" = "$REBUILD" \
-              || { echo "release blocked: $REBUILD carries version $VERSION" >&2; exit 1; }
-            {
-              echo "tag=$REBUILD"
-              echo "version=$VERSION"
-              echo "build=$BUILD"
-              echo "sha=$(git rev-parse HEAD)"
-            } >> "$GITHUB_OUTPUT"
-            echo "Rebuilding $REBUILD"
-            exit 0
-          fi
-
-          case "$VERSION" in
-            *.*.*) ;;
-            *) echo "release blocked: version $VERSION is not major.minor.patch" >&2; exit 1 ;;
-          esac
-          MAJOR="${VERSION%%.*}"
-          REST="${VERSION#*.}"
-          MINOR="${REST%%.*}"
-          PATCH="${REST#*.}"
-          case "$MAJOR$MINOR$PATCH$BUILD" in
-            *[!0-9]*) echo "release blocked: version $VERSION build $BUILD is not numeric" >&2; exit 1 ;;
-          esac
-          NEXT="$MAJOR.$MINOR.$((PATCH + 1))"
-          if git rev-parse "refs/tags/v$NEXT" >/dev/null 2>&1; then
-            echo "release blocked: tag v$NEXT already exists" >&2
-            exit 1
-          fi
-          {
-            echo "tag=v$NEXT"
-            echo "version=$NEXT"
-            echo "build=$((BUILD + 1))"
-            echo "sha=$(git rev-parse HEAD)"
-          } >> "$GITHUB_OUTPUT"
-          echo "Releasing $VERSION -> $NEXT (build $((BUILD + 1)))"
+        working-directory: release-source
+        run: ../scripts/resolve-release-version.sh
 
   dmg:
     name: Build DMG
@@ -140,6 +101,20 @@ jobs:
         with:
           ref: ${{ needs.version.outputs.sha }}
           persist-credentials: false
+
+      - name: Cache libghostty
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: Packages/Edith/vendor/GhosttyKit.xcframework
+          key: ghostty-${{ runner.os }}-${{ hashFiles('scripts/build-ghostty.sh') }}
+
+      - name: Build libghostty
+        run: |
+          if grep -q 'name: "GhosttyKit"' Packages/Edith/Package.swift \
+            && [ ! -d Packages/Edith/vendor/GhosttyKit.xcframework ]; then
+            command -v zig >/dev/null 2>&1 || brew install zig
+            make ghostty
+          fi
 
       - name: Stamp the release version
         run: |
@@ -261,14 +236,6 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: steps.release_build.outputs.superseded != 'true'
-        with:
-          name: release-plists
-          path: Resources/*Info.plist
-          if-no-files-found: error
-          retention-days: 1
-
   publish:
     name: Publish release
     needs: [version, dmg]
@@ -284,6 +251,7 @@ jobs:
       REBUILD: ${{ inputs.rebuild }}
       RELEASE_TAG: ${{ needs.version.outputs.tag }}
       RELEASE_VERSION: ${{ needs.version.outputs.version }}
+      RELEASE_BUILD: ${{ needs.version.outputs.build }}
       BUILT_SHA: ${{ needs.version.outputs.sha }}
     steps:
       - id: app-token
@@ -313,19 +281,12 @@ jobs:
           name: release-macos
           path: release-assets
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: release-plists
-          path: release-plists
-
       - name: Verify release assets
         run: |
           test -f release-assets/Edith.dmg
           test -f release-assets/appcast.xml
-          test -f release-plists/Info.plist
-          test -f release-plists/HelperInfo.plist
 
-      - name: Commit and tag the release
+      - name: Tag the release
         id: release_state
         if: env.REBUILD == ''
         working-directory: release-source
@@ -336,7 +297,6 @@ jobs:
           fi
           RELEASE_SHA256="$(sha256sum ../release-assets/Edith.dmg | cut -d' ' -f1)"
           export RELEASE_SHA256
-          export RELEASE_PLISTS_DIR="$GITHUB_WORKSPACE/release-plists"
           PUBLISH_STATUS=0
           ../scripts/publish-release-state.sh cut || PUBLISH_STATUS=$?
           if [ "$PUBLISH_STATUS" -eq 75 ]; then
@@ -345,7 +305,7 @@ jobs:
           fi
           exit "$PUBLISH_STATUS"
 
-      - name: Update the rebuilt release checksum
+      - name: Prepare the rebuilt release checksum
         if: env.REBUILD != ''
         working-directory: release-source
         run: |
