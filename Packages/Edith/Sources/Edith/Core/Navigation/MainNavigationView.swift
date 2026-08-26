@@ -454,6 +454,9 @@ struct MainWindowView: View {
         .onChange(of: MusicRemote.shared.folderPath, initial: true) { _, newValue in
             musicFolderPath = newValue
         }
+        .onChange(of: destination) { _, opened in
+            PageTrace.begin(opened)
+        }
         .onChange(of: currentLocation) { _, location in
             if restoringHistory {
                 restoringHistory = false
@@ -664,6 +667,7 @@ struct MainWindowView: View {
                 band(detailBackground, height: bandHeight)
                 detail
                     .tint(theme)
+                    .onAppear { PageTrace.end(destination) }
             }
             .environment(\.compactLayout, geo.size.width < UIScale.pt(640))
         }
