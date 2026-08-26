@@ -244,6 +244,12 @@ private struct SidebarNavRow: View {
     }
 }
 
+enum SidebarDisclosureGeometry {
+    static func visibleHeight(contentHeight: CGFloat, progress: Double) -> CGFloat {
+        contentHeight * min(1, max(0, progress))
+    }
+}
+
 private struct CollapsibleSidebarLayout: Layout {
     var progress: Double
 
@@ -258,7 +264,11 @@ private struct CollapsibleSidebarLayout: Layout {
         guard let subview = subviews.first else { return .zero }
         let size = subview.sizeThatFits(
             ProposedViewSize(width: proposal.width, height: nil))
-        return CGSize(width: size.width, height: size.height * progress)
+        return CGSize(
+            width: size.width,
+            height: SidebarDisclosureGeometry.visibleHeight(
+                contentHeight: size.height, progress: progress)
+        )
     }
 
     func placeSubviews(

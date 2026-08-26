@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import Edith
 
 @Suite struct SettingsLayoutTests {
     @Test func settingsUsesPrimaryNavigationAndFullWidthContent() throws {
@@ -61,5 +62,13 @@ import Testing
         #expect(source.contains("LazyVGrid(columns: columns"))
         #expect(source.contains(".adaptive(minimum:"))
         #expect(source.contains("maxWidth: .infinity"))
+    }
+
+    @Test func disclosureHeightTracksAndClampsAnimationProgress() {
+        #expect(SidebarDisclosureGeometry.visibleHeight(contentHeight: 180, progress: 0) == 0)
+        #expect(SidebarDisclosureGeometry.visibleHeight(contentHeight: 180, progress: 0.5) == 90)
+        #expect(SidebarDisclosureGeometry.visibleHeight(contentHeight: 180, progress: 1) == 180)
+        #expect(SidebarDisclosureGeometry.visibleHeight(contentHeight: 180, progress: -0.2) == 0)
+        #expect(SidebarDisclosureGeometry.visibleHeight(contentHeight: 180, progress: 1.2) == 180)
     }
 }
