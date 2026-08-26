@@ -155,6 +155,7 @@ final class HerdrStore {
 
     func watch() async {
         guard watchTask == nil else { return }
+        if hosts.isEmpty { settling = true }
         watchGeneration += 1
         let generation = watchGeneration
         let liveWatcher = liveWatcher
@@ -179,6 +180,7 @@ final class HerdrStore {
         settleTask?.cancel()
         settleTask = nil
         pendingHosts = nil
+        settling = false
     }
 
     func refresh() async {
@@ -188,19 +190,27 @@ final class HerdrStore {
         refreshing = false
     }
 
-    static let settleWindow = Duration.milliseconds(180)
+    static let settleWindow = Duration.milliseconds(400)
+
+    private(set) var settling = false
 
     func settle(_ snapshots: [HerdrHostSnapshot]) {
         pendingHosts = snapshots
         guard settleTask == nil else { return }
+        if !settling { flush() }
         settleTask = Task { [weak self] in
             try? await Task.sleep(for: Self.settleWindow)
             guard let self else { return }
             self.settleTask = nil
-            guard let latest = self.pendingHosts else { return }
-            self.pendingHosts = nil
-            self.apply(latest)
+            self.settling = false
+            self.flush()
         }
+    }
+
+    private func flush() {
+        guard let latest = pendingHosts else { return }
+        pendingHosts = nil
+        apply(latest)
     }
 
     func apply(_ snapshots: [HerdrHostSnapshot]) {

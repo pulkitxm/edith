@@ -149,10 +149,11 @@ import Testing
         store.settle([host])
         store.settle([host, remote])
         store.settle([remote])
-        #expect(store.hosts.isEmpty)
+        #expect(store.hosts.map(\.name) == ["This Mac"])
 
         try await Task.sleep(for: HerdrStore.settleWindow * 3)
         #expect(store.hosts.map(\.name) == ["tuf-wired"])
+        #expect(!store.settling)
     }
 
     @Test func theRailRemembersWhetherItWasCollapsed() {

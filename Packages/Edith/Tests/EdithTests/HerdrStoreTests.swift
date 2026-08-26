@@ -232,7 +232,7 @@ private actor HerdrWatchHarness {
         await harness.waitForCallbacks(2)
         await harness.send([old], through: 0)
         await harness.send([fresh], through: 1)
-        try? await Task.sleep(for: .milliseconds(20))
+        try? await Task.sleep(for: HerdrStore.settleWindow * 3)
         #expect(store.hosts.first?.agents.first?.pane == "fresh")
     }
 

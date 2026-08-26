@@ -417,17 +417,23 @@ struct HerdrPage: View {
                 Text(status.title)
                     .font(.system(size: UIScale.pt(12), weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
-                Text("\(cards.count)")
-                    .font(DashSkin.mono(10, weight: .medium))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                if !store.settling {
+                    Text("\(cards.count)")
+                        .font(DashSkin.mono(10, weight: .medium))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                }
             }
             ScrollView {
                 VStack(spacing: UIScale.pt(8)) {
-                    ForEach(cards) { agent in
-                        card(agent)
-                    }
-                    if cards.isEmpty {
-                        emptyColumnSlot
+                    if store.settling {
+                        HerdrSkeleton(dark: dark, rows: status == .idle ? 3 : 1)
+                    } else {
+                        ForEach(cards) { agent in
+                            card(agent)
+                        }
+                        if cards.isEmpty {
+                            emptyColumnSlot
+                        }
                     }
                 }
             }
@@ -527,8 +533,12 @@ struct HerdrPage: View {
                         store.terminalsCollapsed.toggle()
                     }
                     if !store.terminalsCollapsed {
-                        ForEach(machineTerminals) { terminal in
-                            agentRow(terminal)
+                        if store.settling {
+                            HerdrSkeleton(dark: dark, rows: 2, card: false)
+                        } else {
+                            ForEach(machineTerminals) { terminal in
+                                agentRow(terminal)
+                            }
                         }
                     }
                     if !onBoard {
@@ -538,7 +548,10 @@ struct HerdrPage: View {
                         ) {
                             store.agentsCollapsed.toggle()
                         }
-                        if !store.agentsCollapsed {
+                        if !store.agentsCollapsed, store.settling {
+                            HerdrSkeleton(dark: dark, rows: 4, card: false)
+                        }
+                        if !store.agentsCollapsed, !store.settling {
                             ForEach(listedAgents) { agent in
                                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                                     agentRow(agent)
