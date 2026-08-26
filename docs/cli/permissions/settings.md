@@ -7,10 +7,10 @@ or relaunching Edith.
 ed permissions settings <permission> [--json]
 ```
 
-The permission id is completed from the same nine-value catalogue used by
-`request`. Bluetooth is granted when its feature first runs, but its privacy pane
-can still be opened here. Automation has no direct destination and exits 4 with
-its first-use explanation.
+The permission id is completed from the same ten-value catalogue used by
+`request`. Application Audio and Bluetooth are granted when their features first
+run, but their privacy panes can still be opened here. Automation has no direct
+destination and exits 4 with its first-use explanation.
 
 ## `--json` shape
 
@@ -31,6 +31,7 @@ Mac where `ed` is running.
 ```
 ed permissions settings calendar
 ed permissions settings screenRecording --json
+ed permissions settings applicationAudio
 ```
 
 ## Where to go next

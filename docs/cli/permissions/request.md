@@ -11,7 +11,7 @@ ed permissions request <permission> [--json]
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `<permission>` | one of `calendar`, `notifications`, `accessibility`, `inputMonitoring`, `fullDisk`, `screenRecording`, `camera`, `bluetooth`, `automation` | required | The permission to ask for. Matched case-insensitively, so `INPUTMONITORING` resolves the same as `inputMonitoring` |
+| `<permission>` | one of `calendar`, `notifications`, `accessibility`, `inputMonitoring`, `fullDisk`, `screenRecording`, `applicationAudio`, `camera`, `bluetooth`, `automation` | required | The permission to ask for. Matched case-insensitively, so `INPUTMONITORING` resolves the same as `inputMonitoring` |
 
 ## Options
 
@@ -49,9 +49,9 @@ ed permissions request notifications && ed app relaunch --yes
 The three checks run in this order, and the first one that fails is the one you
 see:
 
-1. the id is looked up, and an unknown one exits 3 listing all nine,
-2. `bluetooth` and `automation` are refused, because they have no prompt to
-   raise, and exit 4,
+1. the id is looked up, and an unknown one exits 3 listing all ten,
+2. `applicationAudio`, `bluetooth` and `automation` are refused, because they
+   have no prompt to raise, and exit 4,
 3. the menu bar app must be running, and exit 4 says so when it is not.
 
 Because the refusal is checked before the app is, asking for `bluetooth` with
@@ -64,7 +64,7 @@ hint: macOS will ask for Bluetooth access when connection alerts first run.
 
 $ ed permissions request wifi
 error: no permission named wifi
-hint: known: calendar, notifications, accessibility, inputMonitoring, fullDisk, screenRecording, camera, bluetooth, automation
+hint: known: calendar, notifications, accessibility, inputMonitoring, fullDisk, screenRecording, applicationAudio, camera, bluetooth, automation
 ```
 
 Past those checks the command posts the permission's grant notification, sleeps

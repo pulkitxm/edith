@@ -22,7 +22,7 @@ it.
 ## `--json` shape
 
 An object with `appRunning` and `permissions`, and one object per permission in
-the fixed order of the table above. Trimmed here to three of the nine rows:
+the fixed order of the table above. Trimmed here to three of the ten rows:
 
 ```json
 {
@@ -78,9 +78,9 @@ live mirror from one that has not been touched since the app was last closed.
 `requiredBy` and `optionalFor` list every extension that declares the
 permission, enabled or not; `usedByEnabledExtension` and
 `blocksEnabledExtension` are the two questions that account for which extensions
-are actually on. `grantsOnFirstUse` is true exactly for `bluetooth` and
-`automation`. `--attention` filters the `permissions` array the same way it
-filters the human table, so the two flags combine.
+are actually on. `grantsOnFirstUse` is true exactly for `applicationAudio`,
+`bluetooth` and `automation`. `--attention` filters the `permissions` array the
+same way it filters the human table, so the two flags combine.
 
 ## Examples
 
@@ -109,6 +109,7 @@ accessibility    granted                 system,clipboard
 inputMonitoring  granted                 system
 fullDisk         no
 screenRecording  granted                 focusDim,presenter,colorPicker
+applicationAudio on first use            notchShelf
 camera           granted                 notchShelf
 bluetooth        on first use            notchShelf
 automation       on first use            notchShelf
