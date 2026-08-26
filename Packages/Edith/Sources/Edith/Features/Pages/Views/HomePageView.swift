@@ -88,6 +88,14 @@ struct HomePage: View {
         .task(id: usageEnabled) {
             if automaticActionsEnabled, usageEnabled { await model.load() }
         }
+        .onAppear {
+            guard automaticActionsEnabled else { return }
+            model.beginObserving()
+        }
+        .onDisappear {
+            guard automaticActionsEnabled else { return }
+            model.endObserving()
+        }
     }
 
     private var background: some View {
