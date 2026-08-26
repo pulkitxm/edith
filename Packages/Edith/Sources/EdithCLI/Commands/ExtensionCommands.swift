@@ -274,9 +274,7 @@ struct ExtensionsDisableCommand: AsyncParsableCommand {
             if entry.defaultsKey == LidAwakeState.enabledKey {
                 if AppBridge.helperIsRunning {
                     _ = try await LidAwakeCLI.request(.disableExtension)
-                } else if CLIEnvironment.sharedDefaults.bool(
-                    forKey: LidAwakeState.activeKey)
-                {
+                } else if LidAwakeState.restorationNeeded(CLIEnvironment.sharedDefaults) {
                     throw CLIFailure.unavailable(
                         "Lid Awake cannot be disabled while lid-close sleep may still be off",
                         hint: "start Edith, then retry so normal sleep can be restored")

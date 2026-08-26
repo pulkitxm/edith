@@ -166,13 +166,17 @@ private func lidAwakeProcessIDs(at url: URL) throws -> [pid_t] {
         defer { defaults.removePersistentDomain(forName: suite) }
 
         #expect(!LidAwakeState.automaticStopPending(defaults))
+        #expect(!LidAwakeState.restorationNeeded(defaults))
         LidAwakeState.setAutomaticStopPending(true, defaults)
         #expect(LidAwakeState.automaticStopPending(defaults))
+        #expect(LidAwakeState.restorationNeeded(defaults))
         #expect(defaults.object(forKey: LidAwakeState.automaticStopPendingKey) as? Bool == true)
 
         LidAwakeState.setAutomaticStopPending(false, defaults)
         #expect(!LidAwakeState.automaticStopPending(defaults))
         #expect(defaults.object(forKey: LidAwakeState.automaticStopPendingKey) == nil)
+        defaults.set(true, forKey: LidAwakeState.activeKey)
+        #expect(LidAwakeState.restorationNeeded(defaults))
     }
 
     @MainActor @Test func powerMutationsRunInSubmissionOrder() async {

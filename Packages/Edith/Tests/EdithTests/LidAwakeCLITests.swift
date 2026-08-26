@@ -221,6 +221,23 @@ import Testing
         }
     }
 
+    @Test func extensionDisableRefusesPendingOfflineRestoration() async throws {
+        await CLIProbe.inWorld { world in
+            world.shared.set(false, forKey: LidAwakeState.enabledKey)
+            world.shared.set(false, forKey: LidAwakeState.activeKey)
+            LidAwakeState.setAutomaticStopPending(true, world.shared)
+
+            let result = await CLIProbe.capture([
+                "extensions", "disable", "lidAwake", "--json",
+            ])
+
+            #expect(result.code == ExitCodes.unavailable)
+            #expect(result.stderr.contains("normal sleep can be restored"))
+            #expect(LidAwakeState.automaticStopPending(world.shared))
+            #expect(world.postedNames().isEmpty)
+        }
+    }
+
     @Test func batteryThresholdIsConfiguredLive() async throws {
         await CLIProbe.inWorld { world in
             let result = await CLIProbe.capture(["lid-awake", "battery", "25", "--json"])

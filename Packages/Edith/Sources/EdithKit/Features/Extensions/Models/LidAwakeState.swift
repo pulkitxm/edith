@@ -67,6 +67,12 @@ public enum LidAwakeState {
         }
     }
 
+    public static func restorationNeeded(
+        _ defaults: UserDefaults = SharedDefaults.store
+    ) -> Bool {
+        defaults.bool(forKey: activeKey) || automaticStopPending(defaults)
+    }
+
     public static func batteryThreshold(
         _ defaults: UserDefaults = SharedDefaults.store
     ) -> Int {

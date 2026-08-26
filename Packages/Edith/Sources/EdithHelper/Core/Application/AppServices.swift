@@ -61,8 +61,7 @@ final class AppServices {
     static func lidAwakeRecoveryNeeded(
         _ defaults: UserDefaults = SharedDefaults.store
     ) -> Bool {
-        defaults.bool(forKey: LidAwakeState.activeKey)
-            || LidAwakeState.automaticStopPending(defaults)
+        LidAwakeState.restorationNeeded(defaults)
     }
 
     func start() {
