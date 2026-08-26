@@ -18,6 +18,11 @@ test("benchmark fixtures produce stable machine-readable percentiles", async () 
     cpuPercent: { median: 0.3, p95: 1.5, peak: 1.5 },
     rssMB: { median: 110, p95: 140, peak: 140 },
     idleWakeups: { median: 3 },
+    raw: {
+      cpuPercent: [0.1, 0.2, 0.3, 0.4, 1.5],
+      rssMB: [90, 100, 110, 120, 140],
+      idleWakeups: [1, 2, 3, 4, 8],
+    },
   });
 });
 

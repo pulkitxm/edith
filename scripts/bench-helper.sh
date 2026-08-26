@@ -118,6 +118,17 @@ maximum() {
   sort -n | tail -1 | awk '{ printf "%.3f", $1 }'
 }
 
+json_array() {
+  local first=1
+  printf '['
+  for value in "$@"; do
+    if [[ "$first" == 0 ]]; then printf ','; fi
+    printf '%.3f' "$value"
+    first=0
+  done
+  printf ']'
+}
+
 cpu_median="$(printf '%s\n' "${cpu_samples[@]}" | median)"
 cpu_p95="$(printf '%s\n' "${cpu_samples[@]}" | percentile 95)"
 cpu_peak="$(printf '%s\n' "${cpu_samples[@]}" | maximum)"
@@ -144,6 +155,13 @@ else
     "$escaped_label" "$escaped_process" "$PID_VALUE" "${#cpu_samples[@]}"
   printf '"cpuPercent":{"median":%.3f,"p95":%.3f,"peak":%.3f},' \
     "$cpu_median" "$cpu_p95" "$cpu_peak"
-  printf '"rssMB":{"median":%.3f,"p95":%.3f,"peak":%.3f},"idleWakeups":{"median":%s}}\n' \
+  printf '"rssMB":{"median":%.3f,"p95":%.3f,"peak":%.3f},"idleWakeups":{"median":%s},' \
     "$rss_median" "$rss_p95" "$rss_peak" "$wake_median"
+  printf '"raw":{"cpuPercent":'
+  json_array "${cpu_samples[@]}"
+  printf ',"rssMB":'
+  json_array "${rss_samples[@]}"
+  printf ',"idleWakeups":'
+  json_array "${wake_samples[@]}"
+  printf '}}\n'
 fi
