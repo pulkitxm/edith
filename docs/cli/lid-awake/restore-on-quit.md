@@ -4,13 +4,14 @@ Chooses whether the menu bar app restores normal lid-close sleep when its Lid
 Awake engine shuts down.
 
 ```
-ed lid-awake restore-on-quit <enabled> [--json]
+ed lid-awake restore-on-quit <enabled> [--yes] [--json]
 ```
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `<enabled>` | boolean | required | Turn restoration on or off. |
-| `--json` | flag | off | Emit the stored boolean as JSON. |
+| `--yes` | flag | off | Apply disabling restoration after previewing it. |
+| `--json` | flag | off | Emit the preview or stored boolean as JSON. |
 
 Boolean spellings are case-insensitive: `true`, `yes`, `on`, `1` and `enabled`
 turn it on; `false`, `no`, `off`, `0` and `disabled` turn it off. Other text
@@ -19,11 +20,16 @@ exits 1 without changing the stored value.
 ```
 ed lid-awake restore-on-quit true
 ed lid-awake restore-on-quit off
-ed lid-awake restore-on-quit false --json
+ed lid-awake restore-on-quit false --yes --json
 ```
 
-Human output is `restore on quit = on` or `restore on quit = off`. JSON contains
-only the stored boolean:
+Turning restoration on applies immediately. Turning it off without `--yes`
+previews the safety impact and does not write the preference. Its JSON preview
+uses the same stable fields as `lid-awake on`, with `restoreOnQuit: false` and
+`session: null`. Pass `--yes` to store the change.
+
+Applied human output is `restore on quit = on` or `restore on quit = off`. JSON
+contains only the stored boolean:
 
 ```json
 {
