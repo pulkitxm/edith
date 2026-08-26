@@ -45,10 +45,6 @@ struct HerdrPage: View {
                         .opacity(tab.id == store.selectedTab ? 1 : 0)
                         .allowsHitTesting(tab.id == store.selectedTab)
                     }
-                    if !onBoard {
-                        detailToggle
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -101,9 +97,6 @@ struct HerdrPage: View {
         )
         .pointerCursor()
         .help(store.detailOpen ? "Hide details" : "Show details")
-        .padding(.top, UIScale.pt(8))
-        .padding(.trailing, UIScale.pt(8))
-        .zIndex(1)
         .accessibilityLabel(store.detailOpen ? "Hide details" : "Show details")
     }
 
@@ -245,6 +238,9 @@ struct HerdrPage: View {
                     !tab.agent.isTerminal
                 {
                     viewModes(for: tab)
+                }
+                if !onBoard {
+                    detailToggle
                         .padding(.trailing, PageMetrics.gutter(compact))
                 }
             }
