@@ -193,19 +193,21 @@ process streams, and previews destructive work before `--yes` execution.
 ## Preliminary measurements
 
 The installed Release build and the worktree build both reported version `0.0.164`.
-Thirty process samples used one-second intervals. Thirty CLI samples used a fresh
-process per invocation after three warmups.
+Thirty process samples used one-second intervals. Thirty CLI samples used the worktree
+Release executable in a fresh process per invocation after three warmups. Raw samples
+and capture conditions are retained in
+`performance/baselines/native-revamp-2026-08-26.json`.
 
 | Scenario | p50 | p95 | Observation |
 | --- | ---: | ---: | --- |
-| Main process with a live data page visible, CPU | 0.0% | 23.7% | Background refresh work made the upper tail bursty |
-| Main process RSS | 101.9 MB | 102.4 MB | Active extensions and live data were enabled |
-| Helper CPU | 0.1% | 0.8% | One 30-second window does not cover every five-minute timer |
-| Helper RSS | 117.5 MB | 117.6 MB | Active extension set, not a minimal profile |
-| `ed --help` | 53.0 ms | 226.5 ms | p95 misses the 100 ms target under the captured load |
-| `ed version` | 84.4 ms | 361.0 ms | Running-application inspection remains on this path |
-| static zsh completion generation | 179.9 ms | 573.9 ms | Both p50 and p95 miss the target |
-| `edh --help` | 72.5 ms | 641.4 ms | Large variance requires an isolated rerun |
+| Main process with a live data page visible, CPU | 0.15% | 22.3% | Background refresh work made the upper tail bursty |
+| Main process RSS | 143.9 MB | 152.5 MB | Active extensions and live data were enabled |
+| Helper CPU | 0.1% | 1.7% | One 30-second window does not cover every five-minute timer |
+| Helper RSS | 116.8 MB | 126.6 MB | Active extension set, not a minimal profile |
+| `ed --help` | 9.0 ms | 9.7 ms | Meets the initial static command target |
+| `ed --version` | 8.5 ms | 9.4 ms | Meets the initial static command target |
+| static zsh completion generation | 65.8 ms | 67.5 ms | Meets the initial target with a 182 KB payload |
+| `ed schema` | 9.8 ms | 10.6 ms | Meets the initial static command target |
 
 Opening the freshly built Release application returned from Launch Services in about
 100 ms and produced an accessible main window. A direct termination signal removed only
