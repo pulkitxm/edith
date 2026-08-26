@@ -671,7 +671,7 @@ requires knowing what runs before it.
 There is one entry point. `.github/workflows/ci.yml` runs on every pull request and
 every push to `main`. Its `changes` job works out which areas a commit touched, the
 check jobs run for the areas that moved, and a final `release` job calls
-`.github/workflows/release.yml` as a reusable workflow.
+`.github/workflows/release.yml` through its gated dispatch inputs.
 
 That `release` job requires a push to `main`, a successful routing and policy job,
 no applicable job failure or cancellation, and a change to the macOS app. The
@@ -680,24 +680,24 @@ area changed. Checks and release are therefore the same run, and the release can
 start until every applicable check has gone green.
 There is no second workflow watching for a tag, and no tag trigger anywhere.
 
-`ci.yml` skips itself when the head commit message starts with `Release v` or
-`Refresh the contributor list`, which is what stops the pipeline's own commits from
-starting another run. Those pushes use `RELEASE_PUSH_TOKEN`, and unlike the
-`GITHUB_TOKEN` an Actions run is handed, a personal access token does trigger
-further workflows: the message guard is the loop protection, not the token.
+`ci.yml` skips itself when the head commit message starts with
+`Refresh the contributor list`, which stops that maintenance commit from starting
+another run. Releases do not write commits to `main`, so they need no loop guard.
 
 `ci.yml`'s concurrency group cancels in progress runs only for pull requests. On
-`main` runs queue instead, because a release pushes to `main` while its own checks
-are still finishing, and a cancelling group would kill the run that is mid-release.
+`main` runs queue instead, so a newer merge cannot cancel a run whose checks are
+still deciding whether its source is releasable.
 
 ### Build
 
 `release.yml` has two build jobs feeding the publisher.
 
-**`version`** runs on macOS, reads `Resources/Info.plist`, refuses to start without
-the signing, Sparkle, push, and tap secrets, and computes the next patch version and
-build number. It writes nothing and pushes nothing; it only decides what is being
-released and which commit is being built.
+**`version`** runs on Linux, refuses to start without the signing and Sparkle
+secrets, and computes the next patch version and build number from the latest
+release tag. New annotated tags carry their build number. The last release commit
+before tag-only publication remains the fallback for older lightweight tags. The
+job writes nothing and pushes nothing; it only decides what is being released and
+which commit is being built.
 
 **`dmg`** runs on macOS. It checks out the commit `version` chose, stamps both plists
 with the release version, imports the signing certificate into a temporary keychain,
@@ -706,27 +706,26 @@ version it was told to build, packages a UDZO disk image with an `/Applications`
 symlink inside, notarizes and staples when the notary secrets exist, generates the
 Sparkle appcast signed with the Sparkle key, verifies the appcast points at the right
 disk image and carries a signature, and uploads `Edith.dmg` and `appcast.xml`. It
-also uploads the two stamped plists, so the bytes that go on to `main` are the exact
-bytes that produced the disk image rather than a second, independent edit.
+uploads the disk image and appcast for the publisher.
 
 ### Bump
 
-**`publish`** is where every write happens, and it happens once. It downloads the
-artifacts, commits the stamped plists and the rewritten cask together as a single
-`Release vX.Y.Z` commit, tags it, pushes commit and tag atomically, creates the
-GitHub release, mirrors the cask to the tap, and reads the tap back to confirm it
-landed.
+**`publish`** downloads the artifacts, verifies that the approved commit is still
+the head of `main`, rewrites the cask in its temporary checkout, creates an
+annotated release tag carrying the build number, creates the GitHub release,
+mirrors the cask to the tap, and reads the tap back to confirm it landed.
 
-Two properties fall out of doing it in that order. A release costs exactly one commit
-on `main`, where it used to cost two. And nothing is written until the build has
-passed, so a failed build leaves no tag, no bumped version, and no cask pointing at a
-release that does not exist. The next merge simply tries the same version again.
+Nothing is written until the build has passed, so a failed build leaves no tag and
+no cask pointing at a release that does not exist. Protected `main` remains
+immutable outside pull requests. The next merge simply tries the same version
+again.
 
 To rebuild the current release when its assets need replacing, run the Release
 workflow by hand from `main` with its required `rebuild` input set to that tag. The
-workflow builds from the tag, replaces the three release assets, commits a changed
-DMG checksum to `main` when necessary, and mirrors the cask to the tap. It refuses
-older tags. This path does not create a new version or move the existing tag.
+workflow builds from the tag, replaces the release assets, prepares the changed DMG
+checksum in its temporary cask, and mirrors that cask to the tap. It refuses older
+tags. This path does not create a new version, move the existing tag, or write to
+`main`.
 
 A new release cannot be cut from the Release workflow's manual entry point. To
 recover an automatic release that CI skipped, dispatch the CI workflow from `main`
@@ -743,33 +742,26 @@ to `scripts/publish-release-state.sh`:
 ```bash
 RELEASE_SHA256="$(sha256sum ../release-assets/Edith.dmg | cut -d' ' -f1)"
 export RELEASE_SHA256
-export RELEASE_PLISTS_DIR="$GITHUB_WORKSPACE/release-plists"
 ../scripts/publish-release-state.sh cut
 ```
 
 For a rebuild it exports the newly computed checksum and invokes the same script
-with `rebuild`. The script validates the tag, version and checksum; rewrites the
-cask through a temporary file; verifies both fields; and owns the appropriate git
-commit and push. Keeping those rules in a tested script lets CI exercise the cut
-and rebuild behavior without duplicating shell logic in the workflow.
+with `rebuild`. The script validates the tag, version, build and checksum; rewrites
+the cask through a temporary file; verifies both fields; and owns the tag push for
+a cut. Keeping those rules in a tested script lets CI exercise the cut and rebuild
+behavior without duplicating shell logic in the workflow.
 
 Design notes on the parts that are not obvious.
 
-**`RELEASE_PUSH_TOKEN`, not `GITHUB_TOKEN`.** `main` is protected by a ruleset
-requiring pull requests and status checks. The token an Actions run is handed cannot
-bypass it, and on a personal repository the GitHub Actions app cannot be added to a
-ruleset bypass list at all: the API answers `Actor GitHub Actions integration must
-be part of the ruleset source or owner organization`. The ruleset does grant the
-repository admin role an unconditional bypass, and a fine grained personal access
-token acts as its owner, so checking out with one lets the push through. This is the
-standard arrangement for a personal repository that both protects its default branch
-and automates its releases; the same secret carries the version bump in the same
-commit.
+**A tag, not a branch bypass.** `main` is protected by a ruleset requiring pull
+requests and status checks. The release publisher does not bypass those rules. It
+uses the repository-scoped app token only to create the release tag and GitHub
+release after CI has approved the exact commit.
 
-**`ref: main`, not the tag.** `publish` checks out `main` and creates the tag itself,
-at the release commit it has just written. The commit has to land on the branch
-people install from, and tagging it afterwards means the tag names a tree whose
-plists and cask both describe the release that exists.
+**`ref: main`, then the tag.** A cut checks out the CI-approved `main` commit and
+tags that source directly. A rebuild checks out the existing tag. The built plists
+are stamped in the temporary build checkout, while the cask is generated for the
+tap from the final disk image checksum.
 
 **The artifact, not the release.** The checksum comes from
 `actions/download-artifact`, the same bytes the `dmg` job produced and `publish`
@@ -791,20 +783,16 @@ The cut path in `publish-release-state.sh`:
 git fetch origin main --tags
 [[ "$(git rev-parse HEAD)" == "$BUILT_SHA" ]]
 [[ "$(git rev-parse origin/main)" == "$BUILT_SHA" ]]
-cp "$RELEASE_PLISTS_DIR/Info.plist" Resources/Info.plist
-cp "$RELEASE_PLISTS_DIR/HelperInfo.plist" Resources/HelperInfo.plist
 rewrite_cask
 verify_cask
-git add Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb
-git commit -m "Release ${RELEASE_TAG}"
-git tag "$RELEASE_TAG"
-git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"
+git tag -f -a "$RELEASE_TAG" -m "Edith $RELEASE_TAG build $RELEASE_BUILD" "$BUILT_SHA"
+git push origin "refs/tags/$RELEASE_TAG"
 ```
 
-**One commit.** The plists and the cask move together, so a release is a single
-`Release vX.Y.Z` commit rather than a bump commit followed by a cask commit. The
-plists are copied from the `dmg` job's artifact, so they are the same bytes that were
-built rather than a re-derived edit that could drift.
+**No release commit.** Version and build metadata live on the annotated release
+tag. The application plists are stamped before the build, and the cask checksum is
+derived from the resulting disk image. Neither generated state needs to bypass the
+branch ruleset.
 
 **Refuse a moving base.** `main` can move while a release builds. The script verifies
 that both its checkout and the latest `origin/main` still equal the commit CI built.
@@ -812,13 +800,10 @@ If another change landed, the release stops before writing anything instead of
 combining checked artifacts with a different source revision. The next CI run can
 release the new head.
 
-**Atomic.** `git push --atomic` sends the branch and the tag as one update. Either
-both land or neither does, so there is no window in which `main` carries a version
-that no tag names, or a tag exists for a commit that was never pushed.
-
-**No release loop.** The commit message starts with `Release v`, which `ci.yml`'s
-`changes` job refuses to run on. This is load-bearing: a release commit that
-triggered a release would produce an infinite chain of version bumps.
+**Compensate for a moving branch.** The build monitor stops when `main` moves. The
+publisher checks once more before tagging, then reads `main` back after the push. If
+the branch moved during that final window, it removes the new tag and yields to the
+newer CI run.
 
 The mirror step:
 
