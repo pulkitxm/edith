@@ -18,6 +18,20 @@ public final class GhosttyTerminalView: NSView {
 
     public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    public var hasSelection: Bool {
+        guard let surface else { return false }
+        return ghostty_surface_has_selection(surface)
+    }
+
+    public func selectedText() -> String? {
+        guard let surface else { return nil }
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_selection(surface, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let raw = text.text else { return nil }
+        return String(cString: raw)
+    }
+
     public func focusIfNeeded() {
         guard let window, window.firstResponder !== self else { return }
         window.makeFirstResponder(self)
@@ -30,6 +44,7 @@ public final class GhosttyTerminalView: NSView {
         self.theme = theme
         super.init(frame: .zero)
         wantsLayer = true
+        registerForDraggedTypes(Array(Self.dropTypes))
         GhosttySurfaceRegistry.shared.register(self)
     }
 
