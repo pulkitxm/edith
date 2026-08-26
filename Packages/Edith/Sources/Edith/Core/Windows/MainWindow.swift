@@ -80,6 +80,7 @@ enum MainWindow {
                 .titled, .closable, .resizable, .miniaturizable, .fullSizeContentView,
             ],
             backing: .buffered, defer: false)
+        MainWindowFramePolicy.disableApplicationStateRestoration(w)
         w.title = "Edith"
         w.identifier = NSUserInterfaceItemIdentifier(MainWindowIdentifier.value)
         w.titleVisibility = .hidden
@@ -88,10 +89,20 @@ enum MainWindow {
         w.isReleasedWhenClosed = false
         w.setContentSize(initialSize)
         w.center()
-        w.setFrameAutosaveName("EdithMainWindow")
-        w.setFrame(
-            MainWindowFramePolicy.normalizedFrame(w.frame, visibleFrame: visibleFrame),
-            display: false)
+        let autosaveName = "EdithMainWindow"
+        if MainWindowFramePolicy.shouldDiscardAutosave(
+            UserDefaults.standard.string(
+                forKey: MainWindowFramePolicy.autosaveKey(name: autosaveName)))
+        {
+            NSWindow.removeFrame(usingName: autosaveName)
+            UserDefaults.standard.removeObject(
+                forKey: MainWindowFramePolicy.autosaveKey(name: autosaveName))
+        }
+        w.setFrameAutosaveName(autosaveName)
+        let launchFrame = MainWindowFramePolicy.normalizedFrame(
+            w.frame, visibleFrame: visibleFrame)
+        if w.isZoomed { w.zoom(nil) }
+        w.setFrame(launchFrame, display: false)
         w.contentMinSize = MainWindowFramePolicy.minimumSize(visibleFrame: visibleFrame)
         let hosting = NSHostingController(
             rootView: ZoomableRoot { MainWindowView(updater: updater) })
@@ -101,6 +112,9 @@ enum MainWindow {
         w.delegate = MainWindowDelegate.shared
         window = w
         w.makeKeyAndOrderFront(nil)
+        if w.isZoomed { w.zoom(nil) }
+        w.setFrame(launchFrame, display: true)
+        w.saveFrame(usingName: autosaveName)
         NSApp.activate(ignoringOtherApps: true)
         if UserDefaults.standard.bool(forKey: AppStorageKeys.General.editMainWindowFullScreen),
             !w.styleMask.contains(.fullScreen)
@@ -113,6 +127,19 @@ enum MainWindow {
 }
 
 enum MainWindowFramePolicy {
+    @MainActor
+    static func disableApplicationStateRestoration(_ window: NSWindow) {
+        window.isRestorable = false
+    }
+
+    static func autosaveKey(name: String) -> String {
+        "NSWindow Frame \(name)"
+    }
+
+    static func shouldDiscardAutosave(_ value: String?) -> Bool {
+        value?.contains("tilingState") == true
+    }
+
     static func minimumSize(visibleFrame: NSRect) -> NSSize {
         NSSize(
             width: min(960, visibleFrame.width),

@@ -193,7 +193,9 @@ private struct SidebarNavRow: View {
                         .font(.system(size: UIScale.pt(13.5), weight: .medium))
                         .foregroundStyle(selected ? .primary : .secondary)
                         .lineLimit(1)
-                    Spacer(minLength: disclosureAction == nil ? 0 : UIScale.pt(28))
+                    Spacer(
+                        minLength: disclosureExpanded == nil
+                            ? 0 : UIScale.pt(SidebarDisclosureGeometry.controlSlotWidth))
                     if let shortcutHint {
                         Text(shortcutHint)
                             .font(.system(size: UIScale.pt(11), weight: .medium))
@@ -206,30 +208,31 @@ private struct SidebarNavRow: View {
             .accessibilityValue(
                 disclosureExpanded.map { $0 ? "Expanded" : "Collapsed" } ?? ""
             )
-            .help("\(item.title) (⌘-click to open in its own window)")
+            .help(
+                detach == nil
+                    ? item.title : "\(item.title) (⌘-click to open in its own window)"
+            )
             .contextMenu {
                 if let detach {
                     Button("Open in New Window", action: detach)
                 }
             }
 
-            if let disclosureExpanded, let disclosureAction {
-                Button(action: disclosureAction) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(disclosureExpanded ? 90 : 0))
-                        .animation(
-                            Motion.animation(Motion.snap, reduceMotion: reduceMotion),
-                            value: disclosureExpanded)
+            if let disclosureExpanded {
+                Button {
+                    disclosureAction?()
+                } label: {
+                    disclosureIcon(expanded: disclosureExpanded)
                 }
                 .buttonStyle(EdithButtonStyle(.iconOnly, tint: theme))
                 .background(
-                    Color.primary.opacity(rowHovered ? 0.055 : 0),
+                    Color.primary.opacity(disclosureAction != nil && rowHovered ? 0.055 : 0),
                     in: RoundedRectangle(cornerRadius: UIScale.pt(6))
                 )
                 .padding(.trailing, UIScale.pt(2))
                 .zIndex(1)
+                .allowsHitTesting(disclosureAction != nil)
+                .accessibilityHidden(disclosureAction == nil)
                 .accessibilityLabel(
                     disclosureExpanded
                         ? "Collapse settings categories" : "Expand settings categories"
@@ -242,11 +245,44 @@ private struct SidebarNavRow: View {
         }
         .onHover { rowHovered = $0 }
     }
+
+    private func disclosureIcon(expanded: Bool) -> some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: UIScale.pt(10), weight: .semibold))
+            .foregroundStyle(.tertiary)
+            .rotationEffect(.degrees(expanded ? 90 : 0))
+            .animation(
+                Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: expanded)
+    }
+}
+
+enum SidebarDisclosureInteraction {
+    static func expansionAfterRowActivation(
+        isSelected: Bool, currentlyExpanded: Bool
+    ) -> Bool {
+        isSelected ? !currentlyExpanded : true
+    }
+
+    static func showsSeparateControl(isSelected: Bool) -> Bool {
+        !isSelected
+    }
 }
 
 enum SidebarDisclosureGeometry {
+    static let controlSlotWidth: CGFloat = 28
+
     static func visibleHeight(contentHeight: CGFloat, progress: Double) -> CGFloat {
         contentHeight * min(1, max(0, progress))
+    }
+}
+
+struct SidebarUtilityVisibility: Equatable {
+    let system: Bool
+    let presenter: Bool
+    let lidAwake: Bool
+
+    var hasActions: Bool {
+        system || presenter || lidAwake
     }
 }
 
@@ -286,9 +322,16 @@ private struct SettingsSidebarRow: View {
     let selected: Bool
     let theme: Color
     let action: () -> Void
+    let detach: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            if SectionWindowCommand.shouldDetach(NSEvent.modifierFlags.swiftUIValue) {
+                detach()
+            } else {
+                action()
+            }
+        } label: {
             HStack(spacing: UIScale.pt(9)) {
                 Image(systemName: category.symbol)
                     .frame(width: UIScale.pt(18))
@@ -302,6 +345,10 @@ private struct SettingsSidebarRow: View {
         .buttonStyle(EdithButtonStyle(.row, selected: selected, tint: theme))
         .padding(.leading, UIScale.pt(18))
         .accessibilityHint(category.summary)
+        .help("\(category.label) (⌘-click to open in its own window)")
+        .contextMenu {
+            Button("Open in New Window", action: detach)
+        }
     }
 }
 
@@ -365,7 +412,7 @@ struct MainWindowView: View {
         var sidebarWidth = 230.0
     @AppStorage(
         AppStorageKeys.General.settingsCategoriesExpanded, store: SharedDefaults.store
-    ) private var settingsCategoriesExpanded = true
+    ) private var settingsCategoriesExpanded = false
     @AppStorage(AppStorageKeys.Tabs.attentionEnabled, store: SharedDefaults.store) private
         var attentionEnabled = false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
@@ -757,7 +804,22 @@ struct MainWindowView: View {
     }
 
     private var footerVisible: Bool {
-        systemEnabled || presenterEnabled || permissionsNeedAttention || updater.updateReady != nil
+        sidebarUtilityVisibility.hasActions || permissionsNeedAttention
+            || updater.updateReady != nil
+    }
+
+    private var sidebarUtilityVisibility: SidebarUtilityVisibility {
+        SidebarUtilityVisibility(
+            system: systemEnabled,
+            presenter: presenterEnabled,
+            lidAwake: lidAwakeEnabled)
+    }
+
+    private var sidebarUtilityTransition: AnyTransition {
+        Motion.transition(
+            .move(edge: .bottom).combined(with: .opacity),
+            reduceMotion: reduceMotion,
+            preferCrossFade: false)
     }
 
     private func sidebar(_ bandHeight: CGFloat) -> some View {
@@ -768,8 +830,11 @@ struct MainWindowView: View {
                 VStack(spacing: UIScale.pt(0)) {
                     sidebarList
                     if footerVisible {
-                        Divider()
-                        sidebarFooter
+                        VStack(spacing: 0) {
+                            Divider()
+                            sidebarFooter
+                        }
+                        .transition(sidebarUtilityTransition)
                     }
                     credit
                         .padding(.vertical, UIScale.pt(8))
@@ -795,14 +860,27 @@ struct MainWindowView: View {
                     .padding(.top, UIScale.pt(14))
                     .padding(.bottom, UIScale.pt(4))
                 ForEach(MainDestination.appItems) { item in
+                    let settingsSelected = item == .settings && destination == .settings
                     SidebarNavRow(
                         item: item, selected: destination == item, theme: theme,
                         shortcutHint: shortcutHint(for: item),
-                        action: { select(item) },
-                        detach: item == .about ? nil : { detach(item) },
+                        action: {
+                            if item == .settings {
+                                settingsCategoriesExpanded =
+                                    SidebarDisclosureInteraction.expansionAfterRowActivation(
+                                        isSelected: settingsSelected,
+                                        currentlyExpanded: settingsCategoriesExpanded)
+                                if !settingsSelected { select(item) }
+                            } else {
+                                select(item)
+                            }
+                        },
+                        detach: item == .about || item == .settings ? nil : { detach(item) },
                         disclosureExpanded: item == .settings
                             ? settingsCategoriesExpanded : nil,
                         disclosureAction: item == .settings
+                            && SidebarDisclosureInteraction.showsSeparateControl(
+                                isSelected: settingsSelected)
                             ? { settingsCategoriesExpanded.toggle() } : nil)
                     if item == .settings {
                         CollapsibleSidebarLayout(
@@ -814,11 +892,12 @@ struct MainWindowView: View {
                                         category: category,
                                         selected: destination == .settings
                                             && settingsTab == category.rawValue,
-                                        theme: theme
-                                    ) {
-                                        settingsTab = category.rawValue
-                                        mainWindowSection = MainDestination.settings.rawValue
-                                    }
+                                        theme: theme,
+                                        action: {
+                                            settingsTab = category.rawValue
+                                            mainWindowSection = MainDestination.settings.rawValue
+                                        },
+                                        detach: { detachSettings(category) })
                                 }
                             }
                             .padding(.top, UIScale.pt(6))
@@ -851,6 +930,11 @@ struct MainWindowView: View {
 
     private func detach(_ item: MainDestination) {
         SectionWindow.open(item)
+    }
+
+    private func detachSettings(_ category: SettingsPane.Tab) {
+        settingsTab = category.rawValue
+        SectionWindow.open(.settings)
     }
 
     private var visibleHomeItems: [MainDestination] {
@@ -958,7 +1042,7 @@ struct MainWindowView: View {
             if let version = updater.updateReady {
                 updateReadyPill(version)
             }
-            if systemEnabled || presenterEnabled {
+            if sidebarUtilityVisibility.hasActions {
                 quickActions
             }
             if permissionsNeedAttention {
@@ -1012,16 +1096,20 @@ struct MainWindowView: View {
         ]
         VStack(spacing: UIScale.pt(8)) {
             if systemEnabled {
-                if clampedSidebarWidth < 220 {
-                    tiles[0]; tiles[1]
-                } else {
-                    HStack(spacing: UIScale.pt(8)) {
+                VStack(spacing: UIScale.pt(8)) {
+                    if clampedSidebarWidth < 220 {
                         tiles[0]; tiles[1]
+                    } else {
+                        HStack(spacing: UIScale.pt(8)) {
+                            tiles[0]; tiles[1]
+                        }
                     }
                 }
+                .transition(sidebarUtilityTransition)
             }
             if presenterEnabled {
                 presenterQuickActionTile
+                    .transition(sidebarUtilityTransition)
             }
             if lidAwakeEnabled {
                 quickActionTile(
@@ -1035,8 +1123,12 @@ struct MainWindowView: View {
                         confirmingLidAwake = true
                     }
                 }
+                .transition(sidebarUtilityTransition)
             }
         }
+        .animation(
+            Motion.animation(Motion.glide, reduceMotion: reduceMotion),
+            value: sidebarUtilityVisibility)
     }
 
     private var presenterQuickActionTile: some View {

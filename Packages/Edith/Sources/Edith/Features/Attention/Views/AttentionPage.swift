@@ -54,27 +54,32 @@ struct AttentionPage: View {
                         .padding(.bottom, 10)
                 }
 
-                Group {
-                    if !model.loaded {
-                        ProgressView()
-                            .controlSize(.small)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 60)
-                    } else if model.needsSetup {
-                        AttentionSetupView(model: model)
-                    } else {
-                        switch model.section {
-                        case .overview:
-                            if model.hasActivity {
-                                AttentionOverview(model: model)
-                            } else {
-                                AttentionCollectingView(model: model)
+                LoadingContainer(
+                    state: model.loaded ? .content : .loading,
+                    title: "No attention activity",
+                    message: "Enable a tracking source to begin collecting activity."
+                ) {
+                    Group {
+                        if model.needsSetup {
+                            AttentionSetupView(model: model)
+                        } else {
+                            switch model.section {
+                            case .overview:
+                                if model.hasActivity {
+                                    AttentionOverview(model: model)
+                                } else {
+                                    AttentionCollectingView(model: model)
+                                }
+                            case .timeline: AttentionTimelineView(model: model)
+                            case .focus: AttentionFocusView(model: model)
+                            case .settings: AttentionSettingsView(model: model)
                             }
-                        case .timeline: AttentionTimelineView(model: model)
-                        case .focus: AttentionFocusView(model: model)
-                        case .settings: AttentionSettingsView(model: model)
                         }
                     }
+                } placeholder: {
+                    ProgressView("Loading attention activity")
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity, minHeight: 240)
                 }
                 .pageContent(compact)
             }

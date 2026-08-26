@@ -46,10 +46,14 @@ struct ExtensionsPane: View {
     @State private var permissionRequest: ExtensionPermissionRequest?
     @State private var provisioningEntry: ExtensionRegistryEntry?
     @StateObject private var lidAwakeOperations = LidAwakeOperationModel()
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.compactLayout) private var compact
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+
+    private var theme: Color { themeColor(themeName) }
 
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
@@ -129,19 +133,10 @@ struct ExtensionsPane: View {
                     } label: {
                         Text(item.rawValue)
                             .font(.system(size: UIScale.pt(10), weight: .semibold))
-                            .foregroundStyle(category == item ? Color.white : Color.secondary)
-                            .padding(.horizontal, UIScale.pt(12))
-                            .frame(height: UIScale.pt(28))
-                            .background(category == item ? Color.accentColor : Color.clear)
-                            .clipShape(Capsule())
-                            .overlay {
-                                if category != item {
-                                    Capsule().stroke(Color(nsColor: .separatorColor).opacity(0.65))
-                                }
-                            }
                     }
-                    .buttonStyle(.plain)
-                    .pointerCursor()
+                    .buttonStyle(
+                        EdithButtonStyle(.selection, selected: category == item, tint: theme)
+                    )
                 }
             }
         }
@@ -182,8 +177,9 @@ struct ExtensionsPane: View {
 
     private var gridColumns: [GridItem] {
         [
-            GridItem(.flexible(), spacing: UIScale.pt(14)),
-            GridItem(.flexible(), spacing: UIScale.pt(14)),
+            GridItem(
+                .adaptive(minimum: UIScale.pt(compact ? 280 : 340)),
+                spacing: UIScale.pt(14), alignment: .top)
         ]
     }
 

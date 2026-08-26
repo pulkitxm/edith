@@ -209,11 +209,39 @@ sign "$HELPER"
 sign "$FILES_APP"
 sign "$APP"
 
-killall Edith 2>/dev/null || true
-pkill -x EdithHelper 2>/dev/null || true
-sleep 1
+process_is_running() {
+  pgrep -f -x "$1" >/dev/null 2>&1
+}
+
+wait_for_process_exit() {
+  local executable="$1"
+  local attempt
+  for attempt in {1..50}; do
+    process_is_running "$executable" || return 0
+    sleep 0.1
+  done
+  return 1
+}
+
+stop_process() {
+  local executable="$1"
+  process_is_running "$executable" || return 0
+  pkill -TERM -f -x "$executable" 2>/dev/null || true
+  wait_for_process_exit "$executable" || pkill -KILL -f -x "$executable" 2>/dev/null || true
+}
+
+stop_installed_app() {
+  local installed_main="/Applications/Edith.app/Contents/MacOS/Edith"
+  local installed_helper="/Applications/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith"
+  if process_is_running "$installed_main"; then
+    osascript -e 'tell application id "com.pulkit.edith" to quit' >/dev/null 2>&1 || true
+    wait_for_process_exit "$installed_main" || stop_process "$installed_main"
+  fi
+  stop_process "$installed_helper"
+}
 
 if [ "$INSTALL" = 1 ]; then
+  stop_installed_app
   rm -rf "/Applications/Edith.app"
   cp -R "$APP" /Applications/
   [ "$NO_OPEN" = 1 ] || open "/Applications/Edith.app"

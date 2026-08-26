@@ -75,8 +75,9 @@ struct DashboardView: View {
             .environment(\.compactLayout, compact)
         }
         .navigationTitle("Agent Usage")
-        .task {
+        .task(id: refresh.updating) {
             guard automaticActionsEnabled else { return }
+            guard !refresh.updating else { return }
             await model.load()
             syncCustomDates()
         }
@@ -90,11 +91,6 @@ struct DashboardView: View {
         }
         .onChange(of: model.loaded) { _, loaded in
             if automaticActionsEnabled, loaded { syncCustomDates() }
-        }
-        .onChange(of: refresh.updating) { _, updating in
-            if automaticActionsEnabled, !updating {
-                Task { await model.load() }
-            }
         }
         .onChange(of: showLog) { _, shown in
             refresh.setLogVisible(shown)
