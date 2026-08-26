@@ -208,7 +208,10 @@ private struct SidebarNavRow: View {
             .accessibilityValue(
                 disclosureExpanded.map { $0 ? "Expanded" : "Collapsed" } ?? ""
             )
-            .help("\(item.title) (⌘-click to open in its own window)")
+            .help(
+                detach == nil
+                    ? item.title : "\(item.title) (⌘-click to open in its own window)"
+            )
             .contextMenu {
                 if let detach {
                     Button("Open in New Window", action: detach)
@@ -307,9 +310,16 @@ private struct SettingsSidebarRow: View {
     let selected: Bool
     let theme: Color
     let action: () -> Void
+    let detach: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            if SectionWindowCommand.shouldDetach(NSEvent.modifierFlags.swiftUIValue) {
+                detach()
+            } else {
+                action()
+            }
+        } label: {
             HStack(spacing: UIScale.pt(9)) {
                 Image(systemName: category.symbol)
                     .frame(width: UIScale.pt(18))
@@ -323,6 +333,10 @@ private struct SettingsSidebarRow: View {
         .buttonStyle(EdithButtonStyle(.row, selected: selected, tint: theme))
         .padding(.leading, UIScale.pt(18))
         .accessibilityHint(category.summary)
+        .help("\(category.label) (⌘-click to open in its own window)")
+        .contextMenu {
+            Button("Open in New Window", action: detach)
+        }
     }
 }
 
@@ -830,7 +844,7 @@ struct MainWindowView: View {
                                 select(item)
                             }
                         },
-                        detach: item == .about ? nil : { detach(item) },
+                        detach: item == .about || item == .settings ? nil : { detach(item) },
                         disclosureExpanded: item == .settings
                             ? settingsCategoriesExpanded : nil,
                         disclosureAction: item == .settings
@@ -847,11 +861,12 @@ struct MainWindowView: View {
                                         category: category,
                                         selected: destination == .settings
                                             && settingsTab == category.rawValue,
-                                        theme: theme
-                                    ) {
-                                        settingsTab = category.rawValue
-                                        mainWindowSection = MainDestination.settings.rawValue
-                                    }
+                                        theme: theme,
+                                        action: {
+                                            settingsTab = category.rawValue
+                                            mainWindowSection = MainDestination.settings.rawValue
+                                        },
+                                        detach: { detachSettings(category) })
                                 }
                             }
                             .padding(.top, UIScale.pt(6))
@@ -884,6 +899,11 @@ struct MainWindowView: View {
 
     private func detach(_ item: MainDestination) {
         SectionWindow.open(item)
+    }
+
+    private func detachSettings(_ category: SettingsPane.Tab) {
+        settingsTab = category.rawValue
+        SectionWindow.open(.settings)
     }
 
     private var visibleHomeItems: [MainDestination] {

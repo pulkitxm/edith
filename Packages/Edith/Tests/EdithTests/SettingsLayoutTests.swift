@@ -29,6 +29,8 @@ import Testing
         #expect(!navigation.contains(".move(edge: .top).combined(with: .opacity)"))
         #expect(navigation.contains("rotationEffect(.degrees(expanded ? 90 : 0))"))
         #expect(navigation.contains(".padding(.top, UIScale.pt(6))"))
+        #expect(navigation.contains("detach: { detachSettings(category) }"))
+        #expect(navigation.contains("item == .about || item == .settings ? nil"))
         #expect(settings.contains(".pickerStyle(.menu)"))
         #expect(!settings.contains(".pickerStyle(.segmented)"))
         #expect(!settings.contains("List(selection: tab)"))

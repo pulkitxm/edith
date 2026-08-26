@@ -30,12 +30,12 @@ import Testing
         #expect(DockerAvailability(status: .permissionDenied).isInstalled)
     }
 
-    @Test func everyVisibleSectionExceptAboutCanDetach() {
+    @Test func topLevelSettingsAndAboutDoNotDetach() {
         let visible: [MainDestination] = [.home, .dashboard, .machines]
         let detachable = SectionWindowCommand.detachableDestinations(visibleHomeItems: visible)
         #expect(detachable.contains(.machines))
         #expect(detachable.contains(.extensions))
-        #expect(detachable.contains(.settings))
+        #expect(!detachable.contains(.settings))
         #expect(!detachable.contains(.about))
     }
 

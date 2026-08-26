@@ -176,7 +176,7 @@ enum SectionWindowCommand {
     }
 
     static func detachableDestinations(visibleHomeItems: [MainDestination]) -> [MainDestination] {
-        visibleHomeItems + [.extensions, .settings]
+        visibleHomeItems + [.extensions]
     }
 }
 
