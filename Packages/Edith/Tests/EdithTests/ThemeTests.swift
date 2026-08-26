@@ -33,4 +33,29 @@ import Testing
     @Test func invalidStoredThemeResolvesToTheBrandTheme() {
         #expect(AppTheme(storedName: "chartreuse") == .accent)
     }
+
+    @Test func appViewsDoNotBypassSharedThemeTokens() throws {
+        let packageRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sourceRoot = packageRoot.appendingPathComponent("Sources/Edith")
+        let banned = [
+            "brandAccent", "Color(nsColor: .windowBackgroundColor)",
+            ".background(dark ? Color.black", ".background(Color.white",
+        ]
+        let files = FileManager.default.enumerator(
+            at: sourceRoot, includingPropertiesForKeys: nil)
+        var violations: [String] = []
+
+        while let url = files?.nextObject() as? URL {
+            guard url.pathExtension == "swift" else { continue }
+            let source = try String(contentsOf: url, encoding: .utf8)
+            for token in banned where source.contains(token) {
+                violations.append("\(url.lastPathComponent): \(token)")
+            }
+        }
+
+        #expect(violations.isEmpty, "theme token bypasses: \(violations.sorted())")
+    }
 }

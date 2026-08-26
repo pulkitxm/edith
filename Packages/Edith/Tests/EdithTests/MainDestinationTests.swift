@@ -26,15 +26,6 @@ import Testing
         #expect(icons.allSatisfy { !$0.isEmpty })
     }
 
-    @Test func paperBackgroundOnlyForHomeItems() {
-        for destination in MainDestination.homeItems {
-            #expect(destination.usesPaperBackground)
-        }
-        for destination in MainDestination.appItems {
-            #expect(!destination.usesPaperBackground)
-        }
-    }
-
     @Test func appItemsUseInformationArchitectureOrder() {
         #expect(MainDestination.appItems == [.extensions, .settings, .about])
     }

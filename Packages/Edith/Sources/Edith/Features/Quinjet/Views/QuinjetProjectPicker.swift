@@ -303,7 +303,7 @@ struct QuinjetWorktreeCountButtonStyle: ButtonStyle {
             .foregroundStyle(hovering ? DashSkin.accent(dark) : DashSkin.ink(dark))
             .background(
                 hovering
-                    ? Color(red: 0.78, green: 0.67, blue: 0.49).opacity(dark ? 0.24 : 0.2)
+                    ? DashSkin.accent(dark).opacity(dark ? 0.2 : 0.13)
                     : Color.clear,
                 in: RoundedRectangle(cornerRadius: UIScale.pt(9))
             )
@@ -325,7 +325,7 @@ private struct QuinjetWorktreeRowStyle: ButtonStyle {
         configuration.label
             .background(
                 hovering
-                    ? Color(red: 0.78, green: 0.67, blue: 0.49).opacity(dark ? 0.16 : 0.13)
+                    ? DashSkin.accent(dark).opacity(dark ? 0.14 : 0.1)
                     : Color.clear,
                 in: RoundedRectangle(cornerRadius: UIScale.pt(7))
             )

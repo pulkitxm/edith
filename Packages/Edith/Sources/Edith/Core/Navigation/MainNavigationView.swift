@@ -74,7 +74,6 @@ enum MainDestination: String, CaseIterable, Identifiable {
         MainDestination(rawValue: raw) ?? .home
     }
 
-    var usesPaperBackground: Bool { Self.homeItems.contains(self) }
 }
 
 struct MainNavigationSelection: Equatable {
@@ -604,8 +603,7 @@ struct MainWindowView: View {
     }
 
     private var detailBackground: Color {
-        destination.usesPaperBackground
-            ? DashSkin.paper(scheme == .dark) : Color(nsColor: .windowBackgroundColor)
+        DashSkin.paper(scheme == .dark)
     }
 
     private var detailCorner: CGFloat { sidebarOpen ? 12 : 0 }
