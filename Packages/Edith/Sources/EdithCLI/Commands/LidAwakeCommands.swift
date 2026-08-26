@@ -44,18 +44,17 @@ enum LidAwakeCLI {
         return threshold
     }
 
-    static func request(
-        _ action: LidAwakeIPC.Action, session: LidAwakeSession? = nil
-    ) async throws -> [AnyHashable: Any] {
+    static func request(_ request: LidAwakeRequest) async throws -> LidAwakeSnapshot {
         try AppBridge.requireHelper("Lid Awake")
-        let timeout: TimeInterval = action == .status ? 3 : 120
+        guard var payload = request.runtimePayload else {
+            throw CLIFailure("The Lid Awake request is not a runtime action")
+        }
+        let timeout: TimeInterval = request == .status ? 3 : 120
         guard let context = LidAwakeRuntimeRequestContext(timeout: .seconds(timeout)) else {
             throw CLIFailure("Lid Awake could not create a valid request deadline")
         }
-        var info: [String: Any] = [LidAwakeIPC.actionKey: action.rawValue]
-        if let session { info[LidAwakeIPC.sessionKey] = session.rawValue }
-        info.merge(context.runtimePayload) { _, new in new }
-        let payload = info
+        payload.merge(context.runtimePayload) { _, new in new }
+        let requestPayload = payload
         guard
             let reply = await AppBridge.awaitReply(
                 IPC.Name.lidAwakeActionResult, timeout: timeout,
@@ -63,7 +62,7 @@ enum LidAwakeCLI {
                     $0[LidAwakeIPC.requestIDKey] as? String == context.requestID
                 },
                 trigger: {
-                    AppBridge.post(IPC.Name.requestLidAwakeAction, userInfo: payload)
+                    AppBridge.post(IPC.Name.requestLidAwakeAction, userInfo: requestPayload)
                 })
         else {
             throw AppBridge.silence("Lid Awake", extensionKey: LidAwakeState.enabledKey)
@@ -72,79 +71,85 @@ enum LidAwakeCLI {
             throw CLIFailure(
                 reply[LidAwakeIPC.errorKey] as? String ?? "Lid Awake could not change state")
         }
-        return reply
+        return LidAwakeSnapshot(
+            payload: reply,
+            fallback: LidAwakeSnapshot(
+                storedIn: CLIEnvironment.sharedDefaults, appRunning: true))
     }
 
-    static func status() async throws -> [AnyHashable: Any] {
+    static func status() async throws -> LidAwakeSnapshot {
         guard AppBridge.helperIsRunning else { return storedStatus() }
         return try await request(.status)
     }
 
-    static func storedStatus() -> [AnyHashable: Any] {
-        let defaults = CLIEnvironment.sharedDefaults
-        let active = defaults.bool(forKey: LidAwakeState.activeKey)
-        return [
-            LidAwakeIPC.okKey: true,
-            "extensionEnabled": LidAwakeState.isEnabled(defaults),
-            "active": active,
-            "requestedActive": active,
-            "applying": false,
-            "batterySuspended": false,
-            "session": LidAwakeState.session(defaults).rawValue,
-            "batteryThreshold": defaults.integer(forKey: LidAwakeState.batteryThresholdKey),
-            "restoreOnQuit": LidAwakeState.restoresOnQuit(defaults),
-            "helperStatus": "unavailable",
-            "appRunning": false,
-        ]
+    static func storedStatus() -> LidAwakeSnapshot {
+        LidAwakeSnapshot(storedIn: CLIEnvironment.sharedDefaults)
     }
 
-    static func json(_ payload: [AnyHashable: Any]) -> JSONValue {
+    static func json(_ snapshot: LidAwakeSnapshot) -> JSONValue {
         .object([
-            "extensionEnabled": .bool(payload["extensionEnabled"] as? Bool ?? false),
-            "active": .bool(payload["active"] as? Bool ?? false),
-            "requestedActive": .bool(payload["requestedActive"] as? Bool ?? false),
-            "applying": .bool(payload["applying"] as? Bool ?? false),
-            "batterySuspended": .bool(payload["batterySuspended"] as? Bool ?? false),
-            "session": .string(payload["session"] as? String ?? "indefinite"),
-            "remainingSeconds": .optional(number(payload["remainingSeconds"])),
-            "batteryThreshold": .int(payload["batteryThreshold"] as? Int ?? 0),
-            "restoreOnQuit": .bool(payload["restoreOnQuit"] as? Bool ?? true),
-            "helperStatus": .string(payload["helperStatus"] as? String ?? "unavailable"),
-            "appRunning": .bool(payload["appRunning"] as? Bool ?? false),
-            "lastError": .optional(payload["lastError"] as? String),
+            "extensionEnabled": .bool(snapshot.extensionEnabled),
+            "active": .bool(snapshot.active),
+            "requestedActive": .bool(snapshot.requestedActive),
+            "applying": .bool(snapshot.applying),
+            "batterySuspended": .bool(snapshot.batterySuspended),
+            "session": .string(snapshot.session.rawValue),
+            "remainingSeconds": .optional(snapshot.remainingSeconds),
+            "batteryThreshold": .int(snapshot.batteryThreshold),
+            "restoreOnQuit": .bool(snapshot.restoreOnQuit),
+            "helperStatus": .string(snapshot.helperStatus),
+            "appRunning": .bool(snapshot.appRunning),
+            "lastError": .optional(snapshot.lastError),
         ])
     }
 
-    static func printStatus(_ payload: [AnyHashable: Any]) {
-        let active = payload["active"] as? Bool ?? false
-        let suspended = payload["batterySuspended"] as? Bool ?? false
-        let applying = payload["applying"] as? Bool ?? false
-        let state =
-            applying ? "changing" : suspended ? "paused on low battery" : active ? "on" : "off"
-        let rawSession = payload["session"] as? String ?? "indefinite"
-        let session = LidAwakeSession(rawValue: rawSession) ?? .indefinite
-        let threshold = payload["batteryThreshold"] as? Int ?? 0
-        CLIOut.out("state: \(state)")
-        CLIOut.out("session: \(session.title)")
-        if let remaining = number(payload["remainingSeconds"]) {
-            CLIOut.out("remaining: \(Int(remaining.rounded(.up))) seconds")
-        }
-        CLIOut.out("battery auto-pause: \(threshold == 0 ? "off" : "\(threshold)%")")
-        CLIOut.out(
-            "restore on quit: \((payload["restoreOnQuit"] as? Bool ?? true) ? "on" : "off")")
-        CLIOut.out("helper: \(payload["helperStatus"] as? String ?? "unavailable")")
-        CLIOut.out("app running: \((payload["appRunning"] as? Bool ?? false) ? "yes" : "no")")
-        if let error = payload["lastError"] as? String { CLIOut.out("last error: \(error)") }
+    static func previewJSON(
+        _ preview: LidAwakeOperationPreview, request: LidAwakeRequest
+    ) -> JSONValue {
+        let session: JSONValue =
+            if case .on(let value) = request { .string(value.rawValue) } else { .null }
+        let restoreOnQuit: JSONValue =
+            if case .setRestoreOnQuit(let value) = request { .bool(value) } else { .null }
+        return .object([
+            "operation": .string(preview.operation.descriptor.id.rawValue),
+            "performed": .bool(false),
+            "requiresConfirmation": .bool(true),
+            "summary": .string(preview.summary),
+            "warning": .string(preview.warning),
+            "session": session,
+            "restoreOnQuit": restoreOnQuit,
+        ])
     }
 
-    private static func number(_ value: Any?) -> Double? {
-        (value as? NSNumber)?.doubleValue
+    static func printPreview(_ preview: LidAwakeOperationPreview) {
+        CLIOut.out("preview: \(preview.summary)")
+        CLIOut.out("warning: \(preview.warning)")
+        CLIOut.out("pass --yes to apply")
+    }
+
+    static func printStatus(_ snapshot: LidAwakeSnapshot) {
+        let state =
+            snapshot.applying
+            ? "changing"
+            : snapshot.batterySuspended ? "paused on low battery" : snapshot.active ? "on" : "off"
+        CLIOut.out("state: \(state)")
+        CLIOut.out("session: \(snapshot.session.title)")
+        if let remaining = snapshot.remainingSeconds {
+            CLIOut.out("remaining: \(Int(remaining.rounded(.up))) seconds")
+        }
+        CLIOut.out(
+            "battery auto-pause: \(snapshot.batteryThreshold == 0 ? "off" : "\(snapshot.batteryThreshold)%")"
+        )
+        CLIOut.out("restore on quit: \(snapshot.restoreOnQuit ? "on" : "off")")
+        CLIOut.out("helper: \(snapshot.helperStatus)")
+        CLIOut.out("app running: \(snapshot.appRunning ? "yes" : "no")")
+        if let error = snapshot.lastError { CLIOut.out("last error: \(error)") }
     }
 }
 
 struct LidAwakeStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "status", abstract: "Show the live Lid Awake state.")
+        commandName: "status", abstract: LidAwakeOperation.status.descriptor.summary)
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -163,7 +168,7 @@ struct LidAwakeStatusCommand: AsyncParsableCommand {
 
 struct LidAwakeOnCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "on", abstract: "Keep running with the lid closed.", aliases: ["start"])
+        commandName: "on", abstract: LidAwakeOperation.on.descriptor.summary, aliases: ["start"])
 
     @Option(name: .customLong("for"), help: "Stop after 15m, 30m, 1h or 2h.")
     var duration: String?
@@ -174,13 +179,25 @@ struct LidAwakeOnCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
+    @Flag(name: .long, help: "Apply the previewed power-state change.")
+    var yes = false
+
     func run() async throws {
         try await execute {
             let session = try LidAwakeCLI.session(
                 duration: duration, untilLidReopens: untilLidReopens)
-            let payload = try await LidAwakeCLI.request(.on, session: session)
+            let request = LidAwakeRequest.on(session)
+            if let preview = LidAwakeOperationExecution.preview(for: request), !yes {
+                if json {
+                    CLIOut.json(LidAwakeCLI.previewJSON(preview, request: request))
+                } else {
+                    LidAwakeCLI.printPreview(preview)
+                }
+                return
+            }
+            let snapshot = try await LidAwakeCLI.request(request)
             if json {
-                CLIOut.json(LidAwakeCLI.json(payload))
+                CLIOut.json(LidAwakeCLI.json(snapshot))
             } else {
                 CLIOut.out("lid awake on: \(session.title)")
             }
@@ -190,16 +207,16 @@ struct LidAwakeOnCommand: AsyncParsableCommand {
 
 struct LidAwakeOffCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "off", abstract: "Restore normal lid-close sleep.", aliases: ["stop"])
+        commandName: "off", abstract: LidAwakeOperation.off.descriptor.summary, aliases: ["stop"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
     func run() async throws {
         try await execute {
-            let payload = try await LidAwakeCLI.request(.off)
+            let snapshot = try await LidAwakeCLI.request(.off)
             if json {
-                CLIOut.json(LidAwakeCLI.json(payload))
+                CLIOut.json(LidAwakeCLI.json(snapshot))
             } else {
                 CLIOut.out("lid awake off")
             }
@@ -209,7 +226,7 @@ struct LidAwakeOffCommand: AsyncParsableCommand {
 
 struct LidAwakeBatteryCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "battery", abstract: "Set the low-battery auto-pause percentage.")
+        commandName: "battery", abstract: LidAwakeOperation.battery.descriptor.summary)
 
     @Argument(help: "A percentage from 1 to 100, or off.")
     var threshold: String
@@ -220,9 +237,10 @@ struct LidAwakeBatteryCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let threshold = try LidAwakeCLI.batteryThreshold(threshold)
-            CLIEnvironment.sharedDefaults.set(
-                threshold, forKey: LidAwakeState.batteryThresholdKey)
-            CLIEnvironment.sharedDefaults.synchronize()
+            guard
+                LidAwakeOperationExecution.applySetting(
+                    .setBatteryThreshold(threshold), defaults: CLIEnvironment.sharedDefaults)
+            else { throw CLIFailure("The battery threshold could not be stored") }
             ConfigStore.announceChange()
             if json {
                 CLIOut.json(.object(["batteryThreshold": .int(threshold)]))
@@ -235,7 +253,8 @@ struct LidAwakeBatteryCommand: AsyncParsableCommand {
 
 struct LidAwakeRestoreOnQuitCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "restore-on-quit", abstract: "Choose whether quitting restores normal sleep.")
+        commandName: "restore-on-quit",
+        abstract: LidAwakeOperation.restoreOnQuit.descriptor.summary)
 
     @Argument(help: "true or false.")
     var enabled: String
@@ -243,11 +262,25 @@ struct LidAwakeRestoreOnQuitCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
+    @Flag(name: .long, help: "Apply the previewed safety-policy change.")
+    var yes = false
+
     func run() async throws {
         try await execute {
             let enabled = try ConfigValueParser.boolean(enabled)
-            CLIEnvironment.sharedDefaults.set(enabled, forKey: LidAwakeState.restoreOnQuitKey)
-            CLIEnvironment.sharedDefaults.synchronize()
+            let request = LidAwakeRequest.setRestoreOnQuit(enabled)
+            if let preview = LidAwakeOperationExecution.preview(for: request), !yes {
+                if json {
+                    CLIOut.json(LidAwakeCLI.previewJSON(preview, request: request))
+                } else {
+                    LidAwakeCLI.printPreview(preview)
+                }
+                return
+            }
+            guard
+                LidAwakeOperationExecution.applySetting(
+                    request, defaults: CLIEnvironment.sharedDefaults)
+            else { throw CLIFailure("The restore-on-quit policy could not be stored") }
             ConfigStore.announceChange()
             if json {
                 CLIOut.json(.object(["restoreOnQuit": .bool(enabled)]))

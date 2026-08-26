@@ -144,6 +144,11 @@ import Testing
                 == ["status", "on", "start", "off", "stop", "battery", "restore-on-quit"])
         let flags = Self.plan(["ed", "lid-awake", "on", "--u"], 3)
         #expect(flags.candidates == ["--until-lid-reopens"])
+        let confirmation = Self.plan(["ed", "lid-awake", "on", "--y"], 3)
+        #expect(confirmation.candidates == ["--yes"])
+        let restoreConfirmation = Self.plan(
+            ["ed", "lid-awake", "restore-on-quit", "false", "--y"], 4)
+        #expect(restoreConfirmation.candidates == ["--yes"])
     }
 
     @Test func quinjetOperationsAndLaunchOptionsComplete() {

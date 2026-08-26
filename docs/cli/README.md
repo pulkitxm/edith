@@ -86,7 +86,7 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 ```
 ed guide                         the built-in manual
 ed config ls                     every setting and its current value
-ed lid-awake on --for 30m        keep running with the lid closed for 30 minutes
+ed lid-awake on --for 30m --yes  keep running with the lid closed for 30 minutes
 ed usage limits --json           the numbers behind the rate-limit rings
 ed system stats --follow         this Mac, sampled continuously
 ed machines ls                   the computers Edith can reach

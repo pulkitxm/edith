@@ -97,6 +97,9 @@ public enum UserOperationCatalog {
         + PresenterRuntimeOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + LidAwakeOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
 
     private static let featureRegistrations: [RegisteredUserOperation] =
         UsageProjectOperation.allCases.map {
@@ -898,6 +901,26 @@ private extension PresenterRuntimeOperation {
             userInterface("Presenter controls", "start manual mode")
         case .stop:
             userInterface("Presenter controls", "stop manual mode")
+        }
+    }
+}
+
+private extension LidAwakeOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .status:
+            userInterface("Lid Awake controls", "inspect runtime state")
+        case .on:
+            userInterface(
+                "Lid Awake controls", "keep running with the lid closed", ["--yes"])
+        case .off:
+            userInterface("Lid Awake controls", "restore normal lid-close sleep")
+        case .battery:
+            userInterface(
+                "Lid Awake settings", "set the low-battery pause floor", ["20"])
+        case .restoreOnQuit:
+            userInterface(
+                "Lid Awake settings", "leave sleep disabled after quitting", ["false", "--yes"])
         }
     }
 }

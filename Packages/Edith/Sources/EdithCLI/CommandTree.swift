@@ -243,7 +243,8 @@ public enum CommandTree {
                     CommandNode("status", "Show the live state.", options: common),
                     CommandNode(
                         "on", "Keep running with the lid closed.", aliases: ["start"],
-                        options: ["--json", "--help", "--for", "--until-lid-reopens"]),
+                        options: ["--json", "--help", "--for", "--until-lid-reopens", "--yes"],
+                        destructivePolicy: .previewThenYes),
                     CommandNode(
                         "off", "Restore normal lid-close sleep.", aliases: ["stop"],
                         options: common),
@@ -252,7 +253,8 @@ public enum CommandTree {
                         arguments: [.free]),
                     CommandNode(
                         "restore-on-quit", "Choose whether quitting restores sleep.",
-                        options: common, arguments: [.free]),
+                        options: ["--json", "--help", "--yes"], arguments: [.free],
+                        destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
                 "permissions", "Inspect and request Edith's macOS permissions.",

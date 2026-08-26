@@ -1,17 +1,18 @@
 # `ed lid-awake on`
 
-Starts a Lid Awake session and waits until macOS sleep state was changed.
-`start` is an alias.
+Previews a Lid Awake session. With `--yes`, it starts the session and waits
+until macOS sleep state was changed. `start` is an alias.
 
 ```
-ed lid-awake on [--for <duration> | --until-lid-reopens] [--json]
+ed lid-awake on [--for <duration> | --until-lid-reopens] [--yes] [--json]
 ```
 
 | Option | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `--for` | `15m`, `30m`, `1h`, `2h`, or an accepted long spelling | none | Stop automatically after the selected preset. |
 | `--until-lid-reopens` | flag | off | Stop after the lid has closed and then opens again. |
-| `--json` | flag | off | Emit the full resulting state object. |
+| `--yes` | flag | off | Apply the previewed power-state change. |
+| `--json` | flag | off | Emit the preview or full resulting state object. |
 
 Without a session option the command selects `indefinite`. Accepted duration
 spellings are case-insensitive and ignore spaces:
@@ -28,16 +29,23 @@ duration also exits 1 and hints `use 15m, 30m, 1h or 2h`.
 
 ```
 ed lid-awake on
-ed lid-awake start --for 30min
-ed lid-awake on --until-lid-reopens
-ed lid-awake on --for 1h --json
+ed lid-awake start --for 30min --yes
+ed lid-awake on --until-lid-reopens --yes
+ed lid-awake on --for 1h --yes --json
 ```
 
-The menu bar app must be running, otherwise this exits 4 before posting a
-request. Starting enables the `lidAwake` extension when needed, waits as long as
-120 seconds for the engine, and exits 0 only after the privileged helper has
-applied the change. The human answer is the selected session, for example
-`lid awake on: 30 minutes`. JSON is the full state object documented by
+Without `--yes`, the command prints the selected session, the heat and power
+warning, and `pass --yes to apply`. It exits 0 without requiring the menu bar
+app, enabling the extension, or posting a runtime request. With `--json`, that
+preview has stable `operation`, `performed`, `requiresConfirmation`, `summary`,
+`warning`, `session`, and `restoreOnQuit` fields. The last field is `null` for
+this operation.
+
+With `--yes`, the menu bar app must be running, otherwise this exits 4 before
+posting a request. Starting enables the `lidAwake` extension when needed, waits
+as long as 120 seconds for the engine, and exits 0 only after the privileged
+helper has applied the change. The human answer is the selected session, for
+example `lid awake on: 30 minutes`. JSON is the full state object documented by
 [`status`](./status.md).
 
 On first use, macOS may require approval for Edith's background helper. The
