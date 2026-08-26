@@ -187,6 +187,16 @@ private final class MutableHistoryURL: @unchecked Sendable {
         #expect(!failed.message.lowercased().contains("shell"))
     }
 
+    @Test func usageStatusMappingDistinguishesPermissionFailures() {
+        #expect(UsageStore.fetchError(statusCode: 401) == .unauthorized)
+        #expect(UsageStore.fetchError(statusCode: 403) == .permissionDenied)
+        #expect(
+            UsageStore.fetchError(statusCode: 429, retryAfter: 120)
+                == .rateLimited(after: 120))
+        #expect(UsageStore.fetchError(statusCode: 500) == .http(500))
+        #expect(UsageStore.fetchError(statusCode: 200) == nil)
+    }
+
     @Test func historyWritesWaitForSeedAndFlushOncePerProvider() {
         var gate = HistoryWriteGate()
         let firstClaude = gate.record(.claude)

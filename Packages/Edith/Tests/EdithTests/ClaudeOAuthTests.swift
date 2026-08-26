@@ -79,6 +79,23 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
     }
 }
 
+private final class ClaudeCredentialDataCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: Data?
+
+    func record(_ data: Data) {
+        lock.lock()
+        stored = data
+        lock.unlock()
+    }
+
+    var data: Data? {
+        lock.lock()
+        defer { lock.unlock() }
+        return stored
+    }
+}
+
 @Suite struct ClaudeOAuthCredentialTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
@@ -723,29 +740,16 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
         #expect(cancelled == .cancelled)
     }
 
-    @Test func keychainUpdateUsesBoundedStdinWithoutExposingTheCredential() async throws {
-        let capture = ClaudeSecurityCommandCapture()
-        let credential = try credentialData("private-token")
+    @Test func keychainUpdatePreservesCompleteCredential() async throws {
+        let capture = ClaudeCredentialDataCapture()
+        let credential = try credentialData(String(repeating: "private-token", count: 64))
 
         try await ClaudeCredentialStore.persist(
             credential, source: .keychain,
-            securityExecutable: URL(fileURLWithPath: "/usr/bin/security"), timeout: 0.5,
-            maximumOutputBytes: 512,
-            runCommand: { request in
-                capture.record(request)
-                return CLICommandResult(terminationStatus: 0, output: "")
-            })
+            keychainUpdater: { capture.record($0) })
 
-        let request = try #require(capture.request)
-        #expect(request.timeout == 0.5)
-        #expect(request.maximumOutputBytes == 512)
-        #expect(request.discardsStandardError)
-        #expect(request.terminatesProcessGroup)
-        #expect(!request.arguments.joined().contains("private-token"))
-        #expect(!request.environment.values.joined().contains("private-token"))
-        #expect(
-            request.standardInputData == credential + Data("\n".utf8) + credential + Data("\n".utf8)
-        )
+        #expect(credential.count > 128)
+        #expect(capture.data == credential)
     }
 
     @Test func oversizedSecurityOutputIsStoppedAndRejected() async throws {
@@ -760,22 +764,18 @@ private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
         #expect(ProcessInfo.processInfo.systemUptime - started < 4)
     }
 
-    @Test func stalledSecurityUpdateReturnsOnlyAGenericError() async throws {
-        let fixture = try shim("trap '' TERM\n/bin/sleep 30")
-        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    @Test func failedKeychainUpdateReturnsOnlyAGenericError() async throws {
         let credential = try credentialData("private-token")
-        let started = ProcessInfo.processInfo.systemUptime
 
         do {
             try await ClaudeCredentialStore.persist(
-                credential, source: .keychain, securityExecutable: fixture.executable,
-                timeout: 0.1, maximumOutputBytes: 1_024)
+                credential, source: .keychain,
+                keychainUpdater: { _ in throw CocoaError(.fileWriteUnknown) })
             Issue.record("expected keychain failure")
         } catch let error as ClaudeCredentialStoreError {
             #expect(error == .keychainUpdateFailed)
             #expect(error.localizedDescription == "Keychain update failed")
         }
-        #expect(ProcessInfo.processInfo.systemUptime - started < 2)
     }
 
     private struct ShimFixture {

@@ -116,6 +116,13 @@ struct CredentialLookupFailurePresentation: Equatable {
     let notifiesExpiredSession: Bool
 }
 
+enum ClaudeLimitsFetchError: Error, Equatable {
+    case unauthorized
+    case permissionDenied
+    case rateLimited(after: TimeInterval?)
+    case http(Int)
+}
+
 @MainActor
 @Observable
 final class UsageStore: FeatureModule {
@@ -541,7 +548,7 @@ final class UsageStore: FeatureModule {
             guard canPublishLimitsRefresh(generation) else { return }
             credential = resolved
         case .failure(let failure):
-            handleCredentialLookupFailure(failure, generation: generation)
+            await handleCredentialLookupFailure(failure, generation: generation)
             return
         case .cancelled:
             return
@@ -558,12 +565,12 @@ final class UsageStore: FeatureModule {
             Log.usage.notice("\(msg, privacy: .public)")
             diag(msg)
             return
-        } catch FetchError.unauthorized {
+        } catch ClaudeLimitsFetchError.unauthorized {
             guard canPublishLimitsRefresh(generation) else { return }
             diag("401 unauthorized - resolving credentials once more")
             Log.usage.error("401 unauthorized - resolving credentials once more")
         } catch {
-            report(error, generation: generation)
+            await report(error, generation: generation)
             return
         }
 
@@ -575,7 +582,7 @@ final class UsageStore: FeatureModule {
             guard canPublishLimitsRefresh(generation) else { return }
             latest = resolved
         case .failure(let failure):
-            handleCredentialLookupFailure(failure, generation: generation)
+            await handleCredentialLookupFailure(failure, generation: generation)
             return
         case .cancelled:
             return
@@ -597,19 +604,22 @@ final class UsageStore: FeatureModule {
             Log.usage.notice("recovered after token refresh")
             diag("recovered after token refresh")
         } catch {
-            report(error, generation: generation)
+            await report(error, generation: generation)
         }
     }
 
-    private func report(_ error: Error, generation: Int) {
+    private func report(_ error: Error, generation: Int) async {
         guard canPublishLimitsRefresh(generation) else { return }
         let msg: String
         switch error {
-        case FetchError.unauthorized:
+        case ClaudeLimitsFetchError.unauthorized:
             limitsError = "Claude session expired - run claude to re-login"
             notifier.notifyTokenExpired()
-            msg = "token refresh unavailable or rejected - keeping last-known numbers"
-        case FetchError.rateLimited(let after):
+            msg = "token refresh unavailable or rejected"
+        case ClaudeLimitsFetchError.permissionDenied:
+            limitsError = "Claude token cannot read usage - run claude auth login --claudeai"
+            msg = "Claude usage permission denied"
+        case ClaudeLimitsFetchError.rateLimited(let after):
             let deadline = LimitsRefreshGate.backoffDeadline(retryAfter: after, now: Date())
             retryNotBefore = deadline
             limitsError =
@@ -621,7 +631,7 @@ final class UsageStore: FeatureModule {
         }
         Log.usage.error("\(msg, privacy: .public)")
         diag(msg)
-        keepOrBlankMenuBar()
+        await clearClaudeLimits(generation: generation)
         scheduleQuickRetry()
     }
 
@@ -639,15 +649,24 @@ final class UsageStore: FeatureModule {
 
     private func handleCredentialLookupFailure(
         _ failure: ClaudeCredentialLookupFailure, generation: Int
-    ) {
+    ) async {
         guard canPublishLimitsRefresh(generation) else { return }
         let presentation = Self.credentialLookupFailurePresentation(for: failure)
         limitsError = presentation.message
         Log.usage.error("\(presentation.diagnostic, privacy: .public)")
         diag(presentation.diagnostic)
-        keepOrBlankMenuBar()
+        await clearClaudeLimits(generation: generation)
         if presentation.notifiesExpiredSession { notifier.notifyTokenExpired() }
         if presentation.schedulesQuickRetry { scheduleQuickRetry() }
+    }
+
+    private func clearClaudeLimits(generation: Int) async {
+        guard canPublishLimitsRefresh(generation) else { return }
+        session = nil
+        week = nil
+        fableWeek = nil
+        updateStatusItem()
+        await recordHistory(.claude, generation: generation)
     }
 
     private func diag(_ message: String) {
@@ -914,12 +933,6 @@ final class UsageStore: FeatureModule {
         CLIToolEnvironment.executable(named: "codex")
     }
 
-    private enum FetchError: Error {
-        case unauthorized
-        case rateLimited(after: TimeInterval?)
-        case http(Int)
-    }
-
     private nonisolated static let limitsSession: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 15
@@ -938,14 +951,21 @@ final class UsageStore: FeatureModule {
         let (data, resp) = try await limitsSession.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if code != 200 { Log.usage.error("GET /oauth/usage -> HTTP \(code, privacy: .public)") }
-        switch code {
-        case 200: return try ClaudeUsageParser.parse(data)
-        case 401, 403: throw FetchError.unauthorized
-        case 429:
-            let after = (resp as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")
-                .flatMap(TimeInterval.init)
-            throw FetchError.rateLimited(after: after)
-        default: throw FetchError.http(code)
+        let after = (resp as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")
+            .flatMap(TimeInterval.init)
+        if let error = fetchError(statusCode: code, retryAfter: after) { throw error }
+        return try ClaudeUsageParser.parse(data)
+    }
+
+    nonisolated static func fetchError(
+        statusCode: Int, retryAfter: TimeInterval? = nil
+    ) -> ClaudeLimitsFetchError? {
+        switch statusCode {
+        case 200: return nil
+        case 401: return .unauthorized
+        case 403: return .permissionDenied
+        case 429: return .rateLimited(after: retryAfter)
+        default: return .http(statusCode)
         }
     }
 
@@ -1010,14 +1030,14 @@ final class UsageStore: FeatureModule {
     {
         let now = Date()
         guard let refreshToken = credential.usableRefreshToken(at: now) else {
-            throw FetchError.unauthorized
+            throw ClaudeLimitsFetchError.unauthorized
         }
         diag("refreshing Claude access token")
         let response = try await Self.fetchRefreshedClaudeToken(refreshToken: refreshToken)
         let data = try credential.updatedData(with: response, now: now)
         try await ClaudeCredentialStore.persist(data, source: credential.source)
         guard let refreshed = ClaudeOAuthCredential.decode(data, source: credential.source) else {
-            throw FetchError.unauthorized
+            throw ClaudeLimitsFetchError.unauthorized
         }
         claudeCredentialSession.store(refreshed)
         Log.usage.notice("Claude access token refreshed and saved")
@@ -1044,13 +1064,13 @@ final class UsageStore: FeatureModule {
         case 200:
             return try JSONDecoder().decode(ClaudeOAuthRefreshResponse.self, from: data)
         case 400, 401, 403:
-            throw FetchError.unauthorized
+            throw ClaudeLimitsFetchError.unauthorized
         case 429:
             let after = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")
                 .flatMap(TimeInterval.init)
-            throw FetchError.rateLimited(after: after)
+            throw ClaudeLimitsFetchError.rateLimited(after: after)
         default:
-            throw FetchError.http(code)
+            throw ClaudeLimitsFetchError.http(code)
         }
     }
 
