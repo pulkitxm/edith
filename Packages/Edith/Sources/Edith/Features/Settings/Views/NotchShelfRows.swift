@@ -160,7 +160,7 @@ struct NotchShelfRows: View {
                     "Per-app volume mixer (beta)",
                     isOn: $audioMixer.configured(AppStorageKeys.Notch.audioMixerEnabled)
                 )
-                .disabled(!audioMixerAvailable)
+                .disabled(!audioMixerAvailable && !audioMixer)
                 .pointerCursor()
                 if audioMixerAvailable {
                     Text(

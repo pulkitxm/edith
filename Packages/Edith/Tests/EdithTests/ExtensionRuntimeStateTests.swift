@@ -288,7 +288,7 @@ import Testing
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
         #expect(source.contains("PlatformCapabilities.macOS.state(for: .applicationAudio)"))
-        #expect(source.contains(".disabled(!audioMixerAvailable)"))
+        #expect(source.contains(".disabled(!audioMixerAvailable && !audioMixer)"))
         #expect(source.contains("Requires macOS 14.4 or later."))
     }
 

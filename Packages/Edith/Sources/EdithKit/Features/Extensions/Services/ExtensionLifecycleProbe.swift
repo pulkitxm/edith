@@ -25,6 +25,7 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
     public var toolReadiness: @Sendable (String) async -> ExtensionToolReadiness
     public var helperRunning: @Sendable () -> Bool
     public var platformCapabilities: PlatformCapabilities
+    public var usesOptionalCapability: @Sendable (PlatformCapability) -> Bool
     public var machineCount: @Sendable () -> Int
     public var adapterReadiness: @Sendable (String) async -> ExtensionAdapterReadiness?
 
@@ -34,6 +35,7 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
         toolReadiness: @escaping @Sendable (String) async -> ExtensionToolReadiness,
         helperRunning: @escaping @Sendable () -> Bool,
         platformCapabilities: PlatformCapabilities,
+        usesOptionalCapability: @escaping @Sendable (PlatformCapability) -> Bool = { _ in true },
         machineCount: @escaping @Sendable () -> Int,
         adapterReadiness: @escaping @Sendable (String) async -> ExtensionAdapterReadiness?
     ) {
@@ -42,6 +44,7 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
         self.toolReadiness = toolReadiness
         self.helperRunning = helperRunning
         self.platformCapabilities = platformCapabilities
+        self.usesOptionalCapability = usesOptionalCapability
         self.machineCount = machineCount
         self.adapterReadiness = adapterReadiness
     }
@@ -58,6 +61,14 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
             ).isEmpty
         },
         platformCapabilities: .macOS,
+        usesOptionalCapability: { capability in
+            switch capability {
+            case .applicationAudio:
+                SharedDefaults.store.bool(forKey: AppStorageKeys.Notch.audioMixerEnabled)
+            default:
+                true
+            }
+        },
         machineCount: { MachineRegistry.machines().count },
         adapterReadiness: { id in
             switch id {
@@ -242,7 +253,11 @@ public struct ExtensionLifecycleProbe: Sendable {
     }
 
     private func platformCheck(_ entry: ExtensionRegistryEntry) -> ExtensionLifecycleCheck {
-        switch entry.availability(on: environment.platformCapabilities) {
+        let optionalCapabilities = entry.optionalCapabilities.filter(
+            environment.usesOptionalCapability)
+        switch environment.platformCapabilities.availability(
+            required: entry.requiredCapabilities, optional: optionalCapabilities)
+        {
         case .available:
             return check(
                 "platform", "Platform support", .passed, "Required capabilities are available.")

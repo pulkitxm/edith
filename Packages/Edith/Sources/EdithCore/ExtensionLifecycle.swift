@@ -547,7 +547,7 @@ public enum ExtensionLifecycleCatalog {
                     "Notch presentation depends on the current display layout."),
                 instruction(
                     "optional", "Grant optional access",
-                    "Camera, Bluetooth and Automation enable extra modules."),
+                    "Application Audio, Camera, Bluetooth and Automation enable extra modules."),
             ],
             examples: ["ed extensions enable notchShelf", "ed shelf ls --json"],
             docs: [documentation("guide", "Shelf guide", "docs/cli/shelf/README.md")],
