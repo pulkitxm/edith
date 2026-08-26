@@ -29,7 +29,7 @@ struct HerdrPage: View {
             header
             tabBar
             HStack(spacing: 0) {
-                if !onBoard, store.railOpen {
+                if store.railOpen {
                     agentList
                     Divider().opacity(0.35)
                 }
@@ -226,10 +226,8 @@ struct HerdrPage: View {
                 .fill(DashSkin.lineStrong(dark))
                 .frame(height: 1)
             HStack(spacing: UIScale.pt(8)) {
-                if !onBoard {
-                    railToggle
-                        .padding(.leading, PageMetrics.gutter(compact))
-                }
+                railToggle
+                    .padding(.leading, PageMetrics.gutter(compact))
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: UIScale.pt(6)) {
                         tabButton(id: HerdrStore.boardID, title: "Board", closable: false)
@@ -240,7 +238,7 @@ struct HerdrPage: View {
                                 closable: true, agent: tab.agent)
                         }
                     }
-                    .padding(.leading, onBoard ? PageMetrics.gutter(compact) : 0)
+                    .padding(.leading, 0)
                     .padding(.vertical, UIScale.pt(8))
                 }
                 if let tab = store.tabs.first(where: { $0.id == store.selectedTab }),
@@ -497,18 +495,20 @@ struct HerdrPage: View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    railHeader("Agents", count: listedAgents.count)
-                    ForEach(listedAgents) { agent in
-                        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                            agentRow(agent)
-                            if store.selectedTab == agent.id {
-                                HerdrAgentViewToggle(
-                                    selection: store.view(for: agent.id), compactStyle: true
-                                ) { option in
-                                    store.open(agent, showing: option)
+                    if !onBoard {
+                        railHeader("Agents", count: listedAgents.count)
+                        ForEach(listedAgents) { agent in
+                            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                                agentRow(agent)
+                                if store.selectedTab == agent.id {
+                                    HerdrAgentViewToggle(
+                                        selection: store.view(for: agent.id), compactStyle: true
+                                    ) { option in
+                                        store.open(agent, showing: option)
+                                    }
+                                    .padding(.horizontal, UIScale.pt(8))
+                                    .padding(.bottom, UIScale.pt(4))
                                 }
-                                .padding(.horizontal, UIScale.pt(8))
-                                .padding(.bottom, UIScale.pt(4))
                             }
                         }
                     }
