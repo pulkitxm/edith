@@ -101,6 +101,9 @@ import Testing
                 let before = probe.activations[role, default: 0]
                 harness.click(point)
                 #expect(probe.activations[role, default: 0] == before + 1)
+                if ProcessInfo.processInfo.environment["EDITH_BUTTON_EVIDENCE"] == "1" {
+                    try await Task.sleep(for: .milliseconds(160))
+                }
             }
         }
     }
@@ -227,17 +230,21 @@ private struct EdithButtonDelegatingStyle: ButtonStyle {
 
 private struct EdithButtonRoleGallery: View {
     let probe: EdithButtonGalleryProbe
+    @State private var counts: [EdithButtonRole: Int] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(EdithButtonRole.allCases, id: \.self) { role in
                 Button {
                     probe.activations[role, default: 0] += 1
+                    counts[role, default: 0] += 1
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: role == .destructive ? "trash" : "sparkles")
                         Text(String(describing: role))
                         if role == .row || role == .selection { Spacer(minLength: 0) }
+                        Text("\(counts[role, default: 0])")
+                            .monospacedDigit()
                     }
                 }
                 .buttonStyle(.edith(role, selected: role == .selection))
@@ -299,6 +306,7 @@ private final class EdithButtonHarness {
             contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.acceptsMouseMovedEvents = true
         window.contentView = host
+        window.center()
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(host)
         host.layoutSubtreeIfNeeded()
