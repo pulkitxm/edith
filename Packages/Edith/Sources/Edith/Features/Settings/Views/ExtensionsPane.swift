@@ -301,7 +301,7 @@ private struct ExtensionMarketplaceCard: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: UIScale.pt(52))
                     .background(
-                        enabled ? brandAccent.opacity(0.1) : DashSkin.paper(dark),
+                        enabled ? DashSkin.accent(dark).opacity(0.1) : DashSkin.paper(dark),
                         in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
             }
             .buttonStyle(.plain)
@@ -310,7 +310,8 @@ private struct ExtensionMarketplaceCard: View {
                 Button(action: open) {
                     HStack(spacing: UIScale.pt(7)) {
                         AppGlyph(entry, size: UIScale.pt(13), weight: .semibold)
-                            .foregroundStyle(enabled ? brandAccent : DashSkin.inkSoft(dark))
+                            .foregroundStyle(
+                                enabled ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
                         Text(entry.title)
                             .font(.system(size: UIScale.pt(13), weight: .semibold))
                             .foregroundStyle(DashSkin.ink(dark))
@@ -327,7 +328,7 @@ private struct ExtensionMarketplaceCard: View {
                     .labelsHidden()
                     .toggleStyle(.switch)
                     .controlSize(.small)
-                    .tint(brandAccent)
+                    .tint(DashSkin.accent(dark))
                     .disabled(switchDisabled)
                     .accessibilityLabel("\(entry.title) enabled")
                     .pointerCursor()

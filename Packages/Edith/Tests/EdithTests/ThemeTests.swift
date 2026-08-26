@@ -22,4 +22,15 @@ import Testing
         let names = themePalette.map(\.name)
         #expect(Set(names).count == names.count)
     }
+
+    @Test func everyStoredThemeResolvesToItsOwnAccent() {
+        for theme in AppTheme.allCases {
+            #expect(AppTheme(storedName: theme.rawValue) == theme)
+            #expect(themeColor(theme.rawValue) == theme.color)
+        }
+    }
+
+    @Test func invalidStoredThemeResolvesToTheBrandTheme() {
+        #expect(AppTheme(storedName: "chartreuse") == .accent)
+    }
 }

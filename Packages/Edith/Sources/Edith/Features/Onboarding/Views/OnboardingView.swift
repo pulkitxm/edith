@@ -138,11 +138,11 @@ struct OnboardingView: View {
             Spacer(minLength: 44)
             ZStack {
                 Circle()
-                    .fill(brandAccent.opacity(0.13))
+                    .fill(DashSkin.accent(dark).opacity(0.13))
                     .frame(width: UIScale.pt(106), height: UIScale.pt(106))
                 Image(systemName: restoreSymbol)
                     .font(.system(size: UIScale.pt(40), weight: .medium))
-                    .foregroundStyle(brandAccent)
+                    .foregroundStyle(DashSkin.accent(dark))
             }
             Text(restoreTitle)
                 .font(DashSkin.serif(34, weight: .bold))
@@ -264,10 +264,10 @@ struct OnboardingView: View {
             HStack(spacing: UIScale.pt(12)) {
                 Image(systemName: showsAllExtensions ? "sparkles.rectangle.stack" : "storefront")
                     .font(.system(size: UIScale.pt(18), weight: .medium))
-                    .foregroundStyle(brandAccent)
+                    .foregroundStyle(DashSkin.accent(dark))
                     .frame(width: UIScale.pt(38), height: UIScale.pt(38))
                     .background(
-                        brandAccent.opacity(0.12),
+                        DashSkin.accent(dark).opacity(0.12),
                         in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text(showsAllExtensions ? "Back to top picks" : "Explore the marketplace")
@@ -339,11 +339,11 @@ struct OnboardingView: View {
             Spacer(minLength: 44)
             ZStack {
                 Circle()
-                    .fill(brandAccent.opacity(0.13))
+                    .fill(DashSkin.accent(dark).opacity(0.13))
                     .frame(width: UIScale.pt(106), height: UIScale.pt(106))
                 Image(systemName: "checkmark")
                     .font(.system(size: UIScale.pt(44), weight: .medium))
-                    .foregroundStyle(brandAccent)
+                    .foregroundStyle(DashSkin.accent(dark))
             }
             Text("You're ready")
                 .font(DashSkin.serif(34, weight: .bold))
@@ -421,7 +421,7 @@ struct OnboardingView: View {
         HStack(spacing: UIScale.pt(8)) {
             ForEach(Step.allCases, id: \.rawValue) { item in
                 Circle()
-                    .fill(item == step ? brandAccent : DashSkin.lineStrong(dark))
+                    .fill(item == step ? DashSkin.accent(dark) : DashSkin.lineStrong(dark))
                     .frame(width: item == step ? 8 : 6, height: item == step ? 8 : 6)
                     .animation(glide, value: step)
             }
@@ -463,7 +463,7 @@ struct OnboardingView: View {
                 Image(systemName: "waveform.path.ecg.rectangle.fill")
                     .resizable()
                     .scaledToFit()
-                    .foregroundStyle(brandAccent)
+                    .foregroundStyle(DashSkin.accent(dark))
             }
         }
     }
@@ -600,11 +600,12 @@ private struct ExtensionChoiceCard: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: UIScale.pt(52))
                         .background(
-                            selected ? brandAccent.opacity(0.1) : DashSkin.paper(dark),
+                            selected ? DashSkin.accent(dark).opacity(0.1) : DashSkin.paper(dark),
                             in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
                     HStack(spacing: UIScale.pt(8)) {
                         AppGlyph(entry, size: UIScale.pt(13), weight: .semibold)
-                            .foregroundStyle(selected ? brandAccent : DashSkin.inkSoft(dark))
+                            .foregroundStyle(
+                                selected ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
                         Text(entry.title)
                             .font(.system(size: UIScale.pt(13), weight: .semibold))
                             .foregroundStyle(DashSkin.ink(dark))
@@ -612,7 +613,8 @@ private struct ExtensionChoiceCard: View {
                         Spacer(minLength: 0)
                         Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                             .font(.system(size: UIScale.pt(14), weight: .semibold))
-                            .foregroundStyle(selected ? brandAccent : DashSkin.inkFaint(dark))
+                            .foregroundStyle(
+                                selected ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                     }
                     Text(entry.subtitle)
                         .font(.system(size: UIScale.pt(10.5)))
@@ -628,7 +630,7 @@ private struct ExtensionChoiceCard: View {
                 Button(action: action) {
                     Text(permissionNote)
                         .font(.system(size: UIScale.pt(9.5), weight: .medium))
-                        .foregroundStyle(selected ? brandAccent : DashSkin.inkFaint(dark))
+                        .foregroundStyle(selected ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                         .lineLimit(1)
                 }
                 .buttonStyle(.plain)
@@ -644,7 +646,7 @@ private struct ExtensionChoiceCard: View {
         .overlay {
             RoundedRectangle(cornerRadius: UIScale.pt(14))
                 .strokeBorder(
-                    selected ? brandAccent : DashSkin.line(dark),
+                    selected ? DashSkin.accent(dark) : DashSkin.line(dark),
                     lineWidth: selected ? 1.5 : 1)
         }
     }
@@ -672,10 +674,10 @@ private struct OnboardingPermissionCard: View {
         HStack(alignment: .top, spacing: UIScale.pt(12)) {
             Image(systemName: item.permission.symbolName)
                 .font(.system(size: UIScale.pt(16), weight: .medium))
-                .foregroundStyle(granted ? DashSkin.ok : brandAccent)
+                .foregroundStyle(granted ? DashSkin.ok : DashSkin.accent(dark))
                 .frame(width: UIScale.pt(34), height: UIScale.pt(34))
                 .background(
-                    (granted ? DashSkin.ok : brandAccent).opacity(0.11),
+                    (granted ? DashSkin.ok : DashSkin.accent(dark)).opacity(0.11),
                     in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 HStack(spacing: UIScale.pt(7)) {
@@ -724,6 +726,9 @@ private struct OnboardingPermissionCard: View {
 
 private struct OnboardingPrimaryButtonStyle: ButtonStyle {
     var compact = false
+    @Environment(\.colorScheme) private var scheme
+
+    private var dark: Bool { scheme == .dark }
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -733,7 +738,7 @@ private struct OnboardingPrimaryButtonStyle: ButtonStyle {
             .frame(maxWidth: compact ? nil : .infinity)
             .frame(height: compact ? 32 : 38)
             .background(
-                brandAccent.opacity(configuration.isPressed ? 0.78 : 1),
+                DashSkin.accent(dark).opacity(configuration.isPressed ? 0.78 : 1),
                 in: RoundedRectangle(cornerRadius: compact ? 8 : 10)
             )
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
