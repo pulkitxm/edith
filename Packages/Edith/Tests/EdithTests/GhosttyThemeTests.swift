@@ -27,6 +27,8 @@ import Testing
         #expect(text.contains("selection-foreground = #ffffff"))
         #expect(text.contains("font-size = 13"))
         #expect(text.contains("copy-on-select = clipboard"))
+        #expect(text.contains("mouse-shift-capture = false"))
+        #expect(text.contains(#"keybind = shift+enter=text:\x1b\r"#))
     }
 
     @Test func anUnsetSelectionIsLeftOutEntirely() {

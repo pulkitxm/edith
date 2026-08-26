@@ -58,6 +58,8 @@ public struct GhosttyTheme: Equatable, Sendable {
             "clipboard-read = allow",
             "clipboard-write = allow",
             "copy-on-select = clipboard",
+            "mouse-shift-capture = false",
+            #"keybind = shift+enter=text:\x1b\r"#,
         ]
         if let selectionBackground {
             lines.append("selection-background = \(selectionBackground)")

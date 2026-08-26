@@ -101,6 +101,15 @@ extension GhosttyTerminalView {
         moved(event)
     }
 
+    public override func mouseEntered(with event: NSEvent) {
+        moved(event)
+    }
+
+    public override func mouseExited(with event: NSEvent) {
+        guard let surface, NSEvent.pressedMouseButtons == 0 else { return }
+        ghostty_surface_mouse_pos(surface, -1, -1, Self.mods(from: event.modifierFlags))
+    }
+
     private func moved(_ event: NSEvent) {
         guard let surface else { return }
         let position = point(for: event)
