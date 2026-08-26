@@ -45,15 +45,23 @@ import Testing
     @Test func extensionShortcutsOnlyIncludeEnabledOwners() {
         #expect(
             ExtensionShortcutVisibility.visible(
-                clipboard: false, focusDim: false, presenter: false, colorPicker: false
+                clipboard: false, micMute: false, focusDim: false, presenter: false,
+                colorPicker: false
             ).isEmpty)
         #expect(
             ExtensionShortcutVisibility.visible(
-                clipboard: true, focusDim: false, presenter: true, colorPicker: false)
+                clipboard: true, micMute: false, focusDim: false, presenter: true,
+                colorPicker: false)
                 == [.clipboard, .presenter])
         #expect(
             ExtensionShortcutVisibility.visible(
-                clipboard: true, focusDim: true, presenter: true, colorPicker: true)
+                clipboard: false, micMute: true, focusDim: false, presenter: false,
+                colorPicker: false)
+                == [.micMute])
+        #expect(
+            ExtensionShortcutVisibility.visible(
+                clipboard: true, micMute: true, focusDim: true, presenter: true,
+                colorPicker: true)
                 == ExtensionShortcut.allCases)
     }
 

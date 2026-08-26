@@ -1848,6 +1848,11 @@ private struct MicMuteRows: View {
 
     var body: some View {
         Section {
+            LabeledContent("Shortcut") {
+                HotKeyRecorderControl(keyPrefix: "micHotKey", defaultLabel: "⌘⇧M")
+            }
+            Text("Use this shortcut to mute or unmute every microphone system-wide.")
+                .settingsCaption()
             Toggle(
                 "Show in the menu bar",
                 isOn: $inMenuBar.configured(AppStorageKeys.Mic.muteInMenuBar)
