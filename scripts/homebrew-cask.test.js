@@ -61,15 +61,13 @@ test("the release mirrors the bumped cask to the tap repository", () => {
 });
 
 test("the unified publisher updates and mirrors the cask", () => {
-  const commitStep = releaseWorkflow.indexOf(
-    "- name: Commit and tag the release",
-  );
+  const tagStep = releaseWorkflow.indexOf("- name: Tag the release");
   const publishStep = releaseWorkflow.indexOf("- name: Publish the release");
   const mirrorStep = releaseWorkflow.indexOf(
     "- name: Mirror the cask to the tap repository",
   );
-  expect(commitStep).toBeGreaterThan(-1);
-  expect(publishStep).toBeGreaterThan(commitStep);
+  expect(tagStep).toBeGreaterThan(-1);
+  expect(publishStep).toBeGreaterThan(tagStep);
   expect(mirrorStep).toBeGreaterThan(publishStep);
   expect(releaseWorkflow).toContain("sha256sum ../release-assets/Edith.dmg");
   expect(releaseStateScript).toContain("Casks/edith.rb");

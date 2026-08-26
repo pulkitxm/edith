@@ -77,19 +77,15 @@ function createFixture() {
   const remote = join(root, "remote.git");
   const seed = join(root, "seed");
   const checkout = join(root, "checkout");
-  const plists = join(root, "release-plists");
 
   git(root, "init", "--bare", "--initial-branch=main", remote);
   git(root, "init", "--initial-branch=main", seed);
   configureRepository(seed);
   mkdirSync(join(seed, "Casks"), { recursive: true });
-  mkdirSync(join(seed, "Resources"), { recursive: true });
   writeFileSync(
     join(seed, "Casks/edith.rb"),
     `cask "edith" do\n  version "0.0.79"\n  sha256 "${"a".repeat(64)}"\nend\n`,
   );
-  writeFileSync(join(seed, "Resources/Info.plist"), "old app plist\n");
-  writeFileSync(join(seed, "Resources/HelperInfo.plist"), "old helper plist\n");
   git(seed, "add", ".");
   git(seed, "commit", "-m", "Initial release state");
   git(seed, "remote", "add", "origin", remote);
@@ -97,14 +93,9 @@ function createFixture() {
 
   git(root, "clone", remote, checkout);
   configureRepository(checkout);
-  mkdirSync(plists);
-  writeFileSync(join(plists, "Info.plist"), "new app plist\n");
-  writeFileSync(join(plists, "HelperInfo.plist"), "new helper plist\n");
-
   return {
     builtSha: git(checkout, "rev-parse", "HEAD"),
     checkout,
-    plists,
     remote,
     root,
   };
@@ -113,7 +104,7 @@ function createFixture() {
 function releaseEnvironment(fixture, checksum = firstChecksum) {
   return {
     BUILT_SHA: fixture.builtSha,
-    RELEASE_PLISTS_DIR: fixture.plists,
+    RELEASE_BUILD: "91",
     RELEASE_SHA256: checksum,
     RELEASE_TAG: "v0.0.80",
     RELEASE_VERSION: "0.0.80",
@@ -135,25 +126,33 @@ function installPrePushHook(fixture, commandLine) {
   chmodSync(hook, 0o755);
 }
 
-test("a release cut publishes one atomic commit and retries cleanly", () => {
+test("a release cut tags the approved source and retries cleanly", () => {
   const fixture = createFixture();
   expect(publish(fixture, "cut").exitCode).toBe(0);
 
   const main = git(fixture.remote, "rev-parse", "refs/heads/main");
   const tag = git(fixture.remote, "rev-parse", "refs/tags/v0.0.80^{commit}");
-  expect(tag).toBe(main);
+  expect(main).toBe(fixture.builtSha);
+  expect(tag).toBe(fixture.builtSha);
   expect(git(fixture.remote, "show", "main:Casks/edith.rb")).toContain(
-    `sha256 "${firstChecksum}"`,
+    `sha256 "${"a".repeat(64)}"`,
   );
-  expect(git(fixture.remote, "show", "main:Resources/Info.plist")).toBe(
-    "new app plist",
-  );
-  expect(git(fixture.remote, "show", "main:Resources/HelperInfo.plist")).toBe(
-    "new helper plist",
-  );
+  expect(
+    readFileSync(join(fixture.checkout, "Casks/edith.rb"), "utf8"),
+  ).toContain(`sha256 "${firstChecksum}"`);
+  expect(
+    git(
+      fixture.remote,
+      "for-each-ref",
+      "--format=%(contents:subject)",
+      "refs/tags/v0.0.80",
+    ),
+  ).toBe("Edith v0.0.80 build 91");
 
   expect(publish(fixture, "cut").exitCode).toBe(0);
-  expect(git(fixture.remote, "rev-parse", "refs/heads/main")).toBe(main);
+  expect(git(fixture.remote, "rev-parse", "refs/heads/main")).toBe(
+    fixture.builtSha,
+  );
 });
 
 test("a release cut reports a superseded build without publishing", () => {
@@ -186,12 +185,16 @@ test("a release cut reports a superseded build without publishing", () => {
 
 test("a release cut keeps genuine publication failures fatal", () => {
   const fixture = createFixture();
-  rmSync(join(fixture.plists, "Info.plist"));
+  writeFileSync(
+    join(fixture.checkout, "Casks/edith.rb"),
+    'cask "edith" do\nend\n',
+  );
+  const before = git(fixture.checkout, "status", "--porcelain");
 
   const result = publish(fixture, "cut");
   expect(result.exitCode).toBe(1);
-  expect(result.stderr).toContain("release plists are missing");
-  expect(git(fixture.checkout, "status", "--porcelain")).toBe("");
+  expect(result.stderr).toContain("the cask version does not match");
+  expect(git(fixture.checkout, "status", "--porcelain")).toBe(before);
   expect(
     command(fixture.remote, "git", [
       "show-ref",
@@ -243,22 +246,22 @@ test("a release cut keeps genuine push failures fatal", () => {
   );
 });
 
-test("a rebuild updates the checksum without moving the release tag", () => {
+test("a rebuild prepares the checksum without moving protected main", () => {
   const fixture = createFixture();
   expect(publish(fixture, "cut").exitCode).toBe(0);
   const tag = git(fixture.remote, "rev-parse", "refs/tags/v0.0.80^{commit}");
 
   expect(publish(fixture, "rebuild", secondChecksum).exitCode).toBe(0);
   const rebuiltMain = git(fixture.remote, "rev-parse", "refs/heads/main");
-  expect(rebuiltMain).not.toBe(tag);
+  expect(rebuiltMain).toBe(tag);
   expect(git(fixture.remote, "rev-parse", "refs/tags/v0.0.80^{commit}")).toBe(
     tag,
   );
-  expect(git(fixture.remote, "show", "main:Casks/edith.rb")).toContain(
-    `sha256 "${secondChecksum}"`,
-  );
+  expect(
+    readFileSync(join(fixture.checkout, "Casks/edith.rb"), "utf8"),
+  ).toContain(`sha256 "${secondChecksum}"`);
   expect(git(fixture.remote, "show", "v0.0.80:Casks/edith.rb")).toContain(
-    `sha256 "${firstChecksum}"`,
+    `sha256 "${"a".repeat(64)}"`,
   );
 
   expect(publish(fixture, "rebuild", secondChecksum).exitCode).toBe(0);
@@ -267,8 +270,8 @@ test("a rebuild updates the checksum without moving the release tag", () => {
 
 test("invalid release metadata cannot mutate release files", () => {
   const fixture = createFixture();
-  const originalInfo = readFileSync(
-    join(fixture.checkout, "Resources/Info.plist"),
+  const originalCask = readFileSync(
+    join(fixture.checkout, "Casks/edith.rb"),
     "utf8",
   );
 
@@ -287,7 +290,7 @@ test("invalid release metadata cannot mutate release files", () => {
   expect(malformedChecksum.exitCode).not.toBe(0);
   expect(malformedChecksum.exitCode).not.toBe(75);
   expect(malformedChecksum.stderr).toContain("invalid release checksum");
-  expect(
-    readFileSync(join(fixture.checkout, "Resources/Info.plist"), "utf8"),
-  ).toBe(originalInfo);
+  expect(readFileSync(join(fixture.checkout, "Casks/edith.rb"), "utf8")).toBe(
+    originalCask,
+  );
 });

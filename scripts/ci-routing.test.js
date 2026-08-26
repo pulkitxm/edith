@@ -234,12 +234,12 @@ test("every workflow change runs the runtime guard", () => {
   );
 });
 
-test("generated pushes cannot replace pending product validation", () => {
+test("contributor refresh pushes cannot replace pending product validation", () => {
   expect(ciWorkflow).toContain(
     "github.event_name == 'workflow_dispatch' && github.run_id",
   );
   expect(ciWorkflow).toContain(
-    "startsWith(github.event.head_commit.message, 'Release v')",
+    "startsWith(github.event.head_commit.message, 'Refresh the contributor list')",
   );
   expect(ciWorkflow).toContain("&& github.sha)");
   expect(ciWorkflow).toContain("|| 'active'");
