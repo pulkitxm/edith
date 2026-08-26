@@ -157,6 +157,53 @@ private final class AudioMixerTapProbe: AudioMixerTapControlling {
         #expect(engine.apps.first?.volume == 1)
     }
 
+    @Test func reusedAudioObjectWithNewProcessIdentityDestroysStaleTap() throws {
+        guard #available(macOS 14.4, *) else { return }
+        let first = mixerApp(objectID: 50, pid: 700)
+        let replacement = mixerApp(objectID: 50, pid: 701)
+        let tap = AudioMixerTapProbe()
+        var apps = [first]
+        let engine = MixerEngine(
+            snapshotLoader: { AudioMixerSnapshot(apps: apps, outputUID: "output-a") },
+            tapFactory: { _, _, _ in .success(tap) })
+        defer { engine.shutdown() }
+
+        engine.refresh()
+        engine.setVolume(try #require(engine.apps.first), 0.6)
+        apps = [replacement]
+        engine.refresh()
+
+        #expect(tap.destroyCount == 1)
+        #expect(!engine.hasActiveTaps)
+        #expect(engine.apps.first?.pid == replacement.pid)
+        #expect(engine.apps.first?.volume == 1)
+    }
+
+    @Test func vanishedFailedAdjustmentClearsItsErrorAndCannotRetry() throws {
+        guard #available(macOS 14.4, *) else { return }
+        let app = mixerApp(objectID: 51)
+        var apps = [app]
+        var calls = 0
+        let engine = MixerEngine(
+            snapshotLoader: { AudioMixerSnapshot(apps: apps, outputUID: "output-a") },
+            tapFactory: { _, _, _ in
+                calls += 1
+                return .failure(.deviceStart(-50))
+            })
+        defer { engine.shutdown() }
+
+        engine.refresh()
+        engine.setVolume(try #require(engine.apps.first), 0.4)
+        #expect(engine.actionError != nil)
+        apps = []
+        engine.refresh()
+
+        #expect(engine.actionError == nil)
+        engine.retry()
+        #expect(calls == 1)
+        #expect(engine.actionError == nil)
+    }
+
     @Test func transientDiscoveryFailurePreservesActiveState() throws {
         guard #available(macOS 14.4, *) else { return }
         let app = mixerApp(objectID: 47)

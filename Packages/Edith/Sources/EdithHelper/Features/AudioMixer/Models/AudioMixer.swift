@@ -290,6 +290,7 @@ final class MixerEngine {
     private var taps: [AudioObjectID: any AudioMixerTapControlling] = [:]
     private var gains: [AudioObjectID: Float] = [:]
     private var failedAdjustment: (app: MixerApp, value: Float)?
+    private var actionErrorObjectID: AudioObjectID?
     private var monitoringTask: Task<Void, Never>?
 
     init(
@@ -323,8 +324,9 @@ final class MixerEngine {
     }
 
     func setVolume(_ app: MixerApp, _ requestedValue: Float) {
-        guard apps.contains(where: { $0.objectID == app.objectID }) else {
+        guard apps.contains(where: { Self.sameProcess($0, app) }) else {
             actionError = "\(app.name) is no longer producing audio."
+            actionErrorObjectID = app.objectID
             failedAdjustment = nil
             return
         }
@@ -334,6 +336,7 @@ final class MixerEngine {
             gains.removeValue(forKey: app.objectID)
             publish(app.objectID, volume: 1)
             actionError = nil
+            actionErrorObjectID = nil
             failedAdjustment = nil
             reconcileMonitoring()
             return
@@ -342,11 +345,13 @@ final class MixerEngine {
             tap.setGain(value)
             publish(app.objectID, volume: value)
             actionError = nil
+            actionErrorObjectID = nil
             failedAdjustment = nil
             return
         }
         guard let outputUID else {
             actionError = "The current audio output is unavailable."
+            actionErrorObjectID = app.objectID
             failedAdjustment = (app, value)
             return
         }
@@ -355,10 +360,12 @@ final class MixerEngine {
             taps[app.objectID] = tap
             publish(app.objectID, volume: value)
             actionError = nil
+            actionErrorObjectID = nil
             failedAdjustment = nil
             reconcileMonitoring()
         case let .failure(error):
             actionError = "Could not change \(app.name)'s volume. \(error.message)"
+            actionErrorObjectID = app.objectID
             failedAdjustment = (app, value)
         }
     }
@@ -366,8 +373,13 @@ final class MixerEngine {
     func retry() {
         refresh()
         guard let failedAdjustment,
-            let app = apps.first(where: { $0.objectID == failedAdjustment.app.objectID })
-        else { return }
+            let app = apps.first(where: { Self.sameProcess($0, failedAdjustment.app) })
+        else {
+            actionError = nil
+            actionErrorObjectID = nil
+            self.failedAdjustment = nil
+            return
+        }
         setVolume(app, failedAdjustment.value)
     }
 
@@ -381,6 +393,7 @@ final class MixerEngine {
         outputUID = nil
         apps.removeAll()
         actionError = nil
+        actionErrorObjectID = nil
         discoveryError = nil
         failedAdjustment = nil
     }
@@ -390,24 +403,57 @@ final class MixerEngine {
             destroyAllTaps()
             gains.removeAll()
             actionError = nil
+            actionErrorObjectID = nil
             failedAdjustment = nil
         }
         outputUID = snapshot.outputUID
 
+        var previousApps: [AudioObjectID: MixerApp] = [:]
+        for app in apps { previousApps[app.objectID] = app }
         var seen: Set<AudioObjectID> = []
-        let currentApps = snapshot.apps.filter { seen.insert($0.objectID).inserted }
-        let currentIDs = Set(currentApps.map(\.objectID))
-        for objectID in taps.keys.filter({ !currentIDs.contains($0) }) {
+        var currentApps: [MixerApp] = []
+        var currentIDs: Set<AudioObjectID> = []
+        var replacedIDs: Set<AudioObjectID> = []
+        for app in snapshot.apps where seen.insert(app.objectID).inserted {
+            currentApps.append(app)
+            currentIDs.insert(app.objectID)
+            if let previous = previousApps[app.objectID], !Self.sameProcess(previous, app) {
+                replacedIDs.insert(app.objectID)
+            }
+        }
+        var retiredIDs: [AudioObjectID] = []
+        for objectID in taps.keys
+        where !currentIDs.contains(objectID) || replacedIDs.contains(objectID) {
+            retiredIDs.append(objectID)
+        }
+        for objectID in retiredIDs {
             taps.removeValue(forKey: objectID)?.destroy()
             gains.removeValue(forKey: objectID)
         }
-        gains = gains.filter { currentIDs.contains($0.key) }
-        apps = currentApps.map { app in
+        for objectID in Array(gains.keys)
+        where !currentIDs.contains(objectID) || replacedIDs.contains(objectID) {
+            gains.removeValue(forKey: objectID)
+        }
+        if let actionErrorObjectID,
+            !currentIDs.contains(actionErrorObjectID)
+                || replacedIDs.contains(actionErrorObjectID)
+        {
+            actionError = nil
+            self.actionErrorObjectID = nil
+            failedAdjustment = nil
+        }
+        apps = currentApps
+        for index in apps.indices {
+            let app = apps[index]
             var current = app
             current.volume = gains[app.objectID] ?? 1
-            return current
+            apps[index] = current
         }
         reconcileMonitoring()
+    }
+
+    private static func sameProcess(_ lhs: MixerApp, _ rhs: MixerApp) -> Bool {
+        lhs.objectID == rhs.objectID && lhs.pid == rhs.pid && lhs.bundleID == rhs.bundleID
     }
 
     private func publish(_ objectID: AudioObjectID, volume: Float) {
