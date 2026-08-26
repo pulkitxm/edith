@@ -680,9 +680,9 @@ area changed. Checks and release are therefore the same run, and the release can
 start until every applicable check has gone green.
 There is no second workflow watching for a tag, and no tag trigger anywhere.
 
-`ci.yml` skips itself when the head commit message starts with
-`Refresh the contributor list`, which stops that maintenance commit from starting
-another run. Releases do not write commits to `main`, so they need no loop guard.
+`ci.yml` skips itself when the head commit message starts with `Release v` or
+`Refresh the contributor list`. That stops either generated commit from starting
+another run.
 
 `ci.yml`'s concurrency group cancels in progress runs only for pull requests. On
 `main` runs queue instead, so a newer merge cannot cancel a run whose checks are
@@ -694,9 +694,9 @@ still deciding whether its source is releasable.
 
 **`version`** runs on Linux, refuses to start without the signing and Sparkle
 secrets, and computes the next patch version and build number from the latest
-release tag. New annotated tags carry their build number. The last release commit
-before tag-only publication remains the fallback for older lightweight tags. The
-job writes nothing and pushes nothing; it only decides what is being released and
+release tag. Annotated tags carry their build number, while older lightweight tags
+fall back to the version and build committed in the application plist. The job
+writes nothing and pushes nothing; it only decides what is being released and
 which commit is being built.
 
 **`dmg`** runs on macOS. It checks out the commit `version` chose, stamps both plists
@@ -705,27 +705,26 @@ builds with `./build.sh --no-open --release`, checks the built bundle carries th
 version it was told to build, packages a UDZO disk image with an `/Applications`
 symlink inside, notarizes and staples when the notary secrets exist, generates the
 Sparkle appcast signed with the Sparkle key, verifies the appcast points at the right
-disk image and carries a signature, and uploads `Edith.dmg` and `appcast.xml`. It
-uploads the disk image and appcast for the publisher.
+disk image and carries a signature, and uploads `Edith.dmg`, `appcast.xml`, and the
+two stamped plists for the publisher.
 
 ### Bump
 
 **`publish`** downloads the artifacts, verifies that the approved commit is still
-the head of `main`, rewrites the cask in its temporary checkout, creates an
-annotated release tag carrying the build number, creates the GitHub release,
-mirrors the cask to the tap, and reads the tap back to confirm it landed.
+the head of `main`, commits the stamped plists and rewritten cask together as
+`Release vX.Y.Z`, creates an annotated tag carrying the build number, pushes the
+commit and tag atomically, creates the GitHub release, mirrors the cask to the tap,
+and reads the tap back to confirm it landed.
 
 Nothing is written until the build has passed, so a failed build leaves no tag and
-no cask pointing at a release that does not exist. Protected `main` remains
-immutable outside pull requests. The next merge simply tries the same version
-again.
+no commit, tag, or cask pointing at a release that does not exist. The next merge
+simply tries the same version again.
 
 To rebuild the current release when its assets need replacing, run the Release
 workflow by hand from `main` with its required `rebuild` input set to that tag. The
-workflow builds from the tag, replaces the release assets, prepares the changed DMG
-checksum in its temporary cask, and mirrors that cask to the tap. It refuses older
-tags. This path does not create a new version, move the existing tag, or write to
-`main`.
+workflow builds from the tag, replaces the release assets, commits a changed DMG
+checksum to `main` when needed, and mirrors that cask to the tap. It refuses older
+tags. This path does not create a new version or move the existing tag.
 
 A new release cannot be cut from the Release workflow's manual entry point. To
 recover an automatic release that CI skipped, dispatch the CI workflow from `main`
@@ -742,26 +741,27 @@ to `scripts/publish-release-state.sh`:
 ```bash
 RELEASE_SHA256="$(sha256sum ../release-assets/Edith.dmg | cut -d' ' -f1)"
 export RELEASE_SHA256
+export RELEASE_PLISTS_DIR="$GITHUB_WORKSPACE/release-plists"
 ../scripts/publish-release-state.sh cut
 ```
 
 For a rebuild it exports the newly computed checksum and invokes the same script
 with `rebuild`. The script validates the tag, version, build and checksum; rewrites
-the cask through a temporary file; verifies both fields; and owns the tag push for
-a cut. Keeping those rules in a tested script lets CI exercise the cut and rebuild
-behavior without duplicating shell logic in the workflow.
+the cask through a temporary file; verifies both fields; and owns the commit and
+tag pushes. Keeping those rules in a tested script lets CI exercise the cut and
+rebuild behavior without duplicating shell logic in the workflow.
 
 Design notes on the parts that are not obvious.
 
-**A tag, not a branch bypass.** `main` is protected by a ruleset requiring pull
-requests and status checks. The release publisher does not bypass those rules. It
-uses the repository-scoped app token only to create the release tag and GitHub
-release after CI has approved the exact commit.
+**A scoped branch bypass.** `main` is protected by rulesets requiring pull requests
+and status checks. The release publisher uses a short-lived Pukbot installation
+token, and every active rule that would reject the generated commit must list that
+app as an always-allowed bypass actor. Ordinary users retain the full protection.
 
 **`ref: main`, then the tag.** A cut checks out the CI-approved `main` commit and
-tags that source directly. A rebuild checks out the existing tag. The built plists
-are stamped in the temporary build checkout, while the cask is generated for the
-tap from the final disk image checksum.
+creates the release commit and tag from it. A rebuild starts from the existing tag,
+then moves to current `main` before committing a changed checksum. The plists in the
+release commit are the exact files stamped in the build job.
 
 **The artifact, not the release.** The checksum comes from
 `actions/download-artifact`, the same bytes the `dmg` job produced and `publish`
@@ -783,16 +783,19 @@ The cut path in `publish-release-state.sh`:
 git fetch origin main --tags
 [[ "$(git rev-parse HEAD)" == "$BUILT_SHA" ]]
 [[ "$(git rev-parse origin/main)" == "$BUILT_SHA" ]]
+cp "$RELEASE_PLISTS_DIR/Info.plist" Resources/Info.plist
+cp "$RELEASE_PLISTS_DIR/HelperInfo.plist" Resources/HelperInfo.plist
 rewrite_cask
 verify_cask
-git tag -f -a "$RELEASE_TAG" -m "Edith $RELEASE_TAG build $RELEASE_BUILD" "$BUILT_SHA"
-git push origin "refs/tags/$RELEASE_TAG"
+git commit Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb \
+  -m "Release ${RELEASE_TAG}"
+git tag -a "$RELEASE_TAG" -m "Edith $RELEASE_TAG build $RELEASE_BUILD"
+git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"
 ```
 
-**No release commit.** Version and build metadata live on the annotated release
-tag. The application plists are stamped before the build, and the cask checksum is
-derived from the resulting disk image. Neither generated state needs to bypass the
-branch ruleset.
+**One release commit.** The application and helper plists move with the cask, so
+the source tree, installed package, and Homebrew metadata all name the same release.
+The annotated tag carries the build number for the next version calculation.
 
 **Refuse a moving base.** `main` can move while a release builds. The script verifies
 that both its checkout and the latest `origin/main` still equal the commit CI built.
@@ -800,37 +803,34 @@ If another change landed, the release stops before writing anything instead of
 combining checked artifacts with a different source revision. The next CI run can
 release the new head.
 
-**Compensate for a moving branch.** The build monitor stops when `main` moves. The
-publisher checks once more before tagging, then reads `main` back after the push. If
-the branch moved during that final window, it removes the new tag and yields to the
-newer CI run.
+**Atomic publication.** The branch and tag are one ref transaction. If `main` moves
+during the final window, neither ref lands and the newer CI run takes over.
 
 The mirror step:
 
 ```yaml
       - name: Mirror the cask to the tap repository
         env:
-          TAP_PUSH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
+          PUKBOT_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           git clone --depth 1 \
-            "https://x-access-token:${TAP_PUSH_TOKEN}@github.com/pulkitxm/homebrew-tap.git" tap
+            "https://x-access-token:${PUKBOT_TOKEN}@github.com/pulkitxm/homebrew-tap.git" tap
           cp release-source/Casks/edith.rb tap/Casks/edith.rb
           cd tap
           if git diff --quiet -- Casks/edith.rb; then
             echo "the tap already carries $RELEASE_TAG"
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "pukbot[bot]"
+          git config user.email "320458784+pukbot[bot]@users.noreply.github.com"
           git add Casks/edith.rb
           git commit -m "Update the Edith cask to ${RELEASE_TAG}"
           git push origin HEAD:main
 ```
 
-**Why a token.** `GITHUB_TOKEN` is scoped to the repository the workflow runs in. It
-cannot push to a different repository, so a cross-repository push needs a credential
-of its own: a fine-grained personal access token scoped to `pulkitxm/homebrew-tap`
-with read and write access to contents, stored as `TAP_PUSH_TOKEN`.
+**Why an app token.** `GITHUB_TOKEN` is scoped to the repository the workflow runs
+in. The Pukbot installation spans both repositories, so its short-lived token can
+push the release state and mirror the cask without storing a personal token.
 
 **Fail rather than skip.** The version job refuses to start without the token, and
 the mirror step fails on any clone or push error. A silent skip could publish a
@@ -963,30 +963,12 @@ gh api repos/pulkitxm/homebrew-tap/contents/Casks/edith.rb --jq .content | base6
 
 The `version` line should be the release you just cut.
 
-### Set up the two push tokens
+### Set up Pukbot publication
 
-Both are required once, before the first release that mirrors the cask.
-
-`RELEASE_PUSH_TOKEN` lets the release jobs push to a protected `main`: a fine
-grained token scoped to `pulkitxm/edith` with read and write access to Contents,
-created by someone with the repository admin role, whose ruleset bypass it inherits.
-
-```
-gh secret set RELEASE_PUSH_TOKEN --repo pulkitxm/edith
-```
-
-`TAP_PUSH_TOKEN` lets the mirror step push to the tap.
-
-1. Create a fine-grained personal access token.
-2. Scope it to `pulkitxm/homebrew-tap` only.
-3. Give it read and write access to Contents.
-4. Add it to `pulkitxm/edith` as `TAP_PUSH_TOKEN`:
-
-```
-gh secret set TAP_PUSH_TOKEN --repo pulkitxm/edith
-```
-
-Rotating it is the same command with a new value. Nothing else needs to change.
+Set `PUKBOT_CLIENT_ID` as a repository variable and `PUKBOT_PRIVATE_KEY` as an
+environment secret for `pukbot-production`. Install the app on both repositories
+with Contents write access. Every active ruleset on `main` that blocks a direct
+release push must list Pukbot as an always-allowed bypass actor.
 
 ### Fix a broken checksum
 
@@ -1033,8 +1015,8 @@ question worth asking after a failed release run.
 | `Cask 'edith' is unavailable` on a new machine | Bare token with no tap installed | Use `brew install --cask pulkitxm/tap/edith` |
 | Error naming `pulkitxm/edith` | Two-segment name, does not match the tap regex | Three segments: `pulkitxm/tap/edith` |
 | `SHA256 mismatch` | Cask version and checksum are out of step, or the release asset was replaced | Recompute from the published DMG, fix both repositories |
-| Release green, tap still on the old version | `publish` job's mirror step failed, usually an expired `TAP_PUSH_TOKEN` | Fix the secret, re-run the job |
-| `GH013: Repository rule violations found for refs/heads/main` | A job pushed to `main` with `GITHUB_TOKEN`, which no ruleset bypass covers | Check out with `RELEASE_PUSH_TOKEN` |
+| Release green, tap still on the old version | Pukbot lacks access to the tap, or the mirror push failed | Restore the app installation, then re-run the job |
+| `GH013: Repository rule violations found for refs/heads/main` | An active `main` ruleset does not grant Pukbot bypass | Add Pukbot as an always-allowed bypass actor |
 | `brew upgrade` never updates Edith | `auto_updates true`, working as designed | `brew upgrade --cask --greedy edith` |
 | `brew info` shows an older version than the running app | Sparkle updated in place | Cosmetic; a greedy upgrade re-syncs it |
 | Gatekeeper warning on first launch | Build was not notarized; Homebrew applied quarantine like any download | Notary secrets in the release workflow |

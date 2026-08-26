@@ -91,7 +91,7 @@ Nothing about the cask is hand-edited. The `publish` job in
 plists and release tag. It then publishes the assets and pushes the same cask to
 the tap repository. CI ignores that release commit, so it cannot loop.
 
-Pushing to the tap needs a `TAP_PUSH_TOKEN` secret on this repository: a fine
-grained personal access token scoped to `pulkitxm/homebrew-tap` with read and
-write access to contents. Without it the release is blocked before a version is
-cut.
+Pushing the release commit and mirroring the cask use a short-lived Pukbot
+installation token. The app needs Contents write access to this repository and
+`pulkitxm/homebrew-tap`, and it must be an always-allowed bypass actor for every
+active `main` ruleset that blocks direct pushes.
