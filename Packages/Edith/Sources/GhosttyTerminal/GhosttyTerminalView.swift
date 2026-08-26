@@ -6,6 +6,7 @@ public final class GhosttyTerminalView: NSView {
 
     private(set) var surface: ghostty_surface_t?
     private var launch: GhosttyLaunch?
+    private var owned: GhosttyConfigStrings?
     private var closed = false
 
     public override var isFlipped: Bool { false }
@@ -48,33 +49,17 @@ public final class GhosttyTerminalView: NSView {
         config.scale_factor = Double(window?.backingScaleFactor ?? 2)
         config.context = GHOSTTY_SURFACE_CONTEXT_TAB
 
-        var envPairs: [ghostty_env_var_s] = []
-        var storage: [[CChar]] = []
-        for entry in launch.environment {
-            guard let split = entry.firstIndex(of: "=") else { continue }
-            var key = Array(String(entry[entry.startIndex..<split]).utf8CString)
-            var value = Array(String(entry[entry.index(after: split)...]).utf8CString)
-            storage.append(key)
-            storage.append(value)
-            envPairs.append(
-                ghostty_env_var_s(
-                    key: UnsafePointer(storage[storage.count - 2]),
-                    value: UnsafePointer(storage[storage.count - 1])))
-            _ = key
-            _ = value
-        }
-
-        let command = launch.command
-        command.withCString { commandPointer in
-            config.command = commandPointer
-            if let directory = launch.workingDirectory {
-                directory.withCString { directoryPointer in
-                    config.working_directory = directoryPointer
-                    surface = ghostty_surface_new(app, &config)
-                }
-            } else {
+        owned = GhosttyConfigStrings(launch: launch)
+        config.command = owned?.command
+        config.working_directory = owned?.workingDirectory
+        if let owned, !owned.environment.isEmpty {
+            owned.environment.withUnsafeBufferPointer { buffer in
+                config.env_vars = UnsafeMutablePointer(mutating: buffer.baseAddress)
+                config.env_var_count = buffer.count
                 surface = ghostty_surface_new(app, &config)
             }
+        } else {
+            surface = ghostty_surface_new(app, &config)
         }
 
         guard let surface else { return }
