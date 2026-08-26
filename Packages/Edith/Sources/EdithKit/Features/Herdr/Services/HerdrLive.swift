@@ -2,6 +2,7 @@ import Foundation
 
 public enum HerdrLive {
     static let remoteLeaseDuration = Duration.seconds(20)
+    static let replayReconcileDelay = Duration.milliseconds(600)
 
     public static func watch(_ yield: @escaping @Sendable ([HerdrHostSnapshot]) -> Void) async {
         let fleet = FleetBag(yield: yield)
@@ -149,9 +150,6 @@ public enum HerdrLive {
                 try await publishSnapshot(
                     socket: socket, connect: connect, sessions: sessions, fleet: fleet)
                 try await stream.subscribeBoard()
-                try await Task.sleep(for: .milliseconds(400))
-                try await publishSnapshot(
-                    socket: socket, connect: connect, sessions: sessions, fleet: fleet)
                 let events = stream.events
                 await withTaskGroup(of: Void.self) { group in
                     group.addTask {
@@ -160,12 +158,14 @@ public enum HerdrLive {
                         }
                     }
                     group.addTask {
+                        var delay = replayReconcileDelay
                         while !Task.isCancelled {
-                            try? await Task.sleep(for: .seconds(20))
+                            try? await Task.sleep(for: delay)
                             guard !Task.isCancelled else { return }
                             try? await publishSnapshot(
                                 socket: socket, connect: connect, sessions: sessions,
                                 fleet: fleet)
+                            delay = .seconds(20)
                         }
                     }
                     await group.next()

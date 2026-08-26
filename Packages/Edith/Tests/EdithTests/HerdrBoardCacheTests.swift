@@ -29,6 +29,21 @@ import Testing
         #expect(Set(afterIdle.map(\.id)).count == 2)
     }
 
+    @Test func aReplayedEventCannotBringBackAPaneThatIsGone() {
+        let cache = HerdrBoardCache(context: tuf)
+        cache.applySnapshot(tufSnapshot(agents: true, queryStatus: "idle", boardStatus: "idle"))
+        let resurrected = cache.applyEvent(
+            """
+            {"event":"pane_created","data":{"type":"pane_created","pane":{"pane_id":"w9:p9","agent":"claude","agent_status":"idle","terminal_title_stripped":"Long gone","workspace_id":"w3"}}}
+            """)
+        #expect(resurrected.map(\.pane).contains("w9:p9"))
+
+        let reconciled = cache.applySnapshot(
+            tufSnapshot(agents: true, queryStatus: "idle", boardStatus: "idle"))
+        #expect(!reconciled.map(\.pane).contains("w9:p9"))
+        #expect(reconciled.map(\.pane) == ["w3:p1N", "w3:p1Q"])
+    }
+
     @Test func snapshotThatDropsAgentsKeepsTheLivePanes() {
         let cache = HerdrBoardCache(context: tuf)
         cache.applySnapshot(tufSnapshot(agents: true, queryStatus: "idle", boardStatus: "idle"))
