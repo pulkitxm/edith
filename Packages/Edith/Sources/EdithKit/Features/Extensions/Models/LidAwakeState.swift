@@ -7,6 +7,7 @@ public enum LidAwakeState {
     public static let sessionKey = "lidAwakeSession"
     public static let sessionDeadlineKey = "lidAwakeSessionDeadline"
     public static let batteryThresholdKey = "lidAwakeBatteryThreshold"
+    public static let batteryThresholdRange = 0...100
 
     public static func isEnabled(_ defaults: UserDefaults = SharedDefaults.store) -> Bool {
         defaults.bool(forKey: enabledKey)
@@ -47,6 +48,20 @@ public enum LidAwakeState {
         } else {
             defaults.removeObject(forKey: sessionDeadlineKey)
         }
+    }
+
+    public static func batteryThreshold(
+        _ defaults: UserDefaults = SharedDefaults.store
+    ) -> Int {
+        normalizedBatteryThreshold(defaults.integer(forKey: batteryThresholdKey))
+    }
+
+    public static func normalizedBatteryThreshold(_ threshold: Int) -> Int {
+        min(batteryThresholdRange.upperBound, max(batteryThresholdRange.lowerBound, threshold))
+    }
+
+    public static func isValidBatteryThreshold(_ threshold: Int) -> Bool {
+        batteryThresholdRange.contains(threshold)
     }
 }
 
@@ -109,11 +124,13 @@ public enum LidAwakeBatteryPolicy {
         threshold: Int,
         hysteresis: Int = 5
     ) -> LidAwakeBatteryAction {
+        let threshold = LidAwakeState.normalizedBatteryThreshold(threshold)
         guard threshold > 0 else { return .none }
         if !suspended, intent, !onAC, !overridden, percent < threshold {
             return .suspend
         }
-        if suspended, onAC, percent >= threshold + hysteresis {
+        let resumeThreshold = threshold + min(max(0, hysteresis), 100 - threshold)
+        if suspended, onAC, percent >= resumeThreshold {
             return .resume
         }
         return .none
