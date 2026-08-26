@@ -10,6 +10,7 @@ public final class GhosttyTerminalView: NSView {
     private var themeConfig: ghostty_config_t?
     private var owned: GhosttyConfigStrings?
     private var closed = false
+    private var drawScheduled = false
 
     public override var isFlipped: Bool { false }
 
@@ -90,8 +91,12 @@ public final class GhosttyTerminalView: NSView {
     }
 
     func scheduleDraw() {
+        guard !drawScheduled else { return }
+        drawScheduled = true
         DispatchQueue.main.async { [weak self] in
-            guard let self, let surface = self.surface else { return }
+            guard let self else { return }
+            self.drawScheduled = false
+            guard let surface = self.surface, self.window != nil else { return }
             ghostty_surface_draw(surface)
         }
     }
