@@ -13,7 +13,7 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: build install reset reinstall release loc ci ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-bundle site-dev cli icon wiki wiki-push
+.PHONY: ghostty build install reset reinstall release loc ci ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-bundle site-dev cli icon wiki wiki-push
 
 ci:
 	bun install --frozen-lockfile
@@ -142,6 +142,10 @@ verify-bundle:
 	codesign --verify dist/Edith.app/Contents/Library/LoginItems/Edith.app
 	codesign --verify "dist/Edith.app/Contents/Library/Applications/Edith Files.app"
 	codesign --verify --deep --strict dist/Edith.app
+
+
+ghostty:
+	scripts/build-ghostty.sh
 
 build:
 	./build.sh $(FLAGS)

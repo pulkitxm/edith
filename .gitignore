@@ -28,3 +28,4 @@ apps/promo-video/out/
 /dmg-root/
 .vercel
 apps/companion/target/
+vendor/
