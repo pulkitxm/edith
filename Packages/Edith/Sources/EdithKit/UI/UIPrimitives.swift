@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-public enum EdithButtonRole: Sendable, CaseIterable {
+public enum EdithButtonRole: Sendable, CaseIterable, Hashable {
     case primary
     case secondary
     case borderless

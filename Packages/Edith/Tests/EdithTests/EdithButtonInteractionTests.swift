@@ -81,6 +81,30 @@ import Testing
         #expect(probe.activations == points.count)
     }
 
+    @Test func roleGalleryActivatesEveryVisibleBound() async throws {
+        let probe = EdithButtonGalleryProbe()
+        let harness = EdithButtonHarness(
+            rootView: EdithButtonRoleGallery(probe: probe),
+            size: CGSize(width: 520, height: 620))
+        defer { harness.close() }
+
+        let frames = try await harness.galleryFrames(probe)
+        for role in EdithButtonRole.allCases {
+            let frame = try #require(frames[role])
+            let inset = frame.insetBy(dx: 1, dy: 1)
+            let points = [
+                CGPoint(x: frame.midX, y: frame.midY),
+                CGPoint(x: inset.minX, y: inset.minY),
+                CGPoint(x: inset.maxX, y: inset.maxY),
+            ]
+            for point in points {
+                let before = probe.activations[role, default: 0]
+                harness.click(point)
+                #expect(probe.activations[role, default: 0] == before + 1)
+            }
+        }
+    }
+
     @Test func spaceShortcutActivatesOnce() async throws {
         let probe = EdithButtonProbe()
         let harness = EdithButtonHarness(
@@ -115,6 +139,12 @@ import Testing
 private final class EdithButtonProbe {
     var activations = 0
     var buttonFrame: CGRect?
+}
+
+@MainActor
+private final class EdithButtonGalleryProbe {
+    var activations: [EdithButtonRole: Int] = [:]
+    var frames: [EdithButtonRole: CGRect] = [:]
 }
 
 private struct EdithButtonFrames {
@@ -195,6 +225,52 @@ private struct EdithButtonDelegatingStyle: ButtonStyle {
     }
 }
 
+private struct EdithButtonRoleGallery: View {
+    let probe: EdithButtonGalleryProbe
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(EdithButtonRole.allCases, id: \.self) { role in
+                Button {
+                    probe.activations[role, default: 0] += 1
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: role == .destructive ? "trash" : "sparkles")
+                        Text(String(describing: role))
+                        if role == .row || role == .selection { Spacer(minLength: 0) }
+                    }
+                }
+                .buttonStyle(.edith(role, selected: role == .selection))
+                .background(EdithButtonGalleryFrameReader(role: role, probe: probe))
+                .overlay {
+                    Rectangle()
+                        .stroke(Color.pink.opacity(0.9), lineWidth: 1)
+                        .allowsHitTesting(false)
+                }
+                .accessibilityLabel("\(String(describing: role)) fixture")
+            }
+        }
+        .padding(40)
+        .frame(width: 520, height: 620, alignment: .topLeading)
+    }
+}
+
+private struct EdithButtonGalleryFrameReader: NSViewRepresentable {
+    let role: EdithButtonRole
+    let probe: EdithButtonGalleryProbe
+
+    func makeNSView(context: Context) -> NSView {
+        NSView()
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async {
+            guard view.window != nil else { return }
+            probe.frames[role] = view.convert(view.bounds, to: nil)
+        }
+    }
+}
+
 private struct EdithButtonFrameReader: NSViewRepresentable {
     let probe: EdithButtonProbe
 
@@ -215,10 +291,10 @@ private final class EdithButtonHarness {
     private static var retained: [EdithButtonHarness] = []
     private let window: NSWindow
 
-    init<Content: View>(rootView: Content) {
+    init<Content: View>(rootView: Content, size: CGSize = CGSize(width: 360, height: 180)) {
         NSApplication.shared.activate()
         let host = NSHostingView(rootView: rootView)
-        host.frame = CGRect(x: 0, y: 0, width: 360, height: 180)
+        host.frame = CGRect(origin: .zero, size: size)
         window = EdithButtonWindow(
             contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.acceptsMouseMovedEvents = true
@@ -251,6 +327,18 @@ private final class EdithButtonHarness {
         mouse(.leftMouseDown, at: point)
         mouse(.leftMouseUp, at: point)
         settle()
+    }
+
+    func galleryFrames(_ probe: EdithButtonGalleryProbe) async throws
+        -> [EdithButtonRole: CGRect]
+    {
+        for _ in 0..<40 {
+            if probe.frames.count == EdithButtonRole.allCases.count {
+                return probe.frames
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        throw EdithButtonHarnessError.missingFrames
     }
 
     func key(code: UInt16, characters: String) {
