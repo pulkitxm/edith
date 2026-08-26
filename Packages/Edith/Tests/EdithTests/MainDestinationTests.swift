@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Edith
 
@@ -73,5 +74,32 @@ import Testing
                 mainWindowSection: "permissions", settingsTab: "shortcuts")
                 == MainNavigationSelection(
                     mainWindowSection: "home", settingsTab: "shortcuts"))
+    }
+
+    @Test func everyExtensionBackedUtilityKeepsTheFooterVisible() {
+        #expect(
+            !SidebarUtilityVisibility(system: false, presenter: false, lidAwake: false)
+                .hasActions)
+        #expect(
+            SidebarUtilityVisibility(system: true, presenter: false, lidAwake: false)
+                .hasActions)
+        #expect(
+            SidebarUtilityVisibility(system: false, presenter: true, lidAwake: false)
+                .hasActions)
+        #expect(
+            SidebarUtilityVisibility(system: false, presenter: false, lidAwake: true)
+                .hasActions)
+    }
+
+    @Test func extensionBackedUtilitiesShareOneAnimatedVisibilityState() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Edith/Core/Navigation/MainNavigationView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        #expect(source.contains("value: sidebarUtilityVisibility"))
+        #expect(source.components(separatedBy: ".transition(sidebarUtilityTransition)").count == 5)
     }
 }

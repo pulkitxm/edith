@@ -276,6 +276,16 @@ enum SidebarDisclosureGeometry {
     }
 }
 
+struct SidebarUtilityVisibility: Equatable {
+    let system: Bool
+    let presenter: Bool
+    let lidAwake: Bool
+
+    var hasActions: Bool {
+        system || presenter || lidAwake
+    }
+}
+
 private struct CollapsibleSidebarLayout: Layout {
     var progress: Double
 
@@ -794,7 +804,22 @@ struct MainWindowView: View {
     }
 
     private var footerVisible: Bool {
-        systemEnabled || presenterEnabled || permissionsNeedAttention || updater.updateReady != nil
+        sidebarUtilityVisibility.hasActions || permissionsNeedAttention
+            || updater.updateReady != nil
+    }
+
+    private var sidebarUtilityVisibility: SidebarUtilityVisibility {
+        SidebarUtilityVisibility(
+            system: systemEnabled,
+            presenter: presenterEnabled,
+            lidAwake: lidAwakeEnabled)
+    }
+
+    private var sidebarUtilityTransition: AnyTransition {
+        Motion.transition(
+            .move(edge: .bottom).combined(with: .opacity),
+            reduceMotion: reduceMotion,
+            preferCrossFade: false)
     }
 
     private func sidebar(_ bandHeight: CGFloat) -> some View {
@@ -805,8 +830,11 @@ struct MainWindowView: View {
                 VStack(spacing: UIScale.pt(0)) {
                     sidebarList
                     if footerVisible {
-                        Divider()
-                        sidebarFooter
+                        VStack(spacing: 0) {
+                            Divider()
+                            sidebarFooter
+                        }
+                        .transition(sidebarUtilityTransition)
                     }
                     credit
                         .padding(.vertical, UIScale.pt(8))
@@ -1014,7 +1042,7 @@ struct MainWindowView: View {
             if let version = updater.updateReady {
                 updateReadyPill(version)
             }
-            if systemEnabled || presenterEnabled {
+            if sidebarUtilityVisibility.hasActions {
                 quickActions
             }
             if permissionsNeedAttention {
@@ -1068,16 +1096,20 @@ struct MainWindowView: View {
         ]
         VStack(spacing: UIScale.pt(8)) {
             if systemEnabled {
-                if clampedSidebarWidth < 220 {
-                    tiles[0]; tiles[1]
-                } else {
-                    HStack(spacing: UIScale.pt(8)) {
+                VStack(spacing: UIScale.pt(8)) {
+                    if clampedSidebarWidth < 220 {
                         tiles[0]; tiles[1]
+                    } else {
+                        HStack(spacing: UIScale.pt(8)) {
+                            tiles[0]; tiles[1]
+                        }
                     }
                 }
+                .transition(sidebarUtilityTransition)
             }
             if presenterEnabled {
                 presenterQuickActionTile
+                    .transition(sidebarUtilityTransition)
             }
             if lidAwakeEnabled {
                 quickActionTile(
@@ -1091,8 +1123,12 @@ struct MainWindowView: View {
                         confirmingLidAwake = true
                     }
                 }
+                .transition(sidebarUtilityTransition)
             }
         }
+        .animation(
+            Motion.animation(Motion.glide, reduceMotion: reduceMotion),
+            value: sidebarUtilityVisibility)
     }
 
     private var presenterQuickActionTile: some View {
