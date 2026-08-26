@@ -437,7 +437,10 @@ private actor PreviewTransferGate {
             for: agent, environment: ["TERM=xterm"],
             executable: URL(fileURLWithPath: "/opt/homebrew/bin/herdr"))
         #expect(request.executable == "/opt/homebrew/bin/herdr")
-        #expect(request.arguments == ["--session", "work", "agent", "attach", "w3:p1N"])
+        #expect(
+            request.arguments == [
+                "--session", "work", "agent", "attach", "w3:p1N", "--takeover",
+            ])
         #expect(request.environment == ["TERM=xterm"])
     }
 

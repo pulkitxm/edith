@@ -11,7 +11,7 @@ public enum HerdrAttachCommand {
     }
 
     public static func herdrLine(session: String, pane: String) -> String {
-        "herdr --session \(session) agent attach \(pane)"
+        "herdr --session \(session) agent attach \(pane) --takeover"
     }
 
     public static func remoteShellLine(session: String, pane: String) -> String {
@@ -19,6 +19,6 @@ public enum HerdrAttachCommand {
     }
 
     public static func arguments(session: String, pane: String) -> [String] {
-        ["--session", session, "agent", "attach", pane]
+        ["--session", session, "agent", "attach", pane, "--takeover"]
     }
 }

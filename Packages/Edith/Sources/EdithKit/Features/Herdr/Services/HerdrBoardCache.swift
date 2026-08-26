@@ -99,6 +99,10 @@ public final class HerdrBoardCache: @unchecked Sendable {
                 }
                 upsert(record)
             }
+        case "pane_agent_status_changed":
+            if let record = HerdrListParser.eventPane(in: text), knownPanes.contains(record.pane) {
+                upsert(record)
+            }
         case "workspace_created", "workspace_updated", "workspace_renamed":
             if let workspace = HerdrListParser.eventWorkspace(in: text) {
                 if let label = workspace.label { labels[workspace.id] = label }
