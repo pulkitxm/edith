@@ -126,6 +126,24 @@ import Testing
         #expect(!third.railOpen)
     }
 
+    @Test func eachRailSectionCollapsesAndSurvivesARestart() {
+        let suite = defaults()
+        let first = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(!first.terminalsCollapsed)
+        #expect(!first.agentsCollapsed)
+        first.terminalsCollapsed = true
+
+        let second = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(second.terminalsCollapsed)
+        #expect(!second.agentsCollapsed)
+
+        second.agentsCollapsed = true
+        second.terminalsCollapsed = false
+        let third = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(third.agentsCollapsed)
+        #expect(!third.terminalsCollapsed)
+    }
+
     @Test func theRailRemembersWhetherItWasCollapsed() {
         let store = defaults()
         let first = HerdrStore(defaults: store, liveWatcher: { _ in })

@@ -520,26 +520,41 @@ struct HerdrPage: View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    railHeader(
+                        "Terminals", count: machineTerminals.count,
+                        collapsed: store.terminalsCollapsed
+                    ) {
+                        store.terminalsCollapsed.toggle()
+                    }
+                    if !store.terminalsCollapsed {
+                        ForEach(machineTerminals) { terminal in
+                            agentRow(terminal)
+                        }
+                    }
                     if !onBoard {
-                        railHeader("Agents", count: listedAgents.count)
-                        ForEach(listedAgents) { agent in
-                            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                                agentRow(agent)
-                                if store.selectedTab == agent.id {
-                                    HerdrAgentViewToggle(
-                                        selection: store.view(for: agent.id), compactStyle: true
-                                    ) { option in
-                                        store.open(agent, showing: option)
+                        railHeader(
+                            "Agents", count: listedAgents.count,
+                            collapsed: store.agentsCollapsed
+                        ) {
+                            store.agentsCollapsed.toggle()
+                        }
+                        if !store.agentsCollapsed {
+                            ForEach(listedAgents) { agent in
+                                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                                    agentRow(agent)
+                                    if store.selectedTab == agent.id {
+                                        HerdrAgentViewToggle(
+                                            selection: store.view(for: agent.id),
+                                            compactStyle: true
+                                        ) { option in
+                                            store.open(agent, showing: option)
+                                        }
+                                        .padding(.horizontal, UIScale.pt(8))
+                                        .padding(.bottom, UIScale.pt(4))
                                     }
-                                    .padding(.horizontal, UIScale.pt(8))
-                                    .padding(.bottom, UIScale.pt(4))
                                 }
                             }
                         }
-                    }
-                    railHeader("Terminals", count: machineTerminals.count)
-                    ForEach(machineTerminals) { terminal in
-                        agentRow(terminal)
                     }
                 }
                 .padding(.horizontal, UIScale.pt(6))
@@ -551,19 +566,34 @@ struct HerdrPage: View {
         .background(DashSkin.paper(dark))
     }
 
-    private func railHeader(_ title: String, count: Int) -> some View {
-        HStack(spacing: UIScale.pt(8)) {
-            Text(title)
-                .font(.system(size: UIScale.pt(11), weight: .semibold))
-                .foregroundStyle(DashSkin.ink(dark))
-            Text("\(count)")
-                .font(DashSkin.mono(10, weight: .medium))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            Spacer(minLength: 0)
+    private func railHeader(
+        _ title: String, count: Int, collapsed: Bool, toggle: @escaping () -> Void
+    ) -> some View {
+        Button {
+            withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) { toggle() }
+        } label: {
+            HStack(spacing: UIScale.pt(6)) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: UIScale.pt(9), weight: .bold))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .rotationEffect(.degrees(collapsed ? 0 : 90))
+                Text(title)
+                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .foregroundStyle(DashSkin.ink(dark))
+                Text("\(count)")
+                    .font(DashSkin.mono(10, weight: .medium))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, UIScale.pt(8))
+            .padding(.top, UIScale.pt(10))
+            .padding(.bottom, UIScale.pt(4))
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, UIScale.pt(8))
-        .padding(.top, UIScale.pt(10))
-        .padding(.bottom, UIScale.pt(4))
+        .buttonStyle(.plain)
+        .pointerCursor()
+        .help(collapsed ? "Show \(title.lowercased())" : "Hide \(title.lowercased())")
+        .accessibilityLabel("\(title), \(collapsed ? "collapsed" : "expanded")")
     }
 
     private func agentRow(_ agent: HerdrAgent) -> some View {

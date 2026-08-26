@@ -29,6 +29,18 @@ final class HerdrStore {
         }
     }
     var railOpen = true
+    var agentsCollapsed = false {
+        didSet {
+            guard agentsCollapsed != oldValue else { return }
+            defaults.set(agentsCollapsed, forKey: AppStorageKeys.Herdr.agentsCollapsed)
+        }
+    }
+    var terminalsCollapsed = false {
+        didSet {
+            guard terminalsCollapsed != oldValue else { return }
+            defaults.set(terminalsCollapsed, forKey: AppStorageKeys.Herdr.terminalsCollapsed)
+        }
+    }
 
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
@@ -44,6 +56,10 @@ final class HerdrStore {
         self.liveWatcher = liveWatcher
         railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
         detailOpen = defaults.object(forKey: AppStorageKeys.Herdr.detailOpen) as? Bool ?? true
+        agentsCollapsed =
+            defaults.object(forKey: AppStorageKeys.Herdr.agentsCollapsed) as? Bool ?? false
+        terminalsCollapsed =
+            defaults.object(forKey: AppStorageKeys.Herdr.terminalsCollapsed) as? Bool ?? false
     }
 
     var agents: [HerdrAgent] { hosts.flatMap(\.agents) }
