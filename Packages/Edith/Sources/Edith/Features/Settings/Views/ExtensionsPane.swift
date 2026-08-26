@@ -329,6 +329,7 @@ private struct ExtensionMarketplaceCard: View {
                     .controlSize(.small)
                     .tint(brandAccent)
                     .disabled(switchDisabled)
+                    .accessibilityLabel("\(entry.title) enabled")
                     .pointerCursor()
             }
             Button(action: open) {
@@ -1848,6 +1849,11 @@ private struct MicMuteRows: View {
 
     var body: some View {
         Section {
+            LabeledContent("Shortcut") {
+                HotKeyRecorderControl(keyPrefix: "micHotKey", defaultLabel: "⌘⇧M")
+            }
+            Text("Use this shortcut to mute or unmute every microphone system-wide.")
+                .settingsCaption()
             Toggle(
                 "Show in the menu bar",
                 isOn: $inMenuBar.configured(AppStorageKeys.Mic.muteInMenuBar)

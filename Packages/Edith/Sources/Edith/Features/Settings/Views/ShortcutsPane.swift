@@ -12,14 +12,16 @@ struct ShortcutsSettingsPane: View {
         false
     @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var focusDimEnabled =
         false
+    @AppStorage(AppStorageKeys.Mic.muteEnabled, store: SharedDefaults.store) private
+        var micMuteEnabled = false
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
         var presenterEnabled =
         false
 
     private var extensionShortcuts: [ExtensionShortcut] {
         ExtensionShortcutVisibility.visible(
-            clipboard: clipboardEnabled, focusDim: focusDimEnabled, presenter: presenterEnabled,
-            colorPicker: colorPickerEnabled)
+            clipboard: clipboardEnabled, micMute: micMuteEnabled, focusDim: focusDimEnabled,
+            presenter: presenterEnabled, colorPicker: colorPickerEnabled)
     }
 
     var body: some View {
@@ -101,6 +103,10 @@ struct ShortcutsSettingsPane: View {
             shortcutRow(
                 "Clipboard history", subtitle: "Opens the clipboard history popup",
                 keyPrefix: "clipboardHotKey", defaultLabel: "⌃⇧C")
+        case .micMute:
+            shortcutRow(
+                "Mic mute", subtitle: "Mutes or unmutes every microphone system-wide",
+                keyPrefix: "micHotKey", defaultLabel: "⌘⇧M")
         case .focusDim:
             shortcutRow(
                 "Focus dim", subtitle: "Toggles background-window dimming",

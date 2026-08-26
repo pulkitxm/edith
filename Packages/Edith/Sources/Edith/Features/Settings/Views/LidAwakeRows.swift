@@ -62,7 +62,7 @@ struct LidAwakeRows: View {
             Section {
                 Toggle(isOn: activeBinding) {
                     HStack(spacing: UIScale.pt(6)) {
-                        Text("Lid awake")
+                        Text("Keep running with lid closed")
                         InfoDot(
                             "Closing the lid normally sleeps the Mac even when Keep awake is on. This turns that pathway off, so the Mac keeps running with the lid shut - no external display or charger needed."
                         )
