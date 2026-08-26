@@ -472,6 +472,8 @@ final class DashboardModel {
     private var mtime: Date?
     private var dataDirWatch: DispatchSourceFileSystemObject?
     private var reloadDebounce: Task<Void, Never>?
+    private var observers = 0
+    private var missedReload = false
     private var ingestGeneration = 0
     private var computeGeneration = 0
     private var computeTask: Task<Void, Never>?
@@ -486,8 +488,27 @@ final class DashboardModel {
         syncExtensionState()
     }
 
+    func beginObserving() {
+        observers += 1
+        guard observers == 1 else { return }
+        watchDataDir()
+        if missedReload {
+            missedReload = false
+            scheduleReload()
+        }
+    }
+
+    func endObserving() {
+        observers = max(0, observers - 1)
+        guard observers == 0 else { return }
+        reloadDebounce?.cancel()
+        reloadDebounce = nil
+        dataDirWatch?.cancel()
+        dataDirWatch = nil
+    }
+
     private func watchDataDir() {
-        guard extensionEnabled, dataDirWatch == nil else { return }
+        guard extensionEnabled, observers > 0, dataDirWatch == nil else { return }
         let fd = open(Repo.dataDir.path, O_EVTONLY)
         guard fd >= 0 else { return }
         let source = DispatchSource.makeFileSystemObjectSource(
@@ -504,6 +525,7 @@ final class DashboardModel {
         if extensionEnabled {
             watchDataDir()
         } else {
+            missedReload = false
             reloadDebounce?.cancel()
             reloadDebounce = nil
             dataDirWatch?.cancel()
@@ -517,6 +539,10 @@ final class DashboardModel {
 
     private func scheduleReload() {
         guard extensionEnabled else { return }
+        guard observers > 0 else {
+            missedReload = true
+            return
+        }
         reloadDebounce?.cancel()
         reloadDebounce = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 300_000_000)
