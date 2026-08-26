@@ -181,7 +181,7 @@ struct HerdrSessionView: View {
                 ProgressView()
             }
         }
-        .background(dark ? Color.black.opacity(0.9) : Color.white)
+        .background(Color(nsColor: TerminalPalette.edith(dark: dark).background))
         .presenterCover(hideAgents, dark: dark)
     }
 

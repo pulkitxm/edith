@@ -46,29 +46,98 @@ extension QuinjetTheme {
 }
 
 struct TerminalPalette: Equatable {
+    private struct EdithKey: Hashable {
+        let theme: AppTheme
+        let dark: Bool
+    }
+
     var background: NSColor
     var foreground: NSColor
     var caret: NSColor
+    var selectionBackground: NSColor
+    var selectionForeground: NSColor
+    var ansi: [NSColor]
 
     static func == (lhs: TerminalPalette, rhs: TerminalPalette) -> Bool {
         lhs.background.isEqual(rhs.background)
             && lhs.foreground.isEqual(rhs.foreground)
             && lhs.caret.isEqual(rhs.caret)
+            && lhs.selectionBackground.isEqual(rhs.selectionBackground)
+            && lhs.selectionForeground.isEqual(rhs.selectionForeground)
+            && lhs.ansi.elementsEqual(rhs.ansi, by: { $0.isEqual($1) })
     }
 
     static func edith(dark: Bool) -> TerminalPalette {
-        TerminalPalette(
-            background: dark ? color(0x171412) : .white,
-            foreground: dark ? color(0xebe6db) : .black,
-            caret: dark ? color(0xd7a65c) : color(0x7a4f17))
+        let theme = AppTheme(
+            storedName: SharedDefaults.store.string(forKey: AppStorageKeys.General.theme)
+                ?? AppTheme.accent.rawValue)
+        return edithPalettes[EdithKey(theme: theme, dark: dark)]
+            ?? .make(
+                background: NSColor(DashSkin.paper(dark, theme: theme)),
+                foreground: NSColor(DashSkin.ink(dark, theme: theme)),
+                caret: NSColor(DashSkin.accent(dark, theme: theme)), dark: dark)
     }
+
+    private static let edithPalettes: [EdithKey: TerminalPalette] = {
+        var palettes: [EdithKey: TerminalPalette] = [:]
+        for theme in AppTheme.allCases {
+            for dark in [false, true] {
+                palettes[EdithKey(theme: theme, dark: dark)] = .make(
+                    background: NSColor(DashSkin.paper(dark, theme: theme)),
+                    foreground: NSColor(DashSkin.ink(dark, theme: theme)),
+                    caret: NSColor(DashSkin.accent(dark, theme: theme)), dark: dark)
+            }
+        }
+        return palettes
+    }()
 
     static func quinjet(
         theme: QuinjetTheme, appearance: QuinjetAppearance
     ) -> TerminalPalette {
         let values = colors(theme: theme, appearance: appearance)
+        return make(
+            background: color(values.0), foreground: color(values.1), caret: color(values.2),
+            dark: appearance == .dark)
+    }
+
+    private static func make(
+        background: NSColor, foreground: NSColor, caret: NSColor, dark: Bool
+    ) -> TerminalPalette {
+        let selectionBackground = blend(background, with: caret, by: dark ? 0.34 : 0.2)
         return TerminalPalette(
-            background: color(values.0), foreground: color(values.1), caret: color(values.2))
+            background: background, foreground: foreground, caret: caret,
+            selectionBackground: selectionBackground, selectionForeground: foreground,
+            ansi: ansi(background: background, foreground: foreground, accent: caret, dark: dark))
+    }
+
+    private static func ansi(
+        background: NSColor, foreground: NSColor, accent: NSColor, dark: Bool
+    ) -> [NSColor] {
+        let normal: [UInt32] =
+            dark
+            ? [0xe06c75, 0x98c379, 0xe5c07b, 0x61afef, 0xc678dd, 0x56b6c2]
+            : [0xe45649, 0x50a14f, 0xc18401, 0x4078f2, 0xa626a4, 0x0184bc]
+        let bright: [UInt32] =
+            dark
+            ? [0xff7b86, 0xb3e192, 0xffd68a, 0x7fc1ff, 0xdf8df0, 0x70d5df]
+            : [0xca1243, 0x3f953a, 0x986801, 0x2f69d9, 0x8f2591, 0x007a9f]
+        let mutedForeground = blend(foreground, with: background, by: dark ? 0.22 : 0.3)
+        let faintForeground = blend(foreground, with: background, by: dark ? 0.52 : 0.58)
+        let accentBright = blend(accent, with: dark ? .white : .black, by: dark ? 0.18 : 0.12)
+        return [
+            background, color(normal[0]), color(normal[1]), color(normal[2]), accent,
+            color(normal[4]), color(normal[5]), mutedForeground, faintForeground,
+            color(bright[0]), color(bright[1]), color(bright[2]), accentBright,
+            color(bright[4]), color(bright[5]), foreground,
+        ]
+    }
+
+    private static func blend(_ color: NSColor, with target: NSColor, by fraction: CGFloat)
+        -> NSColor
+    {
+        let base = color.usingColorSpace(.sRGB) ?? color
+        let resolvedTarget = target.usingColorSpace(.sRGB) ?? target
+        return base.blended(withFraction: fraction, of: resolvedTarget) ?? base
     }
 
     private static func colors(

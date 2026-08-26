@@ -92,8 +92,19 @@ final class TerminalSessionHolder {
         terminalView.nativeBackgroundColor = palette.background
         terminalView.nativeForegroundColor = palette.foreground
         terminalView.caretColor = palette.caret
+        terminalView.selectedTextBackgroundColor = palette.selectionBackground
+        terminalView.selectedTextForegroundColor = palette.selectionForeground
         terminalView.terminal.ansi256PaletteStrategy = .base16LabHarmonious
+        terminalView.installColors(palette.ansi.map(Self.swiftTermColor))
         terminalView.font = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
+    }
+
+    private static func swiftTermColor(_ color: NSColor) -> SwiftTerm.Color {
+        let resolved = color.usingColorSpace(.sRGB) ?? color
+        return SwiftTerm.Color(
+            red8: UInt16((resolved.redComponent * 255).rounded()),
+            green8: UInt16((resolved.greenComponent * 255).rounded()),
+            blue8: UInt16((resolved.blueComponent * 255).rounded()))
     }
 
     func updatePresentation(active: Bool, wantsFocus: Bool) {
@@ -309,7 +320,7 @@ struct MachineTerminalTab: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(dark ? Color.black.opacity(0.9) : Color.white)
+        .background(Color(nsColor: TerminalPalette.edith(dark: dark).background))
         .onAppear(perform: startIfPossible)
         .onChange(of: active) { _, active in
             if active { startIfPossible() }
@@ -403,6 +414,7 @@ struct ContainerTerminalSheet: View {
             Divider()
             TerminalPane(holder: holder, palette: .edith(dark: dark))
         }
+        .background(Color(nsColor: TerminalPalette.edith(dark: dark).background))
         .frame(width: UIScale.pt(760), height: UIScale.pt(520))
         .onAppear(perform: start)
         .onDisappear { holder.stop() }

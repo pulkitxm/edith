@@ -3,7 +3,7 @@ import EdithKit
 import SwiftUI
 
 enum DashSkin {
-    private static var theme: AppTheme {
+    private static var currentTheme: AppTheme {
         AppTheme(
             storedName: SharedDefaults.store.string(forKey: AppStorageKeys.General.theme)
                 ?? AppTheme.accent.rawValue)
@@ -17,7 +17,8 @@ enum DashSkin {
     }
 
     private static func themed(
-        _ pair: (Color, Color), dark: Bool, lightFraction: CGFloat, darkFraction: CGFloat
+        _ pair: (Color, Color), dark: Bool, theme: AppTheme, lightFraction: CGFloat,
+        darkFraction: CGFloat
     ) -> Color {
         let base = dark ? pair.1 : pair.0
         guard theme != .accent else { return base }
@@ -42,36 +43,58 @@ enum DashSkin {
     ]
 
     static func paper(_ d: Bool) -> Color {
-        themed(paperPair, dark: d, lightFraction: 0.055, darkFraction: 0.1)
+        paper(d, theme: currentTheme)
+    }
+    static func paper(_ d: Bool, theme: AppTheme) -> Color {
+        themed(
+            paperPair, dark: d, theme: theme, lightFraction: 0.055, darkFraction: 0.1)
     }
     static func paper2(_ d: Bool) -> Color {
-        themed(paper2Pair, dark: d, lightFraction: 0.035, darkFraction: 0.12)
+        themed(
+            paper2Pair, dark: d, theme: currentTheme, lightFraction: 0.035,
+            darkFraction: 0.12)
     }
     static func ink(_ d: Bool) -> Color {
-        themed(inkPair, dark: d, lightFraction: 0.04, darkFraction: 0.025)
+        ink(d, theme: currentTheme)
+    }
+    static func ink(_ d: Bool, theme: AppTheme) -> Color {
+        themed(inkPair, dark: d, theme: theme, lightFraction: 0.04, darkFraction: 0.025)
     }
     static func inkSoft(_ d: Bool) -> Color {
-        themed(inkSoftPair, dark: d, lightFraction: 0.08, darkFraction: 0.07)
+        themed(
+            inkSoftPair, dark: d, theme: currentTheme, lightFraction: 0.08,
+            darkFraction: 0.07)
     }
     static func inkFaint(_ d: Bool) -> Color {
-        themed(inkFaintPair, dark: d, lightFraction: 0.12, darkFraction: 0.11)
+        themed(
+            inkFaintPair, dark: d, theme: currentTheme, lightFraction: 0.12,
+            darkFraction: 0.11)
     }
     static func line(_ d: Bool) -> Color {
-        themed(linePair, dark: d, lightFraction: 0.13, darkFraction: 0.14)
+        themed(
+            linePair, dark: d, theme: currentTheme, lightFraction: 0.13,
+            darkFraction: 0.14)
     }
     static func lineStrong(_ d: Bool) -> Color {
-        themed(lineStrongPair, dark: d, lightFraction: 0.2, darkFraction: 0.2)
+        themed(
+            lineStrongPair, dark: d, theme: currentTheme, lightFraction: 0.2,
+            darkFraction: 0.2)
     }
     static func accent(_ d: Bool) -> Color {
+        accent(d, theme: currentTheme)
+    }
+    static func accent(_ d: Bool, theme: AppTheme) -> Color {
         guard theme != .accent else { return d ? accentPair.1 : accentPair.0 }
         return shifted(theme.color, toward: d ? .white : .black, by: d ? 0.12 : 0)
     }
     static func accentDeep(_ d: Bool) -> Color {
-        guard theme != .accent else { return d ? accentDeepPair.1 : accentDeepPair.0 }
-        return shifted(theme.color, toward: d ? .white : .black, by: d ? 0.3 : 0.25)
+        guard currentTheme != .accent else { return d ? accentDeepPair.1 : accentDeepPair.0 }
+        return shifted(currentTheme.color, toward: d ? .white : .black, by: d ? 0.3 : 0.25)
     }
     static func grid(_ d: Bool) -> Color {
-        themed(gridPair, dark: d, lightFraction: 0.09, darkFraction: 0.12)
+        themed(
+            gridPair, dark: d, theme: currentTheme, lightFraction: 0.09,
+            darkFraction: 0.12)
     }
     static func heat(_ level: Int, _ d: Bool) -> Color {
         let (target, fraction) = (d ? heatStepsDark : heatSteps)[max(0, min(level, 3))]

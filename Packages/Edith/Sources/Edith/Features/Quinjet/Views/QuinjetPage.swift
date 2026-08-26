@@ -240,6 +240,11 @@ private struct QuinjetTerminalWorkspace: View {
     @Environment(\.compactLayout) private var compact
 
     private var dark: Bool { scheme == .dark }
+    private var palette: TerminalPalette {
+        .quinjet(
+            theme: tab.launchConfiguration.theme,
+            appearance: tab.launchConfiguration.appearance)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -259,9 +264,7 @@ private struct QuinjetTerminalWorkspace: View {
             if tab.launchConfiguration.terminal == .embedded {
                 TerminalPane(
                     holder: tab.holder,
-                    palette: .quinjet(
-                        theme: tab.launchConfiguration.theme,
-                        appearance: tab.launchConfiguration.appearance),
+                    palette: palette,
                     active: presented
                 )
                 .id(tab.holder.generation)
@@ -270,7 +273,7 @@ private struct QuinjetTerminalWorkspace: View {
                 externalWorkspace
             }
         }
-        .background(dark ? Color.black.opacity(0.9) : Color.white)
+        .background(Color(nsColor: palette.background))
     }
 
     private var workspaceBar: some View {
