@@ -16,6 +16,13 @@ public final class GhosttyTerminalView: NSView {
 
     public override var acceptsFirstResponder: Bool { true }
 
+    public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    public func focusIfNeeded() {
+        guard let window, window.firstResponder !== self else { return }
+        window.makeFirstResponder(self)
+    }
+
     public override var wantsUpdateLayer: Bool { false }
 
     public init(launch: GhosttyLaunch, theme: GhosttyTheme? = nil) {
@@ -72,7 +79,6 @@ public final class GhosttyTerminalView: NSView {
             surface, config.scale_factor, config.scale_factor)
         applySize()
         ghostty_surface_set_focus(surface, window?.firstResponder === self)
-        window?.makeFirstResponder(self)
     }
 
     public func apply(theme newTheme: GhosttyTheme) {

@@ -246,7 +246,9 @@ struct TerminalPane: View {
     var body: some View {
         if GhosttyTerminals.enabled {
             if let launch = holder.ghosttyLaunch {
-                GhosttyPane(launch: launch, theme: GhosttyTheme(palette: palette))
+                GhosttyPane(
+                    launch: launch, theme: GhosttyTheme(palette: palette),
+                    active: active, wantsFocus: wantsFocus)
             }
         } else {
             SwiftTermPane(

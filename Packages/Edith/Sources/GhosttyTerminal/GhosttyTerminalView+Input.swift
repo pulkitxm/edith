@@ -108,12 +108,45 @@ extension GhosttyTerminalView {
             surface, position.0, position.1, Self.mods(from: event.modifierFlags))
     }
 
+    static func momentum(_ phase: NSEvent.Phase) -> UInt8 {
+        switch phase {
+        case .began: 1
+        case .stationary: 2
+        case .changed: 3
+        case .ended: 4
+        case .cancelled: 5
+        case .mayBegin: 6
+        default: 0
+        }
+    }
+
+    static func scrollMods(precise: Bool, phase: NSEvent.Phase) -> Int32 {
+        var value: Int32 = precise ? 1 : 0
+        value |= Int32(momentum(phase)) << 1
+        return value
+    }
+
     public override func scrollWheel(with event: NSEvent) {
         guard let surface else { return }
-        var flags: Int32 = 0
-        if event.hasPreciseScrollingDeltas { flags |= 1 }
-        if event.momentumPhase != [] { flags |= 2 }
+        let precise = event.hasPreciseScrollingDeltas
+        var x = event.scrollingDeltaX
+        var y = event.scrollingDeltaY
+        if precise {
+            x *= 2
+            y *= 2
+        }
         ghostty_surface_mouse_scroll(
-            surface, Double(event.scrollingDeltaX), Double(event.scrollingDeltaY), flags)
+            surface, Double(x), Double(y),
+            Self.scrollMods(precise: precise, phase: event.momentumPhase))
+    }
+
+    public override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(
+            NSTrackingArea(
+                rect: bounds,
+                options: [.mouseEnteredAndExited, .mouseMoved, .inVisibleRect, .activeAlways],
+                owner: self))
     }
 }
