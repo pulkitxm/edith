@@ -30,7 +30,9 @@
     "memory",
     "mainThread",
     "largeRepository",
-    "slowNetwork"
+    "slowNetwork",
+    "cliStartup",
+    "deterministicLargeDataset"
   ],
   "scenarios": [
     {
@@ -300,6 +302,40 @@
         {
           "path": "Packages/Edith/Tests/EdithTests/ContributorsTests.swift",
           "contains": "FailingContributorURLProtocol"
+        }
+      ]
+    },
+    {
+      "area": "cliStartup",
+      "status": "protected",
+      "finding": "Static CLI paths have a fresh-process Release benchmark that retains every raw timing sample.",
+      "measurement": "Thirty measured invocations after three warmups report p50, p95, peak, exit code, and stdout and stderr byte counts for help, version, completion generation, and schema.",
+      "regressionProperty": "Nearest-rank summaries are derived from the retained raw runs and every measured command must exit successfully.",
+      "evidence": [
+        {
+          "path": "scripts/bench-cli.mjs",
+          "contains": "raw: runs"
+        },
+        {
+          "path": "scripts/bench-cli.test.js",
+          "contains": "CLI benchmark retains every raw sample"
+        }
+      ]
+    },
+    {
+      "area": "deterministicLargeDataset",
+      "status": "protected",
+      "finding": "Dashboard performance runs can use a fixed synthetic workload without private usage data.",
+      "measurement": "The default fixture contains 730 days, 50 sources, 100 models, and exactly 10,000 project and session rows from a fixed seed.",
+      "regressionProperty": "The generator is deterministic, produces the requested cardinality, and emits only synthetic paths, hosts, names, and URLs.",
+      "evidence": [
+        {
+          "path": "scripts/generate-dashboard-fixture.mjs",
+          "contains": "projects: 10_000"
+        },
+        {
+          "path": "scripts/generate-dashboard-fixture.test.js",
+          "contains": "dashboard fixture is deterministic and contains exact requested cardinality"
         }
       ]
     }

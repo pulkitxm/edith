@@ -24,6 +24,8 @@ evidence.
 | Main thread | Every runtime interval records its begin and end thread context. | A deterministic test checks the main-thread signal. |
 | Large repository | Dashboard JSON decoding is detached, but aggregation returns to the main actor. | Decode placement is checked and aggregation has its own interval. |
 | Slow network | GitHub contributor requests stop after ten seconds and retain cached output. | Timeout source evidence and a local failing-network test. |
+| CLI startup | Static commands have a fresh-process Release benchmark with raw samples. | Tests pin percentile calculation, raw retention, output byte counts and successful exit. |
+| Deterministic large data | Dashboard profiling can use a fixed synthetic data set. | Tests pin determinism, cardinality and synthetic-only identifiers. |
 
 No universal timing budget is checked because CPU, RSS, disk, and network timing
 vary materially by hardware and environment. Stable regression properties are
@@ -66,6 +68,26 @@ The deterministic harness can be verified without a running app:
 ```sh
 make ci-performance
 ```
+
+Generate the standard large dashboard workload without using personal usage data:
+
+```sh
+make performance-fixture
+```
+
+The default fixture contains 730 days, 50 sources, 100 models and 10,000 project
+rows. Override `OUTPUT` when the profiler needs it at a stable location.
+
+After a Release build, capture raw static-command timings with:
+
+```sh
+make bench-cli > cli-baseline.json
+```
+
+The CLI harness starts a fresh process for every sample, performs three warmups, then
+keeps all 30 measured durations together with p50, p95, peak, exit status, and output
+byte counts. Compare files captured on the same machine, power mode, thermal state,
+build, defaults profile and background workload.
 
 The same gate compares changed Swift production files with the selected base revision. It
 rejects newly introduced blocking file or process work on the main actor, fire-and-forget

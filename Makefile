@@ -13,7 +13,7 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: ghostty build install reset reinstall release loc ci ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-bundle site-dev cli icon wiki wiki-push
+.PHONY: ghostty build install reset reinstall release loc ci ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture
 
 ci:
 	bun install --frozen-lockfile
@@ -67,6 +67,12 @@ ci-scripts:
 ci-performance:
 	bun scripts/check-performance-audit.mjs
 	./scripts/bench-helper.sh --fixture scripts/fixtures/bench-helper.samples >/dev/null
+
+bench-cli:
+	bun scripts/bench-cli.mjs
+
+performance-fixture:
+	bun scripts/generate-dashboard-fixture.mjs --output $${OUTPUT:-/tmp/edith-dashboard-large.json}
 
 ci-docs:
 	bun test scripts/cli-docs.test.js scripts/sync-wiki.test.js
