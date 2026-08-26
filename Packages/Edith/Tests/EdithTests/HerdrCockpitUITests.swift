@@ -87,6 +87,15 @@ import Testing
         #expect(store.selectedTab == store.tabs[2].id)
     }
 
+    @Test func aHoveredCardReadsStrongerThanARestingOne() {
+        let resting = HerdrStatusColor.fill(agent, dark: true, selected: false)
+        let hovered = HerdrStatusColor.fill(agent, dark: true, selected: true)
+        #expect(resting != hovered)
+        #expect(
+            HerdrStatusColor.stroke(agent, dark: true, selected: false)
+                != HerdrStatusColor.stroke(agent, dark: true, selected: true))
+    }
+
     @Test func theRailRemembersWhetherItWasCollapsed() {
         let store = defaults()
         let first = HerdrStore(defaults: store, liveWatcher: { _ in })

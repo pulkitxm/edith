@@ -12,6 +12,7 @@ struct HerdrPage: View {
         var presenterBlurAgents = true
     private var presenterState = PresenterState.shared
     @State private var draggingTab: String?
+    @State private var hoveredCard: String?
 
     @MainActor init(store: HerdrStore? = nil) {
         _store = State(initialValue: store ?? .shared)
@@ -429,6 +430,7 @@ struct HerdrPage: View {
 
     private func card(_ agent: HerdrAgent) -> some View {
         let open = store.openIDs.contains(agent.id)
+        let hovered = hoveredCard == agent.id
         return Button {
             openAgent(agent)
         } label: {
@@ -474,13 +476,21 @@ struct HerdrPage: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .widgetBar(
                 cornerRadius: 12,
-                fill: HerdrStatusColor.fill(agent, dark: dark, selected: false),
+                fill: HerdrStatusColor.fill(agent, dark: dark, selected: hovered),
                 stroke: open
-                    ? DashSkin.accent(dark).opacity(0.45)
-                    : HerdrStatusColor.stroke(agent, dark: dark, selected: false))
+                    ? DashSkin.accent(dark).opacity(hovered ? 0.7 : 0.45)
+                    : HerdrStatusColor.stroke(agent, dark: dark, selected: hovered))
         }
         .buttonStyle(.plain)
         .pointerCursor()
+        .onHover { inside in
+            if inside {
+                hoveredCard = agent.id
+            } else if hoveredCard == agent.id {
+                hoveredCard = nil
+            }
+        }
+        .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: hovered)
     }
 
     private var agentList: some View {
