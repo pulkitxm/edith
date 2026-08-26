@@ -788,6 +788,20 @@ struct ActivityHeatmap: View {
                                         hovered = nil
                                     }
                                 }
+                                .popover(
+                                    isPresented: Binding(
+                                        get: { hovered?.id == day.id },
+                                        set: { shown in
+                                            if !shown, hovered?.id == day.id { hovered = nil }
+                                        }),
+                                    arrowEdge: .trailing
+                                ) {
+                                    if let hovered, hovered.id == day.id {
+                                        HeatCard(
+                                            detail: hovered.detail, model: model, dark: dark,
+                                            blur: blur, blurTokens: blurTokens)
+                                    }
+                                }
                             }
                         }
                     }
@@ -796,11 +810,6 @@ struct ActivityHeatmap: View {
             .defaultScrollAnchor(weeks.count > 18 ? .trailing : .leading)
         }
         .frame(height: UIScale.pt(137))
-        .popover(item: $hovered, arrowEdge: .trailing) { item in
-            HeatCard(
-                detail: item.detail, model: model, dark: dark,
-                blur: blur, blurTokens: blurTokens)
-        }
     }
 
     private func monthLabel(for weeks: [[DayPoint]], at index: Int) -> String {
