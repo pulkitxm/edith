@@ -57,7 +57,7 @@ import Testing
         let horizontalPadding = try #require(body.range(of: ".padding(.horizontal"))
         let frame = try #require(body.range(of: ".frame("))
         let background = try #require(body.range(of: ".background("))
-        let contentShape = try #require(body.range(of: ".contentShape(shape)"))
+        let contentShape = try #require(body.range(of: ".contentShape(Rectangle())"))
 
         #expect(horizontalPadding.lowerBound < frame.lowerBound)
         #expect(frame.lowerBound < background.lowerBound)

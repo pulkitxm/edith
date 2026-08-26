@@ -35,7 +35,7 @@ public struct HoverButton: ViewModifier {
     }
 }
 
-public enum EdithButtonRole: Sendable {
+public enum EdithButtonRole: Sendable, CaseIterable {
     case primary
     case secondary
     case borderless
@@ -156,7 +156,7 @@ private struct EdithButtonBody<Label: View>: View {
             .foregroundStyle(foreground)
             .background(background, in: shape)
             .overlay(shape.strokeBorder(border, lineWidth: borderWidth))
-            .contentShape(shape)
+            .contentShape(Rectangle())
             .opacity(enabled ? (inactive ? 0.72 : 1) : 0.42)
             .brightness(pressed && enabled ? -0.08 : 0)
             .onHover { hovering = enabled && $0 }
