@@ -176,7 +176,7 @@ public enum ExtensionRegistry {
             symbolName: "tray.and.arrow.down", group: .media, featured: true,
             defaultsKey: "notchShelfEnabled", requiredCapabilities: [.fileShelf],
             optionalCapabilities: [
-                .bluetoothMonitoring, .cameraPreview, .externalMediaControl,
+                .applicationAudio, .bluetoothMonitoring, .cameraPreview, .externalMediaControl,
             ]),
         ExtensionRegistryEntry(
             id: "clipboard", title: "Clipboard",

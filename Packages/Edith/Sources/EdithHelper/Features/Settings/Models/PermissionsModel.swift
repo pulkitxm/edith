@@ -87,7 +87,7 @@ final class PermissionsModel {
             return true
         case .camera:
             return requestCamera()
-        case .bluetooth, .automation:
+        case .applicationAudio, .bluetooth, .automation:
             return false
         }
     }

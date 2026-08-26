@@ -274,6 +274,9 @@ public extension ExtensionPermission {
         case .screenRecording:
             destination =
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+        case .applicationAudio:
+            destination =
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
         case .camera:
             destination = "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"
         case .bluetooth:
@@ -288,7 +291,7 @@ public extension ExtensionPermission {
     var relaunchRequirement: PermissionRelaunchRequirement {
         switch self {
         case .accessibility, .inputMonitoring, .fullDisk, .screenRecording: .edith
-        case .calendar, .notifications, .camera, .bluetooth, .automation: .none
+        case .calendar, .notifications, .applicationAudio, .camera, .bluetooth, .automation: .none
         }
     }
 }

@@ -101,6 +101,9 @@ import Testing
             let result = Self.plan(["ed", "permissions", command, "screen"], 3)
             #expect(result.candidates == ["screenRecording"])
         }
+        let applicationAudio = Self.plan(
+            ["ed", "permissions", "settings", "application"], 3)
+        #expect(applicationAudio.candidates == ["applicationAudio"])
     }
 
     @Test func extensionLifecycleCommandsCompleteIDsAndFlags() {

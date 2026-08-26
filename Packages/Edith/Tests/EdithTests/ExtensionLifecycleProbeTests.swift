@@ -167,6 +167,20 @@ import EdithCore
         #expect(report.state.issues.map(\.id) == ["platform"])
     }
 
+    @Test func oldMacOSDegradesNotchShelfWithoutClaimingAudioMixerSupport() async throws {
+        let entry = try #require(ExtensionRegistry.entries.first { $0.id == "notchShelf" })
+        let platform = PlatformCapabilities.macOS(
+            version: OperatingSystemVersion(majorVersion: 14, minorVersion: 3, patchVersion: 0))
+        let report = await probe(
+            permissions: [.camera: true], helperRunning: true, platform: platform
+        ).report(for: entry)
+
+        #expect(report.state.phase == .degraded)
+        #expect(report.state.runtimePhase == .installed)
+        #expect(report.state.issues.map(\.id) == ["platform"])
+        #expect(report.state.issues.first?.detail.contains("applicationAudio") == true)
+    }
+
     @Test func backendFailureIsDifferentFromIncompleteSetup() async throws {
         let entry = try #require(ExtensionRegistry.entries.first { $0.id == "companion" })
         let report = await probe(adapter: .failed("Database is unavailable.")).report(for: entry)

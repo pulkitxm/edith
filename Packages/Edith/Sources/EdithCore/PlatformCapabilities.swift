@@ -71,20 +71,32 @@ public struct PlatformCapabilities: Equatable, Sendable {
         return .available
     }
 
-    public static let macOS = PlatformCapabilities(
-        states: states(
-            defaultState: .available,
-            overriding: [
-                .bluetoothMonitoring: .permissionRequired,
-                .calendarEvents: .permissionRequired,
-                .cameraPreview: .permissionRequired,
-                .globalPaste: .permissionRequired,
-                .inputSuppression: .permissionRequired,
-                .notifications: .permissionRequired,
-                .screenColorSampling: .permissionRequired,
-                .screenShareDetection: .permissionRequired,
-                .windowDimming: .permissionRequired,
-            ]))
+    public static var macOS: PlatformCapabilities {
+        macOS(version: ProcessInfo.processInfo.operatingSystemVersion)
+    }
+
+    public static func macOS(version: OperatingSystemVersion) -> PlatformCapabilities {
+        let applicationAudioAvailable =
+            version.majorVersion > 14
+            || (version.majorVersion == 14 && version.minorVersion >= 4)
+        return PlatformCapabilities(
+            states: states(
+                defaultState: .available,
+                overriding: [
+                    .applicationAudio: applicationAudioAvailable
+                        ? .permissionRequired
+                        : .unsupported("Application audio mixing requires macOS 14.4 or later."),
+                    .bluetoothMonitoring: .permissionRequired,
+                    .calendarEvents: .permissionRequired,
+                    .cameraPreview: .permissionRequired,
+                    .globalPaste: .permissionRequired,
+                    .inputSuppression: .permissionRequired,
+                    .notifications: .permissionRequired,
+                    .screenColorSampling: .permissionRequired,
+                    .screenShareDetection: .permissionRequired,
+                    .windowDimming: .permissionRequired,
+                ]))
+    }
 
     private static func states(
         defaultState: PlatformCapabilityState,

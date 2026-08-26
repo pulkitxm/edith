@@ -15,6 +15,9 @@ public typealias ExtensionLifecyclePhase = EdithCore.ExtensionLifecyclePhase
 public typealias ExtensionLifecycleReport = EdithCore.ExtensionLifecycleReport
 public typealias ExtensionRuntimePhase = EdithCore.ExtensionRuntimePhase
 public typealias ExtensionLifecycleState = EdithCore.ExtensionLifecycleState
+public typealias PlatformCapability = EdithCore.PlatformCapability
+public typealias PlatformCapabilityState = EdithCore.PlatformCapabilityState
+public typealias PlatformCapabilities = EdithCore.PlatformCapabilities
 
 public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
     case calendar
@@ -23,6 +26,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
     case inputMonitoring
     case fullDisk
     case screenRecording
+    case applicationAudio
     case camera
     case bluetooth
     case automation
@@ -35,6 +39,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .inputMonitoring: "Input Monitoring"
         case .fullDisk: "Full Disk Access"
         case .screenRecording: "Screen Recording"
+        case .applicationAudio: "Application Audio"
         case .camera: "Camera"
         case .bluetooth: "Bluetooth"
         case .automation: "Automation"
@@ -52,6 +57,8 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .fullDisk: "Asked when a feature needs local service credentials or usage data."
         case .screenRecording:
             "Required to detect shared content or sample colors from the screen."
+        case .applicationAudio:
+            "Asked when you first use the Notch Shelf per-app volume mixer."
         case .camera: "Asked when you first open the Notch Shelf camera preview."
         case .bluetooth: "Asked when Notch Shelf first checks for device connections."
         case .automation: "Asked when Notch Shelf first controls external playback."
@@ -67,7 +74,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .fullDisk: AppStorageKeys.Permissions.fullDiskGranted
         case .screenRecording: AppStorageKeys.Permissions.screenRecordingGranted
         case .camera: AppStorageKeys.Permissions.cameraGranted
-        case .bluetooth, .automation: nil
+        case .applicationAudio, .bluetooth, .automation: nil
         }
     }
 
@@ -79,6 +86,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .inputMonitoring: "keyboard"
         case .fullDisk: "externaldrive"
         case .screenRecording: "rectangle.inset.filled.badge.record"
+        case .applicationAudio: "speaker.wave.2"
         case .camera: "camera"
         case .bluetooth: "wave.3.right"
         case .automation: "gearshape.2"
@@ -94,7 +102,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .fullDisk: IPC.Name.grantFullDisk
         case .screenRecording: IPC.Name.grantScreenRecording
         case .camera: IPC.Name.grantCamera
-        case .bluetooth, .automation: nil
+        case .applicationAudio, .bluetooth, .automation: nil
         }
     }
 
@@ -104,6 +112,8 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
             "macOS will ask for Bluetooth access when connection alerts first run."
         case .automation:
             "macOS will ask for Automation access when Notch Shelf first controls playback."
+        case .applicationAudio:
+            "macOS will ask for application audio access when the mixer first changes an app."
         default: nil
         }
     }
@@ -126,7 +136,7 @@ public extension ExtensionRegistryEntry {
         switch id {
         case "usage", "machines": [.notifications]
         case "system": [.accessibility, .inputMonitoring]
-        case "notchShelf": [.bluetooth, .camera, .automation]
+        case "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation]
         case "clipboard": [.accessibility]
         default: []
         }

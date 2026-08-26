@@ -46,6 +46,25 @@ import Testing
         }
     }
 
+    @Test func applicationAudioOpensScreenAndAudioSettingsButCannotBeRequested() async {
+        await CLIProbe.inWorld { world in
+            let settings = await CLIProbe.capture([
+                "permissions", "settings", "applicationAudio", "--json",
+            ])
+            let request = await CLIProbe.capture([
+                "permissions", "request", "applicationAudio",
+            ])
+
+            #expect(settings.code == 0)
+            #expect(settings.object?["permission"] as? String == "applicationAudio")
+            #expect(
+                world.recordedURLs() == [ExtensionPermission.screenRecording.settingsURL!])
+            #expect(request.code == ExitCodes.unavailable)
+            #expect(request.stderr.contains("granted on first use"))
+            #expect(world.postedNames().isEmpty)
+        }
+    }
+
     @Test func requestJSONReportsDispatchGrantAndSafeRelaunchPolicy() async {
         await CLIProbe.inWorld { world in
             world.helperRunning(true)
