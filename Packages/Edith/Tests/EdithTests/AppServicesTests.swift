@@ -67,6 +67,21 @@ private actor AppServicesCallProbe {
         #expect(AppServices.extensionEnabled(probe))
     }
 
+    @Test func audioMixerRuntimeRequiresBothShelfAndNestedEnablement() {
+        #expect(
+            AppServices.audioMixerRuntimeEnabled(
+                notchShelfEnabled: true, mixerEnabled: true))
+        #expect(
+            !AppServices.audioMixerRuntimeEnabled(
+                notchShelfEnabled: false, mixerEnabled: true))
+        #expect(
+            !AppServices.audioMixerRuntimeEnabled(
+                notchShelfEnabled: true, mixerEnabled: false))
+        #expect(
+            !AppServices.audioMixerRuntimeEnabled(
+                notchShelfEnabled: false, mixerEnabled: false))
+    }
+
     @Test func preferenceDefaultsToEnabledWhenUnset() {
         SharedDefaults.store.removeObject(forKey: probe)
         defer { SharedDefaults.store.removeObject(forKey: probe) }

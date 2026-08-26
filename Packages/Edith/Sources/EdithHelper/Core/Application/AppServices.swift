@@ -47,6 +47,10 @@ final class AppServices {
         SharedDefaults.store.object(forKey: key) as? Bool ?? false
     }
 
+    static func audioMixerRuntimeEnabled(notchShelfEnabled: Bool, mixerEnabled: Bool) -> Bool {
+        notchShelfEnabled && mixerEnabled
+    }
+
     static func lidAwakeDisableRecovery(_ outcome: LidAwakeOutcome) -> String? {
         guard case .failed(let message) = outcome else { return nil }
         return message
@@ -96,6 +100,7 @@ final class AppServices {
     func prepareForTermination() async {
         startup.cancel()
         terminating = true
+        if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
     }
@@ -247,6 +252,14 @@ final class AppServices {
 
     private func reconcilePanelServices() {
         let notchShelfOn = SharedDefaults.store.bool(forKey: AppStorageKeys.Notch.shelfEnabled)
+        let audioMixerOn = SharedDefaults.store.bool(
+            forKey: AppStorageKeys.Notch.audioMixerEnabled)
+        if #available(macOS 14.4, *),
+            !Self.audioMixerRuntimeEnabled(
+                notchShelfEnabled: notchShelfOn, mixerEnabled: audioMixerOn)
+        {
+            MixerEngine.shared.shutdown()
+        }
         if notchShelfOn, notchShelf == nil { notchShelf = NotchShelfController() }
         if !notchShelfOn, let controller = notchShelf {
             controller.shutdown()
