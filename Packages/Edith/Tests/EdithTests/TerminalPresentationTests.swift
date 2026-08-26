@@ -21,20 +21,8 @@ import Testing
     }
 
     @Test func terminalPaletteChangesWithTheAppTheme() {
-        let key = AppStorageKeys.General.theme
-        let original = SharedDefaults.store.object(forKey: key)
-        defer {
-            if let original {
-                SharedDefaults.store.set(original, forKey: key)
-            } else {
-                SharedDefaults.store.removeObject(forKey: key)
-            }
-        }
-
-        SharedDefaults.store.set(AppTheme.blue.rawValue, forKey: key)
-        let blue = TerminalPalette.edith(dark: true)
-        SharedDefaults.store.set(AppTheme.orange.rawValue, forKey: key)
-        let orange = TerminalPalette.edith(dark: true)
+        let blue = TerminalPalette.edith(dark: true, theme: .blue)
+        let orange = TerminalPalette.edith(dark: true, theme: .orange)
 
         #expect(blue != orange)
         #expect(blue.ansi.count == 16)

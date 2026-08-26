@@ -21,4 +21,7 @@ if [[ -d "$FW/Testing.framework" ]]; then
          -Xlinker -rpath -Xlinker "$FW"
          -Xlinker -rpath -Xlinker "$LIB")
 fi
-exec swift test --no-parallel ${FLAGS[@]+"${FLAGS[@]}"} "$@"
+TEST_DEFAULTS_SUITE="${EDITH_SHARED_DEFAULTS_SUITE:-com.pulkit.edith.tests.$$}"
+export EDITH_SHARED_DEFAULTS_SUITE="$TEST_DEFAULTS_SUITE"
+trap 'defaults delete "$TEST_DEFAULTS_SUITE" >/dev/null 2>&1 || true' EXIT
+swift test --no-parallel ${FLAGS[@]+"${FLAGS[@]}"} "$@"

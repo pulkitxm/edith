@@ -71,6 +71,10 @@ struct TerminalPalette: Equatable {
         let theme = AppTheme(
             storedName: SharedDefaults.store.string(forKey: AppStorageKeys.General.theme)
                 ?? AppTheme.accent.rawValue)
+        return edith(dark: dark, theme: theme)
+    }
+
+    static func edith(dark: Bool, theme: AppTheme) -> TerminalPalette {
         return edithPalettes[EdithKey(theme: theme, dark: dark)]
             ?? .make(
                 background: NSColor(DashSkin.paper(dark, theme: theme)),

@@ -35,26 +35,10 @@ import Testing
         #expect(AppTheme(storedName: "chartreuse") == .accent)
     }
 
-    @Test func appSurfacesStayConstantAcrossThemes() {
-        let key = AppStorageKeys.General.theme
-        let original = SharedDefaults.store.object(forKey: key)
-        defer {
-            if let original {
-                SharedDefaults.store.set(original, forKey: key)
-            } else {
-                SharedDefaults.store.removeObject(forKey: key)
-            }
-        }
-
-        SharedDefaults.store.set(AppTheme.blue.rawValue, forKey: key)
-        let bluePaper = DashSkin.paper(true)
-        let blueCard = DashSkin.paper2(true)
-        let blueAccent = DashSkin.accent(true)
-        SharedDefaults.store.set(AppTheme.orange.rawValue, forKey: key)
-
-        #expect(DashSkin.paper(true) == bluePaper)
-        #expect(DashSkin.paper2(true) == blueCard)
-        #expect(DashSkin.accent(true) != blueAccent)
+    @Test func appSurfacesStayConstantWhileAccentsChange() {
+        #expect(rgb(DashSkin.paper(true)) == [26, 23, 20])
+        #expect(rgb(DashSkin.paper2(true)) == [34, 29, 25])
+        #expect(DashSkin.accent(true, theme: .blue) != DashSkin.accent(true, theme: .orange))
     }
 
     @Test func appViewsDoNotBypassSharedThemeTokens() throws {
@@ -80,5 +64,12 @@ import Testing
         }
 
         #expect(violations.isEmpty, "theme token bypasses: \(violations.sorted())")
+    }
+
+    private func rgb(_ color: Color) -> [Int] {
+        let resolved = NSColor(color).usingColorSpace(.sRGB) ?? .black
+        return [resolved.redComponent, resolved.greenComponent, resolved.blueComponent].map {
+            Int(($0 * 255).rounded())
+        }
     }
 }
