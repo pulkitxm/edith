@@ -331,7 +331,6 @@ private struct QuinjetRemoteProjectPicker: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(QuinjetFolderRowStyle(selected: picker.selectionIndex == -1, dark: dark))
-        .pointerCursor()
     }
 
     private func entryRow(_ entry: RemoteFileEntry) -> some View {
@@ -366,7 +365,6 @@ private struct QuinjetRemoteProjectPicker: View {
         .buttonStyle(
             QuinjetFolderRowStyle(selected: picker.selectedEntry == entry, dark: dark)
         )
-        .pointerCursor()
     }
 
     private var shortcuts: some View {
@@ -454,7 +452,6 @@ private struct QuinjetMachineChip: View {
             .frame(height: UIScale.pt(34))
         }
         .buttonStyle(QuinjetMachineChipStyle(selected: selected, dark: dark))
-        .pointerCursor()
     }
 
     private var statusColor: Color {

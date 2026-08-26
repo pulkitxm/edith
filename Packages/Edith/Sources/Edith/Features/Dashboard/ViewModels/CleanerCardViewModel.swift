@@ -367,7 +367,7 @@ struct CleanerCard: View {
             Text("Scan build caches, package managers, Claude Code logs, and your drives.")
                 .font(.system(size: UIScale.pt(12))).foregroundStyle(DashSkin.inkFaint(dark))
             Spacer()
-            Button("Scan") { openPicker(scan: true) }.pointerCursor()
+            Button("Scan") { openPicker(scan: true) }
         }
     }
 
@@ -381,7 +381,6 @@ struct CleanerCard: View {
                     .font(.system(size: UIScale.pt(11), weight: .medium)).buttonStyle(
                         .edith(.borderless)
                     )
-                    .pointerCursor()
                     .foregroundStyle(DashSkin.accent(dark))
             } else {
                 Button {
@@ -433,7 +432,6 @@ struct CleanerCard: View {
                     .font(.system(size: UIScale.pt(11), weight: .medium)).buttonStyle(
                         .edith(.borderless)
                     )
-                    .pointerCursor()
                     .foregroundStyle(DashSkin.accent(dark)).disabled(model.scanning)
                 InfoDot("Cleaning moves items to the Trash, so it stays reversible.")
                 Button("Choose drives…") { openPicker(scan: false) }
@@ -500,7 +498,6 @@ struct CleanerCard: View {
         .tint(DashSkin.accent(dark))
         .controlSize(.large)
         .disabled(model.scanning || model.selectedTotal == 0)
-        .pointerCursor()
         .padding(.top, UIScale.pt(2))
     }
 
@@ -600,12 +597,12 @@ private struct DrivePickerSheet: View {
             Divider()
             HStack {
                 Spacer()
-                Button("Cancel") { dismiss() }.pointerCursor()
+                Button("Cancel") { dismiss() }
                 Button(confirmTitle) {
                     dismiss()
                     onConfirm()
                 }
-                .keyboardShortcut(.defaultAction).pointerCursor()
+                .keyboardShortcut(.defaultAction)
             }
             .padding(.horizontal, UIScale.pt(20)).padding(.vertical, UIScale.pt(14))
         }

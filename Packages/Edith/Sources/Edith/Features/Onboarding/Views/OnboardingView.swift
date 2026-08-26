@@ -131,7 +131,6 @@ struct OnboardingView: View {
                 }
                 .buttonStyle(.edith(.borderless))
                 .foregroundStyle(DashSkin.inkSoft(dark))
-                .pointerCursor()
             }
             .frame(width: UIScale.pt(210))
             .padding(.top, UIScale.pt(30))
@@ -175,7 +174,6 @@ struct OnboardingView: View {
                     Button("Start fresh") { move(to: .picks, direction: 1) }
                         .buttonStyle(.edith(.borderless))
                         .foregroundStyle(DashSkin.inkSoft(dark))
-                        .pointerCursor()
                 }
             }
             .frame(width: UIScale.pt(230))
@@ -300,7 +298,6 @@ struct OnboardingView: View {
             }
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
     }
 
     private var permissionsStep: some View {
@@ -379,7 +376,6 @@ struct OnboardingView: View {
                 .overlay {
                     RoundedRectangle(cornerRadius: UIScale.pt(10)).strokeBorder(DashSkin.line(dark))
                 }
-                .pointerCursor()
                 if cloudBackupFound {
                     Text("We found an existing Edith backup in iCloud.")
                         .font(.system(size: UIScale.pt(10.5)))
@@ -444,7 +440,6 @@ struct OnboardingView: View {
                 Button("Back") { goBack() }
                     .buttonStyle(.edith(.borderless))
                     .foregroundStyle(DashSkin.inkSoft(dark))
-                    .pointerCursor()
             }
             Spacer()
             if step == .picks {
@@ -631,7 +626,6 @@ private struct ExtensionChoiceCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
             .accessibilityLabel("\(entry.title), \(selected ? "selected" : "not selected")")
             HStack(spacing: UIScale.pt(4)) {
                 Button(action: action) {
@@ -641,7 +635,6 @@ private struct ExtensionChoiceCard: View {
                         .lineLimit(1)
                 }
                 .buttonStyle(.edith(.borderless))
-                .pointerCursor()
                 if !permissions.isEmpty {
                     PermissionInfoButton(permissions: permissions)
                 }
@@ -715,7 +708,6 @@ private struct OnboardingPermissionCard: View {
             {
                 Button("Grant", action: grant)
                     .controlSize(.small)
-                    .pointerCursor()
             } else {
                 Text("On first use")
                     .font(.system(size: UIScale.pt(10), weight: .medium))

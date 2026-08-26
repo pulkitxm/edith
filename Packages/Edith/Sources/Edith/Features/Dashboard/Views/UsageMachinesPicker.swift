@@ -102,7 +102,6 @@ struct UsageMachinesPicker: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(MachineRowStyle(dark: dark))
-        .pointerCursor()
         .padding(.horizontal, UIScale.pt(2))
     }
 

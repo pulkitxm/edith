@@ -158,7 +158,6 @@ struct CompanionBackendScreen: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
     }
 
     private var servicesCard: some View {

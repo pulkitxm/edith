@@ -606,7 +606,6 @@ struct RootView: View {
                     }
                 }
                 .buttonStyle(.edith(.toolbar))
-                .pointerCursor()
                 .help("Open the Edith app")
                 Spacer()
                 if tab == "music", musicEnabled {

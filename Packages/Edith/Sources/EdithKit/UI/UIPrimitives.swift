@@ -206,21 +206,6 @@ extension View {
     }
 
     @ViewBuilder
-    public func pointerCursor() -> some View {
-        if #available(macOS 15.0, *) {
-            pointerStyle(.link)
-        } else {
-            onContinuousHover { phase in
-                if case .active = phase {
-                    NSCursor.pointingHand.set()
-                } else {
-                    NSCursor.arrow.set()
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
     public func presenterBlur(_ on: Bool, radius: CGFloat = 4) -> some View {
         if on {
             blur(radius: UIScale.pt(radius))

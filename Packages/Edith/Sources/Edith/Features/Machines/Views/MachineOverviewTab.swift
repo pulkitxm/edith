@@ -216,7 +216,6 @@ struct MachineOverviewTab: View {
             Spacer(minLength: 0)
             if case .disconnected = session.state {
                 Button("Connect") { model.performConnection(.connect, for: session) }
-                    .pointerCursor()
             }
         }
         .padding(UIScale.pt(14))

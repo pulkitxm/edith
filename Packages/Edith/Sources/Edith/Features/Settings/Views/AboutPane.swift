@@ -135,7 +135,6 @@ struct AboutPane: View {
                             avatar(for: person)
                         }
                         .buttonStyle(.edith(.borderless))
-                        .pointerCursor()
                         .help(person.login)
                         .accessibilityLabel("Open \(person.login) on GitHub")
                     }

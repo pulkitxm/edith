@@ -1071,7 +1071,6 @@ struct MainWindowView: View {
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
         .help("Show update options")
     }
 
@@ -1149,7 +1148,6 @@ struct MainWindowView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
             .help("Blur sensitive numbers and track names everywhere in Edith")
 
             Rectangle()
@@ -1166,7 +1164,6 @@ struct MainWindowView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
             .help("Choose what Presenter mode blurs")
             .popover(isPresented: $presenterQuickActionsPresented, arrowEdge: .leading) {
                 presenterQuickActionsPopover
@@ -1273,7 +1270,6 @@ struct MainWindowView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
         .help(help)
     }
 
@@ -1326,7 +1322,6 @@ struct MainWindowView: View {
                 .buttonStyle(.edith(.borderless))
                 .fontWeight(.semibold)
                 .foregroundStyle(theme)
-                .pointerCursor()
                 .help("pulkit.page")
                 Spacer(minLength: 0)
                 Button {
@@ -1364,7 +1359,6 @@ struct MainWindowView: View {
                 Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
     }
 
     @ViewBuilder

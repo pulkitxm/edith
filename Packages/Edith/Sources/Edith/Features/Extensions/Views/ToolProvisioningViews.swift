@@ -62,7 +62,6 @@ struct ToolProvisioningPanel: View {
                     Spacer()
                     Button("Continue", action: continueAction)
                         .keyboardShortcut(.defaultAction)
-                        .pointerCursor()
                 }
             }
         }
@@ -181,7 +180,6 @@ struct CLIToolStatusSection: View {
                             Task { _ = await center.provision([tool]) }
                         }
                         .controlSize(.small)
-                        .pointerCursor()
                     }
                 }
             }

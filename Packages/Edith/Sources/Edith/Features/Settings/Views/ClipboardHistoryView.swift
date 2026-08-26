@@ -36,7 +36,6 @@ struct ClipboardHistoryView: View {
                 }
                 Spacer()
                 Button("Done") { dismiss() }
-                    .pointerCursor()
             }
             .padding()
             Divider()

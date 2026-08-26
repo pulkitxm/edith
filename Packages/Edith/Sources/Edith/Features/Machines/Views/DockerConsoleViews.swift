@@ -261,7 +261,6 @@ private struct DockerContainerRow: View {
                             .foregroundStyle(DashSkin.accent(dark))
                     }
                     .buttonStyle(.edith(.borderless))
-                    .pointerCursor()
                 }
             }
         }

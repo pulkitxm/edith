@@ -315,7 +315,6 @@ struct WorkspacePaneView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.edith(.borderless))
-                .pointerCursor()
                 .help("Close this tab")
             }
             .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
@@ -328,7 +327,6 @@ struct WorkspacePaneView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
         .contextMenu {
             Button("Close Tab") { closeTab(tab) }
             Divider()

@@ -151,7 +151,6 @@ struct AddMachineSheet: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.edith(.borderless))
-                    .pointerCursor()
                     if configHost.id != configHosts.last?.id { Divider().opacity(0.3) }
                 }
             }
@@ -185,7 +184,6 @@ struct AddMachineSheet: View {
                 HStack(spacing: UIScale.pt(8)) {
                     labelledField("Key file", text: $keyPath, placeholder: "~/.ssh/id_ed25519")
                     Button("Choose…") { chooseKey() }
-                        .pointerCursor()
                 }
                 secureField("Passphrase (optional)", text: $secret)
             }
@@ -212,7 +210,6 @@ struct AddMachineSheet: View {
                         .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                     Button("Forget") { forgetSudoPassword = true }
-                        .pointerCursor()
                 }
             }
             secureField("Sudo password (optional)", text: $sudoPassword)
@@ -266,7 +263,6 @@ struct AddMachineSheet: View {
                     }
                 }
                 .disabled(!isValid || testState == .testing)
-                .pointerCursor()
                 Spacer(minLength: 0)
             }
             switch testState {
@@ -297,12 +293,10 @@ struct AddMachineSheet: View {
         HStack {
             Button("Cancel") { dismiss() }
                 .keyboardShortcut(.cancelAction)
-                .pointerCursor()
             Spacer()
             Button(editing == nil ? "Add machine" : "Save") { save() }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!isValid)
-                .pointerCursor()
         }
         .padding(UIScale.pt(16))
     }

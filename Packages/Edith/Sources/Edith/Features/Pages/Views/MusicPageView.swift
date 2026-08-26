@@ -985,7 +985,6 @@ struct MusicPage: View {
                     .liquidGlass(in: Capsule(), tint: theme, interactive: true, dark: dark)
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
             .help(
                 remote.showingFavourites
                     ? "Play your favourites" : "Play everything in this folder")
@@ -1023,7 +1022,6 @@ struct MusicPage: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .pointerCursor()
             .help("Jump to a folder here")
         }
     }
@@ -1183,7 +1181,6 @@ struct SeekBar: View {
             )
         }
         .frame(height: height)
-        .pointerCursor()
     }
 
     private func fill(_ width: CGFloat, _ knob: CGFloat) -> some View {
@@ -1290,7 +1287,6 @@ private struct MusicFolderRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
 
             Button(action: onPlay) {
                 Image(systemName: "play.circle.fill")
@@ -1298,7 +1294,6 @@ private struct MusicFolderRow: View {
                     .foregroundStyle(theme)
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
             .help("Play this folder")
             .opacity(hovering || trackCount == 0 ? 1 : 0.55)
 
@@ -1368,7 +1363,6 @@ private struct MusicPageRow: View {
                 PageArtworkThumb(track: track, size: 34)
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
             .help("Show details")
             Button(action: onToggle) {
                 HStack(spacing: UIScale.pt(10)) {
@@ -1401,7 +1395,6 @@ private struct MusicPageRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
 
             Button(action: onToggleFavourite) {
                 Image(systemName: isFavourite ? "heart.fill" : "heart")
@@ -1410,7 +1403,6 @@ private struct MusicPageRow: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
             .help(isFavourite ? "Remove from favourites" : "Add to favourites")
             .opacity(hovering || isFavourite ? 1 : 0)
         }
@@ -1802,7 +1794,6 @@ private struct MusicDetailSheet: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
         .help(help)
     }
 
@@ -1860,7 +1851,6 @@ private struct MusicDetailSheet: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
         .help("Show this folder in Music")
     }
 
@@ -1880,7 +1870,6 @@ private struct MusicDetailSheet: View {
                 .buttonStyle(.edith(.borderless))
                 .liquidGlass(in: Circle(), tint: theme, interactive: true, dark: dark)
                 .shadow(color: .black.opacity(0.28), radius: UIScale.pt(8), y: UIScale.pt(3))
-                .pointerCursor()
                 .help(isPlaying ? "Pause" : "Play")
                 .offset(x: UIScale.pt(10), y: UIScale.pt(10))
             }
@@ -1954,7 +1943,6 @@ private struct MusicDetailSheet: View {
             .background(theme.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
     }
 
     private var renameReveal: some View {
@@ -1966,7 +1954,6 @@ private struct MusicDetailSheet: View {
         }
         .buttonStyle(.edith(.borderless))
         .background(theme, in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
-        .pointerCursor()
         .font(.system(size: UIScale.pt(12.5), weight: .semibold))
         .padding(.top, UIScale.pt(Self.renameButtonGap))
         .frame(height: canRename ? UIScale.pt(Self.renameRowHeight) : 0, alignment: .top)
@@ -2140,7 +2127,6 @@ struct MusicFooter: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
         .liquidGlass(in: Circle(), tint: tint, interactive: true, dark: dark)
     }
 
@@ -2211,7 +2197,6 @@ struct MusicFooter: View {
                 .controlSize(.mini)
                 .tint(theme)
                 .frame(width: UIScale.pt(80))
-                .pointerCursor()
             }
             .padding(.horizontal, UIScale.pt(12))
             .padding(.vertical, UIScale.pt(7))

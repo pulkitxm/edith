@@ -163,7 +163,6 @@ struct CompanionPage: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.edith(.borderless))
-                    .pointerCursor()
                     .help("Refresh this screen")
                     Button {
                         select(.setup)
@@ -179,7 +178,6 @@ struct CompanionPage: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.edith(.borderless))
-                    .pointerCursor()
                     .help(healthHelp)
                 }
             },
@@ -247,7 +245,6 @@ struct CompanionPage: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.edith(.borderless))
-                .pointerCursor()
                 .help(item.title)
             }
             Spacer(minLength: 0)

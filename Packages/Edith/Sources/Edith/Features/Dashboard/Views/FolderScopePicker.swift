@@ -117,7 +117,6 @@ struct FolderScopePicker: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(HoverRowStyle(dark: dark))
-        .pointerCursor()
     }
 
     private func chooseFolder() {

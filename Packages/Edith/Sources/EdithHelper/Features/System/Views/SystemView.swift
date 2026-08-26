@@ -32,7 +32,6 @@ struct SystemView: View {
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .tint(theme)
-                    .pointerCursor()
                 }
             }
             .card()

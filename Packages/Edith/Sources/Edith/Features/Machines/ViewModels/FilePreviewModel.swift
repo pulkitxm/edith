@@ -272,7 +272,6 @@ struct FilePreviewPane: View {
                     Button("Download preview") {
                         model.loadExplicitPreview(entry: entry, session: session)
                     }
-                    .pointerCursor()
                 }
             }
             .padding(UIScale.pt(20))
@@ -292,7 +291,6 @@ struct FilePreviewPane: View {
                             NSWorkspace.shared.open(urls[0])
                         }
                     }
-                    .pointerCursor()
                 }
             }
             .padding(UIScale.pt(20))

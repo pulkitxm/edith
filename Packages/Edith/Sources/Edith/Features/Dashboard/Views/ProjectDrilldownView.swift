@@ -70,7 +70,6 @@ struct ProjectDrilldownView: View {
                     Spacer(minLength: 0)
                     Button("Dismiss") { actions.dismissFailure() }
                         .buttonStyle(.edith(.borderless))
-                        .pointerCursor()
                 }
                 .font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(DashSkin.danger)
@@ -142,7 +141,6 @@ struct ProjectDrilldownView: View {
             .foregroundStyle(DashSkin.inkSoft(dark))
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
     }
 
     private var headerRow: some View {
@@ -366,7 +364,6 @@ private struct ProjectRow: View {
                 }
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
         } else {
             iconView
             rowLabel

@@ -84,7 +84,6 @@ public struct ProviderSwitchButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
         .help(
             providers.count > 1
                 ? "Choose provider, or Command-click to switch" : selection.label
@@ -112,7 +111,6 @@ public struct ProviderSwitchButton: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.edith(.borderless))
-                    .pointerCursor()
                 }
             }
             .padding(UIScale.pt(6))

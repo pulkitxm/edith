@@ -21,7 +21,6 @@ struct ColorPickerRows: View {
                 Button("Pick now") {
                     _ = ColorPickerOperationExecution.request(.pick)
                 }
-                .pointerCursor()
                 LabeledContent {
                     HotKeyRecorderControl(keyPrefix: "colorPickerHotKey", defaultLabel: "⌃⌥⌘C")
                 } label: {
@@ -38,7 +37,6 @@ struct ColorPickerRows: View {
                         Text(format.displayName).tag(format)
                     }
                 }
-                .pointerCursor()
                 Picker(selection: $profile.configured(AppStorageKeys.ColorPicker.profile)) {
                     ForEach(ColorProfile.allCases, id: \.self) { option in
                         Text(option.displayName).tag(option)
@@ -51,7 +49,6 @@ struct ColorPickerRows: View {
                         )
                     }
                 }
-                .pointerCursor()
                 Stepper(
                     value: $historySize.configured(AppStorageKeys.ColorPicker.historySize),
                     in: 1...100
@@ -61,7 +58,6 @@ struct ColorPickerRows: View {
                         InfoDot("How many past colors to keep.")
                     }
                 }
-                .pointerCursor()
             }
             .disabled(!colorPickerEnabled)
             .opacity(colorPickerEnabled ? 1 : 0.5)

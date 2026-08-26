@@ -492,7 +492,6 @@ fileprivate struct NotchNowPlayingCard: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.edith(.borderless))
-                    .pointerCursor()
                     .help(isLocal ? "Show this track in Music" : "Open the app playing this")
                     Spacer(minLength: 4)
                     HStack(spacing: 6) {

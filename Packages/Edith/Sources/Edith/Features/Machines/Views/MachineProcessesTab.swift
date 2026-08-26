@@ -185,7 +185,6 @@ private struct ProcessRow: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.edith(.borderless))
-                    .pointerCursor()
                     .help("End this process")
                 } else {
                     Color.clear

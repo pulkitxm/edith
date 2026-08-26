@@ -152,14 +152,12 @@ private struct UpdatesPane: View {
                             updater.checkForUpdates()
                         }
                         .disabled(!updater.canCheckForUpdates)
-                        .pointerCursor()
                     } header: {
                         Text("Version")
                     }
 
                     Section {
                         Toggle("Automatic updates", isOn: automaticDownloads)
-                            .pointerCursor()
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
                             .highPriorityGesture(
@@ -217,7 +215,6 @@ struct GeneralPane: View {
                     Text("Light").tag("light")
                     Text("Dark").tag("dark")
                 }
-                .pointerCursor()
                 .onChange(of: appearance) { _, value in applyAppearance(value) }
 
                 LabeledContent("Theme") {
@@ -232,7 +229,6 @@ struct GeneralPane: View {
                                 })
                         )
                         .toggleStyle(.switch)
-                        .pointerCursor()
                         ForEach(themePalette, id: \.name) { entry in
                             swatch(entry.name, color: entry.color)
                         }
@@ -248,7 +244,6 @@ struct GeneralPane: View {
                     "Show Dock icon",
                     isOn: $showDockIcon.configured(AppStorageKeys.General.showDockIcon)
                 )
-                .pointerCursor()
                 .onChange(of: showDockIcon) { _, on in
                     NSApp.setActivationPolicy(on ? .regular : .accessory)
                 }
@@ -285,7 +280,6 @@ struct GeneralPane: View {
                     }
                 }
                 .buttonStyle(.edith(.borderless))
-                .pointerCursor()
             } header: {
                 Text("Access")
             } footer: {
@@ -298,7 +292,6 @@ struct GeneralPane: View {
                     SharedDefaults.store.removeObject(forKey: OnboardingFlow.completionKey)
                     OnboardingWindow.open()
                 }
-                .pointerCursor()
             } header: {
                 Text("Welcome tour")
             }
@@ -362,6 +355,5 @@ struct GeneralPane: View {
             }
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
     }
 }

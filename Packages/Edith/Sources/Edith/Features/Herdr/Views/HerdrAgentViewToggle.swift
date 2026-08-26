@@ -48,7 +48,6 @@ struct HerdrAgentViewToggle: View {
                 strokeWidth: selected ? 1.4 : 1)
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
         .accessibilityAddTraits(selected ? .isSelected : [])
         .help(option == .diff ? "Show the Quinjet diff" : "Show the agent session")
     }

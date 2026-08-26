@@ -165,7 +165,6 @@ struct TerminalTabsView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.edith(.borderless))
-                        .pointerCursor()
                     }
                 }
             }
@@ -203,7 +202,6 @@ struct TerminalTabsView: View {
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(sendBroadcast)
             Button("Send", action: sendBroadcast)
-                .pointerCursor()
             if let broadcastError {
                 Text(broadcastError)
                     .font(.system(size: UIScale.pt(11)))

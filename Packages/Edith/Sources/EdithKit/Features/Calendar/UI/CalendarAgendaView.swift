@@ -412,7 +412,6 @@ private struct CalendarEventRow: View {
                 }
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
             .help("Join meeting at \(url.host ?? url.absoluteString)")
         }
     }
@@ -437,7 +436,6 @@ private struct CalendarActionButton: View {
                 .overlay(Capsule().strokeBorder(color.opacity(hovering ? 0.34 : 0.2), lineWidth: 1))
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
         .onHover { hovering = $0 }
         .help(help)
     }

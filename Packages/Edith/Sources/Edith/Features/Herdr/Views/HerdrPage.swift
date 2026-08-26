@@ -102,7 +102,6 @@ struct HerdrPage: View {
             fill: DashSkin.paper2(dark),
             stroke: DashSkin.line(dark)
         )
-        .pointerCursor()
         .help(store.detailOpen ? "Hide details" : "Show details")
         .accessibilityLabel(store.detailOpen ? "Hide details" : "Show details")
     }
@@ -145,7 +144,6 @@ struct HerdrPage: View {
         .buttonStyle(.edith(.borderless))
         .padding(UIScale.pt(4))
         .widgetBar(cornerRadius: 8, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
-        .pointerCursor()
         .help(store.railOpen ? "Hide the list" : "Show the list")
         .accessibilityLabel(store.railOpen ? "Hide the list" : "Show the list")
     }
@@ -169,7 +167,6 @@ struct HerdrPage: View {
                             selected ? DashSkin.accent(dark).opacity(0.18) : Color.clear)
                 }
                 .buttonStyle(.edith(.borderless))
-                .pointerCursor()
                 .accessibilityAddTraits(selected ? .isSelected : [])
                 .help(mode.title)
             }
@@ -224,7 +221,6 @@ struct HerdrPage: View {
                             strokeWidth: selected ? 1.4 : 1)
                     }
                     .buttonStyle(.edith(.borderless))
-                    .pointerCursor()
                     .modifier(KindPillHelp(enabled: showsKindMark))
                     .accessibilityAddTraits(selected ? .isSelected : [])
                 }
@@ -342,7 +338,6 @@ struct HerdrPage: View {
         .offset(x: draggingTab == id ? dragTranslation : 0)
         .zIndex(draggingTab == id ? 1 : 0)
         .onTapGesture { store.selectedTab = id }
-        .pointerCursor()
         .gesture(
             id == HerdrStore.boardID
                 ? nil
@@ -516,7 +511,6 @@ struct HerdrPage: View {
                     : HerdrStatusColor.stroke(agent, dark: dark, selected: hovered))
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
         .onHover { inside in
             if inside {
                 hoveredCard = agent.id
@@ -609,7 +603,6 @@ struct HerdrPage: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
         .help(collapsed ? "Show \(title.lowercased())" : "Hide \(title.lowercased())")
         .accessibilityLabel("\(title), \(collapsed ? "collapsed" : "expanded")")
     }
@@ -661,7 +654,6 @@ struct HerdrPage: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
     }
 
     private func rowDetail(_ agent: HerdrAgent) -> String {

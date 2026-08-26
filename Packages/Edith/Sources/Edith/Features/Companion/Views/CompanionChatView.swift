@@ -343,7 +343,6 @@ struct CompanionChatScreen: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
             .disabled(model.streaming || !isActive)
             .modifier(ActiveShortcut(active: isActive, key: "n", modifiers: .command))
             .help("Start a fresh conversation (⌘N)")
@@ -464,7 +463,6 @@ struct CompanionChatScreen: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
         .padding(.bottom, UIScale.pt(10))
         .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
@@ -525,7 +523,6 @@ struct CompanionChatScreen: View {
                             .contentShape(Capsule())
                     }
                     .buttonStyle(.edith(.borderless))
-                    .pointerCursor()
                 }
             }
             .frame(maxWidth: UIScale.pt(500))
@@ -674,7 +671,6 @@ struct CompanionChatScreen: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
     }
 
     @ViewBuilder
@@ -775,7 +771,6 @@ struct CompanionChatScreen: View {
                     .foregroundStyle(DashSkin.accent(dark))
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
             .modifier(ActiveEscapeShortcut(active: isActive))
             .help("Stop generating (Esc)")
         } else {
@@ -788,7 +783,6 @@ struct CompanionChatScreen: View {
                         draftEmpty ? DashSkin.inkFaint(dark) : DashSkin.accent(dark))
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
             .disabled(draftEmpty)
             .help("Send (Return)")
         }
@@ -962,7 +956,6 @@ private struct CitationChip: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
         .help("Preview this citation")
         .popover(isPresented: $showing, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
@@ -1022,7 +1015,6 @@ private struct ConversationRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
             if hovering {
                 Button(action: delete) {
                     Image(systemName: "xmark")
@@ -1031,7 +1023,6 @@ private struct ConversationRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.edith(.borderless))
-                .pointerCursor()
                 .help("Delete conversation")
             }
         }

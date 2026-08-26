@@ -294,7 +294,7 @@ struct DashboardView: View {
                         Label("Month", systemImage: "calendar.badge.clock")
                             .font(.system(size: UIScale.pt(11)))
                     }
-                    .menuStyle(.borderlessButton).pointerCursor().fixedSize()
+                    .menuStyle(.borderlessButton).fixedSize()
                     .modifier(FilterChip(dark: dark))
                 }
                 if !model.machineGroups.isEmpty { machineMenu }
@@ -328,7 +328,7 @@ struct DashboardView: View {
                     }),
                 in: (model.dataRange ?? Date()...Date()), displayedComponents: .date
             )
-            .labelsHidden().datePickerStyle(.field).pointerCursor().controlSize(.small)
+            .labelsHidden().datePickerStyle(.field).controlSize(.small)
             Text("→").font(.system(size: UIScale.pt(10))).foregroundStyle(DashSkin.inkFaint(dark))
             DatePicker(
                 "",
@@ -340,7 +340,7 @@ struct DashboardView: View {
                     }),
                 in: (model.dataRange ?? Date()...Date()), displayedComponents: .date
             )
-            .labelsHidden().datePickerStyle(.field).pointerCursor().controlSize(.small)
+            .labelsHidden().datePickerStyle(.field).controlSize(.small)
         }
     }
 
@@ -362,7 +362,6 @@ struct DashboardView: View {
         let active = isActive(r)
         return Button(title) { model.range = r }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
             .font(DashSkin.mono(11, weight: active ? .semibold : .regular))
             .padding(.horizontal, UIScale.pt(11)).padding(.vertical, UIScale.pt(5))
             .widgetBar(
@@ -693,7 +692,6 @@ struct DashboardView: View {
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
     }
 
     private var tokenMixDomain: [String] { ["input", "output", "cache write", "cache read"] }

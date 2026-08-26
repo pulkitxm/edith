@@ -381,7 +381,6 @@ struct DockerContainerDetail: View {
                                 NSWorkspace.shared.open(urls[0])
                             }
                         }
-                        .pointerCursor()
                     }
                 }
                 Button("Remove", role: .destructive, action: onRemove)
@@ -420,7 +419,6 @@ struct DockerContainerDetail: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .pointerCursor()
             .help("Switch to another container in this group")
         }
     }
@@ -459,7 +457,6 @@ struct DockerContainerDetail: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.edith(.borderless))
-                .pointerCursor()
             }
             Spacer(minLength: 0)
             if tab == .logs {
@@ -550,7 +547,6 @@ struct DockerContainerDetail: View {
                     Button("Reattach") {
                         model.startLogs(session: session, container: live)
                     }
-                    .pointerCursor()
                     .font(.system(size: UIScale.pt(11), weight: .medium))
                 }
                 .padding(.horizontal, UIScale.pt(12))
@@ -583,7 +579,6 @@ struct DockerContainerDetail: View {
                         Button("Retry") {
                             loadGeneration &+= 1
                         }
-                        .pointerCursor()
                         .font(.system(size: UIScale.pt(11), weight: .medium))
                     }
                 } else {
@@ -612,7 +607,6 @@ struct DockerContainerDetail: View {
                             .font(.system(size: UIScale.pt(9)))
                     }
                     .buttonStyle(.edith(.borderless))
-                    .pointerCursor()
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .help("Copy \(title)")
                 }
@@ -706,7 +700,6 @@ struct DockerContainerDetail: View {
                     Button("Retry") {
                         loadGeneration &+= 1
                     }
-                    .pointerCursor()
                     .font(.system(size: UIScale.pt(11), weight: .medium))
                 }
                 .padding(UIScale.pt(16))

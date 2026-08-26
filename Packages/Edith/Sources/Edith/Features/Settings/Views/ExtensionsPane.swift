@@ -301,7 +301,6 @@ private struct ExtensionMarketplaceCard: View {
                         in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
             HStack(spacing: UIScale.pt(7)) {
                 Button(action: open) {
                     HStack(spacing: UIScale.pt(7)) {
@@ -315,7 +314,6 @@ private struct ExtensionMarketplaceCard: View {
                     }
                 }
                 .buttonStyle(.edith(.borderless))
-                .pointerCursor()
                 if !permissions.isEmpty {
                     PermissionInfoButton(permissions: permissions)
                 }
@@ -327,7 +325,6 @@ private struct ExtensionMarketplaceCard: View {
                     .tint(DashSkin.accent(dark))
                     .disabled(switchDisabled)
                     .accessibilityLabel("\(entry.title) enabled")
-                    .pointerCursor()
             }
             Button(action: open) {
                 Text(entry.lifecycle?.value ?? entry.subtitle)
@@ -337,7 +334,6 @@ private struct ExtensionMarketplaceCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
         }
         .padding(UIScale.pt(11))
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -350,7 +346,6 @@ private struct ExtensionMarketplaceCard: View {
                         .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(14)))
                 }
                 .buttonStyle(.edith(.borderless))
-                .pointerCursor()
             }
         }
         .overlay {
@@ -394,7 +389,6 @@ struct ExtensionSettingsHeader: View {
             .toggleStyle(.switch)
             .disabled(disabled)
             .accessibilityLabel("\(title) enabled")
-            .pointerCursor()
         }
         .padding(.horizontal, UIScale.pt(28))
         .padding(.vertical, UIScale.pt(18))
@@ -439,7 +433,6 @@ private struct ExtensionSettingsSheet: View {
                         Button("Set up required tools...") {
                             provisioningEntry = entry
                         }
-                        .pointerCursor()
                     }
                 }
                 ExtensionLifecycleRows(
@@ -457,7 +450,6 @@ private struct ExtensionSettingsSheet: View {
                     Spacer()
                     Button("Done") { dismiss() }
                         .keyboardShortcut(.defaultAction)
-                        .pointerCursor()
                 }
                 .padding(.horizontal, UIScale.pt(18))
                 .padding(.vertical, UIScale.pt(12))
@@ -640,7 +632,6 @@ private struct ExtensionLifecycleRows: View {
                     Button("Check again") {
                         readiness.refresh(.verify)
                     }
-                    .pointerCursor()
                 } else {
                     let loading = ExtensionLifecycleState.loading(extensionID: entry.id)
                     HStack(spacing: UIScale.pt(8)) {
@@ -879,11 +870,9 @@ private struct ExtensionPermissionRows: View {
         switch remediation.action {
         case .request:
             Button("Grant...") { request(permission) }
-                .pointerCursor()
         case .firstUse:
             if remediation.settingsURL != nil {
                 Button("Open Settings...") { openSettings(permission) }
-                    .pointerCursor()
             } else {
                 Text("On first use")
                     .settingsCaption()
@@ -968,9 +957,7 @@ private struct AttentionRows: View {
                         model.settings.trackingEnabled || model.settings.browserTrackingEnabled
                     model.saveSettings()
                 }
-                .pointerCursor()
                 Button("Open Attention") { SectionWindow.open(.attention) }
-                    .pointerCursor()
             }
             if let message = model.message {
                 Text(message)
@@ -1006,11 +993,8 @@ private struct HerdrRows: View {
             HStack {
                 Button("Check sessions") { checkSessions() }
                     .disabled(checking)
-                    .pointerCursor()
                 Button("Open Herdr") { SectionWindow.open(.herdr) }
-                    .pointerCursor()
                 Button("Open setup guide") { openGuide() }
-                    .pointerCursor()
             }
             if checking {
                 ProgressView()
@@ -1078,7 +1062,6 @@ private struct CompanionRows: View {
             Text("Search remembered context, capture new material, and manage Companion hosts.")
                 .settingsCaption()
             Button("Open Companion") { SectionWindow.open(.companion) }
-                .pointerCursor()
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
@@ -1096,11 +1079,9 @@ private struct CalendarRows: View {
                 .settingsCaption()
             HStack {
                 Button("Open Edith Calendar") { SectionWindow.open(.calendar) }
-                    .pointerCursor()
                 Button("Open Calendar app") {
                     CalendarEventOperationExecution.openCalendar()
                 }
-                .pointerCursor()
             }
         }
         .disabled(!enabled)
@@ -1197,16 +1178,13 @@ private struct ExtensionPermissionSheet: View {
                 Spacer()
                 Button("Cancel", action: cancel)
                     .keyboardShortcut(.cancelAction)
-                    .pointerCursor()
                 if request.required.isEmpty {
                     Button("Enable anyway", action: enable)
                         .keyboardShortcut(.defaultAction)
-                        .pointerCursor()
                 } else {
                     Button("Enable when granted", action: enable)
                         .keyboardShortcut(.defaultAction)
                         .disabled(!requiredGranted)
-                        .pointerCursor()
                 }
             }
         }
@@ -1257,13 +1235,11 @@ private struct ExtensionPermissionSheet: View {
             {
                 Button("Grant") { requestPermission(permission) }
                     .controlSize(.small)
-                    .pointerCursor()
             } else if MainPermissionOperations.center.remediation(for: permission).settingsURL
                 != nil
             {
                 Button("Open Settings") { openPermissionSettings(permission) }
                     .controlSize(.small)
-                    .pointerCursor()
             } else {
                 Text("On first use")
                     .settingsCaption()
@@ -1393,17 +1369,14 @@ private struct UsageRows: View {
                     "Claude limits",
                     isOn: $claudeEnabled.configured(AppStorageKeys.Limits.claudeEnabled)
                 )
-                .pointerCursor()
                 Toggle(
                     "Codex limits",
                     isOn: $codexEnabled.configured(AppStorageKeys.Limits.codexEnabled)
                 )
-                .pointerCursor()
                 Toggle(
                     "Show limits in the menu bar",
                     isOn: $limitsInMenuBar.configured(AppStorageKeys.Limits.inMenuBar)
                 )
-                .pointerCursor()
 
                 if limitsInMenuBar {
                     if claudeEnabled {
@@ -1425,14 +1398,12 @@ private struct UsageRows: View {
                         Text("Tagged").tag("tagged")
                         Text("Slashes").tag("slash")
                     }
-                    .pointerCursor()
 
                     Picker("Color", selection: colorModeBinding) {
                         Text("White").tag("white")
                         Text("Black").tag("black")
                         Text("Custom").tag("custom")
                     }
-                    .pointerCursor()
 
                     if isCustomColor {
                         ColorPicker(
@@ -1459,7 +1430,6 @@ private struct UsageRows: View {
                             "Smart color",
                             isOn: $smartColor.configured(AppStorageKeys.General.smartColor)
                         )
-                        .pointerCursor()
                         if !smartColor {
                             HStack {
                                 Text("Thresholds")
@@ -1470,14 +1440,12 @@ private struct UsageRows: View {
                                         AppStorageKeys.Limits.warnPercent),
                                     in: 10...critPercent - 5, step: 5
                                 )
-                                .pointerCursor()
                                 Stepper(
                                     "Critical \(critPercent)%",
                                     value: $critPercent.configured(
                                         AppStorageKeys.Limits.critPercent),
                                     in: warnPercent + 5...100, step: 5
                                 )
-                                .pointerCursor()
                             }
                         }
                     }
@@ -1511,7 +1479,6 @@ private struct UsageRows: View {
                 "Pace my Claude usage",
                 isOn: $budgetEnabled.configured(AppStorageKeys.Budget.enabled)
             )
-            .pointerCursor()
             Text(
                 "Set a personal cap under the real limit and get told if you're spending too fast."
             )
@@ -1522,13 +1489,13 @@ private struct UsageRows: View {
                 ) {
                     Text("Auto daily pace").tag("pace")
                     Text("Cap by a deadline").tag("cap")
-                }.pointerCursor()
+                }
                 Picker(
                     "Window", selection: $budgetKind.configured(AppStorageKeys.Budget.kind)
                 ) {
                     Text("Weekly").tag("weekly")
                     Text("Session (5h)").tag("session")
-                }.pointerCursor()
+                }
                 HStack {
                     Text("Cap")
                     Slider(
@@ -1561,7 +1528,6 @@ private struct UsageRows: View {
 
         Section {
             Toggle("Enable alerts", isOn: alertsBinding)
-                .pointerCursor()
             Group {
                 Toggle(
                     isOn: $trackSession.configured(AppStorageKeys.Notify.trackSession)
@@ -1573,7 +1539,6 @@ private struct UsageRows: View {
                         )
                     }
                 }
-                .pointerCursor()
                 Toggle(
                     isOn: $trackWeekly.configured(AppStorageKeys.Notify.trackWeekly)
                 ) {
@@ -1584,12 +1549,10 @@ private struct UsageRows: View {
                         )
                     }
                 }
-                .pointerCursor()
                 Toggle(
                     "Back to green",
                     isOn: $recovery.configured(AppStorageKeys.Notify.recovery)
                 )
-                .pointerCursor()
                 HStack {
                     Text("Pacing margin")
                     Spacer()
@@ -1598,7 +1561,6 @@ private struct UsageRows: View {
                         value: $pacingMargin.configured(AppStorageKeys.Limits.pacingMargin),
                         in: 5...25, step: 5
                     )
-                    .pointerCursor()
                 }
                 Toggle(
                     isOn: $pacingWarning.configured(AppStorageKeys.Notify.pacingWarning)
@@ -1610,18 +1572,15 @@ private struct UsageRows: View {
                         )
                     }
                 }
-                .pointerCursor()
                 Toggle(
                     "Token expired",
                     isOn: $tokenExpired.configured(AppStorageKeys.Notify.tokenExpired)
                 )
-                .pointerCursor()
                 HStack {
                     Toggle(
                         "Remind before session reset",
                         isOn: $reminderSession.configured(AppStorageKeys.Notify.reminderSession)
                     )
-                    .pointerCursor()
                     Picker(
                         "",
                         selection: $reminderSessionOffset.configured(
@@ -1632,14 +1591,13 @@ private struct UsageRows: View {
                         Text("30 min").tag(30)
                         Text("1 h").tag(60)
                     }
-                    .labelsHidden().pointerCursor().disabled(!reminderSession)
+                    .labelsHidden().disabled(!reminderSession)
                 }
                 HStack {
                     Toggle(
                         "Remind before weekly reset",
                         isOn: $reminderWeekly.configured(AppStorageKeys.Notify.reminderWeekly)
                     )
-                    .pointerCursor()
                     Picker(
                         "",
                         selection: $reminderWeeklyOffset.configured(
@@ -1650,7 +1608,7 @@ private struct UsageRows: View {
                         Text("6 h").tag(360)
                         Text("12 h").tag(720)
                     }
-                    .labelsHidden().pointerCursor().disabled(!reminderWeekly)
+                    .labelsHidden().disabled(!reminderWeekly)
                 }
             }
             .disabled(!notifyMaster)
@@ -1662,7 +1620,6 @@ private struct UsageRows: View {
                     testSent = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3) { testSent = false }
                 }
-                .pointerCursor()
                 if testSent {
                     Text("Sent - check Notification Center")
                         .settingsCaption()
@@ -1779,7 +1736,6 @@ private struct MusicRows: View {
             LabeledContent("Music folder") {
                 HStack {
                     Button("Choose folder...") { chooseLibrary() }
-                        .pointerCursor()
                     Button("Open in Finder") {
                         do {
                             try MusicLibraryOperationExecution.openLibrary()
@@ -1788,7 +1744,6 @@ private struct MusicRows: View {
                             openError = error.localizedDescription
                         }
                     }
-                    .pointerCursor()
                 }
             }
             if let openError {
@@ -1800,7 +1755,6 @@ private struct MusicRows: View {
                 "Fade between tracks",
                 isOn: $crossfade.configured(MusicFade.enabledKey)
             )
-            .pointerCursor()
             if crossfade {
                 VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                     LabeledContent("Fade length") {
@@ -1812,7 +1766,6 @@ private struct MusicRows: View {
                         value: $crossfadeSeconds.configured(MusicFade.secondsKey),
                         in: MusicFade.secondsRange
                     )
-                    .pointerCursor()
                     Text("How long the old track fades out while the next one fades in.")
                         .settingsCaption()
                 }
@@ -1856,7 +1809,6 @@ private struct MicMuteRows: View {
                 "Show in the menu bar",
                 isOn: $inMenuBar.configured(AppStorageKeys.Mic.muteInMenuBar)
             )
-            .pointerCursor()
             Text("The menu bar icon shows the current mute state and toggles it on click.")
                 .settingsCaption()
         }
@@ -1884,7 +1836,6 @@ private struct SystemRows: View {
                     )
                 }
             }
-            .pointerCursor()
             HStack {
                 Text("Keyboard cleaning")
                 InfoDot(
@@ -1902,7 +1853,6 @@ private struct SystemRows: View {
                         cleaningStarted = false
                     }
                 }
-                .pointerCursor()
             }
         }
         .disabled(!enabled)
@@ -1922,7 +1872,6 @@ private struct LimitWindowChipsRow: View {
             ForEach(MenuBarLimits.slots(for: provider), id: \.self) { slot in
                 Toggle(slot.settingsLabel, isOn: binding(for: slot))
                     .toggleStyle(.button)
-                    .pointerCursor()
             }
         }
     }

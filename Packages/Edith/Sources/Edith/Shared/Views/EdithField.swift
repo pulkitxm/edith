@@ -74,7 +74,6 @@ struct EdithTextField: View {
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 .buttonStyle(.edith(.borderless))
-                .pointerCursor()
                 .help("Clear this field")
             }
         }

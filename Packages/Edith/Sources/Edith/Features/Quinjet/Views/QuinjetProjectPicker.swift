@@ -30,14 +30,12 @@ struct QuinjetLocalProjectPicker: View {
                         Label("Choose folder", systemImage: "folder.badge.plus")
                     }
                     .buttonStyle(QuinjetToolbarButtonStyle())
-                    .pointerCursor()
                     Button {
                         Task { await model.refreshProjects() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
                     .buttonStyle(QuinjetToolbarButtonStyle())
-                    .pointerCursor()
                     .help("Refresh recent projects")
                 }
             } accessory: {
@@ -167,7 +165,6 @@ struct QuinjetProjectCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
-            .pointerCursor()
 
             Button {
                 showsWorktrees = true
@@ -184,7 +181,6 @@ struct QuinjetProjectCard: View {
                 .padding(.vertical, UIScale.pt(10))
             }
             .buttonStyle(QuinjetWorktreeCountButtonStyle(dark: dark))
-            .pointerCursor()
             .popover(isPresented: $showsWorktrees, arrowEdge: .bottom) {
                 QuinjetWorktreePicker(
                     projectName: project.name, worktrees: project.availableWorktrees,
@@ -283,7 +279,6 @@ struct QuinjetWorktreePicker: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(QuinjetWorktreeRowStyle(dark: dark))
-                .pointerCursor()
             }
         }
     }

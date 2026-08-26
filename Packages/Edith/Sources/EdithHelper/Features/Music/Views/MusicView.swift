@@ -106,7 +106,6 @@ struct TrackRow: View {
             in: RoundedRectangle(cornerRadius: 7)
         )
         .onHover { hovering = $0 }
-        .pointerCursor()
         .task {
             artwork = await player.artwork(for: track)
             duration = await player.durationLabel(for: track)

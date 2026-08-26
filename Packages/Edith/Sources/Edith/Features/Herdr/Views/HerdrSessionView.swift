@@ -237,7 +237,6 @@ struct HerdrSessionView: View {
                 Task { await prepareDiff(restarting: true) }
             }
             .buttonStyle(QuinjetToolbarButtonStyle())
-            .pointerCursor()
         }
         .padding(UIScale.pt(28))
         .frame(maxWidth: UIScale.pt(420))

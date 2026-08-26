@@ -92,7 +92,6 @@ struct NowPlayingBar: View {
                     .controlSize(.mini)
                     .tint(theme)
                     .frame(width: 60)
-                    .pointerCursor()
                 }
                 scrubber
             }
@@ -140,7 +139,6 @@ struct NowPlayingBar: View {
             )
         }
         .frame(height: 5)
-        .pointerCursor()
     }
 
     private func fill(_ width: CGFloat, _ knob: CGFloat) -> some View {

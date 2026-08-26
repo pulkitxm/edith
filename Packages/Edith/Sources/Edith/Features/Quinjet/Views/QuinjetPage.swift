@@ -81,7 +81,6 @@ struct QuinjetPage: View {
                 Image(systemName: "plus")
             }
             .buttonStyle(.edith(.toolbar))
-            .pointerCursor()
             .help("New Quinjet review")
             terminalMenu
             themeMenu
@@ -201,7 +200,6 @@ private struct QuinjetMenuLabel: View {
         }
         .contentShape(Rectangle())
         .onHover { hovered = $0 }
-        .pointerCursor()
     }
 }
 
@@ -242,7 +240,6 @@ private struct QuinjetTabButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
     }
 }
 
@@ -314,7 +311,6 @@ private struct QuinjetTerminalWorkspace: View {
                 Button("Restart", action: restart)
                     .buttonStyle(.edith(.borderless))
                     .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                    .pointerCursor()
             }
             if let message = tab.externalLaunchMessage {
                 Text(message)
@@ -330,7 +326,6 @@ private struct QuinjetTerminalWorkspace: View {
                     .padding(.vertical, UIScale.pt(7))
             }
             .buttonStyle(QuinjetWorktreeCountButtonStyle(dark: dark))
-            .pointerCursor()
             .popover(isPresented: $tab.showsWorktrees, arrowEdge: .bottom) {
                 worktreePopover
             }
@@ -403,10 +398,8 @@ private struct QuinjetTerminalWorkspace: View {
                         }
                     }
                     .buttonStyle(QuinjetToolbarButtonStyle())
-                    .pointerCursor()
                     Button("Use embedded terminal", action: useEmbedded)
                         .buttonStyle(QuinjetToolbarButtonStyle())
-                        .pointerCursor()
                 }
                 Text("Theme: \(tab.launchConfiguration.theme.label)")
                     .font(.system(size: UIScale.pt(10.5), weight: .medium))

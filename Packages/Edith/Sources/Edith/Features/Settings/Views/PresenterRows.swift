@@ -46,7 +46,6 @@ struct PresenterRows: View {
                         )
                     }
                 }
-                .pointerCursor()
                 .onChange(of: presenterMode) {
                     _ = PresenterRuntimeOperationExecution.perform(
                         presenterMode ? .start : .stop)
@@ -55,27 +54,22 @@ struct PresenterRows: View {
                     "Blur music",
                     isOn: $presenterBlurMusic.configured(AppStorageKeys.Presenter.blurMusic)
                 )
-                .pointerCursor()
                 Toggle(
                     "Blur cost figures",
                     isOn: $presenterBlurMoney.configured(AppStorageKeys.Presenter.blurMoney)
                 )
-                .pointerCursor()
                 Toggle(
                     "Blur usage figures",
                     isOn: $presenterBlurUsage.configured(AppStorageKeys.Presenter.blurUsage)
                 )
-                .pointerCursor()
                 Toggle(
                     "Blur calendar events",
                     isOn: $presenterBlurCalendar.configured(AppStorageKeys.Presenter.blurCalendar)
                 )
-                .pointerCursor()
                 Toggle(
                     "Blur agents",
                     isOn: $presenterBlurAgents.configured(AppStorageKeys.Presenter.blurAgents)
                 )
-                .pointerCursor()
             } header: {
                 Text("Manual")
             }
@@ -91,7 +85,6 @@ struct PresenterRows: View {
                         )
                     }
                 }
-                .pointerCursor()
                 Group {
                     Toggle(
                         isOn: $hideMenuBarNumbers.configured(
@@ -104,7 +97,6 @@ struct PresenterRows: View {
                             )
                         }
                     }
-                    .pointerCursor()
                     Toggle(
                         isOn: $detectRecording.configured(
                             AppStorageKeys.Presenter.detectRecording)
@@ -114,7 +106,6 @@ struct PresenterRows: View {
                             InfoDot("Also blur during QuickTime or ⇧⌘5 recordings.")
                         }
                     }
-                    .pointerCursor()
                     Toggle(
                         isOn: $detectScreenSharing.configured(
                             AppStorageKeys.Presenter.detectScreenSharing)
@@ -126,7 +117,6 @@ struct PresenterRows: View {
                             )
                         }
                     }
-                    .pointerCursor()
                     Toggle(
                         isOn: $detectMirroring.configured(
                             AppStorageKeys.Presenter.detectMirroring)
@@ -137,7 +127,6 @@ struct PresenterRows: View {
                                 "Blur when your display mirrors to a projector, TV, or AirPlay.")
                         }
                     }
-                    .pointerCursor()
                 }
                 .disabled(!autoEnabled)
                 .opacity(autoEnabled ? 1 : 0.5)
@@ -154,7 +143,6 @@ struct PresenterRows: View {
                 Button("Open Screen Recording Settings…") {
                     _ = try? MainPermissionOperations.center.openSettings(for: .screenRecording)
                 }
-                .pointerCursor()
             }
 
             Section {

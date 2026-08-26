@@ -111,7 +111,6 @@ struct DownloadSheet: View {
             }
             .buttonStyle(.edith(.toolbar))
             .disabled(downloader.isRunning || downloader.isUpdatingYTDLP)
-            .pointerCursor()
             .help("Update yt-dlp")
             if let result = downloader.updateResult {
                 switch result {
@@ -138,7 +137,6 @@ struct DownloadSheet: View {
             }
             .buttonStyle(.edith(.toolbar))
             .disabled(downloader.isRunning)
-            .pointerCursor()
         }
         .padding(.horizontal, UIScale.pt(22))
         .padding(.vertical, UIScale.pt(14))
@@ -252,7 +250,6 @@ struct DownloadSheet: View {
                         .font(.system(size: UIScale.pt(11)))
                 }
                 .buttonStyle(.edith(.toolbar))
-                .pointerCursor()
             }
             .frame(height: UIScale.pt(16))
         }
@@ -268,7 +265,6 @@ struct DownloadSheet: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .pointerCursor()
             HStack(spacing: UIScale.pt(10)) {
                 ForEach(DownloadKind.allCases, id: \.rawValue) { kind in
                     sizeChip(kind)
@@ -359,7 +355,6 @@ struct DownloadSheet: View {
             }
             .buttonStyle(.edith(.borderless))
             .disabled(!canStart)
-            .pointerCursor()
         }
     }
 
@@ -374,7 +369,6 @@ struct DownloadSheet: View {
             }
             .buttonStyle(.edith(.borderless))
             .disabled(!canStart)
-            .pointerCursor()
             .help("Add to queue")
         }
         .padding(.horizontal, UIScale.pt(22))
@@ -444,7 +438,6 @@ struct DownloadSheet: View {
                 }
                 .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                .pointerCursor()
                 .disabled(downloader.isRunning)
             }
         }
@@ -698,7 +691,6 @@ struct DownloadSheet: View {
                 .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(10), weight: .medium))
                 .foregroundStyle(theme)
-                .pointerCursor()
                 .disabled(downloader.isRunning)
             case .done:
                 HStack(spacing: UIScale.pt(4)) {
@@ -717,7 +709,6 @@ struct DownloadSheet: View {
                 }
                 .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(11)))
-                .pointerCursor()
             default:
                 EmptyView()
             }
@@ -730,7 +721,6 @@ struct DownloadSheet: View {
             .buttonStyle(.edith(.toolbar))
             .font(.system(size: UIScale.pt(11)))
             .foregroundStyle(.red)
-            .pointerCursor()
             .help("Remove from download history")
         }
         .padding(.vertical, UIScale.pt(5))
@@ -756,7 +746,6 @@ struct DownloadSheet: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.edith(.toolbar))
-                .pointerCursor()
             }
             .padding(.horizontal, UIScale.pt(20))
             .padding(.vertical, UIScale.pt(12))
@@ -790,7 +779,6 @@ struct DownloadSheet: View {
                 }
                 .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(11)))
-                .pointerCursor()
                 .disabled(downloader.isRunning)
                 .confirmationDialog(
                     "Clear download history?", isPresented: $confirmClearHistory,
@@ -812,7 +800,6 @@ struct DownloadSheet: View {
                         .font(.system(size: UIScale.pt(11)))
                 }
                 .buttonStyle(.edith(.toolbar))
-                .pointerCursor()
             }
             Spacer()
             Button("Close") {
@@ -820,7 +807,6 @@ struct DownloadSheet: View {
             }
             .buttonStyle(.edith(.toolbar))
             .font(.system(size: UIScale.pt(11)))
-            .pointerCursor()
         }
         .padding(.horizontal, UIScale.pt(22))
         .padding(.vertical, UIScale.pt(10))

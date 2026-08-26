@@ -107,7 +107,6 @@ struct UpdateSchedulePanel: View {
                 .font(.system(size: UIScale.pt(12), weight: .medium))
                 .foregroundStyle(.secondary)
             Toggle("Check automatically", isOn: automaticChecks)
-                .pointerCursor()
             HStack(spacing: UIScale.pt(10)) {
                 Text("Frequency")
                 Picker("", selection: interval) {
@@ -119,7 +118,6 @@ struct UpdateSchedulePanel: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
-                .pointerCursor()
                 .frame(width: UIScale.pt(190))
                 Spacer()
             }
@@ -127,7 +125,6 @@ struct UpdateSchedulePanel: View {
             if showsCustomField { customField }
             HStack(spacing: UIScale.pt(10)) {
                 Button("Run a background check now", action: updater.checkForUpdatesInBackground)
-                    .pointerCursor()
                     .disabled(!updater.canCheckForUpdates)
                 Text("uses the scheduled check path")
                     .font(.system(size: UIScale.pt(11)))
@@ -196,7 +193,6 @@ struct UpdateSchedulePanel: View {
                     Button("Clear", action: updater.clearCheckHistory)
                         .buttonStyle(.link)
                         .font(.system(size: UIScale.pt(11)))
-                        .pointerCursor()
                 }
             }
             if updater.checkHistory.isEmpty {
@@ -252,7 +248,6 @@ struct UpdateSchedulePanel: View {
             Spacer()
             Button("Done") { dismiss() }
                 .keyboardShortcut(.defaultAction)
-                .pointerCursor()
         }
         .padding(UIScale.pt(16))
     }

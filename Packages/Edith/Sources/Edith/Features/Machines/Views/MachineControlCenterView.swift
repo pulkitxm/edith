@@ -295,7 +295,6 @@ struct MachineControlCenterButton: View {
             hovering = $0
             if $0 { model.refreshIfStale() }
         }
-        .pointerCursor()
         .help("Control this machine's hardware and wireless settings")
         .popover(isPresented: $presented, arrowEdge: .top) {
             MachineControlCenterView(model: model)
@@ -474,7 +473,6 @@ struct MachineControlCenterView: View {
             .buttonStyle(.edith(.borderless))
             .disabled(isBusy)
             .opacity(isBusy ? 0.35 : 1)
-            .pointerCursor()
             .help("Refresh available controls")
         }
     }
@@ -542,7 +540,6 @@ struct MachineControlCenterView: View {
                 }
                 .controlSize(.small)
                 .disabled(session.state.isBusy)
-                .pointerCursor()
                 .padding(.top, UIScale.pt(3))
             }
         }
@@ -676,7 +673,6 @@ struct MachineControlCenterView: View {
             .controlSize(.small)
             .tint(DashSkin.accent(dark))
             .disabled(controlsDisabled)
-            .pointerCursor()
         }
         .padding(.horizontal, UIScale.pt(8))
         .padding(.vertical, UIScale.pt(9))
@@ -774,7 +770,6 @@ struct MachineControlCenterView: View {
                 .controlSize(.small)
                 .frame(width: UIScale.pt(132))
                 .disabled(controlsDisabled)
-                .pointerCursor()
             }
             HStack(spacing: UIScale.pt(9)) {
                 Image(systemName: "timer")
@@ -794,11 +789,9 @@ struct MachineControlCenterView: View {
                 .controlSize(.small)
                 .frame(width: UIScale.pt(92))
                 .disabled(controlsDisabled)
-                .pointerCursor()
                 Button("Apply") { model.applyProfile() }
                     .controlSize(.small)
                     .disabled(model.selectedProfile.isEmpty || controlsDisabled)
-                    .pointerCursor()
             }
             HStack(spacing: UIScale.pt(8)) {
                 Text(profileStatus(profile))

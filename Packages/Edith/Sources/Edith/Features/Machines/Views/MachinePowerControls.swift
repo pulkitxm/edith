@@ -27,7 +27,6 @@ private struct PowerIconButton: View {
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.35)
         .onHover { hovering = $0 }
-        .pointerCursor()
         .animation(.easeOut(duration: 0.12), value: hovering)
         .help(help)
     }

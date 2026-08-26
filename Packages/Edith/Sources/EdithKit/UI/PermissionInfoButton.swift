@@ -41,7 +41,6 @@ public struct PermissionInfoButton: View {
         }
         .buttonStyle(.edith(.borderless))
         .foregroundStyle(color)
-        .pointerCursor()
         .accessibilityLabel("Permission details")
         .help("Permission details")
         .popover(isPresented: $showing, arrowEdge: .trailing) {

@@ -326,7 +326,6 @@ private struct WorldClocksCard: View {
             }
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
         .help("Add a timezone clock")
         .popover(isPresented: $showAdd, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
@@ -351,7 +350,6 @@ private struct WorldClocksCard: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.edith(.borderless))
-                            .pointerCursor()
                         }
                         if matches.isEmpty {
                             Text("No matching timezones")
@@ -398,7 +396,6 @@ private struct ClockTile: View {
                                 .background(Circle().fill(DashSkin.paper2(dark)))
                         }
                         .buttonStyle(.edith(.borderless))
-                        .pointerCursor()
                         .offset(x: 5, y: -5)
                         .help("Remove clock")
                     }
@@ -649,7 +646,6 @@ private struct QuickActionsCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
         .help(sub)
     }
 }
@@ -792,7 +788,6 @@ struct JumpLink: View {
             .foregroundStyle(DashSkin.accentDeep(dark))
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
         .padding(.top, UIScale.pt(10))
     }
 }
@@ -1040,7 +1035,6 @@ private struct MusicCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
     }
 }
 

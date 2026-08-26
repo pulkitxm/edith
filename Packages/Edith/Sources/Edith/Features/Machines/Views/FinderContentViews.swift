@@ -243,7 +243,6 @@ struct FinderListView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
     }
 }
 
@@ -422,7 +421,6 @@ struct QuickLookOverlay: View {
             .help("Next")
             if let entry, !entry.isDirectory {
                 Button("Open") { model.open(entry) }
-                    .pointerCursor()
                     .font(.system(size: UIScale.pt(11), weight: .medium))
             }
         }
@@ -462,7 +460,6 @@ struct QuickLookOverlay: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 Button("Open Folder") { model.open(entry) }
-                    .pointerCursor()
                     .padding(.top, UIScale.pt(4))
             }
             Spacer(minLength: 0)
@@ -544,7 +541,6 @@ private struct FinderSidebarRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .pointerCursor()
         .onHover { hovering = $0 }
         .onDrop(
             of: [MachineItemsPayload.typeIdentifier, UTType.fileURL.identifier],
@@ -605,11 +601,9 @@ struct FinderInfoSheet: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(summary.path, forType: .string)
                 }
-                .pointerCursor()
                 Spacer()
                 Button("Done") { dismiss() }
                     .keyboardShortcut(.defaultAction)
-                    .pointerCursor()
             }
             .padding(UIScale.pt(14))
         }

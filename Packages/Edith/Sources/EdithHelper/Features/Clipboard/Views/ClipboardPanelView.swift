@@ -244,7 +244,6 @@ struct ClipboardPanelView: View {
                             .frame(width: 11, height: 11)
                     }
                     .buttonStyle(.edith(.borderless))
-                    .pointerCursor()
                     .padding(.trailing, 5)
                 }
             }
