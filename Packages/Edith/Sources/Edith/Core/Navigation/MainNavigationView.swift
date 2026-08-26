@@ -200,6 +200,9 @@ private struct SidebarNavRow: View {
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
                     }
+                    if let disclosureExpanded, disclosureAction == nil {
+                        disclosureIcon(expanded: disclosureExpanded)
+                    }
                 }
             }
             .buttonStyle(EdithButtonStyle(.row, selected: selected, tint: theme))
@@ -215,13 +218,7 @@ private struct SidebarNavRow: View {
 
             if let disclosureExpanded, let disclosureAction {
                 Button(action: disclosureAction) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(disclosureExpanded ? 90 : 0))
-                        .animation(
-                            Motion.animation(Motion.snap, reduceMotion: reduceMotion),
-                            value: disclosureExpanded)
+                    disclosureIcon(expanded: disclosureExpanded)
                 }
                 .buttonStyle(EdithButtonStyle(.iconOnly, tint: theme))
                 .background(
@@ -241,6 +238,25 @@ private struct SidebarNavRow: View {
             }
         }
         .onHover { rowHovered = $0 }
+    }
+
+    private func disclosureIcon(expanded: Bool) -> some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: UIScale.pt(10), weight: .semibold))
+            .foregroundStyle(.tertiary)
+            .rotationEffect(.degrees(expanded ? 90 : 0))
+            .animation(
+                Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: expanded)
+    }
+}
+
+enum SidebarDisclosureInteraction {
+    static func rowToggles(isSelected: Bool) -> Bool {
+        isSelected
+    }
+
+    static func showsSeparateControl(isSelected: Bool) -> Bool {
+        !isSelected
     }
 }
 
@@ -795,14 +811,26 @@ struct MainWindowView: View {
                     .padding(.top, UIScale.pt(14))
                     .padding(.bottom, UIScale.pt(4))
                 ForEach(MainDestination.appItems) { item in
+                    let settingsSelected = item == .settings && destination == .settings
                     SidebarNavRow(
                         item: item, selected: destination == item, theme: theme,
                         shortcutHint: shortcutHint(for: item),
-                        action: { select(item) },
+                        action: {
+                            if item == .settings,
+                                SidebarDisclosureInteraction.rowToggles(
+                                    isSelected: settingsSelected)
+                            {
+                                settingsCategoriesExpanded.toggle()
+                            } else {
+                                select(item)
+                            }
+                        },
                         detach: item == .about ? nil : { detach(item) },
                         disclosureExpanded: item == .settings
                             ? settingsCategoriesExpanded : nil,
                         disclosureAction: item == .settings
+                            && SidebarDisclosureInteraction.showsSeparateControl(
+                                isSelected: settingsSelected)
                             ? { settingsCategoriesExpanded.toggle() } : nil)
                     if item == .settings {
                         CollapsibleSidebarLayout(

@@ -27,7 +27,7 @@ import Testing
         #expect(navigation.contains("disclosureAction: item == .settings"))
         #expect(navigation.contains(".zIndex(1)"))
         #expect(!navigation.contains(".move(edge: .top).combined(with: .opacity)"))
-        #expect(navigation.contains("rotationEffect(.degrees(disclosureExpanded ? 90 : 0))"))
+        #expect(navigation.contains("rotationEffect(.degrees(expanded ? 90 : 0))"))
         #expect(navigation.contains(".padding(.top, UIScale.pt(6))"))
         #expect(settings.contains(".pickerStyle(.menu)"))
         #expect(!settings.contains(".pickerStyle(.segmented)"))
@@ -70,5 +70,12 @@ import Testing
         #expect(SidebarDisclosureGeometry.visibleHeight(contentHeight: 180, progress: 1) == 180)
         #expect(SidebarDisclosureGeometry.visibleHeight(contentHeight: 180, progress: -0.2) == 0)
         #expect(SidebarDisclosureGeometry.visibleHeight(contentHeight: 180, progress: 1.2) == 180)
+    }
+
+    @Test func selectedSettingsMovesDisclosureBehaviorToTheWholeRow() {
+        #expect(SidebarDisclosureInteraction.rowToggles(isSelected: true))
+        #expect(!SidebarDisclosureInteraction.showsSeparateControl(isSelected: true))
+        #expect(!SidebarDisclosureInteraction.rowToggles(isSelected: false))
+        #expect(SidebarDisclosureInteraction.showsSeparateControl(isSelected: false))
     }
 }
