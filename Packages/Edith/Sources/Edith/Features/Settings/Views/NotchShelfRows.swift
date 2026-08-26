@@ -40,6 +40,10 @@ struct NotchShelfRows: View {
         false
     @State private var bluetoothAuthorization = CBManager.authorization
 
+    private var audioMixerAvailable: Bool {
+        PlatformCapabilities.macOS.state(for: .applicationAudio).isSupported
+    }
+
     var body: some View {
         Group {
             Section {
@@ -156,11 +160,17 @@ struct NotchShelfRows: View {
                     "Per-app volume mixer (beta)",
                     isOn: $audioMixer.configured(AppStorageKeys.Notch.audioMixerEnabled)
                 )
+                .disabled(!audioMixerAvailable && !audioMixer)
                 .pointerCursor()
-                Text(
-                    "Adds an Audio tab to set each app's volume. macOS 14.4+; asks for audio-recording permission the first time. Off by default."
-                )
-                .settingsCaption()
+                if audioMixerAvailable {
+                    Text(
+                        "Adds an Audio tab to set each app's volume. macOS asks for application audio access the first time. Off by default."
+                    )
+                    .settingsCaption()
+                } else {
+                    Text("Unavailable on this macOS version. Requires macOS 14.4 or later.")
+                        .settingsCaption()
+                }
                 Toggle(
                     "Show on external displays",
                     isOn: $showOnExternal.configured(AppStorageKeys.Notch.shelfShowOnExternal)

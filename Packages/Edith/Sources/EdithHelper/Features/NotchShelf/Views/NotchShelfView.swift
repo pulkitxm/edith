@@ -238,8 +238,7 @@ struct NotchShelfContentView: View {
     }
 
     private var visibleTabs: [NotchTab] {
-        let mixerOn = SharedDefaults.store.bool(forKey: AppStorageKeys.Notch.audioMixerEnabled)
-        return NotchTab.allCases.filter { $0 != .audio || mixerOn }
+        NotchTab.currentVisible
     }
 
     @ViewBuilder private var tabContent: some View {

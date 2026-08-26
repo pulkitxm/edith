@@ -248,7 +248,7 @@ import Testing
             "lidAwake": [],
             "music": [],
             "calendar": [],
-            "notchShelf": [.bluetooth, .camera, .automation],
+            "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation],
             "clipboard": [.accessibility],
             "focusDim": [],
             "presenter": [],
@@ -266,8 +266,19 @@ import Testing
 
     @Test func capabilityTiersDriveExtensionAvailability() {
         let clipboard = ExtensionRegistry.entries.first { $0.id == "clipboard" }!
+        let notchShelf = ExtensionRegistry.entries.first { $0.id == "notchShelf" }!
+        let macOS143 = PlatformCapabilities.macOS(
+            version: OperatingSystemVersion(majorVersion: 14, minorVersion: 3, patchVersion: 0))
+        let macOS144 = PlatformCapabilities.macOS(
+            version: OperatingSystemVersion(majorVersion: 14, minorVersion: 4, patchVersion: 0))
 
         #expect(clipboard.availability(on: .macOS) == .available)
+        #expect(
+            macOS143.state(for: .applicationAudio)
+                == .unsupported("Application audio mixing requires macOS 14.4 or later."))
+        #expect(notchShelf.availability(on: macOS143) == .degraded([.applicationAudio]))
+        #expect(macOS144.state(for: .applicationAudio) == .permissionRequired)
+        #expect(notchShelf.availability(on: macOS144) == .available)
     }
 
     @Test func capabilityTiersDoNotOverlap() {

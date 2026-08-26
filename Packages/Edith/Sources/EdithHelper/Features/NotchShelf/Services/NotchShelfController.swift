@@ -294,6 +294,7 @@ final class NotchShelfController: FeatureModule {
     }
 
     func rebuildPanels() {
+        activeTab = NotchTab.validSelection(activeTab, visible: NotchTab.currentVisible)
         let builtin = NSScreen.screens.first {
             $0.displayID.map { CGDisplayIsBuiltin($0) != 0 } ?? false
         }
@@ -841,7 +842,7 @@ final class NotchShelfController: FeatureModule {
     }
 
     func selectTab(_ tab: NotchTab) {
-        activeTab = tab
+        activeTab = NotchTab.validSelection(tab, visible: NotchTab.currentVisible)
         if isExpanded { syncFrames() }
     }
 

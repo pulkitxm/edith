@@ -1,7 +1,7 @@
 # `ed permissions`
 
 macOS hands privacy grants to an application bundle, not to a process, so the
-nine permissions Edith uses belong to the Edith app and never to `ed`. A command
+ten permissions Edith uses belong to the Edith app and never to `ed`. A command
 line process cannot read another bundle's TCC state, and it must not try. `ed`
 therefore reports the mirror the app writes into the shared defaults suite every
 time it re-reads the real state, and hands anything that needs a live system
@@ -25,7 +25,7 @@ line, without you opening System Settings to find out.
 
 ## The permissions Edith uses
 
-There are exactly nine and they are fixed in the binary. `ed permissions
+There are exactly ten and they are fixed in the binary. `ed permissions
 request` is the only command in this group that takes one of their ids; it
 matches case-insensitively, and an id that is not one of these exits 3 with the
 full list as the hint.
@@ -38,15 +38,16 @@ full list as the hint.
 | `inputMonitoring` | Privacy & Security > Input Monitoring | Block key presses while Clean keys is locking the keyboard | optional for `system` |
 | `fullDisk` | Privacy & Security > Full Disk Access | Reach local service credentials and usage data | nothing declares it |
 | `screenRecording` | Privacy & Security > Screen Recording | Detect shared content, and sample colours from the screen | required by `focusDim`, `presenter`, `colorPicker` |
+| `applicationAudio` | Privacy & Security > Screen & System Audio Recording, granted on first use | Notch Shelf per-app volume mixing | optional for `notchShelf` |
 | `camera` | Privacy & Security > Camera | The Notch Shelf camera preview | optional for `notchShelf` |
 | `bluetooth` | Privacy & Security > Bluetooth, granted on first use | Notch Shelf device connection alerts | optional for `notchShelf` |
 | `automation` | Edith opens no pane, granted on first use | Notch Shelf controlling external playback | optional for `notchShelf` |
 
 For the seven that can be requested, the `reason` string in `--json` is the same
 sentence the Permissions pane shows under each row, so the CLI and the UI cannot
-describe those grants differently. `bluetooth` and `automation` are the
-exception: the pane prefers their first-use explanation, which is the same
-sentence `request` prints as its hint when it refuses them.
+describe those grants differently. `applicationAudio`, `bluetooth` and
+`automation` are the exception: the pane prefers their first-use explanation,
+which is the same sentence `request` prints as its hint when it refuses them.
 
 How each one is observed, and what asking for it actually does:
 
@@ -58,6 +59,7 @@ How each one is observed, and what asking for it actually does:
 | `inputMonitoring` | `permInputMonitoringGranted` | `CGPreflightListenEventAccess()` | `CGRequestListenEventAccess()`, and open the Input Monitoring pane |
 | `fullDisk` | `permFullDiskGranted` | try to open `~/Library/Application Support/com.apple.TCC/TCC.db` for reading | open the Full Disk Access pane, because macOS offers no prompt for it |
 | `screenRecording` | `permScreenRecordingGranted` | `CGPreflightScreenCaptureAccess()` | `CGRequestScreenCaptureAccess()`, and open the Screen Recording pane |
+| `applicationAudio` | none | not observed | refused, exit 4; `settings` opens the Screen & System Audio Recording pane |
 | `camera` | `permCameraGranted` | `AVCaptureDevice` video authorisation | ask `AVCaptureDevice` when the state is undetermined, open the Camera pane otherwise |
 | `bluetooth` | none | not observed | refused, exit 4; `settings` can still open its privacy pane |
 | `automation` | none | not observed | refused, exit 4 |
@@ -68,12 +70,12 @@ Edith window rather than by the menu bar helper, and the helper is what answers
 keeps whatever the window last stored. The prompt still comes up; the mirror
 catches up the next time the window is open. The other six move under a refresh.
 
-`bluetooth` and `automation` have no mirror setting because macOS grants them
-the first time the code that needs them runs, and there is no ahead-of-time
-prompt to raise. They therefore report `granted` as `false` for as long as they
-exist, which is a statement about what Edith knows rather than about what macOS
-has decided. `ls` says `on first use` for them instead of `no`; `refresh` says
-`no`.
+`applicationAudio`, `bluetooth` and `automation` have no mirror setting because
+macOS grants them the first time the code that needs them runs, and there is no
+ahead-of-time prompt to raise. They therefore report `granted` as `false` for as
+long as they exist, which is a statement about what Edith knows rather than
+about what macOS has decided. `ls` says `on first use` for them instead of `no`;
+`refresh` says `no`.
 
 `fullDisk` is in the catalogue but no extension declares it, so it never blocks
 anything and never appears under `--attention`. Request it by hand when a
@@ -97,8 +99,8 @@ Permissions pane opens with, and is writable.
 | --- | --- |
 | 0 | Any successful run, including a `request` whose grant did not land inside the wait |
 | 2 | An unknown flag, or `ed permissions request` with no permission named |
-| 3 | `ed permissions request <permission>` where the id is not one of the nine, with the full list as the hint |
-| 4 | `ed permissions request bluetooth` or `automation`; `permissions settings automation`; `request` or `refresh` while the Edith menu bar app is closed |
+| 3 | `ed permissions request <permission>` where the id is not one of the ten, with the full list as the hint |
+| 4 | `ed permissions request applicationAudio`, `bluetooth` or `automation`; `permissions settings automation`; `request` or `refresh` while the Edith menu bar app is closed |
 
 `ed permissions ls` has no failure path and always exits 0.
 

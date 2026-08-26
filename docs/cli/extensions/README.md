@@ -92,7 +92,7 @@ eight the welcome tour shows before you ask it for all of them.
 | `lidAwake` | `lidAwakeEnabled` | no | none | none | none | none |
 | `music` | `tabMusicEnabled` | no | none | none | none | `yt-dlp` |
 | `calendar` | `tabCalendarEnabled` | no | `calendar` | none | none | none |
-| `notchShelf` | `notchShelfEnabled` | yes | none | `bluetooth`, `camera`, `automation` | none | none |
+| `notchShelf` | `notchShelfEnabled` | yes | none | `applicationAudio`, `bluetooth`, `camera`, `automation` | none | none |
 | `clipboard` | `clipboardEnabled` | yes | none | `accessibility` | none | none |
 | `focusDim` | `focusDimEnabled` | no | `screenRecording` | none | none | none |
 | `presenter` | `presenterEnabled` | no | `screenRecording` | none | none | none |
@@ -116,7 +116,7 @@ the current platform, and which missing implementations merely degrade it:
 | `lidAwake` | `preventSleep` | none |
 | `music` | `localMusicPlayback` | `mediaControls` |
 | `calendar` | `calendarEvents` | none |
-| `notchShelf` | `fileShelf` | `bluetoothMonitoring`, `cameraPreview`, `externalMediaControl` |
+| `notchShelf` | `fileShelf` | `applicationAudio`, `bluetoothMonitoring`, `cameraPreview`, `externalMediaControl` |
 | `clipboard` | `clipboardHistory` | `globalPaste`, `globalShortcuts` |
 | `focusDim` | `windowDimming` | none |
 | `presenter` | `screenShareDetection` | none |
@@ -212,10 +212,10 @@ for agents and scripts. Read `verified`, `state.phase`, `state.runtimePhase`,
 - `setup` never opens the app, a permission prompt, or another interactive UI.
   It installs tools only when `--install-tools` is explicit. Use `--dry-run` to
   project the enabled state and required tool plan without changing anything.
-- `bluetooth` and `automation` are granted by macOS on first use and have no
-  mirrored key, so they are always reported as not granted. That is why they
-  appear only as optional permissions, on `notchShelf`, and never in
-  `missingRequiredPermissions`.
+- `applicationAudio`, `bluetooth` and `automation` are granted by macOS on first
+  use and have no mirrored key, so they are always reported as not granted. That
+  is why they appear only as optional permissions, on `notchShelf`, and never
+  in `missingRequiredPermissions`.
 - `requiredTools` contains core setup blockers. `optionalTools` contains tools
   for additional workflows. Onboarding and `setup --install-tools` provision
   only required tools. Music exposes `yt-dlp` as optional because local library

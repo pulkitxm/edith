@@ -278,6 +278,20 @@ import Testing
         }
     }
 
+    @Test func audioMixerSettingsExplainAndEnforcePlatformSupport() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent(
+                "Sources/Edith/Features/Settings/Views/NotchShelfRows.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        #expect(source.contains("PlatformCapabilities.macOS.state(for: .applicationAudio)"))
+        #expect(source.contains(".disabled(!audioMixerAvailable && !audioMixer)"))
+        #expect(source.contains("Requires macOS 14.4 or later."))
+    }
+
     private static func viewDeclaration(_ name: String, in source: String) throws -> Substring {
         let start = try #require(source.range(of: "struct \(name): View"))
         let remaining = start.upperBound..<source.endIndex

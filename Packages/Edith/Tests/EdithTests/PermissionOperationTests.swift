@@ -78,6 +78,24 @@ import Testing
         #expect(driver.requested.isEmpty)
     }
 
+    @Test func applicationAudioIsFirstUseWithScreenAndAudioSettings() throws {
+        let (center, defaults, driver, suite) = makeCenter()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let remediation = center.remediation(for: .applicationAudio)
+        let settings = try center.openSettings(for: .applicationAudio)
+
+        #expect(remediation.action == .firstUse)
+        #expect(remediation.settingsURL == ExtensionPermission.screenRecording.settingsURL)
+        #expect(remediation.relaunch == .none)
+        #expect(settings.opened)
+        #expect(driver.opened == [ExtensionPermission.screenRecording.settingsURL!])
+        #expect(throws: PermissionOperationError.firstUse(.applicationAudio)) {
+            try center.request(.applicationAudio)
+        }
+        #expect(driver.requested.isEmpty)
+    }
+
     @Test func firstUsePermissionCannotBeRequestedOrOpened() {
         let (center, defaults, driver, suite) = makeCenter()
         defer { defaults.removePersistentDomain(forName: suite) }

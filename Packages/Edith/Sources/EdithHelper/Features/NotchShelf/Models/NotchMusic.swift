@@ -4,13 +4,27 @@ import Foundation
 enum NotchTab: String, CaseIterable, Equatable {
     case home, files, clipboard, audio, camera
 
-    static var allCases: [NotchTab] {
+    static func visible(
+        clipboardEnabled: Bool, audioMixerEnabled: Bool, applicationAudioSupported: Bool
+    ) -> [NotchTab] {
         var tabs: [NotchTab] = [.home, .files]
-        if SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.enabled) {
-            tabs.append(.clipboard)
-        }
-        tabs.append(contentsOf: [.audio, .camera])
+        if clipboardEnabled { tabs.append(.clipboard) }
+        if audioMixerEnabled, applicationAudioSupported { tabs.append(.audio) }
+        tabs.append(.camera)
         return tabs
+    }
+
+    static var currentVisible: [NotchTab] {
+        visible(
+            clipboardEnabled: SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.enabled),
+            audioMixerEnabled: SharedDefaults.store.bool(
+                forKey: AppStorageKeys.Notch.audioMixerEnabled),
+            applicationAudioSupported: PlatformCapabilities.macOS.state(for: .applicationAudio)
+                .isSupported)
+    }
+
+    static func validSelection(_ selected: NotchTab, visible: [NotchTab]) -> NotchTab {
+        visible.contains(selected) ? selected : .home
     }
 
     var title: String {

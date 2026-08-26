@@ -50,13 +50,15 @@ import Testing
     }
 
     @Test func grantableSkipsFirstUseOnlyPermissions() {
-        let all = usages(enabled: ["notchShelf"], missing: [.camera, .bluetooth, .automation])
+        let all = usages(
+            enabled: ["notchShelf"],
+            missing: [.applicationAudio, .camera, .bluetooth, .automation])
         #expect(PermissionCatalog.grantable(all).map(\.permission) == [.camera])
     }
 
     @Test func firstUsePermissionsAreFlagged() {
         let all = usages()
         let firstUse = all.filter(\.grantsOnFirstUse).map(\.permission)
-        #expect(Set(firstUse) == [.bluetooth, .automation])
+        #expect(Set(firstUse) == [.applicationAudio, .bluetooth, .automation])
     }
 }

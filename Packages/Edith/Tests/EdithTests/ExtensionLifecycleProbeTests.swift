@@ -167,6 +167,27 @@ import EdithCore
         #expect(report.state.issues.map(\.id) == ["platform"])
     }
 
+    @Test func oldMacOSOnlyDegradesNotchShelfWhenAudioMixerIsEnabled() async throws {
+        let entry = try #require(ExtensionRegistry.entries.first { $0.id == "notchShelf" })
+        let platform = PlatformCapabilities.macOS(
+            version: OperatingSystemVersion(majorVersion: 14, minorVersion: 3, patchVersion: 0))
+        let ready = await probe(
+            permissions: [.camera: true], helperRunning: true, platform: platform,
+            applicationAudioEnabled: false
+        ).report(for: entry)
+        let degraded = await probe(
+            permissions: [.camera: true], helperRunning: true, platform: platform,
+            applicationAudioEnabled: true
+        ).report(for: entry)
+
+        #expect(ready.state.phase == .ready)
+        #expect(ready.state.runtimePhase == .installed)
+        #expect(degraded.state.phase == .degraded)
+        #expect(degraded.state.runtimePhase == .installed)
+        #expect(degraded.state.issues.map(\.id) == ["platform"])
+        #expect(degraded.state.issues.first?.detail.contains("applicationAudio") == true)
+    }
+
     @Test func backendFailureIsDifferentFromIncompleteSetup() async throws {
         let entry = try #require(ExtensionRegistry.entries.first { $0.id == "companion" })
         let report = await probe(adapter: .failed("Database is unavailable.")).report(for: entry)
@@ -299,7 +320,7 @@ import EdithCore
         tools: Set<String> = [], helperRunning: Bool = false,
         platform: PlatformCapabilities = .macOS, machineCount: Int = 0,
         adapter: ExtensionAdapterReadiness? = .ready("Ready."),
-        toolStates: [String: ExtensionToolReadiness] = [:]
+        toolStates: [String: ExtensionToolReadiness] = [:], applicationAudioEnabled: Bool = false
     ) -> ExtensionLifecycleProbe {
         ExtensionLifecycleProbe(
             environment: ExtensionLifecycleProbeEnvironment(
@@ -308,7 +329,10 @@ import EdithCore
                     toolStates[$0]
                         ?? (tools.contains($0) ? .installed(version: "test") : .uninstalled)
                 }, helperRunning: { helperRunning },
-                platformCapabilities: platform, machineCount: { machineCount },
+                platformCapabilities: platform,
+                usesOptionalCapability: {
+                    $0 != .applicationAudio || applicationAudioEnabled
+                }, machineCount: { machineCount },
                 adapterReadiness: { _ in adapter }))
     }
 }

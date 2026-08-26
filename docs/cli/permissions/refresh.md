@@ -15,7 +15,7 @@ ed permissions refresh [--json]
 
 ## `--json` shape
 
-A top-level array, not an object, carrying the same nine permission objects `ls`
+A top-level array, not an object, carrying the same ten permission objects `ls`
 puts under its `permissions` key. There is no `appRunning` field, because the
 command cannot get this far with the app closed. Trimmed here to two rows:
 
@@ -67,7 +67,8 @@ through updating; running it twice costs nothing.
 
 The human table is narrower than the one `ls` prints, two columns and no
 `blocking` marker, and its `STATE` is only ever `granted` or `no`. That is why
-`bluetooth` and `automation` read `no` here and `on first use` under `ls`:
+`applicationAudio`, `bluetooth` and `automation` read `no` here and `on first
+use` under `ls`:
 
 ```
 $ ed permissions refresh
@@ -78,6 +79,7 @@ accessibility    granted
 inputMonitoring  granted
 fullDisk         no
 screenRecording  granted
+applicationAudio no
 camera           granted
 bluetooth        no
 automation       no
