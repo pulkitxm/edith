@@ -33,6 +33,15 @@ import Testing
         #expect(!source.contains("multilineTextAlignment(.center)"))
     }
 
+    @Test func attentionAndDashboardUseOwnedLoadingWork() throws {
+        let attention = try source("Features/Attention/Views/AttentionPage.swift")
+        let dashboard = try source("Features/Dashboard/Views/DashboardView.swift")
+
+        #expect(attention.contains("LoadingContainer("))
+        #expect(dashboard.contains(".task(id: refresh.updating)"))
+        #expect(!dashboard.contains("Task { await model.load() }"))
+    }
+
     private func source(_ relativePath: String) throws -> String {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

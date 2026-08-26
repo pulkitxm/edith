@@ -58,7 +58,7 @@ import Testing
                 startedAt: now.addingTimeInterval(-120), duration: 60,
                 source: .application, appName: "Writing", bundleID: "com.example.Writing"))
         let model = AttentionPageModel(repository: fixture.repository)
-        model.range = .today
+        model.range = .week
         model.reload()
         await model.waitForReload()
         let entity = try #require(model.summary.entities.first)
