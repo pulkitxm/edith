@@ -75,7 +75,7 @@ struct EdithTextField: View {
                 }
                 .buttonStyle(.plain)
                 .pointerCursor()
-                .help("Clear")
+                .help("Clear this field")
             }
         }
         .edithFieldSurface(focused: focused, compact: compact, invalid: invalid)
