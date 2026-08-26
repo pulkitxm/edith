@@ -76,9 +76,19 @@ import Testing
     }
 
     @Test func selectedSettingsMovesDisclosureBehaviorToTheWholeRow() {
-        #expect(SidebarDisclosureInteraction.rowToggles(isSelected: true))
+        #expect(
+            SidebarDisclosureInteraction.expansionAfterRowActivation(
+                isSelected: false, currentlyExpanded: false))
+        #expect(
+            SidebarDisclosureInteraction.expansionAfterRowActivation(
+                isSelected: false, currentlyExpanded: true))
+        #expect(
+            !SidebarDisclosureInteraction.expansionAfterRowActivation(
+                isSelected: true, currentlyExpanded: true))
+        #expect(
+            SidebarDisclosureInteraction.expansionAfterRowActivation(
+                isSelected: true, currentlyExpanded: false))
         #expect(!SidebarDisclosureInteraction.showsSeparateControl(isSelected: true))
-        #expect(!SidebarDisclosureInteraction.rowToggles(isSelected: false))
         #expect(SidebarDisclosureInteraction.showsSeparateControl(isSelected: false))
     }
 }

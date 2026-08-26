@@ -257,8 +257,10 @@ private struct SidebarNavRow: View {
 }
 
 enum SidebarDisclosureInteraction {
-    static func rowToggles(isSelected: Bool) -> Bool {
-        isSelected
+    static func expansionAfterRowActivation(
+        isSelected: Bool, currentlyExpanded: Bool
+    ) -> Bool {
+        isSelected ? !currentlyExpanded : true
     }
 
     static func showsSeparateControl(isSelected: Bool) -> Bool {
@@ -400,7 +402,7 @@ struct MainWindowView: View {
         var sidebarWidth = 230.0
     @AppStorage(
         AppStorageKeys.General.settingsCategoriesExpanded, store: SharedDefaults.store
-    ) private var settingsCategoriesExpanded = true
+    ) private var settingsCategoriesExpanded = false
     @AppStorage(AppStorageKeys.Tabs.attentionEnabled, store: SharedDefaults.store) private
         var attentionEnabled = false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
@@ -835,11 +837,12 @@ struct MainWindowView: View {
                         item: item, selected: destination == item, theme: theme,
                         shortcutHint: shortcutHint(for: item),
                         action: {
-                            if item == .settings,
-                                SidebarDisclosureInteraction.rowToggles(
-                                    isSelected: settingsSelected)
-                            {
-                                settingsCategoriesExpanded.toggle()
+                            if item == .settings {
+                                settingsCategoriesExpanded =
+                                    SidebarDisclosureInteraction.expansionAfterRowActivation(
+                                        isSelected: settingsSelected,
+                                        currentlyExpanded: settingsCategoriesExpanded)
+                                if !settingsSelected { select(item) }
                             } else {
                                 select(item)
                             }
