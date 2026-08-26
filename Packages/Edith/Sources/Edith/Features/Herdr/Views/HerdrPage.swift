@@ -12,6 +12,8 @@ struct HerdrPage: View {
         var presenterBlurAgents = true
     private var presenterState = PresenterState.shared
     @State private var draggingTab: String?
+    @State private var dragTranslation: CGFloat = 0
+    @State private var tabFrames: [String: CGRect] = [:]
     @State private var hoveredCard: String?
 
     @MainActor init(store: HerdrStore? = nil) {
@@ -98,6 +100,18 @@ struct HerdrPage: View {
         .pointerCursor()
         .help(store.detailOpen ? "Hide details" : "Show details")
         .accessibilityLabel(store.detailOpen ? "Hide details" : "Show details")
+    }
+
+    private func reorder(id: String, location: CGPoint) {
+        guard
+            let target = tabFrames.first(where: { entry in
+                entry.key != id && entry.key != HerdrStore.boardID
+                    && location.x >= entry.value.minX && location.x <= entry.value.maxX
+            })
+        else { return }
+        guard target.key != id else { return }
+        store.moveTab(id, toIndexOf: target.key)
+        dragTranslation = 0
     }
 
     private var tabShortcuts: some View {
@@ -248,6 +262,8 @@ struct HerdrPage: View {
                 .fill(DashSkin.lineStrong(dark))
                 .frame(height: 1)
         }
+        .coordinateSpace(name: HerdrTabFrames.space)
+        .onPreferenceChange(HerdrTabFrames.self) { tabFrames = $0 }
         .background(DashSkin.paper2(dark).opacity(0.4))
     }
 
@@ -311,15 +327,30 @@ struct HerdrPage: View {
             strokeWidth: selected ? 1.4 : 1
         )
         .contentShape(Rectangle())
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: HerdrTabFrames.self,
+                    value: [id: proxy.frame(in: .named(HerdrTabFrames.space))])
+            }
+        )
+        .offset(x: draggingTab == id ? dragTranslation : 0)
+        .zIndex(draggingTab == id ? 1 : 0)
         .onTapGesture { store.selectedTab = id }
         .pointerCursor()
-        .onDrag {
-            draggingTab = id
-            return NSItemProvider(object: id as NSString)
-        }
-        .onDrop(
-            of: [.text],
-            delegate: HerdrTabDrop(target: id, store: store, dragging: $draggingTab)
+        .gesture(
+            id == HerdrStore.boardID
+                ? nil
+                : DragGesture(minimumDistance: 6, coordinateSpace: .named(HerdrTabFrames.space))
+                    .onChanged { value in
+                        draggingTab = id
+                        dragTranslation = value.translation.width
+                        reorder(id: id, location: value.location)
+                    }
+                    .onEnded { _ in
+                        draggingTab = nil
+                        dragTranslation = 0
+                    }
         )
         .contextMenu { tabContextMenu(id: id, closable: closable) }
         .help(
@@ -650,23 +681,13 @@ enum HerdrStatusColor {
     }
 }
 
-private struct HerdrTabDrop: DropDelegate {
-    let target: String
-    let store: HerdrStore
-    @Binding var dragging: String?
+private struct HerdrTabFrames: PreferenceKey {
+    static let space = "herdr.tabs"
 
-    func dropEntered(info: DropInfo) {
-        guard let dragging, dragging != target else { return }
-        store.moveTab(dragging, toIndexOf: target)
-    }
+    static let defaultValue: [String: CGRect] = [:]
 
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        dragging = nil
-        return true
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue()) { _, new in new }
     }
 }
 
