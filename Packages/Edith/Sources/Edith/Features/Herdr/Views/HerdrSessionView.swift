@@ -2,6 +2,38 @@ import EdithKit
 import SwiftTerm
 import SwiftUI
 
+private struct SplitResizeCursor: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { CursorView() }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class CursorView: NSView {
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            for area in trackingAreas { removeTrackingArea(area) }
+            addTrackingArea(
+                NSTrackingArea(
+                    rect: bounds,
+                    options: [.activeInActiveApp, .cursorUpdate, .mouseEnteredAndExited],
+                    owner: self))
+        }
+
+        override func cursorUpdate(with event: NSEvent) {
+            NSCursor.resizeLeftRight.set()
+        }
+
+        override func mouseEntered(with event: NSEvent) {
+            NSCursor.resizeLeftRight.set()
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            NSCursor.arrow.set()
+        }
+    }
+}
+
 struct HerdrSessionView: View {
     var store: HerdrStore
     let tab: HerdrOpenTab
@@ -10,9 +42,11 @@ struct HerdrSessionView: View {
     var presented = true
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var connectError: String?
     @State private var starting = false
-    @State private var dragFraction: Double?
+    @State private var dragWidth: CGFloat?
+    @State private var handleHovered = false
 
     private var dark: Bool { scheme == .dark }
     private var agent: HerdrAgent { tab.agent }
@@ -45,6 +79,7 @@ struct HerdrSessionView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: .leading) { ghost(in: total) }
             }
         } else {
             ZStack {
@@ -58,47 +93,71 @@ struct HerdrSessionView: View {
         }
     }
 
-    private var fraction: Double {
-        dragFraction ?? store.splitFraction(for: tab.id)
+    private var handleWidth: CGFloat { UIScale.pt(11) }
+
+    private func paneWidth(in total: CGFloat, fraction: Double) -> CGFloat {
+        let minimum = UIScale.pt(220)
+        guard total > minimum * 2 + handleWidth else {
+            return max(0, (total - handleWidth) / 2)
+        }
+        return min(total - minimum - handleWidth, max(minimum, total * fraction))
     }
 
     private func sessionWidth(in total: CGFloat) -> CGFloat {
-        let minimum = UIScale.pt(220)
-        let handle = UIScale.pt(6)
-        guard total > minimum * 2 + handle else { return max(0, (total - handle) / 2) }
-        return min(total - minimum - handle, max(minimum, total * fraction))
+        paneWidth(in: total, fraction: store.splitFraction(for: tab.id))
+    }
+
+    private func draggedWidth(translation: CGFloat, in total: CGFloat) -> CGFloat {
+        guard total > 0 else { return 0 }
+        let base = store.splitFraction(for: tab.id)
+        let moved = HerdrSplitFraction.clamp(base + Double(translation / total))
+        return paneWidth(in: total, fraction: moved)
+    }
+
+    @ViewBuilder
+    private func ghost(in total: CGFloat) -> some View {
+        if let dragWidth {
+            Rectangle()
+                .fill(DashSkin.accent(dark))
+                .frame(width: UIScale.pt(2))
+                .frame(maxHeight: .infinity)
+                .offset(x: dragWidth + (handleWidth - UIScale.pt(2)) / 2)
+                .allowsHitTesting(false)
+        }
     }
 
     private func splitHandle(total: CGFloat) -> some View {
-        ZStack {
-            DashSkin.lineStrong(dark)
-                .frame(width: 1)
+        let active = handleHovered || dragWidth != nil
+        return ZStack {
+            Capsule()
+                .fill(active ? DashSkin.accent(dark) : DashSkin.lineStrong(dark))
+                .frame(width: active ? UIScale.pt(3) : 1)
+                .padding(.vertical, active ? UIScale.pt(6) : 0)
         }
-        .frame(width: UIScale.pt(6))
+        .frame(width: handleWidth)
         .frame(maxHeight: .infinity)
         .contentShape(Rectangle())
+        .background(SplitResizeCursor())
+        .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: active)
         .gesture(
-            DragGesture(minimumDistance: 1)
+            DragGesture(minimumDistance: 0)
                 .onChanged { value in
-                    guard total > 0 else { return }
-                    let base = store.splitFraction(for: tab.id)
-                    dragFraction = HerdrSplitFraction.clamp(
-                        base + Double(value.translation.width / total))
+                    dragWidth = draggedWidth(translation: value.translation.width, in: total)
                 }
-                .onEnded { _ in
-                    if let dragFraction {
-                        store.setSplitFraction(dragFraction, for: tab.id)
+                .onEnded { value in
+                    guard total > 0 else {
+                        dragWidth = nil
+                        return
                     }
-                    dragFraction = nil
+                    let base = store.splitFraction(for: tab.id)
+                    store.setSplitFraction(
+                        HerdrSplitFraction.clamp(
+                            base + Double(value.translation.width / total)),
+                        for: tab.id)
+                    dragWidth = nil
                 }
         )
-        .onHover { inside in
-            if inside {
-                NSCursor.resizeLeftRight.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
+        .onHover { handleHovered = $0 }
         .accessibilityLabel("Resize the split")
     }
 

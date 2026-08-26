@@ -87,6 +87,27 @@ import Testing
         #expect(store.selectedTab == store.tabs[2].id)
     }
 
+    @Test func aHoveredCardReadsStrongerThanARestingOne() {
+        let resting = HerdrStatusColor.fill(agent, dark: true, selected: false)
+        let hovered = HerdrStatusColor.fill(agent, dark: true, selected: true)
+        #expect(resting != hovered)
+        #expect(
+            HerdrStatusColor.stroke(agent, dark: true, selected: false)
+                != HerdrStatusColor.stroke(agent, dark: true, selected: true))
+    }
+
+    @Test func theBoardStillOffersTheMachineTerminals() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.apply([host, remote])
+        store.selectBoard()
+        #expect(store.selectedTab == HerdrStore.boardID)
+        #expect(store.machineTerminals.count == 2)
+        let terminal = store.machineTerminals[0]
+        store.open(terminal)
+        #expect(store.selectedTab == terminal.id)
+        #expect(store.tabs.map(\.id) == [terminal.id])
+    }
+
     @Test func theRailRemembersWhetherItWasCollapsed() {
         let store = defaults()
         let first = HerdrStore(defaults: store, liveWatcher: { _ in })

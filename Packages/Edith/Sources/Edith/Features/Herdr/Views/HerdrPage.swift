@@ -12,6 +12,7 @@ struct HerdrPage: View {
         var presenterBlurAgents = true
     private var presenterState = PresenterState.shared
     @State private var draggingTab: String?
+    @State private var hoveredCard: String?
 
     @MainActor init(store: HerdrStore? = nil) {
         _store = State(initialValue: store ?? .shared)
@@ -28,7 +29,7 @@ struct HerdrPage: View {
             header
             tabBar
             HStack(spacing: 0) {
-                if !onBoard, store.railOpen {
+                if store.railOpen {
                     agentList
                     Divider().opacity(0.35)
                 }
@@ -43,10 +44,6 @@ struct HerdrPage: View {
                         )
                         .opacity(tab.id == store.selectedTab ? 1 : 0)
                         .allowsHitTesting(tab.id == store.selectedTab)
-                    }
-                    if !onBoard {
-                        detailToggle
-                            .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -100,9 +97,6 @@ struct HerdrPage: View {
         )
         .pointerCursor()
         .help(store.detailOpen ? "Hide details" : "Show details")
-        .padding(.top, UIScale.pt(8))
-        .padding(.trailing, UIScale.pt(8))
-        .zIndex(1)
         .accessibilityLabel(store.detailOpen ? "Hide details" : "Show details")
     }
 
@@ -225,10 +219,8 @@ struct HerdrPage: View {
                 .fill(DashSkin.lineStrong(dark))
                 .frame(height: 1)
             HStack(spacing: UIScale.pt(8)) {
-                if !onBoard {
-                    railToggle
-                        .padding(.leading, PageMetrics.gutter(compact))
-                }
+                railToggle
+                    .padding(.leading, PageMetrics.gutter(compact))
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: UIScale.pt(6)) {
                         tabButton(id: HerdrStore.boardID, title: "Board", closable: false)
@@ -239,13 +231,16 @@ struct HerdrPage: View {
                                 closable: true, agent: tab.agent)
                         }
                     }
-                    .padding(.leading, onBoard ? PageMetrics.gutter(compact) : 0)
+                    .padding(.leading, 0)
                     .padding(.vertical, UIScale.pt(8))
                 }
                 if let tab = store.tabs.first(where: { $0.id == store.selectedTab }),
                     !tab.agent.isTerminal
                 {
                     viewModes(for: tab)
+                }
+                if !onBoard {
+                    detailToggle
                         .padding(.trailing, PageMetrics.gutter(compact))
                 }
             }
@@ -429,6 +424,7 @@ struct HerdrPage: View {
 
     private func card(_ agent: HerdrAgent) -> some View {
         let open = store.openIDs.contains(agent.id)
+        let hovered = hoveredCard == agent.id
         return Button {
             openAgent(agent)
         } label: {
@@ -474,31 +470,41 @@ struct HerdrPage: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .widgetBar(
                 cornerRadius: 12,
-                fill: HerdrStatusColor.fill(agent, dark: dark, selected: false),
+                fill: HerdrStatusColor.fill(agent, dark: dark, selected: hovered),
                 stroke: open
-                    ? DashSkin.accent(dark).opacity(0.45)
-                    : HerdrStatusColor.stroke(agent, dark: dark, selected: false))
+                    ? DashSkin.accent(dark).opacity(hovered ? 0.7 : 0.45)
+                    : HerdrStatusColor.stroke(agent, dark: dark, selected: hovered))
         }
         .buttonStyle(.plain)
         .pointerCursor()
+        .onHover { inside in
+            if inside {
+                hoveredCard = agent.id
+            } else if hoveredCard == agent.id {
+                hoveredCard = nil
+            }
+        }
+        .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: hovered)
     }
 
     private var agentList: some View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    railHeader("Agents", count: listedAgents.count)
-                    ForEach(listedAgents) { agent in
-                        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                            agentRow(agent)
-                            if store.selectedTab == agent.id {
-                                HerdrAgentViewToggle(
-                                    selection: store.view(for: agent.id), compactStyle: true
-                                ) { option in
-                                    store.open(agent, showing: option)
+                    if !onBoard {
+                        railHeader("Agents", count: listedAgents.count)
+                        ForEach(listedAgents) { agent in
+                            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                                agentRow(agent)
+                                if store.selectedTab == agent.id {
+                                    HerdrAgentViewToggle(
+                                        selection: store.view(for: agent.id), compactStyle: true
+                                    ) { option in
+                                        store.open(agent, showing: option)
+                                    }
+                                    .padding(.horizontal, UIScale.pt(8))
+                                    .padding(.bottom, UIScale.pt(4))
                                 }
-                                .padding(.horizontal, UIScale.pt(8))
-                                .padding(.bottom, UIScale.pt(4))
                             }
                         }
                     }
