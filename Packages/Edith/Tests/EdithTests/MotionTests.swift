@@ -8,9 +8,8 @@ import Testing
         #expect(Motion.animation(base, reduceMotion: false) == base)
     }
 
-    @Test func usesReducedAnimationWhenReduceMotionIsOn() {
+    @Test func removesAnimationWhenReduceMotionIsOn() {
         let base = Animation.smooth(duration: 0.7)
-        let reduced = Animation.easeInOut(duration: 0.2)
-        #expect(Motion.animation(base, reduceMotion: true) == reduced)
+        #expect(Motion.animation(base, reduceMotion: true) == nil)
     }
 }
