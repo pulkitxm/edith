@@ -51,6 +51,7 @@ public final class GhosttyRuntime {
     public func start() {
         guard !started else { return }
         started = true
+        TerminalFontRegistry.register()
 
         guard ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) == 0 else {
             log.error("ghostty_init failed")

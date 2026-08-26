@@ -64,6 +64,9 @@ public struct GhosttyTheme: Equatable, Sendable {
             "clipboard-write = allow",
             "copy-on-select = clipboard",
             "mouse-shift-capture = false",
+            "font-codepoint-map = U+E000-U+F8FF=Symbols Nerd Font Mono",
+            "font-codepoint-map = U+F0000-U+FFFFD=Symbols Nerd Font Mono",
+            "font-codepoint-map = U+100000-U+10FFFD=Symbols Nerd Font Mono",
             #"keybind = shift+enter=text:\x1b\r"#,
         ]
         if let selectionBackground {
