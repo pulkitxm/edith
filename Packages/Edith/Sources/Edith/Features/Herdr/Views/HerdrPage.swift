@@ -255,65 +255,63 @@ struct HerdrPage: View {
         -> some View
     {
         let selected = store.selectedTab == id
-        return Button {
-            store.selectedTab = id
-        } label: {
-            HStack(spacing: UIScale.pt(6)) {
-                if let agent {
-                    HerdrKindMark(kind: agent.kind, size: UIScale.pt(13))
-                        .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
-                } else {
-                    AppGlyph(.herdr, size: UIScale.pt(13), weight: .semibold)
-                }
-                Text(title)
-                    .font(.system(size: UIScale.pt(12), weight: selected ? .semibold : .medium))
-                    .lineLimit(1)
-                if let agent, agent.isTerminal {
-                    Text(agent.machineName)
-                        .font(DashSkin.mono(9))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .lineLimit(1)
-                }
-                if let agent {
-                    Button {
-                        store.copyAttachCommand(for: agent)
-                    } label: {
-                        Image(
-                            systemName: store.copiedID == agent.id ? "checkmark" : "terminal"
-                        )
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(
-                            store.copiedID == agent.id
-                                ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
-                    }
-                    .buttonStyle(.plain)
-                    .help(store.copiedID == agent.id ? "Copied" : "Copy attach command")
-                }
-                if closable {
-                    Button {
-                        store.close(id)
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: UIScale.pt(9), weight: .semibold))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Close")
-                }
+        return HStack(spacing: UIScale.pt(6)) {
+            if let agent {
+                HerdrKindMark(kind: agent.kind, size: UIScale.pt(13))
+                    .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
+            } else {
+                AppGlyph(.herdr, size: UIScale.pt(13), weight: .semibold)
             }
-            .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
-            .padding(.horizontal, UIScale.pt(10))
-            .padding(.vertical, UIScale.pt(6))
-            .widgetBar(
-                cornerRadius: 8,
-                fill: agent.map { HerdrStatusColor.fill($0, dark: dark, selected: selected) }
-                    ?? (selected
-                        ? DashSkin.paper2(dark) : DashSkin.paper2(dark).opacity(0.55)),
-                stroke: agent.map { HerdrStatusColor.stroke($0, dark: dark, selected: selected) }
-                    ?? (selected ? DashSkin.lineStrong(dark) : DashSkin.line(dark)),
-                strokeWidth: selected ? 1.4 : 1)
+            Text(title)
+                .font(.system(size: UIScale.pt(12), weight: selected ? .semibold : .medium))
+                .lineLimit(1)
+            if let agent, agent.isTerminal {
+                Text(agent.machineName)
+                    .font(DashSkin.mono(9))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .lineLimit(1)
+            }
+            if let agent {
+                Button {
+                    store.copyAttachCommand(for: agent)
+                } label: {
+                    Image(
+                        systemName: store.copiedID == agent.id ? "checkmark" : "terminal"
+                    )
+                    .font(.system(size: UIScale.pt(10)))
+                    .foregroundStyle(
+                        store.copiedID == agent.id
+                            ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
+                }
+                .buttonStyle(.plain)
+                .help(store.copiedID == agent.id ? "Copied" : "Copy attach command")
+            }
+            if closable {
+                Button {
+                    store.close(id)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: UIScale.pt(9), weight: .semibold))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                }
+                .buttonStyle(.plain)
+                .help("Close")
+            }
         }
-        .buttonStyle(.plain)
+        .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
+        .padding(.horizontal, UIScale.pt(10))
+        .padding(.vertical, UIScale.pt(6))
+        .widgetBar(
+            cornerRadius: 8,
+            fill: agent.map { HerdrStatusColor.fill($0, dark: dark, selected: selected) }
+                ?? (selected
+                    ? DashSkin.paper2(dark) : DashSkin.paper2(dark).opacity(0.55)),
+            stroke: agent.map { HerdrStatusColor.stroke($0, dark: dark, selected: selected) }
+                ?? (selected ? DashSkin.lineStrong(dark) : DashSkin.line(dark)),
+            strokeWidth: selected ? 1.4 : 1
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { store.selectedTab = id }
         .pointerCursor()
         .onDrag {
             draggingTab = id
