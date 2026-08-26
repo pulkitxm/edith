@@ -47,7 +47,8 @@ import Testing
 
         for source in try swiftSources() {
             let text = try String(contentsOf: source, encoding: .utf8)
-            let count = occurrences(of: ".onTapGesture", in: text)
+            let count =
+                occurrences(of: ".onTapGesture", in: text)
                 + occurrences(of: "TapGesture()", in: text)
             if count > 0 {
                 actual[relativePath(source)] = count
