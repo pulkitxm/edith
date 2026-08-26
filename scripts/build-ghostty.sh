@@ -8,7 +8,7 @@ ZIG_VERSION="0.16.0"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 vendor="$root/vendor"
 src="$vendor/ghostty"
-out="$vendor/GhosttyKit.xcframework"
+out="$root/Packages/Edith/vendor/GhosttyKit.xcframework"
 
 zig_bin="$(command -v zig || true)"
 if [ -n "$zig_bin" ] && [ "$("$zig_bin" version)" = "$ZIG_VERSION" ]; then
@@ -53,6 +53,7 @@ if [ ! -d "$built" ]; then
   exit 1
 fi
 
+mkdir -p "$(dirname "$out")"
 rm -rf "$out"
 cp -R "$built" "$out"
 

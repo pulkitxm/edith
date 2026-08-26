@@ -29,3 +29,4 @@ apps/promo-video/out/
 .vercel
 apps/companion/target/
 vendor/
+Packages/Edith/vendor/
