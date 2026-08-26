@@ -193,15 +193,14 @@ private struct SidebarNavRow: View {
                         .font(.system(size: UIScale.pt(13.5), weight: .medium))
                         .foregroundStyle(selected ? .primary : .secondary)
                         .lineLimit(1)
-                    Spacer(minLength: disclosureAction == nil ? 0 : UIScale.pt(28))
+                    Spacer(
+                        minLength: disclosureExpanded == nil
+                            ? 0 : UIScale.pt(SidebarDisclosureGeometry.controlSlotWidth))
                     if let shortcutHint {
                         Text(shortcutHint)
                             .font(.system(size: UIScale.pt(11), weight: .medium))
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
-                    }
-                    if let disclosureExpanded, disclosureAction == nil {
-                        disclosureIcon(expanded: disclosureExpanded)
                     }
                 }
             }
@@ -216,17 +215,21 @@ private struct SidebarNavRow: View {
                 }
             }
 
-            if let disclosureExpanded, let disclosureAction {
-                Button(action: disclosureAction) {
+            if let disclosureExpanded {
+                Button {
+                    disclosureAction?()
+                } label: {
                     disclosureIcon(expanded: disclosureExpanded)
                 }
                 .buttonStyle(EdithButtonStyle(.iconOnly, tint: theme))
                 .background(
-                    Color.primary.opacity(rowHovered ? 0.055 : 0),
+                    Color.primary.opacity(disclosureAction != nil && rowHovered ? 0.055 : 0),
                     in: RoundedRectangle(cornerRadius: UIScale.pt(6))
                 )
                 .padding(.trailing, UIScale.pt(2))
                 .zIndex(1)
+                .allowsHitTesting(disclosureAction != nil)
+                .accessibilityHidden(disclosureAction == nil)
                 .accessibilityLabel(
                     disclosureExpanded
                         ? "Collapse settings categories" : "Expand settings categories"
@@ -261,6 +264,8 @@ enum SidebarDisclosureInteraction {
 }
 
 enum SidebarDisclosureGeometry {
+    static let controlSlotWidth: CGFloat = 28
+
     static func visibleHeight(contentHeight: CGFloat, progress: Double) -> CGFloat {
         contentHeight * min(1, max(0, progress))
     }

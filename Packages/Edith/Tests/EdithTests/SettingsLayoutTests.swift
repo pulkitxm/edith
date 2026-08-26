@@ -65,6 +65,7 @@ import Testing
     }
 
     @Test func disclosureHeightTracksAndClampsAnimationProgress() {
+        #expect(SidebarDisclosureGeometry.controlSlotWidth == 28)
         #expect(SidebarDisclosureGeometry.visibleHeight(contentHeight: 180, progress: 0) == 0)
         #expect(SidebarDisclosureGeometry.visibleHeight(contentHeight: 180, progress: 0.5) == 90)
         #expect(SidebarDisclosureGeometry.visibleHeight(contentHeight: 180, progress: 1) == 180)
