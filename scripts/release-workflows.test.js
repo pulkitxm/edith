@@ -187,11 +187,9 @@ test("the release commit carries every versioned file and its tag atomically", (
     '-c user.email="320458784+pukbot[bot]@users.noreply.github.com"',
   );
   expect(releaseStateScript).toContain(
-    'commit Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb',
+    "commit Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb",
   );
-  expect(releaseStateScript).toContain(
-    `-m "Release ${releaseTagRef}"`,
-  );
+  expect(releaseStateScript).toContain(`-m "Release ${releaseTagRef}"`);
   expect(releaseStateScript).toContain(
     'tag -a "$RELEASE_TAG" -m "Edith $RELEASE_TAG build $RELEASE_BUILD"',
   );
