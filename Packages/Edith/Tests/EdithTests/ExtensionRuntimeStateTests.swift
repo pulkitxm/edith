@@ -292,6 +292,27 @@ import Testing
         #expect(source.contains("Requires macOS 14.4 or later."))
     }
 
+    @Test func audioMixerViewAndAppServicesShareRuntimeOwnership() throws {
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/EdithHelper")
+        let view = try String(
+            contentsOf: sourceRoot.appendingPathComponent(
+                "Features/AudioMixer/Views/AudioMixerView.swift"), encoding: .utf8)
+        let services = try String(
+            contentsOf: sourceRoot.appendingPathComponent(
+                "Core/Application/AppServices.swift"), encoding: .utf8)
+
+        #expect(view.contains("@State private var engine = MixerEngine.shared"))
+        #expect(view.contains("engine.viewAppeared()"))
+        #expect(view.contains("engine.viewDisappeared()"))
+        #expect(view.contains("Button(\"Retry\")"))
+        #expect(view.contains("for: .applicationAudio"))
+        #expect(services.components(separatedBy: "MixerEngine.shared.shutdown()").count == 3)
+    }
+
     private static func viewDeclaration(_ name: String, in source: String) throws -> Substring {
         let start = try #require(source.range(of: "struct \(name): View"))
         let remaining = start.upperBound..<source.endIndex

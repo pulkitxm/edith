@@ -1,45 +1,6 @@
 import AppKit
+import EdithKit
 import SwiftUI
-
-@available(macOS 14.4, *)
-@MainActor
-@Observable
-final class MixerEngine {
-    private(set) var apps: [MixerApp] = []
-
-    private var taps: [pid_t: AppVolumeTap] = [:]
-    private var savedGain: [String: Float] = [:]
-
-    func refresh() {
-        let processes = AudioProcessRegistry.audioProcesses()
-        apps = processes.compactMap { process in
-            guard let app = NSRunningApplication(processIdentifier: process.pid) else { return nil }
-            return MixerApp(
-                objectID: process.objectID, pid: process.pid, bundleID: process.bundleID,
-                name: app.localizedName ?? process.bundleID, icon: app.icon,
-                volume: savedGain[process.bundleID] ?? 1)
-        }
-    }
-
-    func setVolume(_ app: MixerApp, _ value: Float) {
-        savedGain[app.bundleID] = value
-        if value >= 0.99 {
-            taps[app.pid]?.destroy()
-            taps[app.pid] = nil
-        } else if let tap = taps[app.pid] {
-            tap.setGain(value)
-        } else if let tap = AppVolumeTap(processObjectID: app.objectID) {
-            tap.setGain(value)
-            taps[app.pid] = tap
-        }
-        refresh()
-    }
-
-    func shutdown() {
-        for tap in taps.values { tap.destroy() }
-        taps.removeAll()
-    }
-}
 
 struct NotchAudioTab: View {
     var body: some View {
@@ -55,11 +16,14 @@ struct NotchAudioTab: View {
 
 @available(macOS 14.4, *)
 private struct AudioMixerView: View {
-    private var engine = MixerEngine()
+    @State private var engine = MixerEngine.shared
 
     var body: some View {
         ScrollView {
             VStack(spacing: 8) {
+                if let error = engine.errorMessage {
+                    errorView(error)
+                }
                 if engine.apps.isEmpty {
                     Text("Play audio in an app to control it here")
                         .font(.system(size: 12)).foregroundStyle(.white.opacity(0.5))
@@ -72,7 +36,8 @@ private struct AudioMixerView: View {
             }
             .padding(.horizontal, 16).padding(.bottom, 12)
         }
-        .onAppear { engine.refresh() }
+        .onAppear { engine.viewAppeared() }
+        .onDisappear { engine.viewDisappeared() }
     }
 
     private func row(_ app: MixerApp) -> some View {
@@ -92,5 +57,29 @@ private struct AudioMixerView: View {
                 .font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
                 .frame(width: 28, alignment: .trailing)
         }
+    }
+
+    private func errorView(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                Text(message).fixedSize(horizontal: false, vertical: true)
+            }
+            .font(.system(size: 10.5))
+            .foregroundStyle(.orange)
+            HStack(spacing: 10) {
+                Button("Retry") { engine.retry() }
+                Button("Open Settings") {
+                    _ = try? PermissionOperationCenter.application.openSettings(
+                        for: .applicationAudio)
+                }
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.8))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
     }
 }
