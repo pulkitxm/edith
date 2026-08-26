@@ -198,9 +198,11 @@ final class HerdrStore {
         pendingHosts = snapshots
         guard settleTask == nil else { return }
         if !settling { flush() }
+        let generation = watchGeneration
         settleTask = Task { [weak self] in
             try? await Task.sleep(for: Self.settleWindow)
-            guard let self else { return }
+            guard !Task.isCancelled else { return }
+            guard let self, self.watchGeneration == generation else { return }
             self.settleTask = nil
             self.settling = false
             self.flush()
