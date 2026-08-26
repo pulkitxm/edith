@@ -598,6 +598,17 @@ enum UIParity {
                 ])
     }
 
+    @Test func everyLidAwakeLeafDeclaresItsSharedOperation() {
+        let declared = Set(LidAwakeOperation.allCases.map(\.descriptor.cli))
+        #expect(
+            declared
+                == [
+                    ["lid-awake", "status"], ["lid-awake", "on"],
+                    ["lid-awake", "off"], ["lid-awake", "battery"],
+                    ["lid-awake", "restore-on-quit"],
+                ])
+    }
+
     @Test func everyDockerLifecycleLeafDeclaresItsSharedOperation() {
         let declared = Set(DockerLifecycleOperation.allCases.map(\.descriptor.cli))
         #expect(

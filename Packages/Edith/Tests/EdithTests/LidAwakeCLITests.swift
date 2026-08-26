@@ -91,8 +91,20 @@ import Testing
         }
     }
 
-    @Test func onNeedsTheMenuBarApp() async {
-        let result = await CLIProbe.run(["lid-awake", "on"])
+    @Test func onPreviewsWithoutPostingOrNeedingTheMenuBarApp() async throws {
+        await CLIProbe.inWorld { world in
+            let result = await CLIProbe.capture(["lid-awake", "on", "--json"])
+            #expect(result.code == 0)
+            #expect(result.object?["operation"] as? String == "lidAwake.on")
+            #expect(result.object?["performed"] as? Bool == false)
+            #expect(result.object?["requiresConfirmation"] as? Bool == true)
+            #expect(result.object?["session"] as? String == LidAwakeSession.indefinite.rawValue)
+            #expect(world.posted.isEmpty)
+        }
+    }
+
+    @Test func confirmedOnNeedsTheMenuBarApp() async {
+        let result = await CLIProbe.run(["lid-awake", "on", "--yes"])
         #expect(result.code == ExitCodes.unavailable)
         #expect(result.stderr.contains("menu bar app"))
     }
@@ -107,7 +119,7 @@ import Testing
                         requestID: Self.requestID(in: world)) : nil
             }
             let result = await CLIProbe.capture([
-                "lid-awake", "on", "--for", "30m", "--json",
+                "lid-awake", "on", "--for", "30m", "--json", "--yes",
             ])
             #expect(result.code == 0)
             #expect(result.object?["active"] as? Bool == true)
@@ -136,7 +148,7 @@ import Testing
                     requestID: Self.requestID(in: world))
             }
             let result = await CLIProbe.capture([
-                "lid-awake", "on", "--until-lid-reopens",
+                "lid-awake", "on", "--until-lid-reopens", "--yes",
             ])
             #expect(result.code == 0)
             #expect(
@@ -168,7 +180,7 @@ import Testing
                     LidAwakeIPC.requestIDKey: Self.requestID(in: world) ?? "",
                 ]
             }
-            let result = await CLIProbe.capture(["lid-awake", "on"])
+            let result = await CLIProbe.capture(["lid-awake", "on", "--yes"])
             #expect(result.code == ExitCodes.failure)
             #expect(result.stderr.contains("pmset refused"))
         }
@@ -256,14 +268,41 @@ import Testing
         #expect(invalid.code == ExitCodes.failure)
     }
 
-    @Test func restoreOnQuitIsConfiguredLive() async throws {
+    @Test func disablingRestoreOnQuitPreviewsWithoutWriting() async throws {
         await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: LidAwakeState.restoreOnQuitKey)
             let result = await CLIProbe.capture([
                 "lid-awake", "restore-on-quit", "false", "--json",
             ])
             #expect(result.code == 0)
-            #expect(world.shared.bool(forKey: LidAwakeState.restoreOnQuitKey) == false)
+            #expect(result.object?["operation"] as? String == "lidAwake.restoreOnQuit")
+            #expect(result.object?["performed"] as? Bool == false)
             #expect(result.object?["restoreOnQuit"] as? Bool == false)
+            #expect(world.shared.bool(forKey: LidAwakeState.restoreOnQuitKey))
+            #expect(world.posted.isEmpty)
+        }
+    }
+
+    @Test func confirmedRestoreOnQuitIsConfiguredLive() async throws {
+        await CLIProbe.inWorld { world in
+            let result = await CLIProbe.capture([
+                "lid-awake", "restore-on-quit", "false", "--json", "--yes",
+            ])
+            #expect(result.code == 0)
+            #expect(!world.shared.bool(forKey: LidAwakeState.restoreOnQuitKey))
+            #expect(result.object?["restoreOnQuit"] as? Bool == false)
+            #expect(world.postedNames() == [IPC.Name.settingsChanged.rawValue])
+        }
+    }
+
+    @Test func enablingRestoreOnQuitDoesNotNeedConfirmation() async throws {
+        await CLIProbe.inWorld { world in
+            let result = await CLIProbe.capture([
+                "lid-awake", "restore-on-quit", "true", "--json",
+            ])
+            #expect(result.code == 0)
+            #expect(world.shared.bool(forKey: LidAwakeState.restoreOnQuitKey))
+            #expect(result.object?["restoreOnQuit"] as? Bool == true)
             #expect(world.postedNames() == [IPC.Name.settingsChanged.rawValue])
         }
     }

@@ -101,8 +101,8 @@ public enum Guide {
 
         ```
         ed lid-awake on
-        ed lid-awake on --for 30m
-        ed lid-awake on --until-lid-reopens
+        ed lid-awake on --for 30m --yes
+        ed lid-awake on --until-lid-reopens --yes
         ed lid-awake battery 20
         ed lid-awake status --json
         ed lid-awake off

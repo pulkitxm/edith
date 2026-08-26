@@ -23,6 +23,8 @@ import Testing
         "ed companion wipe",
         "ed download clear",
         "ed download rm",
+        "ed lid-awake on",
+        "ed lid-awake restore-on-quit",
         "ed machines docker prune",
         "ed machines docker rm",
         "ed machines docker rmi",
