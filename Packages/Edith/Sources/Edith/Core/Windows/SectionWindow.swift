@@ -25,10 +25,7 @@ struct DetachedSectionView: View {
                 .tint(themeColor(themeName))
                 .environment(\.compactLayout, geo.size.width < UIScale.pt(640))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(
-                    controller.destination.usesPaperBackground
-                        ? DashSkin.paper(scheme == .dark)
-                        : Color(nsColor: .windowBackgroundColor))
+                .background(DashSkin.paper(scheme == .dark))
         }
     }
 

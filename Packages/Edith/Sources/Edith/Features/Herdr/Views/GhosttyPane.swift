@@ -7,8 +7,9 @@ extension GhosttyTheme {
             background: palette.background,
             foreground: palette.foreground,
             cursor: palette.caret,
-            selectionBackground: palette.foreground,
-            selectionForeground: palette.background,
+            selectionBackground: palette.selectionBackground,
+            selectionForeground: palette.selectionForeground,
+            palette: palette.ansi,
             fontSize: fontSize)
     }
 }

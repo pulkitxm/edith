@@ -18,6 +18,7 @@ import Testing
         let theme = GhosttyTheme(
             background: "#101010", foreground: "#f0f0f0", cursor: "#ff8800",
             selectionBackground: "#333333", selectionForeground: "#ffffff",
+            palette: ["#000000", "#ff0000", "#00ff00"],
             fontSize: 13.4)
         let text = theme.configuration
         #expect(text.contains("background = #101010"))
@@ -25,6 +26,9 @@ import Testing
         #expect(text.contains("cursor-color = #ff8800"))
         #expect(text.contains("selection-background = #333333"))
         #expect(text.contains("selection-foreground = #ffffff"))
+        #expect(text.contains("palette = 0=#000000"))
+        #expect(text.contains("palette = 1=#ff0000"))
+        #expect(text.contains("palette = 2=#00ff00"))
         #expect(text.contains("font-size = 13"))
         #expect(text.contains("copy-on-select = clipboard"))
         #expect(text.contains("mouse-shift-capture = false"))

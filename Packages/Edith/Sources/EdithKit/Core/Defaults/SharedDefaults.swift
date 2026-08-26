@@ -2,6 +2,9 @@ import Foundation
 
 public enum SharedDefaults {
     public static let suiteName = "com.pulkit.edith.shared"
+    private static var activeSuiteName: String {
+        ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"] ?? suiteName
+    }
     public static let registeredDefaults: [String: Any] = [
         AppStorageKeys.Backup.icloud: true,
         CompletionScripts.autoRefreshKey: true,
@@ -9,7 +12,7 @@ public enum SharedDefaults {
         MusicFade.secondsKey: MusicFade.defaultSeconds,
     ]
     public static let store: UserDefaults = {
-        let store = UserDefaults(suiteName: suiteName) ?? .standard
+        let store = UserDefaults(suiteName: activeSuiteName) ?? .standard
         store.register(defaults: registeredDefaults)
         return store
     }()

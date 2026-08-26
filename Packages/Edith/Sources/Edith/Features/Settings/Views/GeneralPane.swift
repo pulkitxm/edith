@@ -23,6 +23,7 @@ struct SettingsPane: View {
         var tabRaw =
         Tab.general.rawValue
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+    @Environment(\.colorScheme) private var scheme
 
     private var tab: Binding<Tab> {
         let stored = $tabRaw.configured(AppStorageKeys.General.settingsTab)
@@ -57,7 +58,7 @@ struct SettingsPane: View {
             .scrollContentBackground(.hidden)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(DashSkin.paper(scheme == .dark))
         .navigationTitle("Settings")
         .onAppear {
             if automaticActionsEnabled {

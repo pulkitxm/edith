@@ -20,6 +20,16 @@ import Testing
         #expect(holder.themeApplicationCount == 2)
     }
 
+    @Test func terminalPaletteChangesWithTheAppTheme() {
+        let blue = TerminalPalette.edith(dark: true, theme: .blue)
+        let orange = TerminalPalette.edith(dark: true, theme: .orange)
+
+        #expect(blue != orange)
+        #expect(blue.ansi.count == 16)
+        #expect(orange.ansi.count == 16)
+        #expect(!blue.selectionBackground.isEqual(blue.background))
+    }
+
     @Test func inactiveTerminalCoalescesFloodRedrawAndKeepsBoundedHistory() async throws {
         let holder = TerminalSessionHolder()
         let view = holder.terminalView

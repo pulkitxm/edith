@@ -7,6 +7,7 @@ struct AboutPane: View {
         "accent"
     @State private var contributors: [Contributor] = []
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+    @Environment(\.colorScheme) private var scheme
     private let inspection = AppInspectionCenter()
 
     private var theme: Color { themeColor(themeName) }
@@ -33,7 +34,7 @@ struct AboutPane: View {
                 .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(DashSkin.paper(scheme == .dark))
         .navigationTitle("About")
     }
 
