@@ -39,6 +39,15 @@ struct PermissionsPane: View {
             .sorted { $0.blocksEnabledExtension && !$1.blocksEnabledExtension }
     }
 
+    private var columns: [GridItem] {
+        [
+            GridItem(
+                .adaptive(minimum: UIScale.pt(compact ? 280 : 360)),
+                spacing: UIScale.pt(12),
+                alignment: .top)
+        ]
+    }
+
     @ViewBuilder
     private func section(_ title: String, usages sectionUsages: [PermissionUsage]) -> some View {
         if !sectionUsages.isEmpty {
@@ -49,8 +58,10 @@ struct PermissionsPane: View {
                         .font(.system(size: UIScale.pt(10), weight: .semibold))
                         .foregroundStyle(.quaternary)
                 }
-                ForEach(sectionUsages) { usage in
-                    PermissionCard(usage: usage, grant: grant)
+                LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(12)) {
+                    ForEach(sectionUsages) { usage in
+                        PermissionCard(usage: usage, grant: grant)
+                    }
                 }
             }
         }
@@ -109,7 +120,6 @@ struct PermissionsPane: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(accent)
-                .pointerCursor()
             }
         }
         .pageGutter(compact)
@@ -143,19 +153,10 @@ struct PermissionsPane: View {
                         }
                     }
                     .font(.system(size: UIScale.pt(10), weight: .semibold))
-                    .foregroundStyle(filter == item ? Color.white : Color.secondary)
-                    .padding(.horizontal, UIScale.pt(12))
-                    .frame(height: UIScale.pt(28))
-                    .background(filter == item ? accent : Color.clear)
-                    .clipShape(Capsule())
-                    .overlay {
-                        if filter != item {
-                            Capsule().stroke(Color(nsColor: .separatorColor).opacity(0.65))
-                        }
-                    }
                 }
-                .buttonStyle(.plain)
-                .pointerCursor()
+                .buttonStyle(
+                    EdithButtonStyle(.selection, selected: filter == item, tint: accent)
+                )
             }
             Spacer(minLength: 0)
         }
@@ -230,6 +231,7 @@ private struct PermissionCard: View {
             }
         }
         .padding(UIScale.pt(14))
+        .frame(maxWidth: .infinity, minHeight: UIScale.pt(92), alignment: .topLeading)
         .background(
             Color(nsColor: .controlBackgroundColor),
             in: RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)

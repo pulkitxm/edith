@@ -149,6 +149,10 @@ public enum ConfigCatalog {
             AppStorageKeys.General.mainSidebarWidth, .number, group: "panel",
             summary: "Main window sidebar width in points."),
         SettingDefinition(
+            AppStorageKeys.General.settingsCategoriesExpanded, .bool, group: "panel",
+            summary: "Whether Settings categories are expanded in the main sidebar.",
+            fallback: .bool(true)),
+        SettingDefinition(
             Repo.pathKey, .string, group: "panel",
             summary: "Development repository root used for usage data and music."),
     ]

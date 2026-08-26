@@ -71,8 +71,11 @@ enum MainWindow {
             NSApp.activate(ignoringOtherApps: true)
             return
         }
+        let visibleFrame =
+            NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let initialSize = MainWindowFramePolicy.defaultSize(visibleFrame: visibleFrame)
         let w = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 900, height: 680),
+            contentRect: NSRect(origin: .zero, size: initialSize),
             styleMask: [
                 .titled, .closable, .resizable, .miniaturizable, .fullSizeContentView,
             ],
@@ -83,10 +86,13 @@ enum MainWindow {
         w.titlebarAppearsTransparent = true
         w.titlebarSeparatorStyle = .none
         w.isReleasedWhenClosed = false
-        w.contentMinSize = NSSize(width: 720, height: 500)
-        w.setContentSize(NSSize(width: 900, height: 680))
+        w.setContentSize(initialSize)
         w.center()
         w.setFrameAutosaveName("EdithMainWindow")
+        w.setFrame(
+            MainWindowFramePolicy.normalizedFrame(w.frame, visibleFrame: visibleFrame),
+            display: false)
+        w.contentMinSize = MainWindowFramePolicy.minimumSize(visibleFrame: visibleFrame)
         let hosting = NSHostingController(
             rootView: ZoomableRoot { MainWindowView(updater: updater) })
         hosting.sizingOptions = []
@@ -104,6 +110,46 @@ enum MainWindow {
     }
 
     static func forget() { window = nil }
+}
+
+enum MainWindowFramePolicy {
+    static func minimumSize(visibleFrame: NSRect) -> NSSize {
+        NSSize(
+            width: min(960, visibleFrame.width),
+            height: min(640, visibleFrame.height)
+        )
+    }
+
+    static func defaultSize(visibleFrame: NSRect) -> NSSize {
+        let minimum = minimumSize(visibleFrame: visibleFrame)
+        return NSSize(
+            width: min(1240, max(minimum.width, visibleFrame.width * 0.82)),
+            height: min(820, max(minimum.height, visibleFrame.height * 0.78))
+        )
+    }
+
+    static func normalizedFrame(_ frame: NSRect, visibleFrame: NSRect) -> NSRect {
+        let minimum = minimumSize(visibleFrame: visibleFrame)
+        let undersized = frame.width < minimum.width || frame.height < minimum.height
+        let size =
+            undersized
+            ? defaultSize(visibleFrame: visibleFrame)
+            : NSSize(
+                width: min(visibleFrame.width, frame.width),
+                height: min(visibleFrame.height, frame.height)
+            )
+        let resized = size != frame.size
+        let origin =
+            resized
+            ? NSPoint(
+                x: visibleFrame.midX - size.width / 2,
+                y: visibleFrame.midY - size.height / 2)
+            : NSPoint(
+                x: min(max(frame.minX, visibleFrame.minX), visibleFrame.maxX - size.width),
+                y: min(max(frame.minY, visibleFrame.minY), visibleFrame.maxY - size.height)
+            )
+        return NSRect(origin: origin, size: size)
+    }
 }
 
 enum MainWindowIdentifier {

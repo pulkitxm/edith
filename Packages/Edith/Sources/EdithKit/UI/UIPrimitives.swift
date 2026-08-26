@@ -93,16 +93,20 @@ struct EdithButtonMetrics: Equatable, Sendable {
 public struct EdithButtonStyle: ButtonStyle {
     public let role: EdithButtonRole
     public let selected: Bool
+    public let tint: Color
 
-    public init(_ role: EdithButtonRole, selected: Bool = false) {
+    public init(
+        _ role: EdithButtonRole, selected: Bool = false, tint: Color = brandAccent
+    ) {
         self.role = role
         self.selected = selected
+        self.tint = tint
     }
 
     public func makeBody(configuration: Configuration) -> some View {
         EdithButtonBody(
             label: configuration.label, role: role, selected: selected,
-            pressed: configuration.isPressed)
+            pressed: configuration.isPressed, tint: tint)
     }
 }
 
@@ -112,7 +116,7 @@ public struct HoverButtonStyle: ButtonStyle {
     public func makeBody(configuration: Configuration) -> some View {
         EdithButtonBody(
             label: configuration.label, role: .toolbar, selected: false,
-            pressed: configuration.isPressed)
+            pressed: configuration.isPressed, tint: brandAccent)
     }
 }
 
@@ -121,6 +125,7 @@ private struct EdithButtonBody<Label: View>: View {
     let role: EdithButtonRole
     let selected: Bool
     let pressed: Bool
+    let tint: Color
 
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -177,13 +182,13 @@ private struct EdithButtonBody<Label: View>: View {
         let boost = contrast == .increased ? 0.05 : 0
         switch role {
         case .primary:
-            return brandAccent.opacity(pressed ? 0.74 : 0.9)
+            return tint.opacity(pressed ? 0.74 : 0.9)
         case .destructive:
             return Color.red.opacity(pressed ? 0.72 : 0.88)
         case .secondary:
             return Color.primary.opacity((emphasized ? 0.11 : 0.07) + boost)
         case .row, .selection:
-            if selected { return brandAccent.opacity(0.2 + boost) }
+            if selected { return tint.opacity(0.2 + boost) }
             return Color.primary.opacity((emphasized ? 0.08 : 0) + boost)
         case .borderless, .toolbar, .iconOnly:
             return Color.primary.opacity((emphasized ? 0.08 : 0) + boost)
@@ -191,7 +196,7 @@ private struct EdithButtonBody<Label: View>: View {
     }
 
     private var border: Color {
-        if focused { return brandAccent.opacity(0.95) }
+        if focused { return tint.opacity(0.95) }
         if selected, differentiateWithoutColor { return Color.primary.opacity(0.75) }
         switch role {
         case .secondary:

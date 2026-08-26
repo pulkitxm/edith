@@ -167,62 +167,141 @@ private struct SidebarNavRow: View {
     let selected: Bool
     let theme: Color
     let shortcutHint: String?
-    let selectionNamespace: Namespace.ID
     let action: () -> Void
     var detach: (() -> Void)?
-    @State private var hovering = false
+    var disclosureExpanded: Bool? = nil
+    var disclosureAction: (() -> Void)?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var rowHovered = false
 
     var body: some View {
-        Button {
-            if let detach, SectionWindowCommand.shouldDetach(NSEvent.modifierFlags.swiftUIValue) {
-                detach()
-            } else {
-                action()
+        ZStack(alignment: .trailing) {
+            Button {
+                if let detach,
+                    SectionWindowCommand.shouldDetach(NSEvent.modifierFlags.swiftUIValue)
+                {
+                    detach()
+                } else {
+                    action()
+                }
+            } label: {
+                HStack(spacing: UIScale.pt(11)) {
+                    AppGlyph(item, size: UIScale.pt(15), weight: .medium)
+                        .foregroundStyle(selected ? .primary : .secondary)
+                        .frame(width: UIScale.pt(22))
+                    Text(item.title)
+                        .font(.system(size: UIScale.pt(13.5), weight: .medium))
+                        .foregroundStyle(selected ? .primary : .secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: disclosureAction == nil ? 0 : UIScale.pt(28))
+                    if let shortcutHint {
+                        Text(shortcutHint)
+                            .font(.system(size: UIScale.pt(11), weight: .medium))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
+                }
             }
-        } label: {
-            HStack(spacing: UIScale.pt(11)) {
-                AppGlyph(item, size: UIScale.pt(15), weight: .medium)
-                    .foregroundStyle(selected ? .primary : .secondary)
-                    .frame(width: UIScale.pt(22))
-                Text(item.title)
-                    .font(.system(size: UIScale.pt(13.5), weight: .medium))
-                    .foregroundStyle(selected ? .primary : .secondary)
+            .buttonStyle(EdithButtonStyle(.row, selected: selected, tint: theme))
+            .accessibilityValue(
+                disclosureExpanded.map { $0 ? "Expanded" : "Collapsed" } ?? ""
+            )
+            .help("\(item.title) (⌘-click to open in its own window)")
+            .contextMenu {
+                if let detach {
+                    Button("Open in New Window", action: detach)
+                }
+            }
+
+            if let disclosureExpanded, let disclosureAction {
+                Button(action: disclosureAction) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: UIScale.pt(10), weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(disclosureExpanded ? 90 : 0))
+                        .animation(
+                            Motion.animation(Motion.snap, reduceMotion: reduceMotion),
+                            value: disclosureExpanded)
+                }
+                .buttonStyle(EdithButtonStyle(.iconOnly, tint: theme))
+                .background(
+                    Color.primary.opacity(rowHovered ? 0.055 : 0),
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                )
+                .padding(.trailing, UIScale.pt(2))
+                .zIndex(1)
+                .accessibilityLabel(
+                    disclosureExpanded
+                        ? "Collapse settings categories" : "Expand settings categories"
+                )
+                .help(
+                    disclosureExpanded
+                        ? "Collapse settings categories" : "Expand settings categories"
+                )
+            }
+        }
+        .onHover { rowHovered = $0 }
+    }
+}
+
+enum SidebarDisclosureGeometry {
+    static func visibleHeight(contentHeight: CGFloat, progress: Double) -> CGFloat {
+        contentHeight * min(1, max(0, progress))
+    }
+}
+
+private struct CollapsibleSidebarLayout: Layout {
+    var progress: Double
+
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func sizeThatFits(
+        proposal: ProposedViewSize, subviews: Subviews, cache: inout Void
+    ) -> CGSize {
+        guard let subview = subviews.first else { return .zero }
+        let size = subview.sizeThatFits(
+            ProposedViewSize(width: proposal.width, height: nil))
+        return CGSize(
+            width: size.width,
+            height: SidebarDisclosureGeometry.visibleHeight(
+                contentHeight: size.height, progress: progress)
+        )
+    }
+
+    func placeSubviews(
+        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void
+    ) {
+        guard let subview = subviews.first else { return }
+        subview.place(
+            at: bounds.origin, anchor: .topLeading,
+            proposal: ProposedViewSize(width: bounds.width, height: nil))
+    }
+}
+
+private struct SettingsSidebarRow: View {
+    let category: SettingsPane.Tab
+    let selected: Bool
+    let theme: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: UIScale.pt(9)) {
+                Image(systemName: category.symbol)
+                    .frame(width: UIScale.pt(18))
+                Text(category.label)
                     .lineLimit(1)
                 Spacer(minLength: 0)
-                if let shortcutHint {
-                    Text(shortcutHint)
-                        .font(.system(size: UIScale.pt(11), weight: .medium))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
             }
-            .padding(.vertical, UIScale.pt(8))
-            .padding(.horizontal, UIScale.pt(10))
-            .contentShape(Rectangle())
+            .font(.system(size: UIScale.pt(12.5), weight: .medium))
+            .foregroundStyle(selected ? .primary : .secondary)
         }
-        .buttonStyle(.plain)
-        .background {
-            ZStack {
-                if hovering && !selected {
-                    RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous)
-                        .fill(.primary.opacity(0.07))
-                }
-                if selected {
-                    RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous)
-                        .fill(theme.opacity(0.16))
-                        .matchedGeometryEffect(
-                            id: "sidebarSelection", in: selectionNamespace, isSource: true)
-                }
-            }
-        }
-        .onHover { hovering = $0 }
-        .pointerCursor()
-        .help("\(item.title) (⌘-click to open in its own window)")
-        .contextMenu {
-            if let detach {
-                Button("Open in New Window", action: detach)
-            }
-        }
+        .buttonStyle(EdithButtonStyle(.row, selected: selected, tint: theme))
+        .padding(.leading, UIScale.pt(18))
+        .accessibilityHint(category.summary)
     }
 }
 
@@ -284,6 +363,9 @@ struct MainWindowView: View {
         var sidebarOpen = true
     @AppStorage(AppStorageKeys.General.mainSidebarWidth, store: SharedDefaults.store) private
         var sidebarWidth = 230.0
+    @AppStorage(
+        AppStorageKeys.General.settingsCategoriesExpanded, store: SharedDefaults.store
+    ) private var settingsCategoriesExpanded = true
     @AppStorage(AppStorageKeys.Tabs.attentionEnabled, store: SharedDefaults.store) private
         var attentionEnabled = false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
@@ -353,7 +435,6 @@ struct MainWindowView: View {
         forKey: LidAwakeState.activeKey)
     @State private var confirmingLidAwake = false
     @StateObject private var lidAwakeOperations = LidAwakeOperationModel()
-    @Namespace private var sidebarSelectionNamespace
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
@@ -704,7 +785,6 @@ struct MainWindowView: View {
                     SidebarNavRow(
                         item: item, selected: destination == item, theme: theme,
                         shortcutHint: shortcutHint(for: item),
-                        selectionNamespace: sidebarSelectionNamespace,
                         action: { select(item) },
                         detach: { detach(item) })
                 }
@@ -718,9 +798,35 @@ struct MainWindowView: View {
                     SidebarNavRow(
                         item: item, selected: destination == item, theme: theme,
                         shortcutHint: shortcutHint(for: item),
-                        selectionNamespace: sidebarSelectionNamespace,
                         action: { select(item) },
-                        detach: item == .about ? nil : { detach(item) })
+                        detach: item == .about ? nil : { detach(item) },
+                        disclosureExpanded: item == .settings
+                            ? settingsCategoriesExpanded : nil,
+                        disclosureAction: item == .settings
+                            ? { settingsCategoriesExpanded.toggle() } : nil)
+                    if item == .settings {
+                        CollapsibleSidebarLayout(
+                            progress: settingsCategoriesExpanded ? 1 : 0
+                        ) {
+                            VStack(spacing: UIScale.pt(2)) {
+                                ForEach(SettingsPane.Tab.allCases, id: \.self) { category in
+                                    SettingsSidebarRow(
+                                        category: category,
+                                        selected: destination == .settings
+                                            && settingsTab == category.rawValue,
+                                        theme: theme
+                                    ) {
+                                        settingsTab = category.rawValue
+                                        mainWindowSection = MainDestination.settings.rawValue
+                                    }
+                                }
+                            }
+                            .padding(.top, UIScale.pt(6))
+                        }
+                        .clipped()
+                        .allowsHitTesting(settingsCategoriesExpanded)
+                        .accessibilityHidden(!settingsCategoriesExpanded)
+                    }
                 }
             }
             .padding(.horizontal, UIScale.pt(8))
@@ -731,7 +837,11 @@ struct MainWindowView: View {
             Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: destination
         )
         .animation(
-            Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: showShortcutHints)
+            Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: showShortcutHints
+        )
+        .animation(
+            Motion.animation(Motion.snap, reduceMotion: reduceMotion),
+            value: settingsCategoriesExpanded)
     }
 
     private func select(_ item: MainDestination) {
