@@ -12,6 +12,7 @@ public enum AppStorageKeys {
         public static let appearance = "appearance"
         public static let mainSidebarOpen = "mainSidebarOpen"
         public static let mainSidebarWidth = "mainSidebarWidth"
+        public static let settingsCategoriesExpanded = "settingsCategoriesExpanded"
         public static let mainWindowSection = "mainWindowSection"
         public static let settingsTab = "settingsTab"
         public static let showDockIcon = "showDockIcon"

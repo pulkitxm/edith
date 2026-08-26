@@ -6,6 +6,7 @@ import SwiftUI
 struct SettingsPane: View {
     enum Tab: String, CaseIterable {
         case general, permissions, shortcuts, terminal, icloud, updates
+
         var label: String {
             switch self {
             case .general: return "General"
@@ -14,6 +15,28 @@ struct SettingsPane: View {
             case .terminal: return "Terminal"
             case .icloud: return "iCloud"
             case .updates: return "Updates"
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .general: return "gearshape"
+            case .permissions: return "hand.raised"
+            case .shortcuts: return "keyboard"
+            case .terminal: return "apple.terminal"
+            case .icloud: return "icloud"
+            case .updates: return "arrow.triangle.2.circlepath"
+            }
+        }
+
+        var summary: String {
+            switch self {
+            case .general: return "Appearance, window, and welcome tour"
+            case .permissions: return "Privacy access used by enabled extensions"
+            case .shortcuts: return "Global and application keyboard shortcuts"
+            case .terminal: return "Command line and terminal integration"
+            case .icloud: return "Backup and synchronization"
+            case .updates: return "Version and automatic update behavior"
             }
         }
     }
@@ -35,16 +58,23 @@ struct SettingsPane: View {
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
             PageHeader(
-                "Settings",
-                accessory: {
-                    Picker("", selection: tab) {
-                        ForEach(Tab.allCases, id: \.self) { Text($0.label).tag($0) }
+                tab.wrappedValue.label,
+                trailing: {
+                    Picker("Category", selection: tab) {
+                        ForEach(Tab.allCases, id: \.self) { category in
+                            Label(category.label, systemImage: category.symbol).tag(category)
+                        }
                     }
-                    .pickerStyle(.segmented)
+                    .pickerStyle(.menu)
                     .labelsHidden()
-                    .pointerCursor()
-                    .frame(maxWidth: UIScale.pt(320), alignment: .leading)
-                })
+                    .accessibilityLabel("Settings category")
+                },
+                accessory: {
+                    Text(tab.wrappedValue.summary)
+                        .font(.system(size: UIScale.pt(12)))
+                        .foregroundStyle(.secondary)
+                }
+            )
             Group {
                 switch tab.wrappedValue {
                 case .general: GeneralPane()
@@ -56,10 +86,12 @@ struct SettingsPane: View {
                 }
             }
             .scrollContentBackground(.hidden)
+            .frame(maxWidth: contentMaximumWidth, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DashSkin.paper(scheme == .dark))
-        .navigationTitle("Settings")
+        .navigationTitle(tab.wrappedValue.label)
         .onAppear {
             if automaticActionsEnabled {
                 $tabRaw.configured(AppStorageKeys.General.settingsTab).wrappedValue =
@@ -67,6 +99,13 @@ struct SettingsPane: View {
                         mainWindowSection: MainDestination.settings.rawValue, settingsTab: tabRaw
                     ).settingsTab
             }
+        }
+    }
+
+    private var contentMaximumWidth: CGFloat {
+        switch tab.wrappedValue {
+        case .permissions: .infinity
+        case .general, .shortcuts, .terminal, .icloud, .updates: UIScale.pt(1180)
         }
     }
 }

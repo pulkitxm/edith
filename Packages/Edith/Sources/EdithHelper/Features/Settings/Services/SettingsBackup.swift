@@ -659,6 +659,7 @@ final class SettingsBackup {
         "SUAutomaticallyUpdate", "SUEnableAutomaticChecks", "SUScheduledCheckInterval",
         AppStorageKeys.General.mainWindowSection, AppStorageKeys.General.settingsTab,
         AppStorageKeys.General.mainSidebarOpen, AppStorageKeys.General.mainSidebarWidth,
+        AppStorageKeys.General.settingsCategoriesExpanded,
     ]
 
     nonisolated static let sharedKeys: Set<String> = [
@@ -758,6 +759,7 @@ final class SettingsBackup {
         AppStorageKeys.Music.gridView, "musicFavourites",
         AppStorageKeys.General.mainWindowSection, AppStorageKeys.General.settingsTab,
         AppStorageKeys.General.mainSidebarOpen, AppStorageKeys.General.mainSidebarWidth,
+        AppStorageKeys.General.settingsCategoriesExpanded,
     ]
 
     nonisolated static let deviceLocalKeys: Set<String> = [
