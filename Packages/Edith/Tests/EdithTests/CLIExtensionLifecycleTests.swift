@@ -206,6 +206,14 @@ import Testing
         }
     }
 
+    @Test func companionEndpointUsesTheInjectedSharedDefaults() async {
+        await CLIProbe.inWorld { world in
+            world.shared.set(
+                "http://127.0.0.1:4821", forKey: AppStorageKeys.Companion.endpoint)
+            #expect(CLIEnvironment.resolvedCompanionEndpoint(nil).port == 4821)
+        }
+    }
+
     @Test func plainInfoIncludesVerificationAndRecoveryCommands() async {
         await CLIProbe.inWorld { _ in
             let result = await CLIProbe.capture(["extensions", "info", "notchShelf"])

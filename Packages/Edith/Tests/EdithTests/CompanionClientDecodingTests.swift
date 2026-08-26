@@ -89,6 +89,11 @@ import Testing
             CompanionClient.explicitEndpoint(
                 environmentEndpoint: "  ", savedEndpoint: " https://companion.example ")
                 == "https://companion.example")
+        #expect(
+            CompanionClient.endpoint(
+                environmentEndpoint: "  ", savedEndpoint: "http://127.0.0.1:4821",
+                deployment: nil
+            ).port == 4821)
     }
 
     @Test func healthDecodesSeverityAndSeparatesBlockingFromOptional() throws {
