@@ -98,13 +98,19 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private func scheduleSettingsChangedBroadcast() {
         guard !settingsBroadcastPending else { return }
         settingsBroadcastPending = true
+        ProcessInfo.processInfo.disableSuddenTermination()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, self.settingsBroadcastPending else { return }
-                self.settingsBroadcastPending = false
-                IPC.post(IPC.Name.settingsChanged)
+                self?.flushSettingsChangedBroadcast()
             }
         }
+    }
+
+    private func flushSettingsChangedBroadcast() {
+        guard settingsBroadcastPending else { return }
+        settingsBroadcastPending = false
+        IPC.post(IPC.Name.settingsChanged)
+        ProcessInfo.processInfo.enableSuddenTermination()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
@@ -117,10 +123,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        if settingsBroadcastPending {
-            settingsBroadcastPending = false
-            IPC.post(IPC.Name.settingsChanged)
-        }
+        flushSettingsChangedBroadcast()
         launchCleanupTask?.cancel()
         helperMaintenanceTask?.cancel()
         postLaunch.cancel()
