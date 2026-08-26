@@ -346,6 +346,7 @@ struct MainWindowView: View {
     @State private var musicFolderPath = ""
     @State private var restoringHistory = false
     @State private var permissionsNeedAttention = PermissionsStatus.current
+    @State private var permissionsProbe: Task<Void, Never>?
     @State private var presenterQuickActionsPresented = false
     @State private var hoveredPresenterQuickAction: String?
     @State private var keyboardCleanTrigger = 0
@@ -482,6 +483,7 @@ struct MainWindowView: View {
         }
         .onDisappear {
             guard automaticActionsEnabled else { return }
+            permissionsProbe?.cancel()
             removeWindowKeys()
             removeCommandHintMonitor()
             removeMusicKeys()
@@ -635,11 +637,12 @@ struct MainWindowView: View {
     }
 
     private func refreshPermissionsPill() {
-        CalendarPermission.mirror()
-        _ = MainPermissionOperations.center.refresh()
         permissionsNeedAttention = PermissionsStatus.current
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            permissionsNeedAttention = PermissionsStatus.current
+        permissionsProbe?.cancel()
+        permissionsProbe = Task.detached(priority: .utility) {
+            guard !Task.isCancelled else { return }
+            CalendarPermission.mirror()
+            IPC.post(IPC.Name.requestPermissionsRefresh)
         }
     }
 

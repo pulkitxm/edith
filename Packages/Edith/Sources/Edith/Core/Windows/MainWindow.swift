@@ -84,13 +84,13 @@ enum MainWindow {
         w.titlebarSeparatorStyle = .none
         w.isReleasedWhenClosed = false
         w.contentMinSize = NSSize(width: 720, height: 500)
+        w.setContentSize(NSSize(width: 900, height: 680))
+        w.center()
+        w.setFrameAutosaveName("EdithMainWindow")
         let hosting = NSHostingController(
             rootView: ZoomableRoot { MainWindowView(updater: updater) })
         hosting.sizingOptions = []
         w.contentViewController = hosting
-        w.setContentSize(NSSize(width: 900, height: 680))
-        w.center()
-        w.setFrameAutosaveName("EdithMainWindow")
         w.tabbingMode = .disallowed
         w.delegate = MainWindowDelegate.shared
         window = w
