@@ -121,7 +121,7 @@ struct QuinjetPage: View {
         .menuIndicator(.hidden)
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help("Terminal renderer")
+        .help("Choose the terminal renderer")
     }
 
     private var themeMenu: some View {
