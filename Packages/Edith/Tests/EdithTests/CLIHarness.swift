@@ -200,6 +200,7 @@ final class CLIWorld: @unchecked Sendable {
         CLIEnvironment.resolveCompanionEndpoint = {
             CompanionClient.endpoint(override: $0 ?? "http://127.0.0.1:1")
         }
+        CLIEnvironment.companionConfigured = { false }
         CLIEnvironment.answer = { _ in nil }
         CLIEnvironment.permissionUsages = { [] }
         CLIEnvironment.runningApps = { [] }

@@ -372,8 +372,9 @@ public enum ExtensionLifecycleCatalog {
             ],
             prerequisites: [
                 instruction(
-                    "backend", "Connect the backend", "Run or configure the Companion service.",
-                    "ed companion doctor --json")
+                    "backend", "Deploy or connect the backend",
+                    "Choose a host and deploy Companion, or configure another endpoint.",
+                    "ed companion deploy")
             ],
             examples: ["ed extensions enable companion", "ed companion status --json"],
             docs: [documentation("guide", "Companion guide", "docs/companion.md")],

@@ -451,20 +451,62 @@ public struct CompanionClient: Sendable {
         CompanionEndpointCache.shared.clear()
     }
 
-    private static func fallbackEndpoint() -> URL {
-        deployedEndpoint() ?? URL(string: defaultEndpointString)!
+    public static func hasConfiguredEndpointOrDeployment(
+        environmentEndpoint: String? = ProcessInfo.processInfo.environment[
+            "EDITH_COMPANION_URL"],
+        savedEndpoint: String? = SharedDefaults.store.object(
+            forKey: AppStorageKeys.Companion.endpoint) as? String,
+        deployment: CompanionDeployment? = CompanionDeploymentStore.load()
+    ) -> Bool {
+        if explicitEndpoint(
+            environmentEndpoint: environmentEndpoint, savedEndpoint: savedEndpoint) != nil
+        {
+            return true
+        }
+        guard let deployment else { return false }
+        return (1...65_535).contains(deployment.localPort)
+    }
+
+    public static func endpoint(
+        environmentEndpoint: String?, savedEndpoint: String?,
+        deployment: CompanionDeployment?
+    ) -> URL {
+        guard
+            let value = explicitEndpoint(
+                environmentEndpoint: environmentEndpoint, savedEndpoint: savedEndpoint)
+        else { return fallbackEndpoint(deployment: deployment) }
+        return URL(string: value) ?? fallbackEndpoint(deployment: deployment)
+    }
+
+    static func explicitEndpoint(
+        environmentEndpoint: String?, savedEndpoint: String?
+    ) -> String? {
+        [environmentEndpoint, savedEndpoint]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+    }
+
+    private static func fallbackEndpoint(
+        deployment: CompanionDeployment? = CompanionDeploymentStore.load()
+    ) -> URL {
+        deployedEndpoint(deployment) ?? URL(string: defaultEndpointString)!
     }
 
     private static func resolveEndpoint() -> URL {
-        let value =
-            ProcessInfo.processInfo.environment["EDITH_COMPANION_URL"]
-            ?? SharedDefaults.store.string(forKey: AppStorageKeys.Companion.endpoint)
-        guard let value, !value.isEmpty else { return fallbackEndpoint() }
-        return URL(string: value) ?? fallbackEndpoint()
+        endpoint(
+            environmentEndpoint: ProcessInfo.processInfo.environment[
+                "EDITH_COMPANION_URL"],
+            savedEndpoint: SharedDefaults.store.string(
+                forKey: AppStorageKeys.Companion.endpoint),
+            deployment: CompanionDeploymentStore.load())
     }
 
     public static func deployedEndpoint() -> URL? {
-        guard let deployment = CompanionDeploymentStore.load() else { return nil }
+        deployedEndpoint(CompanionDeploymentStore.load())
+    }
+
+    private static func deployedEndpoint(_ deployment: CompanionDeployment?) -> URL? {
+        guard let deployment else { return nil }
         return URL(string: "http://127.0.0.1:\(deployment.localPort)")
     }
 

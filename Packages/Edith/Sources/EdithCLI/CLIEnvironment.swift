@@ -91,7 +91,26 @@ public enum CLIEnvironment {
         }
 
     nonisolated(unsafe) public static var resolveCompanionEndpoint: @Sendable (String?) -> URL = {
-        CompanionClient.endpoint(override: $0)
+        resolvedCompanionEndpoint($0)
+    }
+
+    nonisolated(unsafe) public static var companionConfigured: @Sendable () -> Bool = {
+        CompanionClient.hasConfiguredEndpointOrDeployment(
+            environmentEndpoint: ProcessInfo.processInfo.environment[
+                "EDITH_COMPANION_URL"],
+            savedEndpoint: sharedDefaults.object(
+                forKey: AppStorageKeys.Companion.endpoint) as? String,
+            deployment: CompanionDeploymentStore.load())
+    }
+
+    public static func resolvedCompanionEndpoint(_ override: String?) -> URL {
+        if let override { return CompanionClient.endpoint(override: override) }
+        return CompanionClient.endpoint(
+            environmentEndpoint: ProcessInfo.processInfo.environment[
+                "EDITH_COMPANION_URL"],
+            savedEndpoint: sharedDefaults.object(
+                forKey: AppStorageKeys.Companion.endpoint) as? String,
+            deployment: CompanionDeploymentStore.load())
     }
 
     nonisolated(unsafe) public static var remoteDirectoryTarget:
@@ -202,7 +221,15 @@ public enum CLIEnvironment {
             await ExtensionLifecycleProbeEnvironment.toolReadiness(
                 id, executableNamed: CLIEnvironment.executableNamed)
         }
-        resolveCompanionEndpoint = { CompanionClient.endpoint(override: $0) }
+        resolveCompanionEndpoint = { resolvedCompanionEndpoint($0) }
+        companionConfigured = {
+            CompanionClient.hasConfiguredEndpointOrDeployment(
+                environmentEndpoint: ProcessInfo.processInfo.environment[
+                    "EDITH_COMPANION_URL"],
+                savedEndpoint: sharedDefaults.object(
+                    forKey: AppStorageKeys.Companion.endpoint) as? String,
+                deployment: CompanionDeploymentStore.load())
+        }
         remoteDirectoryTarget = { try await liveRemoteDirectoryTarget($0) }
         presentURLs = { urls, action in
             switch action {

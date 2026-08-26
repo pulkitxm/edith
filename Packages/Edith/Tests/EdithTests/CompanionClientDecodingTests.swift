@@ -51,6 +51,51 @@ import Testing
         #expect(CompanionClient.longRequestTimeout > CompanionClient.defaultTimeout)
     }
 
+    @Test func explicitEndpointOrValidDeploymentCountsAsConfigured() {
+        let deployment = CompanionDeployment(
+            machineID: nil, machineName: "This Mac", tier: "cpu", localPort: 65_535)
+
+        #expect(
+            !CompanionClient.hasConfiguredEndpointOrDeployment(
+                environmentEndpoint: nil, savedEndpoint: nil, deployment: nil))
+        #expect(
+            CompanionClient.hasConfiguredEndpointOrDeployment(
+                environmentEndpoint: " https://companion.example ", savedEndpoint: nil,
+                deployment: nil))
+        #expect(
+            CompanionClient.hasConfiguredEndpointOrDeployment(
+                environmentEndpoint: nil, savedEndpoint: "not a URL", deployment: nil))
+        #expect(
+            CompanionClient.hasConfiguredEndpointOrDeployment(
+                environmentEndpoint: nil, savedEndpoint: nil, deployment: deployment))
+    }
+
+    @Test func blankEndpointsAndInvalidDeploymentRemainUnconfigured() {
+        let zeroPort = CompanionDeployment(
+            machineID: nil, machineName: "This Mac", tier: "cpu", localPort: 0)
+        let oversizedPort = CompanionDeployment(
+            machineID: nil, machineName: "This Mac", tier: "cpu", localPort: 65_536)
+
+        #expect(
+            !CompanionClient.hasConfiguredEndpointOrDeployment(
+                environmentEndpoint: "  ", savedEndpoint: "\n", deployment: zeroPort))
+        #expect(
+            !CompanionClient.hasConfiguredEndpointOrDeployment(
+                environmentEndpoint: nil, savedEndpoint: nil, deployment: oversizedPort))
+    }
+
+    @Test func blankEnvironmentEndpointLetsSavedEndpointWin() {
+        #expect(
+            CompanionClient.explicitEndpoint(
+                environmentEndpoint: "  ", savedEndpoint: " https://companion.example ")
+                == "https://companion.example")
+        #expect(
+            CompanionClient.endpoint(
+                environmentEndpoint: "  ", savedEndpoint: "http://127.0.0.1:4821",
+                deployment: nil
+            ).port == 4821)
+    }
+
     @Test func healthDecodesSeverityAndSeparatesBlockingFromOptional() throws {
         let health = try decode(
             CompanionHealth.self,

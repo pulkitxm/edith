@@ -334,13 +334,13 @@ struct CompanionDeployCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
+            let chosenPort = try ArgumentChecks.port(port, "--port")
             let hosts = await CompanionHostProbing.hosts(only: machine)
             guard let chosen = pick(from: hosts) else {
                 throw CLIFailure.notFound(
                     machine.map { "no machine called \($0)" } ?? "no machine can run it yet",
                     hint: "run `ed companion hosts` to see what each one needs")
             }
-            let chosenPort = try ArgumentChecks.positive(port, "--port")
             let candidate = CompanionMindRuntimeOperationExecution.deployment(
                 host: chosen, directory: directory, localPort: chosenPort)
             let alreadyThere = await CompanionStackRunner.services(candidate)
