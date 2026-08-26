@@ -26,6 +26,26 @@ public enum QuinjetTheme: String, CaseIterable, Identifiable, Sendable {
     public var id: String { rawValue }
 }
 
+public enum QuinjetThemePreference {
+    public static let app = "app"
+    public static let all = [app] + QuinjetTheme.allCases.map(\.rawValue)
+
+    public static func resolve(_ storedValue: String, appTheme: AppTheme) -> QuinjetTheme {
+        if let explicit = QuinjetTheme(rawValue: storedValue) { return explicit }
+        switch appTheme {
+        case .accent: return .quinjet
+        case .blue: return .github
+        case .indigo: return .tokyoNight
+        case .teal: return .solarized
+        case .green: return .everforest
+        case .purple: return .dracula
+        case .pink: return .rosePine
+        case .red: return .monokai
+        case .orange: return .ayu
+        }
+    }
+}
+
 public enum QuinjetAppearance: String, CaseIterable, Sendable {
     case light
     case dark
@@ -54,10 +74,13 @@ public struct QuinjetLaunchConfiguration: Equatable, Sendable {
             QuinjetTerminal(
                 rawValue: sharedDefaults.string(forKey: AppStorageKeys.Quinjet.terminal) ?? "")
             ?? .embedded
-        let theme =
-            QuinjetTheme(
-                rawValue: sharedDefaults.string(forKey: AppStorageKeys.Quinjet.theme) ?? "")
-            ?? .quinjet
+        let themePreference =
+            sharedDefaults.string(forKey: AppStorageKeys.Quinjet.theme)
+            ?? QuinjetThemePreference.app
+        let appTheme = AppTheme(
+            storedName: sharedDefaults.string(forKey: AppStorageKeys.General.theme)
+                ?? AppTheme.accent.rawValue)
+        let theme = QuinjetThemePreference.resolve(themePreference, appTheme: appTheme)
         let appearance: QuinjetAppearance
         switch sharedDefaults.string(forKey: AppStorageKeys.General.appearance) {
         case "light": appearance = .light

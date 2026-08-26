@@ -43,6 +43,10 @@ struct HerdrSessionView: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(AppStorageKeys.Quinjet.theme, store: SharedDefaults.store)
+    private var quinjetThemeName = QuinjetThemePreference.app
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
+    private var appThemeName = AppTheme.accent.rawValue
     @State private var connectError: String?
     @State private var starting = false
     @State private var dragWidth: CGFloat?
@@ -162,7 +166,7 @@ struct HerdrSessionView: View {
     }
 
     private var diffRequest: String {
-        "\(tab.id)|\(tab.view.rawValue)|\(dark)"
+        "\(tab.id)|\(tab.view.rawValue)|\(dark)|\(quinjetThemeName)|\(appThemeName)"
     }
 
     private var sessionPane: some View {

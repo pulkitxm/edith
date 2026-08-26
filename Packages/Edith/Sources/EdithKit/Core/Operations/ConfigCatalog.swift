@@ -421,10 +421,7 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Quinjet.theme, .string, group: "quinjet",
             summary: "Color theme used by embedded Quinjet terminals.",
-            allowed: [
-                "quinjet", "catppuccin", "dracula", "everforest", "gruvbox", "nord", "one",
-                "rose-pine", "solarized", "tokyo-night", "ayu", "monokai", "github",
-            ], fallback: .string("quinjet")),
+            allowed: QuinjetThemePreference.all, fallback: .string(QuinjetThemePreference.app)),
     ]
 
     private static let finder: [SettingDefinition] = [

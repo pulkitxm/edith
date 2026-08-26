@@ -570,6 +570,22 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
                 ])
     }
 
+    @Test func appThemesResolveToCompatibleQuinjetThemes() {
+        let expected: [AppTheme: QuinjetTheme] = [
+            .accent: .quinjet, .blue: .github, .indigo: .tokyoNight,
+            .teal: .solarized, .green: .everforest, .purple: .dracula,
+            .pink: .rosePine, .red: .monokai, .orange: .ayu,
+        ]
+
+        for (appTheme, quinjetTheme) in expected {
+            #expect(
+                QuinjetThemePreference.resolve(
+                    QuinjetThemePreference.app, appTheme: appTheme) == quinjetTheme)
+        }
+        #expect(
+            QuinjetThemePreference.resolve("gruvbox", appTheme: .blue) == .gruvbox)
+    }
+
     @Test func newTabPayloadCreatesAndSelectsPickerTab() async throws {
         let model = QuinjetPageModel(client: client)
         let original = try #require(model.selectedTab)
@@ -646,6 +662,26 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
         #expect(tab.worktrees == [Self.main, Self.feature])
         #expect(tab.launchConfiguration == configuration)
         #expect(!tab.holder.started)
+    }
+
+    @Test func changingThemeReconfiguresEveryOpenProjectWithoutChangingSelection() throws {
+        let model = QuinjetPageModel(client: client)
+        let first = try #require(model.selectedTab)
+        model.open(
+            Self.main, projectName: "edith", available: [Self.main], in: first,
+            launchEnabled: false)
+        let second = model.addPickerTab()
+        model.open(
+            Self.feature, projectName: "edith", available: [Self.feature], in: second,
+            launchEnabled: false)
+        let selected = try #require(model.selectedTab?.id)
+        let configuration = QuinjetLaunchConfiguration(
+            terminal: .embedded, theme: .github, appearance: .light)
+
+        model.apply(configuration, launchEnabled: false)
+
+        #expect(model.tabs.allSatisfy { $0.launchConfiguration == configuration })
+        #expect(model.selectedTab?.id == selected)
     }
 
     @Test func terminalRoutesManagedOSCSequence() async {

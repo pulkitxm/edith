@@ -6,7 +6,9 @@ struct QuinjetPage: View {
     @AppStorage(AppStorageKeys.Quinjet.terminal, store: SharedDefaults.store)
     private var terminalName = QuinjetTerminal.embedded.rawValue
     @AppStorage(AppStorageKeys.Quinjet.theme, store: SharedDefaults.store)
-    private var themeName = QuinjetTheme.quinjet.rawValue
+    private var themeName = QuinjetThemePreference.app
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
+    private var appThemeName = AppTheme.accent.rawValue
     @Environment(\.colorScheme) private var scheme
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.terminalLaunchEnabled) private var launchEnabled
@@ -93,7 +95,8 @@ struct QuinjetPage: View {
         let storedTerminal = QuinjetTerminal(rawValue: terminalName) ?? .embedded
         return QuinjetLaunchConfiguration(
             terminal: storedTerminal.isAvailable ? storedTerminal : .embedded,
-            theme: QuinjetTheme(rawValue: themeName) ?? .quinjet,
+            theme: QuinjetThemePreference.resolve(
+                themeName, appTheme: AppTheme(storedName: appThemeName)),
             appearance: scheme == .dark ? .dark : .light)
     }
 
@@ -123,11 +126,21 @@ struct QuinjetPage: View {
 
     private var themeMenu: some View {
         Menu {
+            Button {
+                themeName = QuinjetThemePreference.app
+            } label: {
+                if themeName == QuinjetThemePreference.app {
+                    Label("App theme", systemImage: "checkmark")
+                } else {
+                    Text("App theme")
+                }
+            }
+            Divider()
             ForEach(QuinjetTheme.allCases) { theme in
                 Button {
                     themeName = theme.rawValue
                 } label: {
-                    if theme == configuration.theme {
+                    if themeName == theme.rawValue {
                         Label(theme.label, systemImage: "checkmark")
                     } else {
                         Text(theme.label)
@@ -135,7 +148,10 @@ struct QuinjetPage: View {
                 }
             }
         } label: {
-            QuinjetMenuLabel(icon: "paintpalette", title: configuration.theme.label)
+            QuinjetMenuLabel(
+                icon: "paintpalette",
+                title: themeName == QuinjetThemePreference.app
+                    ? "App: \(configuration.theme.label)" : configuration.theme.label)
         }
         .menuIndicator(.hidden)
         .menuStyle(.borderlessButton)

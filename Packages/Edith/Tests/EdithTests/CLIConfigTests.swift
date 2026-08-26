@@ -47,7 +47,7 @@ import Testing
         #expect(terminal?.allowed == ["embedded", "cmux"])
         #expect(terminal?.fallback == .string("embedded"))
         #expect(theme?.allowed == QuinjetThemeValues.all)
-        #expect(theme?.fallback == .string("quinjet"))
+        #expect(theme?.fallback == .string(QuinjetThemePreference.app))
         #expect(SettingsBackup.backedKeys.contains(AppStorageKeys.Quinjet.terminal))
         #expect(SettingsBackup.backedKeys.contains(AppStorageKeys.Quinjet.theme))
         #expect(SettingsBackup.sharedKeys.contains(AppStorageKeys.Quinjet.terminal))
@@ -185,7 +185,7 @@ import Testing
 
 private enum QuinjetThemeValues {
     static let all = [
-        "quinjet", "catppuccin", "dracula", "everforest", "gruvbox", "nord", "one",
+        "app", "quinjet", "catppuccin", "dracula", "everforest", "gruvbox", "nord", "one",
         "rose-pine", "solarized", "tokyo-night", "ayu", "monokai", "github",
     ]
 }

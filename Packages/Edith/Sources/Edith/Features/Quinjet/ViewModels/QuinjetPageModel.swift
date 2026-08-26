@@ -159,7 +159,7 @@ final class QuinjetPageModel {
     func open(
         _ worktree: QuinjetWorktree, projectName: String, available: [QuinjetWorktree],
         remote: QuinjetRemote? = nil, in tab: QuinjetTab, launchEnabled: Bool,
-        configuration: QuinjetLaunchConfiguration = .default
+        configuration: QuinjetLaunchConfiguration = .default, select: Bool = true
     ) {
         tab.projectName = projectName
         tab.worktree = worktree
@@ -169,7 +169,7 @@ final class QuinjetPageModel {
         tab.showsWorktrees = false
         tab.errorMessage = nil
         tab.externalLaunchMessage = nil
-        selected = tab.id
+        if select { selected = tab.id }
         tab.externalLaunchGeneration += 1
         let externalLaunchGeneration = tab.externalLaunchGeneration
         guard launchEnabled else { return }
@@ -281,13 +281,15 @@ final class QuinjetPageModel {
     func apply(
         _ configuration: QuinjetLaunchConfiguration, launchEnabled: Bool
     ) {
-        guard let tab = selectedTab, let worktree = tab.worktree,
-            tab.launchConfiguration != configuration
-        else { return }
-        open(
-            worktree, projectName: tab.projectName ?? "Project", available: tab.worktrees,
-            remote: tab.remote, in: tab, launchEnabled: launchEnabled,
-            configuration: configuration)
+        for tab in tabs {
+            guard let worktree = tab.worktree, tab.launchConfiguration != configuration else {
+                continue
+            }
+            open(
+                worktree, projectName: tab.projectName ?? "Project", available: tab.worktrees,
+                remote: tab.remote, in: tab, launchEnabled: launchEnabled,
+                configuration: configuration, select: false)
+        }
     }
 
     func setSessionLaunchEnabled(_ enabled: Bool) {
