@@ -58,12 +58,15 @@ git fetch origin main --tags
 case "$MODE" in
   cut)
     : "${BUILT_SHA:?BUILT_SHA is required}"
+    : "${RELEASE_PLISTS_DIR:?RELEASE_PLISTS_DIR is required}"
 
     REMOTE_TAG_SHA="$(remote_tag_sha)"
     if [[ -n "$REMOTE_TAG_SHA" ]]; then
-      [[ "$REMOTE_TAG_SHA" == "$BUILT_SHA" ]] \
-        || { echo "release blocked: $RELEASE_TAG was published from another commit" >&2; exit 1; }
-      rewrite_cask
+      [[ "$(git rev-parse "$REMOTE_TAG_SHA^")" == "$BUILT_SHA" ]] \
+        || { echo "release blocked: $RELEASE_TAG was published from another source" >&2; exit 1; }
+      git merge-base --is-ancestor "$REMOTE_TAG_SHA" origin/main \
+        || { echo "release blocked: $RELEASE_TAG is not on current main" >&2; exit 1; }
+      git switch --detach "$REMOTE_TAG_SHA"
       verify_cask
       exit 0
     fi
@@ -72,26 +75,30 @@ case "$MODE" in
       || { echo "release blocked: checkout does not match the built commit" >&2; exit 1; }
     [[ "$(git rev-parse origin/main)" == "$BUILT_SHA" ]] \
       || release_superseded
+    [[ -f "$RELEASE_PLISTS_DIR/Info.plist" && -f "$RELEASE_PLISTS_DIR/HelperInfo.plist" ]] \
+      || { echo "release blocked: release plists are missing" >&2; exit 1; }
 
+    cp "$RELEASE_PLISTS_DIR/Info.plist" Resources/Info.plist
+    cp "$RELEASE_PLISTS_DIR/HelperInfo.plist" Resources/HelperInfo.plist
     rewrite_cask
     verify_cask
     git \
       -c user.name="pukbot[bot]" \
       -c user.email="320458784+pukbot[bot]@users.noreply.github.com" \
-      tag -f -a "$RELEASE_TAG" -m "Edith $RELEASE_TAG build $RELEASE_BUILD" "$BUILT_SHA"
-    if git push origin "refs/tags/$RELEASE_TAG"; then
-      git fetch origin main
-      if [[ "$(git rev-parse origin/main)" != "$BUILT_SHA" ]]; then
-        git push origin ":refs/tags/$RELEASE_TAG"
-        release_superseded
-      fi
+      commit Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb \
+      -m "Release ${RELEASE_TAG}"
+    git \
+      -c user.name="pukbot[bot]" \
+      -c user.email="320458784+pukbot[bot]@users.noreply.github.com" \
+      tag -a "$RELEASE_TAG" -m "Edith $RELEASE_TAG build $RELEASE_BUILD"
+    if git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"; then
       exit 0
     fi
 
     git fetch origin main --tags
     REMOTE_TAG_SHA="$(remote_tag_sha)"
     if [[ -n "$REMOTE_TAG_SHA" ]]; then
-      [[ "$REMOTE_TAG_SHA" == "$BUILT_SHA" ]] \
+      [[ "$REMOTE_TAG_SHA" == "$(git rev-parse HEAD)" ]] \
         || { echo "release blocked: $RELEASE_TAG was published from another commit" >&2; exit 1; }
       exit 0
     fi
@@ -101,14 +108,25 @@ case "$MODE" in
     exit 1
     ;;
   rebuild)
+    git switch --detach origin/main
     LATEST_TAG="$(latest_release_tag)" \
       || { echo "release blocked: no current release tag is available" >&2; exit 1; }
     [[ "$LATEST_TAG" == "$RELEASE_TAG" ]] \
       || { echo "release blocked: only the current release can be rebuilt" >&2; exit 1; }
-    [[ "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" == "$(git rev-parse HEAD)" ]] \
-      || { echo "release blocked: checkout does not match the release tag" >&2; exit 1; }
+    grep -qx "  version \"$RELEASE_VERSION\"" Casks/edith.rb \
+      || { echo "release blocked: only the current release can be rebuilt" >&2; exit 1; }
     rewrite_cask
     verify_cask
+
+    if git diff --quiet -- Casks/edith.rb; then
+      exit 0
+    fi
+
+    git \
+      -c user.name="pukbot[bot]" \
+      -c user.email="320458784+pukbot[bot]@users.noreply.github.com" \
+      commit Casks/edith.rb -m "Refresh ${RELEASE_TAG} release checksum"
+    git push origin HEAD:main
     ;;
   *)
     echo "usage: publish-release-state.sh cut|rebuild" >&2
