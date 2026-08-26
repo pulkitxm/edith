@@ -22,13 +22,14 @@ public struct SettingDefinition: Equatable, Sendable {
     public let group: String
     public let summary: String
     public let allowed: [String]
+    public let integerRange: ClosedRange<Int>?
     public let fallback: JSONValue
     public let readOnly: Bool
 
     public init(
         _ key: String, _ type: ValueType, group: String, summary: String,
-        allowed: [String] = [], fallback: JSONValue = .null, scope: Scope = .shared,
-        readOnly: Bool = false
+        allowed: [String] = [], integerRange: ClosedRange<Int>? = nil,
+        fallback: JSONValue = .null, scope: Scope = .shared, readOnly: Bool = false
     ) {
         self.key = key
         self.type = type
@@ -36,6 +37,7 @@ public struct SettingDefinition: Equatable, Sendable {
         self.group = group
         self.summary = summary
         self.allowed = allowed
+        self.integerRange = integerRange
         self.fallback = fallback
         self.readOnly = readOnly
     }
@@ -472,7 +474,7 @@ public enum ConfigCatalog {
         SettingDefinition(
             LidAwakeState.batteryThresholdKey, .int, group: "system",
             summary: "Battery percentage below which Lid Awake pauses; 0 disables it.",
-            fallback: .int(0)),
+            integerRange: LidAwakeState.batteryThresholdRange, fallback: .int(0)),
         SettingDefinition(
             LidAwakeState.activeKey, .bool, group: "system",
             summary: "Whether Lid Awake is currently preventing lid-close sleep.",

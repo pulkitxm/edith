@@ -61,38 +61,50 @@ public enum ConfigurationValueParser {
     }
 
     public static func coerce(_ raw: Any, to definition: SettingDefinition) throws -> JSONValue {
+        let value: JSONValue
         switch definition.type {
         case .bool:
-            guard let value = raw as? Bool else {
+            guard let flag = raw as? Bool else {
                 throw ConfigurationError("\(definition.key) wants a bool")
             }
-            return .bool(value)
+            value = .bool(flag)
         case .int:
-            guard let value = raw as? NSNumber else {
-                throw ConfigurationError("\(definition.key) wants a number")
+            guard !(raw is Bool), let number = raw as? NSNumber else {
+                throw ConfigurationError("\(definition.key) wants a whole number")
             }
-            return .int(value.intValue)
+            let integer: Int
+            if let exact = Int(number.stringValue) {
+                integer = exact
+            } else {
+                let floating = number.doubleValue
+                guard floating.isFinite, floating.rounded() == floating,
+                    let exact = Int(exactly: floating)
+                else {
+                    throw ConfigurationError("\(definition.key) wants a whole number")
+                }
+                integer = exact
+            }
+            value = .int(integer)
         case .number:
-            guard let value = raw as? NSNumber else {
+            guard !(raw is Bool), let number = raw as? NSNumber, number.doubleValue.isFinite else {
                 throw ConfigurationError("\(definition.key) wants a number")
             }
-            return .double(value.doubleValue)
+            value = .double(number.doubleValue)
         case .string, .csv:
-            guard let value = raw as? String else {
+            guard let string = raw as? String else {
                 throw ConfigurationError("\(definition.key) wants a string")
             }
-            guard definition.allowed.isEmpty || definition.allowed.contains(value) else {
-                throw ConfigurationError("\(value) is not allowed for \(definition.key)")
-            }
-            return .string(value)
+            value = .string(string)
         case .stringList:
-            guard let value = raw as? [String] else {
+            guard let strings = raw as? [String] else {
                 throw ConfigurationError("\(definition.key) wants an array of strings")
             }
-            return .strings(value)
+            value = .strings(strings)
         case .map:
             throw ConfigurationError("\(definition.key) cannot be imported")
         }
+        try validate(value, for: definition)
+        return value
     }
 
     public static func validate(_ value: JSONValue, for definition: SettingDefinition) throws {
@@ -116,6 +128,12 @@ public enum ConfigurationValueParser {
             throw ConfigurationError(
                 "\(text) is not a valid value",
                 hint: "allowed: " + definition.allowed.joined(separator: ", "))
+        }
+        if case let .int(number) = value, let range = definition.integerRange,
+            !range.contains(number)
+        {
+            throw ConfigurationError(
+                "\(definition.key) must be from \(range.lowerBound) through \(range.upperBound)")
         }
         if definition.type == .stringList, case let .array(items) = value,
             items.contains(where: {
@@ -278,13 +296,18 @@ public struct ConfigurationExecutor {
     }
 
     public func describe(_ definition: SettingDefinition) -> JSONValue {
-        .object([
+        var fields: [String: JSONValue] = [
             "key": .string(definition.key), "type": .string(definition.type.rawValue),
             "group": .string(definition.group), "scope": .string(definition.scope.rawValue),
             "summary": .string(definition.summary), "allowed": .strings(definition.allowed),
             "readOnly": .bool(definition.readOnly), "isSet": .bool(isSet(definition)),
             "value": value(for: definition), "default": definition.fallback,
-        ])
+        ]
+        if let range = definition.integerRange {
+            fields["minimum"] = .int(range.lowerBound)
+            fields["maximum"] = .int(range.upperBound)
+        }
+        return .object(fields)
     }
 
     public func notifyChange() { announceChange() }

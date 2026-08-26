@@ -474,13 +474,24 @@ struct MachinesSnippetsCommand: AsyncParsableCommand {
         abstract: "The saved commands a machine offers.",
         subcommands: [
             MachinesSnippetsListCommand.self, MachinesSnippetsAddCommand.self,
-            MachinesSnippetsRemoveCommand.self,
+            MachinesSnippetsRemoveCommand.self, MachinesSnippetsRunCommand.self,
         ],
         defaultSubcommand: MachinesSnippetsListCommand.self,
         aliases: ["snippet"])
 }
 
 enum SnippetBridge {
+    struct Output: Equatable, Sendable {
+        let stdout: String
+        let stderr: String
+    }
+
+    struct Selection {
+        let machine: Machine
+        let snippet: CommandSnippet
+        let index: Int
+    }
+
     static func snippets(_ query: String) throws -> (machine: Machine, all: [CommandSnippet]) {
         let machine = try MachineResolver.machine(query)
         let all = MachineRegistry.snippets(
@@ -496,6 +507,30 @@ enum SnippetBridge {
             "command": .string(snippet.command),
             "sharedAcrossMachines": .bool(snippet.machineID == nil),
         ])
+    }
+
+    static func selection(_ query: String, index: Int) throws -> Selection {
+        let found = try snippets(query)
+        return Selection(
+            machine: found.machine,
+            snippet: try SavedSnippetOperationExecution.snippet(at: index, in: found.all),
+            index: index)
+    }
+
+    static func output(
+        stdout: String, stderr: String, status: Int32, machineName: String
+    ) throws -> Output {
+        guard status == 0 else {
+            let diagnostics = [
+                stdout.isEmpty ? nil : "stdout:\n\(stdout)",
+                stderr.isEmpty ? nil : "stderr:\n\(stderr)",
+            ].compactMap { $0 }.joined(separator: "\n")
+            throw CLIFailure(
+                "saved command exited \(status) on \(machineName)",
+                hint: diagnostics.isEmpty
+                    ? nil : diagnostics.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return Output(stdout: stdout, stderr: stderr)
     }
 }
 
@@ -621,6 +656,63 @@ struct MachinesSnippetsRemoveCommand: AsyncParsableCommand {
                 return
             }
             CLIOut.out("removed \(snippet.title)")
+        }
+    }
+}
+
+struct MachinesSnippetsRunCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "run", abstract: "Run one saved command on a machine.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Machine name, ssh alias or id.")
+    var machine: String
+
+    @Argument(help: "The snippet number, counting from 1.")
+    var index: Int
+
+    func run() async throws {
+        try await execute {
+            let selection: SnippetBridge.Selection
+            do {
+                selection = try SnippetBridge.selection(machine, index: index)
+            } catch let failure as CLIFailure {
+                throw failure
+            } catch let error as MachineDetailOperationError {
+                throw CLIFailure.notFound(error.localizedDescription)
+            } catch {
+                throw error
+            }
+            let runner = try await MachineResolver.runner(selection.machine)
+            let result = await SavedSnippetOperationExecution.run(selection.snippet) {
+                command, timeout in
+                do {
+                    let result = try await runner.run(command, timeout: timeout)
+                    return .success(
+                        try SnippetBridge.output(
+                            stdout: result.stdoutText, stderr: result.stderrText,
+                            status: result.status, machineName: runner.machine.name))
+                } catch {
+                    return .failure(error)
+                }
+            }
+            let output = try result.get()
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "machine": .string(runner.machine.name),
+                        "operation": .string(SavedSnippetOperation.run.descriptor.id.rawValue),
+                        "stderr": .string(output.stderr),
+                        "stdout": .string(output.stdout),
+                        "snippet": SnippetBridge.json(
+                            selection.snippet, index: selection.index),
+                    ]))
+                return
+            }
+            CLIOut.raw(output.stdout)
+            CLIOut.rawError(output.stderr)
         }
     }
 }

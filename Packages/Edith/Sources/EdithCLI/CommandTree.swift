@@ -791,6 +791,9 @@ public enum CommandTree {
                             CommandNode(
                                 "rm", "Forget one snippet.", aliases: ["remove"],
                                 options: common, arguments: [.machine, .historyIndex]),
+                            CommandNode(
+                                "run", "Run one saved command on a machine.", options: common,
+                                arguments: [.machine, .historyIndex]),
                         ]),
                     CommandNode(
                         "power", "Restart, shut down or wake a machine.",
@@ -1028,7 +1031,11 @@ public enum CommandTree {
                                 options: ["--tail", "-f", "--follow"],
                                 arguments: [.machine, .container]),
                             CommandNode(
-                                "inspect", "Raw inspect output.",
+                                "inspect", "Inspect a container with stable fields.",
+                                options: common,
+                                arguments: [.machine, .container]),
+                            CommandNode(
+                                "top", "Read processes running in a container.", options: common,
                                 arguments: [.machine, .container]),
                             CommandNode(
                                 "open", "Open a published container port in the browser.",

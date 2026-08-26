@@ -479,6 +479,9 @@ enum JSONContract {
         JSONCase(
             "ed machines snippets rm",
             ["machines", "snippets", "rm", "nowhere-at-all", "1", "--json"]),
+        JSONCase(
+            "ed machines snippets run",
+            ["machines", "snippets", "run", "nowhere-at-all", "1", "--json"]),
         JSONCase("ed machines metrics", ["machines", "metrics", "nowhere-at-all", "--json"]),
         JSONCase(
             "ed machines terminal broadcast",
@@ -638,6 +641,12 @@ enum JSONContract {
             ["machines", "docker", "networks", "nowhere-at-all", "--json"]),
         JSONCase(
             "ed machines docker df", ["machines", "docker", "df", "nowhere-at-all", "--json"]),
+        JSONCase(
+            "ed machines docker inspect",
+            ["machines", "docker", "inspect", "nowhere-at-all", "api", "--json"]),
+        JSONCase(
+            "ed machines docker top",
+            ["machines", "docker", "top", "nowhere-at-all", "api", "--json"]),
         JSONCase(
             "ed machines docker start",
             ["machines", "docker", "start", "nowhere-at-all", "api", "--json"]),

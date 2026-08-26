@@ -15,7 +15,8 @@ struct MachinesDockerCommand: AsyncParsableCommand {
             DockerPsCommand.self, DockerShellCommand.self, DockerImagesCommand.self,
             DockerVolumesCommand.self, DockerNetworksCommand.self, DockerDiskUsageCommand.self,
             DockerLogsCommand.self,
-            DockerInspectCommand.self, DockerStartCommand.self, DockerStopCommand.self,
+            DockerInspectCommand.self, DockerTopCommand.self,
+            DockerStartCommand.self, DockerStopCommand.self,
             DockerRestartCommand.self, DockerRemoveCommand.self,
             DockerOpenCommand.self,
             DockerPauseCommand.self, DockerUnpauseCommand.self,
@@ -48,24 +49,48 @@ struct DockerOpenCommand: AsyncParsableCommand {
             let output = try await runner.text(DockerCommands.containersWithStats(), timeout: 45)
             let containers = DockerParsing.containers(
                 psOutput: output.components(separatedBy: DockerCommands.listSeparator).first ?? "")
+            let found: DockerContainer
+            do {
+                found = try DockerBrowserOperationExecution.container(
+                    named: container, in: containers)
+            } catch {
+                throw CLIFailure.notFound(error.localizedDescription)
+            }
+            let selected: DockerPortMapping
+            do {
+                selected = try DockerBrowserOperationExecution.publishedPort(
+                    in: found, matching: port, for: runner.machine)
+            } catch let error as MachineDetailOperationError {
+                switch error {
+                case .ambiguousPublishedPorts:
+                    throw CLIFailure(
+                        error.localizedDescription,
+                        hint: "pass --port with a host or container port")
+                default:
+                    throw CLIFailure.notFound(error.localizedDescription)
+                }
+            }
+            guard let hostPort = selected.hostPort else {
+                throw CLIFailure.notFound("\(found.displayName) has no published TCP port")
+            }
+            guard let browserHost = DockerBrowserOperationExecution.browserHost(for: runner.machine)
+            else {
+                throw CLIFailure.unavailable(
+                    "\(runner.machine.name) has no browser-reachable host")
+            }
             guard
-                let found = containers.first(where: {
-                    $0.id == container || $0.shortID == container || $0.names.contains(container)
-                })
-            else { throw CLIFailure.notFound("no container named \(container)") }
-            let ports = LocalBrowserOperationExecution.publishedPorts(in: found, matching: port)
-            guard let selected = ports.first, let hostPort = selected.hostPort else {
-                throw CLIFailure.notFound("\(found.displayName) has no matching published TCP port")
+                let url = DockerBrowserOperationExecution.url(
+                    for: selected, machine: runner.machine)
+            else {
+                let binding = selected.hostIP ?? browserHost
+                throw CLIFailure.unavailable(
+                    "\(found.displayName)'s \(binding):\(hostPort) binding is not reachable",
+                    hint: "publish the port on a reachable address or add an SSH port forward")
             }
-            guard ports.count == 1 else {
-                throw CLIFailure(
-                    "\(found.displayName) has more than one published port",
-                    hint: "pass --port with a host or container port")
-            }
-            guard let url = LocalBrowserOperationExecution.url(port: hostPort),
+            guard
                 RemoteFileOperationExecution.present(
                     [url], action: .open, using: CLIEnvironment.presentURLs)
-            else { throw CLIFailure.unavailable("macOS could not open localhost:\(hostPort)") }
+            else { throw CLIFailure.unavailable("macOS could not open \(url.absoluteString)") }
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -346,7 +371,10 @@ struct DockerLogsCommand: AsyncParsableCommand {
 
 struct DockerInspectCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "inspect", abstract: "Raw docker inspect output.")
+        commandName: "inspect", abstract: "Inspect a container with stable fields.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
 
     @Argument(help: "Machine name, ssh alias or id.")
     var machine: String
@@ -357,12 +385,61 @@ struct DockerInspectCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let runner = try await DockerBridge.runner(machine)
-            let output = try await runner.text(
-                DockerCommands.inspectRaw(container), timeout: 30)
-            guard !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw CLIFailure.notFound("no container named \(container)")
+            let result = await DockerDetailOperationExecution.inspect(containerID: container) {
+                command, timeout in
+                do {
+                    return .success(try await runner.text(command, timeout: timeout))
+                } catch {
+                    return .failure(error)
+                }
             }
-            CLIOut.raw(output)
+            let summary = try result.get()
+            guard !json else {
+                CLIOut.json(MachineReports.inspect(summary))
+                return
+            }
+            CLIOut.out(
+                TextTable.render(
+                    headers: ["FIELD", "VALUE"], rows: MachineReports.inspectRows(summary)))
+        }
+    }
+}
+
+struct DockerTopCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "top", abstract: "Read processes running in a container.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Machine name, ssh alias or id.")
+    var machine: String
+
+    @Argument(help: "Container name or id.")
+    var container: String
+
+    func run() async throws {
+        try await execute {
+            let runner = try await DockerBridge.runner(machine)
+            let result = await DockerDetailOperationExecution.processes(containerID: container) {
+                command, timeout in
+                do {
+                    return .success(try await runner.text(command, timeout: timeout))
+                } catch {
+                    return .failure(error)
+                }
+            }
+            let processes = try result.get()
+            guard !json else {
+                CLIOut.json(.array(processes.map(MachineReports.process)))
+                return
+            }
+            CLIOut.out(
+                TextTable.render(
+                    headers: ["PID", "USER", "CPU", "MEMORY", "COMMAND"],
+                    rows: processes.map {
+                        [$0.pid, $0.user, $0.cpu, $0.memory, $0.command]
+                    }))
         }
     }
 }

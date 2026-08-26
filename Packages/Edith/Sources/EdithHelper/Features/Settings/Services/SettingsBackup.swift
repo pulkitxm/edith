@@ -22,6 +22,16 @@ func settingsBackupMissingNames(cloudNames: Set<String>, localNames: Set<String>
     cloudNames.subtracting(localNames)
 }
 
+func settingsBackupLidAwakeBatteryThreshold(_ value: Any) -> Int? {
+    guard !(value is Bool), let number = value as? NSNumber else { return nil }
+    let threshold = number.doubleValue
+    guard threshold.isFinite, threshold.rounded() == threshold,
+        threshold >= Double(LidAwakeState.batteryThresholdRange.lowerBound),
+        threshold <= Double(LidAwakeState.batteryThresholdRange.upperBound)
+    else { return nil }
+    return Int(threshold)
+}
+
 struct SettingsBackupPendingState: Equatable, Sendable {
     private(set) var remaining: Set<String>
 
@@ -1813,6 +1823,11 @@ final class SettingsBackup {
                 store(for: key).set(
                     paths.filter { RestoredPathValidation.verdict(for: $0) == .keep },
                     forKey: key)
+            case LidAwakeState.batteryThresholdKey:
+                guard let threshold = settingsBackupLidAwakeBatteryThreshold(value) else {
+                    continue
+                }
+                store(for: key).set(threshold, forKey: key)
             default:
                 store(for: key).set(value, forKey: key)
             }

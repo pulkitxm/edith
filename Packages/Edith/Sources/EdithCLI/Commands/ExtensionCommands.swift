@@ -271,7 +271,19 @@ struct ExtensionsDisableCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let entry = try ExtensionLookup.entry(id)
-            _ = ExtensionLookup.mutationCenter().setEnabled(false, for: entry)
+            if entry.defaultsKey == LidAwakeState.enabledKey {
+                if AppBridge.helperIsRunning {
+                    _ = try await LidAwakeCLI.request(.disableExtension)
+                } else if LidAwakeState.restorationNeeded(CLIEnvironment.sharedDefaults) {
+                    throw CLIFailure.unavailable(
+                        "Lid Awake cannot be disabled while lid-close sleep may still be off",
+                        hint: "start Edith, then retry so normal sleep can be restored")
+                } else {
+                    _ = ExtensionLookup.mutationCenter().setEnabled(false, for: entry)
+                }
+            } else {
+                _ = ExtensionLookup.mutationCenter().setEnabled(false, for: entry)
+            }
             guard !json else {
                 CLIOut.json(ExtensionLookup.json(entry))
                 return

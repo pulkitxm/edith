@@ -532,6 +532,8 @@ private struct QuickActionsCard: View {
         "accent"
     @State private var lidAwakeActive = SharedDefaults.store.bool(
         forKey: LidAwakeState.activeKey)
+    @State private var confirmingLidAwake = false
+    @StateObject private var lidAwakeOperations = LidAwakeOperationModel()
 
     private var theme: Color { themeColor(themeName) }
     private var columns: [GridItem] {
@@ -572,7 +574,11 @@ private struct QuickActionsCard: View {
                         icon: "laptopcomputer", title: "Lid awake",
                         sub: "Keep running with the lid closed", active: lidAwakeActive
                     ) {
-                        IPC.post(IPC.Name.toggleLidAwake)
+                        if lidAwakeActive {
+                            lidAwakeOperations.perform(.off)
+                        } else {
+                            confirmingLidAwake = true
+                        }
                     }
                 }
             }
@@ -583,6 +589,32 @@ private struct QuickActionsCard: View {
                 for: IPC.Name.lidAwakeChanged)
         ) { _ in
             lidAwakeActive = SharedDefaults.store.bool(forKey: LidAwakeState.activeKey)
+            lidAwakeOperations.refreshStatus()
+        }
+        .alert("Keep running with the lid closed?", isPresented: $confirmingLidAwake) {
+            Button("Turn On") {
+                lidAwakeOperations.perform(.on(LidAwakeState.session()))
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                LidAwakeOperationExecution.preview(for: .on(LidAwakeState.session()))?.warning
+                    ?? "")
+        }
+        .alert(
+            "Lid Awake could not change state",
+            isPresented: Binding(
+                get: {
+                    lidAwakeOperations.errorMessage != nil
+                        || lidAwakeOperations.lastSnapshot?.lastError != nil
+                },
+                set: { if !$0 { lidAwakeOperations.clearError() } })
+        ) {
+            Button("OK") { lidAwakeOperations.clearError() }
+        } message: {
+            Text(
+                lidAwakeOperations.errorMessage
+                    ?? lidAwakeOperations.lastSnapshot?.lastError ?? "")
         }
     }
 

@@ -48,12 +48,20 @@ enum LidAwakeCLI {
         _ action: LidAwakeIPC.Action, session: LidAwakeSession? = nil
     ) async throws -> [AnyHashable: Any] {
         try AppBridge.requireHelper("Lid Awake")
+        let timeout: TimeInterval = action == .status ? 3 : 120
+        guard let context = LidAwakeRuntimeRequestContext(timeout: .seconds(timeout)) else {
+            throw CLIFailure("Lid Awake could not create a valid request deadline")
+        }
         var info: [String: Any] = [LidAwakeIPC.actionKey: action.rawValue]
         if let session { info[LidAwakeIPC.sessionKey] = session.rawValue }
+        info.merge(context.runtimePayload) { _, new in new }
         let payload = info
         guard
             let reply = await AppBridge.awaitReply(
-                IPC.Name.lidAwakeActionResult, timeout: action == .status ? 3 : 120,
+                IPC.Name.lidAwakeActionResult, timeout: timeout,
+                matching: {
+                    $0[LidAwakeIPC.requestIDKey] as? String == context.requestID
+                },
                 trigger: {
                     AppBridge.post(IPC.Name.requestLidAwakeAction, userInfo: payload)
                 })
@@ -74,7 +82,7 @@ enum LidAwakeCLI {
 
     static func storedStatus() -> [AnyHashable: Any] {
         let defaults = CLIEnvironment.sharedDefaults
-        let active = LidAwakeState.isActive(defaults)
+        let active = defaults.bool(forKey: LidAwakeState.activeKey)
         return [
             LidAwakeIPC.okKey: true,
             "extensionEnabled": LidAwakeState.isEnabled(defaults),

@@ -20,6 +20,8 @@ struct MachineToolsTab: View {
     @State private var mounting = false
     @State private var pendingForwardRemoval: PortForward?
     @State private var pendingSnippetRemoval: CommandSnippet?
+    @State private var snippetTask: Task<Void, Never>?
+    @State private var snippetRunID: UUID?
 
     private var dark: Bool { scheme == .dark }
 
@@ -48,6 +50,7 @@ struct MachineToolsTab: View {
             await session.refreshServices()
             await session.restoreMount()
         }
+        .onDisappear { cancelSnippetRun() }
         .confirmationDialog(
             "Remove this port forward?",
             isPresented: Binding(
@@ -292,7 +295,7 @@ struct MachineToolsTab: View {
                                 .lineLimit(1)
                         }
                         Spacer(minLength: 0)
-                        Button("Run") { run(snippet.command) }
+                        Button("Run") { run(snippet) }
                             .disabled(runningSnippet || !session.state.isConnected)
                             .pointerCursor()
                             .font(.system(size: UIScale.pt(11)))
@@ -444,17 +447,42 @@ struct MachineToolsTab: View {
         }
     }
 
-    private func run(_ command: String) {
+    private func run(_ snippet: CommandSnippet) {
+        snippetTask?.cancel()
+        snippetTask = nil
+        snippetRunID = nil
+        let runID = UUID()
+        let machineID = session.machine.id
+        snippetRunID = runID
         runningSnippet = true
-        snippetOutput = "$ \(command)\n"
-        Task {
-            let result = await session.runCommand(command, timeout: 120)
-            runningSnippet = false
-            switch result {
-            case let .success(output): snippetOutput += output
-            case let .failure(error): snippetOutput += error.localizedDescription
+        snippetOutput = "$ \(snippet.command)\n"
+        snippetTask = Task {
+            let result = await SavedSnippetOperationExecution.run(snippet) { command, timeout in
+                await session.runCommand(command, timeout: timeout)
             }
+            guard !Task.isCancelled, snippetRunID == runID, session.machine.id == machineID else {
+                return
+            }
+            await publishSnippetRun(result)
         }
+    }
+
+    @MainActor
+    private func publishSnippetRun(_ result: Result<String, Error>) async {
+        runningSnippet = false
+        snippetTask = nil
+        snippetRunID = nil
+        switch result {
+        case let .success(output): snippetOutput += output
+        case let .failure(error): snippetOutput += error.localizedDescription
+        }
+    }
+
+    private func cancelSnippetRun() {
+        snippetTask?.cancel()
+        snippetTask = nil
+        snippetRunID = nil
+        runningSnippet = false
     }
 
     private func runService(_ action: String, unit: String) {
