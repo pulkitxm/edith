@@ -6,6 +6,7 @@ public enum LidAwakeState {
     public static let restoreOnQuitKey = "lidAwakeRestoreOnQuit"
     public static let sessionKey = "lidAwakeSession"
     public static let sessionDeadlineKey = "lidAwakeSessionDeadline"
+    public static let automaticStopPendingKey = "lidAwakeAutomaticStopPending"
     public static let batteryThresholdKey = "lidAwakeBatteryThreshold"
     public static let batteryThresholdRange = 0...100
 
@@ -50,6 +51,22 @@ public enum LidAwakeState {
         }
     }
 
+    public static func automaticStopPending(
+        _ defaults: UserDefaults = SharedDefaults.store
+    ) -> Bool {
+        defaults.bool(forKey: automaticStopPendingKey)
+    }
+
+    public static func setAutomaticStopPending(
+        _ pending: Bool, _ defaults: UserDefaults = SharedDefaults.store
+    ) {
+        if pending {
+            defaults.set(true, forKey: automaticStopPendingKey)
+        } else {
+            defaults.removeObject(forKey: automaticStopPendingKey)
+        }
+    }
+
     public static func batteryThreshold(
         _ defaults: UserDefaults = SharedDefaults.store
     ) -> Int {
@@ -70,10 +87,14 @@ public enum LidAwakeIPC {
         case status
         case on
         case off
+        case enableExtension
+        case disableExtension
     }
 
     public static let actionKey = "action"
     public static let sessionKey = "session"
+    public static let requestIDKey = "requestID"
+    public static let deadlineKey = "deadline"
     public static let okKey = "ok"
     public static let errorKey = "error"
 }
