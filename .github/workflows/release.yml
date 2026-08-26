@@ -236,6 +236,14 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: steps.release_build.outputs.superseded != 'true'
+        with:
+          name: release-plists
+          path: Resources/*Info.plist
+          if-no-files-found: error
+          retention-days: 1
+
   publish:
     name: Publish release
     needs: [version, dmg]
@@ -281,12 +289,19 @@ jobs:
           name: release-macos
           path: release-assets
 
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-plists
+          path: release-plists
+
       - name: Verify release assets
         run: |
           test -f release-assets/Edith.dmg
           test -f release-assets/appcast.xml
+          test -f release-plists/Info.plist
+          test -f release-plists/HelperInfo.plist
 
-      - name: Tag the release
+      - name: Commit and tag the release
         id: release_state
         if: env.REBUILD == ''
         working-directory: release-source
@@ -297,6 +312,7 @@ jobs:
           fi
           RELEASE_SHA256="$(sha256sum ../release-assets/Edith.dmg | cut -d' ' -f1)"
           export RELEASE_SHA256
+          export RELEASE_PLISTS_DIR="$GITHUB_WORKSPACE/release-plists"
           PUBLISH_STATUS=0
           ../scripts/publish-release-state.sh cut || PUBLISH_STATUS=$?
           if [ "$PUBLISH_STATUS" -eq 75 ]; then
@@ -305,7 +321,7 @@ jobs:
           fi
           exit "$PUBLISH_STATUS"
 
-      - name: Prepare the rebuilt release checksum
+      - name: Update the rebuilt release checksum
         if: env.REBUILD != ''
         working-directory: release-source
         run: |

@@ -11,6 +11,7 @@ const makefile = readFileSync("Makefile", "utf8");
 const contributing = readFileSync("CONTRIBUTING.md", "utf8");
 const homebrewInternals = readFileSync("docs/homebrew-internals.md", "utf8");
 const sourceShaRef = ["$", "{{ inputs.source_sha || github.sha }}"].join("");
+const releaseTagRef = ["$", "{RELEASE_TAG}"].join("");
 const releaseJob = ciWorkflow.slice(ciWorkflow.indexOf("\n  release:"));
 
 test("CI gates and dispatches the release only on relevant checks", () => {
@@ -81,8 +82,8 @@ test("automatic cuts and manual rebuilds cannot replace each other", () => {
   );
 });
 
-test("contributor refresh commits do not re-run CI", () => {
-  expect(ciWorkflow).not.toContain("'Release v'");
+test("automated commits do not re-run CI", () => {
+  expect(ciWorkflow).toContain("'Release v'");
   expect(ciWorkflow).toContain("'Refresh the contributor list'");
   expect(ciWorkflow).toContain("github.event_name != 'push'");
 });
@@ -133,7 +134,7 @@ test("superseded release builds yield the lane before packaging", () => {
   expect(
     dmgJob.match(/if: steps\.release_build\.outputs\.superseded != 'true'/g)
       ?.length,
-  ).toBe(8);
+  ).toBe(9);
   expect(releaseWorkflow).toContain(
     "needs: [version, dmg]\n    if: needs.dmg.outputs.superseded != 'true'",
   );
@@ -180,16 +181,22 @@ test("build jobs cannot retain write credentials", () => {
   expect(releaseWorkflow.match(/persist-credentials: true/g)?.length).toBe(1);
 });
 
-test("the release tags the approved source without writing protected main", () => {
+test("the release commit carries every versioned file and its tag atomically", () => {
   expect(releaseStateScript).toContain('-c user.name="pukbot[bot]"');
   expect(releaseStateScript).toContain(
     '-c user.email="320458784+pukbot[bot]@users.noreply.github.com"',
   );
   expect(releaseStateScript).toContain(
-    'tag -f -a "$RELEASE_TAG" -m "Edith $RELEASE_TAG build $RELEASE_BUILD" "$BUILT_SHA"',
+    'commit Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb',
   );
   expect(releaseStateScript).toContain(
-    'git push origin "refs/tags/$RELEASE_TAG"',
+    `-m "Release ${releaseTagRef}"`,
+  );
+  expect(releaseStateScript).toContain(
+    'tag -a "$RELEASE_TAG" -m "Edith $RELEASE_TAG build $RELEASE_BUILD"',
+  );
+  expect(releaseStateScript).toContain(
+    'git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"',
   );
   expect(releaseStateScript).toContain(
     '[[ "$(git rev-parse HEAD)" == "$BUILT_SHA" ]]',
@@ -197,17 +204,18 @@ test("the release tags the approved source without writing protected main", () =
   expect(releaseStateScript).toContain(
     '[[ "$(git rev-parse origin/main)" == "$BUILT_SHA" ]]',
   );
-  expect(releaseStateScript).not.toContain("HEAD:main");
-  expect(releaseStateScript).not.toContain("git commit");
+  expect(releaseStateScript).not.toContain("git reset --hard origin/main");
 });
 
 test("release publication can recover after a partial failure", () => {
   expect(releaseStateScript).toContain("remote_tag_sha");
-  expect(releaseWorkflow).toContain("Prepare the rebuilt release checksum");
+  expect(releaseWorkflow).toContain("Update the rebuilt release checksum");
   expect(releaseStateScript).toContain(
     "only the current release can be rebuilt",
   );
-  expect(releaseStateScript).toContain("rewrite_cask");
+  expect(releaseStateScript).toContain(
+    `-m "Refresh ${releaseTagRef} release checksum"`,
+  );
   const mirror = releaseWorkflow.slice(
     releaseWorkflow.indexOf("- name: Mirror the cask to the tap repository"),
   );
