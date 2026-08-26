@@ -35,4 +35,30 @@ import Testing
         #expect(minimum.width == 800)
         #expect(minimum.height == 560)
     }
+
+    @Test func tiledAutosaveIsDiscardedBeforeRestoration() {
+        let value =
+            "0 0 1728 1084 0 0 1728 1084 {\"tilingState\":{\"tilingPosition\":9}}"
+
+        #expect(MainWindowFramePolicy.shouldDiscardAutosave(value))
+    }
+
+    @Test func ordinaryAutosaveKeepsUserPositionAndSize() {
+        let value = "251 159 1180 700 0 0 1728 1084"
+
+        #expect(!MainWindowFramePolicy.shouldDiscardAutosave(value))
+        #expect(
+            MainWindowFramePolicy.autosaveKey(name: "EdithMainWindow")
+                == "NSWindow Frame EdithMainWindow")
+    }
+
+    @Test @MainActor func explicitFrameAutosaveOwnsMainWindowRestoration() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
+            styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+
+        MainWindowFramePolicy.disableApplicationStateRestoration(window)
+
+        #expect(!window.isRestorable)
+    }
 }
