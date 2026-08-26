@@ -181,8 +181,12 @@ test("build jobs cannot retain write credentials", () => {
 });
 
 test("the release tags the approved source without writing protected main", () => {
+  expect(releaseStateScript).toContain('-c user.name="pukbot[bot]"');
   expect(releaseStateScript).toContain(
-    'git tag -f -a "$RELEASE_TAG" -m "Edith $RELEASE_TAG build $RELEASE_BUILD" "$BUILT_SHA"',
+    '-c user.email="320458784+pukbot[bot]@users.noreply.github.com"',
+  );
+  expect(releaseStateScript).toContain(
+    'tag -f -a "$RELEASE_TAG" -m "Edith $RELEASE_TAG build $RELEASE_BUILD" "$BUILT_SHA"',
   );
   expect(releaseStateScript).toContain(
     'git push origin "refs/tags/$RELEASE_TAG"',

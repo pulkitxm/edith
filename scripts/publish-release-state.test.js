@@ -148,6 +148,14 @@ test("a release cut tags the approved source and retries cleanly", () => {
       "refs/tags/v0.0.80",
     ),
   ).toBe("Edith v0.0.80 build 91");
+  expect(
+    git(
+      fixture.remote,
+      "for-each-ref",
+      "--format=%(taggername) <%(taggeremail)>",
+      "refs/tags/v0.0.80",
+    ),
+  ).toBe("pukbot[bot] <<320458784+pukbot[bot]@users.noreply.github.com>>");
 
   expect(publish(fixture, "cut").exitCode).toBe(0);
   expect(git(fixture.remote, "rev-parse", "refs/heads/main")).toBe(
