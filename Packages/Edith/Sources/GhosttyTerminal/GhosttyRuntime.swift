@@ -35,6 +35,7 @@ public final class GhosttyRuntime {
     private var app: ghostty_app_t?
     private var config: ghostty_config_t?
     private var started = false
+    private var tickScheduled = false
 
     public var isReady: Bool { app != nil }
 
@@ -102,8 +103,13 @@ public final class GhosttyRuntime {
 
     private func wakeup() {
         DispatchQueue.main.async { [weak self] in
-            guard let app = self?.app else { return }
-            ghostty_app_tick(app)
+            guard let self, !self.tickScheduled else { return }
+            self.tickScheduled = true
+            DispatchQueue.main.async {
+                self.tickScheduled = false
+                guard let app = self.app else { return }
+                ghostty_app_tick(app)
+            }
         }
     }
 
