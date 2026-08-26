@@ -24,6 +24,15 @@ import Testing
         #expect(system.contains(".accessibilityLabel(\"Dismiss status\")"))
     }
 
+    @Test func aboutUsesTheSharedLeadingReadableLayout() throws {
+        let source = try source("Features/Settings/Views/AboutPane.swift")
+        #expect(source.contains("PageHeader("))
+        #expect(source.contains(".pageContent(compact, width: .readable)"))
+        #expect(source.contains("PageSectionHeader("))
+        #expect(source.contains("EdithButtonStyle(.secondary, tint: theme)"))
+        #expect(!source.contains("multilineTextAlignment(.center)"))
+    }
+
     private func source(_ relativePath: String) throws -> String {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
