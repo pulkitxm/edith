@@ -96,6 +96,26 @@ public final class GhosttyRuntime {
 
     var configHandle: ghostty_config_t? { config }
 
+    func configuration(for theme: GhosttyTheme) -> ghostty_config_t? {
+        guard let cfg = ghostty_config_new() else { return nil }
+        ghostty_config_load_default_files(cfg)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-ghostty", isDirectory: true)
+        try? FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent("\(abs(theme.configuration.hashValue)).conf")
+        do {
+            try theme.configuration.write(to: file, atomically: true, encoding: .utf8)
+        } catch {
+            log.error("could not write the terminal theme: \(error.localizedDescription)")
+            ghostty_config_finalize(cfg)
+            return cfg
+        }
+        file.path.withCString { ghostty_config_load_file(cfg, $0) }
+        ghostty_config_finalize(cfg)
+        return cfg
+    }
+
     private static func from(_ userdata: UnsafeMutableRawPointer?) -> GhosttyRuntime? {
         guard let userdata else { return nil }
         return Unmanaged<GhosttyRuntime>.fromOpaque(userdata).takeUnretainedValue()

@@ -175,8 +175,11 @@ struct HerdrSessionView: View {
         ZStack {
             if usesGhostty {
                 if let ghosttyLaunch {
-                    GhosttyPane(launch: ghosttyLaunch)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    GhosttyPane(
+                        launch: ghosttyLaunch,
+                        theme: GhosttyTheme(palette: .edith(dark: dark))
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else {
                 TerminalPane(

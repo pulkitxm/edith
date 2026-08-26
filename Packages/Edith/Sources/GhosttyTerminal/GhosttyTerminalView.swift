@@ -6,6 +6,8 @@ public final class GhosttyTerminalView: NSView {
 
     private(set) var surface: ghostty_surface_t?
     private var launch: GhosttyLaunch?
+    private var theme: GhosttyTheme?
+    private var themeConfig: ghostty_config_t?
     private var owned: GhosttyConfigStrings?
     private var closed = false
 
@@ -15,11 +17,11 @@ public final class GhosttyTerminalView: NSView {
 
     public override var wantsUpdateLayer: Bool { false }
 
-    public init(launch: GhosttyLaunch) {
+    public init(launch: GhosttyLaunch, theme: GhosttyTheme? = nil) {
         self.launch = launch
+        self.theme = theme
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = NSColor.black.cgColor
         GhosttySurfaceRegistry.shared.register(self)
     }
 
@@ -27,6 +29,7 @@ public final class GhosttyTerminalView: NSView {
 
     deinit {
         if let surface { ghostty_surface_free(surface) }
+        if let themeConfig { ghostty_config_free(themeConfig) }
         GhosttySurfaceRegistry.shared.unregister(self)
     }
 
@@ -63,11 +66,27 @@ public final class GhosttyTerminalView: NSView {
         }
 
         guard let surface else { return }
+        applyTheme()
         ghostty_surface_set_content_scale(
             surface, config.scale_factor, config.scale_factor)
         applySize()
         ghostty_surface_set_focus(surface, window?.firstResponder === self)
         window?.makeFirstResponder(self)
+    }
+
+    public func apply(theme newTheme: GhosttyTheme) {
+        guard theme != newTheme else { return }
+        theme = newTheme
+        applyTheme()
+    }
+
+    private func applyTheme() {
+        guard let surface, let theme else { return }
+        guard let config = GhosttyRuntime.shared.configuration(for: theme) else { return }
+        ghostty_surface_update_config(surface, config)
+        if let themeConfig { ghostty_config_free(themeConfig) }
+        themeConfig = config
+        scheduleDraw()
     }
 
     func scheduleDraw() {
