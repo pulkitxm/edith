@@ -539,9 +539,10 @@ actor SettingsBackupFileWorker {
         do {
             return try settingsBackupCoordinateCloud(at: cloudURL, writing: true) {
                 coordinatedURL in
-                if settingsBackupReadSettingsFile(at: coordinatedURL) != data {
-                    try data.write(to: coordinatedURL, options: .atomic)
+                guard settingsBackupReadSettingsFile(at: coordinatedURL) != data else {
+                    return false
                 }
+                try data.write(to: coordinatedURL, options: .atomic)
                 return true
             }
         } catch {

@@ -80,6 +80,14 @@ struct DashboardView: View {
             await model.load()
             syncCustomDates()
         }
+        .onAppear {
+            guard automaticActionsEnabled else { return }
+            model.beginObserving()
+        }
+        .onDisappear {
+            guard automaticActionsEnabled else { return }
+            model.endObserving()
+        }
         .onChange(of: model.loaded) { _, loaded in
             if automaticActionsEnabled, loaded { syncCustomDates() }
         }
