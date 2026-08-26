@@ -141,6 +141,19 @@ jobs:
           ref: ${{ needs.version.outputs.sha }}
           persist-credentials: false
 
+      - name: Cache libghostty
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: Packages/Edith/vendor/GhosttyKit.xcframework
+          key: ghostty-${{ runner.os }}-${{ hashFiles('scripts/build-ghostty.sh') }}
+
+      - name: Build libghostty
+        run: |
+          if [ ! -d Packages/Edith/vendor/GhosttyKit.xcframework ]; then
+            command -v zig >/dev/null 2>&1 || brew install zig
+            make ghostty
+          fi
+
       - name: Stamp the release version
         run: |
           for plist in Resources/Info.plist Resources/HelperInfo.plist; do

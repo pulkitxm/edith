@@ -92,10 +92,23 @@ test("release waits for and publishes the macOS assets", () => {
     releaseWorkflow.indexOf("\n  publish:"),
   );
   expect(dmgJob).toContain("timeout-minutes: 60");
+  expect(dmgJob).toContain("name: Cache libghostty");
+  expect(dmgJob).toContain("name: Build libghostty");
+  expect(dmgJob).toContain("make ghostty");
   expect(releaseWorkflow).toContain("release-assets/Edith.dmg");
   expect(releaseWorkflow).toContain("release-assets/appcast.xml");
   expect(releaseWorkflow).toContain("gh release create");
   expect(releaseWorkflow).toContain("gh release upload");
+});
+
+test("swift tests leave enough time for a cold libghostty build", () => {
+  const swiftTestJob = ciWorkflow.slice(
+    ciWorkflow.indexOf("\n  swift-test:"),
+    ciWorkflow.indexOf("\n  companion:"),
+  );
+  expect(swiftTestJob).toContain("timeout-minutes: 30");
+  expect(swiftTestJob).toContain("name: Cache libghostty");
+  expect(swiftTestJob).toContain("name: Build libghostty");
 });
 
 test("superseded release builds yield the lane before packaging", () => {
