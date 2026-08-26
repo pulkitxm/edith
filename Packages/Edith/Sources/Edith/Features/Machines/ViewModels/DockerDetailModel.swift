@@ -348,7 +348,7 @@ struct DockerContainerDetail: View {
                 Button(action: onBack) {
                     Image(systemName: "chevron.left")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help("Back to the list")
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(live.displayName)
@@ -479,14 +479,14 @@ struct DockerContainerDetail: View {
                 } label: {
                     Image(systemName: "textformat.size.smaller")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help("Smaller log text")
                 Button {
                     model.logFontSize = min(18, model.logFontSize + 1)
                 } label: {
                     Image(systemName: "textformat.size.larger")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help("Larger log text")
                 Button {
                     NSPasteboard.general.clearContents()
@@ -494,14 +494,14 @@ struct DockerContainerDetail: View {
                 } label: {
                     Image(systemName: "doc.on.doc")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help("Copy all visible log lines")
                 Button {
                     model.logs = []
                 } label: {
                     Image(systemName: "clear")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help("Clear the log view")
             }
         }
@@ -752,7 +752,7 @@ struct DockerContainerDetail: View {
                 } label: {
                     Image(systemName: "chevron.up")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .disabled(model.filePath == "/")
                 Text(model.filePath)
                     .font(DashSkin.mono(11))

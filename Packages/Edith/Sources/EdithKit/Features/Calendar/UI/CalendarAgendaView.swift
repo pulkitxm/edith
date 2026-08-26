@@ -91,7 +91,7 @@ public struct CalendarPermissionPrompt: View {
                 Button("Grant…") {
                     _ = try? PermissionOperationCenter.application.request(.calendar)
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .font(.system(size: style.permissionButtonSize))
                 .foregroundStyle(accentColor)
                 .help("Opens System Settings on the right pane")

@@ -78,7 +78,7 @@ struct HerdrPage: View {
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .disabled(store.refreshing)
             },
             accessory: { filters })

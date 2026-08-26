@@ -172,7 +172,7 @@ struct LimitsRefreshButton: View {
             }
             .frame(width: UIScale.pt(16), height: UIScale.pt(16))
         }
-        .buttonStyle(HoverButtonStyle())
+        .buttonStyle(.edith(.toolbar))
         .disabled(refreshing)
         .help("Refresh limits now")
         .onReceive(

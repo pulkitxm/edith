@@ -288,7 +288,7 @@ struct WorkspaceView: View {
             } label: {
                 Image(systemName: "equal.square")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Even out the panes")
 
             Text("\(model.layout.paneCount) pane\(model.layout.paneCount == 1 ? "" : "s")")

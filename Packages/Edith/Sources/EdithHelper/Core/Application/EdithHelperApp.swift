@@ -605,7 +605,7 @@ struct RootView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .pointerCursor()
                 .help("Open the Edith app")
                 Spacer()
@@ -618,7 +618,7 @@ struct RootView: View {
                             .font(.system(size: 13))
                             .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(HoverButtonStyle())
+                    .buttonStyle(.edith(.toolbar))
                     .help("Open music folder in Finder")
                 }
                 if let colorPicker = services.colorPicker {
@@ -630,7 +630,7 @@ struct RootView: View {
                             .font(.system(size: 13))
                             .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(HoverButtonStyle())
+                    .buttonStyle(.edith(.toolbar))
                     .help("Grab a color (\(ColorPickerHotKey.label))")
                     .contextMenu {
                         if colorPicker.history.isEmpty {
@@ -650,7 +650,7 @@ struct RootView: View {
                             .font(.system(size: 13))
                             .foregroundStyle(.primary)
                     }
-                    .buttonStyle(HoverButtonStyle())
+                    .buttonStyle(.edith(.toolbar))
                     .help("Focus dim (\(FocusDimHotKey.label))")
                 }
                 Button {
@@ -667,7 +667,7 @@ struct RootView: View {
                         permissions.needsAttention
                             ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help(permissions.needsAttention ? "Permissions need attention" : "Permissions")
                 Button {
                     if NSApp.currentEvent?.modifierFlags.contains(.option) == true {
@@ -681,7 +681,7 @@ struct RootView: View {
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help("Settings (⌥-click for developer options)")
                 Menu {
                     Button("Close Panel") { dismissPanel() }
@@ -694,7 +694,7 @@ struct RootView: View {
                         .foregroundStyle(.tertiary)
                 }
                 .menuIndicator(.hidden)
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help("Quit options")
             }
             if presenterEnabled, presenterState.autoActive {
@@ -764,7 +764,7 @@ struct RootView: View {
             Button("Pause") {
                 services.presenter?.pauseUntilShareEnds()
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .font(.system(size: 11))
             .help("Stop auto-blur until this share ends")
         }

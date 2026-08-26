@@ -109,7 +109,7 @@ struct DownloadSheet: View {
                     .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                     .contentShape(Rectangle())
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .disabled(downloader.isRunning || downloader.isUpdatingYTDLP)
             .pointerCursor()
             .help("Update yt-dlp")
@@ -136,7 +136,7 @@ struct DownloadSheet: View {
                     .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                     .contentShape(Rectangle())
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .disabled(downloader.isRunning)
             .pointerCursor()
         }
@@ -251,7 +251,7 @@ struct DownloadSheet: View {
                     Label("Paste", systemImage: "clipboard")
                         .font(.system(size: UIScale.pt(11)))
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .pointerCursor()
             }
             .frame(height: UIScale.pt(16))
@@ -442,7 +442,7 @@ struct DownloadSheet: View {
                 Button("Retry All") {
                     downloader.retryAll()
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(10.5), weight: .medium))
                 .pointerCursor()
                 .disabled(downloader.isRunning)
@@ -577,7 +577,7 @@ struct DownloadSheet: View {
                 } label: {
                     Image(systemName: "xmark")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(.red)
                 .pointerCursor()
@@ -586,7 +586,7 @@ struct DownloadSheet: View {
                 Button("Retry") {
                     downloader.retry(item)
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(10), weight: .medium))
                 .foregroundStyle(theme)
                 .pointerCursor()
@@ -606,7 +606,7 @@ struct DownloadSheet: View {
                     }
                     .help("Reveal downloaded file")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(11)))
                 .pointerCursor()
             }
@@ -693,7 +693,7 @@ struct DownloadSheet: View {
                 Button("Retry") {
                     downloader.retry(item)
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(10), weight: .medium))
                 .foregroundStyle(theme)
                 .pointerCursor()
@@ -713,7 +713,7 @@ struct DownloadSheet: View {
                     }
                     .help("Reveal downloaded file")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(11)))
                 .pointerCursor()
             default:
@@ -725,7 +725,7 @@ struct DownloadSheet: View {
             } label: {
                 Image(systemName: "trash")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .font(.system(size: UIScale.pt(11)))
             .foregroundStyle(.red)
             .pointerCursor()
@@ -753,7 +753,7 @@ struct DownloadSheet: View {
                         .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .pointerCursor()
             }
             .padding(.horizontal, UIScale.pt(20))
@@ -786,7 +786,7 @@ struct DownloadSheet: View {
                 Button("Clear History") {
                     confirmClearHistory = true
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(11)))
                 .pointerCursor()
                 .disabled(downloader.isRunning)
@@ -809,14 +809,14 @@ struct DownloadSheet: View {
                     Label("Cancel All", systemImage: "xmark")
                         .font(.system(size: UIScale.pt(11)))
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .pointerCursor()
             }
             Spacer()
             Button("Close") {
                 dismiss()
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .font(.system(size: UIScale.pt(11)))
             .pointerCursor()
         }

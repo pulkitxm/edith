@@ -136,7 +136,7 @@ struct TitlebarChrome: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 22, height: 22)
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Toggle sidebar (⌘B)")
             .keyboardShortcut("b", modifiers: .command)
 
@@ -1336,7 +1336,7 @@ struct MainWindowView: View {
                         .foregroundStyle(.tertiary)
                         .frame(width: UIScale.pt(16), height: UIScale.pt(16))
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help("Hide this")
             }
             .font(.system(size: UIScale.pt(10)))

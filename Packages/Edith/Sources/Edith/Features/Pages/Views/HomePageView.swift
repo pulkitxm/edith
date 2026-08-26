@@ -734,7 +734,7 @@ private struct MeetingsCard: View {
                         .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(theme)
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help("Join meeting")
             }
         }
@@ -759,7 +759,7 @@ private struct MeetingsCard: View {
             Button("Grant…") {
                 _ = try? MainPermissionOperations.center.request(.calendar)
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .font(.system(size: UIScale.pt(11)))
             .foregroundStyle(theme)
         }
@@ -1009,7 +1009,7 @@ private struct MusicCard: View {
                     .font(.system(size: UIScale.pt(15)))
                     .foregroundStyle(theme)
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             Button {
                 remote.next()
             } label: {
@@ -1017,7 +1017,7 @@ private struct MusicCard: View {
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(theme)
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
         }
     }
 

@@ -1,40 +1,6 @@
 import AppKit
 import SwiftUI
 
-public struct HoverButton: ViewModifier {
-    @State private var hovering = false
-
-    public init() {}
-
-    @ViewBuilder
-    public func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) {
-            content
-                .padding(UIScale.pt(4))
-                .glassEffect(
-                    .regular.interactive(), in: RoundedRectangle(cornerRadius: UIScale.pt(6))
-                )
-                .onHover { hovering = $0 }
-                .animation(Motion.feedback, value: hovering)
-        } else {
-            content
-                .padding(UIScale.pt(4))
-                .background(
-                    .primary.opacity(hovering ? 0.07 : 0),
-                    in: RoundedRectangle(cornerRadius: UIScale.pt(6))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: UIScale.pt(6))
-                        .strokeBorder(
-                            .primary.opacity(hovering ? 0.18 : 0), lineWidth: UIScale.pt(0.5))
-                )
-                .shadow(color: .black.opacity(hovering ? 0.35 : 0), radius: UIScale.pt(4), y: 1)
-                .onHover { hovering = $0 }
-                .animation(Motion.feedback, value: hovering)
-        }
-    }
-}
-
 public enum EdithButtonRole: Sendable, CaseIterable {
     case primary
     case secondary
@@ -110,13 +76,11 @@ public struct EdithButtonStyle: ButtonStyle {
     }
 }
 
-public struct HoverButtonStyle: ButtonStyle {
-    public init() {}
-
-    public func makeBody(configuration: Configuration) -> some View {
-        EdithButtonBody(
-            label: configuration.label, role: .toolbar, selected: false,
-            pressed: configuration.isPressed, tint: brandAccent)
+extension ButtonStyle where Self == EdithButtonStyle {
+    public static func edith(
+        _ role: EdithButtonRole, selected: Bool = false, tint: Color = brandAccent
+    ) -> EdithButtonStyle {
+        EdithButtonStyle(role, selected: selected, tint: tint)
     }
 }
 
@@ -215,8 +179,6 @@ private struct EdithButtonBody<Label: View>: View {
 }
 
 extension View {
-    public func hoverButton() -> some View { modifier(HoverButton()) }
-
     @ViewBuilder
     public func pointerCursor() -> some View {
         if #available(macOS 15.0, *) {

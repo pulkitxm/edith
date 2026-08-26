@@ -170,7 +170,7 @@ struct DashboardView: View {
                 }
                 .frame(width: UIScale.pt(18), height: UIScale.pt(18))
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .disabled(isLoading)
             .help(helperText)
         }

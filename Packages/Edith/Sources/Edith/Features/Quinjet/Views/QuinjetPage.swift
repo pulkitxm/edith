@@ -80,7 +80,7 @@ struct QuinjetPage: View {
             } label: {
                 Image(systemName: "plus")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .pointerCursor()
             .help("New Quinjet review")
             terminalMenu

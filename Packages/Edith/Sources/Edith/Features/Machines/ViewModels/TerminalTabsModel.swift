@@ -174,7 +174,7 @@ struct TerminalTabsView: View {
             } label: {
                 Image(systemName: "plus")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("New terminal (⌘T)")
 
             Toggle("Broadcast", isOn: $model.broadcast)
@@ -187,7 +187,7 @@ struct TerminalTabsView: View {
             } label: {
                 Image(systemName: "macwindow")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Open terminals in their own window")
         }
         .padding(.horizontal, UIScale.pt(12))

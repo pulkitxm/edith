@@ -307,7 +307,7 @@ struct HerdrSessionView: View {
                                 systemImage: store.copiedID == agent.id
                                     ? "checkmark" : "doc.on.doc")
                         }
-                        .buttonStyle(HoverButtonStyle())
+                        .buttonStyle(.edith(.toolbar))
                     }
                 }
             }

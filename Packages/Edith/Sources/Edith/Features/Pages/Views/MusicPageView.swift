@@ -886,7 +886,7 @@ struct MusicPage: View {
             } label: {
                 Image(systemName: gridView ? "list.bullet" : "square.grid.2x2")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help(gridView ? "Show as list" : "Show as grid")
             Button {
                 if remote.showingFavourites {
@@ -900,7 +900,7 @@ struct MusicPage: View {
                         remote.showingFavourites
                             ? AnyShapeStyle(theme) : AnyShapeStyle(.primary))
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help(remote.showingFavourites ? "Back to your folders" : "Show favourites")
             Button {
                 newFolderName = ""
@@ -908,28 +908,28 @@ struct MusicPage: View {
             } label: {
                 Image(systemName: "folder.badge.plus")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("New folder")
             Button {
                 _ = try? MusicLibraryOperationExecution.openLibrary()
             } label: {
                 Image(systemName: "folder")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Open music folder in Finder")
             Button {
                 remote.rescan()
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Rescan music folder")
             Button {
                 showDownloader = true
             } label: {
                 Image(systemName: "arrow.down.circle")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Download YouTube audio")
         }
     }
@@ -2235,7 +2235,7 @@ struct MusicFooter: View {
                     .font(.system(size: UIScale.pt(11), weight: .medium))
                     .foregroundStyle(theme)
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
         }
         .padding(.horizontal, UIScale.pt(22))
     }

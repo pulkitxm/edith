@@ -255,7 +255,7 @@ struct MachineToolsTab: View {
                         } label: {
                             Image(systemName: "trash")
                         }
-                        .buttonStyle(HoverButtonStyle())
+                        .buttonStyle(.edith(.toolbar))
                         .help("Remove")
                     }
                 }
@@ -304,7 +304,7 @@ struct MachineToolsTab: View {
                         } label: {
                             Image(systemName: "trash")
                         }
-                        .buttonStyle(HoverButtonStyle())
+                        .buttonStyle(.edith(.toolbar))
                         .help("Remove")
                     }
                 }

@@ -113,7 +113,7 @@ struct DockerContainerList: View {
                         Image(systemName: "play.fill")
                             .font(.system(size: UIScale.pt(9.5)))
                     }
-                    .buttonStyle(HoverButtonStyle())
+                    .buttonStyle(.edith(.toolbar))
                     .help(Self.groupHelp("Start", plan.startable.count, "stopped"))
                 }
                 if plan.canStop {
@@ -123,7 +123,7 @@ struct DockerContainerList: View {
                         Image(systemName: "stop.fill")
                             .font(.system(size: UIScale.pt(9.5)))
                     }
-                    .buttonStyle(HoverButtonStyle())
+                    .buttonStyle(.edith(.toolbar))
                     .help(Self.groupHelp("Stop", plan.stoppable.count, "running"))
                 }
             }
@@ -277,13 +277,13 @@ private struct DockerContainerRow: View {
                 } label: {
                     Image(systemName: container.state.isRunning ? "stop.fill" : "play.fill")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help(container.state.isRunning ? "Stop" : "Start")
             }
             Button(action: onOpen) {
                 Image(systemName: "chevron.right")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Open details")
         }
         .font(.system(size: UIScale.pt(11)))
@@ -337,7 +337,7 @@ struct DockerSimpleList: View {
                             } label: {
                                 Image(systemName: "trash")
                             }
-                            .buttonStyle(HoverButtonStyle())
+                            .buttonStyle(.edith(.toolbar))
                             .help("Remove")
                         }
                     }

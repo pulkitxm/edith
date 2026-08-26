@@ -398,7 +398,7 @@ struct QuickLookOverlay: View {
             } label: {
                 Image(systemName: "xmark")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Close (space)")
             Spacer(minLength: 0)
             Text(entry?.name ?? "")
@@ -411,14 +411,14 @@ struct QuickLookOverlay: View {
             } label: {
                 Image(systemName: "chevron.up")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Previous")
             Button {
                 model.moveSelection(by: 1, extend: false)
             } label: {
                 Image(systemName: "chevron.down")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Next")
             if let entry, !entry.isDirectory {
                 Button("Open") { model.open(entry) }
