@@ -22,7 +22,12 @@ final class HerdrStore {
     var tabs: [HerdrOpenTab] = []
     var refreshing = false
     var copiedID: String?
-    var detailOpen = true
+    var detailOpen = true {
+        didSet {
+            guard detailOpen != oldValue else { return }
+            defaults.set(detailOpen, forKey: AppStorageKeys.Herdr.detailOpen)
+        }
+    }
     var railOpen = true
 
     private let defaults: UserDefaults
@@ -38,6 +43,7 @@ final class HerdrStore {
         self.defaults = defaults
         self.liveWatcher = liveWatcher
         railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
+        detailOpen = defaults.object(forKey: AppStorageKeys.Herdr.detailOpen) as? Bool ?? true
     }
 
     var agents: [HerdrAgent] { hosts.flatMap(\.agents) }

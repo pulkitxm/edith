@@ -89,6 +89,7 @@ public enum AppStorageKeys {
         public static let ghosttyTerminal = "herdrGhosttyTerminal"
         public static let splitFraction = "herdrSplitFraction"
         public static let railOpen = "herdrRailOpen"
+        public static let detailOpen = "herdrDetailOpen"
     }
 
     public enum Limits {

@@ -108,6 +108,24 @@ import Testing
         #expect(store.tabs.map(\.id) == [terminal.id])
     }
 
+    @Test func bothPanesSurviveARestart() {
+        let suite = defaults()
+        let first = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(first.detailOpen)
+        #expect(first.railOpen)
+        first.detailOpen = false
+        first.setRailOpen(false)
+
+        let second = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(!second.detailOpen)
+        #expect(!second.railOpen)
+
+        second.detailOpen = true
+        let third = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(third.detailOpen)
+        #expect(!third.railOpen)
+    }
+
     @Test func theRailRemembersWhetherItWasCollapsed() {
         let store = defaults()
         let first = HerdrStore(defaults: store, liveWatcher: { _ in })
