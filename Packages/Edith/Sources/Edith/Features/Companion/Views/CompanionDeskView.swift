@@ -32,12 +32,17 @@ final class CompanionDeskModel: CompanionRefreshable {
     func refresh() async {
         do {
             let client = client
-            beliefs = try await client.beliefs(limit: 12)
-            predictions = try await client.predictions(limit: 12)
-            discrepancies = try await client.discrepancies(limit: 12)
-            hypotheses = try await client.hypotheses(limit: 8)
-            let queued = try await client.questions(limit: 5)
-            budget = (queued.askedToday, queued.dailyBudget)
+            async let beliefs = client.beliefs(limit: 12)
+            async let predictions = client.predictions(limit: 12)
+            async let discrepancies = client.discrepancies(limit: 12)
+            async let hypotheses = client.hypotheses(limit: 8)
+            async let queued = client.questions(limit: 5)
+            self.beliefs = try await beliefs
+            self.predictions = try await predictions
+            self.discrepancies = try await discrepancies
+            self.hypotheses = try await hypotheses
+            let answered = try await queued
+            budget = (answered.askedToday, answered.dailyBudget)
             loaded = true
             error = nil
         } catch {
@@ -125,10 +130,12 @@ final class CompanionDeskModel: CompanionRefreshable {
 
 struct CompanionDeskScreen: View {
     @Bindable var model: CompanionDeskModel
+    var isActive = true
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Environment(\.companionGeneration) private var generation
+    @State private var refreshedGeneration = -1
     @State private var overrideTarget: CompanionDiscrepancy?
     @State private var overrideNote = ""
 
@@ -164,7 +171,11 @@ struct CompanionDeskScreen: View {
                 .pageContent(compact)
             }
         }
-        .task(id: generation) { if requestsEnabled { await model.refresh() } }
+        .task(id: isActive ? generation : -1) {
+            guard isActive, requestsEnabled, refreshedGeneration != generation else { return }
+            await model.refresh()
+            if !Task.isCancelled { refreshedGeneration = generation }
+        }
         .sheet(item: $overrideTarget) { discrepancy in
             overrideSheet(discrepancy)
         }

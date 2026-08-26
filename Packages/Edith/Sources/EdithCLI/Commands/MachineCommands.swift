@@ -72,20 +72,84 @@ struct MachinesListCommand: AsyncParsableCommand {
     func run() async throws {
         let machines = MachineDirectory.load()
         guard !json else {
-            CLIOut.json(.array(machines.map(MachineDirectory.summary)))
+            let summaries = await MachineParallel.map(machines) {
+                MachineDirectory.summary($0)
+            }
+            CLIOut.json(.array(summaries))
             return
         }
         guard !machines.isEmpty else {
             CLIOut.note("no machines are configured; add one with `ed machines add <name> <host>`")
             return
         }
-        let rows = machines.map { machine in
+        let connected = await MachineParallel.map(machines) {
+            await MachineLiveness.connected($0)
+        }
+        let rows = machines.enumerated().map { index, machine in
             [
                 machine.name, machine.subtitle, machine.auth.displayName,
-                MachineDirectory.hasLiveControlSocket(machine) ? "connected" : "-",
+                connected[index] ? "connected" : "-",
             ]
         }
         CLIOut.out(TextTable.render(headers: ["NAME", "TARGET", "AUTH", "STATE"], rows: rows))
+    }
+}
+
+enum MachineParallel {
+    static func map<Value: Sendable>(
+        _ machines: [Machine], _ transform: @escaping @Sendable (Machine) async -> Value
+    ) async -> [Value] {
+        guard !machines.isEmpty else { return [] }
+        return await withTaskGroup(of: (Int, Value).self) { group in
+            let maxConcurrentChecks = 4
+            var results = [Value?](repeating: nil, count: machines.count)
+            var started = 0
+            while started < machines.count, started < maxConcurrentChecks {
+                let index = started
+                group.addTask { (index, await transform(machines[index])) }
+                started += 1
+            }
+            while let (index, value) = await group.next() {
+                results[index] = value
+                if started < machines.count {
+                    let next = started
+                    group.addTask { (next, await transform(machines[next])) }
+                    started += 1
+                }
+            }
+            return results.compactMap { $0 }
+        }
+    }
+}
+
+enum MachineLiveness {
+    static let checkBudget: TimeInterval = 1.5
+
+    static func connected(_ machine: Machine, budget: TimeInterval = checkBudget) async -> Bool {
+        let gate = FirstAnswerGate()
+        return await withCheckedContinuation { continuation in
+            Task {
+                let live = MachineDirectory.hasLiveControlSocket(machine)
+                if gate.claim() { continuation.resume(returning: live) }
+            }
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(budget * 1_000_000_000))
+                if gate.claim() { continuation.resume(returning: false) }
+            }
+        }
+    }
+}
+
+private final class FirstAnswerGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var claimed = false
+
+    func claim() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !claimed else { return false }
+        claimed = true
+        return true
     }
 }
 
@@ -102,9 +166,17 @@ struct MachinesShowCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let runner = try await MachineResolver.runner(machine)
-            let hello = try? await runner.text("uname -srm 2>/dev/null", timeout: 20)
-            let uptime = try? await runner.text("uptime 2>/dev/null", timeout: 15)
-            let who = try? await runner.text(MachineFacts.whoCommand, timeout: 15)
+            let sentinel = "EDITH-FACT-BOUNDARY-\(UUID().uuidString)"
+            let batched = [
+                "uname -srm 2>/dev/null", "echo \(sentinel)",
+                "uptime 2>/dev/null", "echo \(sentinel)",
+                MachineFacts.whoCommand,
+            ].joined(separator: "; ")
+            let output = (try? await runner.run(batched, timeout: 20))?.stdoutText ?? ""
+            let sections = output.components(separatedBy: sentinel)
+            let hello = sections.first
+            let uptime = sections.count > 1 ? sections[1] : nil
+            let who = sections.count > 2 ? sections[2] : nil
             let summary = MachineDirectory.summary(runner.machine)
             let facts = JSONValue.object([
                 "machine": summary,

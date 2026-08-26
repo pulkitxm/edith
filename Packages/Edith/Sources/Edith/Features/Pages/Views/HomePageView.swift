@@ -653,9 +653,12 @@ private struct QuickActionsCard: View {
 }
 
 private struct MeetingsCard: View {
+    @MainActor private static let sharedStore = CalendarStore()
+
     let dark: Bool
-    @State private var store = CalendarStore()
     private var presenterState = PresenterState.shared
+
+    private var store: CalendarStore { Self.sharedStore }
 
     init(dark: Bool) {
         self.dark = dark

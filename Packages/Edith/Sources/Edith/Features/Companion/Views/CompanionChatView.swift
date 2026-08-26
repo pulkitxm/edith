@@ -274,6 +274,8 @@ struct CompanionChatScreen: View {
     @FocusState private var composerFocused: Bool
     @State private var anchored = true
     @State private var pendingDeletion: CompanionConversation?
+    @State private var refreshedGeneration = -1
+    @State private var buckets: [ChatBucket] = []
 
     private var dark: Bool { scheme == .dark }
     private var columnWidth: CGFloat { UIScale.pt(728) }
@@ -286,11 +288,14 @@ struct CompanionChatScreen: View {
             }
             thread
         }
-        .task(id: generation) {
-            if requestsEnabled {
-                await model.loadConversations()
-                await model.loadPersonas()
-            }
+        .task(id: isActive ? generation : -1) {
+            guard isActive, requestsEnabled, refreshedGeneration != generation else { return }
+            await model.loadConversations()
+            await model.loadPersonas()
+            if !Task.isCancelled { refreshedGeneration = generation }
+        }
+        .onChange(of: model.conversations, initial: true) {
+            buckets = ChatBucketing.buckets(model.conversations)
         }
         .onAppear { if isActive { composerFocused = true } }
         .onChange(of: isActive) { _, active in
@@ -357,7 +362,7 @@ struct CompanionChatScreen: View {
                             .padding(.horizontal, UIScale.pt(10))
                             .padding(.top, UIScale.pt(8))
                     } else {
-                        ForEach(bucketed, id: \.label) { bucket in
+                        ForEach(buckets, id: \.label) { bucket in
                             Text(bucket.label.uppercased())
                                 .font(.system(size: UIScale.pt(9.5), weight: .semibold))
                                 .tracking(UIScale.pt(0.8))
@@ -382,42 +387,6 @@ struct CompanionChatScreen: View {
         .frame(width: UIScale.pt(230))
     }
 
-    private struct Bucket {
-        let label: String
-        let items: [CompanionConversation]
-    }
-
-    private var bucketed: [Bucket] {
-        let calendar = Calendar.current
-        let now = Date()
-        var groups: [(String, [CompanionConversation])] = [
-            ("Today", []), ("Yesterday", []), ("Previous 7 days", []),
-            ("Previous 30 days", []), ("Older", []),
-        ]
-        let parser = ISO8601DateFormatter()
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        for conversation in model.conversations {
-            let date =
-                fractional.date(from: conversation.lastActiveAt)
-                ?? parser.date(from: conversation.lastActiveAt) ?? now
-            let index: Int
-            if calendar.isDateInToday(date) {
-                index = 0
-            } else if calendar.isDateInYesterday(date) {
-                index = 1
-            } else if date > calendar.date(byAdding: .day, value: -7, to: now) ?? now {
-                index = 2
-            } else if date > calendar.date(byAdding: .day, value: -30, to: now) ?? now {
-                index = 3
-            } else {
-                index = 4
-            }
-            groups[index].1.append(conversation)
-        }
-        return groups.filter { !$0.1.isEmpty }.map { Bucket(label: $0.0, items: $0.1) }
-    }
-
     private var thread: some View {
         VStack(spacing: UIScale.pt(0)) {
             if model.messages.isEmpty {
@@ -437,7 +406,7 @@ struct CompanionChatScreen: View {
     private var transcript: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: UIScale.pt(0)) {
+                LazyVStack(alignment: .leading, spacing: UIScale.pt(0)) {
                     ForEach(Array(model.messages.enumerated()), id: \.element.id) {
                         index, message in
                         if let divider = dayDivider(at: index) {
@@ -592,7 +561,9 @@ struct CompanionChatScreen: View {
                     .font(.system(size: UIScale.pt(9.5), weight: .semibold))
                     .tracking(UIScale.pt(1.1))
                     .foregroundStyle(DashSkin.inkFaint(dark))
-                MarkdownBody(text: message.content, dark: dark, size: 13, bodyInk: true)
+                MarkdownBody(
+                    text: message.content, dark: dark, size: 13, bodyInk: true,
+                    cacheKey: message.id)
                 if message.streaming {
                     StreamingCaret(dark: dark, waiting: message.content.isEmpty)
                 }
@@ -855,20 +826,71 @@ struct ActiveEscapeShortcut: ViewModifier {
 }
 
 enum CompanionChatDates {
+    static let dayParser: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    static let dayLabel: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM d"
+        return formatter
+    }()
+
     static func day(_ iso: String?) -> String? {
         guard let iso, iso.count >= 10 else { return nil }
         return String(iso.prefix(10))
     }
 
     static func label(_ day: String) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        guard let date = formatter.date(from: day) else { return day }
+        guard let date = dayParser.date(from: day) else { return day }
         if Calendar.current.isDateInToday(date) { return "Today" }
         if Calendar.current.isDateInYesterday(date) { return "Yesterday" }
-        let output = DateFormatter()
-        output.dateFormat = "MMMM d"
-        return output.string(from: date)
+        return dayLabel.string(from: date)
+    }
+}
+
+struct ChatBucket {
+    let label: String
+    let items: [CompanionConversation]
+}
+
+enum ChatBucketing {
+    static let isoParser = ISO8601DateFormatter()
+
+    static let isoFractionalParser: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    static func buckets(_ conversations: [CompanionConversation]) -> [ChatBucket] {
+        let calendar = Calendar.current
+        let now = Date()
+        var groups: [(String, [CompanionConversation])] = [
+            ("Today", []), ("Yesterday", []), ("Previous 7 days", []),
+            ("Previous 30 days", []), ("Older", []),
+        ]
+        for conversation in conversations {
+            let date =
+                isoFractionalParser.date(from: conversation.lastActiveAt)
+                ?? isoParser.date(from: conversation.lastActiveAt) ?? now
+            let index: Int
+            if calendar.isDateInToday(date) {
+                index = 0
+            } else if calendar.isDateInYesterday(date) {
+                index = 1
+            } else if date > calendar.date(byAdding: .day, value: -7, to: now) ?? now {
+                index = 2
+            } else if date > calendar.date(byAdding: .day, value: -30, to: now) ?? now {
+                index = 3
+            } else {
+                index = 4
+            }
+            groups[index].1.append(conversation)
+        }
+        return groups.filter { !$0.1.isEmpty }.map { ChatBucket(label: $0.0, items: $0.1) }
     }
 }
 

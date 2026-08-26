@@ -36,11 +36,19 @@ struct ProjectDrilldownView: View {
     let dark: Bool
     var blur = false
     var blurTokens = false
+    @State private var debouncedQuery = ""
+    @State private var displayNodes: [ProjNode] = []
 
-    private static let chatsPerGroup = 20
     private static let rowHeight: CGFloat = 27
     private static let minTableHeight: CGFloat = 520
     private static let maxTableHeight: CGFloat = 760
+
+    private struct RebuildKey: Equatable {
+        let query: String
+        let revision: Int
+        let sortKey: ProjSortKey
+        let ascending: Bool
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
@@ -90,7 +98,7 @@ struct ProjectDrilldownView: View {
                                     onToggle: { toggleExpand(row.node.id) }, actions: actions)
                                 Divider().opacity(0.12)
                             }
-                            if nodes.isEmpty {
+                            if displayNodes.isEmpty, !debouncedQuery.isEmpty {
                                 Text("No projects match “\(model.projQuery)”")
                                     .font(.system(size: UIScale.pt(11)))
                                     .foregroundStyle(DashSkin.inkFaint(dark))
@@ -100,6 +108,21 @@ struct ProjectDrilldownView: View {
                     }
                 }
                 .frame(height: tableHeight)
+                .task(id: model.projQuery) {
+                    let query = model.projQuery.trimmingCharacters(in: .whitespaces)
+                    guard query != debouncedQuery else { return }
+                    try? await Task.sleep(nanoseconds: 200_000_000)
+                    guard !Task.isCancelled else { return }
+                    debouncedQuery = query
+                }
+                .task(
+                    id: RebuildKey(
+                        query: debouncedQuery, revision: model.revision,
+                        sortKey: model.projSortKey, ascending: model.projSortAscending)
+                ) {
+                    displayNodes = ProjectDrilldownNodes.build(
+                        tree: model.projectTree, query: debouncedQuery)
+                }
             }
         }
     }
@@ -183,7 +206,7 @@ struct ProjectDrilldownView: View {
                 for kid in kids { add(kid, depth + 1) }
             }
         }
-        for node in nodes { add(node, 0) }
+        for node in displayNodes { add(node, 0) }
         return out
     }
 
@@ -192,15 +215,14 @@ struct ProjectDrilldownView: View {
             max(CGFloat(model.projectTree.count + 1) * Self.rowHeight + 44, Self.minTableHeight),
             Self.maxTableHeight)
     }
+}
 
-    private var matchedTree: [ProjTreeRow] {
-        let q = model.projQuery.trimmingCharacters(in: .whitespaces)
-        guard !q.isEmpty else { return model.projectTree }
-        return model.projectTree.filter { $0.matches(q) }
-    }
+private enum ProjectDrilldownNodes {
+    static let chatsPerGroup = 20
 
-    private var nodes: [ProjNode] {
-        matchedTree.map { repository in
+    static func build(tree: [ProjTreeRow], query: String) -> [ProjNode] {
+        let matched = query.isEmpty ? tree : tree.filter { $0.matches(query) }
+        return matched.map { repository in
             let folders = repository.folders.map(folderNode)
             return ProjNode(
                 id: repository.id, kind: .repository, label: repository.name,
@@ -212,7 +234,7 @@ struct ProjectDrilldownView: View {
         }
     }
 
-    private func folderNode(_ folder: ProjFolder) -> ProjNode {
+    private static func folderNode(_ folder: ProjFolder) -> ProjNode {
         var children = chatNodes(folder.chats, parent: folder.id)
         children += folder.worktrees.map { worktree in
             let chats = chatNodes(worktree.chats, parent: worktree.id)
@@ -231,7 +253,7 @@ struct ProjectDrilldownView: View {
             children: children.isEmpty ? nil : children)
     }
 
-    private func chatNodes(_ chats: [ProjChat], parent: String) -> [ProjNode] {
+    private static func chatNodes(_ chats: [ProjChat], parent: String) -> [ProjNode] {
         var out = chats.prefix(Self.chatsPerGroup).map { c in
             ProjNode(
                 id: "\(parent)|chat:\(c.id)", kind: .chat, label: c.title, tokens: c.tokens,
@@ -253,7 +275,6 @@ struct ProjectDrilldownView: View {
         }
         return out
     }
-
 }
 
 private struct ProjectRow: View {

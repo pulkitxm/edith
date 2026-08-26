@@ -276,11 +276,13 @@ final class AudioPlayback {
 struct CompanionLibraryScreen: View {
     @Bindable var model: CompanionLibraryModel
     let home: CompanionHomeModel
+    var isActive = true
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Environment(\.companionGeneration) private var generation
+    @State private var refreshedGeneration = -1
 
     private var dark: Bool { scheme == .dark }
 
@@ -301,8 +303,10 @@ struct CompanionLibraryScreen: View {
         }
         .pageContent(compact)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .task(id: generation) {
-            if requestsEnabled { await model.refresh() }
+        .task(id: isActive ? generation : -1) {
+            guard isActive, requestsEnabled, refreshedGeneration != generation else { return }
+            await model.refresh()
+            if !Task.isCancelled { refreshedGeneration = generation }
         }
         .onChange(of: model.query) {
             model.searchChanged()

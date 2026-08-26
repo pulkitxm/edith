@@ -56,7 +56,7 @@ enum AttentionViewRange: String, CaseIterable, Identifiable {
 final class AttentionPageModel {
     var section: AttentionPageSection = .overview
     var range: AttentionViewRange = .today
-    var settings: AttentionSettings
+    var settings = AttentionSettings()
     var summary: AttentionSummary
     var events: [AttentionEvent] = []
     var focusSessions: [AttentionFocusSession] = []
@@ -65,40 +65,79 @@ final class AttentionPageModel {
     var extensionInstalled = false
     var message: String?
     var errorMessage: String?
+    private(set) var loaded = false
+    private(set) var hasStoredEvents = false
 
     private let repository: AttentionRepository
+    private var reloadTask: Task<Void, Never>?
+    private var reloadGeneration = 0
 
     init(repository: AttentionRepository = AttentionRepository()) {
         self.repository = repository
-        settings = repository.loadSettings()
         let interval = AttentionViewRange.today.interval()
         summary = AttentionSummary(
             from: interval.start, to: interval.end, activeDuration: 0, idleDuration: 0,
             focusedDuration: 0, communicationDuration: 0, entertainmentDuration: 0,
             contextSwitches: 0, entities: [], music: [])
-        reload(preserveSettings: true)
     }
 
     var needsSetup: Bool {
-        !settings.trackingEnabled && !settings.browserTrackingEnabled && !repository.hasEvents()
+        !settings.trackingEnabled && !settings.browserTrackingEnabled && !hasStoredEvents
     }
 
     var hasActivity: Bool { !summary.entities.isEmpty || summary.idleDuration > 0 }
-    var hasStoredEvents: Bool { repository.hasEvents() }
 
     var cloudBackup: AttentionCloudBackup { AttentionCloudBackup() }
 
     func reload(preserveSettings: Bool = false) {
-        if !preserveSettings { settings = repository.loadSettings() }
+        reloadTask?.cancel()
+        reloadGeneration &+= 1
+        let generation = reloadGeneration
+        let repository = repository
+        let range = range
+        let knownSettings = settings
+        reloadTask = Task.detached { [weak self] in
+            let state = AttentionPageModel.loadState(
+                repository: repository, range: range,
+                settings: preserveSettings ? knownSettings : nil)
+            await self?.publish(state, preserveSettings: preserveSettings, generation: generation)
+        }
+    }
+
+    func waitForReload() async {
+        await reloadTask?.value
+    }
+
+    private func publish(_ state: AttentionPageState, preserveSettings: Bool, generation: Int) {
+        guard !Task.isCancelled, reloadGeneration == generation else { return }
+        reloadTask = nil
+        if !preserveSettings { settings = state.settings }
+        summary = state.summary
+        events = state.events
+        activeFocus = state.activeFocus
+        focusSessions = state.focusSessions
+        hasStoredEvents = state.hasStoredEvents
+        extensionInstalled = state.extensionInstalled
+        loaded = true
+    }
+
+    nonisolated private static func loadState(
+        repository: AttentionRepository, range: AttentionViewRange, settings: AttentionSettings?
+    ) -> AttentionPageState {
+        let resolvedSettings = settings ?? repository.loadSettings()
         let interval = range.interval()
         let all = repository.events(from: interval.start, to: interval.end)
-        summary = AttentionAnalyzer().summary(
-            events: all, settings: settings, from: interval.start, to: interval.end)
-        events = Array(all.sorted { $0.startedAt > $1.startedAt }.prefix(500))
-        activeFocus = repository.activeFocus()
-        focusSessions = repository.focusSessions(from: interval.start, to: interval.end).reversed()
-        extensionInstalled = FileManager.default.fileExists(
-            atPath: AttentionExtensionInstaller.installedDirectory.path)
+        let summary = AttentionAnalyzer().summary(
+            events: all, settings: resolvedSettings, from: interval.start, to: interval.end)
+        let events = Array(all.sorted { $0.startedAt > $1.startedAt }.prefix(500))
+        let focusSessions = Array(
+            repository.focusSessions(from: interval.start, to: interval.end).reversed())
+        return AttentionPageState(
+            settings: resolvedSettings, summary: summary, events: events,
+            activeFocus: repository.activeFocus(), focusSessions: focusSessions,
+            hasStoredEvents: repository.hasEvents(),
+            extensionInstalled: FileManager.default.fileExists(
+                atPath: AttentionExtensionInstaller.installedDirectory.path))
     }
 
     func saveSettings() {
@@ -155,7 +194,7 @@ final class AttentionPageModel {
 
     func startFocus(name: String, duration: TimeInterval) {
         do {
-            try AttentionFocusOperationExecution.start(
+            activeFocus = try AttentionFocusOperationExecution.start(
                 name: name, duration: duration, repository: repository)
             errorMessage = nil
             reload()
@@ -167,6 +206,7 @@ final class AttentionPageModel {
     func stopFocus() {
         do {
             try AttentionFocusOperationExecution.stop(repository: repository)
+            activeFocus = nil
             errorMessage = nil
             reload()
         } catch {
@@ -256,4 +296,14 @@ final class AttentionPageModel {
         }
         browserConnected = await AttentionIngestionServer.isHealthy(port: settings.serverPort)
     }
+}
+
+private struct AttentionPageState: Sendable {
+    var settings: AttentionSettings
+    var summary: AttentionSummary
+    var events: [AttentionEvent]
+    var activeFocus: AttentionFocusSession?
+    var focusSessions: [AttentionFocusSession]
+    var hasStoredEvents: Bool
+    var extensionInstalled: Bool
 }

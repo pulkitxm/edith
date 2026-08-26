@@ -185,20 +185,31 @@ import EdithKit
         return url
     }
 
-    @Test func initLoadsLogTail() throws {
+    @Test func showingTheLogLoadsItsTail() async throws {
         let url = try tempLog("first line\nsecond line\n")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let bridge = DashboardRefreshBridge(logURL: url)
+        #expect(bridge.log.isEmpty)
+
+        bridge.setLogVisible(true)
+        await bridge.awaitPendingLogLoad()
+
         #expect(bridge.log == "first line\nsecond line\n")
         #expect(!bridge.updating)
     }
 
-    @Test func initTailsOversizedLogToCompleteLines() throws {
+    @Test func showingTheLogTailsOversizedContentToCompleteLines() async throws {
         let filler = String(repeating: "x", count: 70 * 1024)
         let url = try tempLog(filler + "\ntail line\n")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let bridge = DashboardRefreshBridge(logURL: url)
+        #expect(bridge.log.isEmpty)
+
+        bridge.setLogVisible(true)
+        await bridge.awaitPendingLogLoad()
+
         #expect(bridge.log == "tail line\n")
+        #expect(!bridge.updating)
     }
 
     @Test func refreshRequestUsesTheInjectedOperationPath() throws {

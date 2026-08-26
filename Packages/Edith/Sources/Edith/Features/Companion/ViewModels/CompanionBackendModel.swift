@@ -15,6 +15,7 @@ final class CompanionBackendModel: CompanionRefreshable {
     private(set) var configStatus: String?
     private(set) var configStatusIsError = false
     private(set) var secretsStatus: String?
+    private(set) var secretHints: [CompanionSecretKind: String] = [:]
     var selectedHostID: UUID?
     var config = CompanionStackConfig()
     var secrets = CompanionSecretValues()
@@ -31,8 +32,10 @@ final class CompanionBackendModel: CompanionRefreshable {
     var runningCount: Int { services.filter(\.running).count }
 
     func refresh() async {
-        await probeHosts()
-        await refreshServices()
+        load()
+        async let probed: Void = probeHosts()
+        async let refreshed: Void = refreshServices()
+        _ = await (probed, refreshed)
     }
 
     private var configPrimed = false
@@ -44,6 +47,7 @@ final class CompanionBackendModel: CompanionRefreshable {
             configPrimed = true
         }
         selectedHostID = selectedHostID ?? deployment.flatMap { $0.machineID }
+        refreshSecretHints()
     }
 
     func probeHosts() async {
@@ -155,15 +159,24 @@ final class CompanionBackendModel: CompanionRefreshable {
             written == 0
             ? "Nothing to save; paste a key first or use Clear to remove one."
             : "Saved \(written) value(s) to the Keychain."
+        refreshSecretHints()
     }
 
     func clearSecret(_ kind: CompanionSecretKind) {
         CompanionSecrets.set("", kind: kind)
         secretsStatus = "Cleared."
+        refreshSecretHints()
     }
 
     func secretHint(_ kind: CompanionSecretKind) -> String {
-        CompanionSecrets.get(kind).flatMap(CompanionSecrets.hint) ?? "not set"
+        secretHints[kind] ?? "not set"
+    }
+
+    private func refreshSecretHints() {
+        for kind in CompanionSecretKind.allCases {
+            secretHints[kind] =
+                CompanionSecrets.get(kind).flatMap(CompanionSecrets.hint) ?? "not set"
+        }
     }
 
     func exportBundle() -> Data? {

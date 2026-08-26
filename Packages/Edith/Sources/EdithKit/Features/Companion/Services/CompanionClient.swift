@@ -437,13 +437,30 @@ public struct CompanionClient: Sendable {
     }
 
     public static func endpoint(override: String?) -> URL {
-        let fallback = deployedEndpoint() ?? URL(string: defaultEndpointString)!
+        if let override {
+            guard !override.isEmpty else { return fallbackEndpoint() }
+            return URL(string: override) ?? fallbackEndpoint()
+        }
+        if let cached = CompanionEndpointCache.shared.cached() { return cached }
+        let resolved = resolveEndpoint()
+        CompanionEndpointCache.shared.store(resolved)
+        return resolved
+    }
+
+    public static func invalidateEndpointCache() {
+        CompanionEndpointCache.shared.clear()
+    }
+
+    private static func fallbackEndpoint() -> URL {
+        deployedEndpoint() ?? URL(string: defaultEndpointString)!
+    }
+
+    private static func resolveEndpoint() -> URL {
         let value =
-            override
-            ?? ProcessInfo.processInfo.environment["EDITH_COMPANION_URL"]
+            ProcessInfo.processInfo.environment["EDITH_COMPANION_URL"]
             ?? SharedDefaults.store.string(forKey: AppStorageKeys.Companion.endpoint)
-        guard let value, !value.isEmpty else { return fallback }
-        return URL(string: value) ?? fallback
+        guard let value, !value.isEmpty else { return fallbackEndpoint() }
+        return URL(string: value) ?? fallbackEndpoint()
     }
 
     public static func deployedEndpoint() -> URL? {
@@ -451,8 +468,8 @@ public struct CompanionClient: Sendable {
         return URL(string: "http://127.0.0.1:\(deployment.localPort)")
     }
 
-    public func health() async throws -> CompanionHealth {
-        try await get("health", allowing: [503])
+    public func health(timeout: TimeInterval = defaultTimeout) async throws -> CompanionHealth {
+        try await get("health", allowing: [503], timeout: timeout)
     }
 
     public func status() async throws -> CompanionStatus {
@@ -825,8 +842,10 @@ public struct CompanionClient: Sendable {
         return try await self.request(request, timeout: timeout)
     }
 
-    func get<T: Decodable>(_ path: String, allowing: Set<Int> = []) async throws -> T {
-        try await request(URLRequest(url: url(for: path)), allowing: allowing)
+    func get<T: Decodable>(
+        _ path: String, allowing: Set<Int> = [], timeout: TimeInterval = defaultTimeout
+    ) async throws -> T {
+        try await request(URLRequest(url: url(for: path)), allowing: allowing, timeout: timeout)
     }
 
     func request<T: Decodable>(
@@ -867,6 +886,30 @@ public struct CompanionClient: Sendable {
             return envelope.error
         }
         return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+final class CompanionEndpointCache: @unchecked Sendable {
+    static let shared = CompanionEndpointCache()
+    private let lock = NSLock()
+    private var value: URL?
+
+    func cached() -> URL? {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+
+    func store(_ url: URL) {
+        lock.lock()
+        value = url
+        lock.unlock()
+    }
+
+    func clear() {
+        lock.lock()
+        value = nil
+        lock.unlock()
     }
 }
 

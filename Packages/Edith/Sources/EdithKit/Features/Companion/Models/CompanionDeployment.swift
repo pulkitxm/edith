@@ -91,11 +91,13 @@ public enum CompanionDeploymentStore {
         try? FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: url, options: .atomic)
+        CompanionClient.invalidateEndpointCache()
         return deployment
     }
 
     public static func clear(_ url: URL = file) {
         try? FileManager.default.removeItem(at: url)
+        CompanionClient.invalidateEndpointCache()
     }
 }
 

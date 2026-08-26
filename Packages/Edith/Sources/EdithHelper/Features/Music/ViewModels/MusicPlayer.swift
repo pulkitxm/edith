@@ -12,7 +12,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
     var volume: Double {
         didSet {
             player?.setVolume(Float(volume), fadeDuration: 0.1)
-            UserDefaults.standard.set(volume, forKey: AppStorageKeys.Music.volume)
+            scheduleVolumePersist()
             broadcastState()
         }
     }
@@ -59,6 +59,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
     private var artworkTrack: Track?
     private let fade: TimeInterval = 0.35
     private var saveTimer: Timer?
+    private var volumePersistWorkItem: DispatchWorkItem?
     private var levelTimer: Timer?
     private var levelSubscriberUntil = Date.distantPast
     private var smoothedLevel = 0.0
@@ -232,6 +233,24 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
                 "shuffling": isShuffling,
                 "at": Date().timeIntervalSince1970,
             ])
+    }
+
+    private func scheduleVolumePersist() {
+        volumePersistWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.volumePersistWorkItem = nil
+            UserDefaults.standard.set(self.volume, forKey: AppStorageKeys.Music.volume)
+        }
+        volumePersistWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+    }
+
+    private func flushVolumePersist() {
+        guard let work = volumePersistWorkItem else { return }
+        work.cancel()
+        volumePersistWorkItem = nil
+        UserDefaults.standard.set(volume, forKey: AppStorageKeys.Music.volume)
     }
 
     private func startSaveTimer() {
@@ -529,6 +548,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
 
     func shutdown() {
         stop()
+        flushVolumePersist()
         tracks = []
         let center = MPRemoteCommandCenter.shared()
         [
@@ -593,16 +613,35 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
     private func restoreLastPlayback() {
         guard current == nil, let snapshot = PlaybackStore.load(from: .standard) else { return }
         let track = self.track(for: snapshot.track)
-        guard let p = try? AVAudioPlayer(contentsOf: track.url) else { return }
+        loadGeneration += 1
+        let generation = loadGeneration
+        current = track
+        isPlaying = false
+        updateNowPlaying()
+        Task { [weak self] in
+            let loaded = await Task.detached { LoadedAudio(url: track.url) }.value
+            guard let self, self.loadGeneration == generation else { return }
+            guard let loaded else {
+                if self.current == track { self.current = nil }
+                self.updateNowPlaying()
+                self.broadcastState()
+                return
+            }
+            self.installRestored(loaded.player, for: track, snapshot: snapshot)
+        }
+    }
+
+    private func installRestored(
+        _ p: AVAudioPlayer, for track: Track, snapshot: PlaybackStore.Snapshot
+    ) {
+        guard current == track else { return }
         player = p
         p.isMeteringEnabled = true
         p.delegate = self
         p.volume = Float(volume)
-        p.prepareToPlay()
         if snapshot.position > 0, snapshot.position < p.duration {
             p.currentTime = snapshot.position
         }
-        current = track
         if snapshot.playing {
             p.play()
             isPlaying = true
@@ -611,6 +650,7 @@ final class MusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             isPlaying = false
         }
         updateNowPlaying()
+        broadcastState()
     }
 
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {

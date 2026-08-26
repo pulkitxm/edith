@@ -23,12 +23,18 @@ final class CompanionMindModel: CompanionRefreshable {
     func refresh() async {
         do {
             let client = client
-            beliefs = try await client.beliefs(limit: 30)
-            claims = try await client.claims(limit: 30)
-            observations = try await client.observations(limit: 40, kind: nil)
-            runs = try await client.runs(limit: 5)
-            core = (try? await client.core()) ?? []
-            calibration = (try? await client.calibration()) ?? []
+            async let beliefs = client.beliefs(limit: 30)
+            async let claims = client.claims(limit: 30)
+            async let observations = client.observations(limit: 40, kind: nil)
+            async let runs = client.runs(limit: 5)
+            async let core = client.core()
+            async let calibration = client.calibration()
+            self.beliefs = try await beliefs
+            self.claims = try await claims
+            self.observations = try await observations
+            self.runs = try await runs
+            self.core = (try? await core) ?? []
+            self.calibration = (try? await calibration) ?? []
             loaded = true
             error = nil
         } catch {
@@ -85,6 +91,7 @@ enum MindDetail: Identifiable {
 
 struct CompanionMindScreen: View {
     let model: CompanionMindModel
+    var isActive = true
     var openEpisode: (String) -> Void = { _ in }
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
@@ -92,6 +99,7 @@ struct CompanionMindScreen: View {
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Environment(\.companionGeneration) private var generation
     @State private var barsFilled = false
+    @State private var refreshedGeneration = -1
     @State private var detail: MindDetail?
     @State private var editingSection: String?
     @State private var sectionDraft = ""
@@ -130,8 +138,12 @@ struct CompanionMindScreen: View {
                 .pageContent(compact)
             }
         }
-        .task(id: generation) {
-            if requestsEnabled { await model.refresh() }
+        .task(id: isActive ? generation : -1) {
+            guard isActive else { return }
+            if requestsEnabled, refreshedGeneration != generation {
+                await model.refresh()
+                if !Task.isCancelled { refreshedGeneration = generation }
+            }
             withAnimation(Motion.animation(Motion.settle, reduceMotion: reduceMotion)) {
                 barsFilled = true
             }

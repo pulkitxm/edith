@@ -6,43 +6,50 @@ import Testing
 
 @MainActor
 @Suite struct AttentionPageModelTests {
-    @Test func pristineStoreShowsGuidedSetupWithoutActivity() {
+    @Test func pristineStoreShowsGuidedSetupWithoutActivity() async {
         let fixture = fixture()
         defer { fixture.cleanup() }
         let model = AttentionPageModel(repository: fixture.repository)
+        model.reload()
+        await model.waitForReload()
+        #expect(model.loaded)
         #expect(model.needsSetup)
         #expect(model.hasActivity == false)
         #expect(model.summary.entities.isEmpty)
         #expect(model.events.isEmpty)
     }
 
-    @Test func completingSetupPersistsRealSourceChoices() {
+    @Test func completingSetupPersistsRealSourceChoices() async {
         let fixture = fixture()
         defer { fixture.cleanup() }
         let model = AttentionPageModel(repository: fixture.repository)
         model.completeSetup(applicationTracking: true, browserTracking: false)
+        await model.waitForReload()
         let settings = fixture.repository.loadSettings()
         #expect(settings.isEnabled)
         #expect(settings.trackingEnabled)
         #expect(settings.browserTrackingEnabled == false)
+        #expect(model.settings.trackingEnabled)
         #expect(model.needsSetup == false)
         #expect(model.hasActivity == false)
     }
 
-    @Test func masterSwitchStopsCollectionWithoutLosingSourceChoices() {
+    @Test func masterSwitchStopsCollectionWithoutLosingSourceChoices() async {
         let fixture = fixture()
         defer { fixture.cleanup() }
         let model = AttentionPageModel(repository: fixture.repository)
         model.completeSetup(applicationTracking: true, browserTracking: true)
         model.setAttentionEnabled(false)
+        await model.waitForReload()
         let settings = fixture.repository.loadSettings()
         #expect(settings.isEnabled == false)
         #expect(settings.trackingEnabled)
         #expect(settings.browserTrackingEnabled)
+        #expect(model.settings.isEnabled == false)
         #expect(model.browserConnected == false)
     }
 
-    @Test func categoryMenuReclassifiesExistingEntity() throws {
+    @Test func categoryMenuReclassifiesExistingEntity() async throws {
         let fixture = fixture()
         defer { fixture.cleanup() }
         let now = Date()
@@ -53,8 +60,11 @@ import Testing
         let model = AttentionPageModel(repository: fixture.repository)
         model.range = .today
         model.reload()
+        await model.waitForReload()
         let entity = try #require(model.summary.entities.first)
+        #expect(entity.name == "Writing")
         model.assign(entity: entity, to: "focus")
+        await model.waitForReload()
         #expect(model.summary.focusedDuration == 60)
     }
 

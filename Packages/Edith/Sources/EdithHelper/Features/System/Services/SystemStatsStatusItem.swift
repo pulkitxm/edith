@@ -8,6 +8,10 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     private var previous: CPUTicks?
     private var sleepObservers: [NSObjectProtocol] = []
     private var lockObservers: [NSObjectProtocol] = []
+    private var cachedTintHex: String?
+    private var cachedGlyphs: [String: NSAttributedString] = [:]
+    private var numberAttributes: [NSAttributedString.Key: Any] = [:]
+    private var percentAttributes: [NSAttributedString.Key: Any] = [:]
 
     override init() {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -85,6 +89,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
             previous = SystemStatsReader.readCPUTicks()
         }
         let memory = SystemStatsReader.memoryUsedPercent()
+        ensureStyleCache()
         let title = NSMutableAttributedString()
         appendStat(symbol: "cpu", value: cpu, into: title)
         title.append(NSAttributedString(string: "  "))
@@ -92,18 +97,18 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         item.button?.attributedTitle = title
     }
 
-    private var tint: NSColor {
-        LimitsStatusItem.nsColor(
-            hex: SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.statsColorHex))
-            ?? .white
-    }
-
-    private func appendStat(symbol: String, value: Double, into out: NSMutableAttributedString) {
-        let color = tint
+    private func ensureStyleCache() {
+        let hex = SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.statsColorHex)
+        guard cachedTintHex != hex || cachedGlyphs.isEmpty else { return }
+        cachedTintHex = hex
+        let color = LimitsStatusItem.nsColor(hex: hex) ?? .white
         let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .semibold)
-        if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
-            .withSymbolConfiguration(config)
-        {
+        var glyphs: [String: NSAttributedString] = [:]
+        for symbol in ["cpu", "memorychip"] {
+            guard
+                let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+                    .withSymbolConfiguration(config)
+            else { continue }
             image.isTemplate = true
             let attachment = NSTextAttachment()
             attachment.image = image
@@ -113,22 +118,26 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
             glyph.addAttribute(
                 .foregroundColor, value: color,
                 range: NSRange(location: 0, length: glyph.length))
+            glyph.append(NSAttributedString(string: " "))
+            glyphs[symbol] = glyph
+        }
+        cachedGlyphs = glyphs
+        numberAttributes = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold),
+            .foregroundColor: color,
+        ]
+        percentAttributes = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold),
+            .foregroundColor: color.withAlphaComponent(0.75),
+        ]
+    }
+
+    private func appendStat(symbol: String, value: Double, into out: NSMutableAttributedString) {
+        if let glyph = cachedGlyphs[symbol] {
             out.append(glyph)
-            out.append(NSAttributedString(string: " "))
         }
         out.append(
-            NSAttributedString(
-                string: "\(Int(value.rounded()))",
-                attributes: [
-                    .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold),
-                    .foregroundColor: color,
-                ]))
-        out.append(
-            NSAttributedString(
-                string: "%",
-                attributes: [
-                    .font: NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold),
-                    .foregroundColor: color.withAlphaComponent(0.75),
-                ]))
+            NSAttributedString(string: "\(Int(value.rounded()))", attributes: numberAttributes))
+        out.append(NSAttributedString(string: "%", attributes: percentAttributes))
     }
 }

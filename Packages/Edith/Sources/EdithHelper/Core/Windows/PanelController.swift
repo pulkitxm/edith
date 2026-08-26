@@ -9,6 +9,7 @@ final class PanelController: NSObject {
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
     private let services: AppServices
+    private var hostingController: NSHostingController<AnyView>?
     private var eventMonitor: Any?
     private var keyMonitor: Any?
 
@@ -32,10 +33,18 @@ final class PanelController: NSObject {
 
     func open() {
         guard !popover.isShown, let button = statusItem.button else { return }
-        let host = NSHostingController(
-            rootView: AnyView(RootView(services: services)))
-        host.sizingOptions = [.preferredContentSize]
-        popover.contentViewController = host
+        let host: NSHostingController<AnyView>
+        if let hostingController {
+            host = hostingController
+        } else {
+            host = NSHostingController(
+                rootView: AnyView(RootView(services: services)))
+            host.sizingOptions = [.preferredContentSize]
+            hostingController = host
+        }
+        if popover.contentViewController !== host {
+            popover.contentViewController = host
+        }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         NSApp.activate(ignoringOtherApps: true)
         if let window = popover.contentViewController?.view.window {
@@ -48,8 +57,13 @@ final class PanelController: NSObject {
     func close() {
         guard popover.isShown else { return }
         popover.performClose(nil)
-        popover.contentViewController = nil
         stopEventMonitor()
+    }
+
+    func shutdown() {
+        close()
+        popover.contentViewController = nil
+        hostingController = nil
     }
 
     private func startEventMonitor() {
