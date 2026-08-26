@@ -8,6 +8,7 @@ struct MachineDetailView: View {
     @Binding var tab: MachineTab
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+    @State private var visited: Set<MachineTab> = []
 
     private var dark: Bool { scheme == .dark }
 
@@ -97,15 +98,21 @@ struct MachineDetailView: View {
 
     @ViewBuilder
     private var detail: some View {
+        let mounted = visited.union([tab])
         ZStack {
             ForEach(MachineTab.tabs(isLocal: session.isLocal, hasDocker: true)) { item in
-                screen(item, presented: item == tab)
-                    .opacity(item == tab ? 1 : 0)
-                    .allowsHitTesting(item == tab)
-                    .accessibilityHidden(item != tab)
+                if mounted.contains(item) {
+                    screen(item, presented: item == tab)
+                        .opacity(item == tab ? 1 : 0)
+                        .allowsHitTesting(item == tab)
+                        .accessibilityHidden(item != tab)
+                }
             }
         }
         .id(session.id)
+        .onAppear { visited.insert(tab) }
+        .onChange(of: tab) { _, opened in visited.insert(opened) }
+        .onChange(of: session.id) { _, _ in visited = [tab] }
     }
 
     @ViewBuilder
