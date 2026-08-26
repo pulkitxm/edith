@@ -75,7 +75,10 @@ case "$MODE" in
 
     rewrite_cask
     verify_cask
-    git tag -f -a "$RELEASE_TAG" -m "Edith $RELEASE_TAG build $RELEASE_BUILD" "$BUILT_SHA"
+    git \
+      -c user.name="pukbot[bot]" \
+      -c user.email="320458784+pukbot[bot]@users.noreply.github.com" \
+      tag -f -a "$RELEASE_TAG" -m "Edith $RELEASE_TAG build $RELEASE_BUILD" "$BUILT_SHA"
     if git push origin "refs/tags/$RELEASE_TAG"; then
       git fetch origin main
       if [[ "$(git rev-parse origin/main)" != "$BUILT_SHA" ]]; then
