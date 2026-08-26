@@ -59,6 +59,7 @@ public final class GhosttyTerminalView: NSView {
         config.userdata = Unmanaged.passUnretained(self).toOpaque()
         config.scale_factor = Double(window?.backingScaleFactor ?? 2)
         config.context = GHOSTTY_SURFACE_CONTEXT_TAB
+        config.wait_after_command = false
 
         owned = GhosttyConfigStrings(launch: launch)
         config.command = owned?.command
