@@ -189,13 +189,13 @@ import Testing
                 of: "private struct ExtensionLifecycleRows",
                 range: sheetStart.upperBound..<source.endIndex))
         let sheet = String(source[sheetStart.lowerBound..<sheetEnd.lowerBound])
-        let header = try #require(
-            sheet.range(of: "ExtensionSettingsHeader(title: entry.title, enabled: enabledBinding)"))
+        let header = try #require(sheet.range(of: "ExtensionSettingsHeader("))
         let form = try #require(sheet.range(of: "Form {"))
 
         #expect(header.lowerBound < form.lowerBound)
         #expect(headerSource.contains("Toggle(isOn: $enabled)"))
         #expect(headerSource.contains(".labelsHidden()"))
+        #expect(headerSource.contains(".disabled(disabled)"))
         #expect(headerSource.contains(".accessibilityLabel(\"\\(title) enabled\")"))
         #expect(headerSource.components(separatedBy: "Toggle(").count == 2)
         #expect(!sheet.contains(".navigationTitle(entry.title)"))
@@ -205,6 +205,8 @@ import Testing
         #expect(!sheet.contains("This extension is available throughout Edith."))
         #expect(!sheet.contains("Enable this extension to use its controls and workflows."))
         #expect(!sheet.contains(".disabled(!enabled)"))
+        #expect(sheet.contains("disabled: entry.defaultsKey == LidAwakeState.enabledKey"))
+        #expect(!sheet.contains(".disabled(lidAwakeOperations.applying)"))
         #expect(sheet.contains("Button(\"Set up required tools...\")"))
         #expect(sheet.contains("ToolProvisioningSheet(entry: entry)"))
     }
@@ -321,7 +323,58 @@ import Testing
 
         #expect(source.contains("count: 4"))
         #expect(source.contains("title: \"Lid awake\""))
-        #expect(source.contains("IPC.post(IPC.Name.toggleLidAwake)"))
+        #expect(source.contains("lidAwakeOperations.perform(.on"))
+        #expect(source.contains("lidAwakeOperations.perform(.off)"))
+        #expect(!source.contains("IPC.Name.toggleLidAwake"))
+    }
+
+    @Test func lidAwakeUISurfacesUseCorrelatedOperationsAndExposeFailures() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources")
+        let settings = try String(
+            contentsOf: root.appendingPathComponent(
+                "Edith/Features/Settings/Views/LidAwakeRows.swift"), encoding: .utf8)
+        let extensions = try String(
+            contentsOf: root.appendingPathComponent(
+                "Edith/Features/Settings/Views/ExtensionsPane.swift"), encoding: .utf8)
+        let home = try String(
+            contentsOf: root.appendingPathComponent(
+                "Edith/Features/Pages/Views/HomePageView.swift"), encoding: .utf8)
+        let navigation = try String(
+            contentsOf: root.appendingPathComponent(
+                "Edith/Core/Navigation/MainNavigationView.swift"), encoding: .utf8)
+        let shelfController = try String(
+            contentsOf: root.appendingPathComponent(
+                "EdithHelper/Features/NotchShelf/Services/NotchShelfController.swift"),
+            encoding: .utf8)
+        let shelfView = try String(
+            contentsOf: root.appendingPathComponent(
+                "EdithHelper/Features/NotchShelf/Views/NotchShelfView.swift"), encoding: .utf8)
+
+        #expect(settings.contains("@StateObject private var operations = LidAwakeOperationModel()"))
+        #expect(settings.contains("operations.perform(.on"))
+        #expect(settings.contains("operations.perform(.off)"))
+        #expect(settings.contains("operations.refreshStatus()"))
+        #expect(settings.contains("operations.lastSnapshot?.lastError"))
+        #expect(settings.contains(".disabled(!enabled)"))
+        #expect(settings.contains(".disabled(operations.applying)"))
+        #expect(!settings.contains("IPC.Name.toggleLidAwake"))
+        #expect(!settings.contains("IPC.Name.setLidAwakeSession"))
+        #expect(!settings.contains("IPC.Name.lidAwakeSettingsChanged"))
+
+        #expect(extensions.contains("lidAwakeOperations.perform(.disableExtension)"))
+        #expect(extensions.contains(".disabled(switchDisabled)"))
+        #expect(extensions.contains("lidAwakeOperations.lastSnapshot?.lastError"))
+        #expect(home.contains("lidAwakeOperations.lastSnapshot?.lastError"))
+        #expect(navigation.contains("lidAwakeOperations.lastSnapshot?.lastError"))
+        #expect(shelfController.contains("LidAwakeShelfOperationOwner"))
+        #expect(shelfController.contains("presentLidAwakeFailure"))
+        #expect(shelfController.contains("engine?.$lastError"))
+        #expect(shelfView.contains("controller.performLidAwake"))
+        #expect(shelfView.contains("LidAwakeOperationExecution.preview"))
     }
 
     @Test func focusDimSeparatesInstalledFromActive() {

@@ -475,7 +475,7 @@ public enum LidAwakeOperationExecution {
 
     public static func request(
         _ request: LidAwakeRequest, defaults: UserDefaults = SharedDefaults.store,
-        timeout: Duration = .seconds(20)
+        timeout: Duration = .seconds(30)
     ) async throws -> LidAwakeSnapshot {
         guard var payload = request.runtimePayload else {
             throw LidAwakeOperationFailure("The Lid Awake request is not a runtime action.")

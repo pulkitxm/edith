@@ -316,6 +316,15 @@ private struct NotchHomeTab: View {
     @AppStorage(AppStorageKeys.Notch.shelfShowMusic, store: SharedDefaults.store) private
         var showMusic = true
     @AppStorage("lidAwakeActive", store: SharedDefaults.store) private var lidAwakeActive = false
+    @State private var pendingLidAwakeSession: LidAwakeSession?
+
+    private var confirmingLidAwake: Binding<Bool> {
+        Binding(
+            get: { pendingLidAwakeSession != nil },
+            set: { showing in
+                if !showing { pendingLidAwakeSession = nil }
+            })
+    }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -359,31 +368,35 @@ private struct NotchHomeTab: View {
             }
             if controller.canToggleLidAwake {
                 actionTile("laptopcomputer", "Lid awake", active: lidAwakeActive) {
-                    controller.toggleLidAwake()
+                    if lidAwakeActive {
+                        controller.performLidAwake(.off)
+                    } else {
+                        pendingLidAwakeSession = .indefinite
+                    }
                 }
                 .contextMenu {
                     Button("Indefinitely") {
-                        controller.startLidAwake(.indefinite)
+                        pendingLidAwakeSession = .indefinite
                     }
                     Button("15 minutes") {
-                        controller.startLidAwake(.fifteenMinutes)
+                        pendingLidAwakeSession = .fifteenMinutes
                     }
                     Button("30 minutes") {
-                        controller.startLidAwake(.thirtyMinutes)
+                        pendingLidAwakeSession = .thirtyMinutes
                     }
                     Button("1 hour") {
-                        controller.startLidAwake(.oneHour)
+                        pendingLidAwakeSession = .oneHour
                     }
                     Button("2 hours") {
-                        controller.startLidAwake(.twoHours)
+                        pendingLidAwakeSession = .twoHours
                     }
                     Button("Until lid reopens") {
-                        controller.startLidAwake(.untilLidReopens)
+                        pendingLidAwakeSession = .untilLidReopens
                     }
                     if lidAwakeActive {
                         Divider()
                         Button("Turn off") {
-                            controller.stopLidAwake()
+                            controller.performLidAwake(.off)
                         }
                     }
                 }
@@ -400,6 +413,21 @@ private struct NotchHomeTab: View {
                     controller.pickColor()
                 }
             }
+        }
+        .alert("Keep running with the lid closed?", isPresented: confirmingLidAwake) {
+            Button("Turn On") {
+                guard let session = pendingLidAwakeSession else { return }
+                pendingLidAwakeSession = nil
+                controller.performLidAwake(.on(session))
+            }
+            Button("Cancel", role: .cancel) {
+                pendingLidAwakeSession = nil
+            }
+        } message: {
+            Text(
+                pendingLidAwakeSession.flatMap {
+                    LidAwakeOperationExecution.preview(for: .on($0))?.warning
+                } ?? "")
         }
     }
 

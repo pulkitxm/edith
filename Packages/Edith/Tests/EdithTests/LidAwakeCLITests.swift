@@ -6,11 +6,12 @@ import Testing
 
 @Suite struct LidAwakeCLITests {
     static func liveReply(
-        active: Bool, session: LidAwakeSession = .indefinite
+        active: Bool, extensionEnabled: Bool = true,
+        session: LidAwakeSession = .indefinite, requestID: String? = nil
     ) -> [AnyHashable: Any] {
-        [
+        var result: [AnyHashable: Any] = [
             LidAwakeIPC.okKey: true,
-            "extensionEnabled": true,
+            "extensionEnabled": extensionEnabled,
             "active": active,
             "requestedActive": active,
             "applying": false,
@@ -21,6 +22,13 @@ import Testing
             "helperStatus": "enabled",
             "appRunning": true,
         ]
+        if let requestID { result[LidAwakeIPC.requestIDKey] = requestID }
+        return result
+    }
+
+    static func requestID(in world: CLIWorld) -> String? {
+        world.postedPayloads(for: IPC.Name.requestLidAwakeAction).last?[
+            LidAwakeIPC.requestIDKey] as? String
     }
 
     @Test func commandGroupIsRegisteredAtTheRoot() throws {
@@ -70,6 +78,19 @@ import Testing
         #expect(result.object?["appRunning"] as? Bool == false)
     }
 
+    @Test func offlineStatusPreservesRawOrphanedActiveState() async throws {
+        await CLIProbe.inWorld { world in
+            world.shared.set(false, forKey: LidAwakeState.enabledKey)
+            world.shared.set(true, forKey: LidAwakeState.activeKey)
+
+            let result = await CLIProbe.capture(["lid-awake", "status", "--json"])
+
+            #expect(result.code == 0)
+            #expect(result.object?["extensionEnabled"] as? Bool == false)
+            #expect(result.object?["active"] as? Bool == true)
+        }
+    }
+
     @Test func onNeedsTheMenuBarApp() async {
         let result = await CLIProbe.run(["lid-awake", "on"])
         #expect(result.code == ExitCodes.unavailable)
@@ -81,7 +102,9 @@ import Testing
             world.helperRunning(true)
             world.answers { name in
                 name == IPC.Name.lidAwakeActionResult
-                    ? Self.liveReply(active: true, session: .thirtyMinutes) : nil
+                    ? Self.liveReply(
+                        active: true, session: .thirtyMinutes,
+                        requestID: Self.requestID(in: world)) : nil
             }
             let result = await CLIProbe.capture([
                 "lid-awake", "on", "--for", "30m", "--json",
@@ -94,6 +117,13 @@ import Testing
             #expect(
                 world.posted.first?.info[LidAwakeIPC.sessionKey] as? String
                     == LidAwakeSession.thirtyMinutes.rawValue)
+            #expect(
+                UUID(
+                    uuidString: world.posted.first?.info[LidAwakeIPC.requestIDKey] as? String ?? "")
+                    != nil)
+            #expect(
+                (world.posted.first?.info[LidAwakeIPC.deadlineKey] as? TimeInterval ?? 0)
+                    > Date().timeIntervalSince1970)
         }
     }
 
@@ -101,7 +131,9 @@ import Testing
         await CLIProbe.inWorld { world in
             world.helperRunning(true)
             world.answers { _ in
-                Self.liveReply(active: true, session: .untilLidReopens)
+                Self.liveReply(
+                    active: true, session: .untilLidReopens,
+                    requestID: Self.requestID(in: world))
             }
             let result = await CLIProbe.capture([
                 "lid-awake", "on", "--until-lid-reopens",
@@ -116,7 +148,9 @@ import Testing
     @Test func offWaitsForTheRuntimeResult() async throws {
         await CLIProbe.inWorld { world in
             world.helperRunning(true)
-            world.answers { _ in Self.liveReply(active: false) }
+            world.answers { _ in
+                Self.liveReply(active: false, requestID: Self.requestID(in: world))
+            }
             let result = await CLIProbe.capture(["lid-awake", "off", "--json"])
             #expect(result.code == 0)
             #expect(result.object?["active"] as? Bool == false)
@@ -128,11 +162,62 @@ import Testing
         await CLIProbe.inWorld { world in
             world.helperRunning(true)
             world.answers { _ in
-                [LidAwakeIPC.okKey: false, LidAwakeIPC.errorKey: "pmset refused"]
+                [
+                    LidAwakeIPC.okKey: false,
+                    LidAwakeIPC.errorKey: "pmset refused",
+                    LidAwakeIPC.requestIDKey: Self.requestID(in: world) ?? "",
+                ]
             }
             let result = await CLIProbe.capture(["lid-awake", "on"])
             #expect(result.code == ExitCodes.failure)
             #expect(result.stderr.contains("pmset refused"))
+        }
+    }
+
+    @Test func extensionDisableWaitsForCorrelatedSafetyRestoration() async throws {
+        await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: LidAwakeState.enabledKey)
+            world.shared.set(true, forKey: LidAwakeState.activeKey)
+            world.helperRunning(true)
+            world.answers { _ in
+                guard
+                    world.postedPayloads(for: IPC.Name.requestLidAwakeAction).last?[
+                        LidAwakeIPC.actionKey] as? String
+                        == LidAwakeIPC.Action.disableExtension.rawValue
+                else { return nil }
+                world.shared.set(false, forKey: LidAwakeState.enabledKey)
+                world.shared.set(false, forKey: LidAwakeState.activeKey)
+                return Self.liveReply(
+                    active: false, extensionEnabled: false,
+                    requestID: Self.requestID(in: world))
+            }
+
+            let result = await CLIProbe.capture([
+                "extensions", "disable", "lidAwake", "--json",
+            ])
+
+            #expect(result.code == 0)
+            #expect(result.object?["enabled"] as? Bool == false)
+            #expect(!world.shared.bool(forKey: LidAwakeState.enabledKey))
+            #expect(
+                world.posted.first?.info[LidAwakeIPC.actionKey] as? String
+                    == LidAwakeIPC.Action.disableExtension.rawValue)
+        }
+    }
+
+    @Test func extensionDisableRefusesUnsafeOfflineMutation() async throws {
+        await CLIProbe.inWorld { world in
+            world.shared.set(false, forKey: LidAwakeState.enabledKey)
+            world.shared.set(true, forKey: LidAwakeState.activeKey)
+
+            let result = await CLIProbe.capture([
+                "extensions", "disable", "lidAwake", "--json",
+            ])
+
+            #expect(result.code == ExitCodes.unavailable)
+            #expect(result.stderr.contains("normal sleep can be restored"))
+            #expect(!world.shared.bool(forKey: LidAwakeState.enabledKey))
+            #expect(world.postedNames().isEmpty)
         }
     }
 
