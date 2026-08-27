@@ -21,7 +21,7 @@ final class CommandBarModel {
     @ObservationIgnored var dismiss: () -> Void = {}
     @ObservationIgnored private var applications: [CommandBarApplication] = []
     @ObservationIgnored private var applicationTask: Task<Void, Never>?
-    @ObservationIgnored private var searchTask: Task<Void, Never>?
+    @ObservationIgnored private var searchWork: Task<Void, Never>?
     @ObservationIgnored private var searchGeneration = 0
     @ObservationIgnored private var usage = CommandBarUsage()
 
@@ -47,8 +47,8 @@ final class CommandBarModel {
         copiedAnswer = false
         applicationTask?.cancel()
         applicationTask = nil
-        searchTask?.cancel()
-        searchTask = nil
+        searchWork?.cancel()
+        searchWork = nil
         searchGeneration += 1
         loadingApplications = false
     }
@@ -111,12 +111,11 @@ final class CommandBarModel {
     }
 
     private func refresh() {
-        searchTask?.cancel()
+        searchWork?.cancel()
         searchGeneration += 1
         let generation = searchGeneration
         let base = actionItems() + applicationItems()
-        var byID: [String: CommandBarItem] = [:]
-        for item in base { byID[item.id] = item }
+        let byID = Self.indexed(items: base)
         let candidates = Self.candidates(in: base)
         let ranking = learnsRanking ? usage : CommandBarUsage()
         let query = query
@@ -138,27 +137,37 @@ final class CommandBarModel {
             items = []
         }
         selectedIndex = 0
-        searchTask = Task.detached(priority: .userInitiated) { [weak self] in
-            let rankedIDs = CommandBarSearch.rank(
-                candidates, query: query, usage: ranking, limit: 12
-            ).map(\.id)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                guard let self, !Task.isCancelled, self.searchGeneration == generation else {
-                    return
-                }
-                var ranked: [CommandBarItem] = []
-                for id in rankedIDs {
-                    guard let item = byID[id] else { continue }
-                    ranked.append(item)
-                }
-                if let answerItem { ranked.insert(answerItem, at: 0) }
-                if ranked.count > 12 { ranked.removeLast() }
-                self.items = ranked
-                self.selectedIndex = min(self.selectedIndex, max(0, ranked.count - 1))
-                self.searchTask = nil
+        searchWork = Task { [weak self] in
+            let rankingTask = Task.detached(priority: .userInitiated) {
+                CommandBarSearch.rank(
+                    candidates, query: query, usage: ranking, limit: 12
+                ).map(\.id)
             }
+            let rankedIDs = await withTaskCancellationHandler {
+                await rankingTask.value
+            } onCancel: {
+                rankingTask.cancel()
+            }
+            guard let self, generation == self.searchGeneration, !Task.isCancelled else { return }
+            var ranked: [CommandBarItem] = []
+            for id in rankedIDs {
+                guard let item = byID[id] else { continue }
+                ranked.append(item)
+            }
+            if let answerItem { ranked.insert(answerItem, at: 0) }
+            if ranked.count > 12 { ranked.removeLast() }
+            self.items = ranked
+            self.selectedIndex = min(self.selectedIndex, max(0, ranked.count - 1))
+            self.searchWork = nil
         }
+    }
+
+    private nonisolated static func indexed(
+        items: [CommandBarItem]
+    ) -> [String: CommandBarItem] {
+        var result: [String: CommandBarItem] = [:]
+        for item in items { result[item.id] = item }
+        return result
     }
 
     private nonisolated static func candidates(
