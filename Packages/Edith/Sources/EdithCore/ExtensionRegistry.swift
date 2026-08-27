@@ -172,6 +172,12 @@ public enum ExtensionRegistry {
             defaultsKey: "tabMusicEnabled", requiredCapabilities: [.localMusicPlayback],
             optionalCapabilities: [.mediaControls], optionalToolIDs: ["yt-dlp"]),
         ExtensionRegistryEntry(
+            id: "mediaToolkit", title: "Media Toolkit",
+            subtitle: "Batch-convert images and compress videos locally.",
+            symbolName: "photo.stack", group: .media, featured: true,
+            defaultsKey: "tabMediaToolkitEnabled",
+            requiredCapabilities: [.localMediaProcessing]),
+        ExtensionRegistryEntry(
             id: "calendar", title: "Calendar",
             subtitle: "Shows your schedule in the panel and the app.",
             symbolName: "calendar", group: .media, featured: false,

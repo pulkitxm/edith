@@ -147,6 +147,9 @@ public enum UserOperationCatalog {
         + WorkspaceOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + MediaToolkitOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
 
     private static let remoteFileRegistrations: [RegisteredUserOperation] =
         UsageCollectionOperation.allCases.map {
@@ -1438,5 +1441,20 @@ private extension MachineFileOperation {
 private extension CompanionMindRuntimeOperation {
     var interfaceExposure: UserOperationExposure {
         .userInterface(placements)
+    }
+}
+
+private extension MediaToolkitOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .convertImages:
+            userInterface(
+                "Media Toolkit", "convert selected images",
+                ["~/Pictures/input.png", "--to", "~/Pictures/Converted"])
+        case .compressVideo:
+            userInterface(
+                "Media Toolkit", "compress the selected video",
+                ["~/Movies/input.mov", "--to", "~/Movies", "--target-mb", "20"])
+        }
     }
 }

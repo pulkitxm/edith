@@ -15,6 +15,7 @@ public enum PlatformCapability: String, CaseIterable, Codable, Hashable, Sendabl
     case globalShortcuts
     case inputSuppression
     case localMusicPlayback
+    case localMediaProcessing
     case localTerminal
     case machineManagement
     case mediaControls

@@ -10,6 +10,11 @@ public enum SharedDefaults {
         CompletionScripts.autoRefreshKey: true,
         MusicFade.enabledKey: true,
         MusicFade.secondsKey: MusicFade.defaultSeconds,
+        AppStorageKeys.MediaToolkit.imageFormat: MediaImageFormat.jpeg.rawValue,
+        AppStorageKeys.MediaToolkit.imageMaxDimension: 1600,
+        AppStorageKeys.MediaToolkit.imageQuality: 0.82,
+        AppStorageKeys.MediaToolkit.videoKeepAudio: true,
+        AppStorageKeys.MediaToolkit.videoTargetMegabytes: 20,
     ]
     public static let store: UserDefaults = {
         let store = UserDefaults(suiteName: activeSuiteName) ?? .standard
