@@ -629,9 +629,20 @@ private struct ExtensionLifecycleRows: View {
                     ForEach(report.checks) { check in
                         checkRow(check)
                     }
-                    Button("Check again") {
+                    Button {
                         readiness.refresh(.verify)
+                    } label: {
+                        if readiness.isRefreshing {
+                            HStack(spacing: UIScale.pt(6)) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Checking...")
+                            }
+                        } else {
+                            Text("Check again")
+                        }
                     }
+                    .disabled(readiness.isRefreshing)
                 } else {
                     let loading = ExtensionLifecycleState.loading(extensionID: entry.id)
                     HStack(spacing: UIScale.pt(8)) {
