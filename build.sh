@@ -118,11 +118,23 @@ fi
 CONFIG=Debug
 [ "$RELEASE" = 1 ] && CONFIG=Release
 
+BUILD_JOBS="${EDITH_BUILD_JOBS:-}"
+XCODE_JOBS=()
+SWIFT_JOBS=()
+if [ -n "$BUILD_JOBS" ]; then
+  case "$BUILD_JOBS" in
+    *[!0-9]*|0) echo "EDITH_BUILD_JOBS must be a positive integer" >&2; exit 1 ;;
+  esac
+  XCODE_JOBS=(-jobs "$BUILD_JOBS")
+  SWIFT_JOBS=(--jobs "$BUILD_JOBS")
+fi
+
 TEAM_ID=""
 [ "$SIGN_IDENTITY" = "-" ] || TEAM_ID="$(team_id_for "$SIGN_IDENTITY" || true)"
 
 DERIVED=build
 xcodebuild -project edth.xcodeproj -scheme EdithMain -configuration "$CONFIG" \
+  "${XCODE_JOBS[@]}" \
   -derivedDataPath "$DERIVED" \
   -destination 'platform=macOS,arch=arm64' \
   -quiet \
@@ -143,9 +155,10 @@ SWIFT_BIN="$(DEVELOPER_DIR="$DEVELOPER_DIR" xcrun --find swift)"
 SWIFT_CONFIGURATION=debug
 [ "$CONFIG" = Release ] && SWIFT_CONFIGURATION=release
 "$SWIFT_BIN" build --package-path Packages/Edith --configuration "$SWIFT_CONFIGURATION" \
-  --product EdithLidAwakeHelper
+  "${SWIFT_JOBS[@]}" --product EdithLidAwakeHelper
 PRIVILEGED_HELPER_BUILD="$($SWIFT_BIN build --package-path Packages/Edith \
-  --configuration "$SWIFT_CONFIGURATION" --show-bin-path)/EdithLidAwakeHelper"
+  --configuration "$SWIFT_CONFIGURATION" "${SWIFT_JOBS[@]}" \
+  --show-bin-path)/EdithLidAwakeHelper"
 
 APP="dist/Edith.app"
 HELPER="$APP/Contents/Library/LoginItems/Edith.app"
