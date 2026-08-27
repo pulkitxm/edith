@@ -31,8 +31,12 @@ enum HerdrAgentWindow {
         window.isReleasedWhenClosed = false
         window.contentMinSize = NSSize(width: 560, height: 360)
         window.tabbingMode = .disallowed
+        if !agent.isTerminal {
+            addViewControls(to: window, store: store, agentID: agent.id)
+        }
         let hosting = NSHostingController(
-            rootView: HerdrDetachedView(store: store, tab: tab, launchEnabled: launchEnabled))
+            rootView: HerdrDetachedView(
+                store: store, agentID: tab.id, launchEnabled: launchEnabled))
         hosting.sizingOptions = []
         window.contentViewController = hosting
         window.setContentSize(NSSize(width: 1000, height: 640))
@@ -42,6 +46,21 @@ enum HerdrAgentWindow {
         windows[agent.id] = window
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    static func addViewControls(
+        to window: NSWindow, store: HerdrStore, agentID: String
+    ) {
+        let accessory = NSTitlebarAccessoryViewController()
+        accessory.layoutAttribute = .right
+        let hosting = NSHostingView(
+            rootView: HerdrTitlebarViewPicker(store: store, agentID: agentID)
+                .frame(width: 228, height: 28)
+                .padding(.trailing, 8)
+        )
+        hosting.frame = NSRect(x: 0, y: 0, width: 236, height: 28)
+        accessory.view = hosting
+        window.addTitlebarAccessoryViewController(accessory)
     }
 
     static func forget(_ window: NSWindow) -> String? {
@@ -66,11 +85,98 @@ final class HerdrAgentWindowDelegate: NSObject, NSWindowDelegate {
 
 private struct HerdrDetachedView: View {
     let store: HerdrStore
-    let tab: HerdrOpenTab
+    let agentID: String
     let launchEnabled: Bool
 
     var body: some View {
-        HerdrSessionView(store: store, tab: tab, launchEnabled: launchEnabled)
-            .environment(\.terminalLaunchEnabled, launchEnabled)
+        if let tab = store.detachedTab(id: agentID) {
+            HerdrSessionView(store: store, tab: tab, launchEnabled: launchEnabled)
+                .environment(\.terminalLaunchEnabled, launchEnabled)
+        }
+    }
+}
+
+struct HerdrTitlebarViewPicker: View {
+    let store: HerdrStore
+    let agentID: String
+
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        AppTheme.accent.rawValue
+    @Environment(\.colorScheme) private var scheme
+
+    private var selection: HerdrAgentView {
+        store.detachedTab(id: agentID)?.view ?? .agent
+    }
+
+    private var theme: AppTheme { AppTheme(storedName: themeName) }
+    private var dark: Bool { scheme == .dark }
+    private var accent: Color { DashSkin.accent(dark, theme: theme) }
+
+    var body: some View {
+        HStack(spacing: UIScale.pt(2)) {
+            ForEach([HerdrAgentView.agent, .split, .diff], id: \.self) { mode in
+                HerdrTitlebarViewButton(
+                    mode: mode,
+                    selected: selection == mode,
+                    dark: dark,
+                    theme: theme
+                ) {
+                    store.setView(mode, for: agentID)
+                }
+            }
+        }
+        .padding(UIScale.pt(2))
+        .widgetBar(
+            cornerRadius: 8,
+            fill: DashSkin.paper(dark, theme: theme),
+            stroke: accent.opacity(dark ? 0.5 : 0.35)
+        )
+        .tint(accent)
+        .help("Choose the agent, split, or diff view")
+    }
+}
+
+private struct HerdrTitlebarViewButton: View {
+    let mode: HerdrAgentView
+    let selected: Bool
+    let dark: Bool
+    let theme: AppTheme
+    let select: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovered = false
+
+    private var accent: Color { DashSkin.accent(dark, theme: theme) }
+    private var foreground: Color {
+        selected ? accent : DashSkin.ink(dark, theme: theme).opacity(hovered ? 0.92 : 0.68)
+    }
+
+    var body: some View {
+        Button(action: select) {
+            Label(mode.shortTitle, systemImage: mode.icon)
+                .font(.system(size: UIScale.pt(10), weight: selected ? .semibold : .medium))
+                .foregroundStyle(foreground)
+                .padding(.horizontal, UIScale.pt(7))
+                .frame(maxWidth: .infinity, minHeight: UIScale.pt(22))
+                .background(
+                    selected
+                        ? accent.opacity(dark ? 0.24 : 0.16)
+                        : accent.opacity(hovered ? (dark ? 0.12 : 0.08) : 0),
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: UIScale.pt(6))
+                        .strokeBorder(
+                            accent.opacity(selected ? (dark ? 0.78 : 0.62) : 0),
+                            lineWidth: UIScale.pt(1))
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.borderless, selected: selected, tint: accent))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .help(mode.title)
+        .onHover { hovered = $0 }
+        .animation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: hovered)
+        .animation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: selected)
     }
 }

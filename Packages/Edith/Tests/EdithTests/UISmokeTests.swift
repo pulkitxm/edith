@@ -285,6 +285,54 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(renders(TitlebarChrome(height: 52, width: 200), width: 220, height: 60))
     }
 
+    @Test func herdrTitlebarViewPickerRenders() {
+        #expect(
+            renders(
+                HerdrTitlebarViewPicker(store: HerdrStore(), agentID: "agent"),
+                width: 240, height: 40))
+    }
+
+    @Test func herdrTitlebarViewPickerRendersEveryThemeDistinctly() throws {
+        let key = AppStorageKeys.General.theme
+        let saved = SharedDefaults.store.object(forKey: key)
+        defer {
+            if let saved {
+                SharedDefaults.store.set(saved, forKey: key)
+            } else {
+                SharedDefaults.store.removeObject(forKey: key)
+            }
+        }
+        var appearances = Set<Data>()
+        for theme in AppTheme.allCases {
+            SharedDefaults.store.set(theme.rawValue, forKey: key)
+            let bitmap = try #require(
+                renderedBitmap(
+                    HerdrTitlebarViewPicker(store: HerdrStore(), agentID: "agent"),
+                    width: 240, height: 40))
+            appearances.insert(try #require(bitmap.representation(using: .png, properties: [:])))
+        }
+        #expect(appearances.count == AppTheme.allCases.count)
+    }
+
+    @Test func herdrViewPickerUsesTheRightTitlebarAccessory() throws {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
+            styleMask: [.titled, .closable, .resizable, .miniaturizable],
+            backing: .buffered, defer: false)
+        defer { window.orderOut(nil) }
+
+        HerdrAgentWindow.addViewControls(
+            to: window, store: HerdrStore(), agentID: "agent")
+
+        let accessory = try #require(window.titlebarAccessoryViewControllers.first)
+        #expect(window.titlebarAccessoryViewControllers.count == 1)
+        #expect(accessory.layoutAttribute == .right)
+        #expect(accessory.view.frame.width == 236)
+        #expect(accessory.view.frame.height >= 28)
+        #expect(accessory.view.fittingSize.width >= 228)
+        #expect(accessory.view.fittingSize.height <= 36)
+    }
+
     @Test func panelTabBarRenders() {
         let tabs: [(id: String, title: String)] = allTabs.map { ($0.id, $0.title) }
         #expect(

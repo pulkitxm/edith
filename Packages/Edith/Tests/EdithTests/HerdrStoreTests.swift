@@ -288,6 +288,19 @@ private actor HerdrWatchHarness {
         #expect(HerdrAgentViews.view(for: claude.id, defaults) == .agent)
     }
 
+    @Test func detachedAgentSwitchesViewsImmediately() throws {
+        let defaults = Self.scratchDefaults()
+        let store = HerdrStore(defaults: defaults)
+        let claude = agent("Claude Code", pane: "a")
+        _ = store.detachedTab(for: claude)
+
+        store.setView(.split, for: claude.id)
+
+        #expect(store.view(for: claude.id) == .split)
+        #expect(try #require(store.detachedTab(id: claude.id)).view == .split)
+        #expect(HerdrAgentViews.view(for: claude.id, defaults) == .split)
+    }
+
     @Test func openingAnAlreadyOpenAgentSwitchesItsView() {
         let defaults = Self.scratchDefaults()
         let store = HerdrStore(defaults: defaults)
