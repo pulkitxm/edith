@@ -282,7 +282,8 @@ private extension TextUtilityOperation {
     var interfaceExposure: UserOperationExposure {
         switch self {
         case .cleanURL:
-            userInterface("Text Utilities settings", "clean a URL", ["https://example.com/?utm_source=x"])
+            userInterface(
+                "Text Utilities settings", "clean a URL", ["https://example.com/?utm_source=x"])
         case .pastePlain:
             userInterface("Text Utilities settings", "paste clipboard text without formatting")
         case .listSnippets:
@@ -290,7 +291,8 @@ private extension TextUtilityOperation {
         case .addSnippet:
             userInterface("Text Utilities settings", "add a snippet", [";sig", "Thanks"])
         case .updateSnippet:
-            userInterface("Text Utilities settings", "edit a snippet", ["1", "--name", "Signature"])
+            userInterface(
+                "Text Utilities settings", "edit a snippet", ["1", "--name", "Signature"])
         case .removeSnippet:
             userInterface("Text Utilities settings", "remove a snippet", ["1", "--yes"])
         }

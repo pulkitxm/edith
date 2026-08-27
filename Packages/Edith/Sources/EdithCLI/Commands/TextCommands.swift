@@ -112,15 +112,19 @@ struct TextStatusCommand: AsyncParsableCommand {
             CLIOut.out(
                 TextTable.render(
                     headers: ["EXTENSION", "SNIPPETS", "CLEAN URLS", "AUTO CLEAR", "SHORTCUT"],
-                    rows: [[
-                        defaults.bool(forKey: AppStorageKeys.TextUtilities.enabled) ? "on" : "off",
-                        String(TextCLI.snippets.count),
-                        defaults.bool(forKey: AppStorageKeys.TextUtilities.cleanCopiedURLs)
-                            ? "on" : "off",
-                        defaults.bool(forKey: AppStorageKeys.TextUtilities.autoClearEnabled)
-                            ? "on" : "off",
-                        defaults.string(forKey: AppStorageKeys.TextUtilities.hotKeyLabel) ?? "⌃⌥⌘V",
-                    ]]))
+                    rows: [
+                        [
+                            defaults.bool(forKey: AppStorageKeys.TextUtilities.enabled)
+                                ? "on" : "off",
+                            String(TextCLI.snippets.count),
+                            defaults.bool(forKey: AppStorageKeys.TextUtilities.cleanCopiedURLs)
+                                ? "on" : "off",
+                            defaults.bool(forKey: AppStorageKeys.TextUtilities.autoClearEnabled)
+                                ? "on" : "off",
+                            defaults.string(forKey: AppStorageKeys.TextUtilities.hotKeyLabel)
+                                ?? "⌃⌥⌘V",
+                        ]
+                    ]))
         }
     }
 }
@@ -142,8 +146,9 @@ struct TextCleanURLCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let configured = CLIEnvironment.sharedDefaults.string(
-                forKey: AppStorageKeys.TextUtilities.customTrackingParameters) ?? ""
+            let configured =
+                CLIEnvironment.sharedDefaults.string(
+                    forKey: AppStorageKeys.TextUtilities.customTrackingParameters) ?? ""
             let custom = TextUtilitiesSupport.customParameters(parameters ?? configured)
             guard let result = TextUtilitiesSupport.cleanURL(value, customParameters: custom) else {
                 throw CLIFailure.usage(
@@ -174,8 +179,9 @@ struct TextPastePlainCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            guard CLIEnvironment.sharedDefaults.bool(
-                forKey: AppStorageKeys.TextUtilities.enabled)
+            guard
+                CLIEnvironment.sharedDefaults.bool(
+                    forKey: AppStorageKeys.TextUtilities.enabled)
             else {
                 throw CLIFailure.unavailable(
                     "the Text Utilities extension is off",
@@ -184,7 +190,8 @@ struct TextPastePlainCommand: AsyncParsableCommand {
             try AppBridge.requireHelper("plain-text paste")
             AppBridge.post(IPC.Name.requestPlainTextPaste)
             if json {
-                CLIOut.json(.object(["requested": .bool(true), "operation": .string("text.paste-plain")]))
+                CLIOut.json(
+                    .object(["requested": .bool(true), "operation": .string("text.paste-plain")]))
             } else {
                 CLIOut.out("requested plain-text paste")
             }
@@ -219,9 +226,10 @@ struct TextSnippetListCommand: AsyncParsableCommand {
             let all = TextCLI.snippets
             let rows = all.enumerated().filter { _, snippet in
                 let folderMatches = folder.map { snippet.folder == $0 } ?? true
-                let queryMatches = search.map {
-                    TextUtilitiesSupport.sections([snippet], query: $0).isEmpty == false
-                } ?? true
+                let queryMatches =
+                    search.map {
+                        TextUtilitiesSupport.sections([snippet], query: $0).isEmpty == false
+                    } ?? true
                 return folderMatches && queryMatches
             }
             guard !json else {
@@ -316,8 +324,9 @@ struct TextSnippetSetCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            guard [name, trigger, replacement, folder, mode].contains(where: { $0 != nil })
-                || ignoreCase != nil || enabled != nil
+            guard
+                [name, trigger, replacement, folder, mode].contains(where: { $0 != nil })
+                    || ignoreCase != nil || enabled != nil
             else {
                 throw CLIFailure.usage("pass at least one value to change")
             }
@@ -333,9 +342,11 @@ struct TextSnippetSetCommand: AsyncParsableCommand {
             if let mode { snippet.expansion = try TextCLI.expansion(mode) }
             if let ignoreCase { snippet.ignoresCase = ignoreCase }
             if let enabled { snippet.enabled = enabled }
-            guard !snippets.enumerated().contains(where: {
-                $0.offset != index - 1 && $0.element.trigger == snippet.trigger
-            }) else {
+            guard
+                !snippets.enumerated().contains(where: {
+                    $0.offset != index - 1 && $0.element.trigger == snippet.trigger
+                })
+            else {
                 throw CLIFailure.usage("the trigger \(snippet.trigger) already exists")
             }
             snippets[index - 1] = snippet

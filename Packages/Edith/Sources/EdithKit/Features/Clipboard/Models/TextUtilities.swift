@@ -160,7 +160,8 @@ public enum TextUtilitiesSupport {
         ]
         for (name, format) in formats {
             result = result.replacingOccurrences(
-                of: "{{\(name)}}", with: formatted(date, format: format, locale: locale, timeZone: timeZone))
+                of: "{{\(name)}}",
+                with: formatted(date, format: format, locale: locale, timeZone: timeZone))
         }
         let expression = try? NSRegularExpression(pattern: #"\{\{(date|time):([^{}]+)\}\}"#)
         let range = NSRange(result.startIndex..., in: result)
@@ -175,7 +176,9 @@ public enum TextUtilitiesSupport {
         return result
     }
 
-    public static func sections(_ snippets: [TextSnippet], query: String = "") -> [TextSnippetSection] {
+    public static func sections(_ snippets: [TextSnippet], query: String = "")
+        -> [TextSnippetSection]
+    {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let visible = snippets.filter {
             needle.isEmpty || $0.name.localizedCaseInsensitiveContains(needle)
@@ -216,9 +219,11 @@ public enum TextUtilitiesSupport {
             && now.timeIntervalSince(changedAt) >= delay
     }
 
-    private static func suffix(_ value: String, matches trigger: String, ignoresCase: Bool) -> Bool {
+    private static func suffix(_ value: String, matches trigger: String, ignoresCase: Bool) -> Bool
+    {
         let options: String.CompareOptions = ignoresCase ? [.caseInsensitive] : []
-        return value.range(of: trigger, options: options.union(.backwards))?.upperBound == value.endIndex
+        return value.range(of: trigger, options: options.union(.backwards))?.upperBound
+            == value.endIndex
     }
 
     private static func formatted(

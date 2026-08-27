@@ -606,7 +606,8 @@ public enum ExtensionLifecycleCatalog {
                     "ed permissions ls --json")
             ],
             examples: [
-                "ed extensions enable textUtilities", "ed text clean-url https://example.com/?utm_source=x",
+                "ed extensions enable textUtilities",
+                "ed text clean-url https://example.com/?utm_source=x",
                 "ed text snippets ls --json",
             ],
             docs: [documentation("guide", "Text Utilities guide", "docs/cli/text/README.md")],

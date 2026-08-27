@@ -184,9 +184,11 @@ final class ClipboardStore: FeatureModule {
         else { return }
         let delay = TextUtilitiesSupport.clampedAutoClearDelay(
             SharedDefaults.store.integer(forKey: AppStorageKeys.TextUtilities.autoClearDelay))
-        guard TextUtilitiesSupport.shouldAutoClear(
-            observedChangeCount: observedChangeCount, currentChangeCount: pasteboard.changeCount,
-            changedAt: changedAt, now: Date(), delay: TimeInterval(delay))
+        guard
+            TextUtilitiesSupport.shouldAutoClear(
+                observedChangeCount: observedChangeCount,
+                currentChangeCount: pasteboard.changeCount,
+                changedAt: changedAt, now: Date(), delay: TimeInterval(delay))
         else { return }
         clearPasteboard(pasteboard)
     }

@@ -51,9 +51,10 @@ struct ClipboardPasteboardSnapshot {
 
     init(_ pasteboard: NSPasteboard) {
         items = (pasteboard.pasteboardItems ?? []).map { item in
-            Item(values: item.types.compactMap { type in
-                item.data(forType: type).map { (type, $0) }
-            })
+            Item(
+                values: item.types.compactMap { type in
+                    item.data(forType: type).map { (type, $0) }
+                })
         }
     }
 

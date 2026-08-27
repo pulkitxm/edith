@@ -58,8 +58,9 @@ struct TextUtilitiesRows: View {
             if snippets.isEmpty {
                 ContentUnavailableView(
                     "No snippets", systemImage: "text.badge.plus",
-                    description: Text("Create reusable text with folders and dynamic variables."))
-                    .frame(maxWidth: .infinity, minHeight: UIScale.pt(120))
+                    description: Text("Create reusable text with folders and dynamic variables.")
+                )
+                .frame(maxWidth: .infinity, minHeight: UIScale.pt(120))
             } else if filteredSections.isEmpty {
                 ContentUnavailableView.search(text: snippetQuery)
                     .frame(maxWidth: .infinity, minHeight: UIScale.pt(100))
@@ -71,8 +72,10 @@ struct TextUtilitiesRows: View {
         } header: {
             Text("Snippets")
         } footer: {
-            Text("Use {{date}}, {{time}}, {{datetime}}, {{clipboard}}, or a custom format such as {{date:MMM d}}.")
-                .settingsCaption()
+            Text(
+                "Use {{date}}, {{time}}, {{datetime}}, {{clipboard}}, or a custom format such as {{date:MMM d}}."
+            )
+            .settingsCaption()
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
@@ -113,9 +116,10 @@ struct TextUtilitiesRows: View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             Label(
                 section.folder.isEmpty ? "Unfiled" : section.folder,
-                systemImage: section.folder.isEmpty ? "tray" : "folder")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                systemImage: section.folder.isEmpty ? "tray" : "folder"
+            )
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
             ForEach(section.snippets) { snippet in
                 HStack(spacing: UIScale.pt(9)) {
                     Image(systemName: snippet.enabled ? "bolt.fill" : "bolt.slash")
@@ -159,8 +163,10 @@ struct TextUtilitiesRows: View {
             } label: {
                 Label("Paste current clipboard as plain text", systemImage: "doc.on.clipboard")
             }
-            Text("Temporarily pastes only the clipboard text, then restores the original clipboard contents.")
-                .settingsCaption()
+            Text(
+                "Temporarily pastes only the clipboard text, then restores the original clipboard contents."
+            )
+            .settingsCaption()
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
@@ -174,9 +180,11 @@ struct TextUtilitiesRows: View {
                     AppStorageKeys.TextUtilities.cleanCopiedURLs))
             LabeledContent("Extra parameters") {
                 TextField(
-                    "ref, campaign", text: $customTrackingParameters.configured(
-                        AppStorageKeys.TextUtilities.customTrackingParameters))
-                    .multilineTextAlignment(.trailing)
+                    "ref, campaign",
+                    text: $customTrackingParameters.configured(
+                        AppStorageKeys.TextUtilities.customTrackingParameters)
+                )
+                .multilineTextAlignment(.trailing)
             }
             TextField("Paste a URL to clean", text: $URLInput)
                 .textFieldStyle(.roundedBorder)
@@ -195,8 +203,9 @@ struct TextUtilitiesRows: View {
                 Text(
                     URLResult.removedParameters.isEmpty
                         ? "No tracking parameters found."
-                        : "Removed: \(URLResult.removedParameters.joined(separator: ", "))")
-                    .settingsCaption()
+                        : "Removed: \(URLResult.removedParameters.joined(separator: ", "))"
+                )
+                .settingsCaption()
             } else if !URLMessage.isEmpty {
                 Text(URLMessage)
                     .settingsCaption()
@@ -213,17 +222,21 @@ struct TextUtilitiesRows: View {
                 isOn: $autoClearEnabled.configured(
                     AppStorageKeys.TextUtilities.autoClearEnabled))
             Stepper(
-                "Clear after \(autoClearDelay) seconds", value: $autoClearDelay.configured(
-                    AppStorageKeys.TextUtilities.autoClearDelay), in: 5...3_600, step: 5)
-                .disabled(!autoClearEnabled)
+                "Clear after \(autoClearDelay) seconds",
+                value: $autoClearDelay.configured(
+                    AppStorageKeys.TextUtilities.autoClearDelay), in: 5...3_600, step: 5
+            )
+            .disabled(!autoClearEnabled)
             Toggle(
                 "Clear when the screen locks",
                 isOn: $clearOnLock.configured(AppStorageKeys.TextUtilities.clearOnLock))
             Toggle(
                 "Clear before the Mac sleeps",
                 isOn: $clearOnSleep.configured(AppStorageKeys.TextUtilities.clearOnSleep))
-            Text("Only the unchanged clipboard generation is cleared, so newer copies are never erased by an older timer.")
-                .settingsCaption()
+            Text(
+                "Only the unchanged clipboard generation is cleared, so newer copies are never erased by an older timer."
+            )
+            .settingsCaption()
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)

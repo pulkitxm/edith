@@ -20,7 +20,8 @@ final class TextUtilitiesEngine: FeatureModule {
     func syncSettings() {
         snippets = TextUtilitiesSupport.decode(
             SharedDefaults.store.string(forKey: AppStorageKeys.TextUtilities.snippets))
-        let enabled = SharedDefaults.store.bool(forKey: AppStorageKeys.TextUtilities.snippetsEnabled)
+        let enabled = SharedDefaults.store.bool(
+            forKey: AppStorageKeys.TextUtilities.snippetsEnabled)
         if enabled, keyboardMonitor == nil {
             keyboardMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) {
                 [weak self] event in
@@ -70,8 +71,9 @@ final class TextUtilitiesEngine: FeatureModule {
             buffer = TextUtilitiesSupport.appending(buffer, character: character)
             let expansion: TextSnippetExpansion =
                 TextUtilitiesSupport.isDelimiter(character) ? .afterDelimiter : .immediate
-            guard let snippet = TextUtilitiesSupport.match(
-                buffer: buffer, expansion: expansion, snippets: snippets)
+            guard
+                let snippet = TextUtilitiesSupport.match(
+                    buffer: buffer, expansion: expansion, snippets: snippets)
             else { continue }
             expand(snippet, delimiter: expansion == .afterDelimiter ? character : "")
             break
@@ -82,8 +84,9 @@ final class TextUtilitiesEngine: FeatureModule {
         expanding = true
         buffer = ""
         let clipboard = NSPasteboard.general.string(forType: .string)
-        let replacement = TextUtilitiesSupport.expand(
-            snippet.replacement, clipboard: clipboard) + delimiter
+        let replacement =
+            TextUtilitiesSupport.expand(
+                snippet.replacement, clipboard: clipboard) + delimiter
         let deletedCharacters = snippet.trigger.count + delimiter.count
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
             ClipboardPasteSynth.synthesizeDeletes(deletedCharacters)
