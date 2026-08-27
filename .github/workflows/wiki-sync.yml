@@ -20,9 +20,8 @@ jobs:
   sync:
     name: Sync wiki
     runs-on: ubuntu-latest
-    environment: pukbot-production
     permissions:
-      contents: read
+      contents: write
     timeout-minutes: 10
     steps:
       - name: Require main for manual sync
@@ -30,20 +29,12 @@ jobs:
         run: >-
           test "$GITHUB_REF" = refs/heads/main
           || { echo "sync blocked: select the main branch" >&2; exit 1; }
-      - id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
-        with:
-          client-id: ${{ vars.PUKBOT_CLIENT_ID }}
-          private-key: ${{ secrets.PUKBOT_PRIVATE_KEY }}
-          owner: pulkitxm
-          repositories: edith
-          permission-contents: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       - run: bun scripts/sync-wiki.mjs --push
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          GIT_AUTHOR_NAME: "pukbot[bot]"
-          GIT_AUTHOR_EMAIL: "320458784+pukbot[bot]@users.noreply.github.com"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIT_AUTHOR_NAME: "github-actions[bot]"
+          GIT_AUTHOR_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"

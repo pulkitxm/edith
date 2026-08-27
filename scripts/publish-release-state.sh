@@ -83,13 +83,13 @@ case "$MODE" in
     rewrite_cask
     verify_cask
     git \
-      -c user.name="pukbot[bot]" \
-      -c user.email="320458784+pukbot[bot]@users.noreply.github.com" \
+      -c user.name="github-actions[bot]" \
+      -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
       commit Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb \
       -m "Release ${RELEASE_TAG} [skip ci]"
     git \
-      -c user.name="pukbot[bot]" \
-      -c user.email="320458784+pukbot[bot]@users.noreply.github.com" \
+      -c user.name="github-actions[bot]" \
+      -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
       tag -a "$RELEASE_TAG" -m "Edith $RELEASE_TAG build $RELEASE_BUILD"
     if git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"; then
       exit 0
@@ -123,8 +123,8 @@ case "$MODE" in
     fi
 
     git \
-      -c user.name="pukbot[bot]" \
-      -c user.email="320458784+pukbot[bot]@users.noreply.github.com" \
+      -c user.name="github-actions[bot]" \
+      -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
       commit Casks/edith.rb -m "Refresh ${RELEASE_TAG} release checksum"
     git push origin HEAD:main
     ;;

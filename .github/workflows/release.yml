@@ -47,6 +47,8 @@ jobs:
       WORKFLOW_REF: ${{ github.ref }}
       HAS_SIGNING: ${{ secrets.MACOS_CERT_P12 != '' }}
       HAS_SPARKLE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY != '' }}
+      HAS_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN != '' }}
+      HAS_TAP_TOKEN: ${{ secrets.TAP_PUSH_TOKEN != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -76,6 +78,10 @@ jobs:
             || { echo "release blocked: MACOS_CERT_P12 is required" >&2; exit 1; }
           test "$HAS_SPARKLE_KEY" = true \
             || { echo "release blocked: SPARKLE_PRIVATE_KEY is required" >&2; exit 1; }
+          test "$HAS_PUSH_TOKEN" = true \
+            || { echo "release blocked: RELEASE_PUSH_TOKEN is required" >&2; exit 1; }
+          test "$HAS_TAP_TOKEN" = true \
+            || { echo "release blocked: TAP_PUSH_TOKEN is required" >&2; exit 1; }
 
       - name: Resolve the version to release
         id: resolve
@@ -249,12 +255,11 @@ jobs:
     needs: [version, dmg]
     if: needs.dmg.outputs.superseded != 'true'
     runs-on: ubuntu-latest
-    environment: pukbot-production
     concurrency:
       group: release-publication
       cancel-in-progress: false
     permissions:
-      contents: read
+      contents: write
     env:
       REBUILD: ${{ inputs.rebuild }}
       RELEASE_TAG: ${{ needs.version.outputs.tag }}
@@ -262,16 +267,6 @@ jobs:
       RELEASE_BUILD: ${{ needs.version.outputs.build }}
       BUILT_SHA: ${{ needs.version.outputs.sha }}
     steps:
-      - id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
-        with:
-          client-id: ${{ vars.PUKBOT_CLIENT_ID }}
-          private-key: ${{ secrets.PUKBOT_PRIVATE_KEY }}
-          owner: pulkitxm
-          repositories: |
-            edith
-            homebrew-tap
-          permission-contents: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
@@ -281,7 +276,7 @@ jobs:
           ref: ${{ needs.version.outputs.sha }}
           path: release-source
           fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
           persist-credentials: true
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -332,7 +327,7 @@ jobs:
       - name: Publish the release
         if: steps.release_state.outputs.superseded != 'true'
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
@@ -346,18 +341,18 @@ jobs:
       - name: Mirror the cask to the tap repository
         if: steps.release_state.outputs.superseded != 'true'
         env:
-          PUKBOT_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAP_PUSH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
         run: |
           git clone --depth 1 \
-            "https://x-access-token:${PUKBOT_TOKEN}@github.com/pulkitxm/homebrew-tap.git" tap
+            "https://x-access-token:${TAP_PUSH_TOKEN}@github.com/pulkitxm/homebrew-tap.git" tap
           cp release-source/Casks/edith.rb tap/Casks/edith.rb
           cd tap
           if git diff --quiet -- Casks/edith.rb; then
             echo "the tap already carries $RELEASE_TAG"
             exit 0
           fi
-          git config user.name "pukbot[bot]"
-          git config user.email "320458784+pukbot[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Casks/edith.rb
           git commit -m "Update the Edith cask to ${RELEASE_TAG}"
           git push origin HEAD:main
