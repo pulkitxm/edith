@@ -647,6 +647,9 @@ public enum CommandTree {
                 "media", "Convert images and compress videos locally.",
                 children: [
                     CommandNode(
+                        "status", "Show Media Toolkit defaults and supported formats.",
+                        options: common),
+                    CommandNode(
                         "convert-images", "Convert and resize one or more images.",
                         options: [
                             "--json", "--help", "--to", "--format", "--quality",

@@ -22,6 +22,19 @@ enum JSONContract {
         JSONCase("ed guide", ["guide", "--json"]),
         JSONCase("ed version", ["version", "--json"]),
         JSONCase("ed status", ["status", "--json"]),
+        JSONCase("ed media status", ["media", "status", "--json"]),
+        JSONCase(
+            "ed media convert-images",
+            [
+                "media", "convert-images", "/path/that/does/not/exist.png", "--to", "/tmp",
+                "--json",
+            ]),
+        JSONCase(
+            "ed media compress-video",
+            [
+                "media", "compress-video", "/path/that/does/not/exist.mov", "--to", "/tmp",
+                "--json",
+            ]),
         JSONCase(
             "ed maintenance inventory", ["maintenance", "inventory", "--no-updates", "--json"]),
         JSONCase(

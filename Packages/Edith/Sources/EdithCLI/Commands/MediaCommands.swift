@@ -6,7 +6,64 @@ struct MediaCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "media",
         abstract: "Convert images and compress videos locally.",
-        subcommands: [MediaConvertImagesCommand.self, MediaCompressVideoCommand.self])
+        subcommands: [
+            MediaStatusCommand.self, MediaConvertImagesCommand.self,
+            MediaCompressVideoCommand.self,
+        ],
+        defaultSubcommand: MediaStatusCommand.self)
+}
+
+struct MediaStatusCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "status", abstract: "Show Media Toolkit defaults and supported formats.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let defaults = CLIEnvironment.sharedDefaults
+            let enabled =
+                defaults.object(forKey: AppStorageKeys.Tabs.mediaToolkitEnabled) as? Bool ?? false
+            let format =
+                defaults.string(forKey: AppStorageKeys.MediaToolkit.imageFormat)
+                ?? MediaImageFormat.jpeg.rawValue
+            let maxDimension =
+                defaults.object(forKey: AppStorageKeys.MediaToolkit.imageMaxDimension) as? Int
+                ?? 1600
+            let quality =
+                defaults.object(forKey: AppStorageKeys.MediaToolkit.imageQuality) as? Double
+                ?? 0.82
+            let targetMegabytes =
+                defaults.object(forKey: AppStorageKeys.MediaToolkit.videoTargetMegabytes) as? Int
+                ?? 20
+            let keepAudio =
+                defaults.object(forKey: AppStorageKeys.MediaToolkit.videoKeepAudio) as? Bool
+                ?? true
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "enabled": .bool(enabled),
+                        "image": .object([
+                            "format": .string(format),
+                            "formats": .strings(MediaImageFormat.allCases.map(\.rawValue)),
+                            "maxDimension": .int(maxDimension),
+                            "quality": .double(quality),
+                        ]),
+                        "video": .object([
+                            "keepAudio": .bool(keepAudio),
+                            "targetMegabytes": .int(targetMegabytes),
+                        ]),
+                    ]))
+                return
+            }
+            CLIOut.out("Media Toolkit: \(enabled ? "on" : "off")")
+            CLIOut.out(
+                "Images: \(format), \(maxDimension == 0 ? "original size" : "\(maxDimension) px"), \(Int(quality * 100))% quality"
+            )
+            CLIOut.out("Video: \(targetMegabytes) MB, audio \(keepAudio ? "kept" : "removed")")
+        }
+    }
 }
 
 enum MediaCLI {

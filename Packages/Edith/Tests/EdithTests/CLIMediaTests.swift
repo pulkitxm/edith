@@ -7,6 +7,19 @@ import UniformTypeIdentifiers
 @testable import EdithCLI
 
 @Suite struct CLIMediaTests {
+    @Test func bareCommandReportsDefaultsAsHumanTextOrJSON() async {
+        let human = await CLIProbe.run(["media"])
+        let json = await CLIProbe.run(["media", "--json"])
+
+        #expect(human.code == 0)
+        #expect(human.stdout.contains("Media Toolkit: off"))
+        #expect(json.code == 0)
+        #expect(json.object?["enabled"] as? Bool == false)
+        #expect((json.object?["image"] as? [String: Any])?["format"] as? String == "jpeg")
+        #expect(
+            (json.object?["video"] as? [String: Any])?["targetMegabytes"] as? Int == 20)
+    }
+
     @Test func parserExposesBothMediaOperations() throws {
         let images = try #require(
             try EdRoot.parseAsRoot([
