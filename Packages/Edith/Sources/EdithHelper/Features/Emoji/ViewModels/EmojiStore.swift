@@ -21,16 +21,6 @@ final class EmojiStore: FeatureModule {
     private var settingsObserver: NSObjectProtocol?
     private let typeCharacter: @MainActor (String) -> Void
 
-    static let defaultFrequentCount = 10
-    static let maxFrequentCount = 24
-
-    static var frequentCount: Int {
-        let stored =
-            SharedDefaults.store.object(forKey: AppStorageKeys.Emoji.frequentCount) as? Int
-            ?? defaultFrequentCount
-        return min(max(stored, 0), maxFrequentCount)
-    }
-
     required convenience init() {
         self.init(catalog: .shared, typeCharacter: { EmojiTypeSynth.type($0) })
     }
@@ -102,13 +92,13 @@ final class EmojiStore: FeatureModule {
     }
 
     private func refreshFrequent() {
-        let ranked = ledger.ranked(now: Date(), limit: Self.frequentCount)
-        frequent = ranked.compactMap { character in
-            guard let entry = catalog.emoji(matching: character) else { return nil }
-            return Emoji(
-                character: character, name: entry.name, groupIndex: entry.groupIndex,
-                unicodeVersion: entry.unicodeVersion, terms: entry.terms)
-        }
+        frequent = EmojiCatalogSummary.frequent(catalog: catalog, store: SharedDefaults.store)
+            .compactMap { character in
+                guard let entry = catalog.emoji(matching: character) else { return nil }
+                return Emoji(
+                    character: character, name: entry.name, groupIndex: entry.groupIndex,
+                    unicodeVersion: entry.unicodeVersion, terms: entry.terms)
+            }
         revision += 1
     }
 
