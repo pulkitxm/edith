@@ -2,7 +2,7 @@ import Foundation
 
 public enum HerdrLive {
     static let remoteLeaseDuration = Duration.seconds(20)
-    static let fallbackSnapshotDelay = Duration.seconds(2)
+    static let snapshotInterval = Duration.seconds(2)
 
     public static func watch(_ yield: @escaping @Sendable ([HerdrHostSnapshot]) -> Void) async {
         let fleet = FleetBag(yield: yield)
@@ -137,38 +137,6 @@ public enum HerdrLive {
         sessions: SessionBag,
         fleet: FleetBag
     ) async {
-        do {
-            fleet.put(
-                sessions.applySnapshot(
-                    session: socket.name,
-                    text: try await snapshot(path: socket.path, connect: connect)))
-        } catch {
-            fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
-            return
-        }
-
-        let stream: HerdrSocketClient
-        do {
-            stream = try connect(socket.path)
-        } catch {
-            fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
-            return
-        }
-        await withTaskCancellationHandler {
-            defer { stream.close() }
-            do {
-                let events = stream.events
-                try await stream.subscribeBoard()
-                for await line in events {
-                    fleet.put(sessions.applyEvent(session: socket.name, text: line))
-                }
-            } catch {
-                fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
-            }
-        } onCancel: {
-            stream.close()
-        }
-
         while !Task.isCancelled {
             do {
                 fleet.put(
@@ -178,7 +146,7 @@ public enum HerdrLive {
             } catch {
                 fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
             }
-            try? await Task.sleep(for: fallbackSnapshotDelay)
+            try? await Task.sleep(for: snapshotInterval)
         }
     }
 
