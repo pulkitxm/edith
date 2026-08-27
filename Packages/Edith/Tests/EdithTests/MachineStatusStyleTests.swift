@@ -18,6 +18,16 @@ import EdithKit
         #expect(MachineStatusStyle.detail(.connected(latencyMillis: nil)) == "Connected")
     }
 
+    @Test func reconnectDetailsExposeTheLatestFailure() {
+        let state = MachineConnectionState.reconnecting(
+            message: "Connection timed out. Is the machine reachable on this network?")
+
+        #expect(MachineStatusStyle.label(state) == "Reconnecting…")
+        #expect(
+            MachineStatusStyle.detail(state)
+                == "Connection timed out. Is the machine reachable on this network?")
+    }
+
     @Test func clipboardStatesExposeUsefulStatus() {
         #expect(SSHClipboardSyncState.disabled.label == "Clipboard sync disabled")
         #expect(SSHClipboardSyncState.configuring.symbol == "arrow.triangle.2.circlepath")

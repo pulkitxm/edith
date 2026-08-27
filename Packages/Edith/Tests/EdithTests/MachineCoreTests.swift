@@ -1199,7 +1199,8 @@ private actor ProcessReadProbe {
     @Test func staysQuietThroughABlipAndTurnsRedOnAnOutage() {
         for failures in 1...MachineReconnect.quietFailures {
             #expect(
-                MachineReconnect.state(afterFailures: failures, reason: "nope") == .reconnecting)
+                MachineReconnect.state(afterFailures: failures, reason: "nope")
+                    == .reconnecting(message: "nope"))
         }
         #expect(
             MachineReconnect.state(
@@ -1208,10 +1209,11 @@ private actor ProcessReadProbe {
     }
 
     @Test func aQuietReconnectIsBusyAndRetryableButNotConnected() {
-        let state = MachineConnectionState.reconnecting
+        let state = MachineConnectionState.reconnecting(message: "Connection timed out.")
         #expect(state.isBusy)
-        #expect(state.isRetryable)
+        #expect(state.isRetryable == false)
         #expect(state.isConnected == false)
+        #expect(state.failureMessage == "Connection timed out.")
         #expect(MachineConnectionState.connecting.isRetryable == false)
         #expect(MachineConnectionState.disconnected.isRetryable == false)
     }

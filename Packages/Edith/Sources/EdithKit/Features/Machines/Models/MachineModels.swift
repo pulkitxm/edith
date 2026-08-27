@@ -128,7 +128,7 @@ public struct Machine: Codable, Identifiable, Equatable, Hashable, Sendable {
 public enum MachineConnectionState: Equatable, Sendable {
     case disconnected
     case connecting
-    case reconnecting
+    case reconnecting(message: String? = nil)
     case connected(latencyMillis: Double?)
     case failed(message: String, recoverable: Bool)
 
@@ -146,15 +146,17 @@ public enum MachineConnectionState: Equatable, Sendable {
 
     public var isRetryable: Bool {
         switch self {
-        case .reconnecting: return true
         case let .failed(_, recoverable): return recoverable
         default: return false
         }
     }
 
     public var failureMessage: String? {
-        guard case let .failed(message, _) = self else { return nil }
-        return message
+        switch self {
+        case let .reconnecting(message): return message
+        case let .failed(message, _): return message
+        default: return nil
+        }
     }
 }
 
