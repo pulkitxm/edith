@@ -54,6 +54,23 @@ import Testing
         #expect(SettingsBackup.sharedKeys.contains(AppStorageKeys.Quinjet.theme))
     }
 
+    @Test func mouseSettingsAreConfigurableAndBackedUp() {
+        let keys: Set<String> = [
+            AppStorageKeys.Mouse.enabled, AppStorageKeys.Mouse.smoothScroll,
+            AppStorageKeys.Mouse.scrollStep, AppStorageKeys.Mouse.reverseVertical,
+            AppStorageKeys.Mouse.reverseHorizontal, AppStorageKeys.Mouse.focusFollowsPointer,
+            AppStorageKeys.Mouse.focusDelay, AppStorageKeys.Mouse.sideNavigation,
+            AppStorageKeys.Mouse.middleClick, AppStorageKeys.Mouse.button4Action,
+            AppStorageKeys.Mouse.button5Action, AppStorageKeys.Mouse.button6Action,
+            AppStorageKeys.Mouse.button7Action, AppStorageKeys.Mouse.button8Action,
+            AppStorageKeys.Mouse.excludedApps,
+        ]
+
+        #expect(keys.isSubset(of: Set(ConfigCatalog.keys)))
+        #expect(keys.isSubset(of: Set(SettingsBackup.backedKeys)))
+        #expect(keys.isSubset(of: SettingsBackup.sharedKeys))
+    }
+
     @Test func groupsAreDeclaredForEverySetting() {
         for definition in ConfigCatalog.settings {
             #expect(
