@@ -31,8 +31,12 @@ enum HerdrAgentWindow {
         window.isReleasedWhenClosed = false
         window.contentMinSize = NSSize(width: 560, height: 360)
         window.tabbingMode = .disallowed
+        if !agent.isTerminal {
+            addViewControls(to: window, store: store, agentID: agent.id)
+        }
         let hosting = NSHostingController(
-            rootView: HerdrDetachedView(store: store, tab: tab, launchEnabled: launchEnabled))
+            rootView: HerdrDetachedView(
+                store: store, agentID: tab.id, launchEnabled: launchEnabled))
         hosting.sizingOptions = []
         window.contentViewController = hosting
         window.setContentSize(NSSize(width: 1000, height: 640))
@@ -42,6 +46,19 @@ enum HerdrAgentWindow {
         windows[agent.id] = window
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private static func addViewControls(
+        to window: NSWindow, store: HerdrStore, agentID: String
+    ) {
+        let accessory = NSTitlebarAccessoryViewController()
+        accessory.layoutAttribute = .right
+        accessory.view = NSHostingView(
+            rootView: HerdrTitlebarViewPicker(store: store, agentID: agentID)
+                .frame(width: 228, height: 28)
+                .padding(.trailing, 8)
+        )
+        window.addTitlebarAccessoryViewController(accessory)
     }
 
     static func forget(_ window: NSWindow) -> String? {
@@ -66,11 +83,37 @@ final class HerdrAgentWindowDelegate: NSObject, NSWindowDelegate {
 
 private struct HerdrDetachedView: View {
     let store: HerdrStore
-    let tab: HerdrOpenTab
+    let agentID: String
     let launchEnabled: Bool
 
     var body: some View {
-        HerdrSessionView(store: store, tab: tab, launchEnabled: launchEnabled)
-            .environment(\.terminalLaunchEnabled, launchEnabled)
+        if let tab = store.detachedTab(id: agentID) {
+            HerdrSessionView(store: store, tab: tab, launchEnabled: launchEnabled)
+                .environment(\.terminalLaunchEnabled, launchEnabled)
+        }
+    }
+}
+
+struct HerdrTitlebarViewPicker: View {
+    let store: HerdrStore
+    let agentID: String
+
+    private var selection: Binding<HerdrAgentView> {
+        Binding(
+            get: { store.detachedTab(id: agentID)?.view ?? .agent },
+            set: { store.setView($0, for: agentID) })
+    }
+
+    var body: some View {
+        Picker("View", selection: selection) {
+            ForEach([HerdrAgentView.agent, .split, .diff], id: \.self) { mode in
+                Label(mode.shortTitle, systemImage: mode.icon)
+                    .tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        .controlSize(.small)
+        .labelsHidden()
+        .help("Choose the agent, split, or diff view")
     }
 }

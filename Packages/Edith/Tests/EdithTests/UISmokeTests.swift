@@ -285,6 +285,13 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(renders(TitlebarChrome(height: 52, width: 200), width: 220, height: 60))
     }
 
+    @Test func herdrTitlebarViewPickerRenders() {
+        #expect(
+            renders(
+                HerdrTitlebarViewPicker(store: HerdrStore(), agentID: "agent"),
+                width: 240, height: 40))
+    }
+
     @Test func panelTabBarRenders() {
         let tabs: [(id: String, title: String)] = allTabs.map { ($0.id, $0.title) }
         #expect(
