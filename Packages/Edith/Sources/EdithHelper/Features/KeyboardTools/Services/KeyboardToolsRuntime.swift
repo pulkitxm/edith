@@ -333,9 +333,25 @@ private final class KeyboardToolsEventTap: @unchecked Sendable {
 }
 
 private final class KeyboardSuperMapper: @unchecked Sendable {
-    private struct CommandResult {
-        let output: String
-        let status: Int32
+    private final class CommandWaiter: @unchecked Sendable {
+        private let condition = NSCondition()
+        private var result: CLICommandResult?
+        private var finished = false
+
+        func finish(_ result: CLICommandResult?) {
+            condition.lock()
+            self.result = result
+            finished = true
+            condition.broadcast()
+            condition.unlock()
+        }
+
+        func wait() -> CLICommandResult? {
+            condition.lock()
+            defer { condition.unlock() }
+            while !finished { condition.wait() }
+            return result
+        }
     }
 
     private enum MappingError: LocalizedError {
@@ -376,7 +392,7 @@ private final class KeyboardSuperMapper: @unchecked Sendable {
                 "property", "--matching", "keyboard", "--set",
                 KeyboardSuperMappingSupport.mappingArgument(desired),
             ])
-            guard result.status == 0 else { throw MappingError.unavailable }
+            guard result.terminationStatus == 0 else { throw MappingError.unavailable }
             let readback = try readMappings()
             guard KeyboardSuperMappingSupport.reportConfirms(readback, expected: desired) else {
                 throw MappingError.unconfirmed
@@ -390,21 +406,27 @@ private final class KeyboardSuperMapper: @unchecked Sendable {
             "property", "--matching", "keyboard", "--get",
             KeyboardSuperMappingSupport.property,
         ])
-        guard result.status == 0 else { throw MappingError.unavailable }
+        guard result.terminationStatus == 0 else { throw MappingError.unavailable }
         return result.output
     }
 
-    private func run(_ arguments: [String]) throws -> CommandResult {
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/hidutil")
-        process.arguments = arguments
-        process.standardOutput = pipe
-        process.standardError = pipe
-        try process.run()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return CommandResult(
-            output: String(decoding: data, as: UTF8.self), status: process.terminationStatus)
+    private func run(_ arguments: [String]) throws -> CLICommandResult {
+        let waiter = CommandWaiter()
+        let commandTask = Task.detached(priority: .userInitiated) {
+            let result = try? await CLICommandRunner.run(
+                CLICommandRequest(
+                    executableURL: URL(fileURLWithPath: "/usr/bin/hidutil"),
+                    arguments: arguments,
+                    environment: ProcessInfo.processInfo.environment,
+                    timeout: 3,
+                    maximumOutputBytes: 262_144,
+                    terminatesProcessGroup: true
+                )
+            ) { _ in }
+            waiter.finish(result)
+        }
+        defer { commandTask.cancel() }
+        guard let result = waiter.wait() else { throw MappingError.unavailable }
+        return result
     }
 }
