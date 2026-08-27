@@ -171,7 +171,9 @@ test("a release cut publishes one atomic commit and retries cleanly", () => {
       "--format=%(taggername) <%(taggeremail)>",
       "refs/tags/v0.0.80",
     ),
-  ).toBe("pukbot[bot] <<320458784+pukbot[bot]@users.noreply.github.com>>");
+  ).toBe(
+    "github-actions[bot] <<41898282+github-actions[bot]@users.noreply.github.com>>",
+  );
 
   expect(publish(fixture, "cut").exitCode).toBe(0);
   expect(git(fixture.remote, "rev-parse", "refs/heads/main")).toBe(main);
