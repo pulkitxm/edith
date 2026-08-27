@@ -277,13 +277,23 @@ final class WindowToolsEngine: FeatureModule {
     }
 
     private func axFrame(from frame: CGRect) -> CGRect {
-        let top = NSScreen.screens.map(\.frame.maxY).max() ?? frame.maxY
+        let top = desktopTop(fallback: frame.maxY)
         return CGRect(x: frame.minX, y: top - frame.maxY, width: frame.width, height: frame.height)
     }
 
     private func appKitFrame(from frame: CGRect) -> CGRect {
-        let top = NSScreen.screens.map(\.frame.maxY).max() ?? frame.maxY
+        let top = desktopTop(fallback: frame.maxY)
         return CGRect(x: frame.minX, y: top - frame.maxY, width: frame.width, height: frame.height)
+    }
+
+    private func desktopTop(fallback: CGFloat) -> CGFloat {
+        let screens = NSScreen.screens
+        guard let first = screens.first else { return fallback }
+        var top = first.frame.maxY
+        for screen in screens.dropFirst() {
+            top = max(top, screen.frame.maxY)
+        }
+        return top
     }
 
     private func frame(of element: AXUIElement) -> CGRect? {
