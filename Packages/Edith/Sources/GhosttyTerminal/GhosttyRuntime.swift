@@ -78,7 +78,9 @@ public final class GhosttyRuntime {
         runtime.read_clipboard_cb = { userdata, location, state, _, _, _ in
             GhosttyRuntime.readClipboard(userdata, location, state)
         }
-        runtime.confirm_read_clipboard_cb = { _, _, _, _ in }
+        runtime.confirm_read_clipboard_cb = { userdata, confirmation, state, request in
+            GhosttyRuntime.confirmClipboard(userdata, confirmation, state, request)
+        }
         runtime.write_clipboard_cb = { _, _, content, count, _ in
             GhosttyRuntime.writeClipboard(content, count)
         }
@@ -142,9 +144,64 @@ public final class GhosttyRuntime {
         case GHOSTTY_ACTION_CLOSE_TAB, GHOSTTY_ACTION_CLOSE_WINDOW:
             GhosttySurfaceRegistry.shared.requestClose(target)
             return true
+        case GHOSTTY_ACTION_OPEN_URL:
+            guard let view = GhosttySurfaceRegistry.shared.view(target),
+                let value = GhosttyTerminalView.decoded(
+                    action.action.open_url.url, count: Int(action.action.open_url.len))
+            else { return false }
+            return onMain { view.openTerminalTarget(value) }
+        case GHOSTTY_ACTION_MOUSE_SHAPE:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            onMain { view.setMouseShape(action.action.mouse_shape) }
+            return true
+        case GHOSTTY_ACTION_MOUSE_VISIBILITY:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            onMain {
+                view.setMouseVisible(action.action.mouse_visibility == GHOSTTY_MOUSE_VISIBLE)
+            }
+            return true
+        case GHOSTTY_ACTION_MOUSE_OVER_LINK:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            let value = GhosttyTerminalView.decoded(
+                action.action.mouse_over_link.url, count: action.action.mouse_over_link.len)
+            onMain { view.setHoveredLink(value) }
+            return true
+        case GHOSTTY_ACTION_SELECTION_CHANGED:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            onMain { view.selectionChanged() }
+            return true
+        case GHOSTTY_ACTION_SET_TITLE, GHOSTTY_ACTION_SET_TAB_TITLE,
+            GHOSTTY_ACTION_SET_WINDOW_TITLE:
+            guard let view = GhosttySurfaceRegistry.shared.view(target),
+                let value = GhosttyTerminalView.decoded(action.action.set_title.title)
+            else { return false }
+            onMain { view.setTerminalTitle(value) }
+            return true
+        case GHOSTTY_ACTION_PWD:
+            guard let view = GhosttySurfaceRegistry.shared.view(target),
+                let value = GhosttyTerminalView.decoded(action.action.pwd.pwd)
+            else { return false }
+            onMain { view.setWorkingDirectory(value) }
+            return true
+        case GHOSTTY_ACTION_RING_BELL:
+            onMain { NSSound.beep() }
+            return true
         default:
             return false
         }
+    }
+
+    private func onMain(_ action: () -> Void) {
+        if Thread.isMainThread {
+            action()
+        } else {
+            DispatchQueue.main.sync(execute: action)
+        }
+    }
+
+    private func onMain(_ action: () -> Bool) -> Bool {
+        if Thread.isMainThread { return action() }
+        return DispatchQueue.main.sync(execute: action)
     }
 
     private static func readClipboard(
@@ -156,7 +213,7 @@ public final class GhosttyRuntime {
         else {
             return GHOSTTY_CLIPBOARD_READ_UNAVAILABLE
         }
-        var bytes = Array(text.utf8CString)
+        let bytes = Array(text.utf8CString)
         let mime = Array("text/plain;charset=utf-8".utf8CString)
         bytes.withUnsafeBufferPointer { data in
             mime.withUnsafeBufferPointer { mimePointer in
@@ -177,6 +234,75 @@ public final class GhosttyRuntime {
             }
         }
         return GHOSTTY_CLIPBOARD_READ_STARTED
+    }
+
+    private static func confirmClipboard(
+        _ userdata: UnsafeMutableRawPointer?,
+        _ confirmation: UnsafePointer<ghostty_clipboard_confirm_s>?,
+        _ state: UnsafeMutableRawPointer?, _ request: ghostty_clipboard_request_e
+    ) {
+        guard let surface = GhosttySurfaceRegistry.shared.surface(userdata), let confirmation,
+            let state
+        else { return }
+        let approved = GhosttyRuntime.shared.onMain {
+            let alert = NSAlert()
+            alert.messageText = confirmationTitle(for: request)
+            alert.informativeText = confirmationDetail(confirmation.pointee)
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: confirmationButton(for: request))
+            alert.addButton(withTitle: "Cancel")
+            return alert.runModal() == .alertFirstButtonReturn
+        }
+        guard approved else {
+            ghostty_surface_deny_clipboard_request(surface, state)
+            return
+        }
+        var complete = ghostty_clipboard_complete_s(
+            contents: confirmation.pointee.contents,
+            contents_len: confirmation.pointee.contents_len,
+            available: confirmation.pointee.available,
+            available_len: confirmation.pointee.available_len,
+            confirmed: true,
+            remember: false)
+        ghostty_surface_complete_clipboard_request(surface, &complete, state)
+    }
+
+    private static func confirmationTitle(for request: ghostty_clipboard_request_e) -> String {
+        switch request {
+        case GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ, GHOSTTY_CLIPBOARD_REQUEST_KITTY_READ,
+            GHOSTTY_CLIPBOARD_REQUEST_LIST:
+            return "Allow terminal clipboard access?"
+        case GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE, GHOSTTY_CLIPBOARD_REQUEST_KITTY_WRITE:
+            return "Allow terminal to change the clipboard?"
+        default:
+            return "Paste into the terminal?"
+        }
+    }
+
+    private static func confirmationButton(for request: ghostty_clipboard_request_e) -> String {
+        switch request {
+        case GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ, GHOSTTY_CLIPBOARD_REQUEST_KITTY_READ,
+            GHOSTTY_CLIPBOARD_REQUEST_LIST:
+            return "Allow"
+        case GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE, GHOSTTY_CLIPBOARD_REQUEST_KITTY_WRITE:
+            return "Change Clipboard"
+        default:
+            return "Paste"
+        }
+    }
+
+    private static func confirmationDetail(_ confirmation: ghostty_clipboard_confirm_s) -> String {
+        guard let contents = confirmation.contents, confirmation.contents_len > 0 else {
+            return "A program in this terminal requested clipboard access."
+        }
+        let entry = contents[0]
+        guard let raw = entry.data, entry.len > 0 else {
+            return "A program in this terminal requested clipboard access."
+        }
+        let text = String(
+            decoding: UnsafeRawBufferPointer(start: raw, count: min(Int(entry.len), 240)),
+            as: UTF8.self)
+        return text.count < Int(entry.len) ? "\(text)…" : text
     }
 
     private static func writeClipboard(

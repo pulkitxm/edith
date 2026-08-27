@@ -26,7 +26,7 @@ extension GhosttyTerminalView {
     public override func flagsChanged(with event: NSEvent) {
         guard let surface else { return }
         var key = ghostty_input_key_s()
-        key.action = GHOSTTY_ACTION_PRESS
+        key.action = Self.modifierAction(for: event)
         key.mods = Self.mods(from: event.modifierFlags)
         key.consumed_mods = ghostty_input_mods_e(GHOSTTY_MODS_NONE.rawValue)
         key.keycode = UInt32(event.keyCode)
@@ -34,6 +34,49 @@ extension GhosttyTerminalView {
         key.unshifted_codepoint = 0
         key.composing = false
         _ = ghostty_surface_key(surface, key)
+        if let point = currentMousePoint() {
+            ghostty_surface_mouse_pos(
+                surface, Double(point.x), Double(bounds.height - point.y),
+                Self.mods(from: event.modifierFlags))
+        }
+    }
+
+    static func modifierAction(for event: NSEvent) -> ghostty_input_action_e {
+        let active: Bool
+        switch event.keyCode {
+        case 54, 55: active = event.modifierFlags.contains(.command)
+        case 56, 60: active = event.modifierFlags.contains(.shift)
+        case 58, 61: active = event.modifierFlags.contains(.option)
+        case 59, 62: active = event.modifierFlags.contains(.control)
+        case 57: active = event.modifierFlags.contains(.capsLock)
+        default: active = false
+        }
+        return active ? GHOSTTY_ACTION_PRESS : GHOSTTY_ACTION_RELEASE
+    }
+
+    public override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard event.type == .keyDown, window?.firstResponder === self else {
+            return super.performKeyEquivalent(with: event)
+        }
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            .subtracting([.capsLock, .function, .numericPad])
+        guard flags == .command else { return super.performKeyEquivalent(with: event) }
+        switch event.charactersIgnoringModifiers?.lowercased() {
+        case "c":
+            copyTerminalSelection(nil)
+            return true
+        case "v":
+            pasteTerminalClipboard(nil)
+            return true
+        case "a":
+            selectAllTerminalText(nil)
+            return true
+        case "k":
+            clearTerminalScrollback(nil)
+            return true
+        default:
+            return super.performKeyEquivalent(with: event)
+        }
     }
 
     private func send(event: NSEvent, action: ghostty_input_action_e) -> Bool {
@@ -71,7 +114,19 @@ extension GhosttyTerminalView {
 
     private func point(for event: NSEvent) -> (Double, Double) {
         let local = convert(event.locationInWindow, from: nil)
+        lastMousePoint = local
         return (Double(local.x), Double(bounds.height - local.y))
+    }
+
+    private func currentMousePoint() -> NSPoint? {
+        if let window {
+            let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+            if bounds.insetBy(dx: -1, dy: -1).contains(point) {
+                lastMousePoint = point
+                return point
+            }
+        }
+        return lastMousePoint
     }
 
     private func button(
@@ -88,22 +143,74 @@ extension GhosttyTerminalView {
 
     public override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
-        button(event, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT)
+        if event.clickCount == 1 {
+            button(event, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT)
+        } else if let surface {
+            _ = ghostty_surface_mouse_button(
+                surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT,
+                Self.mods(from: event.modifierFlags))
+        }
     }
 
     public override func mouseUp(with event: NSEvent) {
+        let selectionWasActive = hasSelection
+        commandClickReleaseActive = event.modifierFlags.contains(.command)
+        commandClickOpenedTarget = false
         button(event, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT)
+        if commandClickReleaseActive, !commandClickOpenedTarget, !selectionWasActive,
+            let target = terminalTargetAtPointer()
+        {
+            _ = openTerminalTarget(target)
+        }
+        commandClickReleaseActive = false
     }
 
     public override func rightMouseDown(with event: NSEvent) {
+        guard let surface, ghostty_surface_mouse_captured(surface) else {
+            super.rightMouseDown(with: event)
+            return
+        }
         button(event, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT)
     }
 
     public override func rightMouseUp(with event: NSEvent) {
+        guard let surface, ghostty_surface_mouse_captured(surface) else {
+            super.rightMouseUp(with: event)
+            return
+        }
         button(event, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_RIGHT)
     }
 
+    public override func otherMouseDown(with event: NSEvent) {
+        guard event.buttonNumber == 2 else {
+            super.otherMouseDown(with: event)
+            return
+        }
+        window?.makeFirstResponder(self)
+        button(event, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_MIDDLE)
+    }
+
+    public override func otherMouseUp(with event: NSEvent) {
+        guard event.buttonNumber == 2 else {
+            super.otherMouseUp(with: event)
+            return
+        }
+        button(event, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_MIDDLE)
+    }
+
     public override func mouseDragged(with event: NSEvent) {
+        moved(event)
+    }
+
+    public override func rightMouseDragged(with event: NSEvent) {
+        moved(event)
+    }
+
+    public override func otherMouseDragged(with event: NSEvent) {
+        guard event.buttonNumber == 2 else {
+            super.otherMouseDragged(with: event)
+            return
+        }
         moved(event)
     }
 
@@ -118,6 +225,7 @@ extension GhosttyTerminalView {
     public override func mouseExited(with event: NSEvent) {
         guard let surface, NSEvent.pressedMouseButtons == 0 else { return }
         ghostty_surface_mouse_pos(surface, -1, -1, Self.mods(from: event.modifierFlags))
+        setHoveredLink(nil)
     }
 
     private func moved(_ event: NSEvent) {
@@ -159,6 +267,11 @@ extension GhosttyTerminalView {
             Self.scrollMods(precise: precise, phase: event.momentumPhase))
     }
 
+    public override func pressureChange(with event: NSEvent) {
+        guard let surface else { return }
+        ghostty_surface_mouse_pressure(surface, UInt32(event.stage), Double(event.pressure))
+    }
+
     public override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for area in trackingAreas { removeTrackingArea(area) }
@@ -167,5 +280,97 @@ extension GhosttyTerminalView {
                 rect: bounds,
                 options: [.mouseEnteredAndExited, .mouseMoved, .inVisibleRect, .activeAlways],
                 owner: self))
+    }
+
+    func terminalTargetAtPointer() -> String? {
+        guard let surface else { return nil }
+        var text = ghostty_text_s()
+        guard ghostty_surface_quicklook_word(surface, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let raw = text.text, text.text_len > 0 else { return nil }
+        return String(
+            decoding: UnsafeRawBufferPointer(start: raw, count: Int(text.text_len)), as: UTF8.self)
+    }
+
+    @objc func copyTerminalSelection(_ sender: Any?) {
+        guard surface != nil else { return }
+        if performBindingAction("copy_to_clipboard") { return }
+        guard let text = selectedText(), !text.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    @objc func pasteTerminalClipboard(_ sender: Any?) {
+        guard surface != nil else { return }
+        if performBindingAction("paste_from_clipboard") { return }
+        guard let text = NSPasteboard.general.string(forType: .string) else { return }
+        _ = insertText(text)
+    }
+
+    @objc func selectAllTerminalText(_ sender: Any?) {
+        _ = performBindingAction("select_all")
+    }
+
+    @objc func clearTerminalScrollback(_ sender: Any?) {
+        _ = performBindingAction("clear_screen")
+    }
+
+    @discardableResult
+    func performBindingAction(_ name: String) -> Bool {
+        guard let surface else { return false }
+        return name.withCString { pointer in
+            ghostty_surface_binding_action(surface, pointer, UInt(name.utf8.count))
+        }
+    }
+
+    @objc func openContextLink(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String else { return }
+        _ = openTerminalTarget(rawValue)
+    }
+
+    @objc func copyContextLink(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(rawValue, forType: .string)
+    }
+
+    public override func menu(for event: NSEvent) -> NSMenu? {
+        guard let surface, !ghostty_surface_mouse_captured(surface) else { return nil }
+        window?.makeFirstResponder(self)
+        let position = point(for: event)
+        ghostty_surface_mouse_pos(
+            surface, position.0, position.1, Self.mods(from: event.modifierFlags))
+        let link = hoveredLink ?? terminalTargetAtPointer()
+        let menu = NSMenu()
+        if let link, Self.linkTarget(for: link, workingDirectory: currentDirectory) != nil {
+            let open = menu.addItem(
+                withTitle: "Open Link", action: #selector(openContextLink(_:)), keyEquivalent: "")
+            open.target = self
+            open.representedObject = link
+            let copyLink = menu.addItem(
+                withTitle: "Copy Link", action: #selector(copyContextLink(_:)), keyEquivalent: "")
+            copyLink.target = self
+            copyLink.representedObject = link
+            menu.addItem(.separator())
+        }
+        if hasSelection {
+            let copy = menu.addItem(
+                withTitle: "Copy", action: #selector(copyTerminalSelection(_:)), keyEquivalent: "")
+            copy.target = self
+        }
+        let paste = menu.addItem(
+            withTitle: "Paste", action: #selector(pasteTerminalClipboard(_:)), keyEquivalent: "")
+        paste.target = self
+        paste.isEnabled = NSPasteboard.general.string(forType: .string) != nil
+        let selectAll = menu.addItem(
+            withTitle: "Select All", action: #selector(selectAllTerminalText(_:)), keyEquivalent: ""
+        )
+        selectAll.target = self
+        menu.addItem(.separator())
+        let clear = menu.addItem(
+            withTitle: "Clear Scrollback", action: #selector(clearTerminalScrollback(_:)),
+            keyEquivalent: "")
+        clear.target = self
+        return menu
     }
 }

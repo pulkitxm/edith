@@ -4,14 +4,24 @@ import GhosttyKit
 public final class GhosttyTerminalView: NSView {
     public var onClose: (() -> Void)?
     public var onDropFiles: ((TerminalDropPayload) -> Bool)?
+    public var onTitleChange: ((String) -> Void)?
+    public var onWorkingDirectoryChange: ((String) -> Void)?
 
     private(set) var surface: ghostty_surface_t?
+    public internal(set) var currentDirectory: String?
+    public internal(set) var hoveredLink: String?
     private var launch: GhosttyLaunch?
     private var theme: GhosttyTheme?
     private var themeConfig: ghostty_config_t?
     private var owned: GhosttyConfigStrings?
     private var closed = false
     private var drawScheduled = false
+    var terminalCursor = NSCursor.iBeam
+    var cursorHidden = false
+    var commandClickReleaseActive = false
+    var commandClickOpenedTarget = false
+    var lastMousePoint: NSPoint?
+    let linkHoverView = TerminalLinkHoverView(frame: .zero)
 
     public override var isFlipped: Bool { false }
 
@@ -29,8 +39,9 @@ public final class GhosttyTerminalView: NSView {
         var text = ghostty_text_s()
         guard ghostty_surface_read_selection(surface, &text) else { return nil }
         defer { ghostty_surface_free_text(surface, &text) }
-        guard let raw = text.text else { return nil }
-        return String(cString: raw)
+        guard let raw = text.text, text.text_len > 0 else { return nil }
+        return String(
+            decoding: UnsafeRawBufferPointer(start: raw, count: Int(text.text_len)), as: UTF8.self)
     }
 
     @discardableResult
@@ -52,15 +63,18 @@ public final class GhosttyTerminalView: NSView {
     public init(launch: GhosttyLaunch, theme: GhosttyTheme? = nil) {
         self.launch = launch
         self.theme = theme
+        currentDirectory = launch.workingDirectory
         super.init(frame: .zero)
         wantsLayer = true
         registerForDraggedTypes(Array(Self.dropTypes))
+        addSubview(linkHoverView)
         GhosttySurfaceRegistry.shared.register(self)
     }
 
     required init?(coder: NSCoder) { nil }
 
     deinit {
+        if cursorHidden { NSCursor.unhide() }
         shutdown()
         GhosttySurfaceRegistry.shared.unregister(self)
     }
@@ -169,6 +183,15 @@ public final class GhosttyTerminalView: NSView {
         let scale = window?.backingScaleFactor ?? 2
         ghostty_surface_set_content_scale(surface, scale, scale)
         applySize()
+    }
+
+    public override func layout() {
+        super.layout()
+        linkHoverView.frame = bounds
+    }
+
+    public override func resetCursorRects() {
+        addCursorRect(bounds, cursor: terminalCursor)
     }
 
     public override func becomeFirstResponder() -> Bool {
