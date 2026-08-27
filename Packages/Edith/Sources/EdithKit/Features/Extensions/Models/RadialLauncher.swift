@@ -121,6 +121,29 @@ public struct RadialLauncherItem: Codable, Equatable, Identifiable, Sendable {
         }
         return kind.defaultSymbol
     }
+
+    public var displayName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? kind.title : trimmed
+    }
+
+    public var isConfigured: Bool {
+        switch kind {
+        case .application, .file:
+            return !payload.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .link:
+            guard let url = URL(string: payload), let scheme = url.scheme?.lowercased() else {
+                return false
+            }
+            return scheme == "http" || scheme == "https"
+        case .keyCombination:
+            return modifiers != 0 && !payload.isEmpty
+        case .media:
+            return RadialLauncherMediaAction(rawValue: payload) != nil
+        case .edith:
+            return RadialLauncherEdithAction(rawValue: payload) != nil
+        }
+    }
 }
 
 public struct RadialLauncherProfile: Codable, Equatable, Identifiable, Sendable {
@@ -139,7 +162,8 @@ public struct RadialLauncherProfile: Codable, Equatable, Identifiable, Sendable 
             name: "Favorites",
             items: [
                 RadialLauncherItem(
-                    kind: .application, name: "Safari", payload: "/Applications/Safari.app"),
+                    kind: .application, name: "Safari",
+                    payload: "/System/Applications/Safari.app"),
                 RadialLauncherItem(
                     kind: .file, name: "Downloads", payload: "~/Downloads"),
                 RadialLauncherItem(
@@ -155,6 +179,18 @@ public struct RadialLauncherProfile: Codable, Equatable, Identifiable, Sendable 
                     kind: .edith, name: "Edith panel",
                     payload: RadialLauncherEdithAction.openPanel.rawValue),
             ])
+    }
+}
+
+public enum RadialLauncherSelection {
+    public static func index(
+        dx: Double, dy: Double, itemCount: Int, deadZone: Double
+    ) -> Int? {
+        guard itemCount > 0, hypot(dx, dy) >= deadZone else { return nil }
+        let step = 2 * Double.pi / Double(itemCount)
+        var index = Int(round((Double.pi / 2 - atan2(dy, dx)) / step)) % itemCount
+        if index < 0 { index += itemCount }
+        return index
     }
 }
 

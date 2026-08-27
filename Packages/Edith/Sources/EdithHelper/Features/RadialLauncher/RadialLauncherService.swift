@@ -6,7 +6,7 @@ import IOKit.hidsystem
 import SwiftUI
 
 @MainActor
-final class RadialLauncherService: ObservableObject, FeatureModule {
+final class RadialLauncherService: ObservableObject {
     @Published private(set) var profile = RadialLauncherProfile.starter
     @Published private(set) var highlightedIndex: Int?
     @Published private(set) var visible = false
@@ -16,6 +16,10 @@ final class RadialLauncherService: ObservableObject, FeatureModule {
     private var monitors: [Any] = []
     private var requestObserver: NSObjectProtocol?
     private var center = CGPoint.zero
+
+    var items: [RadialLauncherItem] {
+        profile.items.filter(\.isConfigured)
+    }
 
     init(executeEdith: @escaping (RadialLauncherEdithAction) -> Void) {
         self.executeEdith = executeEdith
@@ -51,7 +55,7 @@ final class RadialLauncherService: ObservableObject, FeatureModule {
     }
 
     func show() {
-        guard !profile.items.isEmpty else {
+        guard !items.isEmpty else {
             NSSound.beep()
             return
         }
@@ -91,8 +95,8 @@ final class RadialLauncherService: ObservableObject, FeatureModule {
     }
 
     func select(_ index: Int) {
-        guard profile.items.indices.contains(index) else { return }
-        let item = profile.items[index]
+        guard items.indices.contains(index) else { return }
+        let item = items[index]
         dismiss()
         execute(item)
     }
@@ -121,27 +125,47 @@ final class RadialLauncherService: ObservableObject, FeatureModule {
     private func installMonitors() {
         removeMonitors()
         let events: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
-        if let local = NSEvent.addLocalMonitorForEvents(matching: events) { [weak self] event in
-            self?.updateHighlight(NSEvent.mouseLocation)
-            return event
-        } {
+        if let local = NSEvent.addLocalMonitorForEvents(
+            matching: events,
+            handler: { [weak self] event in
+                self?.updateHighlight(NSEvent.mouseLocation)
+                return event
+            })
+        {
             monitors.append(local)
         }
-        if let global = NSEvent.addGlobalMonitorForEvents(matching: events) { [weak self] _ in
-            Task { @MainActor in self?.updateHighlight(NSEvent.mouseLocation) }
-        } {
+        if let global = NSEvent.addGlobalMonitorForEvents(
+            matching: events,
+            handler: { [weak self] _ in
+                let point = NSEvent.mouseLocation
+                Task { @MainActor in self?.updateHighlight(point) }
+            })
+        {
             monitors.append(global)
         }
         if let mouse = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown]
-        ) { [weak self] _ in
-            Task { @MainActor in self?.dismiss() }
-        } {
+            matching: [.leftMouseDown, .rightMouseDown],
+            handler: { [weak self] _ in
+                let point = NSEvent.mouseLocation
+                Task { @MainActor in
+                    guard self?.panel?.frame.contains(point) == false else { return }
+                    self?.dismiss()
+                }
+            })
+        {
             monitors.append(mouse)
         }
-        if let keys = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            MainActor.assumeIsolated { self?.handleKey(event) == true ? nil : event }
-        } {
+        if let keys = NSEvent.addLocalMonitorForEvents(
+            matching: .keyDown,
+            handler: { [weak self] event in
+                let keyCode = event.keyCode
+                let characters = event.charactersIgnoringModifiers
+                let handled = MainActor.assumeIsolated {
+                    self?.handleKey(keyCode: keyCode, characters: characters) == true
+                }
+                return handled ? nil : event
+            })
+        {
             monitors.append(keys)
         }
     }
@@ -151,26 +175,26 @@ final class RadialLauncherService: ObservableObject, FeatureModule {
         monitors.removeAll()
     }
 
-    private func handleKey(_ event: NSEvent) -> Bool {
-        if event.keyCode == 53 {
+    private func handleKey(keyCode: UInt16, characters: String?) -> Bool {
+        if keyCode == 53 {
             dismiss()
             return true
         }
-        if event.keyCode == 36, let highlightedIndex {
+        if keyCode == 36, let highlightedIndex {
             select(highlightedIndex)
             return true
         }
-        if let digit = Int(event.charactersIgnoringModifiers ?? ""),
-            digit > 0, profile.items.indices.contains(digit - 1)
+        if let digit = Int(characters ?? ""),
+            digit > 0, items.indices.contains(digit - 1)
         {
             select(digit - 1)
             return true
         }
-        if event.keyCode == 123 || event.keyCode == 126 {
+        if keyCode == 123 || keyCode == 126 {
             moveSelection(-1)
             return true
         }
-        if event.keyCode == 124 || event.keyCode == 125 {
+        if keyCode == 124 || keyCode == 125 {
             moveSelection(1)
             return true
         }
@@ -178,24 +202,15 @@ final class RadialLauncherService: ObservableObject, FeatureModule {
     }
 
     private func moveSelection(_ amount: Int) {
-        let count = profile.items.count
+        let count = items.count
         guard count > 0 else { return }
         highlightedIndex = ((highlightedIndex ?? (amount > 0 ? -1 : 0)) + amount + count) % count
     }
 
     private func updateHighlight(_ point: CGPoint) {
-        let dx = point.x - center.x
-        let dy = point.y - center.y
-        let distance = hypot(dx, dy)
-        guard distance >= RadialLauncherLayout.deadZone else {
-            highlightedIndex = nil
-            return
-        }
-        let count = profile.items.count
-        let step = 2 * Double.pi / Double(count)
-        var index = Int(round((Double.pi / 2 - atan2(dy, dx)) / step)) % count
-        if index < 0 { index += count }
-        highlightedIndex = index
+        highlightedIndex = RadialLauncherSelection.index(
+            dx: point.x - center.x, dy: point.y - center.y,
+            itemCount: items.count, deadZone: RadialLauncherLayout.deadZone)
     }
 
     private func clamped(_ point: CGPoint, to frame: CGRect) -> CGPoint {
@@ -298,9 +313,9 @@ private struct RadialLauncherWheel: View {
                 .frame(width: 350, height: 350)
                 .overlay(Circle().stroke(.white.opacity(0.16)))
                 .shadow(color: .black.opacity(0.3), radius: 28, y: 12)
-            ForEach(Array(service.profile.items.enumerated()), id: \.element.id) { index, item in
+            ForEach(Array(service.items.enumerated()), id: \.element.id) { index, item in
                 itemButton(item, index: index)
-                    .offset(offset(index, count: service.profile.items.count))
+                    .offset(offset(index, count: service.items.count))
             }
             VStack(spacing: 4) {
                 Image(systemName: "circle.hexagongrid.fill")
@@ -327,7 +342,7 @@ private struct RadialLauncherWheel: View {
                 itemIcon(item)
                     .font(.system(size: 25, weight: .semibold))
                     .frame(width: 30, height: 30)
-                Text(item.name)
+                Text(item.displayName)
                     .font(.system(size: 10, weight: .semibold))
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
@@ -351,7 +366,7 @@ private struct RadialLauncherWheel: View {
             .animation(.snappy(duration: 0.16), value: service.highlightedIndex)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(index + 1), \(item.name)")
+        .accessibilityLabel("\(index + 1), \(item.displayName)")
     }
 
     @ViewBuilder

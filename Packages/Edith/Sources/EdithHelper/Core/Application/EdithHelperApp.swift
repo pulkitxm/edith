@@ -328,19 +328,22 @@ enum GlobalHotKey {
         handlerInstalled = true
     }
 
+    @discardableResult
     static func set(
         id: UInt32, keyCode: Int, modifiers: Int, action: @escaping () -> Void,
         release: (() -> Void)? = nil
-    ) {
+    ) -> Bool {
         installHandlerOnce()
         clear(id: id)
-        actions[id] = action
-        releaseActions[id] = release
         let hotKeyID = EventHotKeyID(signature: OSType(0x4544_4954), id: id)
         var ref: EventHotKeyRef?
-        RegisterEventHotKey(
+        let status = RegisterEventHotKey(
             UInt32(keyCode), UInt32(modifiers), hotKeyID, GetApplicationEventTarget(), 0, &ref)
+        guard status == noErr, let ref else { return false }
         refs[id] = ref
+        actions[id] = action
+        releaseActions[id] = release
+        return true
     }
 
     static func clear(id: UInt32) {
