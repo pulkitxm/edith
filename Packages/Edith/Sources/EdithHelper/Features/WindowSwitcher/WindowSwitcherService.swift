@@ -209,8 +209,9 @@ final class WindowSwitcherController: NSObject, NSWindowDelegate {
     }
 
     private func makePanel() -> WindowSwitcherPanel {
+        let contentSize = NSSize(width: 680, height: 520)
         let panel = WindowSwitcherPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 680, height: 520),
+            contentRect: NSRect(origin: .zero, size: contentSize),
             styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false)
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
@@ -223,7 +224,10 @@ final class WindowSwitcherController: NSObject, NSWindowDelegate {
         panel.contentViewController = NSHostingController(
             rootView: WindowSwitcherView(
                 store: store,
-                activate: { [weak self] id in _ = self?.activateStored(id: id) }))
+                activate: { [weak self] id in _ = self?.activateStored(id: id) }
+            )
+            .frame(width: contentSize.width, height: contentSize.height))
+        panel.setContentSize(contentSize)
         return panel
     }
 
