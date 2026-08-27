@@ -24,7 +24,8 @@ import Testing
         #expect(snapshot.keyboardLightEnabled == true)
         #expect(!snapshot.hiddenFilesShown)
         #expect(snapshot.desktopIconsShown)
-        #expect(snapshot.ejectableVolumes == [QuickActionVolume(name: "Work", path: "/Volumes/Work")])
+        #expect(
+            snapshot.ejectableVolumes == [QuickActionVolume(name: "Work", path: "/Volumes/Work")])
     }
 
     @Test func reversibleActionsToggleTheirState() throws {
@@ -68,9 +69,10 @@ import Testing
         #expect(Set(QuickAction.allCases.map(\.descriptor.id)).count == QuickAction.allCases.count)
         #expect(QuickAction.emptyTrash.descriptor.effect == .destructive)
         #expect(QuickAction.emptyTrash.descriptor.requiresPreview)
-        #expect(QuickAction.allCases.filter { $0 != .emptyTrash }.allSatisfy {
-            !$0.descriptor.requiresPreview
-        })
+        #expect(
+            QuickAction.allCases.filter { $0 != .emptyTrash }.allSatisfy {
+                !$0.descriptor.requiresPreview
+            })
     }
 
     @Test func volumePolicyOnlyAllowsLocalExternalNonRootVolumes() {
