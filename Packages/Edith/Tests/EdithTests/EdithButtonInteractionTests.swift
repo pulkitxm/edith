@@ -89,13 +89,6 @@ import Testing
         defer { harness.close() }
 
         let frames = try await harness.galleryFrames(probe)
-        let evidenceDirectory = ProcessInfo.processInfo.environment["EDITH_BUTTON_EVIDENCE_DIR"]
-            .map(URL.init(fileURLWithPath:))
-        var evidenceFrame = 0
-        if let evidenceDirectory {
-            try harness.capture(evidenceDirectory.appendingPathComponent("000.png"))
-            evidenceFrame += 1
-        }
         for role in EdithButtonRole.allCases {
             let frame = try #require(frames[role])
             let inset = frame.insetBy(dx: 1, dy: 1)
@@ -108,13 +101,6 @@ import Testing
                 let before = probe.activations[role, default: 0]
                 harness.click(point)
                 #expect(probe.activations[role, default: 0] == before + 1)
-                if let evidenceDirectory {
-                    try await Task.sleep(for: .milliseconds(160))
-                    try harness.capture(
-                        evidenceDirectory.appendingPathComponent(
-                            String(format: "%03d.png", evidenceFrame)))
-                    evidenceFrame += 1
-                }
             }
         }
     }
@@ -358,19 +344,6 @@ private final class EdithButtonHarness {
             try await Task.sleep(for: .milliseconds(10))
         }
         throw EdithButtonHarnessError.missingFrames
-    }
-
-    func capture(_ url: URL) throws {
-        guard let view = window.contentView,
-            let image = view.bitmapImageRepForCachingDisplay(in: view.bounds)
-        else {
-            throw EdithButtonHarnessError.missingFrames
-        }
-        view.cacheDisplay(in: view.bounds, to: image)
-        guard let data = image.representation(using: .png, properties: [:]) else {
-            throw EdithButtonHarnessError.missingFrames
-        }
-        try data.write(to: url)
     }
 
     func key(code: UInt16, characters: String) {
