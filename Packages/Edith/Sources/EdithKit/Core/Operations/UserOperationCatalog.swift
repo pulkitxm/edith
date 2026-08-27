@@ -100,6 +100,9 @@ public enum UserOperationCatalog {
         + LidAwakeOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + AudioControlOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
 
     private static let featureRegistrations: [RegisteredUserOperation] =
         UsageProjectOperation.allCases.map {

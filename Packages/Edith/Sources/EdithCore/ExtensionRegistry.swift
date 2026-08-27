@@ -166,6 +166,12 @@ public enum ExtensionRegistry {
             defaultsKey: "tabMusicEnabled", requiredCapabilities: [.localMusicPlayback],
             optionalCapabilities: [.mediaControls], optionalToolIDs: ["yt-dlp"]),
         ExtensionRegistryEntry(
+            id: "audioControls", title: "Audio Controls",
+            subtitle: "Pin devices, protect speaker volume, and route each app independently.",
+            symbolName: "speaker.wave.3.fill", group: .media, featured: true,
+            defaultsKey: "audioControlsEnabled", requiredCapabilities: [.microphoneControl],
+            optionalCapabilities: [.applicationAudio, .globalShortcuts, .mediaControls]),
+        ExtensionRegistryEntry(
             id: "calendar", title: "Calendar",
             subtitle: "Shows your schedule in the panel and the app.",
             symbolName: "calendar", group: .media, featured: false,
