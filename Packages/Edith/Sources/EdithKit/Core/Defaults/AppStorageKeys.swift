@@ -1,6 +1,11 @@
 import Foundation
 
 public enum AppStorageKeys {
+    public enum AppMaintenance {
+        public static let enabled = "appMaintenanceEnabled"
+        public static let installDestination = "appMaintenanceInstallDestination"
+    }
+
     public enum Update {
         public static let automaticChecks = "SUEnableAutomaticChecks"
         public static let checkInterval = "SUScheduledCheckInterval"

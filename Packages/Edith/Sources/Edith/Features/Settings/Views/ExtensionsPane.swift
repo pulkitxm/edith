@@ -931,6 +931,7 @@ private struct ExtensionDetailRows: View {
             case .herdr: HerdrRows()
             case .quinjet: QuinjetRows()
             case .system: SystemRows()
+            case .appMaintenance: AppMaintenanceRows()
             case .machines: MachinesRows()
             case .companion: CompanionRows()
             case .systemStats: SystemStatsRows()
@@ -1922,6 +1923,35 @@ private struct SystemRows: View {
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
+    }
+}
+
+private struct AppMaintenanceRows: View {
+    @AppStorage(AppStorageKeys.AppMaintenance.enabled, store: SharedDefaults.store) private
+        var enabled = false
+    @AppStorage(AppStorageKeys.AppMaintenance.installDestination, store: SharedDefaults.store)
+    private var installDestination = AppMaintenanceInstallDestination.user.rawValue
+    @State private var showingMaintenance = false
+
+    var body: some View {
+        Section("Maintenance") {
+            LabeledContent("Removal", value: "Review first, then move to Trash")
+            Text(
+                "Inventory regular Applications folders, verify single-app disk images and select exact support files before removal."
+            )
+            .settingsCaption()
+            Picker("Disk image destination", selection: $installDestination) {
+                ForEach(AppMaintenanceInstallDestination.allCases, id: \.rawValue) { destination in
+                    Text(destination.title).tag(destination.rawValue)
+                }
+            }
+            Button("Open App Maintenance") { showingMaintenance = true }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+        .sheet(isPresented: $showingMaintenance) {
+            AppMaintenanceView()
+        }
     }
 }
 
