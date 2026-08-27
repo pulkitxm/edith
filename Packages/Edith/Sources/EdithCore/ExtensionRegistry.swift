@@ -185,6 +185,11 @@ public enum ExtensionRegistry {
             defaultsKey: "clipboardEnabled", requiredCapabilities: [.clipboardHistory],
             optionalCapabilities: [.globalPaste, .globalShortcuts]),
         ExtensionRegistryEntry(
+            id: "keyboardTools", title: "Keyboard Tools",
+            subtitle: "Debounce faulty keys and turn Caps Lock into a Super key.",
+            symbolName: "keyboard", group: .utilities, featured: true,
+            defaultsKey: "keyboardToolsEnabled", requiredCapabilities: [.inputSuppression]),
+        ExtensionRegistryEntry(
             id: "focusDim", title: "Focus Dim",
             subtitle: "Dims everything behind your active app.",
             symbolName: "circle.lefthalf.filled", group: .utilities, featured: false,

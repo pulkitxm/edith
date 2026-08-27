@@ -12,6 +12,7 @@ final class AppServices {
     private(set) var notchShelf: NotchShelfController?
     private(set) var colorPicker: ColorPickerStore?
     private(set) var clipboard: ClipboardStore?
+    private(set) var keyboardTools: KeyboardToolsRuntime?
     private(set) var focusDim: FocusDimEngine?
     private(set) var presenter: PresenterDetector?
     private(set) var micMute: MicMuteEngine?
@@ -76,6 +77,9 @@ final class AppServices {
             StartupPhase(name: "helper.services.system") { [weak self] in
                 self?.reconcileSystemServices()
             },
+            StartupPhase(name: "helper.services.input") { [weak self] in
+                self?.reconcileInputServices()
+            },
             StartupPhase(name: "helper.services.panels") { [weak self] in
                 self?.reconcilePanelServices()
             },
@@ -101,6 +105,7 @@ final class AppServices {
         startup.cancel()
         terminating = true
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
+        keyboardTools?.shutdown()
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
     }
@@ -181,6 +186,7 @@ final class AppServices {
         startup.cancel()
         reconcileMediaServices()
         reconcileSystemServices()
+        reconcileInputServices()
         reconcilePanelServices()
         reconcilePresentationServices()
         reconcileHardwareServices()
@@ -298,6 +304,17 @@ final class AppServices {
         notchShelf?.attachUsage(usage)
         notchShelf?.attachCalendar(calendar)
         notchShelf?.attachColorPicker(colorPicker)
+    }
+
+    private func reconcileInputServices() {
+        let keyboardToolsOn = Self.extensionEnabled(AppStorageKeys.KeyboardTools.enabled)
+        if keyboardToolsOn, keyboardTools == nil { keyboardTools = KeyboardToolsRuntime() }
+        if !keyboardToolsOn {
+            keyboardTools?.shutdown()
+            keyboardTools = nil
+            KeyboardToolsRuntime.restoreDisabledState()
+        }
+        keyboardTools?.syncSettings()
     }
 
     private func reconcilePresentationServices() {

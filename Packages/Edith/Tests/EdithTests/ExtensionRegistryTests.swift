@@ -21,6 +21,7 @@ import Testing
         "tabCalendarEnabled",
         "notchShelfEnabled",
         "clipboardEnabled",
+        "keyboardToolsEnabled",
         "focusDimEnabled",
         "presenterEnabled",
         "colorPickerEnabled",
@@ -149,7 +150,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard",
+                "clipboard", "keyboardTools",
             ])
     }
 
@@ -240,6 +241,7 @@ import Testing
             "calendar": [.calendar],
             "notchShelf": [],
             "clipboard": [],
+            "keyboardTools": [.accessibility],
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
             "colorPicker": [.screenRecording],
@@ -259,6 +261,7 @@ import Testing
             "calendar": [],
             "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation],
             "clipboard": [.accessibility],
+            "keyboardTools": [.inputMonitoring],
             "focusDim": [],
             "presenter": [],
             "colorPicker": [],
