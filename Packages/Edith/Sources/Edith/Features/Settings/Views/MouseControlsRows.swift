@@ -1,3 +1,4 @@
+import AppKit
 import EdithKit
 import SwiftUI
 
@@ -35,6 +36,7 @@ struct MouseControlsRows: View {
     @AppStorage(AppStorageKeys.Mouse.excludedApps, store: SharedDefaults.store) private
         var excludedApps = ""
     @State private var tab = "general"
+    @State private var runningApps: [MouseAppChoice] = []
 
     var body: some View {
         Section {
@@ -55,6 +57,7 @@ struct MouseControlsRows: View {
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
+        .onAppear(perform: refreshRunningApps)
     }
 
     @ViewBuilder private var generalSections: some View {
@@ -151,9 +154,41 @@ struct MouseControlsRows: View {
 
     @ViewBuilder private var appSections: some View {
         Section("Leave apps unchanged") {
-            EdithTextField(
-                placeholder: "com.example.game, com.example.design",
-                text: $excludedApps.configured(AppStorageKeys.Mouse.excludedApps))
+            Menu {
+                if availableRunningApps.isEmpty {
+                    Text("No other running apps")
+                } else {
+                    ForEach(availableRunningApps) { app in
+                        Button(app.name) { addExcludedApp(app.bundleIdentifier) }
+                    }
+                }
+            } label: {
+                Label("Add Running App", systemImage: "plus.circle")
+            }
+            ForEach(excludedBundleIDs, id: \.self) { bundleIdentifier in
+                HStack {
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                        Text(applicationName(for: bundleIdentifier))
+                        Text(bundleIdentifier)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        removeExcludedApp(bundleIdentifier)
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Remove exclusion")
+                }
+            }
+            DisclosureGroup("Add by bundle identifier") {
+                EdithTextField(
+                    placeholder: "com.example.game, com.example.design",
+                    text: $excludedApps.configured(AppStorageKeys.Mouse.excludedApps))
+            }
             Text(
                 "Enter bundle identifiers separated by commas. Wheel, focus, and button handling all stand down in these apps."
             )
@@ -169,6 +204,56 @@ struct MouseControlsRows: View {
             })
     }
 
+    private var excludedBundleIDs: [String] {
+        MouseControlSupport.excludedBundleIDs(excludedApps).sorted()
+    }
+
+    private var availableRunningApps: [MouseAppChoice] {
+        let excluded = MouseControlSupport.excludedBundleIDs(excludedApps)
+        return runningApps.filter { !excluded.contains($0.bundleIdentifier.lowercased()) }
+    }
+
+    private func refreshRunningApps() {
+        var seen: Set<String> = []
+        runningApps = NSWorkspace.shared.runningApplications.compactMap { app in
+            guard app.activationPolicy == .regular, let bundleIdentifier = app.bundleIdentifier,
+                bundleIdentifier != MainApp.bundleIdentifier,
+                bundleIdentifier != MainApp.statusBarBundleIdentifier,
+                seen.insert(bundleIdentifier.lowercased()).inserted
+            else { return nil }
+            return MouseAppChoice(
+                bundleIdentifier: bundleIdentifier,
+                name: app.localizedName ?? applicationName(for: bundleIdentifier))
+        }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private func addExcludedApp(_ bundleIdentifier: String) {
+        var values = MouseControlSupport.excludedBundleIDs(excludedApps)
+        values.insert(bundleIdentifier.lowercased())
+        setExcludedApps(values)
+    }
+
+    private func removeExcludedApp(_ bundleIdentifier: String) {
+        var values = MouseControlSupport.excludedBundleIDs(excludedApps)
+        values.remove(bundleIdentifier.lowercased())
+        setExcludedApps(values)
+    }
+
+    private func setExcludedApps(_ values: Set<String>) {
+        $excludedApps.configured(AppStorageKeys.Mouse.excludedApps).wrappedValue =
+            values.sorted().joined(separator: ",")
+    }
+
+    private func applicationName(for bundleIdentifier: String) -> String {
+        guard
+            let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier),
+            let bundle = Bundle(url: url)
+        else { return bundleIdentifier }
+        return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
+            ?? bundleIdentifier
+    }
+
     private func buttonPicker(
         _ title: String, selection: Binding<String>, key: String
     ) -> some View {
@@ -178,4 +263,11 @@ struct MouseControlsRows: View {
             }
         }
     }
+}
+
+private struct MouseAppChoice: Identifiable {
+    let bundleIdentifier: String
+    let name: String
+
+    var id: String { bundleIdentifier }
 }

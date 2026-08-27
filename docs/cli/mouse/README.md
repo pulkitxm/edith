@@ -14,7 +14,7 @@ The menu bar companion owns the global event tap. Turning the extension off imme
 
 ## Settings
 
-Open Edith, choose Extensions, then open Mouse Controls. The General tab contains wheel and focus behavior. Buttons maps mouse buttons 4 through 8. Apps accepts comma-separated bundle identifiers that should keep their original mouse behavior.
+Open Edith, choose Extensions, then open Mouse Controls. The General tab contains wheel, focus, and trackpad behavior. Buttons maps mouse buttons 4 through 8. Apps can add a running application or accept comma-separated bundle identifiers that should keep their original mouse behavior.
 
 Every setting is also visible through the existing configuration commands:
 
