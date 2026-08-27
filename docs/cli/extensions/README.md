@@ -33,10 +33,10 @@ enables immediately and reports missing grants in plain text or JSON.
 | `ed extensions enable <id>` | Turns one on, and names on stderr any required permission still missing |
 | `ed extensions disable <id>` | Turns one off |
 | `ed extensions info <id>` | Describes one: name, summary, key, group, state, permissions |
-| `ed extensions status [id]` | Summarises readiness for one extension or all seventeen |
+| `ed extensions status [id]` | Summarises readiness for one extension or all registered extensions |
 | `ed extensions setup <id>` | Enables one and reports the setup that remains |
 | `ed extensions verify <id>` | Runs every readiness check for one extension |
-| `ed extensions doctor [id]` | Diagnoses one extension or all seventeen, with recovery commands |
+| `ed extensions doctor [id]` | Diagnoses one extension or all registered extensions, with recovery commands |
 
 The Extensions pane and each extension settings modal use these same typed read
 operations. Marketplace browsing maps to `ls`, opening a modal maps to `info`,
@@ -52,7 +52,7 @@ operations as their command-line equivalents.
 ## The registry
 
 `ExtensionRegistry.entries` in EdithKit is the single list every command here
-walks, and its order is the order `ls` prints. Seventeen entries, in this order:
+walks, and its order is the order `ls` prints. The registered entries are:
 
 | ID | Name | Group | What it does |
 | --- | --- | --- | --- |
@@ -67,6 +67,7 @@ walks, and its order is the order `ls` prints. Seventeen entries, in this order:
 | `micMute` | Mic Mute | System | Mute every microphone system-wide with ⌘⇧M or the menu bar icon |
 | `lidAwake` | Lid Awake | System | Keeps this Mac running with the lid shut, on battery and unplugged |
 | `music` | Music | Media | Plays your local music folder, with media keys |
+| `mediaToolkit` | Media Toolkit | Media | Batch-converts images and compresses videos locally |
 | `calendar` | Calendar | Media | Shows your schedule in the panel and the app |
 | `notchShelf` | Notch Shelf | Media | File shelf, now playing, camera, and alerts around the notch |
 | `clipboard` | Clipboard | Utilities | Clipboard history with instant paste |
@@ -74,7 +75,7 @@ walks, and its order is the order `ls` prints. Seventeen entries, in this order:
 | `presenter` | Presenter | Utilities | Blurs sensitive numbers while sharing your screen |
 | `colorPicker` | Color Picker | Utilities | System loupe on a hotkey, sampled color to your clipboard |
 
-The same seventeen, with what each one is made of. `Key` is the preference the app
+The same extensions, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the
 eight the welcome tour shows before you ask it for all of them.
 
@@ -91,6 +92,7 @@ eight the welcome tour shows before you ask it for all of them.
 | `micMute` | `micMuteEnabled` | no | none | none | none | none |
 | `lidAwake` | `lidAwakeEnabled` | no | none | none | none | none |
 | `music` | `tabMusicEnabled` | no | none | none | none | `yt-dlp` |
+| `mediaToolkit` | `tabMediaToolkitEnabled` | yes | none | none | none | none |
 | `calendar` | `tabCalendarEnabled` | no | `calendar` | none | none | none |
 | `notchShelf` | `notchShelfEnabled` | yes | none | `applicationAudio`, `bluetooth`, `camera`, `automation` | none | none |
 | `clipboard` | `clipboardEnabled` | yes | none | `accessibility` | none | none |
@@ -115,6 +117,7 @@ the current platform, and which missing implementations merely degrade it:
 | `micMute` | `microphoneControl` | `globalShortcuts` |
 | `lidAwake` | `preventSleep` | none |
 | `music` | `localMusicPlayback` | `mediaControls` |
+| `mediaToolkit` | `localMediaProcessing` | none |
 | `calendar` | `calendarEvents` | none |
 | `notchShelf` | `fileShelf` | `applicationAudio`, `bluetoothMonitoring`, `cameraPreview`, `externalMediaControl` |
 | `clipboard` | `clipboardHistory` | `globalPaste`, `globalShortcuts` |
