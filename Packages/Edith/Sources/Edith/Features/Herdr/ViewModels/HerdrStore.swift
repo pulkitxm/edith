@@ -238,6 +238,10 @@ final class HerdrStore {
         return tab
     }
 
+    func detachedTab(id: String) -> HerdrOpenTab? {
+        detachedTabs[id]
+    }
+
     func reattach(_ id: String) {
         detachedTabs[id]?.holder.stop()
         detachedTabs[id]?.quinjet.stop()
@@ -273,10 +277,19 @@ final class HerdrStore {
     }
 
     func view(for id: String) -> HerdrAgentView {
-        tabs.first { $0.id == id }?.view ?? HerdrAgentViews.view(for: id, defaults)
+        tabs.first { $0.id == id }?.view ?? detachedTabs[id]?.view
+            ?? HerdrAgentViews.view(for: id, defaults)
     }
 
     func setView(_ view: HerdrAgentView, for id: String) {
+        if var tab = detachedTabs[id] {
+            guard tab.view != view else { return }
+            tab.view = view
+            detachedTabs[id] = tab
+            HerdrAgentViews.set(view, for: id, defaults)
+            if view == .split { detailOpen = false }
+            return
+        }
         guard let index = tabs.firstIndex(where: { $0.id == id }) else {
             HerdrAgentViews.set(view, for: id, defaults)
             return
