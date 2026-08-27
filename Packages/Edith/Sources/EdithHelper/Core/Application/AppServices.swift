@@ -13,6 +13,7 @@ final class AppServices {
     private(set) var colorPicker: ColorPickerStore?
     private(set) var clipboard: ClipboardStore?
     private(set) var emoji: EmojiStore?
+    private(set) var finderTools: FinderToolsService?
     private(set) var focusDim: FocusDimEngine?
     private(set) var presenter: PresenterDetector?
     private(set) var micMute: MicMuteEngine?
@@ -103,6 +104,7 @@ final class AppServices {
         startup.cancel()
         terminating = true
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
+        finderTools?.shutdown()
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
     }
@@ -312,6 +314,14 @@ final class AppServices {
         notchShelf?.attachUsage(usage)
         notchShelf?.attachCalendar(calendar)
         notchShelf?.attachColorPicker(colorPicker)
+
+        let finderToolsOn = Self.extensionEnabled(AppStorageKeys.FinderTools.enabled)
+        if finderToolsOn, finderTools == nil { finderTools = FinderToolsService() }
+        if !finderToolsOn {
+            finderTools?.shutdown()
+            finderTools = nil
+        }
+        finderTools?.syncSettings()
     }
 
     private func reconcilePresentationServices() {

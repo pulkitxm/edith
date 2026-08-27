@@ -65,6 +65,25 @@ import EdithCore
                 == .ready("Attention tracking is configured for the selected sources."))
     }
 
+    @Test func finderToolsRequiresAtLeastOneSelectedFeature() {
+        let suite = "test.extension-adapter.finder-tools.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        #expect(
+            ExtensionLiveAdapters.finderToolsReadiness(defaults: defaults)
+                == .ready("Finder Tools features enabled: 4."))
+        for key in [
+            AppStorageKeys.FinderTools.cutPaste, AppStorageKeys.FinderTools.rename,
+            AppStorageKeys.FinderTools.pasteImages, AppStorageKeys.FinderTools.diskImageInstaller,
+        ] {
+            defaults.set(false, forKey: key)
+        }
+        #expect(
+            ExtensionLiveAdapters.finderToolsReadiness(defaults: defaults)
+                == .needsSetup("Turn on at least one Finder Tools feature."))
+    }
+
     @Test func usageDetectsMissingLoadingEmptyReadyAndCorruptData() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

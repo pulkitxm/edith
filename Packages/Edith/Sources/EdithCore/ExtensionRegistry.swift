@@ -186,6 +186,12 @@ public enum ExtensionRegistry {
             defaultsKey: "clipboardEnabled", requiredCapabilities: [.clipboardHistory],
             optionalCapabilities: [.globalPaste, .globalShortcuts]),
         ExtensionRegistryEntry(
+            id: "finderTools", title: "Finder Tools",
+            subtitle: "Cut and paste, F2 rename, image paste, and safe DMG installs.",
+            symbolName: "folder.badge.gearshape", group: .utilities, featured: false,
+            defaultsKey: "finderToolsEnabled",
+            requiredCapabilities: [.globalShortcuts, .runningApplications]),
+        ExtensionRegistryEntry(
             id: "focusDim", title: "Focus Dim",
             subtitle: "Dims everything behind your active app.",
             symbolName: "circle.lefthalf.filled", group: .utilities, featured: false,

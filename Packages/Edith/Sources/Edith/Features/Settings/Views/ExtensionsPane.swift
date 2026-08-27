@@ -575,7 +575,7 @@ private struct ExtensionSettingsSheet: View {
         case "machines": 420
         case "lidAwake": 400
         case "music": 460
-        case "focusDim", "colorPicker": 430
+        case "focusDim", "colorPicker", "finderTools": 430
         case "system": 500
         case "notchShelf", "presenter", "windowTools": 580
         default: 620
@@ -629,9 +629,20 @@ private struct ExtensionLifecycleRows: View {
                     ForEach(report.checks) { check in
                         checkRow(check)
                     }
-                    Button("Check again") {
+                    Button {
                         readiness.refresh(.verify)
+                    } label: {
+                        if readiness.isRefreshing {
+                            HStack(spacing: UIScale.pt(6)) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Checking...")
+                            }
+                        } else {
+                            Text("Check again")
+                        }
                     }
+                    .disabled(readiness.isRefreshing)
                 } else {
                     let loading = ExtensionLifecycleState.loading(extensionID: entry.id)
                     HStack(spacing: UIScale.pt(8)) {
@@ -929,6 +940,7 @@ private struct ExtensionDetailRows: View {
             case .calendar: CalendarRows()
             case .notchShelf: NotchShelfRows()
             case .clipboard: ClipboardRows()
+            case .finderTools: FinderToolsRows()
             case .focusDim: FocusDimRows()
             case .presenter: PresenterRows()
             case .colorPicker: ColorPickerRows()
