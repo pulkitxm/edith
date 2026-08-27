@@ -6,7 +6,8 @@ struct CommandBarCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "command-bar",
         abstract: "Calculate and convert with the Command Bar engine.",
-        subcommands: [CommandBarCalculateCommand.self, CommandBarConvertCommand.self])
+        subcommands: [CommandBarCalculateCommand.self, CommandBarConvertCommand.self],
+        defaultSubcommand: CommandBarCalculateCommand.self)
 }
 
 struct CommandBarCalculateCommand: AsyncParsableCommand {

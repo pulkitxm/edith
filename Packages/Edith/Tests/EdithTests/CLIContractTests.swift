@@ -75,6 +75,12 @@ enum JSONContract {
         JSONCase("ed clipboard unpin", ["clipboard", "unpin", "1", "--json"]),
         JSONCase("ed clipboard rm", ["clipboard", "rm", "1", "--json"]),
         JSONCase("ed clipboard clear", ["clipboard", "clear", "--json"]),
+        JSONCase(
+            "ed command-bar calculate",
+            ["command-bar", "calculate", "2", "+", "3", "--json"]),
+        JSONCase(
+            "ed command-bar convert",
+            ["command-bar", "convert", "5", "km", "mi", "--json"]),
         JSONCase("ed calendar open", ["calendar", "open", "--json"], mutatesTheMachine: true),
         JSONCase("ed calendar join", ["calendar", "join", "nothing-at-all", "--json"]),
         JSONCase(
