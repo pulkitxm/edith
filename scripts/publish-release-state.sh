@@ -86,7 +86,7 @@ case "$MODE" in
       -c user.name="pukbot[bot]" \
       -c user.email="320458784+pukbot[bot]@users.noreply.github.com" \
       commit Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb \
-      -m "Release ${RELEASE_TAG}"
+      -m "Release ${RELEASE_TAG} [skip ci]"
     git \
       -c user.name="pukbot[bot]" \
       -c user.email="320458784+pukbot[bot]@users.noreply.github.com" \

@@ -154,7 +154,7 @@ test("a release cut publishes one atomic commit and retries cleanly", () => {
     "new helper plist",
   );
   expect(git(fixture.remote, "show", "-s", "--format=%s", main)).toBe(
-    "Release v0.0.80",
+    "Release v0.0.80 [skip ci]",
   );
   expect(
     git(
