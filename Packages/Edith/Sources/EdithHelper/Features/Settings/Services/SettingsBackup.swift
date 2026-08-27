@@ -496,6 +496,17 @@ func settingsBackupReadCloudSettingsFile(
     }
 }
 
+func settingsBackupReadCloudSettingsFileAsync(
+    at url: URL, maximumBytes: Int = settingsBackupMaximumSettingsBytes,
+    reader: @escaping @Sendable (URL, Int) -> Data? = {
+        settingsBackupReadCloudSettingsFile(at: $0, maximumBytes: $1)
+    }
+) async -> Data? {
+    await Task.detached(priority: .utility) {
+        reader(url, maximumBytes)
+    }.value
+}
+
 @MainActor
 func settingsBackupAwaitFinalSettingsExport(
     after previousExport: Task<Void, Never>?, generation: Int,
@@ -824,6 +835,8 @@ final class SettingsBackup {
     private var settingsRestorePending = false
     private var settingsRestoreDeadline: Date?
     private var settingsRestoreRetry: Timer?
+    private var settingsImportTask: Task<Void, Never>?
+    private var settingsImportGeneration = 0
     private var musicDebounce: Timer?
     private var musicFolderObserver: NSObjectProtocol?
     static let settingsRestoreRetryInterval: TimeInterval = 3
@@ -1369,6 +1382,9 @@ final class SettingsBackup {
         settingsExportTask?.cancel()
         settingsExportTask = nil
         pendingSettingsData = nil
+        settingsImportGeneration += 1
+        settingsImportTask?.cancel()
+        settingsImportTask = nil
         for dataClass in SettingsBackupDataClass.allCases {
             restoreGenerationState.invalidate(dataClass)
             restoreTokens[dataClass]?.invalidate()
@@ -1392,6 +1408,9 @@ final class SettingsBackup {
     func prepareForTermination() {
         debounce?.invalidate()
         debounce = nil
+        settingsImportGeneration += 1
+        settingsImportTask?.cancel()
+        settingsImportTask = nil
     }
 
     func backupMusic() {
@@ -1779,6 +1798,10 @@ final class SettingsBackup {
     }
 
     private func importFromCloudIfNewer(decision: SettingsBackupTransferDecision) {
+        settingsImportGeneration += 1
+        let generation = settingsImportGeneration
+        settingsImportTask?.cancel()
+        settingsImportTask = nil
         guard decision.shouldRestore else {
             finishSettingsRestore()
             return
@@ -1807,7 +1830,21 @@ final class SettingsBackup {
             finishSettingsRestore()
             return
         }
-        guard let data = settingsBackupReadCloudSettingsFile(at: cloudFile),
+        let cloudFile = cloudFile
+        settingsImportTask = Task { [weak self] in
+            await self?.readAndApplyImportedSettings(at: cloudFile, generation: generation)
+        }
+    }
+
+    private func readAndApplyImportedSettings(at cloudFile: URL, generation: Int) async {
+        let data = await settingsBackupReadCloudSettingsFileAsync(at: cloudFile)
+        guard !Task.isCancelled, generation == settingsImportGeneration else { return }
+        settingsImportTask = nil
+        applyImportedSettings(data)
+    }
+
+    private func applyImportedSettings(_ data: Data?) {
+        guard let data,
             let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
             awaitSettingsDownload()

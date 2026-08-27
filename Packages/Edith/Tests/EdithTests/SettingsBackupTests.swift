@@ -3,6 +3,11 @@ import Testing
 @testable import EdithHelper
 @testable import EdithKit
 
+private final class SettingsBackupBlockingReaderProbe: @unchecked Sendable {
+    let entered = DispatchSemaphore(value: 0)
+    let release = DispatchSemaphore(value: 0)
+}
+
 @Suite struct SettingsBackupTests {
     private func waitForSignal(_ semaphore: DispatchSemaphore) async -> Bool {
         await withCheckedContinuation { continuation in
@@ -625,6 +630,28 @@ import Testing
 
         #expect(data == expected)
         #expect(document == ["onboardingCompleted": true])
+    }
+
+    @Test @MainActor func cloudSettingsImportLeavesTheMainActorResponsive() async {
+        let probe = SettingsBackupBlockingReaderProbe()
+        let expected = Data("settings".utf8)
+        let read = Task { @MainActor in
+            await settingsBackupReadCloudSettingsFileAsync(
+                at: URL(fileURLWithPath: "/tmp/settings.json")
+            ) { _, _ in
+                probe.entered.signal()
+                probe.release.wait()
+                return expected
+            }
+        }
+        defer { probe.release.signal() }
+
+        #expect(await waitForSignal(probe.entered))
+        let marker = Task { @MainActor in true }
+
+        #expect(await marker.value)
+        probe.release.signal()
+        #expect(await read.value == expected)
     }
 
     @Test @MainActor func finalSettingsExportPublishesAfterCancelledOlderExport() async throws {
