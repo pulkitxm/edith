@@ -1,11 +1,16 @@
 import AppKit
 import EdithKit
+import UserNotifications
 
 @MainActor
 final class SystemStatsStatusItem: NSObject, FeatureModule {
     private let item: NSStatusItem
     private var timer: Timer?
-    private var previous: CPUTicks?
+    private let sampler = SystemMonitorSampler()
+    private var cpuAlert = SustainedThresholdGate()
+    private var memoryAlert = SustainedThresholdGate()
+    private var diskAlert = SustainedThresholdGate()
+    private var batteryAlert = SustainedThresholdGate()
     private var sleepObservers: [NSObjectProtocol] = []
     private var lockObservers: [NSObjectProtocol] = []
     private var cachedTintHex: String?
@@ -17,7 +22,6 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         StatusItemMenu.attach(to: item, target: self, action: #selector(clicked))
-        previous = SystemStatsReader.readCPUTicks()
         update()
         startTimer()
         let workspace = NSWorkspace.shared.notificationCenter
@@ -48,7 +52,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
 
     private func startTimer() {
         guard timer == nil else { return }
-        previous = SystemStatsReader.readCPUTicks()
+        sampler.reset()
         update()
         let timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.update() }
@@ -61,6 +65,8 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     private func stopTimer() {
         timer?.invalidate()
         timer = nil
+        sampler.reset()
+        resetAlerts()
     }
 
     func shutdown() {
@@ -81,20 +87,15 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     }
 
     private func update() {
-        var cpu = 0.0
-        if let previous, let current = SystemStatsReader.readCPUTicks() {
-            cpu = SystemStatsReader.cpuUsage(previous: previous, current: current)
-            self.previous = current
-        } else {
-            previous = SystemStatsReader.readCPUTicks()
-        }
-        let memory = SystemStatsReader.memoryUsedPercent()
+        let snapshot = sampler.sample()
         ensureStyleCache()
         let title = NSMutableAttributedString()
-        appendStat(symbol: "cpu", value: cpu, into: title)
+        appendStat(symbol: "cpu", value: snapshot.cpuPercent, into: title)
         title.append(NSAttributedString(string: "  "))
-        appendStat(symbol: "memorychip", value: memory, into: title)
+        appendStat(symbol: "memorychip", value: snapshot.memoryPercent, into: title)
         item.button?.attributedTitle = title
+        item.button?.toolTip = details(snapshot)
+        evaluateAlerts(snapshot)
     }
 
     private func ensureStyleCache() {
@@ -139,5 +140,141 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         out.append(
             NSAttributedString(string: "\(Int(value.rounded()))", attributes: numberAttributes))
         out.append(NSAttributedString(string: "%", attributes: percentAttributes))
+    }
+
+    private func details(_ snapshot: SystemMonitorSnapshot) -> String {
+        let gpu: String
+        if let value = snapshot.gpuPercent {
+            gpu = String(format: "%.0f%%", value)
+        } else {
+            gpu = "unavailable"
+        }
+        let storage: String
+        if let value = snapshot.rootDiskUsedPercent {
+            storage = String(format: "%.0f%% used", value)
+        } else {
+            storage = "unavailable"
+        }
+        let battery: String
+        if let value = snapshot.battery {
+            let watts: String
+            if let value = value.watts {
+                watts = String(format: " · %+.1f W", value)
+            } else {
+                watts = ""
+            }
+            battery = "\(value.percent)% · \(value.status)\(watts)"
+        } else {
+            battery = "not installed"
+        }
+        return [
+            String(
+                format: "CPU %.0f%% · Memory %.0f%% · GPU %@", snapshot.cpuPercent,
+                snapshot.memoryPercent, gpu),
+            "Network ↓ \(ByteFormatter.rate(snapshot.network.inboundBytesPerSecond))  ↑ \(ByteFormatter.rate(snapshot.network.outboundBytesPerSecond))",
+            "Disk read \(ByteFormatter.rate(snapshot.disk.inboundBytesPerSecond))  write \(ByteFormatter.rate(snapshot.disk.outboundBytesPerSecond))",
+            "Startup disk \(storage) · Battery \(battery)",
+        ].joined(separator: "\n")
+    }
+
+    private func evaluateAlerts(_ snapshot: SystemMonitorSnapshot) {
+        let defaults = SharedDefaults.store
+        guard defaults.bool(forKey: AppStorageKeys.MenuBar.statsAlerts) else {
+            resetAlerts()
+            return
+        }
+        let duration: TimeInterval = 12
+        if cpuAlert.evaluate(
+            value: snapshot.cpuPercent,
+            threshold: threshold(AppStorageKeys.MenuBar.statsCPUThreshold, fallback: 90),
+            readAt: snapshot.sampledAt, sustainedSeconds: duration, direction: .atLeast)
+        {
+            SystemMonitorNotifier.send(.cpu(snapshot.cpuPercent))
+        }
+        if memoryAlert.evaluate(
+            value: snapshot.memoryPercent,
+            threshold: threshold(AppStorageKeys.MenuBar.statsMemoryThreshold, fallback: 90),
+            readAt: snapshot.sampledAt, sustainedSeconds: duration, direction: .atLeast)
+        {
+            SystemMonitorNotifier.send(.memory(snapshot.memoryPercent))
+        }
+        if diskAlert.evaluate(
+            value: snapshot.rootDiskUsedPercent,
+            threshold: threshold(AppStorageKeys.MenuBar.statsDiskThreshold, fallback: 90),
+            readAt: snapshot.storageReadAt, sustainedSeconds: duration, direction: .atLeast)
+        {
+            SystemMonitorNotifier.send(.disk(snapshot.rootDiskUsedPercent ?? 0))
+        }
+        let batteryValue: Double?
+        if let battery = snapshot.battery, !battery.externalPower {
+            batteryValue = Double(battery.percent)
+        } else {
+            batteryValue = nil
+        }
+        if batteryAlert.evaluate(
+            value: batteryValue,
+            threshold: threshold(AppStorageKeys.MenuBar.statsBatteryThreshold, fallback: 20),
+            readAt: snapshot.batteryReadAt, sustainedSeconds: duration, direction: .atMost)
+        {
+            SystemMonitorNotifier.send(.battery(snapshot.battery?.percent ?? 0))
+        }
+    }
+
+    private func threshold(_ key: String, fallback: Double) -> Double {
+        SharedDefaults.store.object(forKey: key) as? Double ?? fallback
+    }
+
+    private func resetAlerts() {
+        cpuAlert.reset()
+        memoryAlert.reset()
+        diskAlert.reset()
+        batteryAlert.reset()
+    }
+}
+
+private enum SystemMonitorAlert {
+    case cpu(Double)
+    case memory(Double)
+    case disk(Double)
+    case battery(Int)
+
+    var identifier: String {
+        switch self {
+        case .cpu: "system-monitor.cpu"
+        case .memory: "system-monitor.memory"
+        case .disk: "system-monitor.disk"
+        case .battery: "system-monitor.battery"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .cpu: "CPU pressure is staying high"
+        case .memory: "Memory pressure is staying high"
+        case .disk: "The startup disk is almost full"
+        case .battery: "Battery is running low"
+        }
+    }
+
+    var body: String {
+        switch self {
+        case let .cpu(value): String(format: "CPU usage has held at %.0f%% or higher.", value)
+        case let .memory(value):
+            String(format: "Memory usage has held at %.0f%% or higher.", value)
+        case let .disk(value): String(format: "The startup disk is %.0f%% full.", value)
+        case let .battery(value): "Battery has stayed at \(value)% while unplugged."
+        }
+    }
+}
+
+private enum SystemMonitorNotifier {
+    static func send(_ alert: SystemMonitorAlert, center: UNUserNotificationCenter = .current()) {
+        let content = UNMutableNotificationContent()
+        content.title = alert.title
+        content.body = alert.body
+        content.sound = .default
+        center.removeDeliveredNotifications(withIdentifiers: [alert.identifier])
+        center.add(
+            UNNotificationRequest(identifier: alert.identifier, content: content, trigger: nil))
     }
 }

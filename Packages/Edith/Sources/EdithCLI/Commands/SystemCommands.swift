@@ -31,28 +31,35 @@ struct SystemStatsCommand: AsyncParsableCommand {
             let interval = try ArgumentChecks.positive(self.interval, "--interval")
             let processes = try ArgumentChecks.nonNegative(self.processes, "--processes")
             let sampler = LocalMachineSampler()
+            let monitor = SystemMonitorSampler()
+            defer { monitor.reset() }
             let hello = sampler.hello()
             _ = await sampler.sample()
+            _ = monitor.sample()
             try await Task.sleep(for: .milliseconds(500))
             var first = true
             repeat {
                 if !first { try await Task.sleep(for: .seconds(max(0.5, interval))) }
                 let sample = await sampler.sample()
+                let monitorSample = monitor.sample()
                 let payload = JSONValue.object([
                     "host": MachineReports.hello(hello),
                     "sample": MachineReports.sample(sample, processes: processes),
+                    "monitor": MachineReports.systemMonitor(monitorSample),
                 ])
                 if json {
                     CLIOut.out(JSONSerializer.string(payload, pretty: !follow))
                 } else {
-                    printHuman(hello: hello, sample: sample, header: first)
+                    printHuman(hello: hello, sample: sample, monitor: monitorSample, header: first)
                 }
                 first = false
             } while follow
         }
     }
 
-    private func printHuman(hello: MachineHello, sample: MachineSample, header: Bool) {
+    private func printHuman(
+        hello: MachineHello, sample: MachineSample, monitor: SystemMonitorSnapshot, header: Bool
+    ) {
         if header {
             CLIOut.out("\(hello.host)  \(hello.os)  \(hello.cores) cores")
         }
@@ -65,6 +72,12 @@ struct SystemStatsCommand: AsyncParsableCommand {
                 format: "cpu %5.1f%%   mem %@   load %@   net down %@ up %@",
                 sample.cpu.total, memory, load, ByteFormatter.rate(sample.net.rxBps),
                 ByteFormatter.rate(sample.net.txBps)))
+        let gpu = monitor.gpuPercent.map { String(format: "%.0f%%", $0) } ?? "n/a"
+        let storage = monitor.rootDiskUsedPercent.map { String(format: "%.0f%%", $0) } ?? "n/a"
+        let power = monitor.battery.map { "\($0.percent)% \($0.status)" } ?? "desktop"
+        CLIOut.out(
+            "gpu \(gpu)   disk read \(ByteFormatter.rate(monitor.disk.inboundBytesPerSecond)) write \(ByteFormatter.rate(monitor.disk.outboundBytesPerSecond))   storage \(storage)   power \(power)"
+        )
         guard processes > 0 else { return }
         let rows = sample.procs.prefix(processes).map { process in
             [

@@ -202,9 +202,9 @@
     {
       "area": "backgroundWorker",
       "status": "protected",
-      "finding": "Usage collection runs in a utility subprocess and terminates that subprocess when its task is canceled.",
-      "measurement": "The usage.refresh interval covers the worker lifetime and its structured event transcript.",
-      "regressionProperty": "The collector retains utility quality of service and task-cancellation handling.",
+      "finding": "Usage collection runs in a cancellable utility subprocess, while System Monitor uses native counters and fixed slow-metric strides.",
+      "measurement": "The usage.refresh interval covers the worker lifetime, and deterministic monitor tests protect GPU and battery or capacity cadence.",
+      "regressionProperty": "Usage refresh remains asynchronous and cancellable, while continuous monitoring keeps expensive metric families off its two-second path.",
       "evidence": [
         {
           "path": "Packages/Edith/Sources/EdithKit/Features/Usage/Services/UsageRefreshRunner.swift",
@@ -213,6 +213,14 @@
         {
           "path": "Packages/Edith/Sources/EdithKit/Core/Processes/ToolProvisioner.swift",
           "contains": "withTaskCancellationHandler"
+        },
+        {
+          "path": "Packages/Edith/Sources/EdithKit/Features/System/Services/SystemMonitorSampler.swift",
+          "contains": "static let slowStride = 15"
+        },
+        {
+          "path": "Packages/Edith/Tests/EdithTests/SystemStatsTests.swift",
+          "contains": "monitorCadenceKeepsExpensiveMetricsOffTheFastPath"
         }
       ]
     },
