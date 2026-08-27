@@ -1,4 +1,5 @@
 import EdithKit
+import Security
 import ServiceManagement
 import SwiftUI
 
@@ -13,6 +14,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var appStarted = false
     private var launchCleanupTask: Task<Void, Never>?
     private var helperMaintenanceTask: Task<Void, Never>?
+    private let lidAwakeDaemonRegistrar = LidAwakeDaemonRegistrar()
     private let postLaunch = StartupCoordinator()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -33,6 +35,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         }
         appStarted = true
         ExtensionDefaultsMigration.migrate()
+        lidAwakeDaemonRegistrar.register()
         applyConfiguredActivationPolicy()
         showInitialWindow()
         PerformanceTrace.event(.mainThread, "main.initialWindow")
@@ -131,6 +134,79 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+}
+
+private final class LidAwakeDaemonRegistrar {
+    private static let fingerprintKey = "lidAwakePrivilegedHelperFingerprint"
+
+    private let service = SMAppService.daemon(plistName: LidAwakePrivilegedService.plistName)
+    private var registrationInFlight = false
+
+    func register() {
+        guard !registrationInFlight else { return }
+        let fingerprint = helperFingerprint()
+        switch service.status {
+        case .enabled:
+            guard let fingerprint else { return }
+            guard UserDefaults.standard.string(forKey: Self.fingerprintKey) != fingerprint
+            else { return }
+            registrationInFlight = true
+            service.unregister { [weak self] error in
+                guard let self else { return }
+                self.registrationInFlight = false
+                guard error == nil else { return }
+                self.registerCurrent(fingerprint: fingerprint)
+            }
+        case .requiresApproval:
+            persist(fingerprint)
+        case .notRegistered, .notFound:
+            registerCurrent(fingerprint: fingerprint)
+        @unknown default:
+            break
+        }
+    }
+
+    private func registerCurrent(fingerprint: String?) {
+        do {
+            try service.register()
+            persist(fingerprint)
+        } catch {
+            let failure = error as NSError
+            if service.status == .requiresApproval
+                || (failure.domain == "SMAppServiceErrorDomain" && failure.code == 1)
+            {
+                persist(fingerprint)
+            } else {
+                NSLog(
+                    "Service Management registration failed (%@ %ld): %@", failure.domain,
+                    failure.code, failure.localizedDescription)
+            }
+        }
+    }
+
+    private func persist(_ fingerprint: String?) {
+        if let fingerprint {
+            UserDefaults.standard.set(fingerprint, forKey: Self.fingerprintKey)
+        }
+    }
+
+    private func helperFingerprint() -> String? {
+        let helper = Bundle.main.bundleURL
+            .appendingPathComponent("Contents/Library/PrivilegedHelperTools")
+            .appendingPathComponent(LidAwakePrivilegedService.bundleIdentifier)
+        var code: SecStaticCode?
+        guard
+            SecStaticCodeCreateWithPath(helper as CFURL, [], &code) == errSecSuccess,
+            let code
+        else { return nil }
+        var information: CFDictionary?
+        guard
+            SecCodeCopySigningInformation(code, [], &information) == errSecSuccess,
+            let values = information as? [CFString: Any],
+            let data = values[kSecCodeInfoUnique] as? Data
+        else { return nil }
+        return data.map { String(format: "%02x", $0) }.joined()
     }
 }
 

@@ -740,11 +740,20 @@ private func lidAwakeProcessIDs(at url: URL) throws -> [pid_t] {
             contentsOf: root.appendingPathComponent("build.sh"), encoding: .utf8)
         #expect(
             build.contains(
-                "PRIVILEGED_HELPER=\"$HELPER/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake\""
+                "PRIVILEGED_HELPER=\"$APP/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake\""
             ))
         #expect(
             build.contains(
-                "LAUNCH_DAEMONS=\"$HELPER/Contents/Library/LaunchDaemons\""))
+                "LAUNCH_DAEMONS=\"$APP/Contents/Library/LaunchDaemons\""))
+        #expect(
+            build.contains(
+                "STATUS_HELPER=\"$HELPER/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake\""
+            ))
+        let mainApp = try String(
+            contentsOf: root.appendingPathComponent(
+                "Packages/Edith/Sources/Edith/Core/Application/EdithApp.swift"),
+            encoding: .utf8)
+        #expect(mainApp.contains("LidAwakeDaemonRegistrar"))
         let package = try String(
             contentsOf: root.appendingPathComponent("Packages/Edith/Package.swift"),
             encoding: .utf8)

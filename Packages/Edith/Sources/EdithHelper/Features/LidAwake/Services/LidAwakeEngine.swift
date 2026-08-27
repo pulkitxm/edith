@@ -181,7 +181,6 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
         lastError = initialError
         let savedDeadline = LidAwakeState.sessionDeadline(defaults)
         let automaticStopPending = LidAwakeState.automaticStopPending(defaults)
-        if startServices { privilegedClient.register() }
         active = readSystemState()
         intent = active
         if active {
@@ -400,7 +399,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
             remainingSeconds: remaining, batteryThreshold: batteryThreshold,
             restoreOnQuit: LidAwakeState.restoresOnQuit(defaults),
             helperStatus: privilegedClient.state.rawValue, appRunning: true,
-            lastError: lastError ?? privilegedClient.registrationError)
+            lastError: lastError)
     }
 
     func resultPayload(
@@ -537,7 +536,6 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
             outcome = await applySystemState(false)
         } else {
             let client = LidAwakePrivilegedClient()
-            client.register()
             do {
                 try await client.setSleepDisabled(false)
                 outcome = .applied
