@@ -393,13 +393,21 @@ struct MachineTerminalTab: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
+        let presentation = MachineTerminalPresentation.make(
+            state: session.state, target: session.machine.sshTarget, isLocal: session.isLocal,
+            started: holder.started, exitMessage: holder.exitMessage,
+            launchEnabled: launchEnabled)
         VStack(spacing: 0) {
-            statusBar
-            TerminalPane(
-                holder: holder, palette: .edith(dark: dark), active: active,
-                wantsFocus: wantsFocus
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            statusBar(presentation)
+            if presentation.showsTerminal {
+                TerminalPane(
+                    holder: holder, palette: .edith(dark: dark), active: active,
+                    wantsFocus: wantsFocus
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                terminalUnavailable(presentation)
+            }
         }
         .background(Color(nsColor: TerminalPalette.edith(dark: dark).background))
         .onAppear(perform: startIfPossible)
@@ -412,7 +420,7 @@ struct MachineTerminalTab: View {
         .onDisappear { if injectedHolder == nil { holder.stop() } }
     }
 
-    private var statusBar: some View {
+    private func statusBar(_ presentation: MachineTerminalPresentation) -> some View {
         HStack(spacing: UIScale.pt(10)) {
             Text(session.isLocal ? "Local shell" : "SSH · \(session.machine.sshTarget)")
                 .font(DashSkin.mono(11))
@@ -423,11 +431,42 @@ struct MachineTerminalTab: View {
                     .foregroundStyle(DashSkin.warn)
             }
             Spacer(minLength: 0)
-            Button(holder.started ? "Restart" : "Start") { restart() }
-                .font(.system(size: UIScale.pt(11)))
+            if let action = presentation.action {
+                Button(action.title) { perform(action) }
+                    .font(.system(size: UIScale.pt(11)))
+            }
         }
         .padding(.horizontal, PageMetrics.gutter(compact))
         .padding(.bottom, UIScale.pt(8))
+    }
+
+    private func terminalUnavailable(_ presentation: MachineTerminalPresentation) -> some View {
+        VStack(spacing: UIScale.pt(10)) {
+            if presentation.showsProgress {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Image(systemName: presentation.symbol)
+                    .font(.system(size: UIScale.pt(24), weight: .light))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+            }
+            Text(presentation.title)
+                .font(.system(size: UIScale.pt(14), weight: .semibold))
+                .foregroundStyle(DashSkin.ink(dark))
+            if let detail = presentation.detail {
+                Text(detail)
+                    .font(.system(size: UIScale.pt(12)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: UIScale.pt(520))
+            }
+            if let action = presentation.action {
+                Button(action.title) { perform(action) }
+                    .buttonStyle(.edith(.primary))
+            }
+        }
+        .padding(UIScale.pt(24))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func startIfPossible() {
@@ -453,6 +492,93 @@ struct MachineTerminalTab: View {
     private func restart() {
         holder.stop()
         startIfPossible()
+    }
+
+    private func perform(_ action: MachineTerminalAction) {
+        switch action {
+        case .start: startIfPossible()
+        case .restart: restart()
+        case .connect: session.start()
+        case .retry: session.retry()
+        }
+    }
+}
+
+enum MachineTerminalAction: Equatable {
+    case start
+    case restart
+    case connect
+    case retry
+
+    var title: String {
+        switch self {
+        case .start: return "Start"
+        case .restart: return "Restart"
+        case .connect: return "Connect"
+        case .retry: return "Retry"
+        }
+    }
+}
+
+struct MachineTerminalPresentation: Equatable {
+    let title: String
+    let detail: String?
+    let symbol: String
+    let showsProgress: Bool
+    let showsTerminal: Bool
+    let action: MachineTerminalAction?
+
+    static func make(
+        state: MachineConnectionState, target: String, isLocal: Bool, started: Bool,
+        exitMessage: String?, launchEnabled: Bool
+    ) -> MachineTerminalPresentation {
+        if started {
+            return MachineTerminalPresentation(
+                title: "Terminal running", detail: nil, symbol: "terminal",
+                showsProgress: false, showsTerminal: true,
+                action: launchEnabled ? .restart : nil)
+        }
+        if isLocal {
+            if let exitMessage {
+                return MachineTerminalPresentation(
+                    title: "Terminal session ended", detail: exitMessage, symbol: "terminal",
+                    showsProgress: false, showsTerminal: false,
+                    action: launchEnabled ? .start : nil)
+            }
+            return MachineTerminalPresentation(
+                title: "Starting local shell…", detail: nil, symbol: "terminal",
+                showsProgress: true, showsTerminal: false, action: nil)
+        }
+        switch state {
+        case .disconnected:
+            return MachineTerminalPresentation(
+                title: "Not connected", detail: "Connect to \(target) to start a terminal.",
+                symbol: "network.slash", showsProgress: false, showsTerminal: false,
+                action: .connect)
+        case .connecting:
+            return MachineTerminalPresentation(
+                title: "Connecting to \(target)…", detail: nil, symbol: "network",
+                showsProgress: true, showsTerminal: false, action: nil)
+        case let .reconnecting(message):
+            return MachineTerminalPresentation(
+                title: "Reconnecting to \(target)…", detail: message, symbol: "network",
+                showsProgress: true, showsTerminal: false, action: nil)
+        case .connected:
+            if let exitMessage {
+                return MachineTerminalPresentation(
+                    title: "Terminal session ended", detail: exitMessage, symbol: "terminal",
+                    showsProgress: false, showsTerminal: false,
+                    action: launchEnabled ? .start : nil)
+            }
+            return MachineTerminalPresentation(
+                title: "Starting terminal…", detail: nil, symbol: "terminal",
+                showsProgress: true, showsTerminal: false, action: nil)
+        case let .failed(message, recoverable):
+            return MachineTerminalPresentation(
+                title: "Couldn’t connect to \(target)", detail: message,
+                symbol: "exclamationmark.triangle", showsProgress: false,
+                showsTerminal: false, action: recoverable ? .retry : nil)
+        }
     }
 }
 

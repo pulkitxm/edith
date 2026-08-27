@@ -143,6 +143,7 @@ struct ConnectionPill: View {
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .lineLimit(1)
                 .truncationMode(.tail)
+                .help(MachineStatusStyle.detail(session.state))
             if session.state.isRetryable {
                 Button("Retry") { session.retry() }
                     .buttonStyle(.edith(.borderless))
