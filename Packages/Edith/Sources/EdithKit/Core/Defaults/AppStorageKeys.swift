@@ -159,6 +159,7 @@ public enum AppStorageKeys {
         public static let excludedApps = "mouseExcludedApps"
         public static let focusDelay = "mouseFocusDelay"
         public static let focusFollowsPointer = "mouseFocusFollowsPointer"
+        public static let middleClick = "mouseMiddleClick"
         public static let reverseHorizontal = "mouseReverseHorizontal"
         public static let reverseVertical = "mouseReverseVertical"
         public static let sideNavigation = "mouseSideNavigation"

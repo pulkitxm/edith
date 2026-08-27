@@ -34,6 +34,60 @@ import Testing
         #expect(MouseControlSupport.frameDelta(-100) == -20)
     }
 
+    @Test func touchGesturesStayNativeWhileContinuousMouseWheelsAreHandled() {
+        let discrete = MouseControlSupport.ScrollTraits(
+            isContinuous: false, momentumPhase: 0, scrollPhase: 0, scrollCount: 0)
+        let mouseDriver = MouseControlSupport.ScrollTraits(
+            isContinuous: true, momentumPhase: 0, scrollPhase: 0, scrollCount: 0)
+        let touchGesture = MouseControlSupport.ScrollTraits(
+            isContinuous: true, momentumPhase: 0, scrollPhase: 1, scrollCount: 1)
+        let touchTransition = MouseControlSupport.ScrollTraits(
+            isContinuous: true, momentumPhase: 0, scrollPhase: 0, scrollCount: 1)
+
+        #expect(MouseControlSupport.isMouseWheel(discrete, secondsSinceLastGesturePhase: nil))
+        #expect(MouseControlSupport.isMouseWheel(mouseDriver, secondsSinceLastGesturePhase: nil))
+        #expect(!MouseControlSupport.isMouseWheel(touchGesture, secondsSinceLastGesturePhase: 0))
+        #expect(
+            !MouseControlSupport.isMouseWheel(touchTransition, secondsSinceLastGesturePhase: 0.2))
+        #expect(MouseControlSupport.isMouseWheel(touchTransition, secondsSinceLastGesturePhase: 2))
+    }
+
+    @Test func continuousDistanceAndSubpixelCarryPreserveTravel() {
+        #expect(MouseControlSupport.continuousDistance(fixedPoint: 2, point: 0, step: 40) == 20)
+        #expect(MouseControlSupport.continuousDistance(fixedPoint: 2, point: 5, step: 80) == 10)
+        let first = MouseControlSupport.wholePixels(1.4, carry: 0)
+        #expect(first.pixels == 1)
+        #expect(abs(first.carry - 0.4) < 0.000_001)
+        let second = MouseControlSupport.wholePixels(1.4, carry: first.carry)
+        #expect(second.pixels == 1)
+        #expect(abs(second.carry - 0.8) < 0.000_001)
+        #expect(MouseControlSupport.finalPixels(0.2, carry: second.carry) == 1)
+        #expect(MouseControlSupport.continuingCarry(0.4, distance: -1) == 0)
+    }
+
+    @Test func middleClickRequiresFreshSettledContactsAndHonorsConflicts() {
+        #expect(
+            MouseControlSupport.middleClickDecision(
+                fingerCount: 3, frameAge: 0.01, settledFor: 0.1,
+                sinceLastTransform: nil, systemDragEnabled: false) == .transform)
+        #expect(
+            MouseControlSupport.middleClickDecision(
+                fingerCount: 3, frameAge: 0.01, settledFor: 0.01,
+                sinceLastTransform: nil, systemDragEnabled: false) == .passThrough)
+        #expect(
+            MouseControlSupport.middleClickDecision(
+                fingerCount: 3, frameAge: 0.3, settledFor: 0.1,
+                sinceLastTransform: nil, systemDragEnabled: false) == .passThrough)
+        #expect(
+            MouseControlSupport.middleClickDecision(
+                fingerCount: 3, frameAge: 0.01, settledFor: 0.1,
+                sinceLastTransform: 0.1, systemDragEnabled: false) == .suppress)
+        #expect(
+            MouseControlSupport.middleClickDecision(
+                fingerCount: 3, frameAge: 0.01, settledFor: 0.1,
+                sinceLastTransform: nil, systemDragEnabled: true) == .passThrough)
+    }
+
     @Test func automaticSideButtonsResolveWithoutOverridingExplicitMappings() {
         #expect(
             MouseControlSupport.resolvedAction(

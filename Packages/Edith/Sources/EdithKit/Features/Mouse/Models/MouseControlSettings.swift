@@ -32,12 +32,38 @@ public enum MouseButtonAction: String, CaseIterable, Identifiable, Sendable {
 }
 
 public enum MouseControlSupport {
+    public struct ScrollTraits: Equatable, Sendable {
+        public let isContinuous: Bool
+        public let momentumPhase: Int64
+        public let scrollPhase: Int64
+        public let scrollCount: Int64
+
+        public init(
+            isContinuous: Bool, momentumPhase: Int64, scrollPhase: Int64, scrollCount: Int64
+        ) {
+            self.isContinuous = isContinuous
+            self.momentumPhase = momentumPhase
+            self.scrollPhase = scrollPhase
+            self.scrollCount = scrollCount
+        }
+    }
+
+    public enum MiddleClickDecision: Equatable, Sendable {
+        case transform
+        case passThrough
+        case suppress
+    }
+
     public static let buttonNumbers = 3...7
     public static let scrollStepRange = 20...100
     public static let defaultScrollStep = 40
     public static let focusDelayRange = 100...1_000
     public static let defaultFocusDelay = 300
     public static let syntheticEventTag: Int64 = 0x45444954484D4F55
+    public static let touchGestureGrace: TimeInterval = 1
+    public static let middleClickFrameFreshness: TimeInterval = 0.25
+    public static let middleClickMinimumSettle: TimeInterval = 0.04
+    public static let middleClickRepeatGuard: TimeInterval = 0.3
 
     public static func sanitizedScrollStep(_ value: Int) -> Int {
         guard value != 0 else { return defaultScrollStep }
@@ -78,6 +104,71 @@ public enum MouseControlSupport {
         return (remaining < 0 ? -1 : 1) * max(abs(remaining) * 0.2, 1)
     }
 
+    public static func isMouseWheel(
+        _ traits: ScrollTraits, secondsSinceLastGesturePhase: TimeInterval?
+    ) -> Bool {
+        if !traits.isContinuous { return true }
+        guard traits.momentumPhase == 0, traits.scrollPhase == 0 else { return false }
+        if traits.scrollCount != 0, let elapsed = secondsSinceLastGesturePhase,
+            elapsed <= touchGestureGrace
+        {
+            return false
+        }
+        return true
+    }
+
+    public static func continuousDistance(
+        fixedPoint: Double, point: Double, step: Double
+    ) -> Double {
+        guard fixedPoint.isFinite, point.isFinite, step.isFinite else { return 0 }
+        let pixels = point != 0 ? point : fixedPoint * 10
+        return pixels * step / Double(defaultScrollStep)
+    }
+
+    public static func wholePixels(
+        _ distance: Double, carry: Double
+    ) -> (pixels: Double, carry: Double) {
+        let total = distance + carry
+        guard total.isFinite else { return (0, 0) }
+        let whole = total.rounded(.towardZero)
+        return (whole, total - whole)
+    }
+
+    public static func finalPixels(_ distance: Double, carry: Double) -> Double {
+        let total = distance + carry
+        guard total.isFinite else { return 0 }
+        return total.rounded(.toNearestOrAwayFromZero)
+    }
+
+    public static func continuingCarry(_ carry: Double, distance: Double) -> Double {
+        guard carry != 0, distance != 0, (carry < 0) != (distance < 0) else { return carry }
+        return 0
+    }
+
+    public static func middleClickDecision(
+        fingerCount: Int, frameAge: TimeInterval, settledFor: TimeInterval,
+        sinceLastTransform: TimeInterval?, systemDragEnabled: Bool
+    ) -> MiddleClickDecision {
+        guard !systemDragEnabled, fingerCount == 3, frameAge >= 0,
+            frameAge <= middleClickFrameFreshness
+        else { return .passThrough }
+        if let sinceLastTransform, sinceLastTransform >= 0,
+            sinceLastTransform < middleClickRepeatGuard
+        {
+            return .suppress
+        }
+        guard settledFor >= middleClickMinimumSettle else { return .passThrough }
+        return .transform
+    }
+
+    public static func systemThreeFingerDragEnabled() -> Bool {
+        boolPreference(
+            "TrackpadThreeFingerDrag", domain: "com.apple.AppleMultitouchTrackpad")
+            || boolPreference(
+                "TrackpadThreeFingerDrag",
+                domain: "com.apple.driver.AppleBluetoothMultitouch.trackpad")
+    }
+
     public static func resolvedAction(
         buttonNumber: Int, stored: String?, sideNavigation: Bool
     ) -> MouseButtonAction {
@@ -101,5 +192,12 @@ public enum MouseControlSupport {
     {
         guard let bundleIdentifier else { return false }
         return exclusions.contains(bundleIdentifier.lowercased())
+    }
+
+    private static func boolPreference(_ key: String, domain: String) -> Bool {
+        guard let value = CFPreferencesCopyAppValue(key as CFString, domain as CFString) else {
+            return false
+        }
+        return (value as? NSNumber)?.boolValue ?? false
     }
 }

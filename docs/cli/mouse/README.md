@@ -27,6 +27,7 @@ ed config set mouseReverseHorizontal true
 ed config set mouseFocusFollowsPointer true
 ed config set mouseFocusDelay 350
 ed config set mouseSideNavigation true
+ed config set mouseMiddleClick true
 ed config set mouseButton6Action middleClick
 ed config set mouseExcludedApps com.example.game,com.example.design
 ```
@@ -37,7 +38,7 @@ Button actions include `automatic`, `passThrough`, `back`, `forward`, `middleCli
 
 Smooth scrolling and direction changes apply only to discrete mouse-wheel events. Edith does not alter continuous touch scrolling. Focus changes only after the pointer settles, and pause while a mouse button or modifier key is held.
 
-Middle click is available as an extra-button action. Three-finger trackpad middle click is not included because macOS 14 has no public global API for reading trackpad contact counts.
+Middle click is available as an extra-button action. The optional trackpad setting turns a three-finger physical press into a standard middle-button down, drag, and up sequence. Light taps and swipes stay unchanged. This compatibility feature uses macOS trackpad contact data when available and stands down if that source changes or if macOS three-finger drag is enabled.
 
 ## Recovery
 

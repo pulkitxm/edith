@@ -12,7 +12,11 @@ final class MouseControlsEngine {
     private var pendingFocus: DispatchWorkItem?
     private var remainingVertical = 0.0
     private var remainingHorizontal = 0.0
+    private var carryVertical = 0.0
+    private var carryHorizontal = 0.0
     private var currentFlags: CGEventFlags = []
+    private var glideFromContinuous = false
+    private var lastGesturePhaseTimestamp: UInt64?
     private var pressedButtons: Set<Int> = []
     private var claimedButtons: Set<Int> = []
     private var untouchedButtons: Set<Int> = []
@@ -23,6 +27,10 @@ final class MouseControlsEngine {
     private var focusFollowsPointer = false
     private var focusDelay = MouseControlSupport.defaultFocusDelay
     private var sideNavigation = true
+    private var middleClick = false
+    private var middleClickSourceButton: Int?
+    private var suppressedMiddleClickSourceButton: Int?
+    private var lastMiddleClickEnd: TimeInterval?
     private var actions: [Int: String] = [:]
     private var exclusions: Set<String> = []
     private let windowResolver = MouseWindowResolver()
@@ -45,6 +53,7 @@ final class MouseControlsEngine {
             defaults.integer(forKey: AppStorageKeys.Mouse.focusDelay))
         sideNavigation = Self.bool(
             defaults, AppStorageKeys.Mouse.sideNavigation, fallback: true)
+        middleClick = defaults.bool(forKey: AppStorageKeys.Mouse.middleClick)
         actions = Dictionary(
             uniqueKeysWithValues: zip(
                 MouseControlSupport.buttonNumbers,
@@ -58,6 +67,13 @@ final class MouseControlsEngine {
         windowResolver.invalidate()
         if AXIsProcessTrusted() {
             start()
+            if middleClick {
+                TrackpadContactMonitor.shared.start()
+            } else {
+                releaseHeldMiddleButton()
+                suppressedMiddleClickSourceButton = nil
+                TrackpadContactMonitor.shared.stop()
+            }
         } else {
             stop()
         }
@@ -100,9 +116,13 @@ final class MouseControlsEngine {
     private func stop() {
         cancelFocus()
         stopGlide()
+        releaseHeldMiddleButton()
+        TrackpadContactMonitor.shared.stop()
         pressedButtons.removeAll()
         claimedButtons.removeAll()
         untouchedButtons.removeAll()
+        suppressedMiddleClickSourceButton = nil
+        lastMiddleClickEnd = nil
         if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
         if let runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
@@ -114,6 +134,7 @@ final class MouseControlsEngine {
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            releaseHeldMiddleButton()
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return Unmanaged.passUnretained(event)
         }
@@ -133,6 +154,7 @@ final class MouseControlsEngine {
             return handleButtonUp(event)
         case .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
             cancelFocus()
+            return handleButtonDrag(event)
         default:
             break
         }
@@ -140,8 +162,21 @@ final class MouseControlsEngine {
     }
 
     private func handleScroll(_ event: CGEvent) -> Unmanaged<CGEvent>? {
-        guard event.getIntegerValueField(.scrollWheelEventIsContinuous) == 0,
-            event.getIntegerValueField(.scrollWheelEventMomentumPhase) == 0,
+        let traits = MouseControlSupport.ScrollTraits(
+            isContinuous: event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0,
+            momentumPhase: event.getIntegerValueField(.scrollWheelEventMomentumPhase),
+            scrollPhase: event.getIntegerValueField(.scrollWheelEventScrollPhase),
+            scrollCount: event.getIntegerValueField(.scrollWheelEventScrollCount))
+        let timestamp = UInt64(event.timestamp)
+        let secondsSinceGesture = lastGesturePhaseTimestamp.map {
+            Double(timestamp &- $0) / 1_000_000_000
+        }
+        if traits.momentumPhase != 0 || traits.scrollPhase != 0 {
+            lastGesturePhaseTimestamp = timestamp
+        }
+        guard
+            MouseControlSupport.isMouseWheel(
+                traits, secondsSinceLastGesturePhase: secondsSinceGesture),
             !event.flags.contains(.maskControl), !isExcluded(at: event.location)
         else { return Unmanaged.passUnretained(event) }
         if !smoothScroll {
@@ -151,24 +186,56 @@ final class MouseControlsEngine {
                 factor: reverseHorizontal ? -1 : 1)
             return Unmanaged.passUnretained(event)
         }
-        let vertical = MouseControlSupport.ticks(
-            integer: Double(event.getIntegerValueField(.scrollWheelEventDeltaAxis1)),
-            fixedPoint: event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1))
-        let horizontal = MouseControlSupport.ticks(
-            integer: Double(event.getIntegerValueField(.scrollWheelEventDeltaAxis2)),
-            fixedPoint: event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2))
-        let shifted = event.flags.contains(.maskShift) && horizontal == 0
-        let axes = MouseControlSupport.axes(
-            vertical: vertical, horizontal: horizontal, shiftPressed: shifted,
-            reverseVertical: reverseVertical, reverseHorizontal: reverseHorizontal)
+        let shifted: Bool
+        let axes: (vertical: Double, horizontal: Double)
+        let step: Double
+        if traits.isContinuous {
+            shifted = false
+            axes = (
+                MouseControlSupport.continuousDistance(
+                    fixedPoint: event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1),
+                    point: Double(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis1)),
+                    step: Double(scrollStep)) * (reverseVertical ? -1.0 : 1.0),
+                MouseControlSupport.continuousDistance(
+                    fixedPoint: event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2),
+                    point: Double(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis2)),
+                    step: Double(scrollStep)) * (reverseHorizontal ? -1.0 : 1.0)
+            )
+            step = 1
+        } else {
+            let vertical = MouseControlSupport.ticks(
+                integer: Double(event.getIntegerValueField(.scrollWheelEventDeltaAxis1)),
+                fixedPoint: event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1))
+            let horizontal = MouseControlSupport.ticks(
+                integer: Double(event.getIntegerValueField(.scrollWheelEventDeltaAxis2)),
+                fixedPoint: event.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2))
+            shifted = event.flags.contains(.maskShift) && horizontal == 0
+            axes = MouseControlSupport.axes(
+                vertical: vertical, horizontal: horizontal, shiftPressed: shifted,
+                reverseVertical: reverseVertical, reverseHorizontal: reverseHorizontal)
+            step = Double(scrollStep)
+        }
         guard axes.vertical != 0 || axes.horizontal != 0 else {
             return Unmanaged.passUnretained(event)
         }
+        if glideFromContinuous != traits.isContinuous
+            || currentFlags.contains(.maskShift) != event.flags.contains(.maskShift)
+        {
+            remainingVertical = 0
+            remainingHorizontal = 0
+            carryVertical = 0
+            carryHorizontal = 0
+        }
+        carryVertical = MouseControlSupport.continuingCarry(
+            carryVertical, distance: axes.vertical)
+        carryHorizontal = MouseControlSupport.continuingCarry(
+            carryHorizontal, distance: axes.horizontal)
         remainingVertical = MouseControlSupport.nextRemaining(
-            current: remainingVertical, added: axes.vertical * Double(scrollStep))
+            current: remainingVertical, added: axes.vertical * step)
         remainingHorizontal = MouseControlSupport.nextRemaining(
-            current: remainingHorizontal, added: axes.horizontal * Double(scrollStep))
+            current: remainingHorizontal, added: axes.horizontal * step)
         currentFlags = shifted ? event.flags.subtracting(.maskShift) : event.flags
+        glideFromContinuous = traits.isContinuous
         startGlide()
         return nil
     }
@@ -188,45 +255,62 @@ final class MouseControlsEngine {
 
     private func startGlide() {
         guard frameTimer == nil else { return }
-        frameTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) {
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) {
             [weak self] _ in
             MainActor.assumeIsolated { self?.emitFrame() }
         }
-        if let frameTimer { RunLoop.main.add(frameTimer, forMode: .common) }
+        RunLoop.main.add(timer, forMode: .common)
+        frameTimer = timer
+        emitFrame()
     }
 
     private func emitFrame() {
-        let vertical = consume(&remainingVertical)
-        let horizontal = consume(&remainingHorizontal)
-        guard vertical != 0 || horizontal != 0 else {
-            stopGlide()
+        let vertical = MouseControlSupport.frameDelta(remainingVertical)
+        let horizontal = MouseControlSupport.frameDelta(remainingHorizontal)
+        remainingVertical -= vertical
+        remainingHorizontal -= horizontal
+        let landing = remainingVertical == 0 && remainingHorizontal == 0
+        let verticalFrame =
+            landing
+            ? (
+                pixels: MouseControlSupport.finalPixels(vertical, carry: carryVertical),
+                carry: 0.0
+            )
+            : MouseControlSupport.wholePixels(vertical, carry: carryVertical)
+        let horizontalFrame =
+            landing
+            ? (
+                pixels: MouseControlSupport.finalPixels(horizontal, carry: carryHorizontal),
+                carry: 0.0
+            )
+            : MouseControlSupport.wholePixels(horizontal, carry: carryHorizontal)
+        carryVertical = verticalFrame.carry
+        carryHorizontal = horizontalFrame.carry
+        let verticalPixels = Self.pixelField(verticalFrame.pixels)
+        let horizontalPixels = Self.pixelField(horizontalFrame.pixels)
+        if verticalPixels == 0, horizontalPixels == 0 {
+            if landing { finishGlide() }
             return
         }
         let source = CGEventSource(stateID: .hidSystemState)
         guard
             let event = CGEvent(
                 scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2,
-                wheel1: vertical, wheel2: horizontal, wheel3: 0)
+                wheel1: verticalPixels, wheel2: horizontalPixels, wheel3: 0)
         else { return }
         event.flags = currentFlags
         event.setIntegerValueField(
             .eventSourceUserData, value: MouseControlSupport.syntheticEventTag)
         event.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
         event.post(tap: .cghidEventTap)
-        if remainingVertical == 0, remainingHorizontal == 0 { stopGlide() }
+        if landing { finishGlide() }
     }
 
-    private func consume(_ remaining: inout Double) -> Int32 {
-        guard remaining != 0 else { return 0 }
-        if abs(remaining) <= 1 {
-            let result: Int32 = remaining < 0 ? -1 : 1
-            remaining = 0
-            return result
-        }
-        let delta = MouseControlSupport.frameDelta(remaining)
-        let pixels = Int32(delta.rounded(.toNearestOrAwayFromZero))
-        remaining -= Double(pixels)
-        return pixels
+    private func finishGlide() {
+        frameTimer?.invalidate()
+        frameTimer = nil
+        carryVertical = 0
+        carryHorizontal = 0
     }
 
     private func stopGlide() {
@@ -234,6 +318,13 @@ final class MouseControlsEngine {
         frameTimer = nil
         remainingVertical = 0
         remainingHorizontal = 0
+        carryVertical = 0
+        carryHorizontal = 0
+    }
+
+    private static func pixelField(_ value: Double) -> Int32 {
+        guard value.isFinite else { return 0 }
+        return Int32(clamping: Int(min(max(value, -1_000_000), 1_000_000)))
     }
 
     private func handlePointerMove(_ event: CGEvent) {
@@ -272,6 +363,18 @@ final class MouseControlsEngine {
         let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
         pressedButtons.insert(button)
         cancelFocus()
+        if button == 0 || button == 1 {
+            switch trackpadMiddleClickDecision(for: event, button: button) {
+            case .transform:
+                middleClickSourceButton = button
+                return Unmanaged.passUnretained(asMiddle(event, type: .otherMouseDown))
+            case .suppress:
+                suppressedMiddleClickSourceButton = button
+                return nil
+            case .passThrough:
+                break
+            }
+        }
         guard MouseControlSupport.buttonNumbers.contains(button) else {
             return Unmanaged.passUnretained(event)
         }
@@ -290,9 +393,62 @@ final class MouseControlsEngine {
     private func handleButtonUp(_ event: CGEvent) -> Unmanaged<CGEvent>? {
         let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
         pressedButtons.remove(button)
+        if suppressedMiddleClickSourceButton == button {
+            suppressedMiddleClickSourceButton = nil
+            return nil
+        }
+        if middleClickSourceButton == button {
+            middleClickSourceButton = nil
+            lastMiddleClickEnd = ProcessInfo.processInfo.systemUptime
+            return Unmanaged.passUnretained(asMiddle(event, type: .otherMouseUp))
+        }
         if untouchedButtons.remove(button) != nil { return Unmanaged.passUnretained(event) }
         if claimedButtons.remove(button) != nil { return nil }
         return Unmanaged.passUnretained(event)
+    }
+
+    private func handleButtonDrag(_ event: CGEvent) -> Unmanaged<CGEvent>? {
+        let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
+        if suppressedMiddleClickSourceButton == button { return nil }
+        if middleClickSourceButton == button {
+            return Unmanaged.passUnretained(asMiddle(event, type: .otherMouseDragged))
+        }
+        return Unmanaged.passUnretained(event)
+    }
+
+    private func trackpadMiddleClickDecision(
+        for event: CGEvent, button: Int
+    ) -> MouseControlSupport.MiddleClickDecision {
+        guard middleClick, !isExcluded(at: event.location) else { return .passThrough }
+        if middleClickSourceButton == button { return .suppress }
+        let now = ProcessInfo.processInfo.systemUptime
+        let snapshot = TrackpadContactMonitor.shared.snapshot(at: now)
+        return MouseControlSupport.middleClickDecision(
+            fingerCount: snapshot.fingerCount, frameAge: snapshot.frameAge,
+            settledFor: snapshot.settledFor,
+            sinceLastTransform: lastMiddleClickEnd.map { now - $0 },
+            systemDragEnabled: MouseControlSupport.systemThreeFingerDragEnabled())
+    }
+
+    private func asMiddle(_ event: CGEvent, type: CGEventType) -> CGEvent {
+        event.type = type
+        event.setIntegerValueField(.mouseEventButtonNumber, value: 2)
+        return event
+    }
+
+    private func releaseHeldMiddleButton() {
+        guard middleClickSourceButton != nil else { return }
+        middleClickSourceButton = nil
+        let point = CGEvent(source: nil)?.location ?? .zero
+        let source = CGEventSource(stateID: .hidSystemState)
+        let event = CGEvent(
+            mouseEventSource: source, mouseType: .otherMouseUp,
+            mouseCursorPosition: point, mouseButton: .center)
+        event?.setIntegerValueField(.mouseEventButtonNumber, value: 2)
+        event?.setIntegerValueField(
+            .eventSourceUserData, value: MouseControlSupport.syntheticEventTag)
+        event?.post(tap: .cghidEventTap)
+        lastMiddleClickEnd = ProcessInfo.processInfo.systemUptime
     }
 
     private func perform(_ action: MouseButtonAction, at point: CGPoint) {

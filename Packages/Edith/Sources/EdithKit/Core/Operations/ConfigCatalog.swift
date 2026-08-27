@@ -664,6 +664,10 @@ public enum ConfigCatalog {
             AppStorageKeys.Mouse.sideNavigation, .bool, group: "mouse",
             summary: "Use the standard side buttons for Back and Forward.", fallback: .bool(true)),
         SettingDefinition(
+            AppStorageKeys.Mouse.middleClick, .bool, group: "mouse",
+            summary: "Turn a three-finger physical trackpad press into a middle click.",
+            fallback: .bool(false)),
+        SettingDefinition(
             AppStorageKeys.Mouse.button4Action, .string, group: "mouse",
             summary: "Action assigned to mouse button 4.",
             allowed: MouseButtonAction.allCases.map(\.rawValue), fallback: .string("automatic")),

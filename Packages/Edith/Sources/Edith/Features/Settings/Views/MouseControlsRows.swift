@@ -20,6 +20,8 @@ struct MouseControlsRows: View {
         MouseControlSupport.defaultFocusDelay
     @AppStorage(AppStorageKeys.Mouse.sideNavigation, store: SharedDefaults.store) private
         var sideNavigation = true
+    @AppStorage(AppStorageKeys.Mouse.middleClick, store: SharedDefaults.store) private
+        var middleClick = false
     @AppStorage(AppStorageKeys.Mouse.button4Action, store: SharedDefaults.store) private
         var button4Action = MouseButtonAction.automatic.rawValue
     @AppStorage(AppStorageKeys.Mouse.button5Action, store: SharedDefaults.store) private
@@ -106,6 +108,20 @@ struct MouseControlsRows: View {
             }
             Text("Focus waits while you drag or hold Command, Shift, Option, or Control.")
                 .settingsCaption()
+        }
+        Section("Trackpad") {
+            Toggle(
+                "Three-finger press is Middle Click",
+                isOn: $middleClick.configured(AppStorageKeys.Mouse.middleClick))
+            if middleClick && MouseControlSupport.systemThreeFingerDragEnabled() {
+                Text(
+                    "macOS three-finger drag uses the same gesture. Turn it off in Accessibility, Pointer Control, Trackpad Options."
+                )
+                .settingsCaption()
+            } else {
+                Text("Only a physical press changes. Light taps and swipes stay unchanged.")
+                    .settingsCaption()
+            }
         }
     }
 
