@@ -10,6 +10,7 @@ requested limit. Both commands preserve their inputs and can run while Edith is 
 
 ## Commands
 
+- [`ed media status`](./status.md)
 - [`ed media convert-images`](./convert-images.md)
 - [`ed media compress-video`](./compress-video.md)
 
