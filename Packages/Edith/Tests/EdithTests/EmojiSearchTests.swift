@@ -65,6 +65,77 @@ private let corpus = [
     }
 }
 
+@Suite struct EmojiOperationResolveTests {
+    private let catalog = EmojiCatalog(
+        groups: [EmojiGroup(id: "people-body", name: "People", symbolName: "hand.wave")],
+        emoji: [
+            Emoji(
+                character: "👍\u{FE0F}", name: "thumbs up", groupIndex: 0, unicodeVersion: 0.6,
+                terms: ["like"], toneVariants: ["👍🏻", "👍🏼", "👍🏽", "👍🏾", "👍🏿"]),
+            Emoji(
+                character: "🚀", name: "rocket", groupIndex: 0, unicodeVersion: 0.6,
+                terms: ["launch"]),
+        ])
+
+    private func scratch() -> UserDefaults {
+        let name = "test.emoji.resolve.\(UUID().uuidString)"
+        return UserDefaults(suiteName: name)!
+    }
+
+    @Test func resolvesTheCharacterItselfAHexcodeAndAName() throws {
+        let store = scratch()
+        #expect(try EmojiOperationExecution.resolve("🚀", in: catalog, store: store) == "🚀")
+        #expect(
+            try EmojiOperationExecution.resolve("1F680", in: catalog, store: store) == "🚀")
+        #expect(try EmojiOperationExecution.resolve("rocket", in: catalog, store: store) == "🚀")
+        #expect(try EmojiOperationExecution.resolve("launch", in: catalog, store: store) == "🚀")
+    }
+
+    @Test func hexcodeMatchesWithOrWithoutTheVariationSelector() throws {
+        let store = scratch()
+        #expect(
+            try EmojiOperationExecution.resolve("1F44D", in: catalog, store: store) == "👍\u{FE0F}")
+        #expect(
+            try EmojiOperationExecution.resolve("1F44D-FE0F", in: catalog, store: store)
+                == "👍\u{FE0F}")
+        #expect(try EmojiOperationExecution.resolve("👍", in: catalog, store: store) == "👍\u{FE0F}")
+    }
+
+    @Test func storedToneAppliesToBaseCharactersButNotToAnExplicitVariant() throws {
+        let store = scratch()
+        store.set(EmojiSkinTone.dark.rawValue, forKey: AppStorageKeys.Emoji.skinTone)
+        #expect(try EmojiOperationExecution.resolve("1F44D", in: catalog, store: store) == "👍🏿")
+        #expect(try EmojiOperationExecution.resolve("👍🏻", in: catalog, store: store) == "👍🏻")
+        #expect(try EmojiOperationExecution.resolve("🚀", in: catalog, store: store) == "🚀")
+    }
+
+    @Test func unknownInputThrows() {
+        let store = scratch()
+        #expect(throws: EmojiOperationError.self) {
+            try EmojiOperationExecution.resolve("aardvark", in: catalog, store: store)
+        }
+        #expect(throws: EmojiOperationError.self) {
+            try EmojiOperationExecution.resolve("  ", in: catalog, store: store)
+        }
+    }
+
+    @Test func hexcodeParsingRejectsNonsense() {
+        #expect(EmojiOperationExecution.character(fromHexcode: "1F600") == "😀")
+        #expect(EmojiOperationExecution.character(fromHexcode: "1F1EE-1F1F3") == "🇮🇳")
+        #expect(EmojiOperationExecution.character(fromHexcode: "zzz") == nil)
+        #expect(EmojiOperationExecution.character(fromHexcode: "") == nil)
+        #expect(EmojiOperationExecution.character(fromHexcode: "110000") == nil)
+    }
+
+    @Test func skinToneTokensRoundTrip() {
+        for tone in EmojiSkinTone.allCases {
+            #expect(EmojiSkinTone(token: tone.token) == tone)
+            #expect(EmojiSkinTone(token: tone.token.uppercased()) == tone)
+        }
+        #expect(EmojiSkinTone(token: "beige") == nil)
+    }
+}
+
 @Suite struct EmojiUsageLedgerTests {
     private let epoch = Date(timeIntervalSince1970: 1_700_000_000)
 
