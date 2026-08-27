@@ -25,6 +25,7 @@ final class TerminalSessionHolder {
     private(set) var exitMessage: String?
     private(set) var themeApplicationCount = 0
     private(set) var ghosttyLaunch: GhosttyLaunch?
+    private(set) var ghosttyView: GhosttyTerminalView?
     private(set) var presentationGeneration = 0
 
     private var delegateBox: TerminalProcessDelegate?
@@ -75,17 +76,38 @@ final class TerminalSessionHolder {
         appliedPalette = nil
         presentationActive = nil
         presentationWantsFocus = false
+        ghosttyView?.shutdown()
+        ghosttyView = nil
         ghosttyLaunch = nil
     }
 
     func stop() {
-        guard started else { return }
-        terminalView.terminate()
+        if started { terminalView.terminate() }
+        ghosttyView?.shutdown()
+        ghosttyView = nil
+        ghosttyLaunch = nil
         started = false
+    }
+
+    func retainedGhosttyView(launch: GhosttyLaunch, theme: GhosttyTheme) -> GhosttyTerminalView {
+        if let ghosttyView {
+            ghosttyView.apply(theme: theme)
+            return ghosttyView
+        }
+        let view = GhosttyTerminalView(launch: launch, theme: theme)
+        view.onClose = { [weak self] in
+            Task { @MainActor in
+                self?.exitMessage = "Session ended."
+                self?.started = false
+            }
+        }
+        ghosttyView = view
+        return view
     }
 
     func applyTheme(_ palette: TerminalPalette) {
         guard palette != appliedPalette else { return }
+        TerminalFontRegistry.register()
         appliedPalette = palette
         themeApplicationCount += 1
         terminalView.configureNativeColors()
@@ -96,7 +118,7 @@ final class TerminalSessionHolder {
         terminalView.selectedTextForegroundColor = palette.selectionForeground
         terminalView.terminal.ansi256PaletteStrategy = .base16LabHarmonious
         terminalView.installColors(palette.ansi.map(Self.swiftTermColor))
-        terminalView.font = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
+        terminalView.font = TerminalFontRegistry.monospacedFont(ofSize: 12.5)
     }
 
     private static func swiftTermColor(_ color: NSColor) -> SwiftTerm.Color {
@@ -142,6 +164,14 @@ final class TerminalSessionHolder {
             Task { @MainActor in handler(payload) }
         }
     }
+
+    func insertText(_ text: String) {
+        if let ghosttyView {
+            _ = ghosttyView.insertText(text)
+        } else {
+            terminalView.send(Array(text.utf8))
+        }
+    }
 }
 
 final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResponder {
@@ -156,6 +186,7 @@ final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResp
     private(set) var deferredDisplayPasses = 0
     private(set) var reactivationDisplayPasses = 0
     private(set) var hasDeferredDisplay = false
+    var onDropFiles: ((TerminalDropPayload) -> Bool)?
 
     func setRenderingActive(_ active: Bool) {
         guard active != renderingActive else { return }
@@ -211,6 +242,24 @@ final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResp
         }
     }
 
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard onDropFiles != nil, let types = sender.draggingPasteboard.types,
+            !Set(types).isDisjoint(with: Set(TerminalDropPayload.pasteboardTypes))
+        else { return super.draggingEntered(sender) }
+        return .copy
+    }
+
+    override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        draggingEntered(sender)
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        guard let onDropFiles,
+            let payload = TerminalDropPayload.files(from: sender.draggingPasteboard)
+        else { return super.performDragOperation(sender) }
+        return onDropFiles(payload)
+    }
+
     enum DirectCommand {
         case newline
         case copy
@@ -253,17 +302,19 @@ struct TerminalPane: View {
     let palette: TerminalPalette
     var active = true
     var wantsFocus = true
+    var onDropFiles: ((TerminalDropPayload) -> Bool)?
 
     var body: some View {
         if GhosttyTerminals.enabled {
             if let launch = holder.ghosttyLaunch {
                 GhosttyPane(
-                    launch: launch, theme: GhosttyTheme(palette: palette),
-                    active: active, wantsFocus: wantsFocus)
+                    holder: holder, launch: launch, theme: GhosttyTheme(palette: palette),
+                    active: active, wantsFocus: wantsFocus, onDropFiles: onDropFiles)
             }
         } else {
             SwiftTermPane(
-                holder: holder, palette: palette, active: active, wantsFocus: wantsFocus)
+                holder: holder, palette: palette, active: active, wantsFocus: wantsFocus,
+                onDropFiles: onDropFiles)
         }
     }
 }
@@ -273,17 +324,21 @@ struct SwiftTermPane: NSViewRepresentable {
     let palette: TerminalPalette
     var active = true
     var wantsFocus = true
+    var onDropFiles: ((TerminalDropPayload) -> Bool)?
 
-    func makeNSView(context: Context) -> LocalProcessTerminalView {
+    func makeNSView(context: Context) -> EdithTerminalView {
         holder.applyTheme(palette)
         holder.updatePresentation(active: active, wantsFocus: wantsFocus)
         let view = holder.terminalView
+        view.onDropFiles = onDropFiles
+        view.registerForDraggedTypes(TerminalDropPayload.pasteboardTypes)
         return view
     }
 
-    func updateNSView(_ view: LocalProcessTerminalView, context: Context) {
+    func updateNSView(_ view: EdithTerminalView, context: Context) {
         holder.applyTheme(palette)
         holder.updatePresentation(active: active, wantsFocus: wantsFocus)
+        view.onDropFiles = onDropFiles
     }
 }
 

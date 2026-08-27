@@ -39,4 +39,23 @@ import Testing
         board.clearContents()
         #expect(GhosttyTerminalView.dropped(from: board) == nil)
     }
+
+    @Test func imageDataBecomesADurableTemporaryFile() throws {
+        let board = NSPasteboard(name: .init("edith.drop.image-data"))
+        board.clearContents()
+        let image = NSImage(size: NSSize(width: 2, height: 2))
+        image.lockFocus()
+        NSColor.red.setFill()
+        NSRect(x: 0, y: 0, width: 2, height: 2).fill()
+        image.unlockFocus()
+        board.writeObjects([image])
+
+        let payload = try #require(TerminalDropPayload.files(from: board))
+        defer { payload.removeTemporaryFiles() }
+
+        #expect(payload.files.count == 1)
+        #expect(payload.files[0].pathExtension == "png")
+        #expect(FileManager.default.fileExists(atPath: payload.files[0].path))
+        #expect(payload.temporaryFiles == Set(payload.files))
+    }
 }
