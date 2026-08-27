@@ -293,9 +293,9 @@ struct DashboardView: View {
                     } label: {
                         Label("Month", systemImage: "calendar.badge.clock")
                             .font(.system(size: UIScale.pt(11)))
+                            .modifier(FilterChip(dark: dark))
                     }
                     .menuStyle(.borderlessButton).fixedSize()
-                    .modifier(FilterChip(dark: dark))
                 }
                 if !model.machineGroups.isEmpty { machineMenu }
                 Button("Reset") { model.reset() }
@@ -394,9 +394,9 @@ struct DashboardView: View {
             Label(folderScopeLabel, systemImage: "folder")
                 .font(.system(size: UIScale.pt(11)))
                 .lineLimit(1)
+                .modifier(FilterChip(dark: dark))
         }
         .buttonStyle(.edith(.borderless)).fixedSize()
-        .modifier(FilterChip(dark: dark))
         .popover(isPresented: $folderPickerOpen, arrowEdge: .bottom) {
             FolderScopePicker(model: model, dark: dark) { folderPickerOpen = false }
         }
@@ -418,9 +418,9 @@ struct DashboardView: View {
         } label: {
             Label(sourceSummary, systemImage: "square.stack.3d.up")
                 .font(.system(size: UIScale.pt(11)))
+                .modifier(FilterChip(dark: dark))
         }
         .buttonStyle(.edith(.borderless)).fixedSize()
-        .modifier(FilterChip(dark: dark))
         .popover(isPresented: $sourcePickerOpen, arrowEdge: .bottom) {
             FilterMultiSelect(
                 options: model.allSources.map { FilterSelectOption(id: $0.id, label: $0.label) },
@@ -448,9 +448,9 @@ struct DashboardView: View {
                     systemImage: stale.isEmpty ? "server.rack" : "exclamationmark.triangle.fill"
                 )
                 .font(.system(size: UIScale.pt(11)))
+                .modifier(FilterChip(dark: dark))
             }
             .buttonStyle(.edith(.borderless)).fixedSize()
-            .modifier(FilterChip(dark: dark))
         }
         .popover(isPresented: $machinePickerOpen, arrowEdge: .bottom) {
             UsageMachinesPicker(model: model, dark: dark) { machinePickerOpen = false }
@@ -488,9 +488,9 @@ struct DashboardView: View {
         } label: {
             Label("\(model.selectedModels.count) models", systemImage: "cpu")
                 .font(.system(size: UIScale.pt(11)))
+                .modifier(FilterChip(dark: dark))
         }
         .buttonStyle(.edith(.borderless)).fixedSize()
-        .modifier(FilterChip(dark: dark))
         .popover(isPresented: $modelPickerOpen, arrowEdge: .bottom) {
             FilterMultiSelect(
                 options: model.allModels.map {

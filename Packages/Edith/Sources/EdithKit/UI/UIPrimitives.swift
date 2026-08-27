@@ -165,6 +165,7 @@ private struct EdithButtonBody<Label: View>: View {
     }
 
     private var background: Color {
+        guard role != .borderless else { return .clear }
         let boost = contrast == .increased ? 0.05 : 0
         switch role {
         case .primary:
@@ -176,12 +177,15 @@ private struct EdithButtonBody<Label: View>: View {
         case .row, .selection:
             if selected { return tint.opacity(0.2 + boost) }
             return Color.primary.opacity((emphasized ? 0.08 : 0) + boost)
-        case .borderless, .toolbar, .iconOnly:
+        case .toolbar, .iconOnly:
             return Color.primary.opacity((emphasized ? 0.08 : 0) + boost)
+        case .borderless:
+            return .clear
         }
     }
 
     private var border: Color {
+        guard role != .borderless else { return .clear }
         if focused { return tint.opacity(0.95) }
         if selected, differentiateWithoutColor { return Color.primary.opacity(0.75) }
         switch role {
