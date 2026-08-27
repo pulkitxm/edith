@@ -32,8 +32,10 @@ public enum EmojiSkinTone: Int, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    public static func stored(forKey key: String) -> EmojiSkinTone {
-        guard let raw = SharedDefaults.store.object(forKey: key) as? Int else { return .standard }
+    public static func stored(
+        forKey key: String, store: UserDefaults = SharedDefaults.store
+    ) -> EmojiSkinTone {
+        guard let raw = store.object(forKey: key) as? Int else { return .standard }
         return EmojiSkinTone(rawValue: raw) ?? .standard
     }
 }

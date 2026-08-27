@@ -17,11 +17,20 @@ enum CatalogSamples {
         return definition.allowed.first { $0 != fallback } ?? definition.allowed.first
     }
 
+    static func sampleInteger(_ definition: SettingDefinition) -> Int {
+        guard let range = definition.integerRange else {
+            return definition.fallback == .int(7) ? 8 : 7
+        }
+        let preferred = range.contains(7) ? 7 : range.lowerBound
+        guard definition.fallback == .int(preferred) else { return preferred }
+        return preferred == range.upperBound ? range.lowerBound : preferred + 1
+    }
+
     static func sample(for definition: SettingDefinition) -> String {
         if let choice = allowedChoice(definition) { return choice }
         switch definition.type {
         case .bool: return definition.fallback == .bool(true) ? "false" : "true"
-        case .int: return definition.fallback == .int(7) ? "8" : "7"
+        case .int: return String(sampleInteger(definition))
         case .number: return definition.fallback == .double(0.25) ? "0.5" : "0.25"
         case .string: return "edith-test-value"
         case .csv: return "one,two"
@@ -34,7 +43,7 @@ enum CatalogSamples {
         if let choice = allowedChoice(definition) { return .string(choice) }
         switch definition.type {
         case .bool: return .bool(definition.fallback != .bool(true))
-        case .int: return .int(definition.fallback == .int(7) ? 8 : 7)
+        case .int: return .int(sampleInteger(definition))
         case .number: return .double(definition.fallback == .double(0.25) ? 0.5 : 0.25)
         case .string: return .string("edith-test-value")
         case .csv: return .string("one,two")

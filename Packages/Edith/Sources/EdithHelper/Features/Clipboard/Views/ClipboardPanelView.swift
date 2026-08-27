@@ -504,7 +504,7 @@ struct ClipboardPanelView: View {
 
     private func openPreferences() {
         SharedDefaults.store.set("settings", forKey: AppStorageKeys.General.mainWindowSection)
-        SharedDefaults.store.set("clipboard", forKey: "settingsSection")
+        SharedDefaults.store.set("clipboard", forKey: AppStorageKeys.General.settingsSection)
         MainApp.openDashboard()
         onDismiss()
     }

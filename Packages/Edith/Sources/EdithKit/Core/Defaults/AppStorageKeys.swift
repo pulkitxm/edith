@@ -15,6 +15,7 @@ public enum AppStorageKeys {
         public static let settingsCategoriesExpanded = "settingsCategoriesExpanded"
         public static let mainWindowSection = "mainWindowSection"
         public static let settingsTab = "settingsTab"
+        public static let settingsSection = "settingsSection"
         public static let showDockIcon = "showDockIcon"
         public static let smartColor = "smartColor"
         public static let theme = "theme"

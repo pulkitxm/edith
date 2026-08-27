@@ -126,6 +126,9 @@ public enum UserOperationCatalog {
         + WindowLayoutAction.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + EmojiOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + CompanionSettingsOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -1075,6 +1078,21 @@ private extension ColorPickerOperation {
         switch self {
         case .pick:
             userInterface("Colour picker", "open the system loupe")
+        }
+    }
+}
+
+private extension EmojiOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .pick:
+            userInterface("Emoji settings", "open the emoji picker")
+        case .insert:
+            userInterface("Emoji picker grid", "insert the chosen emoji", ["1F600"])
+        case .tone:
+            userInterface("Emoji settings", "choose the default skin tone", ["medium"])
+        case .clear:
+            userInterface("Emoji settings", "clear the frequently used emoji")
         }
     }
 }

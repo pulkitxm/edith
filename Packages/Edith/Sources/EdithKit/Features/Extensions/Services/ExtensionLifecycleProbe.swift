@@ -217,6 +217,8 @@ public struct ExtensionLifecycleProbe: Sendable {
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "windowTools": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
+        "emoji": Policy(
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
     ]
 
     public let environment: ExtensionLifecycleProbeEnvironment

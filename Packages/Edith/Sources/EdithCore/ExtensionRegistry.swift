@@ -196,6 +196,12 @@ public enum ExtensionRegistry {
             symbolName: "theatermasks.fill", group: .utilities, featured: false,
             defaultsKey: "presenterEnabled", requiredCapabilities: [.screenShareDetection]),
         ExtensionRegistryEntry(
+            id: "emoji", title: "Emoji Picker",
+            subtitle: "Every macOS emoji on a hotkey, straight into the app you are typing in.",
+            symbolName: "face.smiling", group: .utilities, featured: false,
+            defaultsKey: "emojiEnabled", requiredCapabilities: [.emojiInsertion],
+            optionalCapabilities: [.globalShortcuts]),
+        ExtensionRegistryEntry(
             id: "colorPicker", title: "Color Picker",
             subtitle: "System loupe on a hotkey, sampled color to your clipboard.",
             symbolName: "eyedropper", group: .utilities, featured: false,

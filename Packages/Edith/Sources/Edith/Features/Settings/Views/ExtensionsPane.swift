@@ -933,6 +933,7 @@ private struct ExtensionDetailRows: View {
             case .presenter: PresenterRows()
             case .colorPicker: ColorPickerRows()
             case .windowTools: WindowToolsRows()
+            case .emoji: EmojiRows()
             }
         } else {
             Section("Controls") {

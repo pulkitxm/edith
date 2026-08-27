@@ -50,8 +50,8 @@ public enum ConfigCatalog {
         "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
         "calendar",
         "clipboard",
-        "notch", "focusdim", "windowtools", "presenter", "colorpicker", "micmute", "backup",
-        "permissions", "terminal",
+        "notch", "focusdim", "windowtools", "presenter", "colorpicker", "emoji", "micmute",
+        "backup", "permissions", "terminal",
     ]
 
     public static let settings: [SettingDefinition] =
@@ -59,6 +59,7 @@ public enum ConfigCatalog {
         + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
         + system + cleaner
         + music + calendar + clipboard + notch + focusDim + windowTools + presenter + colorPicker
+        + emoji
         + micMute
         + backup + permissions + terminal
 
@@ -108,7 +109,7 @@ public enum ConfigCatalog {
             "extensionsExpand", .string, group: "panel",
             summary: "Extension card the Extensions page scrolls to and opens next."),
         SettingDefinition(
-            "settingsSection", .string, group: "panel",
+            AppStorageKeys.General.settingsSection, .string, group: "panel",
             summary: "Settings section a deep link opens on."),
         SettingDefinition(
             "mainWindowZoom", .number, group: "panel",
@@ -861,6 +862,34 @@ public enum ConfigCatalog {
         SettingDefinition(
             "colorPickerHotKeyLabel", .string, group: "colorpicker",
             summary: "Printable label for the colour picker shortcut."),
+    ]
+
+    private static let emoji: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Emoji.enabled, .bool, group: "emoji",
+            summary: "Emoji Picker extension: every macOS emoji on a hotkey.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Emoji.popupAt, .string, group: "emoji",
+            summary: "Where the emoji picker opens.",
+            allowed: PopupPosition.allCases.map(\.rawValue), fallback: .string("cursor")),
+        SettingDefinition(
+            AppStorageKeys.Emoji.skinTone, .int, group: "emoji",
+            summary: "Default skin tone index applied to emoji that support one.",
+            integerRange: 0...5, fallback: .int(0)),
+        SettingDefinition(
+            AppStorageKeys.Emoji.frequentCount, .int, group: "emoji",
+            summary: "How many frequently used emoji pin to the top of the picker.",
+            integerRange: 0...EmojiCatalogSummary.maxFrequentCount, fallback: .int(10)),
+        SettingDefinition(
+            AppStorageKeys.Emoji.hotKeyCode, .int, group: "emoji",
+            summary: "Virtual key code of the emoji picker shortcut."),
+        SettingDefinition(
+            AppStorageKeys.Emoji.hotKeyMods, .int, group: "emoji",
+            summary: "Carbon modifier mask of the emoji picker shortcut."),
+        SettingDefinition(
+            AppStorageKeys.Emoji.hotKeyLabel, .string, group: "emoji",
+            summary: "Printable label for the emoji picker shortcut."),
     ]
 
     private static let micMute: [SettingDefinition] = [

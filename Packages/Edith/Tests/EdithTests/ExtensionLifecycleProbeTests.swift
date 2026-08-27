@@ -65,6 +65,9 @@ import EdithCore
             id: "presenter", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
+            id: "emoji", helper: true, machine: false, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "colorPicker", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
