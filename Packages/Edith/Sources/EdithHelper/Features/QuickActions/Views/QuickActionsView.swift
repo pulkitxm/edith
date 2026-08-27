@@ -22,7 +22,7 @@ struct QuickActionsView: View {
     @State private var confirmingTrash = false
 
     private let columns = [
-        GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)
+        GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8),
     ]
 
     private var theme: Color { themeColor(themeName) }
@@ -32,7 +32,9 @@ struct QuickActionsView: View {
             HStack {
                 eyebrow("QUICK ACTIONS")
                 Spacer()
-                Button { model.refresh() } label: {
+                Button {
+                    model.refresh()
+                } label: {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.edith(.toolbar))
@@ -53,7 +55,9 @@ struct QuickActionsView: View {
                     Text(feedback).lineLimit(2)
                 }
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(model.errorMessage == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
+                .foregroundStyle(
+                    model.errorMessage == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red)
+                )
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -105,7 +109,7 @@ struct QuickActionsView: View {
             .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
             .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 9))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .disabled(model.running != nil || !action.isAvailable(in: model.snapshot))
         .help(action.descriptor.summary)
     }
