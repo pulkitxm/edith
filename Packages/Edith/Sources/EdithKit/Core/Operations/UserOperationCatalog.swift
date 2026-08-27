@@ -289,6 +289,8 @@ private extension TextUtilityOperation {
             userInterface("Text Utilities settings", "view saved snippets")
         case .addSnippet:
             userInterface("Text Utilities settings", "add a snippet", [";sig", "Thanks"])
+        case .updateSnippet:
+            userInterface("Text Utilities settings", "edit a snippet", ["1", "--name", "Signature"])
         case .removeSnippet:
             userInterface("Text Utilities settings", "remove a snippet", ["1", "--yes"])
         }

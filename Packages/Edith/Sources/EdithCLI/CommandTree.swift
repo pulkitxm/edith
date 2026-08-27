@@ -554,6 +554,38 @@ public enum CommandTree {
                         destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
+                "text", "Expand, clean, and protect text and links.",
+                children: [
+                    CommandNode(
+                        "clean-url", "Remove tracking parameters from a URL.",
+                        options: ["--json", "--help", "--parameters"], arguments: [.free]),
+                    CommandNode(
+                        "paste-plain", "Paste clipboard text without formatting.", options: common),
+                    CommandNode(
+                        "snippets", "Manage saved text expansions.",
+                        children: [
+                            CommandNode(
+                                "ls", "List text snippets.", aliases: ["list"],
+                                options: ["--json", "--help", "--folder", "--search"]),
+                            CommandNode(
+                                "add", "Add a text snippet.",
+                                options: [
+                                    "--json", "--help", "--name", "--folder", "--mode",
+                                    "--ignore-case", "--disabled",
+                                ], arguments: [.free, .free]),
+                            CommandNode(
+                                "set", "Change a text snippet.",
+                                options: [
+                                    "--json", "--help", "--name", "--trigger", "--replacement",
+                                    "--folder", "--mode", "--ignore-case", "--enabled",
+                                ], arguments: [.historyIndex]),
+                            CommandNode(
+                                "rm", "Remove a text snippet.", aliases: ["remove"],
+                                options: ["--json", "--help", "--yes"],
+                                arguments: [.historyIndex], destructivePolicy: .previewThenYes),
+                        ]),
+                ]),
+            CommandNode(
                 "attention", "Local attention, application, website, music and focus data.",
                 children: [
                     CommandNode("status", "Show tracking, data and focus state.", options: common),

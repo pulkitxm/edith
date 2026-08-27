@@ -237,6 +237,7 @@ public enum TextUtilityOperation: String, CaseIterable, Sendable {
     case pastePlain = "paste-plain"
     case listSnippets = "snippets-list"
     case addSnippet = "snippets-add"
+    case updateSnippet = "snippets-update"
     case removeSnippet = "snippets-remove"
 
     public var descriptor: UserOperationDescriptor {
@@ -251,6 +252,7 @@ public enum TextUtilityOperation: String, CaseIterable, Sendable {
         case .pastePlain: ["text", "paste-plain"]
         case .listSnippets: ["text", "snippets", "ls"]
         case .addSnippet: ["text", "snippets", "add"]
+        case .updateSnippet: ["text", "snippets", "set"]
         case .removeSnippet: ["text", "snippets", "rm"]
         }
     }
@@ -261,6 +263,7 @@ public enum TextUtilityOperation: String, CaseIterable, Sendable {
         case .pastePlain: "Paste the current clipboard text without formatting."
         case .listSnippets: "List saved text snippets."
         case .addSnippet: "Add a text snippet."
+        case .updateSnippet: "Change a text snippet."
         case .removeSnippet: "Remove a text snippet."
         }
     }
@@ -269,7 +272,7 @@ public enum TextUtilityOperation: String, CaseIterable, Sendable {
         switch self {
         case .cleanURL, .listSnippets: .read
         case .pastePlain: .interactive
-        case .addSnippet: .write
+        case .addSnippet, .updateSnippet: .write
         case .removeSnippet: .destructive
         }
     }
