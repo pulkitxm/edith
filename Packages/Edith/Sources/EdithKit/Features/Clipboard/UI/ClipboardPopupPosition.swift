@@ -26,25 +26,39 @@ public enum ClipboardPopupPosition: String, CaseIterable, Identifiable, Sendable
     }
 
     @MainActor
-    public func origin(size: NSSize, statusItemFrame: NSRect?) -> NSPoint {
-        Self.clampedToScreen(unclampedOrigin(size: size, statusItemFrame: statusItemFrame), size)
+    public func origin(size: NSSize, statusItemFrame: NSRect?) async -> NSPoint {
+        let origin = await unclampedOrigin(size: size, statusItemFrame: statusItemFrame)
+        return Self.clampedToScreen(origin, size)
     }
 
     @MainActor
-    private func unclampedOrigin(size: NSSize, statusItemFrame: NSRect?) -> NSPoint {
+    private func unclampedOrigin(size: NSSize, statusItemFrame: NSRect?) async -> NSPoint {
         switch self {
         case .cursor:
-            if let caret = Self.focusedTextRect() {
+            let fallback = NSEvent.mouseLocation
+            let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+            let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+            let caret = await Self.boundedProbe(fallback: nil) {
+                Self.focusedTextRect(
+                    frontmostPID: frontmostPID, primaryHeight: primaryHeight)
+            }
+            if let caret {
                 return NSPoint(x: caret.minX, y: caret.minY - size.height - 4)
             }
-            var point = NSEvent.mouseLocation
+            var point = fallback
             point.y -= size.height
             return point
         case .statusItem:
             guard let statusItemFrame else { return Self.centered(size) }
             return NSPoint(x: statusItemFrame.minX, y: statusItemFrame.minY - size.height)
         case .window:
-            guard let frame = Self.frontmostWindowFrame() else { return Self.centered(size) }
+            let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+            let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+            let frame = await Self.boundedProbe(fallback: nil) {
+                Self.frontmostWindowFrame(
+                    frontmostPID: frontmostPID, primaryHeight: primaryHeight)
+            }
+            guard let frame else { return Self.centered(size) }
             return NSPoint(
                 x: frame.midX - size.width / 2, y: frame.midY - size.height / 2)
         case .center:
@@ -87,18 +101,19 @@ public enum ClipboardPopupPosition: String, CaseIterable, Identifiable, Sendable
             forKey: "clipboardWindowPositionY")
     }
 
-    @MainActor
-    private static func focusedTextRect() -> NSRect? {
-        guard AXIsProcessTrusted(), let element = focusedElement() else { return nil }
-        if let caret = caretRect(of: element) { return caret }
-        return textElementRect(of: element)
+    nonisolated private static func focusedTextRect(
+        frontmostPID: pid_t?, primaryHeight: CGFloat
+    ) -> NSRect? {
+        guard AXIsProcessTrusted(), let element = focusedElement(frontmostPID: frontmostPID)
+        else { return nil }
+        if let caret = caretRect(of: element, primaryHeight: primaryHeight) { return caret }
+        return textElementRect(of: element, primaryHeight: primaryHeight)
     }
 
-    @MainActor
-    private static func focusedElement() -> AXUIElement? {
+    nonisolated private static func focusedElement(frontmostPID: pid_t?) -> AXUIElement? {
         var candidates = [AXUIElementCreateSystemWide()]
-        if let app = NSWorkspace.shared.frontmostApplication {
-            candidates.append(AXUIElementCreateApplication(app.processIdentifier))
+        if let frontmostPID {
+            candidates.append(AXUIElementCreateApplication(frontmostPID))
         }
         for candidate in candidates {
             var focusedRef: CFTypeRef?
@@ -112,7 +127,9 @@ public enum ClipboardPopupPosition: String, CaseIterable, Identifiable, Sendable
         return nil
     }
 
-    private static func caretRect(of element: AXUIElement) -> NSRect? {
+    nonisolated private static func caretRect(
+        of element: AXUIElement, primaryHeight: CGFloat
+    ) -> NSRect? {
         var rangeRef: CFTypeRef?
         guard
             AXUIElementCopyAttributeValue(
@@ -141,12 +158,14 @@ public enum ClipboardPopupPosition: String, CaseIterable, Identifiable, Sendable
             guard AXValueGetValue(unsafeBitCast(boundsRef, to: AXValue.self), .cgRect, &rect),
                 rect.height > 0, rect.height < 300, rect.origin != .zero
             else { continue }
-            return flippedToCocoa(rect)
+            return flippedToCocoa(rect, primaryHeight: primaryHeight)
         }
         return nil
     }
 
-    private static func textElementRect(of element: AXUIElement) -> NSRect? {
+    nonisolated private static func textElementRect(
+        of element: AXUIElement, primaryHeight: CGFloat
+    ) -> NSRect? {
         var roleRef: CFTypeRef?
         guard
             AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef)
@@ -171,11 +190,13 @@ public enum ClipboardPopupPosition: String, CaseIterable, Identifiable, Sendable
             AXValueGetValue(unsafeBitCast(sizeRef, to: AXValue.self), .cgSize, &size),
             size.height > 0
         else { return nil }
-        return flippedToCocoa(CGRect(origin: position, size: size))
+        return flippedToCocoa(
+            CGRect(origin: position, size: size), primaryHeight: primaryHeight)
     }
 
-    private static func flippedToCocoa(_ rect: CGRect) -> NSRect {
-        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+    nonisolated private static func flippedToCocoa(
+        _ rect: CGRect, primaryHeight: CGFloat
+    ) -> NSRect {
         return NSRect(
             x: rect.minX, y: primaryHeight - rect.maxY, width: rect.width, height: rect.height)
     }
@@ -192,18 +213,18 @@ public enum ClipboardPopupPosition: String, CaseIterable, Identifiable, Sendable
         return NSPoint(x: visible.midX - size.width / 2, y: visible.midY - size.height / 2)
     }
 
-    @MainActor
-    private static func frontmostWindowFrame() -> NSRect? {
+    nonisolated private static func frontmostWindowFrame(
+        frontmostPID: pid_t?, primaryHeight: CGFloat
+    ) -> NSRect? {
         guard CGPreflightScreenCaptureAccess(),
-            let app = NSWorkspace.shared.frontmostApplication,
+            let frontmostPID,
             let list = CGWindowListCopyWindowInfo(
                 [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
                 as? [[String: Any]]
         else { return nil }
-        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
         for info in list {
             guard let pid = info[kCGWindowOwnerPID as String] as? pid_t,
-                pid == app.processIdentifier,
+                pid == frontmostPID,
                 info[kCGWindowLayer as String] as? Int == 0,
                 let bounds = info[kCGWindowBounds as String] as? [String: CGFloat],
                 let width = bounds["Width"], let height = bounds["Height"],
@@ -215,5 +236,25 @@ public enum ClipboardPopupPosition: String, CaseIterable, Identifiable, Sendable
                 width: width, height: height)
         }
         return nil
+    }
+
+    nonisolated private static func boundedProbe<T: Sendable>(
+        fallback: T, operation: @escaping @Sendable () -> T
+    ) async -> T {
+        let (stream, continuation) = AsyncStream.makeStream(of: T.self)
+        let work = Task.detached(priority: .userInitiated) {
+            continuation.yield(operation())
+            continuation.finish()
+        }
+        let timer = Task {
+            try? await Task.sleep(for: .milliseconds(250))
+            continuation.yield(fallback)
+            continuation.finish()
+        }
+        var iterator = stream.makeAsyncIterator()
+        let value = await iterator.next() ?? fallback
+        work.cancel()
+        timer.cancel()
+        return value
     }
 }

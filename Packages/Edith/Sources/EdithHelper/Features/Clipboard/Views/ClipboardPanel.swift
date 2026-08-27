@@ -24,6 +24,8 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
 
     private var panel: NSPanel?
     private var hosting: NSHostingView<AnyView>?
+    private var showTask: Task<Void, Never>?
+    private var showGeneration = 0
 
     func toggle() {
         if let panel, panel.isVisible {
@@ -39,14 +41,30 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         let height = min(
             ClipboardPanelView.estimatedHeight(entries: store.entries), Self.maxHeight)
         p.setContentSize(NSSize(width: Self.width, height: height))
-        p.setFrameOrigin(
-            ClipboardPopupPosition.current.origin(
-                size: p.frame.size, statusItemFrame: PanelController.shared?.statusItemFrame))
-        p.orderFrontRegardless()
-        p.makeKey()
+        let position = ClipboardPopupPosition.current
+        let size = p.frame.size
+        let statusItemFrame = PanelController.shared?.statusItemFrame
+        showGeneration += 1
+        let generation = showGeneration
+        showTask?.cancel()
+        showTask = Task.detached { [weak self] in
+            let origin = await position.origin(size: size, statusItemFrame: statusItemFrame)
+            guard !Task.isCancelled else { return }
+            await self?.finishShow(origin: origin, generation: generation)
+        }
+    }
+
+    private func finishShow(origin: NSPoint, generation: Int) {
+        guard generation == showGeneration, let panel else { return }
+        panel.setFrameOrigin(origin)
+        panel.orderFrontRegardless()
+        panel.makeKey()
     }
 
     func hide() {
+        showGeneration += 1
+        showTask?.cancel()
+        showTask = nil
         panel?.orderOut(nil)
     }
 

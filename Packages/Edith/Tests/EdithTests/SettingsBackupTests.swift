@@ -271,6 +271,47 @@ private final class SettingsBackupBlockingReaderProbe: @unchecked Sendable {
                 localDate: now.addingTimeInterval(-1)))
     }
 
+    @Test func settingsImportInspectionHandlesMissingCurrentAndCloudFiles() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-settings-import-\(UUID().uuidString)")
+        let cloud = directory.appendingPathComponent("cloud.json")
+        let local = directory.appendingPathComponent("local.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        #expect(
+            settingsBackupImportAction(
+                cloudFile: cloud, localFile: local, freshInstall: false) == .finish)
+
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("cloud".utf8).write(to: cloud)
+        #expect(
+            settingsBackupImportAction(
+                cloudFile: cloud, localFile: local, freshInstall: false) == .importFile)
+
+        try Data("local".utf8).write(to: local)
+        let future = Date().addingTimeInterval(60)
+        try FileManager.default.setAttributes(
+            [.modificationDate: future], ofItemAtPath: local.path)
+        #expect(
+            settingsBackupImportAction(
+                cloudFile: cloud, localFile: local, freshInstall: false) == .finish)
+    }
+
+    @Test func settingsImportInspectionWaitsForUbiquitousPlaceholder() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-settings-placeholder-\(UUID().uuidString)")
+        let cloud = directory.appendingPathComponent("settings.json")
+        let placeholder = directory.appendingPathComponent(".settings.json.icloud")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data().write(to: placeholder)
+
+        #expect(
+            settingsBackupImportAction(
+                cloudFile: cloud, localFile: directory.appendingPathComponent("local.json"),
+                freshInstall: false) == .awaitDownload)
+    }
+
     @Test func restoredPathValidationMatrix() {
         let home = URL(fileURLWithPath: "/Users/example")
         let cases: [(String, RestoredPathVerdict)] = [

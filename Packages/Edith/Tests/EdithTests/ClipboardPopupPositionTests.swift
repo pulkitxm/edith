@@ -110,7 +110,7 @@ import Testing
         #expect(relY >= 0 && relY <= 1)
     }
 
-    @Test func savedFrameRoundTripsThroughLastPositionOrigin() throws {
+    @Test func savedFrameRoundTripsThroughLastPositionOrigin() async throws {
         let snapshot = snapshotPositionKeys()
         defer { restorePositionKeys(snapshot) }
         let size = NSSize(width: 300, height: 200)
@@ -122,7 +122,8 @@ import Testing
             x: visible.midX - size.width / 2, y: visible.midY - size.height / 2,
             width: size.width, height: size.height)
         ClipboardPopupPosition.saveLastPosition(frame: frame, screen: screen)
-        let origin = ClipboardPopupPosition.lastPosition.origin(size: size, statusItemFrame: nil)
+        let origin = await ClipboardPopupPosition.lastPosition.origin(
+            size: size, statusItemFrame: nil)
         #expect(abs(origin.x - frame.minX) < 0.5)
         #expect(abs(origin.y - frame.minY) < 0.5)
     }
