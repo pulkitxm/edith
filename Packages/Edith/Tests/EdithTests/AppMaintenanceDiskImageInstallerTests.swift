@@ -315,6 +315,25 @@ private final class DiskImageTrashHarness: @unchecked Sendable {
         #expect(!FileManager.default.fileExists(atPath: plan.mountURL.path))
     }
 
+    @Test func installRejectsAChangedDestinationRootAndEjects() async throws {
+        let fixture = try fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let commands = DiskImageCommandHarness()
+        let plan = try await AppMaintenanceDiskImageInstaller.plan(
+            imageURL: fixture.image, destinationRoot: fixture.destination,
+            run: { try commands.run($0) })
+        try FileManager.default.removeItem(at: fixture.destination)
+        try FileManager.default.createDirectory(
+            at: fixture.destination, withIntermediateDirectories: true)
+
+        await #expect(throws: AppMaintenanceDiskImageError.reviewedDestinationChanged) {
+            _ = try await AppMaintenanceDiskImageInstaller.install(
+                plan: plan, replaceExisting: false, run: { try commands.run($0) })
+        }
+        #expect(commands.recordedRequests.last?.arguments.first == "detach")
+        #expect(!FileManager.default.fileExists(atPath: plan.mountURL.path))
+    }
+
     @Test func failedEjectKeepsTheReviewedImage() async throws {
         let fixture = try fixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }

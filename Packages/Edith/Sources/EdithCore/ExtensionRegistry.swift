@@ -134,7 +134,7 @@ public enum ExtensionRegistry {
             optionalCapabilities: [.preventSleep, .inputSuppression]),
         ExtensionRegistryEntry(
             id: "appMaintenance", title: "App Maintenance",
-            subtitle: "Installed app inventory, update status, and review-first removal.",
+            subtitle: "Verified disk image installs, app updates, and review-first removal.",
             symbolName: "shippingbox.and.arrow.backward", group: .system, featured: true,
             defaultsKey: "appMaintenanceEnabled", requiredCapabilities: [.runningApplications]),
         ExtensionRegistryEntry(

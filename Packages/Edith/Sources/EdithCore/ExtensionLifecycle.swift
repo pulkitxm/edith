@@ -369,13 +369,21 @@ public enum ExtensionLifecycleCatalog {
                 instruction(
                     "rescan", "Rescan a changed app",
                     "Build a fresh removal plan when an app changes after review.",
-                    "ed maintenance scan /Applications/Example.app")
+                    "ed maintenance scan /Applications/Example.app"),
+                instruction(
+                    "image", "Retry a changed disk image",
+                    "Choose the download again, review it and explicitly retry installation.",
+                    "ed maintenance install ~/Downloads/Example.dmg --yes"),
             ],
             verification: [
                 instruction(
                     "inventory", "List installed apps",
                     "Confirm the Applications folders and optional Homebrew status are readable.",
-                    "ed maintenance inventory --json")
+                    "ed maintenance inventory --json"),
+                instruction(
+                    "installer", "Review an installer",
+                    "Mount, verify, preview and eject a single-app disk image without installing it.",
+                    "ed maintenance install ~/Downloads/Example.dmg --json"),
             ]),
         descriptor(
             "machines", "Operate SSH computers, files, services and containers from Edith.",

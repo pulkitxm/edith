@@ -213,10 +213,15 @@ public enum ExtensionLiveAdapters {
     static func appMaintenanceReadiness() -> ExtensionAdapterReadiness {
         let roots = AppMaintenanceInventory.defaultApplicationRoots
         let available = roots.contains { FileManager.default.isReadableFile(atPath: $0.path) }
+        let tools = ["/usr/bin/hdiutil", "/usr/bin/codesign", "/usr/sbin/spctl", "/usr/bin/ditto"]
+        let installerAvailable = tools.allSatisfy(FileManager.default.isExecutableFile(atPath:))
         return ExtensionAdapterFacts(
-            configured: available,
-            readyDetail: "Installed application inventory and safe Trash review are available.",
-            setupDetail: "No readable Applications folder is available."
+            configured: available && installerAvailable,
+            readyDetail:
+                "Verified disk image installation, app inventory and safe Trash review are available.",
+            setupDetail: available
+                ? "Required macOS disk image verification tools are unavailable."
+                : "No readable Applications folder is available."
         ).readiness
     }
 

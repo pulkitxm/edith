@@ -44,6 +44,7 @@ public struct AppMaintenanceDiskImagePlan: Identifiable, Equatable, Sendable {
     public let sourceInfoIdentity: AppMaintenanceFileIdentity
     public let destination: AppMaintenanceInstallDestination
     public let destinationRoot: URL
+    public let destinationRootIdentity: AppMaintenanceFileIdentity?
     public let destinationURL: URL
     public let existingApplication: InstalledApplication?
     public let existingIdentity: AppMaintenanceFileIdentity?
@@ -172,7 +173,12 @@ public enum AppMaintenanceDiskImageInstaller {
             guard await gatekeeperAccepts(sourceURL, run: run) else {
                 throw AppMaintenanceDiskImageError.verificationFailed
             }
-            let root = normalizedURL(destinationRoot ?? destination.root(home: home))
+            let requestedRoot = destinationRoot ?? destination.root(home: home)
+            guard !isSymbolicLink(requestedRoot) else {
+                throw AppMaintenanceDiskImageError.invalidApplication
+            }
+            let root = normalizedURL(requestedRoot)
+            let rootIdentity = directoryIdentity(at: root)
             guard let destinationURL = destinationURL(for: sourceURL, root: root) else {
                 throw AppMaintenanceDiskImageError.invalidApplication
             }
@@ -193,7 +199,8 @@ public enum AppMaintenanceDiskImageInstaller {
                 mountURL: parsed.mountURL, mountIdentity: mountIdentity,
                 deviceEntry: parsed.deviceEntry, sourceApplication: source.application,
                 sourceIdentity: source.identity, sourceInfoIdentity: source.infoIdentity,
-                destination: destination, destinationRoot: root, destinationURL: destinationURL,
+                destination: destination, destinationRoot: root,
+                destinationRootIdentity: rootIdentity, destinationURL: destinationURL,
                 existingApplication: existingApplication, existingIdentity: existingIdentity,
                 existingInfoIdentity: existingInfoIdentity)
         } catch {
@@ -277,6 +284,7 @@ public enum AppMaintenanceDiskImageInstaller {
         trash: @escaping TrashItem
     ) async throws -> AppMaintenanceInstallResult {
         guard regularFileIdentity(at: plan.imageURL) == plan.imageIdentity,
+            fileSize(at: plan.imageURL) == plan.imageSizeBytes,
             directoryIdentity(at: plan.mountURL) == plan.mountIdentity,
             directoryIdentity(at: plan.sourceApplication.url) == plan.sourceIdentity,
             regularFileIdentity(
@@ -285,6 +293,15 @@ public enum AppMaintenanceDiskImageInstaller {
             normalizedURL(plan.sourceApplication.url.deletingLastPathComponent())
                 == normalizedURL(plan.mountURL)
         else { throw AppMaintenanceDiskImageError.reviewedSourceChanged }
+        if let expectedRootIdentity = plan.destinationRootIdentity {
+            guard directoryIdentity(at: plan.destinationRoot) == expectedRootIdentity else {
+                throw AppMaintenanceDiskImageError.reviewedDestinationChanged
+            }
+        } else {
+            guard !FileManager.default.fileExists(atPath: plan.destinationRoot.path),
+                !isSymbolicLink(plan.destinationRoot)
+            else { throw AppMaintenanceDiskImageError.reviewedDestinationChanged }
+        }
         try prepareDestinationRoot(plan.destinationRoot)
         let destinationExists = FileManager.default.fileExists(atPath: plan.destinationURL.path)
         if let existingIdentity = plan.existingIdentity,
@@ -350,7 +367,8 @@ public enum AppMaintenanceDiskImageInstaller {
                 mountURL: plan.mountURL, deviceEntry: plan.deviceEntry), run: run)
         var imageMovedToTrash = false
         if ejected, moveImageToTrash,
-            regularFileIdentity(at: plan.imageURL) == plan.imageIdentity
+            regularFileIdentity(at: plan.imageURL) == plan.imageIdentity,
+            fileSize(at: plan.imageURL) == plan.imageSizeBytes
         {
             imageMovedToTrash = (try? trash(plan.imageURL)) != nil
         }
