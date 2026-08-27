@@ -21,8 +21,9 @@ public struct QuinjetClient: Sendable {
         let capabilities = try decode(
             QuinjetCapabilities.self,
             from: await execute(["capabilities", "--json"]))
-        guard let values = capabilities.commands.first(where: { $0.path == "quinjet tui" })?
-            .arguments.first(where: { $0.id == "theme" })?.possibleValues
+        guard
+            let values = capabilities.commands.first(where: { $0.path == "quinjet tui" })?
+                .arguments.first(where: { $0.id == "theme" })?.possibleValues
         else {
             throw QuinjetClientError.invalidResponse
         }
