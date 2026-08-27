@@ -196,8 +196,14 @@ final class UsageStore: FeatureModule {
     private var limitHistoryGeneration = 0
     private var statusItem: LimitsStatusItem?
 
+    var enabledProviders: [LimitProvider] {
+        Self.enabledLimitProviders(
+            claude: providerEnabled(.claude), codex: providerEnabled(.codex))
+    }
+
     var availableProviders: [LimitProvider] {
-        LimitProvider.allCases.filter { limits(for: $0).isAvailable && providerEnabled($0) }
+        let enabled = Set(enabledProviders)
+        return LimitProvider.allCases.filter { enabled.contains($0) && limits(for: $0).isAvailable }
     }
 
     func limits(for provider: LimitProvider) -> ProviderLimits {

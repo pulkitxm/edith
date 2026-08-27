@@ -592,6 +592,16 @@ private struct NotchSeekBar: View {
     }
 }
 
+struct NotchLimitRingValue: Equatable {
+    let progress: Double
+    let text: String
+
+    init(_ window: LimitWindow?) {
+        progress = window?.percent ?? 0
+        text = window.map { "\(Int($0.percent.rounded()))%" } ?? "-"
+    }
+}
+
 private struct NotchUsageRings: View {
     var usage: UsageStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -603,7 +613,7 @@ private struct NotchUsageRings: View {
     @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
         LimitRing.defaultCriticalPercent
 
-    private var providers: [LimitProvider] { usage.availableProviders }
+    private var providers: [LimitProvider] { usage.enabledProviders }
     private var selected: LimitProvider {
         get {
             let saved = LimitProvider(rawValue: selectedRaw) ?? .claude
@@ -655,22 +665,26 @@ private struct NotchUsageRings: View {
     }
 
     private func ring(_ label: String, _ window: LimitWindow?) -> some View {
-        let value = window?.percent ?? 0
+        let value = NotchLimitRingValue(window)
         return VStack(spacing: 0) {
             ZStack {
                 Circle().stroke(.white.opacity(0.12), lineWidth: 4.5)
                 Circle()
-                    .trim(from: 0, to: min(1, value / 100))
-                    .stroke(color(value), style: StrokeStyle(lineWidth: 4.5, lineCap: .round))
+                    .trim(from: 0, to: min(1, value.progress / 100))
+                    .stroke(
+                        color(value.progress),
+                        style: StrokeStyle(lineWidth: 4.5, lineCap: .round)
+                    )
                     .rotationEffect(.degrees(-90))
-                    .animation(LimitRing.animation(reduceMotion: reduceMotion), value: value)
-                Text("\(Int(value.rounded()))%")
+                    .animation(
+                        LimitRing.animation(reduceMotion: reduceMotion), value: value.progress)
+                Text(value.text)
                     .font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .animation(
                         LimitRing.animation(reduceMotion: reduceMotion),
-                        value: Int(value.rounded()))
+                        value: value.text)
             }
             .frame(width: 52, height: 52)
             Text(label)
