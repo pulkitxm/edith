@@ -50,8 +50,7 @@ test("uninstalling quits every bundle and zapping clears Edith's own state", () 
 
 test("the release mirrors the bumped cask to the tap repository", () => {
   expect(releaseWorkflow).toContain("github.com/pulkitxm/homebrew-tap.git");
-  expect(releaseWorkflow).toContain("PUKBOT_TOKEN");
-  expect(releaseWorkflow).not.toContain("TAP_PUSH_TOKEN");
+  expect(releaseWorkflow).toContain("TAP_PUSH_TOKEN");
   expect(releaseWorkflow).toContain(
     "cp release-source/Casks/edith.rb tap/Casks/edith.rb",
   );

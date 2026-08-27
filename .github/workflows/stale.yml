@@ -16,20 +16,12 @@ jobs:
   stale:
     name: Sweep
     runs-on: ubuntu-latest
-    environment: pukbot-production
+    permissions:
+      issues: write
+      pull-requests: write
     steps:
-      - id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
-        with:
-          client-id: ${{ vars.PUKBOT_CLIENT_ID }}
-          private-key: ${{ secrets.PUKBOT_PRIVATE_KEY }}
-          owner: pulkitxm
-          repositories: edith
-          permission-issues: write
-          permission-pull-requests: write
       - uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93
         with:
-          repo-token: ${{ steps.app-token.outputs.token }}
           days-before-stale: 45
           days-before-close: 14
           exempt-issue-labels: pinned,security

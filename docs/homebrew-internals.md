@@ -682,7 +682,9 @@ There is no second workflow watching for a tag, and no tag trigger anywhere.
 
 `ci.yml` skips itself when the head commit message starts with `Release v` or
 `Refresh the contributor list`. That stops either generated commit from starting
-another run.
+another run. Those pushes use `RELEASE_PUSH_TOKEN`, and unlike the `GITHUB_TOKEN`
+an Actions run is handed, a personal access token does trigger further workflows:
+the message guard is the loop protection, not the token.
 
 `ci.yml`'s concurrency group cancels in progress runs only for pull requests. On
 `main` runs queue instead, so a newer merge cannot cancel a run whose checks are
@@ -753,10 +755,16 @@ rebuild behavior without duplicating shell logic in the workflow.
 
 Design notes on the parts that are not obvious.
 
-**A scoped branch bypass.** `main` is protected by rulesets requiring pull requests
-and status checks. The release publisher uses a short-lived Pukbot installation
-token, and every active rule that would reject the generated commit must list that
-app as an always-allowed bypass actor. Ordinary users retain the full protection.
+**`RELEASE_PUSH_TOKEN`, not `GITHUB_TOKEN`.** `main` is protected by a ruleset
+requiring pull requests and status checks. The token an Actions run is handed cannot
+bypass it, and on a personal repository the GitHub Actions app cannot be added to a
+ruleset bypass list at all: the API answers `Actor GitHub Actions integration must
+be part of the ruleset source or owner organization`. The ruleset does grant the
+repository admin role an unconditional bypass, and a fine grained personal access
+token acts as its owner, so checking out with one lets the push through. This is the
+standard arrangement for a personal repository that both protects its default branch
+and automates its releases; the same secret carries the version bump in the same
+commit.
 
 **`ref: main`, then the tag.** A cut checks out the CI-approved `main` commit and
 creates the release commit and tag from it. A rebuild starts from the existing tag,
@@ -811,26 +819,27 @@ The mirror step:
 ```yaml
       - name: Mirror the cask to the tap repository
         env:
-          PUKBOT_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAP_PUSH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
         run: |
           git clone --depth 1 \
-            "https://x-access-token:${PUKBOT_TOKEN}@github.com/pulkitxm/homebrew-tap.git" tap
+            "https://x-access-token:${TAP_PUSH_TOKEN}@github.com/pulkitxm/homebrew-tap.git" tap
           cp release-source/Casks/edith.rb tap/Casks/edith.rb
           cd tap
           if git diff --quiet -- Casks/edith.rb; then
             echo "the tap already carries $RELEASE_TAG"
             exit 0
           fi
-          git config user.name "pukbot[bot]"
-          git config user.email "320458784+pukbot[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Casks/edith.rb
           git commit -m "Update the Edith cask to ${RELEASE_TAG}"
           git push origin HEAD:main
 ```
 
-**Why an app token.** `GITHUB_TOKEN` is scoped to the repository the workflow runs
-in. The Pukbot installation spans both repositories, so its short-lived token can
-push the release state and mirror the cask without storing a personal token.
+**Why a token.** `GITHUB_TOKEN` is scoped to the repository the workflow runs in. It
+cannot push to a different repository, so a cross-repository push needs a credential
+of its own: a fine-grained personal access token scoped to `pulkitxm/homebrew-tap`
+with read and write access to contents, stored as `TAP_PUSH_TOKEN`.
 
 **Fail rather than skip.** The version job refuses to start without the token, and
 the mirror step fails on any clone or push error. A silent skip could publish a
@@ -963,12 +972,28 @@ gh api repos/pulkitxm/homebrew-tap/contents/Casks/edith.rb --jq .content | base6
 
 The `version` line should be the release you just cut.
 
-### Set up Pukbot publication
+### Set up the two push tokens
 
-Set `PUKBOT_CLIENT_ID` as a repository variable and `PUKBOT_PRIVATE_KEY` as an
-environment secret for `pukbot-production`. Install the app on both repositories
-with Contents write access. Every active ruleset on `main` that blocks a direct
-release push must list Pukbot as an always-allowed bypass actor.
+Both are required once, before the first release that mirrors the cask.
+
+`RELEASE_PUSH_TOKEN` lets the release jobs push to a protected `main`: a fine
+grained token scoped to `pulkitxm/edith` with read and write access to Contents,
+created by someone with the repository admin role, whose ruleset bypass it inherits.
+
+```
+gh secret set RELEASE_PUSH_TOKEN --repo pulkitxm/edith
+```
+
+`TAP_PUSH_TOKEN` lets the mirror step push to the tap.
+
+1. Create a fine-grained personal access token.
+2. Scope it to `pulkitxm/homebrew-tap` only.
+3. Give it read and write access to Contents.
+4. Add it to `pulkitxm/edith` as `TAP_PUSH_TOKEN`:
+
+```
+gh secret set TAP_PUSH_TOKEN --repo pulkitxm/edith
+```
 
 ### Fix a broken checksum
 
@@ -1015,8 +1040,8 @@ question worth asking after a failed release run.
 | `Cask 'edith' is unavailable` on a new machine | Bare token with no tap installed | Use `brew install --cask pulkitxm/tap/edith` |
 | Error naming `pulkitxm/edith` | Two-segment name, does not match the tap regex | Three segments: `pulkitxm/tap/edith` |
 | `SHA256 mismatch` | Cask version and checksum are out of step, or the release asset was replaced | Recompute from the published DMG, fix both repositories |
-| Release green, tap still on the old version | Pukbot lacks access to the tap, or the mirror push failed | Restore the app installation, then re-run the job |
-| `GH013: Repository rule violations found for refs/heads/main` | An active `main` ruleset does not grant Pukbot bypass | Add Pukbot as an always-allowed bypass actor |
+| Release green, tap still on the old version | `publish` job's mirror step failed, usually an expired `TAP_PUSH_TOKEN` | Fix the secret, re-run the job |
+| `GH013: Repository rule violations found for refs/heads/main` | A job pushed to `main` with `GITHUB_TOKEN`, which no ruleset bypass covers | Check out with `RELEASE_PUSH_TOKEN` |
 | `brew upgrade` never updates Edith | `auto_updates true`, working as designed | `brew upgrade --cask --greedy edith` |
 | `brew info` shows an older version than the running app | Sparkle updated in place | Cosmetic; a greedy upgrade re-syncs it |
 | Gatekeeper warning on first launch | Build was not notarized; Homebrew applied quarantine like any download | Notary secrets in the release workflow |
