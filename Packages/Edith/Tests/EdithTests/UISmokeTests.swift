@@ -305,6 +305,8 @@ private func descendantViews(of view: NSView) -> [NSView] {
         let accessory = try #require(window.titlebarAccessoryViewControllers.first)
         #expect(window.titlebarAccessoryViewControllers.count == 1)
         #expect(accessory.layoutAttribute == .right)
+        #expect(accessory.view.frame.width == 236)
+        #expect(accessory.view.frame.height >= 28)
         #expect(accessory.view.fittingSize.width >= 228)
         #expect(accessory.view.fittingSize.height <= 36)
     }

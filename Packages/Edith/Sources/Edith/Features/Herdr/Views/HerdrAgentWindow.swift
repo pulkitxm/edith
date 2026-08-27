@@ -53,11 +53,13 @@ enum HerdrAgentWindow {
     ) {
         let accessory = NSTitlebarAccessoryViewController()
         accessory.layoutAttribute = .right
-        accessory.view = NSHostingView(
+        let hosting = NSHostingView(
             rootView: HerdrTitlebarViewPicker(store: store, agentID: agentID)
                 .frame(width: 228, height: 28)
                 .padding(.trailing, 8)
         )
+        hosting.frame = NSRect(x: 0, y: 0, width: 236, height: 28)
+        accessory.view = hosting
         window.addTitlebarAccessoryViewController(accessory)
     }
 
