@@ -51,3 +51,5 @@ Inspect permissions, helper state, and configuration with:
 ```bash
 ed extensions doctor keyboardTools --json
 ```
+
+[Back to the CLI reference](../README.md)

@@ -2,6 +2,7 @@ import CoreGraphics
 import Foundation
 import Testing
 
+@testable import EdithHelper
 @testable import EdithKit
 
 @Suite struct KeyboardToolsTests {
@@ -161,6 +162,27 @@ import Testing
 
         #expect(missing == .needsSetup("Turn on Debounce, Super key, or both."))
         #expect(ready == .ready("The keyboard event filter is configured and ready."))
+    }
+
+    @Test func settingsBackupIncludesPreferencesButNotRuntimeState() {
+        let preferences = [
+            AppStorageKeys.KeyboardTools.enabled,
+            AppStorageKeys.KeyboardTools.debounceEnabled,
+            AppStorageKeys.KeyboardTools.debounceWindow,
+            AppStorageKeys.KeyboardTools.superEnabled,
+            AppStorageKeys.KeyboardTools.superTapAction,
+            AppStorageKeys.KeyboardTools.superHoldAction,
+        ]
+        let runtime = [
+            AppStorageKeys.KeyboardTools.mappingApplied,
+            AppStorageKeys.KeyboardTools.runtimeActive,
+            AppStorageKeys.KeyboardTools.runtimeError,
+        ]
+
+        #expect(preferences.allSatisfy(SettingsBackup.backedKeys.contains))
+        #expect(preferences.allSatisfy(SettingsBackup.sharedKeys.contains))
+        #expect(runtime.allSatisfy { !SettingsBackup.backedKeys.contains($0) })
+        #expect(runtime.allSatisfy { !SettingsBackup.sharedKeys.contains($0) })
     }
 
     private func mappingReport(_ tables: [[KeyboardSuperMapping]]) -> String {
