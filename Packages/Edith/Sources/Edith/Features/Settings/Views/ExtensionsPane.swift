@@ -923,6 +923,11 @@ private struct ExtensionDetailRows: View {
             case .machines: MachinesRows()
             case .companion: CompanionRows()
             case .systemStats: SystemStatsRows()
+            case .audioControls:
+                Section("Audio devices") {
+                    Text("Choose preferred devices and safety behavior here.")
+                        .settingsCaption()
+                }
             case .micMute: MicMuteRows()
             case .lidAwake: LidAwakeRows()
             case .music: MusicRows()

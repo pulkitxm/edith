@@ -38,6 +38,8 @@ public enum ArgumentKind: Equatable, Sendable {
     case quinjetTheme
     case localPath
     case musicPlayer
+    case audioInput
+    case audioOutput
     case remotePath
     case container
     case tool
@@ -350,6 +352,20 @@ public enum CommandTree {
                         "stats", "Sample CPU, memory, load and network.",
                         options: ["--json", "-f", "--follow", "--interval", "--processes"]),
                     CommandNode("disks", "Mounted volumes and their free space.", options: common),
+                ]),
+            CommandNode(
+                "audio", "Audio devices, defaults, and application routes.",
+                children: [
+                    CommandNode("status", "Show devices, defaults, and saved routes.", options: common),
+                    CommandNode(
+                        "input", "Pin an input device, or follow the system default.",
+                        options: common, arguments: [.audioInput]),
+                    CommandNode(
+                        "output", "Switch the system output device.", options: common,
+                        arguments: [.audioOutput]),
+                    CommandNode(
+                        "route", "Route an application to an output device.", options: common,
+                        arguments: [.free, .audioOutput]),
                 ]),
             CommandNode(
                 "music", "Whatever is playing, and playback control.",
