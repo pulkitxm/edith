@@ -33,6 +33,7 @@ struct QuinjetPage: View {
         }
         .task {
             guard automaticActionsEnabled else { return }
+            await model.refreshThemes()
             await model.refreshProjects()
         }
         .onChange(of: configuration) { _, configuration in
@@ -135,7 +136,7 @@ struct QuinjetPage: View {
                 }
             }
             Divider()
-            ForEach(QuinjetTheme.allCases) { theme in
+            ForEach(model.themes) { theme in
                 Button {
                     themeName = theme.rawValue
                 } label: {

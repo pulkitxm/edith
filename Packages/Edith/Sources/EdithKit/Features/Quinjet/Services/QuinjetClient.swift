@@ -17,6 +17,23 @@ public struct QuinjetClient: Sendable {
             from: await execute(["project", "list", "--json"]))
     }
 
+    public func themes() async throws -> [QuinjetTheme] {
+        let capabilities = try decode(
+            QuinjetCapabilities.self,
+            from: await execute(["capabilities", "--json"]))
+        guard let values = capabilities.commands.first(where: { $0.path == "quinjet tui" })?
+            .arguments.first(where: { $0.id == "theme" })?.possibleValues
+        else {
+            throw QuinjetClientError.invalidResponse
+        }
+        var seen = Set<QuinjetTheme>()
+        let themes = values.compactMap(QuinjetTheme.init(rawValue:)).filter {
+            seen.insert($0).inserted
+        }
+        guard !themes.isEmpty else { throw QuinjetClientError.invalidResponse }
+        return themes
+    }
+
     public func recentProjects(remote: QuinjetRemote) async throws -> [QuinjetProject] {
         let folders = try decode(
             QuinjetRemoteFolders.self, from: await execute(["remote", "list", "--json"]))
@@ -128,6 +145,20 @@ public struct QuinjetClient: Sendable {
         }
         return Data(result.output.utf8)
     }
+}
+
+private struct QuinjetCapabilities: Decodable {
+    let commands: [QuinjetCapabilityCommand]
+}
+
+private struct QuinjetCapabilityCommand: Decodable {
+    let path: String
+    let arguments: [QuinjetCapabilityArgument]
+}
+
+private struct QuinjetCapabilityArgument: Decodable {
+    let id: String
+    let possibleValues: [String]
 }
 
 private struct RemoteFolderProbe: Sendable {

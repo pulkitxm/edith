@@ -8,30 +8,47 @@ public enum QuinjetTerminal: String, CaseIterable, Identifiable, Sendable {
     public var id: String { rawValue }
 }
 
-public enum QuinjetTheme: String, CaseIterable, Identifiable, Sendable {
-    case quinjet
-    case catppuccin
-    case dracula
-    case everforest
-    case gruvbox
-    case nord
-    case one
-    case rosePine = "rose-pine"
-    case solarized
-    case tokyoNight = "tokyo-night"
-    case ayu
-    case monokai
-    case github
+public struct QuinjetTheme: RawRepresentable, Hashable, Identifiable, Sendable {
+    public let rawValue: String
 
     public var id: String { rawValue }
+
+    public init?(rawValue: String) {
+        guard !rawValue.isEmpty, rawValue != QuinjetThemePreference.app else { return nil }
+        self.rawValue = rawValue
+    }
+
+    private init(_ rawValue: String) {
+        self.rawValue = rawValue
+    }
+
+    public static let quinjet = Self("quinjet")
+    public static let catppuccin = Self("catppuccin")
+    public static let dracula = Self("dracula")
+    public static let everforest = Self("everforest")
+    public static let gruvbox = Self("gruvbox")
+    public static let nord = Self("nord")
+    public static let one = Self("one")
+    public static let rosePine = Self("rose-pine")
+    public static let solarized = Self("solarized")
+    public static let tokyoNight = Self("tokyo-night")
+    public static let ayu = Self("ayu")
+    public static let monokai = Self("monokai")
+    public static let github = Self("github")
+
+    public static let allCases = [
+        quinjet, catppuccin, dracula, everforest, gruvbox, nord, one, rosePine, solarized,
+        tokyoNight, ayu, monokai, github,
+    ]
 }
 
 public enum QuinjetThemePreference {
     public static let app = "app"
-    public static let all = [app] + QuinjetTheme.allCases.map(\.rawValue)
 
     public static func resolve(_ storedValue: String, appTheme: AppTheme) -> QuinjetTheme {
-        if let explicit = QuinjetTheme(rawValue: storedValue) { return explicit }
+        if storedValue != app, let explicit = QuinjetTheme(rawValue: storedValue) {
+            return explicit
+        }
         switch appTheme {
         case .accent: return .quinjet
         case .blue: return .github

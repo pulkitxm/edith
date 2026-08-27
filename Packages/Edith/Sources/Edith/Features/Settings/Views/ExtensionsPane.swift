@@ -1096,6 +1096,8 @@ private struct QuinjetRows: View {
         var terminal = QuinjetTerminal.embedded.rawValue
     @AppStorage(AppStorageKeys.Quinjet.theme, store: SharedDefaults.store) private
         var theme = QuinjetThemePreference.app
+    @State private var themes = QuinjetTheme.allCases
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     var body: some View {
         CLIToolStatusSection(tools: [.quinjet], extensionEnabled: enabled)
@@ -1112,9 +1114,13 @@ private struct QuinjetRows: View {
             }
             Picker("Theme", selection: $theme.configured(AppStorageKeys.Quinjet.theme)) {
                 Text("App theme").tag(QuinjetThemePreference.app)
-                ForEach(QuinjetTheme.allCases) { option in
+                ForEach(themes) { option in
                     Text(option.label).tag(option.rawValue)
                 }
+            }
+            .task {
+                guard automaticActionsEnabled else { return }
+                themes = (try? await QuinjetClient.live.themes()) ?? QuinjetTheme.allCases
             }
         }
         .disabled(!enabled)

@@ -40,6 +40,7 @@ final class QuinjetPageModel {
     private(set) var tabs: [QuinjetTab]
     private(set) var selected: UUID
     private(set) var projects: [QuinjetProject] = []
+    private(set) var themes = QuinjetTheme.allCases
     private(set) var loadingProjects = false
     var projectError: String?
     var query = ""
@@ -120,6 +121,15 @@ final class QuinjetPageModel {
         } catch {
             guard generation == projectRefreshGeneration else { return }
             projectError = error.localizedDescription
+        }
+    }
+
+    func refreshThemes() async {
+        do {
+            themes = try await client.themes()
+        } catch is CancellationError {
+        } catch {
+            themes = QuinjetTheme.allCases
         }
     }
 

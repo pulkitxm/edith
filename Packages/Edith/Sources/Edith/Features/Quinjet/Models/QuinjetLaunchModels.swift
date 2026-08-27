@@ -27,20 +27,22 @@ extension QuinjetTerminal {
 
 extension QuinjetTheme {
     var label: String {
-        switch self {
-        case .quinjet: "Quinjet"
-        case .catppuccin: "Catppuccin"
-        case .dracula: "Dracula"
-        case .everforest: "Everforest"
-        case .gruvbox: "Gruvbox"
-        case .nord: "Nord"
-        case .one: "One"
-        case .rosePine: "Rosé Pine"
-        case .solarized: "Solarized"
-        case .tokyoNight: "Tokyo Night"
-        case .ayu: "Ayu"
-        case .monokai: "Monokai"
-        case .github: "GitHub"
+        switch rawValue {
+        case QuinjetTheme.quinjet.rawValue: "Quinjet"
+        case QuinjetTheme.catppuccin.rawValue: "Catppuccin"
+        case QuinjetTheme.dracula.rawValue: "Dracula"
+        case QuinjetTheme.everforest.rawValue: "Everforest"
+        case QuinjetTheme.gruvbox.rawValue: "Gruvbox"
+        case QuinjetTheme.nord.rawValue: "Nord"
+        case QuinjetTheme.one.rawValue: "One"
+        case QuinjetTheme.rosePine.rawValue: "Rosé Pine"
+        case QuinjetTheme.solarized.rawValue: "Solarized"
+        case QuinjetTheme.tokyoNight.rawValue: "Tokyo Night"
+        case QuinjetTheme.ayu.rawValue: "Ayu"
+        case QuinjetTheme.monokai.rawValue: "Monokai"
+        case QuinjetTheme.github.rawValue: "GitHub"
+        default:
+            rawValue.split(separator: "-").map { $0.capitalized }.joined(separator: " ")
         }
     }
 }
@@ -147,33 +149,37 @@ struct TerminalPalette: Equatable {
     private static func colors(
         theme: QuinjetTheme, appearance: QuinjetAppearance
     ) -> (UInt32, UInt32, UInt32) {
-        switch (theme, appearance) {
-        case (.quinjet, .dark): (0x0d1117, 0xe6edf3, 0x58a6ff)
-        case (.quinjet, .light): (0xffffff, 0x1f2328, 0x0969da)
-        case (.catppuccin, .dark): (0x1e1e2e, 0xf5e0dc, 0x89b4fa)
-        case (.catppuccin, .light): (0xeff1f5, 0x3c3f58, 0x1e66f5)
-        case (.dracula, .dark): (0x282a36, 0xffffff, 0x66d9ef)
-        case (.dracula, .light): (0xf8f8f2, 0x20212b, 0x005cc5)
-        case (.everforest, .dark): (0x2d353b, 0xe4d9bd, 0x7fbbb3)
-        case (.everforest, .light): (0xfdf6e3, 0x4b565c, 0x3a94c5)
-        case (.gruvbox, .dark): (0x282828, 0xfbf1c7, 0x83a598)
-        case (.gruvbox, .light): (0xfbf1c7, 0x282828, 0x458588)
-        case (.nord, .dark): (0x2e3440, 0xe5e9f0, 0x81a1c1)
-        case (.nord, .light): (0xeceff4, 0x2e3440, 0x426b94)
-        case (.one, .dark): (0x282c34, 0xd7dae0, 0x61afef)
-        case (.one, .light): (0xfafafa, 0x202227, 0x4078f2)
-        case (.rosePine, .dark): (0x191724, 0xeeeaf4, 0xc4a7e7)
-        case (.rosePine, .light): (0xfaf4ed, 0x403d52, 0x907aa9)
-        case (.solarized, .dark): (0x002b36, 0xfdf6e3, 0x268bd2)
-        case (.solarized, .light): (0xfdf6e3, 0x073642, 0x268bd2)
-        case (.tokyoNight, .dark): (0x1a1b26, 0xd5d6db, 0x7aa2f7)
-        case (.tokyoNight, .light): (0xe1e2e7, 0x2e3c64, 0x2e7de9)
-        case (.ayu, .dark): (0x0b0e14, 0xe6e1cf, 0x59c2ff)
-        case (.ayu, .light): (0xfafafa, 0x3f454a, 0x399ee6)
-        case (.monokai, .dark): (0x272822, 0xf5f4f1, 0x66d9ef)
-        case (.monokai, .light): (0xf9f8f5, 0x272822, 0x007fa3)
-        case (.github, .dark): (0x0d1117, 0xf0f6fc, 0x2f81f7)
-        case (.github, .light): (0xffffff, 0x24292f, 0x0969da)
+        switch (theme.rawValue, appearance) {
+        case (QuinjetTheme.quinjet.rawValue, .dark): (0x0d1117, 0xe6edf3, 0x58a6ff)
+        case (QuinjetTheme.quinjet.rawValue, .light): (0xffffff, 0x1f2328, 0x0969da)
+        case (QuinjetTheme.catppuccin.rawValue, .dark): (0x1e1e2e, 0xf5e0dc, 0x89b4fa)
+        case (QuinjetTheme.catppuccin.rawValue, .light): (0xeff1f5, 0x3c3f58, 0x1e66f5)
+        case (QuinjetTheme.dracula.rawValue, .dark): (0x282a36, 0xffffff, 0x66d9ef)
+        case (QuinjetTheme.dracula.rawValue, .light): (0xf8f8f2, 0x20212b, 0x005cc5)
+        case (QuinjetTheme.everforest.rawValue, .dark): (0x2d353b, 0xe4d9bd, 0x7fbbb3)
+        case (QuinjetTheme.everforest.rawValue, .light): (0xfdf6e3, 0x4b565c, 0x3a94c5)
+        case (QuinjetTheme.gruvbox.rawValue, .dark): (0x282828, 0xfbf1c7, 0x83a598)
+        case (QuinjetTheme.gruvbox.rawValue, .light): (0xfbf1c7, 0x282828, 0x458588)
+        case (QuinjetTheme.nord.rawValue, .dark): (0x2e3440, 0xe5e9f0, 0x81a1c1)
+        case (QuinjetTheme.nord.rawValue, .light): (0xeceff4, 0x2e3440, 0x426b94)
+        case (QuinjetTheme.one.rawValue, .dark): (0x282c34, 0xd7dae0, 0x61afef)
+        case (QuinjetTheme.one.rawValue, .light): (0xfafafa, 0x202227, 0x4078f2)
+        case (QuinjetTheme.rosePine.rawValue, .dark): (0x191724, 0xeeeaf4, 0xc4a7e7)
+        case (QuinjetTheme.rosePine.rawValue, .light): (0xfaf4ed, 0x403d52, 0x907aa9)
+        case (QuinjetTheme.solarized.rawValue, .dark): (0x002b36, 0xfdf6e3, 0x268bd2)
+        case (QuinjetTheme.solarized.rawValue, .light): (0xfdf6e3, 0x073642, 0x268bd2)
+        case (QuinjetTheme.tokyoNight.rawValue, .dark): (0x1a1b26, 0xd5d6db, 0x7aa2f7)
+        case (QuinjetTheme.tokyoNight.rawValue, .light): (0xe1e2e7, 0x2e3c64, 0x2e7de9)
+        case (QuinjetTheme.ayu.rawValue, .dark): (0x0b0e14, 0xe6e1cf, 0x59c2ff)
+        case (QuinjetTheme.ayu.rawValue, .light): (0xfafafa, 0x3f454a, 0x399ee6)
+        case (QuinjetTheme.monokai.rawValue, .dark): (0x272822, 0xf5f4f1, 0x66d9ef)
+        case (QuinjetTheme.monokai.rawValue, .light): (0xf9f8f5, 0x272822, 0x007fa3)
+        case (QuinjetTheme.github.rawValue, .dark): (0x0d1117, 0xf0f6fc, 0x2f81f7)
+        case (QuinjetTheme.github.rawValue, .light): (0xffffff, 0x24292f, 0x0969da)
+        default:
+            appearance == .dark
+                ? (0x0d1117, 0xe6edf3, 0x58a6ff)
+                : (0xffffff, 0x1f2328, 0x0969da)
         }
     }
 

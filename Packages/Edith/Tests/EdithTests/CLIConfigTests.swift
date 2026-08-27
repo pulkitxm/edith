@@ -46,7 +46,7 @@ import Testing
 
         #expect(terminal?.allowed == ["embedded", "cmux"])
         #expect(terminal?.fallback == .string("embedded"))
-        #expect(theme?.allowed == QuinjetThemeValues.all)
+        #expect(theme?.allowed.isEmpty == true)
         #expect(theme?.fallback == .string(QuinjetThemePreference.app))
         #expect(SettingsBackup.backedKeys.contains(AppStorageKeys.Quinjet.terminal))
         #expect(SettingsBackup.backedKeys.contains(AppStorageKeys.Quinjet.theme))
@@ -181,13 +181,6 @@ import Testing
         #expect(fields["type"] == .string("integer"))
         #expect(fields["default"] == .int(60))
     }
-}
-
-private enum QuinjetThemeValues {
-    static let all = [
-        "app", "quinjet", "catppuccin", "dracula", "everforest", "gruvbox", "nord", "one",
-        "rose-pine", "solarized", "tokyo-night", "ayu", "monokai", "github",
-    ]
 }
 
 @Suite struct CLIConfigImportComparisonTests {

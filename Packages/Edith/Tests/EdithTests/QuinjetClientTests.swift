@@ -45,6 +45,40 @@ import Testing
         #expect(projects[0].defaultWorktree?.branch == "main")
     }
 
+    @Test func discoversThemesFromQuinjetCapabilitiesInReportedOrder() async throws {
+        let client = QuinjetClient { arguments in
+            #expect(arguments == ["capabilities", "--json"])
+            return Data(
+                """
+                {
+                  "commands": [
+                    {
+                      "path": "quinjet tui",
+                      "arguments": [
+                        {
+                          "id": "theme",
+                          "possibleValues": ["quinjet", "new-theme", "quinjet"]
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """.utf8)
+        }
+
+        let themes = try await client.themes()
+
+        #expect(themes.map(\.rawValue) == ["quinjet", "new-theme"])
+    }
+
+    @Test func rejectsCapabilitiesWithoutTerminalThemes() async {
+        let client = QuinjetClient { _ in Data(#"{"commands":[]}"#.utf8) }
+
+        await #expect(throws: QuinjetClientError.invalidResponse) {
+            try await client.themes()
+        }
+    }
+
     @Test func requestsWorktreesForCurrentPath() async throws {
         let client = QuinjetClient { arguments in
             #expect(
