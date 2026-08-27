@@ -27,6 +27,7 @@ struct ExtensionPreview: View {
         case "herdr": herdrPreview(phase: phase)
         case "quinjet": quinjetPreview(phase: phase)
         case "system": systemPreview(phase: phase)
+        case "homebrew": homebrewPreview(phase: phase)
         case "machines": machinesPreview(phase: phase)
         case "systemStats": systemStatsPreview(phase: phase)
         case "micMute": micMutePreview(phase: phase)
@@ -151,6 +152,36 @@ struct ExtensionPreview: View {
                     .offset(y: press * 2)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func homebrewPreview(phase: Double) -> some View {
+        let active = Int(phase * 1.7) % 3
+        return VStack(spacing: UIScale.pt(5)) {
+            ForEach(0..<3) { index in
+                HStack(spacing: UIScale.pt(7)) {
+                    Image(systemName: index == 1 ? "app.fill" : "terminal.fill")
+                        .font(.system(size: UIScale.pt(8)))
+                        .foregroundStyle(
+                            index == active ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
+                        )
+                        .frame(width: UIScale.pt(12))
+                    RoundedRectangle(cornerRadius: UIScale.pt(2))
+                        .fill(
+                            index == active
+                                ? DashSkin.accent(dark).opacity(0.65)
+                                : DashSkin.lineStrong(dark)
+                        )
+                        .frame(
+                            width: UIScale.pt(Double(54 - index * 7)), height: UIScale.pt(5))
+                    Spacer(minLength: 0)
+                    Circle()
+                        .fill(index == 0 ? DashSkin.sage : DashSkin.inkFaint(dark).opacity(0.35))
+                        .frame(width: UIScale.pt(5), height: UIScale.pt(5))
+                }
+            }
+        }
+        .padding(.horizontal, UIScale.pt(16))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 

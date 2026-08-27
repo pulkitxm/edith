@@ -51,6 +51,15 @@ import EdithCore
                 == .ready("Attention tracking is configured for the selected sources."))
     }
 
+    @Test func homebrewAdapterTracksTheExecutable() {
+        #expect(
+            ExtensionLiveAdapters.homebrewReadiness(executable: nil)
+                == .uninstalled("Install Homebrew from brew.sh, then check again."))
+        #expect(
+            ExtensionLiveAdapters.homebrewReadiness(
+                executable: URL(fileURLWithPath: "/opt/homebrew/bin/brew"))
+                == .ready("Homebrew package management is available."))
+    }
     @Test func usageDetectsMissingLoadingEmptyReadyAndCorruptData() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

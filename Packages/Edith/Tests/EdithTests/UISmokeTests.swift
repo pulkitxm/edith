@@ -63,6 +63,25 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(renders(HomePage()))
     }
 
+    @Test func homebrewManagerRendersInstalledPackagesAndUpdates() {
+        let model = HomebrewPageModel()
+        model.status = HomebrewStatus(
+            available: true, executable: "/opt/homebrew/bin/brew", version: "Homebrew 5.0.0")
+        model.loaded = true
+        model.packages = [
+            HomebrewPackage(
+                kind: .formula, name: "ripgrep", displayName: "ripgrep",
+                description: "Search text quickly", installedVersions: ["14.1.0"],
+                currentVersion: "14.1.1", outdated: true),
+            HomebrewPackage(
+                kind: .formula, name: "jq", displayName: "jq",
+                description: "Process JSON", installedVersions: ["1.7.1"],
+                currentVersion: "1.7.1"),
+        ]
+
+        #expect(renders(HomebrewPage(model: model)))
+    }
+
     @Test func mainWindowRendersEveryDestination() {
         let saved = SharedDefaults.store.string(forKey: "mainWindowSection")
         let savedSettingsTab = SharedDefaults.store.string(forKey: "settingsTab")

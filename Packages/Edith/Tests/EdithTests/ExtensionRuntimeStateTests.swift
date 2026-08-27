@@ -252,6 +252,7 @@ import Testing
             ("herdr", "HerdrRows", "enabled", "ExtensionsPane.swift"),
             ("quinjet", "QuinjetRows", "enabled", "ExtensionsPane.swift"),
             ("system", "SystemRows", "enabled", "ExtensionsPane.swift"),
+            ("homebrew", "HomebrewRows", "enabled", "ExtensionsPane.swift"),
             ("machines", "MachinesRows", "enabled", "MachinesRows.swift"),
             ("companion", "CompanionRows", "enabled", "ExtensionsPane.swift"),
             ("systemStats", "SystemStatsRows", "enabled", "ExtensionsPane.swift"),

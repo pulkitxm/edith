@@ -96,6 +96,10 @@ public enum AppStorageKeys {
         public static let terminalsCollapsed = "herdrTerminalsCollapsed"
     }
 
+    public enum Homebrew {
+        public static let defaultKind = "homebrewDefaultKind"
+    }
+
     public enum Limits {
         public static let claudeEnabled = "claudeLimitsEnabled"
         public static let codexEnabled = "codexLimitsEnabled"
@@ -215,6 +219,7 @@ public enum AppStorageKeys {
         public static let calendarEnabled = "tabCalendarEnabled"
         public static let companionEnabled = "tabCompanionEnabled"
         public static let herdrEnabled = "tabHerdrEnabled"
+        public static let homebrewEnabled = "tabHomebrewEnabled"
         public static let machinesEnabled = "tabMachinesEnabled"
         public static let musicEnabled = "tabMusicEnabled"
         public static let order = "tabOrder"

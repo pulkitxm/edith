@@ -12,6 +12,7 @@ import Testing
         "tabHerdrEnabled",
         "tabQuinjetEnabled",
         "tabSystemEnabled",
+        "tabHomebrewEnabled",
         "tabMachinesEnabled",
         "tabCompanionEnabled",
         "menuBarSystemStats",
@@ -149,7 +150,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard",
+                "clipboard", "homebrew",
             ])
     }
 
@@ -157,12 +158,14 @@ import Testing
         let music = ExtensionRegistry.entries.first { $0.id == "music" }!
         let usage = ExtensionRegistry.entries.first { $0.id == "usage" }!
         let quinjet = ExtensionRegistry.entries.first { $0.id == "quinjet" }!
+        let homebrew = ExtensionRegistry.entries.first { $0.id == "homebrew" }!
 
         #expect(music.requiredTools.isEmpty)
         #expect(music.optionalTools == [.youtubeDownloader])
         #expect(usage.requiredTools == [.claudeCode, .codex])
         #expect(usage.optionalTools.isEmpty)
         #expect(quinjet.requiredTools == [.quinjet])
+        #expect(homebrew.requiredTools == [.homebrew])
         #expect(CLIToolSpec.claudeCode.requirement == .always)
         #expect(
             CLIToolSpec.codex.requirement
@@ -231,6 +234,7 @@ import Testing
             "herdr": [],
             "quinjet": [],
             "system": [],
+            "homebrew": [],
             "machines": [],
             "companion": [],
             "systemStats": [],
@@ -250,6 +254,7 @@ import Testing
             "herdr": [],
             "quinjet": [],
             "system": [.accessibility, .inputMonitoring],
+            "homebrew": [],
             "machines": [.notifications],
             "companion": [],
             "systemStats": [],

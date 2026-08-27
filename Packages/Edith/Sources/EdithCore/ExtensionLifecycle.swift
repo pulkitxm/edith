@@ -336,6 +336,41 @@ public enum ExtensionLifecycleCatalog {
                     "ed apps ls --json")
             ]),
         descriptor(
+            "homebrew", "Search and manage installed and available Homebrew packages safely.",
+            workflows: [
+                instruction(
+                    "browse", "Review packages",
+                    "Browse installed formulae and casks, including available updates."),
+                instruction(
+                    "search", "Find packages",
+                    "Search Homebrew metadata before choosing an exact package."),
+                instruction(
+                    "manage", "Manage packages",
+                    "Install, upgrade, or confirm an uninstall from the native manager."),
+            ],
+            prerequisites: [
+                instruction(
+                    "tool", "Install Homebrew",
+                    "Install Homebrew from brew.sh and ensure the brew executable is on Edith's PATH.",
+                    "ed brew status --json")
+            ],
+            examples: [
+                "ed extensions enable homebrew", "ed brew ls --outdated --json",
+                "ed brew search ripgrep --kind formula --json",
+            ],
+            docs: [documentation("guide", "Homebrew Manager guide", "docs/homebrew-manager.md")],
+            recovery: [
+                instruction(
+                    "status", "Check Homebrew", "Confirm Homebrew is installed and callable.",
+                    "ed brew status --json")
+            ],
+            verification: [
+                instruction(
+                    "inventory", "Read installed packages",
+                    "Confirm Homebrew metadata is available without changing packages.",
+                    "ed brew ls --json")
+            ]),
+        descriptor(
             "machines", "Operate SSH computers, files, services and containers from Edith.",
             workflows: [
                 instruction(

@@ -64,9 +64,9 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
-        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "colorPicker",
+        "attention", "usage", "quinjet", "system", "homebrew", "machines",
+        "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf", "clipboard",
+        "focusDim", "presenter", "colorPicker",
     ]
 
     public static func provider(
@@ -95,6 +95,7 @@ public enum ExtensionLiveAdapters {
         case "quinjet":
             quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
         case "system": await systemReadiness()
+        case "homebrew": homebrewReadiness(executable: executableNamed("brew"))
         case "machines": machinesReadiness()
         case "systemStats": systemStatsReadiness()
         case "micMute": microphoneReadiness()
@@ -193,6 +194,13 @@ public enum ExtensionLiveAdapters {
         ).readiness
     }
 
+    static func homebrewReadiness(executable: URL?) -> ExtensionAdapterReadiness {
+        ExtensionAdapterFacts(
+            installed: executable != nil,
+            readyDetail: "Homebrew package management is available.",
+            uninstalledDetail: "Install Homebrew from brew.sh, then check again."
+        ).readiness
+    }
     static func machinesReadiness(file: URL = MachinePaths.machinesFile)
         -> ExtensionAdapterReadiness
     {
