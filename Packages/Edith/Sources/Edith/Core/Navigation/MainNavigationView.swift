@@ -218,21 +218,22 @@ private struct SidebarNavRow: View {
                 }
             }
 
-            if let disclosureExpanded {
-                Button {
-                    disclosureAction?()
-                } label: {
+            if let disclosureExpanded, let disclosureAction {
+                Button(action: disclosureAction) {
                     disclosureIcon(expanded: disclosureExpanded)
+                        .frame(
+                            width: UIScale.pt(SidebarDisclosureGeometry.controlSlotWidth),
+                            height: UIScale.pt(SidebarDisclosureGeometry.controlSlotWidth)
+                        )
+                        .background(
+                            Color.primary.opacity(rowHovered ? 0.055 : 0),
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                        )
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(EdithButtonStyle(.iconOnly, tint: theme))
-                .background(
-                    Color.primary.opacity(disclosureAction != nil && rowHovered ? 0.055 : 0),
-                    in: RoundedRectangle(cornerRadius: UIScale.pt(6))
-                )
+                .buttonStyle(.edith(.borderless))
                 .padding(.trailing, UIScale.pt(2))
                 .zIndex(1)
-                .allowsHitTesting(disclosureAction != nil)
-                .accessibilityHidden(disclosureAction == nil)
                 .accessibilityLabel(
                     disclosureExpanded
                         ? "Collapse settings categories" : "Expand settings categories"
@@ -253,18 +254,6 @@ private struct SidebarNavRow: View {
             .rotationEffect(.degrees(expanded ? 90 : 0))
             .animation(
                 Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: expanded)
-    }
-}
-
-enum SidebarDisclosureInteraction {
-    static func expansionAfterRowActivation(
-        isSelected: Bool, currentlyExpanded: Bool
-    ) -> Bool {
-        isSelected ? !currentlyExpanded : true
-    }
-
-    static func showsSeparateControl(isSelected: Bool) -> Bool {
-        !isSelected
     }
 }
 
@@ -412,7 +401,7 @@ struct MainWindowView: View {
         var sidebarWidth = 230.0
     @AppStorage(
         AppStorageKeys.General.settingsCategoriesExpanded, store: SharedDefaults.store
-    ) private var settingsCategoriesExpanded = false
+    ) private var settingsCategoriesExpanded = true
     @AppStorage(AppStorageKeys.Tabs.attentionEnabled, store: SharedDefaults.store) private
         var attentionEnabled = false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
@@ -860,27 +849,14 @@ struct MainWindowView: View {
                     .padding(.top, UIScale.pt(14))
                     .padding(.bottom, UIScale.pt(4))
                 ForEach(MainDestination.appItems) { item in
-                    let settingsSelected = item == .settings && destination == .settings
                     SidebarNavRow(
                         item: item, selected: destination == item, theme: theme,
                         shortcutHint: shortcutHint(for: item),
-                        action: {
-                            if item == .settings {
-                                settingsCategoriesExpanded =
-                                    SidebarDisclosureInteraction.expansionAfterRowActivation(
-                                        isSelected: settingsSelected,
-                                        currentlyExpanded: settingsCategoriesExpanded)
-                                if !settingsSelected { select(item) }
-                            } else {
-                                select(item)
-                            }
-                        },
+                        action: { select(item) },
                         detach: item == .about || item == .settings ? nil : { detach(item) },
                         disclosureExpanded: item == .settings
                             ? settingsCategoriesExpanded : nil,
                         disclosureAction: item == .settings
-                            && SidebarDisclosureInteraction.showsSeparateControl(
-                                isSelected: settingsSelected)
                             ? { settingsCategoriesExpanded.toggle() } : nil)
                     if item == .settings {
                         CollapsibleSidebarLayout(
