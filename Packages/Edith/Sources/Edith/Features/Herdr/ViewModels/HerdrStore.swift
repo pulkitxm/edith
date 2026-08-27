@@ -414,6 +414,18 @@ final class HerdrStore {
         return configuration
     }
 
+    func uploadDroppedFiles(_ urls: [URL], for tab: HerdrOpenTab) async throws -> [String] {
+        guard let machine = tab.machine else { throw HerdrQuinjetError.machineUnavailable }
+        let connection = try await connection(for: machine)
+        var paths: [String] = []
+        for url in urls {
+            let path = HerdrDropTransfer.remotePath(for: url)
+            try await connection.upload(localURL: url, toRemotePath: path)
+            paths.append(path)
+        }
+        return paths
+    }
+
     func attachRequest(
         for tab: HerdrOpenTab, environment: [String],
         localExecutable: URL? = HerdrCollector.executable()

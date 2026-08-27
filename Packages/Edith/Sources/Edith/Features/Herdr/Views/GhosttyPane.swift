@@ -15,21 +15,22 @@ extension GhosttyTheme {
 }
 
 struct GhosttyPane: NSViewRepresentable {
+    let holder: TerminalSessionHolder
     let launch: GhosttyLaunch
     let theme: GhosttyTheme
     var active = true
     var wantsFocus = true
-    var onClose: (() -> Void)?
+    var onDropFiles: ((TerminalDropPayload) -> Bool)?
 
     func makeNSView(context: Context) -> GhosttyTerminalView {
-        let view = GhosttyTerminalView(launch: launch, theme: theme)
-        view.onClose = onClose
+        let view = holder.retainedGhosttyView(launch: launch, theme: theme)
+        view.onDropFiles = onDropFiles
         return view
     }
 
     func updateNSView(_ view: GhosttyTerminalView, context: Context) {
-        view.onClose = onClose
         view.apply(theme: theme)
+        view.onDropFiles = onDropFiles
         guard active, wantsFocus else { return }
         DispatchQueue.main.async { view.focusIfNeeded() }
     }

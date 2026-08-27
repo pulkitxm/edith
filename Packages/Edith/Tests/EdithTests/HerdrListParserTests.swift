@@ -247,7 +247,8 @@ import Testing
             session: "default", pane: "w3:p1N", kind: "OpenCode", status: .working,
             title: "Board", workspace: "edith", cwd: "/tmp")
         #expect(
-            HerdrAttachCommand.line(for: agent) == "herdr --session default agent attach w3:p1N")
+            HerdrAttachCommand.line(for: agent)
+                == "herdr --session default agent attach w3:p1N --takeover")
     }
 
     @Test func remoteAttachIsAnSSHCommand() {
@@ -257,7 +258,7 @@ import Testing
             status: .working, title: "Board", workspace: "edith", cwd: "/tmp")
         #expect(
             HerdrAttachCommand.line(for: agent)
-                == "ssh -tt tuf-wired -- herdr --session default agent attach w3:p1N")
+                == "ssh -tt tuf-wired -- herdr --session default agent attach w3:p1N --takeover")
     }
 }
 
@@ -284,6 +285,10 @@ import Testing
     @Test func relayScriptTalksUnixSockets() {
         #expect(HerdrSocketClient.relayScript.contains("AF_UNIX"))
         #expect(HerdrSocketClient.boardSubscriptions.contains { $0["type"] == "pane.updated" })
+        #expect(
+            HerdrSocketClient.boardSubscriptions.contains {
+                $0["type"] == "pane.agent_status_changed"
+            })
     }
 
     @Test func aMissingSocketThrowsInsteadOfAborting() {

@@ -1,6 +1,7 @@
 import AppKit
 @testable import Edith
 @testable import EdithKit
+@testable import GhosttyTerminal
 import Testing
 
 @Suite(.serialized) @MainActor struct TerminalPresentationTests {
@@ -107,5 +108,27 @@ import Testing
         #expect(typeAheadStarts == 0)
         #expect(textInputMatches == 100_000)
         #expect(elapsed < .seconds(1))
+    }
+
+    @Test func ghosttySurfaceIdentitySurvivesRepresentableReconstruction() {
+        let key = AppStorageKeys.Herdr.ghosttyTerminal
+        let previous = SharedDefaults.store.object(forKey: key)
+        SharedDefaults.store.set(true, forKey: key)
+        defer {
+            if let previous {
+                SharedDefaults.store.set(previous, forKey: key)
+            } else {
+                SharedDefaults.store.removeObject(forKey: key)
+            }
+        }
+
+        let holder = TerminalSessionHolder()
+        holder.start(executable: "/usr/bin/true", arguments: [], environment: [])
+        let launch = holder.ghosttyLaunch!
+        let theme = GhosttyTheme(palette: .edith(dark: true))
+        let first = holder.retainedGhosttyView(launch: launch, theme: theme)
+        let second = holder.retainedGhosttyView(launch: launch, theme: theme)
+
+        #expect(first === second)
     }
 }

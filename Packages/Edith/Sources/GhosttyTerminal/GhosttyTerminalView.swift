@@ -3,6 +3,7 @@ import GhosttyKit
 
 public final class GhosttyTerminalView: NSView {
     public var onClose: (() -> Void)?
+    public var onDropFiles: ((TerminalDropPayload) -> Bool)?
 
     private(set) var surface: ghostty_surface_t?
     private var launch: GhosttyLaunch?
@@ -32,6 +33,15 @@ public final class GhosttyTerminalView: NSView {
         return String(cString: raw)
     }
 
+    @discardableResult
+    public func insertText(_ text: String) -> Bool {
+        guard let surface, !text.isEmpty else { return false }
+        text.withCString { pointer in
+            ghostty_surface_text(surface, pointer, UInt(strlen(pointer)))
+        }
+        return true
+    }
+
     public func focusIfNeeded() {
         guard let window, window.firstResponder !== self else { return }
         window.makeFirstResponder(self)
@@ -51,9 +61,20 @@ public final class GhosttyTerminalView: NSView {
     required init?(coder: NSCoder) { nil }
 
     deinit {
-        if let surface { ghostty_surface_free(surface) }
-        if let themeConfig { ghostty_config_free(themeConfig) }
+        shutdown()
         GhosttySurfaceRegistry.shared.unregister(self)
+    }
+
+    public func shutdown() {
+        if let surface {
+            ghostty_surface_free(surface)
+            self.surface = nil
+        }
+        if let themeConfig {
+            ghostty_config_free(themeConfig)
+            self.themeConfig = nil
+        }
+        owned = nil
     }
 
     public override func viewDidMoveToWindow() {

@@ -4,21 +4,32 @@ import GhosttyKit
 final class GhosttySurfaceRegistry {
     static let shared = GhosttySurfaceRegistry()
 
-    private var views: [ObjectIdentifier: GhosttyTerminalView] = [:]
+    private final class WeakView {
+        weak var value: GhosttyTerminalView?
+
+        init(_ value: GhosttyTerminalView) {
+            self.value = value
+        }
+    }
+
+    private let lock = NSLock()
+    private var views: [UInt: WeakView] = [:]
 
     private init() {}
 
     func register(_ view: GhosttyTerminalView) {
-        views[ObjectIdentifier(view)] = view
+        let key = UInt(bitPattern: Unmanaged.passUnretained(view).toOpaque())
+        lock.withLock { views[key] = WeakView(view) }
     }
 
     func unregister(_ view: GhosttyTerminalView) {
-        views.removeValue(forKey: ObjectIdentifier(view))
+        let key = UInt(bitPattern: Unmanaged.passUnretained(view).toOpaque())
+        _ = lock.withLock { views.removeValue(forKey: key) }
     }
 
     func view(_ userdata: UnsafeMutableRawPointer?) -> GhosttyTerminalView? {
         guard let userdata else { return nil }
-        return Unmanaged<GhosttyTerminalView>.fromOpaque(userdata).takeUnretainedValue()
+        return lock.withLock { views[UInt(bitPattern: userdata)]?.value }
     }
 
     func surface(_ userdata: UnsafeMutableRawPointer?) -> ghostty_surface_t? {

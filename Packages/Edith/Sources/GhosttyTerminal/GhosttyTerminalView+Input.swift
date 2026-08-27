@@ -38,7 +38,7 @@ extension GhosttyTerminalView {
 
     private func send(event: NSEvent, action: ghostty_input_action_e) -> Bool {
         guard let surface else { return false }
-        let characters = event.characters ?? ""
+        let characters = Self.inputText(for: event)
         var key = ghostty_input_key_s()
         key.action =
             event.isARepeat && action == GHOSTTY_ACTION_PRESS
@@ -49,7 +49,7 @@ extension GhosttyTerminalView {
         key.unshifted_codepoint =
             event.charactersIgnoringModifiers?.unicodeScalars.first?.value ?? 0
         key.composing = false
-        guard !characters.isEmpty else {
+        guard let characters else {
             key.text = nil
             return ghostty_surface_key(surface, key)
         }
@@ -57,6 +57,16 @@ extension GhosttyTerminalView {
             key.text = pointer
             return ghostty_surface_key(surface, key)
         }
+    }
+
+    static func inputText(for event: NSEvent) -> String? {
+        guard let characters = event.characters, !characters.isEmpty else { return nil }
+        if characters.unicodeScalars.count == 1, let scalar = characters.unicodeScalars.first,
+            scalar.value >= 0xF700, scalar.value <= 0xF8FF
+        {
+            return nil
+        }
+        return characters
     }
 
     private func point(for event: NSEvent) -> (Double, Double) {
