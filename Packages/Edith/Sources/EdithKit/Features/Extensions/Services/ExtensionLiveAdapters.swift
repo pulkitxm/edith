@@ -66,7 +66,7 @@ public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "attention", "usage", "quinjet", "system", "appMaintenance", "machines", "systemStats",
         "micMute", "lidAwake", "music", "calendar", "notchShelf", "clipboard", "finderTools",
-        "focusDim", "presenter", "emoji", "colorPicker", "windowTools", "windowSwitcher",
+        "windowSwitcher", "focusDim", "presenter", "emoji", "colorPicker", "windowTools",
     ]
 
     public static func provider(

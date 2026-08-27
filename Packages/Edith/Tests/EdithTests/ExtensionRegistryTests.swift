@@ -397,6 +397,7 @@ import Testing
             "notchShelfEnabled": false,
             "clipboardEnabled": true,
             "finderToolsEnabled": false,
+            "windowSwitcherEnabled": false,
             "focusDimEnabled": false,
             "presenterEnabled": true,
             "colorPickerEnabled": false,

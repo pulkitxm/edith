@@ -18,6 +18,9 @@ import Testing
     @Test func searchMatchesApplicationAndWindowTitles() {
         #expect(WindowSwitcherCollection.filtered(windows, query: "safari").count == 2)
         #expect(WindowSwitcherCollection.filtered(windows, query: "plans").map(\.id) == ["200:0"])
+        #expect(
+            WindowSwitcherCollection.filtered(windows, query: "com.apple.notes").map(\.id)
+                == ["200:0"])
         #expect(WindowSwitcherCollection.filtered(windows, query: "  ") == windows)
     }
 

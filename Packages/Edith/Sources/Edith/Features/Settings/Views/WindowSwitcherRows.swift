@@ -41,14 +41,18 @@ struct WindowSwitcherRows: View {
         .opacity(enabled ? 1 : 0.5)
 
         Section("Application rules") {
-            TextField(
-                "com.example.Helper",
-                text: $includedApps.configured(AppStorageKeys.WindowSwitcher.includedApps))
+            LabeledContent("Always include") {
+                TextField(
+                    "com.example.Helper",
+                    text: $includedApps.configured(AppStorageKeys.WindowSwitcher.includedApps))
+            }
             Text("Always include these bundle identifiers, separated by commas.")
                 .settingsCaption()
-            TextField(
-                "com.example.Private",
-                text: $hiddenApps.configured(AppStorageKeys.WindowSwitcher.hiddenApps))
+            LabeledContent("Hide") {
+                TextField(
+                    "com.example.Private",
+                    text: $hiddenApps.configured(AppStorageKeys.WindowSwitcher.hiddenApps))
+            }
             Text("Hide these bundle identifiers, separated by commas. Hide rules take priority.")
                 .settingsCaption()
         }

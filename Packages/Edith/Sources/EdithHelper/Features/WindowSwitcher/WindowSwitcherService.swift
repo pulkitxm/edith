@@ -60,10 +60,11 @@ enum WindowSwitcherEnumerator {
             AXUIElementSetAttributeValue(
                 window.element, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
         }
-        window.application.activate()
-        AXUIElementSetAttributeValue(
+        let activated = window.application.activate()
+        let madeMain = AXUIElementSetAttributeValue(
             window.element, kAXMainAttribute as CFString, kCFBooleanTrue)
-        return AXUIElementPerformAction(window.element, kAXRaiseAction as CFString) == .success
+        let raised = AXUIElementPerformAction(window.element, kAXRaiseAction as CFString)
+        return activated && (madeMain == .success || raised == .success)
     }
 
     static func cycleFrontApplication() -> Bool {
@@ -129,6 +130,11 @@ final class WindowSwitcherStore: ObservableObject {
     func selected() -> WindowSwitcherRuntimeWindow? {
         visible.indices.contains(selectedIndex) ? visible[selectedIndex] : nil
     }
+
+    func select(id: String) {
+        guard let index = visible.firstIndex(where: { $0.value.id == id }) else { return }
+        selectedIndex = index
+    }
 }
 
 final class WindowSwitcherPanel: NSPanel {
@@ -137,14 +143,16 @@ final class WindowSwitcherPanel: NSPanel {
 }
 
 @MainActor
-final class WindowSwitcherController {
+final class WindowSwitcherController: NSObject, NSWindowDelegate {
     private let store = WindowSwitcherStore()
-    private lazy var panel = makePanel()
+    private var panel: WindowSwitcherPanel?
     private var keyMonitor: Any?
 
     func show() {
         store.query = ""
         store.reload()
+        let panel = panel ?? makePanel()
+        self.panel = panel
         let screen = NSScreen.main ?? NSScreen.screens.first
         if let screen {
             panel.setFrameOrigin(
@@ -158,13 +166,19 @@ final class WindowSwitcherController {
     }
 
     func close() {
-        panel.orderOut(nil)
+        panel?.orderOut(nil)
         removeKeyMonitor()
     }
 
     func activate(id: String) -> Bool {
         guard let window = WindowSwitcherEnumerator.windows().first(where: { $0.value.id == id })
         else { return false }
+        close()
+        return WindowSwitcherEnumerator.activate(window)
+    }
+
+    func activateStored(id: String) -> Bool {
+        guard let window = store.windows.first(where: { $0.value.id == id }) else { return false }
         close()
         return WindowSwitcherEnumerator.activate(window)
     }
@@ -185,7 +199,13 @@ final class WindowSwitcherController {
 
     func shutdown() {
         close()
-        panel.contentViewController = nil
+        panel?.delegate = nil
+        panel?.contentViewController = nil
+        panel = nil
+    }
+
+    func windowDidResignKey(_ notification: Notification) {
+        close()
     }
 
     private func makePanel() -> WindowSwitcherPanel {
@@ -199,10 +219,11 @@ final class WindowSwitcherController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false
         panel.backgroundColor = .clear
+        panel.delegate = self
         panel.contentViewController = NSHostingController(
             rootView: WindowSwitcherView(
                 store: store,
-                activate: { [weak self] id in _ = self?.activate(id: id) }))
+                activate: { [weak self] id in _ = self?.activateStored(id: id) }))
         return panel
     }
 
@@ -436,6 +457,9 @@ private struct WindowSwitcherView: View {
         }
         .buttonStyle(.plain)
         .id(window.id)
+        .onHover { hovering in
+            if hovering { store.select(id: window.id) }
+        }
     }
 
     private func appIcon(_ window: WindowSwitcherWindow) -> Image {

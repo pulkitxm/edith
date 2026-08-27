@@ -71,6 +71,7 @@ public enum WindowSwitcherCollection {
         return windows.filter {
             $0.appName.localizedCaseInsensitiveContains(needle)
                 || $0.title.localizedCaseInsensitiveContains(needle)
+                || $0.bundleIdentifier.localizedCaseInsensitiveContains(needle)
         }
     }
 

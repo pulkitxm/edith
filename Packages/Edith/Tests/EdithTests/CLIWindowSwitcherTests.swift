@@ -78,4 +78,47 @@ import Testing
         #expect(result.code == 0)
         #expect(result.object?["activated"] as? Bool == true)
     }
+
+    @Test func listReportsMissingAccessibilityPermission() async {
+        let result = await CLIProbe.runInWorld(["windows", "ls"]) { world in
+            world.helperRunning(true)
+            world.answers { name in
+                guard name == IPC.Name.windowSwitcherOperationResult,
+                    let request = world.postedPayloads(
+                        for: IPC.Name.requestWindowSwitcherOperation
+                    ).last,
+                    let requestID = request[WindowSwitcherIPC.requestIDKey] as? String
+                else { return nil }
+                return [
+                    WindowSwitcherIPC.requestIDKey: requestID,
+                    WindowSwitcherIPC.statusKey: "notAuthorized",
+                ]
+            }
+        }
+
+        #expect(result.code == ExitCodes.unavailable)
+        #expect(result.stderr.contains("Accessibility access"))
+        #expect(result.stderr.contains("ed permissions request accessibility"))
+    }
+
+    @Test func cycleReportsWhenTheFrontAppHasNoWindows() async {
+        let result = await CLIProbe.runInWorld(["windows", "cycle"]) { world in
+            world.helperRunning(true)
+            world.answers { name in
+                guard name == IPC.Name.windowSwitcherOperationResult,
+                    let request = world.postedPayloads(
+                        for: IPC.Name.requestWindowSwitcherOperation
+                    ).last,
+                    let requestID = request[WindowSwitcherIPC.requestIDKey] as? String
+                else { return nil }
+                return [
+                    WindowSwitcherIPC.requestIDKey: requestID,
+                    WindowSwitcherIPC.statusKey: "notFound",
+                ]
+            }
+        }
+
+        #expect(result.code == ExitCodes.notFound)
+        #expect(result.stderr.contains("no switchable window found"))
+    }
 }

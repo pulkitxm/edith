@@ -263,6 +263,7 @@ import Testing
             ("notchShelf", "NotchShelfRows", "enabled", "NotchShelfRows.swift"),
             ("clipboard", "ClipboardRows", "enabled", "ClipboardRows.swift"),
             ("finderTools", "FinderToolsRows", "enabled", "FinderToolsRows.swift"),
+            ("windowSwitcher", "WindowSwitcherRows", "enabled", "WindowSwitcherRows.swift"),
             ("focusDim", "FocusDimRows", "enabled", "FocusDimRows.swift"),
             ("presenter", "PresenterRows", "presenterEnabled", "PresenterRows.swift"),
             ("colorPicker", "ColorPickerRows", "colorPickerEnabled", "ColorPickerRows.swift"),
