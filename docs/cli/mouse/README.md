@@ -52,3 +52,9 @@ ed extensions doctor mouseControls --json
 ```
 
 Excluded applications always receive their original wheel and button events.
+
+## Where to go next
+
+- [`ed extensions`](../extensions/README.md), to enable, verify, or diagnose Mouse Controls
+- [`ed config`](../config/README.md), to inspect or change every setting without opening Edith
+- [All command groups](../README.md)
