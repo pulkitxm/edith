@@ -11,7 +11,7 @@ import Testing
         #expect(scheduled == .schedule(deadline: 0.1))
         #expect(gate.isOpen == false)
 
-        #expect(gate.fire(now: 0.05) == .none)
+        #expect(gate.fire(now: 0.05) == .schedule(deadline: 0.1))
         #expect(gate.isOpen == false)
 
         #expect(gate.fire(now: 0.1) == .opened)
@@ -46,7 +46,7 @@ import Testing
         var gate = NotchHoverGate(openDwell: 0.1, closeGrace: 0.4)
         gate.forceOpen()
         #expect(gate.sample(.outside, now: 1.0) == .schedule(deadline: 1.4))
-        #expect(gate.fire(now: 1.2) == .none)
+        #expect(gate.fire(now: 1.2) == .schedule(deadline: 1.4))
         #expect(gate.isOpen)
         #expect(gate.fire(now: 1.4) == .closed)
         #expect(gate.isOpen == false)
@@ -75,6 +75,14 @@ import Testing
         #expect(gate.sample(.open, now: 0) == .schedule(deadline: 0.1))
         #expect(gate.sample(.open, now: 0.02) == .none)
         #expect(gate.sample(.open, now: 0.05) == .none)
+        #expect(gate.fire(now: 0.1) == .opened)
+    }
+
+    @Test func earlyTimerFireReschedulesOriginalDeadline() {
+        var gate = NotchHoverGate(openDwell: 0.1, closeGrace: 0.4)
+        #expect(gate.sample(.open, now: 0) == .schedule(deadline: 0.1))
+        #expect(gate.fire(now: 0.099) == .schedule(deadline: 0.1))
+        #expect(gate.hasPending)
         #expect(gate.fire(now: 0.1) == .opened)
     }
 
