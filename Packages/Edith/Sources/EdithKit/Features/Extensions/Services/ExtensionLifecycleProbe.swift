@@ -210,7 +210,7 @@ public struct ExtensionLifecycleProbe: Sendable {
         "clipboard": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "commandBar": Policy(
-            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: false),
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "focusDim": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "presenter": Policy(

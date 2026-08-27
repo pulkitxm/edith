@@ -65,8 +65,8 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
-        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "colorPicker",
+        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "commandBar", "focusDim",
+        "presenter", "colorPicker",
     ]
 
     public static func provider(
@@ -103,11 +103,22 @@ public enum ExtensionLiveAdapters {
         case "calendar": calendarReadiness()
         case "notchShelf": shelfReadiness()
         case "clipboard": clipboardReadiness()
+        case "commandBar": commandBarReadiness(defaults: defaults)
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
         default: nil
         }
+    }
+
+    static func commandBarReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
+        let registrationStatus = defaults.integer(
+            forKey: AppStorageKeys.CommandBar.registrationStatus)
+        return ExtensionAdapterFacts(
+            configured: registrationStatus == 0,
+            readyDetail: "The Command Bar shortcut is registered and ready.",
+            setupDetail: "The Command Bar shortcut is already in use. Record another shortcut."
+        ).readiness
     }
 
     static func attentionReadiness(
