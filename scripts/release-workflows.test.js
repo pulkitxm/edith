@@ -228,7 +228,10 @@ test("superseded release cuts finish cleanly without publishing", () => {
   );
   expect(releaseStateScript).toContain("exit 75");
   expect(releaseWorkflow).toContain(
-    "../scripts/publish-release-state.sh cut || PUBLISH_STATUS=$?",
+    "bash ../scripts/publish-release-state.sh cut || PUBLISH_STATUS=$?",
+  );
+  expect(releaseWorkflow).toContain(
+    "bash ../scripts/publish-release-state.sh rebuild",
   );
   expect(releaseWorkflow).toContain('if [ "$PUBLISH_STATUS" -eq 75 ]; then');
   expect(releaseWorkflow).toContain(
