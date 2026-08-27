@@ -547,7 +547,7 @@ private final class DiskImageAppInstaller {
 
     nonisolated private static func candidate(mountedAt mount: URL) -> Candidate? {
         let manager = FileManager.default
-        let info = run("/usr/bin/hdiutil", ["info", "-plist"])
+        let info = run("/usr/bin/hdiutil", ["info", "-plist"], timeout: 10)
         guard info.status == 0,
             let image = FinderToolsSupport.diskImageURL(
                 mountedAt: mount, hdiutilInfo: info.output),
@@ -597,7 +597,8 @@ private final class DiskImageAppInstaller {
         let staged = staging.appendingPathComponent(candidate.application.lastPathComponent)
         let copied = run(
             "/usr/bin/ditto",
-            ["--rsrc", "--extattr", "--acl", "--qtn", candidate.application.path, staged.path])
+            ["--rsrc", "--extattr", "--acl", "--qtn", candidate.application.path, staged.path],
+            timeout: 600)
         guard copied.status == 0, validApplication(staged) else {
             return .failed("The app could not be copied from the disk image.")
         }
@@ -637,15 +638,19 @@ private final class DiskImageAppInstaller {
     }
 
     nonisolated private static func gatekeeperAccepts(_ url: URL) -> Bool {
-        guard run("/usr/bin/codesign", ["--verify", "--deep", "--strict", url.path]).status == 0
+        guard
+            run(
+                "/usr/bin/codesign", ["--verify", "--deep", "--strict", url.path], timeout: 120
+            ).status == 0
         else { return false }
-        let status = run("/usr/sbin/spctl", ["--status"])
+        let status = run("/usr/sbin/spctl", ["--status"], timeout: 10)
         if String(data: status.output, encoding: .utf8)?.localizedCaseInsensitiveContains(
             "disabled") == true
         {
             return true
         }
-        return run("/usr/sbin/spctl", ["-a", "-t", "exec", url.path]).status == 0
+        return run("/usr/sbin/spctl", ["-a", "-t", "exec", url.path], timeout: 120).status
+            == 0
     }
 
     nonisolated private static func fileIdentity(_ url: URL) -> FileIdentity? {
@@ -656,22 +661,22 @@ private final class DiskImageAppInstaller {
         return FileIdentity(device: UInt64(value.st_dev), inode: UInt64(value.st_ino))
     }
 
-    nonisolated private static func run(_ executable: String, _ arguments: [String])
+    nonisolated private static func run(
+        _ executable: String, _ arguments: [String], timeout: TimeInterval
+    )
         -> CommandResult
     {
-        let process = Process()
-        let output = Pipe()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = arguments
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
         do {
-            try process.run()
+            let result = try LidAwakeCommandProcess.run(
+                executableURL: URL(fileURLWithPath: executable), arguments: arguments,
+                timeout: timeout)
+            guard !result.timedOut, !result.cancelled else {
+                return CommandResult(status: -1, output: Data())
+            }
+            return CommandResult(
+                status: result.terminationStatus, output: Data(result.standardOutput.utf8))
         } catch {
             return CommandResult(status: -1, output: Data())
         }
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return CommandResult(status: process.terminationStatus, output: data)
     }
 }
