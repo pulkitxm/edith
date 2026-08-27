@@ -262,12 +262,14 @@ struct ExtensionPreview: View {
                             .font(DashSkin.mono(6, weight: .semibold))
                     }
                     .foregroundStyle(
-                        index == active ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
+                        index == active ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
+                    )
                     .padding(.horizontal, UIScale.pt(7))
                     .padding(.vertical, UIScale.pt(5))
                     .background(
                         DashSkin.paper2(dark),
-                        in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                    )
                     .overlay {
                         RoundedRectangle(cornerRadius: UIScale.pt(6))
                             .strokeBorder(

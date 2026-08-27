@@ -65,8 +65,11 @@ private struct AudioMixerView: View {
                     Button {
                         engine.setOutput(app, nil)
                     } label: {
-                        if app.outputUID == nil { Label("System output", systemImage: "checkmark") }
-                        else { Text("System output") }
+                        if app.outputUID == nil {
+                            Label("System output", systemImage: "checkmark")
+                        } else {
+                            Text("System output")
+                        }
                     }
                     Divider()
                     ForEach(engine.outputDevices) { device in

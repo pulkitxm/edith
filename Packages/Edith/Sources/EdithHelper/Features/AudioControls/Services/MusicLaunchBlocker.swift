@@ -11,7 +11,8 @@ enum MusicLaunchBlockPolicy {
         return state == 10 && mediaKeyCodes.contains(keyCode)
     }
 
-    static func shouldBlock(lastMediaKeyAt: Date?, launchAt: Date, window: TimeInterval = 2) -> Bool {
+    static func shouldBlock(lastMediaKeyAt: Date?, launchAt: Date, window: TimeInterval = 2) -> Bool
+    {
         guard let lastMediaKeyAt else { return false }
         let elapsed = launchAt.timeIntervalSince(lastMediaKeyAt)
         return elapsed >= 0 && elapsed <= window

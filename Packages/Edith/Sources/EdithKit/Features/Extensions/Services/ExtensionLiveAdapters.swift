@@ -200,7 +200,8 @@ public enum ExtensionLiveAdapters {
             guard !snapshot.inputs.isEmpty, !snapshot.outputs.isEmpty else {
                 return .needsSetup("Connect at least one input and one output device.")
             }
-            let details = "Found \(snapshot.inputs.count) inputs and \(snapshot.outputs.count) outputs."
+            let details =
+                "Found \(snapshot.inputs.count) inputs and \(snapshot.outputs.count) outputs."
             if #available(macOS 14.4, *) { return .ready(details) }
             return .degraded("\(details) Per-app routing requires macOS 14.4 or later.")
         } catch {

@@ -356,7 +356,8 @@ public enum CommandTree {
             CommandNode(
                 "audio", "Audio devices, defaults, and application routes.",
                 children: [
-                    CommandNode("status", "Show devices, defaults, and saved routes.", options: common),
+                    CommandNode(
+                        "status", "Show devices, defaults, and saved routes.", options: common),
                     CommandNode(
                         "input", "Pin an input device, or follow the system default.",
                         options: common, arguments: [.audioInput]),

@@ -573,7 +573,8 @@ public enum ConfigCatalog {
     private static let audio: [SettingDefinition] = [
         SettingDefinition(
             AppStorageKeys.Audio.enabled, .bool, group: "audio",
-            summary: "Audio Controls extension: device pinning, safety, routing, and launch blocking.",
+            summary:
+                "Audio Controls extension: device pinning, safety, routing, and launch blocking.",
             fallback: .bool(false)),
         SettingDefinition(
             AppStorageKeys.Audio.preferredInputUID, .string, group: "audio",

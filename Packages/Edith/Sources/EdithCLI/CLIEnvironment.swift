@@ -75,9 +75,10 @@ public enum CLIEnvironment {
 
     nonisolated(unsafe) public static var usageRefresh = UsageRefreshDriver.live
 
-    nonisolated(unsafe) public static var audioSnapshot: @Sendable () throws -> AudioDeviceSnapshot = {
-        try AudioDeviceOperations.snapshot()
-    }
+    nonisolated(unsafe) public static var audioSnapshot:
+        @Sendable () throws -> AudioDeviceSnapshot = {
+            try AudioDeviceOperations.snapshot()
+        }
 
     nonisolated(unsafe) public static var setAudioInput: @Sendable (String) throws -> Void = {
         try AudioDeviceOperations.setDefaultInput(uid: $0)

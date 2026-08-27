@@ -82,7 +82,9 @@ import Testing
         defaults.set(true, forKey: AppStorageKeys.Audio.lowerOnHeadphoneDisconnect)
         defaults.set(25, forKey: AppStorageKeys.Audio.safeOutputPercent)
         var current = AudioDeviceSnapshot(
-            devices: [device(uid: "headphones", name: "USB Headphones", output: true, headphones: true)],
+            devices: [
+                device(uid: "headphones", name: "USB Headphones", output: true, headphones: true)
+            ],
             defaultInputUID: nil, defaultOutputUID: "headphones")
         var volumes = ["speakers": Float(0.8)]
         var changes: [(String, Float)] = []

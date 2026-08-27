@@ -119,7 +119,8 @@ private final class AudioSelection: @unchecked Sendable {
             #expect(result.code == 0)
             #expect(
                 AudioControlPolicy.routeMap(
-                    world.shared.dictionary(forKey: AppStorageKeys.Audio.appOutputRoutes)).isEmpty)
+                    world.shared.dictionary(forKey: AppStorageKeys.Audio.appOutputRoutes)
+                ).isEmpty)
         }
     }
 

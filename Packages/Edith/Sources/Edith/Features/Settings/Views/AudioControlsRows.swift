@@ -2,7 +2,8 @@ import EdithKit
 import SwiftUI
 
 struct AudioControlsRows: View {
-    @AppStorage(AppStorageKeys.Audio.enabled, store: SharedDefaults.store) private var enabled = false
+    @AppStorage(AppStorageKeys.Audio.enabled, store: SharedDefaults.store) private var enabled =
+        false
     @AppStorage(AppStorageKeys.Audio.preferredInputUID, store: SharedDefaults.store) private
         var preferredInputUID = ""
     @AppStorage(AppStorageKeys.Audio.lowerOnHeadphoneDisconnect, store: SharedDefaults.store)
@@ -63,8 +64,9 @@ struct AudioControlsRows: View {
                 Stepper(
                     "Safe speaker volume: \(safeOutputPercent)%",
                     value: $safeOutputPercent.configured(AppStorageKeys.Audio.safeOutputPercent),
-                    in: 0...50, step: 5)
-                    .disabled(!lowerOnDisconnect)
+                    in: 0...50, step: 5
+                )
+                .disabled(!lowerOnDisconnect)
                 Text(
                     "Edith lowers the newly selected non-headphone output once. It restores the previous level only when you have not changed it yourself."
                 )

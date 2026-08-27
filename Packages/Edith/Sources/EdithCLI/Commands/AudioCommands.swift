@@ -82,7 +82,10 @@ enum AudioCLI {
         let output = snapshot.outputs.first { $0.uid == snapshot.defaultOutputUID }
         CLIOut.out("input   " + (input?.name ?? "unavailable"))
         CLIOut.out("output  " + (output?.name ?? "unavailable"))
-        CLIOut.out("pin     " + (preferredInputUID.flatMap { uid in snapshot.inputs.first { $0.uid == uid }?.name } ?? "system"))
+        CLIOut.out(
+            "pin     "
+                + (preferredInputUID.flatMap { uid in snapshot.inputs.first { $0.uid == uid }?.name
+                } ?? "system"))
         CLIOut.out("routes  \(routes.count)")
     }
 }
@@ -209,9 +212,10 @@ struct AudioRouteCommand: AsyncParsableCommand {
                     ]))
                 return
             }
-            let name = routes[normalized].flatMap { uid in
-                snapshot.outputs.first { $0.uid == uid }?.name
-            } ?? "system"
+            let name =
+                routes[normalized].flatMap { uid in
+                    snapshot.outputs.first { $0.uid == uid }?.name
+                } ?? "system"
             CLIOut.out("\(normalized) -> \(name)")
         }
     }

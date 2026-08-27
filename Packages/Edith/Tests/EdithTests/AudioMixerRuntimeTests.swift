@@ -306,7 +306,8 @@ private final class AudioMixerTapProbe: AudioMixerTapControlling {
         #expect(engine.apps.first?.outputUID == nil)
         #expect(
             AudioControlPolicy.routeMap(
-                defaults.dictionary(forKey: AppStorageKeys.Audio.appOutputRoutes)).isEmpty)
+                defaults.dictionary(forKey: AppStorageKeys.Audio.appOutputRoutes)
+            ).isEmpty)
     }
 
     @Test func serviceOwnershipKeepsMonitoringWithoutAVisibleView() {

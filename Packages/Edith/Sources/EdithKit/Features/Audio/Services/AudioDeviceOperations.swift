@@ -53,7 +53,8 @@ public enum AudioDeviceOperationError: Error, LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .unavailable(let device): "No available audio device matches \(device)."
-        case .coreAudio(let action, let status): "\(action) failed with Core Audio status \(status)."
+        case .coreAudio(let action, let status):
+            "\(action) failed with Core Audio status \(status)."
         case .volumeUnavailable(let device): "\(device) does not expose software volume control."
         }
     }
@@ -200,7 +201,8 @@ public enum AudioDeviceOperations {
         guard let device = snapshot.inputs.first(where: { $0.uid == uid }),
             let id = deviceID(uid: device.uid)
         else { throw AudioDeviceOperationError.unavailable(uid) }
-        try setDefault(id: id, selector: kAudioHardwarePropertyDefaultInputDevice, action: "Input switch")
+        try setDefault(
+            id: id, selector: kAudioHardwarePropertyDefaultInputDevice, action: "Input switch")
     }
 
     public static func setDefaultOutput(uid: String) throws {
@@ -208,7 +210,8 @@ public enum AudioDeviceOperations {
         guard let device = snapshot.outputs.first(where: { $0.uid == uid }),
             let id = deviceID(uid: device.uid)
         else { throw AudioDeviceOperationError.unavailable(uid) }
-        try setDefault(id: id, selector: kAudioHardwarePropertyDefaultOutputDevice, action: "Output switch")
+        try setDefault(
+            id: id, selector: kAudioHardwarePropertyDefaultOutputDevice, action: "Output switch")
         try? setDefault(
             id: id, selector: kAudioHardwarePropertyDefaultSystemOutputDevice,
             action: "System sound output switch")
@@ -275,8 +278,9 @@ public enum AudioDeviceOperations {
         var property = address(selector)
         var id = AudioObjectID(0)
         var size = UInt32(MemoryLayout<AudioObjectID>.size)
-        guard AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &property, 0, nil, &size, &id) == noErr,
+        guard
+            AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject), &property, 0, nil, &size, &id) == noErr,
             id != 0
         else { return nil }
         return string(id, kAudioDevicePropertyDeviceUID)

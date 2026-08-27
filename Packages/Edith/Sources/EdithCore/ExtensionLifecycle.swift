@@ -535,7 +535,8 @@ public enum ExtensionLifecycleCatalog {
             recovery: [
                 instruction(
                     "status", "Refresh devices",
-                    "Inspect currently available devices and saved routes.", "ed audio status --json"),
+                    "Inspect currently available devices and saved routes.",
+                    "ed audio status --json"),
                 instruction(
                     "reset", "Return to system input",
                     "Stop pinning a missing or unwanted microphone.", "ed audio input system"),
