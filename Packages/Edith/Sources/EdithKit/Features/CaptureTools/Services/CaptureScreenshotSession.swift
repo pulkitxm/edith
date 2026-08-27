@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 
 public enum CaptureScreenshotError: LocalizedError, Equatable {
@@ -19,7 +20,9 @@ public enum CaptureScreenshotError: LocalizedError, Equatable {
 
 public final class CaptureScreenshotSession: @unchecked Sendable {
     private let lock = NSLock()
-    private var process: Process?
+    private var active = false
+    private var processID: pid_t?
+    private var cancellationRequested = false
 
     public init() {}
 
@@ -27,59 +30,130 @@ public final class CaptureScreenshotSession: @unchecked Sendable {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-capture-\(UUID().uuidString)")
             .appendingPathExtension("png")
+        try reserve()
+        let worker = Task.detached(priority: .userInitiated) { [self] in
+            try captureSynchronously(at: url)
+        }
         return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-                process.arguments = ["-i", "-x", url.path]
-                process.terminationHandler = { [weak self] completed in
-                    self?.release(completed)
-                    if completed.terminationStatus == 0,
-                        FileManager.default.fileExists(atPath: url.path)
-                    {
-                        continuation.resume(returning: url)
-                    } else {
-                        try? FileManager.default.removeItem(at: url)
-                        let error: CaptureScreenshotError =
-                            completed.terminationStatus == 1
-                            ? .cancelled : .captureFailed(completed.terminationStatus)
-                        continuation.resume(throwing: error)
-                    }
-                }
-                do {
-                    try prepare(process)
-                    guard !Task.isCancelled else {
-                        release(process)
-                        throw CaptureScreenshotError.cancelled
-                    }
-                    try process.run()
-                } catch {
-                    release(process)
-                    try? FileManager.default.removeItem(at: url)
-                    continuation.resume(throwing: error)
-                }
-            }
+            try await worker.value
         } onCancel: {
+            worker.cancel()
             cancel()
         }
     }
 
     public func cancel() {
-        let active = lock.withLock { process }
-        if active?.isRunning == true { active?.terminate() }
+        let processID = lock.withLock {
+            cancellationRequested = true
+            return self.processID
+        }
+        if let processID { _ = kill(-processID, SIGTERM) }
     }
 
-    private func prepare(_ process: Process) throws {
+    private func reserve() throws {
         try lock.withLock {
-            guard self.process == nil else { throw CaptureScreenshotError.busy }
-            self.process = process
+            guard !active else { throw CaptureScreenshotError.busy }
+            active = true
+            cancellationRequested = false
         }
     }
 
-    private func release(_ process: Process) {
+    private func release(_ processID: pid_t?) {
         lock.withLock {
-            if self.process === process { self.process = nil }
+            if processID == nil || self.processID == processID {
+                active = false
+                self.processID = nil
+                cancellationRequested = false
+            }
         }
+    }
+
+    private func captureSynchronously(at url: URL) throws -> URL {
+        var launchedProcessID: pid_t?
+        var completed = false
+        defer {
+            release(launchedProcessID)
+            if !completed { try? FileManager.default.removeItem(at: url) }
+        }
+        let processID = try spawn(
+            executable: "/usr/sbin/screencapture", arguments: ["-i", "-x", url.path])
+        launchedProcessID = processID
+        let shouldCancel = lock.withLock {
+            self.processID = processID
+            return cancellationRequested
+        }
+        if shouldCancel || Task.isCancelled { _ = kill(-processID, SIGTERM) }
+        let status = try waitForExit(processID)
+        let cancelled = lock.withLock { cancellationRequested } || Task.isCancelled
+        if cancelled { throw CaptureScreenshotError.cancelled }
+        guard status == 0 else {
+            throw status == 1
+                ? CaptureScreenshotError.cancelled : CaptureScreenshotError.captureFailed(status)
+        }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw CaptureScreenshotError.saveFailed
+        }
+        completed = true
+        return url
+    }
+
+    private func waitForExit(_ processID: pid_t) throws -> Int32 {
+        var waitStatus: Int32 = 0
+        var cancellationDeadline: Date?
+        while true {
+            let result = waitpid(processID, &waitStatus, WNOHANG)
+            if result == processID { return terminationStatus(waitStatus) }
+            if result == -1, errno != EINTR {
+                throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+            }
+            let cancelled = lock.withLock { cancellationRequested } || Task.isCancelled
+            if cancelled {
+                if cancellationDeadline == nil {
+                    _ = kill(-processID, SIGTERM)
+                    cancellationDeadline = Date().addingTimeInterval(0.5)
+                } else if let cancellationDeadline, Date() >= cancellationDeadline {
+                    _ = kill(-processID, SIGKILL)
+                }
+            }
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+    }
+
+    private func spawn(executable: String, arguments: [String]) throws -> pid_t {
+        var attributes: posix_spawnattr_t?
+        var processID: pid_t = 0
+        let initStatus = posix_spawnattr_init(&attributes)
+        guard initStatus == 0 else { throw posixError(initStatus) }
+        defer { posix_spawnattr_destroy(&attributes) }
+        let flagsStatus = posix_spawnattr_setflags(
+            &attributes, Int16(POSIX_SPAWN_SETPGROUP))
+        guard flagsStatus == 0 else { throw posixError(flagsStatus) }
+        let groupStatus = posix_spawnattr_setpgroup(&attributes, 0)
+        guard groupStatus == 0 else { throw posixError(groupStatus) }
+        let storage = ([executable] + arguments).map { strdup($0) }
+        guard storage.allSatisfy({ $0 != nil }) else {
+            storage.compactMap { $0 }.forEach { free($0) }
+            throw CocoaError(.fileWriteOutOfSpace)
+        }
+        defer { storage.compactMap { $0 }.forEach { free($0) } }
+        var pointers = storage + [nil]
+        let spawnStatus = executable.withCString { executablePath in
+            pointers.withUnsafeMutableBufferPointer { buffer in
+                posix_spawn(
+                    &processID, executablePath, nil, &attributes, buffer.baseAddress, environ)
+            }
+        }
+        guard spawnStatus == 0 else { throw posixError(spawnStatus) }
+        return processID
+    }
+
+    private func terminationStatus(_ waitStatus: Int32) -> Int32 {
+        let signal = waitStatus & 0x7f
+        return signal == 0 ? (waitStatus >> 8) & 0xff : signal
+    }
+
+    private func posixError(_ status: Int32) -> NSError {
+        NSError(domain: NSPOSIXErrorDomain, code: Int(status))
     }
 }
 
@@ -109,7 +183,8 @@ public enum CaptureScreenshotArchive {
         var destination = directory.appendingPathComponent(name).appendingPathExtension("png")
         var suffix = 2
         while FileManager.default.fileExists(atPath: destination.path) {
-            destination = directory
+            destination =
+                directory
                 .appendingPathComponent("\(name) \(suffix)")
                 .appendingPathExtension("png")
             suffix += 1

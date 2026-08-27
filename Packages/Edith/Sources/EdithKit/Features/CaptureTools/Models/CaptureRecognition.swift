@@ -93,7 +93,8 @@ public enum CaptureRecognizer {
         let accurateRequest = textRequest(level: .accurate, detectsLanguage: true)
         let codeRequest = VNDetectBarcodesRequest()
         codeRequest.symbologies = [.qr, .microQR, .aztec, .dataMatrix, .pdf417]
-        let requests: [VNRequest] = detectCodes ? [codeRequest, accurateRequest] : [accurateRequest]
+        let requests: [VNRequest] =
+            detectCodes ? [codeRequest, accurateRequest] : [accurateRequest]
         try VNImageRequestHandler(cgImage: image, options: [:]).perform(requests)
 
         var lines = sortedText(accurateRequest.results ?? [])

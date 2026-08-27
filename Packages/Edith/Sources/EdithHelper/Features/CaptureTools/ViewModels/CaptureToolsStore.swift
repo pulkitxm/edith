@@ -123,13 +123,15 @@ final class CaptureToolsStore: FeatureModule {
             let url = try await session.capture()
             temporaryURL = url
             guard !Task.isCancelled, generation == token else { return }
-            let data = try Data(contentsOf: url)
-            let image = try CaptureScreenshotImage.load(url)
             let detectsCodes =
                 SharedDefaults.store.object(forKey: AppStorageKeys.Capture.detectCodes) as? Bool
                 ?? true
-            let recognition = try await Task.detached(priority: .userInitiated) {
-                try CaptureRecognizer.recognize(image, detectCodes: detectsCodes)
+            let (data, recognition) = try await Task.detached(priority: .userInitiated) {
+                let data = try Data(contentsOf: url)
+                let image = try CaptureScreenshotImage.load(url)
+                let recognition = try CaptureRecognizer.recognize(
+                    image, detectCodes: detectsCodes)
+                return (data, recognition)
             }.value
             guard !Task.isCancelled, generation == token else { return }
             let result = try finalize(recognition, data: data, operation: operation)
@@ -166,7 +168,8 @@ final class CaptureToolsStore: FeatureModule {
             codes: recognition.codes, imagePath: savedPath)
         if operation == .read {
             let raw =
-                SharedDefaults.store.object(forKey: AppStorageKeys.Capture.historySize) as? Int ?? 10
+                SharedDefaults.store.object(forKey: AppStorageKeys.Capture.historySize) as? Int
+                ?? 10
             CaptureHistoryStore.add(result, limit: min(max(raw, 1), 25))
             history = CaptureHistoryStore.load()
             IPC.post(IPC.Name.settingsChanged)

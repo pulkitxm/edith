@@ -125,8 +125,9 @@ private struct CapturePreviewView: View {
             HStack {
                 Label(
                     operation == .read ? "Screen read" : "Screenshot",
-                    systemImage: operation == .read ? "text.viewfinder" : "camera.viewfinder")
-                    .font(.headline)
+                    systemImage: operation == .read ? "text.viewfinder" : "camera.viewfinder"
+                )
+                .font(.headline)
                 Spacer()
                 if copiedResult {
                     Label("Copied", systemImage: "checkmark.circle.fill")
