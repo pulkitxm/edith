@@ -1,7 +1,7 @@
 # `ed config`
 
 Every preference the Edith UI writes is a key in the same defaults the app
-reads, and `ed config` is that surface from the command line: 261 settings in 31
+reads, and `ed config` is that surface from the command line: 263 settings in 31
 groups, each with a type, a default, a scope and a one-line summary. Reach for
 it when you want to know what a switch in Settings is actually called, flip one
 without opening the window, or move a whole setup to another Mac.
@@ -227,6 +227,8 @@ not here cannot be set, and `import` skips it.
 | `SUScheduledCheckInterval` | number | `86400` | standard | Seconds between scheduled update checks. |
 | `SUAutomaticallyUpdate` | bool | `true` | standard | Download and install updates automatically. |
 | `tabSystemEnabled` | bool | `false` | shared | System extension: running apps, prevent sleep and the cleaning lock. |
+| `appMaintenanceEnabled` | bool | `false` | shared | App Maintenance extension: inventory, installation and safe removal. |
+| `appMaintenanceInstallDestination` | string: `user`, `system` | `user` | shared | Default disk image installation destination. |
 | `preventSleep` | bool | `false` | shared | Keep the Mac awake (Keep Awake). |
 | `lidAwakeEnabled` | bool | `false` | shared | Enable the Lid Awake extension. |
 | `lidAwakeRestoreOnQuit` | bool | `true` | shared | Restore normal lid-close sleep when Edith quits. |
