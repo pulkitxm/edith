@@ -155,6 +155,18 @@ import Testing
         }
     }
 
+    @Test func explainsNonRepositoryFailures() {
+        let error = QuinjetClientError.commandFailed(
+            "error: Not a Git repository: fatal: not a git repository"
+        )
+
+        #expect(
+            error.localizedDescription
+                == "This folder is not a Git repository. "
+                + "Choose the project folder that contains .git."
+        )
+    }
+
     @Test func mapsManagedHostPayloads() {
         #expect(QuinjetHostAction.oscCode == 6973)
         #expect(QuinjetHostAction(payload: "quinjet;open-new-tab") == .openNewTab)
