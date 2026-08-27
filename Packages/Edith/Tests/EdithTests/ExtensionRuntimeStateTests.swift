@@ -127,6 +127,27 @@ import Testing
                 "extensionEnabled: Self.extensionEnabled(AppStorageKeys.Tabs.attentionEnabled)"))
     }
 
+    @Test func mouseControlsRuntimeSyncsAndTearsDownWithPermissionRefresh() throws {
+        let sourceRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/EdithHelper/Core/Application")
+        let services = try String(
+            contentsOf: sourceRoot.appendingPathComponent("AppServices.swift"), encoding: .utf8)
+        let helper = try String(
+            contentsOf: sourceRoot.appendingPathComponent("EdithHelperApp.swift"), encoding: .utf8)
+
+        #expect(
+            services.contains("let mouseOn = Self.extensionEnabled(AppStorageKeys.Mouse.enabled)"))
+        #expect(services.contains("mouseControls = MouseControlsEngine()"))
+        #expect(services.contains("engine.shutdown()"))
+        #expect(services.contains("mouseControls = nil"))
+        #expect(services.contains("mouseControls?.syncSettings()"))
+        #expect(helper.contains("IPC.observe(IPC.Name.permissionsRefreshed)"))
+        #expect(helper.contains("services.sync()"))
+    }
+
     @Test func everyExtensionSettingsSheetHasLifecycleContent() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
