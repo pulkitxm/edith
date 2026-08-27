@@ -1,6 +1,7 @@
 import Foundation
 
 public enum ToolInstallFailure: Error, CustomStringConvertible, Equatable {
+    case manual(String)
     case noPackageManager(String)
     case homebrewUnavailable(String)
     case commandFailed(String, Int32)
@@ -8,6 +9,8 @@ public enum ToolInstallFailure: Error, CustomStringConvertible, Equatable {
 
     public var description: String {
         switch self {
+        case let .manual(instruction):
+            return instruction
         case let .noPackageManager(name):
             return "Neither Homebrew nor npm is available for installing \(name)."
         case let .homebrewUnavailable(name):
@@ -56,6 +59,8 @@ public struct ToolInstaller: Sendable {
     @discardableResult
     public func install(_ tool: CLIToolSpec, log: @escaping Log = { _ in }) async throws -> String {
         switch tool.installStrategy {
+        case let .manual(instruction):
+            throw ToolInstallFailure.manual(instruction)
         case let .standaloneBinary(url, destinationName, _):
             try await installStandaloneBinary(
                 url: url, destinationName: destinationName, log: log)
