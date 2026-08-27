@@ -2,6 +2,7 @@ import Foundation
 
 public enum HerdrLive {
     static let remoteLeaseDuration = Duration.seconds(20)
+    static let fallbackSnapshotDelay = Duration.seconds(2)
 
     public static func watch(_ yield: @escaping @Sendable ([HerdrHostSnapshot]) -> Void) async {
         let fleet = FleetBag(yield: yield)
@@ -147,9 +148,21 @@ public enum HerdrLive {
             defer { stream.close() }
             do {
                 let events = stream.events
-                try await stream.subscribeBoard()
+                let bootstrap = try await bootstrapSession(
+                    subscribe: { try await stream.subscribeBoard() },
+                    snapshot: { try await stream.snapshot() })
                 fleet.put(
-                    sessions.applySnapshot(session: socket.name, text: try await stream.snapshot()))
+                    sessions.applySnapshot(session: socket.name, text: bootstrap.snapshot))
+                guard bootstrap.subscribed else {
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: fallbackSnapshotDelay)
+                        guard !Task.isCancelled else { return }
+                        fleet.put(
+                            sessions.applySnapshot(
+                                session: socket.name, text: try await stream.snapshot()))
+                    }
+                    return
+                }
                 await withTaskGroup(of: Void.self) { group in
                     group.addTask {
                         for await line in events {
@@ -166,6 +179,19 @@ public enum HerdrLive {
         }
     }
 
+    static func bootstrapSession(
+        subscribe: () async throws -> Void,
+        snapshot: () async throws -> String
+    ) async throws -> (snapshot: String, subscribed: Bool) {
+        let subscribed: Bool
+        do {
+            try await subscribe()
+            subscribed = true
+        } catch {
+            subscribed = false
+        }
+        return (try await snapshot(), subscribed)
+    }
 }
 
 private final class FleetBag: @unchecked Sendable {
