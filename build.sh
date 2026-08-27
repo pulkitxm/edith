@@ -150,8 +150,10 @@ PRIVILEGED_HELPER_BUILD="$($SWIFT_BIN build --package-path Packages/Edith \
 APP="dist/Edith.app"
 HELPER="$APP/Contents/Library/LoginItems/Edith.app"
 FILES_APP="$APP/Contents/Library/Applications/Edith Files.app"
-PRIVILEGED_HELPER="$HELPER/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake"
-LAUNCH_DAEMONS="$HELPER/Contents/Library/LaunchDaemons"
+PRIVILEGED_HELPER="$APP/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake"
+LAUNCH_DAEMONS="$APP/Contents/Library/LaunchDaemons"
+STATUS_HELPER="$HELPER/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake"
+STATUS_LAUNCH_DAEMONS="$HELPER/Contents/Library/LaunchDaemons"
 rm -rf dist && mkdir -p dist
 ditto "$BUILT" "$APP"
 
@@ -160,10 +162,12 @@ ditto "$BUILT_HELPER" "$HELPER"
 mv "$HELPER/Contents/MacOS/EdithHelper" "$HELPER/Contents/MacOS/Edith"
 /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable Edith' "$HELPER/Contents/Info.plist"
 
-rm -rf "$APP/Contents/Library/PrivilegedHelperTools" "$APP/Contents/Library/LaunchDaemons"
-mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS"
+mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS" \
+  "$(dirname "$STATUS_HELPER")" "$STATUS_LAUNCH_DAEMONS"
 cp "$PRIVILEGED_HELPER_BUILD" "$PRIVILEGED_HELPER"
-cp Resources/com.pulkit.edith.lidawake.plist "$LAUNCH_DAEMONS/"
+cp Resources/com.pulkit.edith.lidawake.v2.plist "$LAUNCH_DAEMONS/"
+cp "$PRIVILEGED_HELPER_BUILD" "$STATUS_HELPER"
+cp Resources/com.pulkit.edith.lidawake.plist "$STATUS_LAUNCH_DAEMONS/"
 
 rm -rf "$FILES_APP/Contents/Frameworks"
 
@@ -204,6 +208,8 @@ sign_tool "$APP/Contents/MacOS/ed"
 sign_tool "$APP/Contents/MacOS/edh"
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
   --identifier com.pulkit.edith.lidawake "$PRIVILEGED_HELPER"
+codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
+  --identifier com.pulkit.edith.lidawake "$STATUS_HELPER"
 sign_tool "$APP/Contents/Frameworks/Sparkle.framework"
 sign "$HELPER"
 sign "$FILES_APP"

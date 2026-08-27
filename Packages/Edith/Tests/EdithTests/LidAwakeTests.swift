@@ -571,6 +571,12 @@ private func lidAwakeProcessIDs(at url: URL) throws -> [pid_t] {
                 == true)
     }
 
+    @Test func privilegedRequestsDoNotRetryWhileApprovalIsPending() {
+        let error = LidAwakePrivilegedClient.requestError(for: .awaitingApproval)
+        #expect(error?.errorDescription?.contains("Approve Edith") == true)
+        #expect(LidAwakePrivilegedClient.requestError(for: .enabled) == nil)
+    }
+
     @Test func privilegedReplyTimesOutAndCancelsTheConnection() async {
         let reply = LidAwakePrivilegedReply()
         let probe = LidAwakeCancellationProbe()
@@ -719,7 +725,8 @@ private func lidAwakeProcessIDs(at url: URL) throws -> [pid_t] {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let plistURL = root.appendingPathComponent("Resources/com.pulkit.edith.lidawake.plist")
+        let plistURL = root.appendingPathComponent(
+            "Resources/com.pulkit.edith.lidawake.v2.plist")
         let plistData = try Data(contentsOf: plistURL)
         let plist = try #require(
             PropertyListSerialization.propertyList(from: plistData, format: nil)
@@ -728,17 +735,38 @@ private func lidAwakeProcessIDs(at url: URL) throws -> [pid_t] {
             plist["BundleProgram"] as? String
                 == "Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake")
         let associated = plist["AssociatedBundleIdentifiers"] as? [String]
-        #expect(
-            associated?.contains(LidAwakePrivilegedService.clientBundleIdentifier) == true)
+        #expect(associated == ["com.pulkit.edith"])
         let build = try String(
             contentsOf: root.appendingPathComponent("build.sh"), encoding: .utf8)
         #expect(
             build.contains(
-                "PRIVILEGED_HELPER=\"$HELPER/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake\""
+                "PRIVILEGED_HELPER=\"$APP/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake\""
             ))
         #expect(
             build.contains(
-                "LAUNCH_DAEMONS=\"$HELPER/Contents/Library/LaunchDaemons\""))
+                "LAUNCH_DAEMONS=\"$APP/Contents/Library/LaunchDaemons\""))
+        #expect(
+            build.contains(
+                "STATUS_HELPER=\"$HELPER/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake\""
+            ))
+        let mainApp = try String(
+            contentsOf: root.appendingPathComponent(
+                "Packages/Edith/Sources/Edith/Core/Application/EdithApp.swift"),
+            encoding: .utf8)
+        #expect(mainApp.contains("LidAwakeDaemonRegistrar"))
+        let package = try String(
+            contentsOf: root.appendingPathComponent("Packages/Edith/Package.swift"),
+            encoding: .utf8)
+        #expect(package.contains("\"__info_plist\""))
+        let helperInfoURL = root.appendingPathComponent(
+            "Packages/Edith/Sources/EdithLidAwakeHelper/Info.plist")
+        let helperInfoData = try Data(contentsOf: helperInfoURL)
+        let helperInfo = try #require(
+            PropertyListSerialization.propertyList(from: helperInfoData, format: nil)
+                as? [String: Any])
+        #expect(
+            helperInfo["CFBundleIdentifier"] as? String
+                == LidAwakePrivilegedService.bundleIdentifier)
     }
 
     @Test func powerSettingsReportSleepDisabled() {

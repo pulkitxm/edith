@@ -82,6 +82,12 @@ enum ExtensionLookup {
             executableNamed: CLIEnvironment.executableNamed)
         let existingAdapters = environment.adapterReadiness
         environment.adapterReadiness = { id in
+            if id == "lidAwake", AppBridge.helperIsRunning,
+                let snapshot = try? await LidAwakeCLI.status()
+            {
+                return ExtensionLiveAdapters.lidAwakeReadiness(
+                    helperStatus: snapshot.helperStatus)
+            }
             if let readiness = await liveAdapters(id) { return readiness }
             return await existingAdapters(id)
         }

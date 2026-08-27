@@ -1,6 +1,5 @@
 import EdithKit
 import Foundation
-import Security
 import ServiceManagement
 
 enum LidAwakePrivilegedClientState: String, Equatable {
@@ -43,114 +42,30 @@ enum LidAwakePrivilegedClientError: LocalizedError {
 
 @MainActor
 final class LidAwakePrivilegedClient {
-    private static let fingerprintKey = "lidAwakePrivilegedHelperFingerprint"
-
-    private let service = SMAppService.daemon(
-        plistName: LidAwakePrivilegedService.plistName)
-    private let fingerprint = LidAwakePrivilegedClient.helperFingerprint()
-    private var approvalRequired = false
-    private var registrationInFlight = false
     private let requestTimeout: Duration
-    private(set) var registrationError: String?
 
     init(requestTimeout: Duration = .seconds(15)) {
         self.requestTimeout = requestTimeout
     }
 
     var state: LidAwakePrivilegedClientState {
-        let serviceState: LidAwakePrivilegedClientState =
-            switch service.status {
-            case .notRegistered: .notRegistered
-            case .enabled: .enabled
-            case .requiresApproval: .awaitingApproval
-            case .notFound: .notFound
-            @unknown default: .notFound
-            }
-        return approvalRequired && serviceState != .enabled ? .awaitingApproval : serviceState
+        guard
+            let rawValue = SharedDefaults.store.string(
+                forKey: LidAwakePrivilegedService.stateKey),
+            let state = LidAwakePrivilegedClientState(rawValue: rawValue)
+        else { return .notRegistered }
+        return state
     }
 
     var isUsable: Bool { state == .enabled }
 
-    func register() {
-        guard !registrationInFlight else { return }
-        let currentState = state
-        if currentState == .awaitingApproval {
-            persistFingerprint()
-            return
-        }
-        if currentState == .enabled {
-            guard let fingerprint else { return }
-            if UserDefaults.standard.string(forKey: Self.fingerprintKey) == fingerprint { return }
-            reregister()
-            return
-        }
-        registerCurrent()
-    }
-
-    private func registerCurrent() {
-        do {
-            try service.register()
-            approvalRequired = false
-            registrationError = nil
-            persistFingerprint()
-        } catch {
-            let failure = error as NSError
-            if service.status == .requiresApproval
-                || (failure.domain == "SMAppServiceErrorDomain" && failure.code == 1)
-            {
-                approvalRequired = true
-                registrationError = nil
-                persistFingerprint()
-            } else {
-                registrationError =
-                    "Service Management registration failed (\(failure.domain) \(failure.code)): \(failure.localizedDescription)"
-                NSLog("%@", registrationError ?? "Service Management registration failed")
-            }
-        }
-    }
-
-    private func reregister() {
-        registrationInFlight = true
-        service.unregister { [weak self] error in
-            Task { @MainActor in
-                guard let self else { return }
-                self.registrationInFlight = false
-                if let error {
-                    let failure = error as NSError
-                    self.registrationError =
-                        "Service Management update failed (\(failure.domain) \(failure.code)): \(failure.localizedDescription)"
-                    return
-                }
-                self.registerCurrent()
-            }
-        }
-    }
-
-    private func persistFingerprint() {
-        if let fingerprint {
-            UserDefaults.standard.set(fingerprint, forKey: Self.fingerprintKey)
-        }
-    }
-
-    func unregister() {
-        do {
-            try service.unregister()
-        } catch {
-            NSLog("SMAppService unregistration failed: \((error as NSError).localizedDescription)")
-        }
-    }
-
     func setSleepDisabled(_ disable: Bool) async throws {
-        var currentState = state
-        if currentState == .awaitingApproval {
-            registerCurrent()
-            currentState = state
-        }
-        guard currentState == .enabled else {
+        let currentState = state
+        if let error = Self.requestError(for: currentState) {
             if currentState == .awaitingApproval {
                 SMAppService.openSystemSettingsLoginItems()
             }
-            throw LidAwakePrivilegedClientError.helperUnavailable(currentState)
+            throw error
         }
         let connection = makeConnection()
         defer { connection.invalidate() }
@@ -183,6 +98,25 @@ final class LidAwakePrivilegedClient {
             })
     }
 
+    nonisolated static func requestError(
+        for state: LidAwakePrivilegedClientState
+    ) -> LidAwakePrivilegedClientError? {
+        guard state != .enabled else { return nil }
+        return .helperUnavailable(state)
+    }
+
+    static func cleanupLegacyRegistration() {
+        let service = SMAppService.daemon(plistName: LidAwakePrivilegedService.legacyPlistName)
+        guard service.status != .notRegistered, service.status != .notFound else { return }
+        service.unregister { error in
+            if let error {
+                NSLog(
+                    "Retired Lid Awake helper cleanup failed: %@",
+                    (error as NSError).localizedDescription)
+            }
+        }
+    }
+
     private func makeConnection() -> NSXPCConnection {
         let connection = NSXPCConnection(
             machServiceName: LidAwakePrivilegedService.machServiceName,
@@ -193,23 +127,6 @@ final class LidAwakePrivilegedClient {
         return connection
     }
 
-    private static func helperFingerprint() -> String? {
-        let helper = Bundle.main.bundleURL
-            .appendingPathComponent("Contents/Library/PrivilegedHelperTools")
-            .appendingPathComponent(LidAwakePrivilegedService.bundleIdentifier)
-        var code: SecStaticCode?
-        guard
-            SecStaticCodeCreateWithPath(helper as CFURL, [], &code) == errSecSuccess,
-            let code
-        else { return nil }
-        var information: CFDictionary?
-        guard
-            SecCodeCopySigningInformation(code, [], &information) == errSecSuccess,
-            let values = information as? [CFString: Any],
-            let data = values[kSecCodeInfoUnique] as? Data
-        else { return nil }
-        return data.map { String(format: "%02x", $0) }.joined()
-    }
 }
 
 private final class LidAwakeXPCConnectionBox: @unchecked Sendable {
