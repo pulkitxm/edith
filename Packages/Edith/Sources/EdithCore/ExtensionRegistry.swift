@@ -133,6 +133,11 @@ public enum ExtensionRegistry {
             defaultsKey: "tabSystemEnabled", requiredCapabilities: [.runningApplications],
             optionalCapabilities: [.preventSleep, .inputSuppression]),
         ExtensionRegistryEntry(
+            id: "appMaintenance", title: "App Maintenance",
+            subtitle: "Installed app inventory, update status, and review-first removal.",
+            symbolName: "shippingbox.and.arrow.backward", group: .system, featured: true,
+            defaultsKey: "appMaintenanceEnabled", requiredCapabilities: [.runningApplications]),
+        ExtensionRegistryEntry(
             id: "machines", title: "Machines",
             subtitle: "Your other computers over SSH: stats, files, Docker, and a terminal.",
             symbolName: "server.rack", group: .system, featured: true,

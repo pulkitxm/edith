@@ -336,6 +336,43 @@ public enum ExtensionLifecycleCatalog {
                     "ed apps ls --json")
             ]),
         descriptor(
+            "appMaintenance",
+            "Review installed applications, available Homebrew updates and exact support files.",
+            workflows: [
+                instruction(
+                    "inventory", "Review installed apps",
+                    "See versions and Homebrew update status for regular Applications folders."),
+                instruction(
+                    "remove", "Remove an app safely",
+                    "Choose exact bundle-identifier matches and move only the selection to Trash."),
+            ],
+            prerequisites: [
+                instruction(
+                    "access", "Use regular Applications folders",
+                    "User-owned apps need no extra access. macOS may refuse protected or administrator-owned items."
+                )
+            ],
+            examples: [
+                "ed extensions enable appMaintenance", "ed maintenance inventory --json",
+                "ed maintenance scan /Applications/Example.app --json",
+            ],
+            docs: [
+                documentation(
+                    "guide", "App Maintenance guide", "docs/app-maintenance.md")
+            ],
+            recovery: [
+                instruction(
+                    "rescan", "Rescan a changed app",
+                    "Build a fresh removal plan when an app changes after review.",
+                    "ed maintenance scan /Applications/Example.app")
+            ],
+            verification: [
+                instruction(
+                    "inventory", "List installed apps",
+                    "Confirm the Applications folders and optional Homebrew status are readable.",
+                    "ed maintenance inventory --json")
+            ]),
+        descriptor(
             "machines", "Operate SSH computers, files, services and containers from Edith.",
             workflows: [
                 instruction(
