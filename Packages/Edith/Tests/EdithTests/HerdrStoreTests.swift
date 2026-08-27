@@ -76,15 +76,6 @@ private actor HerdrWatchHarness {
 
 @MainActor
 @Suite struct HerdrStoreTests {
-    @Test func rejectedLiveSubscriptionStillBootstrapsSnapshot() async throws {
-        let bootstrap = try await HerdrLive.bootstrapSession(
-            subscribe: { throw HerdrSocketError(message: "unsupported subscription") },
-            snapshot: { "current snapshot" })
-
-        #expect(bootstrap.snapshot == "current snapshot")
-        #expect(!bootstrap.subscribed)
-    }
-
     @Test func fleetCollectionPreservesOrderWithinTheConcurrencyLimit() async {
         let machines = (0..<24).map { Machine(name: "machine-\($0)", host: "host-\($0)") }
         let harness = HerdrFleetConcurrencyHarness()

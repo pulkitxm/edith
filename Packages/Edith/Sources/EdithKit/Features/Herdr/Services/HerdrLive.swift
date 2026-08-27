@@ -137,60 +137,59 @@ public enum HerdrLive {
         sessions: SessionBag,
         fleet: FleetBag
     ) async {
-        let stream: HerdrSocketClient
         do {
-            stream = try connect(socket.path)
+            fleet.put(
+                sessions.applySnapshot(
+                    session: socket.name,
+                    text: try await snapshot(path: socket.path, connect: connect)))
         } catch {
             fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
             return
         }
-        await withTaskCancellationHandler {
-            defer { stream.close() }
+
+        while !Task.isCancelled {
+            let stream: HerdrSocketClient
             do {
-                let events = stream.events
-                let bootstrap = try await bootstrapSession(
-                    subscribe: { try await stream.subscribeBoard() },
-                    snapshot: { try await stream.snapshot() })
+                stream = try connect(socket.path)
+            } catch {
+                fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
+                return
+            }
+            await withTaskCancellationHandler {
+                defer { stream.close() }
+                do {
+                    let events = stream.events
+                    try await stream.subscribeBoard()
+                    for await line in events {
+                        fleet.put(sessions.applyEvent(session: socket.name, text: line))
+                    }
+                } catch {
+                    fleet.put(
+                        sessions.failed(session: socket.name, error: error.localizedDescription))
+                }
+            } onCancel: {
+                stream.close()
+            }
+            try? await Task.sleep(for: fallbackSnapshotDelay)
+            guard !Task.isCancelled else { return }
+            do {
                 fleet.put(
-                    sessions.applySnapshot(session: socket.name, text: bootstrap.snapshot))
-                guard bootstrap.subscribed else {
-                    while !Task.isCancelled {
-                        try? await Task.sleep(for: fallbackSnapshotDelay)
-                        guard !Task.isCancelled else { return }
-                        fleet.put(
-                            sessions.applySnapshot(
-                                session: socket.name, text: try await stream.snapshot()))
-                    }
-                    return
-                }
-                await withTaskGroup(of: Void.self) { group in
-                    group.addTask {
-                        for await line in events {
-                            fleet.put(sessions.applyEvent(session: socket.name, text: line))
-                        }
-                    }
-                    await group.waitForAll()
-                }
+                    sessions.applySnapshot(
+                        session: socket.name,
+                        text: try await snapshot(path: socket.path, connect: connect)))
             } catch {
                 fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
             }
-        } onCancel: {
-            stream.close()
         }
     }
 
-    static func bootstrapSession(
-        subscribe: () async throws -> Void,
-        snapshot: () async throws -> String
-    ) async throws -> (snapshot: String, subscribed: Bool) {
-        let subscribed: Bool
-        do {
-            try await subscribe()
-            subscribed = true
-        } catch {
-            subscribed = false
-        }
-        return (try await snapshot(), subscribed)
+    static func snapshot(
+        path: String,
+        connect: @escaping @Sendable (String) throws -> HerdrSocketClient
+    ) async throws -> String {
+        let stream = try connect(path)
+        defer { stream.close() }
+        return try await stream.snapshot()
     }
 }
 
