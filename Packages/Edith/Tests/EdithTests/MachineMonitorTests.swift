@@ -4,6 +4,12 @@ import Testing
 @testable import EdithHelper
 @testable import EdithKit
 
+private final class MachineNotificationProbe: @unchecked Sendable {
+    let entered = DispatchSemaphore(value: 0)
+    let release = DispatchSemaphore(value: 0)
+    let returned = DispatchSemaphore(value: 0)
+}
+
 @Suite struct MachineMonitorTests {
     private let disks = [
         MachineFilesystem(
@@ -185,6 +191,25 @@ import Testing
         let alert = MachineAlert.diskFull(machine: "Tuf", mount: "/", percent: 94.6)
         #expect(alert.title == "Tuf is running out of space")
         #expect(alert.body == "/ is 95% full.")
+    }
+
+    @Test func stalledNotificationCenterDoesNotBlockMachineMonitor() {
+        let probe = MachineNotificationProbe()
+        let queue = NotificationReplacementQueue(
+            label: "test.machine-notifications.\(UUID().uuidString)"
+        ) { _ in
+            probe.entered.signal()
+            probe.release.wait()
+        }
+
+        DispatchQueue.global().async {
+            MachineMonitor.notify(.unreachable(machine: "Tuf"), queue: queue)
+            probe.returned.signal()
+        }
+
+        #expect(probe.entered.wait(timeout: .now() + 1) == .success)
+        #expect(probe.returned.wait(timeout: .now() + 0.2) == .success)
+        probe.release.signal()
     }
 }
 
