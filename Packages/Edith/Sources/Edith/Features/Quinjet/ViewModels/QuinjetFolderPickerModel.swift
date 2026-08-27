@@ -180,6 +180,8 @@ final class QuinjetFolderPickerModel {
         let prefix = URL(fileURLWithPath: value).lastPathComponent
         await load(parent, filter: prefix)
         guard path.trimmingCharacters(in: .whitespacesAndNewlines) == value else { return }
+        let candidates = entries.indices.filter { navigable(entries[$0]) }
+        if candidates.count == 1 { selectionIndex = candidates[0] }
         guard
             let exact = entries.first(where: {
                 navigable($0) && $0.name.localizedCaseInsensitiveCompare(prefix) == .orderedSame

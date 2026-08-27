@@ -24,6 +24,7 @@ import Testing
         await model.waitForInputRefresh()
 
         #expect(model.entries.map(\.name) == ["Desktop"])
+        #expect(model.selectedEntry?.name == "Desktop")
         #expect(!model.canOpenCurrentDirectory)
         await model.completePath()
         #expect(model.path == "/home/pulkit/Desktop")
