@@ -217,6 +217,9 @@ struct EdithApp: App {
                         RunningAppIPC.changedKey: outcome.changed,
                     ])
             })
+        _ = IPC.observe(
+            IPC.Name.requestWindowSwitcherOperation,
+            info: { info in services.performWindowSwitcherOperation(info) })
         _ = IPC.observe(IPC.Name.openPanel) {
             AppRuntimeCenter().perform(.open) { showPanel() }
         }
@@ -295,6 +298,8 @@ enum GlobalHotKey {
         static let micMute: UInt32 = 6
         static let presenterToggle: UInt32 = 7
         static let emoji: UInt32 = 8
+        static let windowSwitcher: UInt32 = 9
+        static let windowCycle: UInt32 = 10
         static let windowLeft: UInt32 = 20
         static let windowRight: UInt32 = 21
         static let windowMaximize: UInt32 = 22

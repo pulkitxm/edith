@@ -66,7 +66,7 @@ public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "attention", "usage", "quinjet", "system", "appMaintenance", "machines", "systemStats",
         "micMute", "lidAwake", "music", "calendar", "notchShelf", "clipboard", "finderTools",
-        "focusDim", "presenter", "emoji", "colorPicker", "windowTools",
+        "focusDim", "presenter", "emoji", "colorPicker", "windowTools", "windowSwitcher",
     ]
 
     public static func provider(
@@ -105,6 +105,7 @@ public enum ExtensionLiveAdapters {
         case "notchShelf": shelfReadiness()
         case "clipboard": clipboardReadiness()
         case "finderTools": finderToolsReadiness(defaults: defaults)
+        case "windowSwitcher": windowSwitcherReadiness(defaults: defaults)
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
@@ -124,6 +125,15 @@ public enum ExtensionLiveAdapters {
             configured: !enabled.isEmpty,
             readyDetail: "Finder Tools features enabled: \(enabled.count).",
             setupDetail: "Turn on at least one Finder Tools feature."
+        ).readiness
+    }
+
+    static func windowSwitcherReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
+        let granted = defaults.bool(forKey: AppStorageKeys.Permissions.accessibilityGranted)
+        return ExtensionAdapterFacts(
+            configured: granted,
+            readyDetail: "Window enumeration and activation are available.",
+            setupDetail: "Grant Accessibility access to inspect and activate windows."
         ).readiness
     }
 

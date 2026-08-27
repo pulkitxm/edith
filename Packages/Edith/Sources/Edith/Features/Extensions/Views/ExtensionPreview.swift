@@ -34,6 +34,7 @@ struct ExtensionPreview: View {
         case "calendar": calendarPreview(phase: phase)
         case "notchShelf": notchPreview(phase: phase)
         case "clipboard": clipboardPreview(phase: phase)
+        case "windowSwitcher": windowSwitcherPreview(phase: phase)
         case "music": musicPreview(animating: animating)
         case "focusDim": focusDimPreview(phase: phase)
         case "presenter": presenterPreview(phase: phase)
@@ -379,6 +380,34 @@ struct ExtensionPreview: View {
             }
         }
         .padding(.horizontal, UIScale.pt(25))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func windowSwitcherPreview(phase: Double) -> some View {
+        let selected = Int(phase.rounded(.down)) % 3
+        return HStack(spacing: UIScale.pt(7)) {
+            ForEach(0..<3) { index in
+                VStack(spacing: UIScale.pt(4)) {
+                    RoundedRectangle(cornerRadius: UIScale.pt(5))
+                        .fill(
+                            index == selected
+                                ? DashSkin.accent(dark).opacity(0.22)
+                                : DashSkin.paper(dark)
+                        )
+                        .overlay {
+                            Image(systemName: ["safari", "doc.text", "terminal"][index])
+                                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                                .foregroundStyle(
+                                    index == selected
+                                        ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
+                        }
+                        .frame(width: UIScale.pt(36), height: UIScale.pt(28))
+                    Capsule()
+                        .fill(DashSkin.inkFaint(dark).opacity(0.45))
+                        .frame(width: UIScale.pt(24), height: UIScale.pt(3))
+                }
+            }
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 

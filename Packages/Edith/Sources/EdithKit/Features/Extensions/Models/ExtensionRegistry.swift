@@ -51,7 +51,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .calendar: "Required to read and show your schedule in Calendar."
         case .notifications: "Asked when you enable usage, machine, or system pressure alerts."
         case .accessibility:
-            "Required for global keyboard tools that act outside Edith."
+            "Required for global keyboard tools and window controls that act outside Edith."
         case .inputMonitoring:
             "Asked when you first use Clean keys to block key presses during cleaning."
         case .fullDisk: "Asked when a feature needs local service credentials or usage data."
@@ -127,6 +127,7 @@ public extension ExtensionRegistryEntry {
     var requiredPermissions: [ExtensionPermission] {
         switch id {
         case "calendar": [.calendar]
+        case "windowSwitcher": [.accessibility]
         case "focusDim", "presenter", "colorPicker": [.screenRecording]
         case "finderTools", "windowTools": [.accessibility]
         default: []

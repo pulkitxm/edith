@@ -251,6 +251,17 @@ public enum CommandTree {
                         CommandNode($0.rawValue, $0.descriptor.summary, options: common)
                     }),
             CommandNode(
+                "windows", "Search and activate macOS windows.", aliases: ["window-switcher"],
+                children: [
+                    CommandNode(
+                        "ls", "List switchable windows.", aliases: ["list"], options: common),
+                    CommandNode("show", "Open the searchable switcher.", options: common),
+                    CommandNode(
+                        "activate", "Activate one window.", options: common, arguments: [.free]),
+                    CommandNode(
+                        "cycle", "Cycle windows of the front application.", options: common),
+                ]),
+            CommandNode(
                 "lid-awake", "Keep the Mac running with its lid closed.",
                 children: [
                     CommandNode("status", "Show the live state.", options: common),

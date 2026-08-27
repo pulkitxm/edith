@@ -23,6 +23,7 @@ import Testing
         "notchShelfEnabled",
         "clipboardEnabled",
         "finderToolsEnabled",
+        "windowSwitcherEnabled",
         "focusDimEnabled",
         "presenterEnabled",
         "colorPickerEnabled",
@@ -144,7 +145,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard", "appMaintenance",
+                "clipboard", "appMaintenance", "windowSwitcher",
             ])
     }
 
@@ -237,6 +238,7 @@ import Testing
             "notchShelf": [],
             "clipboard": [],
             "finderTools": [.accessibility],
+            "windowSwitcher": [.accessibility],
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
             "colorPicker": [.screenRecording],
@@ -260,6 +262,7 @@ import Testing
             "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation],
             "clipboard": [.accessibility],
             "finderTools": [.automation],
+            "windowSwitcher": [],
             "focusDim": [],
             "presenter": [],
             "colorPicker": [],
