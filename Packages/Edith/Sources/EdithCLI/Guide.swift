@@ -34,6 +34,7 @@ public enum Guide {
         ed config ls                every setting, with its current value
         ed config describe <key>    one setting: type, scope, allowed values
         ed extensions ls            every extension and whether it is on
+        ed audio status             input, output, and saved application routes
         ed lid-awake status          closed-lid state, session, battery and helper
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler

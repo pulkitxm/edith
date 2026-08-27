@@ -22,6 +22,7 @@ enum JSONContract {
         JSONCase("ed guide", ["guide", "--json"]),
         JSONCase("ed version", ["version", "--json"]),
         JSONCase("ed status", ["status", "--json"]),
+        JSONCase("ed audio", ["audio", "--json"]),
         JSONCase("ed audio status", ["audio", "status", "--json"]),
         JSONCase(
             "ed audio input", ["audio", "input", "system", "--json"],
