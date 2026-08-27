@@ -745,6 +745,19 @@ private func lidAwakeProcessIDs(at url: URL) throws -> [pid_t] {
         #expect(
             build.contains(
                 "LAUNCH_DAEMONS=\"$HELPER/Contents/Library/LaunchDaemons\""))
+        let package = try String(
+            contentsOf: root.appendingPathComponent("Packages/Edith/Package.swift"),
+            encoding: .utf8)
+        #expect(package.contains("\"__info_plist\""))
+        let helperInfoURL = root.appendingPathComponent(
+            "Packages/Edith/Sources/EdithLidAwakeHelper/Info.plist")
+        let helperInfoData = try Data(contentsOf: helperInfoURL)
+        let helperInfo = try #require(
+            PropertyListSerialization.propertyList(from: helperInfoData, format: nil)
+                as? [String: Any])
+        #expect(
+            helperInfo["CFBundleIdentifier"] as? String
+                == LidAwakePrivilegedService.bundleIdentifier)
     }
 
     @Test func powerSettingsReportSleepDisabled() {
