@@ -10,6 +10,15 @@ public enum EdithButtonRole: Sendable, CaseIterable, Hashable {
     case row
     case iconOnly
     case selection
+
+    var usesFeatureAppearance: Bool {
+        switch self {
+        case .borderless, .toolbar, .iconOnly:
+            true
+        case .primary, .secondary, .destructive, .row, .selection:
+            false
+        }
+    }
 }
 
 struct EdithButtonMetrics: Equatable, Sendable {
@@ -25,18 +34,10 @@ struct EdithButtonMetrics: Equatable, Sendable {
             Self(
                 horizontalPadding: 12, verticalPadding: 6, minimumWidth: 32,
                 minimumHeight: 32, cornerRadius: 7)
-        case .borderless:
+        case .borderless, .toolbar, .iconOnly:
             Self(
-                horizontalPadding: 0, verticalPadding: 0, minimumWidth: 28,
-                minimumHeight: 28, cornerRadius: 6)
-        case .toolbar:
-            Self(
-                horizontalPadding: 7, verticalPadding: 5, minimumWidth: 28,
-                minimumHeight: 28, cornerRadius: 6)
-        case .iconOnly:
-            Self(
-                horizontalPadding: 6, verticalPadding: 6, minimumWidth: 28,
-                minimumHeight: 28, cornerRadius: 6)
+                horizontalPadding: 0, verticalPadding: 0, minimumWidth: 0,
+                minimumHeight: 0, cornerRadius: 6)
         case .row, .selection:
             Self(
                 horizontalPadding: 9, verticalPadding: 7, minimumWidth: 32,
@@ -86,15 +87,18 @@ public struct EdithButtonTarget: ViewModifier {
     public func body(content: Content) -> some View {
         let metrics = EdithButtonMetrics.metrics(for: role)
         let fillsWidth = role == .row || role == .selection
-        return
+        if role.usesFeatureAppearance {
+            content.contentShape(Rectangle())
+        } else {
             content
-            .frame(
-                minWidth: UIScale.pt(metrics.minimumWidth),
-                maxWidth: fillsWidth ? .infinity : nil,
-                minHeight: UIScale.pt(metrics.minimumHeight),
-                alignment: fillsWidth ? .leading : .center
-            )
-            .contentShape(Rectangle())
+                .frame(
+                    minWidth: UIScale.pt(metrics.minimumWidth),
+                    maxWidth: fillsWidth ? .infinity : nil,
+                    minHeight: UIScale.pt(metrics.minimumHeight),
+                    alignment: fillsWidth ? .leading : .center
+                )
+                .contentShape(Rectangle())
+        }
     }
 }
 
@@ -129,30 +133,36 @@ private struct EdithButtonBody<Label: View>: View {
     private var inactive: Bool { activeState == .inactive }
     private var emphasized: Bool { selected || pressed || hovering }
 
-    var body: some View {
-        label
-            .padding(.horizontal, UIScale.pt(metrics.horizontalPadding))
-            .padding(.vertical, UIScale.pt(metrics.verticalPadding))
-            .frame(
-                minWidth: UIScale.pt(metrics.minimumWidth),
-                maxWidth: fillsWidth ? .infinity : nil,
-                minHeight: UIScale.pt(metrics.minimumHeight),
-                alignment: fillsWidth ? .leading : .center
-            )
-            .foregroundStyle(foreground)
-            .background(background, in: shape)
-            .overlay(shape.strokeBorder(border, lineWidth: borderWidth))
-            .contentShape(Rectangle())
-            .opacity(enabled ? (inactive ? 0.72 : 1) : 0.42)
-            .brightness(pressed && enabled ? -0.08 : 0)
-            .onHover { hovering = enabled && $0 }
-            .animation(
-                Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: hovering
-            )
-            .animation(
-                Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: pressed
-            )
-            .accessibilityAddTraits(selected ? .isSelected : AccessibilityTraits())
+    @ViewBuilder var body: some View {
+        if role.usesFeatureAppearance {
+            label
+                .contentShape(Rectangle())
+                .accessibilityAddTraits(selected ? .isSelected : AccessibilityTraits())
+        } else {
+            label
+                .padding(.horizontal, UIScale.pt(metrics.horizontalPadding))
+                .padding(.vertical, UIScale.pt(metrics.verticalPadding))
+                .frame(
+                    minWidth: UIScale.pt(metrics.minimumWidth),
+                    maxWidth: fillsWidth ? .infinity : nil,
+                    minHeight: UIScale.pt(metrics.minimumHeight),
+                    alignment: fillsWidth ? .leading : .center
+                )
+                .foregroundStyle(foreground)
+                .background(background, in: shape)
+                .overlay(shape.strokeBorder(border, lineWidth: borderWidth))
+                .contentShape(Rectangle())
+                .opacity(enabled ? (inactive ? 0.72 : 1) : 0.42)
+                .brightness(pressed && enabled ? -0.08 : 0)
+                .onHover { hovering = enabled && $0 }
+                .animation(
+                    Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: hovering
+                )
+                .animation(
+                    Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: pressed
+                )
+                .accessibilityAddTraits(selected ? .isSelected : AccessibilityTraits())
+        }
     }
 
     private var foreground: Color {
@@ -165,7 +175,7 @@ private struct EdithButtonBody<Label: View>: View {
     }
 
     private var background: Color {
-        guard role != .borderless else { return .clear }
+        guard !role.usesFeatureAppearance else { return .clear }
         let boost = contrast == .increased ? 0.05 : 0
         switch role {
         case .primary:
@@ -185,7 +195,7 @@ private struct EdithButtonBody<Label: View>: View {
     }
 
     private var border: Color {
-        guard role != .borderless else { return .clear }
+        guard !role.usesFeatureAppearance else { return .clear }
         if focused { return tint.opacity(0.95) }
         if selected, differentiateWithoutColor { return Color.primary.opacity(0.75) }
         switch role {

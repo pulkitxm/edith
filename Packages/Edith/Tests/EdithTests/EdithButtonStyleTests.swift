@@ -33,12 +33,25 @@ import Testing
         }
     }
 
-    @Test func iconOnlyAndToolbarRolesMeetTheMinimumTarget() {
+    @Test func featureOwnedRolesPreserveTheirLabelSize() {
         for role in [EdithButtonRole.iconOnly, .toolbar, .borderless] {
+            let label = CGSize(width: 10, height: 10)
+            let size = EdithButtonMetrics.metrics(for: role).visibleSize(
+                label: label)
+            #expect(role.usesFeatureAppearance)
+            #expect(size == label)
+        }
+    }
+
+    @Test func chromedRolesKeepTheirMinimumTarget() {
+        for role in [
+            EdithButtonRole.primary, .secondary, .destructive, .row, .selection,
+        ] {
             let size = EdithButtonMetrics.metrics(for: role).visibleSize(
                 label: CGSize(width: 10, height: 10))
-            #expect(size.width >= 28)
-            #expect(size.height >= 28)
+            #expect(!role.usesFeatureAppearance)
+            #expect(size.width >= 32)
+            #expect(size.height >= 32)
         }
     }
 
@@ -55,9 +68,15 @@ import Testing
                 of: "private var foreground", range: bodyStart.upperBound..<source.endIndex))
         let body = String(source[bodyStart.lowerBound..<foregroundStart.lowerBound])
         let horizontalPadding = try #require(body.range(of: ".padding(.horizontal"))
-        let frame = try #require(body.range(of: ".frame("))
-        let background = try #require(body.range(of: ".background("))
-        let contentShape = try #require(body.range(of: ".contentShape(Rectangle())"))
+        let frame = try #require(
+            body.range(of: ".frame(", range: horizontalPadding.upperBound..<body.endIndex))
+        let background = try #require(
+            body.range(of: ".background(", range: frame.upperBound..<body.endIndex))
+        let contentShape = try #require(
+            body.range(
+                of: ".contentShape(Rectangle())",
+                range: background.upperBound..<body.endIndex)
+        )
 
         #expect(horizontalPadding.lowerBound < frame.lowerBound)
         #expect(frame.lowerBound < background.lowerBound)
