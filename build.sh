@@ -208,6 +208,8 @@ sign_tool "$APP/Contents/MacOS/ed"
 sign_tool "$APP/Contents/MacOS/edh"
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
   --identifier com.pulkit.edith.lidawake "$PRIVILEGED_HELPER"
+codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
+  --identifier com.pulkit.edith.lidawake "$STATUS_HELPER"
 sign_tool "$APP/Contents/Frameworks/Sparkle.framework"
 sign "$HELPER"
 sign "$FILES_APP"
