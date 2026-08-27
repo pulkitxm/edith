@@ -180,7 +180,8 @@ struct MouseControlsRows: View {
                         Image(systemName: "minus.circle.fill")
                             .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.iconOnly))
+                    .edithButtonTarget(.iconOnly)
                     .help("Remove exclusion")
                 }
             }
