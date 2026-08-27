@@ -33,21 +33,83 @@ struct FileIconCatalogTests {
         #expect(icon("main.tf").badge == "TF")
     }
 
+    @Test("recognizes Next.js and TypeScript ecosystem files")
+    func typescriptEcosystem() {
+        #expect(icon("pnpm-workspace.yaml").badge == "PN")
+        #expect(icon("tsconfig.json").badge == "TS")
+        #expect(icon("turbo.json").badge == "TB")
+        #expect(icon("components.json").badge == "UI")
+        #expect(icon("cypress.config.ts").badge == "CY")
+        #expect(icon("button.stories.tsx").badge == "SB")
+        #expect(icon("theme.ts", path: ".storybook/theme.ts").badge == "SB")
+        #expect(icon("devcontainer.json", path: ".devcontainer/devcontainer.json").badge == "DEV")
+        #expect(icon("workspace.code-workspace").badge == "VS")
+        #expect(icon("cache.tsbuildinfo").badge == "TS")
+    }
+
+    @Test("recognizes Python ecosystem files")
+    func pythonEcosystem() {
+        #expect(icon("pyproject.toml").badge == "PY")
+        #expect(icon("requirements.txt").badge == "PY")
+        #expect(icon("uv.lock").badge == "UV")
+        #expect(icon("MANIFEST.in").badge == "PY")
+        #expect(icon(".python-version").badge == "PY")
+        #expect(icon("module.pyx").badge == "CY")
+        #expect(icon("template.jinja2").badge == "J2")
+        #expect(icon("model.onnx").badge == "ML")
+    }
+
+    @Test("recognizes Swift and Apple ecosystem files")
+    func swiftEcosystem() {
+        #expect(icon("Cartfile.resolved").badge == "CT")
+        #expect(icon("Project.swift").badge == "TU")
+        #expect(icon("Main.storyboard").badge == "UI")
+        #expect(icon("Settings.xctestplan").badge == "XCD")
+        #expect(icon("Module.swiftinterface").badge == "SW")
+        #expect(icon("Model.mlmodel").badge == "ML")
+        #expect(icon(".swiftlint.yml").badge == "SW")
+    }
+
+    @Test("recognizes Rust and systems ecosystem files")
+    func rustEcosystem() {
+        #expect(icon("rust-toolchain.toml").badge == "RS")
+        #expect(icon("clippy.toml").badge == "RS")
+        #expect(icon("shader.wgsl").badge == "GPU")
+        #expect(icon("library.rlib").badge == "BIN")
+        #expect(icon("module.ll").badge == "IR")
+        #expect(icon("installer.wxs").badge == "SETUP")
+        #expect(icon("service.service").badge == "SYS")
+    }
+
+    @Test("recognizes data media and documentation formats")
+    func broaderFormats() {
+        #expect(icon("dataset.parquet").badge == "DATA")
+        #expect(icon("weights.safetensors").badge == "ML")
+        #expect(icon("architecture.mermaid").badge == "DIA")
+        #expect(icon("photo.jxl").badge == "IMG")
+        #expect(icon("captions.vtt").badge == "SUB")
+        #expect(icon("locations.kml").badge == "GEO")
+        #expect(icon("package.deb").badge == "ZIP")
+    }
+
     @Test("recognizes compound names and repository context")
     func context() {
         #expect(icon("app.d.ts").badge == "TS")
         #expect(icon("welcome.blade.php").badge == "LV")
         #expect(icon("deploy.yml", path: ".github/workflows/deploy.yml").badge == "CI")
         #expect(icon(".env.production").badge == "ENV")
+        #expect(icon("bug.yml", path: ".github/ISSUE_TEMPLATE/bug.yml").badge == "ISS")
+        #expect(
+            icon("default.md", path: ".github/PULL_REQUEST_TEMPLATE/default.md").badge == "PR")
     }
 
     @Test("creates stable distinct fallbacks for the long tail")
     func fallbacks() {
-        let first = icon("model.safetensors")
-        let repeated = icon("weights.safetensors")
+        let first = icon("model.zorbium")
+        let repeated = icon("weights.zorbium")
         let other = icon("scene.customformat")
         #expect(first == repeated)
-        #expect(first.badge == "SAFE")
+        #expect(first.badge == "ZORB")
         #expect(other.badge == "CUST")
         #expect(first.color != other.color || first.badge != other.badge)
     }
