@@ -340,7 +340,7 @@ struct MediaToolkitPage: View {
                         style: StrokeStyle(lineWidth: 1.2, dash: [7, 5]))
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .disabled(model.isProcessing)
         .accessibilityLabel(model.mode == .images ? "Choose input images" : "Choose input video")
     }
@@ -668,7 +668,7 @@ struct MediaToolkitFileRow: View {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(.secondary)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .accessibilityLabel("Remove \(url.lastPathComponent)")
         }
     }
