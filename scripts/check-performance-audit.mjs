@@ -273,6 +273,7 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
     /\.readData\s*\(\s*ofLength\s*:/g,
     /\.waitUntilExit\s*\(/g,
     /\.executeAndReturnError\s*\(/g,
+    /\bCGWindowListCopyWindowInfo\s*\(/g,
   ];
   for (const pattern of blockingPatterns) {
     for (const match of masked.matchAll(pattern)) {

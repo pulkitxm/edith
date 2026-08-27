@@ -37,6 +37,8 @@ final class FocusDimEngine: FeatureModule {
     private var activationObserver: NSObjectProtocol?
     private var spaceObserver: NSObjectProtocol?
     private var screenObserver: NSObjectProtocol?
+    private var repositionTask: Task<Void, Never>?
+    private var repositionGeneration = 0
 
     init() {
         FocusDimHotKey.register()
@@ -66,6 +68,9 @@ final class FocusDimEngine: FeatureModule {
 
     func shutdown() {
         FocusDimHotKey.unregister()
+        repositionGeneration += 1
+        repositionTask?.cancel()
+        repositionTask = nil
         let workspaceCenter = NSWorkspace.shared.notificationCenter
         if let activationObserver { workspaceCenter.removeObserver(activationObserver) }
         if let spaceObserver { workspaceCenter.removeObserver(spaceObserver) }
@@ -137,18 +142,43 @@ final class FocusDimEngine: FeatureModule {
     }
 
     private func reposition(animateIn: Bool) {
+        repositionGeneration += 1
+        let generation = repositionGeneration
+        repositionTask?.cancel()
+        repositionTask = nil
         guard CGPreflightScreenCaptureAccess(), FocusDimState.isActive() else {
             overlays.values.forEach { $0.alphaValue = 0 }
             return
         }
-        let windows = Self.onScreenWindows()
         let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1
-        var targets: [(FocusDimOverlayWindow, Int?)] = []
+        var screenFrames: [(CGDirectDisplayID, CGRect)] = []
         for screen in NSScreen.screens {
-            guard let id = screen.focusDimDisplayID, let overlay = overlays[id] else { continue }
+            if let displayID = screen.focusDimDisplayID {
+                screenFrames.append((displayID, screen.frame))
+            }
+        }
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+        let mode = displayMode
+        repositionTask = Task.detached(priority: .userInitiated) { [weak self] in
+            let windows = Self.onScreenWindows(primaryHeight: primaryHeight)
+            guard !Task.isCancelled else { return }
+            await self?.applyReposition(
+                windows: windows, screenFrames: screenFrames, frontmostPID: frontmostPID,
+                mode: mode, animateIn: animateIn, generation: generation)
+        }
+    }
+
+    private func applyReposition(
+        windows: [FocusDimWindowInfo], screenFrames: [(CGDirectDisplayID, CGRect)],
+        frontmostPID: pid_t, mode: FocusDimDisplayMode, animateIn: Bool, generation: Int
+    ) {
+        guard generation == repositionGeneration else { return }
+        var targets: [(FocusDimOverlayWindow, Int?)] = []
+        for (id, frame) in screenFrames {
+            guard let overlay = overlays[id] else { continue }
             let reference = FocusDimSelection.referenceWindow(
-                forScreen: screen.frame, frontmostPID: frontmostPID,
-                windowsFrontToBack: windows, mode: displayMode)
+                forScreen: frame, frontmostPID: frontmostPID,
+                windowsFrontToBack: windows, mode: mode)
             targets.append((overlay, reference?.windowNumber))
         }
 
@@ -173,7 +203,7 @@ final class FocusDimEngine: FeatureModule {
             },
             completionHandler: { [weak self] in
                 MainActor.assumeIsolated {
-                    guard let self else { return }
+                    guard let self, generation == self.repositionGeneration else { return }
                     for (overlay, windowNumber) in targets {
                         self.applyOrder(overlay, below: windowNumber)
                     }
@@ -194,12 +224,13 @@ final class FocusDimEngine: FeatureModule {
         }
     }
 
-    private static func onScreenWindows() -> [FocusDimWindowInfo] {
+    nonisolated private static func onScreenWindows(
+        primaryHeight: CGFloat
+    ) -> [FocusDimWindowInfo] {
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let raw = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]]
         else { return [] }
         let myPID = ProcessInfo.processInfo.processIdentifier
-        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
         return raw.compactMap { entry in
             guard
                 let layer = entry[kCGWindowLayer as String] as? Int, layer == 0,

@@ -35,6 +35,7 @@ test("hostile actor work and process capture are rejected", () => {
         process.waitUntilExit()
         let data = try Data(contentsOf: URL(fileURLWithPath: "/tmp/data"))
         let output = pipe.fileHandleForReading.readDataToEndOfFile()
+        let windows = CGWindowListCopyWindowInfo([], 0)
       }
     }
   `;
@@ -46,7 +47,7 @@ test("hostile actor work and process capture are rejected", () => {
   expect(rules).toContain("unbounded-process-output");
   expect(
     rules.filter((rule) => rule === "main-actor-blocking-io"),
-  ).toHaveLength(3);
+  ).toHaveLength(4);
 });
 
 test("bounded cancellation and group escalation satisfy process lifecycle analysis", () => {
