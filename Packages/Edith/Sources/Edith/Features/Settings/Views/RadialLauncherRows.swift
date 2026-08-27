@@ -20,6 +20,7 @@ struct RadialLauncherRows: View {
                 HotKeyRecorderControl(
                     keyPrefix: "radialLauncherHotKey", defaultLabel: "⌥⌘Space")
                 Button("Try launcher") { IPC.post(IPC.Name.requestRadialLauncher) }
+                    .disabled(!profile.items.contains(where: \.isConfigured))
             }
             Text(
                 "Press the shortcut, point at a slice, then release. A quick press leaves the wheel open for clicking or number keys."
@@ -30,10 +31,15 @@ struct RadialLauncherRows: View {
         .opacity(enabled ? 1 : 0.5)
 
         Section("Wheel actions") {
-            ForEach($profile.items) { $item in
-                RadialLauncherItemRow(item: $item) {
-                    profile.items.removeAll { $0.id == item.id }
-                }
+            ForEach(Array(profile.items.enumerated()), id: \.element.id) { index, item in
+                RadialLauncherItemRow(
+                    item: $profile.items[index], canMoveUp: index > 0,
+                    canMoveDown: index < profile.items.count - 1,
+                    canDuplicate: profile.items.count < 8,
+                    moveUp: { move(item.id, by: -1) },
+                    moveDown: { move(item.id, by: 1) },
+                    duplicate: { duplicate(item.id) },
+                    remove: { profile.items.removeAll { $0.id == item.id } })
             }
             Button {
                 profile.items.append(
@@ -67,10 +73,33 @@ struct RadialLauncherRows: View {
             forKey: RadialLauncherPreferenceKeys.profile)
         IPC.post(IPC.Name.settingsChanged)
     }
+
+    private func move(_ id: UUID, by offset: Int) {
+        guard let source = profile.items.firstIndex(where: { $0.id == id }) else { return }
+        let destination = source + offset
+        guard profile.items.indices.contains(destination) else { return }
+        profile.items.swapAt(source, destination)
+    }
+
+    private func duplicate(_ id: UUID) {
+        guard profile.items.count < 8,
+            let source = profile.items.firstIndex(where: { $0.id == id })
+        else { return }
+        var item = profile.items[source]
+        item.id = UUID()
+        item.name = item.displayName + " copy"
+        profile.items.insert(item, at: source + 1)
+    }
 }
 
 private struct RadialLauncherItemRow: View {
     @Binding var item: RadialLauncherItem
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let canDuplicate: Bool
+    let moveUp: () -> Void
+    let moveDown: () -> Void
+    let duplicate: () -> Void
     let remove: () -> Void
 
     var body: some View {
@@ -86,12 +115,35 @@ private struct RadialLauncherItemRow: View {
                 }
                 .labelsHidden()
                 .frame(width: UIScale.pt(150))
+                Button(action: moveUp) {
+                    Image(systemName: "arrow.up")
+                }
+                .buttonStyle(.borderless)
+                .disabled(!canMoveUp)
+                Button(action: moveDown) {
+                    Image(systemName: "arrow.down")
+                }
+                .buttonStyle(.borderless)
+                .disabled(!canMoveDown)
+                Button(action: duplicate) {
+                    Image(systemName: "plus.square.on.square")
+                }
+                .buttonStyle(.borderless)
+                .disabled(!canDuplicate)
                 Button(role: .destructive, action: remove) {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.borderless)
             }
             targetEditor
+            if !item.isConfigured {
+                Label(
+                    "Complete this action before it appears in the wheel.",
+                    systemImage: "exclamationmark.triangle"
+                )
+                .font(.system(size: UIScale.pt(11)))
+                .foregroundStyle(.orange)
+            }
         }
         .padding(.vertical, UIScale.pt(4))
         .onChange(of: item.kind) { resetTarget() }
