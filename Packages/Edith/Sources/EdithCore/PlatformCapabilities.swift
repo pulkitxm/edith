@@ -7,6 +7,7 @@ public enum PlatformCapability: String, CaseIterable, Codable, Hashable, Sendabl
     case cameraPreview
     case clipboardHistory
     case companionService
+    case displayControl
     case externalMediaControl
     case fileShelf
     case globalPaste

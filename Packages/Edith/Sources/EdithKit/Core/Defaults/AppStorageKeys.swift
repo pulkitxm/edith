@@ -86,6 +86,16 @@ public enum AppStorageKeys {
         public static let otherDisplaysMode = "focusDimOtherDisplaysMode"
     }
 
+    public enum DisplayPower {
+        public static let enabled = "displayPowerEnabled"
+        public static let brightnessLevels = "displayPowerBrightnessLevels"
+        public static let bluetoothOffDuringSleep = "displayPowerBluetoothOffDuringSleep"
+        public static let bluetoothRestorePending = "displayPowerBluetoothRestorePending"
+        public static let latestSnapshot = "displayPowerLatestSnapshot"
+        public static let xdrBoostEnabled = "displayPowerXDRBoostEnabled"
+        public static let xdrBoostLevel = "displayPowerXDRBoostLevel"
+    }
+
     public enum Herdr {
         public static let agentViews = "herdrAgentViews"
         public static let ghosttyTerminal = "herdrGhosttyTerminal"

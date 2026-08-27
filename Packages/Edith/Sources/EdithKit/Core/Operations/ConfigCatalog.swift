@@ -47,7 +47,7 @@ public enum ConfigCatalog {
     public static let groups = [
         "appearance", "panel", "attention", "usage", "limits", "menubar", "alerts", "budget",
         "dashboard",
-        "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
+        "machines", "herdr", "quinjet", "companion", "finder", "system", "display", "cleaner", "music",
         "calendar",
         "clipboard",
         "notch", "focusdim", "presenter", "colorpicker", "micmute",
@@ -57,7 +57,7 @@ public enum ConfigCatalog {
     public static let settings: [SettingDefinition] =
         appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
-        + system + cleaner
+        + system + display + cleaner
         + music + calendar + clipboard + notch + focusDim + presenter + colorPicker + micMute
         + backup + permissions + terminal
 
@@ -490,6 +490,22 @@ public enum ConfigCatalog {
         SettingDefinition(
             "systemAppsSortAsc", .bool, group: "system",
             summary: "Sort running apps ascending.", fallback: .bool(false)),
+    ]
+
+    private static let display: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.DisplayPower.enabled, .bool, group: "display",
+            summary: "Display and Power extension.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.DisplayPower.bluetoothOffDuringSleep, .bool, group: "display",
+            summary: "Turn Bluetooth off while the Mac sleeps.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.DisplayPower.xdrBoostEnabled, .bool, group: "display",
+            summary: "Use available XDR headroom for extra brightness.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.DisplayPower.xdrBoostLevel, .int, group: "display",
+            summary: "XDR extra brightness percentage.", integerRange: 0...100,
+            fallback: .int(50)),
     ]
 
     private static let cleaner: [SettingDefinition] = [

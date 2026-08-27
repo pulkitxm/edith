@@ -574,6 +574,7 @@ private struct ExtensionSettingsSheet: View {
         case "attention": 440
         case "machines": 420
         case "lidAwake": 400
+        case "displayPower": 540
         case "music": 460
         case "focusDim", "colorPicker": 430
         case "system": 500
@@ -933,6 +934,7 @@ private struct ExtensionDetailRows: View {
             case .systemStats: SystemStatsRows()
             case .micMute: MicMuteRows()
             case .lidAwake: LidAwakeRows()
+            case .displayPower: DisplayPowerRows()
             case .music: MusicRows()
             case .calendar: CalendarRows()
             case .notchShelf: NotchShelfRows()

@@ -47,6 +47,9 @@ import EdithCore
             id: "lidAwake", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
+            id: "displayPower", helper: true, machine: false, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "music", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: ["yt-dlp"]),
         MatrixRow(

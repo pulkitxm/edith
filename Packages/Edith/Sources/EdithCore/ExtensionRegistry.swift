@@ -160,6 +160,11 @@ public enum ExtensionRegistry {
             symbolName: "laptopcomputer", group: .system, featured: false,
             defaultsKey: "lidAwakeEnabled", requiredCapabilities: [.preventSleep]),
         ExtensionRegistryEntry(
+            id: "displayPower", title: "Display & Power",
+            subtitle: "Brightness for every display, XDR boost, and Bluetooth sleep control.",
+            symbolName: "display.2", group: .system, featured: false,
+            defaultsKey: "displayPowerEnabled", requiredCapabilities: [.displayControl]),
+        ExtensionRegistryEntry(
             id: "music", title: "Music",
             subtitle: "Plays your local music folder, with media keys.",
             symbolName: "music.note", group: .media, featured: false,

@@ -472,6 +472,40 @@ public enum ExtensionLifecycleCatalog {
                     "ed lid-awake status --json")
             ]),
         descriptor(
+            "displayPower",
+            "Control display brightness and restore temporary power changes safely.",
+            workflows: [
+                instruction(
+                    "brightness", "Adjust displays",
+                    "Use hardware brightness when available and reversible dimming otherwise."),
+                instruction(
+                    "sleep", "Protect sleep connections",
+                    "Turn Bluetooth off during sleep and restore only state Edith changed."),
+            ],
+            prerequisites: [
+                instruction(
+                    "helper", "Run the menu bar helper",
+                    "The helper owns display overlays and wake restoration.",
+                    "ed display status --json")
+            ],
+            examples: [
+                "ed extensions enable displayPower", "ed display brightness 60",
+                "ed display bluetooth-sleep on",
+            ],
+            docs: [documentation("guide", "Display and Power guide", "docs/cli/display/README.md")],
+            recovery: [
+                instruction(
+                    "disable", "Restore temporary changes",
+                    "Disable the extension to restore software dimming, XDR overlays, and Bluetooth.",
+                    "ed extensions disable displayPower")
+            ],
+            verification: [
+                instruction(
+                    "status", "Inspect active routes",
+                    "Confirm each display reports its brightness method.",
+                    "ed display status --json")
+            ]),
+        descriptor(
             "music", "Play and organize a local music library with system media controls.",
             workflows: [
                 instruction(

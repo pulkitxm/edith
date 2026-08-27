@@ -35,6 +35,7 @@ public enum Guide {
         ed config describe <key>    one setting: type, scope, allowed values
         ed extensions ls            every extension and whether it is on
         ed lid-awake status          closed-lid state, session, battery and helper
+        ed display status            display brightness routes and power behavior
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler
         ed color copy 1 --format hex
@@ -106,6 +107,19 @@ public enum Guide {
         ed lid-awake battery 20
         ed lid-awake status --json
         ed lid-awake off
+        ```
+
+        Display and Power applies brightness through the safest available route and
+        restores any temporary gamma or Bluetooth change it owns:
+
+        ```
+        ed display status
+        ed display status --json
+        ed display brightness 60
+        ed display brightness 45 --display 1
+        ed display xdr 50
+        ed display xdr off
+        ed display bluetooth-sleep on
         ```
 
         ## Machines

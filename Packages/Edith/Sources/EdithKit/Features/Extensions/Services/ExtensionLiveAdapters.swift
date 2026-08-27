@@ -65,8 +65,8 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
-        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "colorPicker",
+        "lidAwake", "displayPower", "music", "calendar", "notchShelf", "clipboard", "focusDim",
+        "presenter", "colorPicker",
     ]
 
     public static func provider(
@@ -99,6 +99,7 @@ public enum ExtensionLiveAdapters {
         case "systemStats": systemStatsReadiness()
         case "micMute": microphoneReadiness()
         case "lidAwake": lidAwakeReadiness()
+        case "displayPower": displayPowerReadiness(defaults: defaults)
         case "music": musicReadiness()
         case "calendar": calendarReadiness()
         case "notchShelf": shelfReadiness()
@@ -280,6 +281,23 @@ public enum ExtensionLiveAdapters {
         default:
             .failed("The privileged sleep helper returned an unknown status: \(helperStatus).")
         }
+    }
+
+    static func displayPowerReadiness(
+        defaults: UserDefaults = SharedDefaults.store
+    ) -> ExtensionAdapterReadiness {
+        guard let snapshot = try? DisplayPowerOperationExecution.snapshot(defaults: defaults) else {
+            return .loading("The helper is discovering active displays.")
+        }
+        guard !snapshot.displays.isEmpty else {
+            return .empty("No active physical display is available.")
+        }
+        let hardware = snapshot.displays.filter {
+            $0.method == .system || $0.method == .ddc
+        }.count
+        let software = snapshot.displays.filter { $0.method == .software }.count
+        return .ready(
+            "Display routes: \(hardware) hardware, \(software) software fallback.")
     }
 
     static func musicReadiness(directory: URL = Repo.musicDir) -> ExtensionAdapterReadiness {

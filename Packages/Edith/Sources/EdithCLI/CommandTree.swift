@@ -257,6 +257,20 @@ public enum CommandTree {
                         destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
+                "display", "Control display brightness and sleep power behavior.",
+                children: [
+                    CommandNode("status", "Show displays and power behavior.", options: common),
+                    CommandNode(
+                        "brightness", "Set display brightness.", options: ["--json", "--display"],
+                        arguments: [.free]),
+                    CommandNode(
+                        "xdr", "Set extra XDR brightness.", options: common,
+                        arguments: [.free]),
+                    CommandNode(
+                        "bluetooth-sleep", "Turn Bluetooth off only while sleeping.",
+                        options: common, arguments: [.onOff]),
+                ]),
+            CommandNode(
                 "permissions", "Inspect and request Edith's macOS permissions.",
                 children: [
                     CommandNode(

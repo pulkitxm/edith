@@ -257,6 +257,7 @@ import Testing
             ("systemStats", "SystemStatsRows", "enabled", "ExtensionsPane.swift"),
             ("micMute", "MicMuteRows", "enabled", "ExtensionsPane.swift"),
             ("lidAwake", "LidAwakeRows", "enabled", "LidAwakeRows.swift"),
+            ("displayPower", "DisplayPowerRows", "enabled", "DisplayPowerRows.swift"),
             ("music", "MusicRows", "enabled", "ExtensionsPane.swift"),
             ("calendar", "CalendarRows", "enabled", "ExtensionsPane.swift"),
             ("notchShelf", "NotchShelfRows", "enabled", "NotchShelfRows.swift"),

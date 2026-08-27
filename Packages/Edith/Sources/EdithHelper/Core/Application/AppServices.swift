@@ -16,6 +16,7 @@ final class AppServices {
     private(set) var presenter: PresenterDetector?
     private(set) var micMute: MicMuteEngine?
     private(set) var lidAwake: LidAwakeEngine?
+    private(set) var displayPower: DisplayPowerRuntime?
     private(set) var systemStats: SystemStatsStatusItem?
     private(set) var attention: AttentionTrackingService?
     private let startup = StartupCoordinator()
@@ -101,6 +102,9 @@ final class AppServices {
         startup.cancel()
         terminating = true
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
+        displayPower?.shutdown()
+        displayPower = nil
+        BluetoothSleepController.restoreIfOwed()
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
     }
@@ -334,6 +338,15 @@ final class AppServices {
             micMute = nil
         }
         micMute?.syncSettings()
+
+        BluetoothSleepController.restoreIfOwed()
+        let displayPowerOn = Self.extensionEnabled(AppStorageKeys.DisplayPower.enabled)
+        if displayPowerOn, displayPower == nil { displayPower = DisplayPowerRuntime() }
+        if !displayPowerOn, let runtime = displayPower {
+            runtime.shutdown()
+            displayPower = nil
+        }
+        displayPower?.syncSettings()
 
         reconcileLidAwakeService()
     }

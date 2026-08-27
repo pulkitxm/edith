@@ -100,6 +100,9 @@ public enum UserOperationCatalog {
         + LidAwakeOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + DisplayPowerOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
 
     private static let featureRegistrations: [RegisteredUserOperation] =
         UsageProjectOperation.allCases.map {
@@ -921,6 +924,21 @@ private extension LidAwakeOperation {
         case .restoreOnQuit:
             userInterface(
                 "Lid Awake settings", "leave sleep disabled after quitting", ["false", "--yes"])
+        }
+    }
+}
+
+private extension DisplayPowerOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .status:
+            userInterface("Display and Power settings", "inspect active display routes")
+        case .brightness:
+            userInterface("Display and Power settings", "set display brightness", ["60"])
+        case .xdr:
+            userInterface("Display and Power settings", "set extra XDR brightness", ["50"])
+        case .bluetoothSleep:
+            userInterface("Display and Power settings", "turn Bluetooth off during sleep", ["on"])
         }
     }
 }
