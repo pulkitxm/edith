@@ -22,6 +22,13 @@ import Testing
         #expect(GhosttyTerminalView.inputText(for: event) == "x")
     }
 
+    @Test func inputMethodCompositionSuppressesControlEventsOnly() {
+        #expect(GhosttyTerminalView.suppresses("\r", whileComposing: true))
+        #expect(GhosttyTerminalView.suppresses("\u{1B}", whileComposing: true))
+        #expect(!GhosttyTerminalView.suppresses("文", whileComposing: true))
+        #expect(!GhosttyTerminalView.suppresses("\r", whileComposing: false))
+    }
+
     @Test func modifierTransitionsSendPressAndRelease() throws {
         let pressed = try #require(
             NSEvent.keyEvent(

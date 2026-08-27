@@ -186,6 +186,30 @@ public final class GhosttyRuntime {
         case GHOSTTY_ACTION_RING_BELL:
             onMain { NSSound.beep() }
             return true
+        case GHOSTTY_ACTION_START_SEARCH:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            let needle = GhosttyTerminalView.decoded(action.action.start_search.needle) ?? ""
+            onMain { view.beginSearch(needle) }
+            return true
+        case GHOSTTY_ACTION_END_SEARCH:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            onMain { view.endSearch() }
+            return true
+        case GHOSTTY_ACTION_SEARCH_TOTAL:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            let value = action.action.search_total.total
+            onMain { view.setSearchTotal(value >= 0 ? value : nil) }
+            return true
+        case GHOSTTY_ACTION_SEARCH_SELECTED:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            let value = action.action.search_selected.selected
+            onMain { view.setSearchSelected(value >= 0 ? value : nil) }
+            return true
+        case GHOSTTY_ACTION_PROGRESS_REPORT:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            let report = action.action.progress_report
+            onMain { view.setProgress(report.state, progress: Int(report.progress)) }
+            return true
         default:
             return false
         }

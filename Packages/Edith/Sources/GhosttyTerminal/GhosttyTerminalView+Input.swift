@@ -13,14 +13,45 @@ extension GhosttyTerminalView {
     }
 
     public override func keyDown(with event: NSEvent) {
-        guard send(event: event, action: GHOSTTY_ACTION_PRESS) else {
+        let action = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if !flags.isDisjoint(with: [.command, .control]) {
+            guard
+                send(
+                    event: event, action: action, text: Self.inputText(for: event), composing: false
+                )
+            else {
+                super.keyDown(with: event)
+                return
+            }
+            return
+        }
+        let markedBefore = hasMarkedText()
+        keyTextAccumulator = []
+        interpretKeyEvents([event])
+        let accumulated = keyTextAccumulator ?? []
+        keyTextAccumulator = nil
+        syncPreedit(clearIfNeeded: markedBefore)
+        let composing = hasMarkedText() || markedBefore
+        if !accumulated.isEmpty {
+            for text in accumulated where !Self.suppresses(text, whileComposing: composing) {
+                _ = send(event: event, action: action, text: text, composing: false)
+            }
+            return
+        }
+        if Self.suppresses(event.characters, whileComposing: composing) { return }
+        guard
+            send(
+                event: event, action: action, text: Self.inputText(for: event), composing: composing
+            )
+        else {
             super.keyDown(with: event)
             return
         }
     }
 
     public override func keyUp(with event: NSEvent) {
-        _ = send(event: event, action: GHOSTTY_ACTION_RELEASE)
+        _ = send(event: event, action: GHOSTTY_ACTION_RELEASE, text: nil, composing: false)
     }
 
     public override func flagsChanged(with event: NSEvent) {
@@ -60,8 +91,13 @@ extension GhosttyTerminalView {
         }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             .subtracting([.capsLock, .function, .numericPad])
+        let character = event.charactersIgnoringModifiers?.lowercased()
+        if flags == [.command, .shift], character == "g" {
+            _ = performBindingAction("navigate_search:previous")
+            return true
+        }
         guard flags == .command else { return super.performKeyEquivalent(with: event) }
-        switch event.charactersIgnoringModifiers?.lowercased() {
+        switch character {
         case "c":
             copyTerminalSelection(nil)
             return true
@@ -74,29 +110,43 @@ extension GhosttyTerminalView {
         case "k":
             clearTerminalScrollback(nil)
             return true
+        case "f":
+            startTerminalSearch(nil)
+            return true
+        case "g":
+            _ = performBindingAction("navigate_search:next")
+            return true
+        case "+", "=":
+            _ = performBindingAction("increase_font_size:1")
+            return true
+        case "-":
+            _ = performBindingAction("decrease_font_size:1")
+            return true
+        case "0":
+            _ = performBindingAction("reset_font_size")
+            return true
         default:
             return super.performKeyEquivalent(with: event)
         }
     }
 
-    private func send(event: NSEvent, action: ghostty_input_action_e) -> Bool {
+    private func send(
+        event: NSEvent, action: ghostty_input_action_e, text: String?, composing: Bool
+    ) -> Bool {
         guard let surface else { return false }
-        let characters = Self.inputText(for: event)
         var key = ghostty_input_key_s()
-        key.action =
-            event.isARepeat && action == GHOSTTY_ACTION_PRESS
-            ? GHOSTTY_ACTION_REPEAT : action
+        key.action = action
         key.mods = Self.mods(from: event.modifierFlags)
         key.consumed_mods = ghostty_input_mods_e(GHOSTTY_MODS_NONE.rawValue)
         key.keycode = UInt32(event.keyCode)
         key.unshifted_codepoint =
             event.charactersIgnoringModifiers?.unicodeScalars.first?.value ?? 0
-        key.composing = false
-        guard let characters else {
+        key.composing = composing
+        guard let text else {
             key.text = nil
             return ghostty_surface_key(surface, key)
         }
-        return characters.withCString { pointer in
+        return text.withCString { pointer in
             key.text = pointer
             return ghostty_surface_key(surface, key)
         }
@@ -110,6 +160,13 @@ extension GhosttyTerminalView {
             return nil
         }
         return characters
+    }
+
+    static func suppresses(_ text: String?, whileComposing composing: Bool) -> Bool {
+        guard composing, let text, text.unicodeScalars.count == 1,
+            let scalar = text.unicodeScalars.first
+        else { return false }
+        return scalar.value < 0x20
     }
 
     private func point(for event: NSEvent) -> (Double, Double) {
@@ -325,6 +382,10 @@ extension GhosttyTerminalView {
         _ = performBindingAction("clear_screen")
     }
 
+    @objc func startTerminalSearch(_ sender: Any?) {
+        _ = performBindingAction(hasSelection ? "search_selection" : "start_search")
+    }
+
     @discardableResult
     func performBindingAction(_ name: String) -> Bool {
         guard let surface else { return false }
@@ -376,6 +437,9 @@ extension GhosttyTerminalView {
             withTitle: "Select All", action: #selector(selectAllTerminalText(_:)), keyEquivalent: ""
         )
         selectAll.target = self
+        let find = menu.addItem(
+            withTitle: "Find", action: #selector(startTerminalSearch(_:)), keyEquivalent: "")
+        find.target = self
         menu.addItem(.separator())
         let clear = menu.addItem(
             withTitle: "Clear Scrollback", action: #selector(clearTerminalScrollback(_:)),

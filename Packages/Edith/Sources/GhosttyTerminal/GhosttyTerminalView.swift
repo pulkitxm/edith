@@ -17,12 +17,19 @@ public final class GhosttyTerminalView: NSView {
     var temporaryDropFiles = Set<URL>()
     private var closed = false
     private var drawScheduled = false
+    private var renderingActive = true
     var terminalCursor = NSCursor.iBeam
     var cursorHidden = false
     var commandClickReleaseActive = false
     var commandClickOpenedTarget = false
     var lastMousePoint: NSPoint?
     let linkHoverView = TerminalLinkHoverView(frame: .zero)
+    let searchBar = TerminalSearchBar(frame: .zero)
+    let progressStrip = TerminalProgressStrip(frame: .zero)
+    var searchTotal: Int?
+    var searchSelected: Int?
+    let markedText = NSMutableAttributedString()
+    var keyTextAccumulator: [String]?
 
     public override var isFlipped: Bool { false }
 
@@ -69,6 +76,28 @@ public final class GhosttyTerminalView: NSView {
         wantsLayer = true
         registerForDraggedTypes(Array(Self.dropTypes))
         addSubview(linkHoverView)
+        searchBar.translatesAutoresizingMaskIntoConstraints = false
+        progressStrip.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(searchBar)
+        addSubview(progressStrip)
+        NSLayoutConstraint.activate([
+            searchBar.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            searchBar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            progressStrip.topAnchor.constraint(equalTo: topAnchor),
+            progressStrip.leadingAnchor.constraint(equalTo: leadingAnchor),
+            progressStrip.trailingAnchor.constraint(equalTo: trailingAnchor),
+            progressStrip.heightAnchor.constraint(equalToConstant: 3),
+        ])
+        searchBar.onQuery = { [weak self] query in
+            _ = self?.performBindingAction("search:\(query)")
+        }
+        searchBar.onNavigate = { [weak self] previous in
+            _ = self?.performBindingAction(
+                previous ? "navigate_search:previous" : "navigate_search:next")
+        }
+        searchBar.onClose = { [weak self] in
+            _ = self?.performBindingAction("end_search")
+        }
         GhosttySurfaceRegistry.shared.register(self)
     }
 
@@ -98,6 +127,7 @@ public final class GhosttyTerminalView: NSView {
         super.viewDidMoveToWindow()
         guard window != nil else { return }
         startIfNeeded()
+        applyPresentationState()
     }
 
     private func startIfNeeded() {
@@ -133,6 +163,7 @@ public final class GhosttyTerminalView: NSView {
             surface, config.scale_factor, config.scale_factor)
         applySize()
         ghostty_surface_set_focus(surface, window?.firstResponder === self)
+        applyPresentationState()
     }
 
     public func apply(theme newTheme: GhosttyTheme) {
@@ -186,6 +217,34 @@ public final class GhosttyTerminalView: NSView {
         let scale = window?.backingScaleFactor ?? 2
         ghostty_surface_set_content_scale(surface, scale, scale)
         applySize()
+        applyPresentationState()
+    }
+
+    public override func viewDidHide() {
+        super.viewDidHide()
+        applyPresentationState()
+    }
+
+    public override func viewDidUnhide() {
+        super.viewDidUnhide()
+        applyPresentationState()
+    }
+
+    public func setRenderingActive(_ active: Bool) {
+        guard renderingActive != active else { return }
+        renderingActive = active
+        applyPresentationState()
+    }
+
+    private func applyPresentationState() {
+        guard let surface else { return }
+        ghostty_surface_set_occlusion(surface, !renderingActive || isHidden || window == nil)
+        if let number = window?.screen?.deviceDescription[.init("NSScreenNumber")] as? NSNumber {
+            ghostty_surface_set_display_id(surface, number.uint32Value)
+        }
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        ghostty_surface_set_color_scheme(
+            surface, dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
     }
 
     public override func layout() {

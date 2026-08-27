@@ -25,12 +25,14 @@ struct GhosttyPane: NSViewRepresentable {
     func makeNSView(context: Context) -> GhosttyTerminalView {
         let view = holder.retainedGhosttyView(launch: launch, theme: theme)
         view.onDropFiles = onDropFiles
+        view.setRenderingActive(active)
         return view
     }
 
     func updateNSView(_ view: GhosttyTerminalView, context: Context) {
         view.apply(theme: theme)
         view.onDropFiles = onDropFiles
+        view.setRenderingActive(active)
         guard active, wantsFocus else { return }
         DispatchQueue.main.async { view.focusIfNeeded() }
     }

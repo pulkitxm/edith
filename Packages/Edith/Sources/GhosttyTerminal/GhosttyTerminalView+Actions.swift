@@ -48,6 +48,154 @@ final class TerminalLinkHoverView: NSView {
     }
 }
 
+final class TerminalSearchField: NSSearchField {
+    var onClose: (() -> Void)?
+    var onNext: ((Bool) -> Void)?
+
+    override func cancelOperation(_ sender: Any?) {
+        onClose?()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if event.keyCode == 36 || event.keyCode == 76 {
+            onNext?(flags.contains(.shift))
+            return
+        }
+        if flags == .command, event.charactersIgnoringModifiers?.lowercased() == "g" {
+            onNext?(false)
+            return
+        }
+        if flags == [.command, .shift], event.charactersIgnoringModifiers?.lowercased() == "g" {
+            onNext?(true)
+            return
+        }
+        super.keyDown(with: event)
+    }
+}
+
+final class TerminalSearchBar: NSVisualEffectView, NSSearchFieldDelegate {
+    let field = TerminalSearchField(frame: .zero)
+    private let countLabel = NSTextField(labelWithString: "")
+    private let previousButton = NSButton()
+    private let nextButton = NSButton()
+    private let closeButton = NSButton()
+    var onQuery: ((String) -> Void)?
+    var onNavigate: ((Bool) -> Void)?
+    var onClose: (() -> Void)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        material = .hudWindow
+        blendingMode = .withinWindow
+        state = .active
+        wantsLayer = true
+        layer?.cornerRadius = 8
+        layer?.masksToBounds = true
+        field.placeholderString = "Find in terminal"
+        field.delegate = self
+        field.onClose = { [weak self] in self?.onClose?() }
+        field.onNext = { [weak self] previous in self?.onNavigate?(previous) }
+        countLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        countLabel.textColor = .secondaryLabelColor
+        countLabel.alignment = .right
+        configure(previousButton, symbol: "chevron.up", action: #selector(previous))
+        configure(nextButton, symbol: "chevron.down", action: #selector(next))
+        configure(closeButton, symbol: "xmark", action: #selector(close))
+        let stack = NSStackView(views: [field, countLabel, previousButton, nextButton, closeButton])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 5
+        stack.edgeInsets = NSEdgeInsets(top: 6, left: 8, bottom: 6, right: 6)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            field.widthAnchor.constraint(equalToConstant: 210),
+            countLabel.widthAnchor.constraint(equalToConstant: 64),
+            previousButton.widthAnchor.constraint(equalToConstant: 24),
+            nextButton.widthAnchor.constraint(equalToConstant: 24),
+            closeButton.widthAnchor.constraint(equalToConstant: 24),
+        ])
+        isHidden = true
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    func controlTextDidChange(_ notification: Notification) {
+        onQuery?(field.stringValue)
+    }
+
+    func begin(_ needle: String, in window: NSWindow?) {
+        field.stringValue = needle
+        isHidden = false
+        onQuery?(needle)
+        window?.makeFirstResponder(field)
+    }
+
+    func update(selected: Int?, total: Int?) {
+        guard let total, total > 0 else {
+            countLabel.stringValue = "No results"
+            return
+        }
+        let selected = min(total, max(1, (selected ?? 0) + 1))
+        countLabel.stringValue = "\(selected) of \(total)"
+    }
+
+    private func configure(_ button: NSButton, symbol: String, action: Selector) {
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        button.bezelStyle = .inline
+        button.isBordered = false
+        button.target = self
+        button.action = action
+    }
+
+    @objc private func previous() {
+        onNavigate?(true)
+    }
+
+    @objc private func next() {
+        onNavigate?(false)
+    }
+
+    @objc private func close() {
+        onClose?()
+    }
+}
+
+final class TerminalProgressStrip: NSProgressIndicator {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        style = .bar
+        minValue = 0
+        maxValue = 100
+        isHidden = true
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    func update(_ state: ghostty_action_progress_report_state_e, progress: Int) {
+        switch state {
+        case GHOSTTY_PROGRESS_STATE_REMOVE:
+            stopAnimation(nil)
+            isHidden = true
+        case GHOSTTY_PROGRESS_STATE_INDETERMINATE:
+            isHidden = false
+            isIndeterminate = true
+            startAnimation(nil)
+        default:
+            stopAnimation(nil)
+            isHidden = false
+            isIndeterminate = progress < 0
+            doubleValue = Double(max(0, progress))
+            if isIndeterminate { startAnimation(nil) }
+        }
+    }
+}
+
 extension GhosttyTerminalView {
     static func decoded(_ bytes: UnsafePointer<CChar>?, count: Int? = nil) -> String? {
         guard let bytes else { return nil }
@@ -179,6 +327,32 @@ extension GhosttyTerminalView {
 
     func selectionChanged() {
         NSAccessibility.post(element: self, notification: .selectedTextChanged)
+    }
+
+    func beginSearch(_ needle: String) {
+        searchSelected = nil
+        searchTotal = nil
+        searchBar.update(selected: nil, total: nil)
+        searchBar.begin(needle, in: window)
+    }
+
+    func endSearch() {
+        searchBar.isHidden = true
+        window?.makeFirstResponder(self)
+    }
+
+    func setSearchTotal(_ value: Int?) {
+        searchTotal = value
+        searchBar.update(selected: searchSelected, total: searchTotal)
+    }
+
+    func setSearchSelected(_ value: Int?) {
+        searchSelected = value
+        searchBar.update(selected: searchSelected, total: searchTotal)
+    }
+
+    func setProgress(_ state: ghostty_action_progress_report_state_e, progress: Int) {
+        progressStrip.update(state, progress: progress)
     }
 
     public override func isAccessibilityElement() -> Bool { true }
