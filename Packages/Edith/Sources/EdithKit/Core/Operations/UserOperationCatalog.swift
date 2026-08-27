@@ -100,6 +100,9 @@ public enum UserOperationCatalog {
         + LidAwakeOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + RadialLauncherOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
 
     private static let featureRegistrations: [RegisteredUserOperation] =
         UsageProjectOperation.allCases.map {
@@ -921,6 +924,17 @@ private extension LidAwakeOperation {
         case .restoreOnQuit:
             userInterface(
                 "Lid Awake settings", "leave sleep disabled after quitting", ["false", "--yes"])
+        }
+    }
+}
+
+private extension RadialLauncherOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .show:
+            userInterface("Radial Launcher", "show the action wheel")
+        case .profile:
+            userInterface("Radial Launcher settings", "inspect the active profile")
         }
     }
 }

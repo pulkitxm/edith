@@ -18,6 +18,7 @@ public typealias ExtensionLifecycleState = EdithCore.ExtensionLifecycleState
 public typealias PlatformCapability = EdithCore.PlatformCapability
 public typealias PlatformCapabilityState = EdithCore.PlatformCapabilityState
 public typealias PlatformCapabilities = EdithCore.PlatformCapabilities
+public typealias RadialLauncherPreferenceKeys = EdithCore.RadialLauncherPreferenceKeys
 
 public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
     case calendar
@@ -137,7 +138,7 @@ public extension ExtensionRegistryEntry {
         case "usage", "machines": [.notifications]
         case "system": [.accessibility, .inputMonitoring]
         case "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation]
-        case "clipboard": [.accessibility]
+        case "clipboard", "radialLauncher": [.accessibility]
         default: []
         }
     }
