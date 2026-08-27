@@ -32,3 +32,4 @@ explicit alternatives.
 - [`ed capture`](./README.md)
 - [`ed capture screenshot`](./screenshot.md)
 - [`ed extensions enable`](../extensions/enable.md)
+- [All `ed` commands](../README.md)

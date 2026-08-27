@@ -3,13 +3,22 @@ import Carbon.HIToolbox
 import EdithKit
 import Observation
 
+protocol CaptureScreenshotCapturing: Sendable {
+    func capture() async throws -> URL
+    func cancel()
+}
+
+extension CaptureScreenshotSession: CaptureScreenshotCapturing {}
+
 @MainActor
 @Observable
 final class CaptureToolsStore: FeatureModule {
     private(set) var history: [CaptureRecognition] = []
     private(set) var inProgress = false
     private(set) var errorMessage: String?
-    @ObservationIgnored private let session = CaptureScreenshotSession()
+    @ObservationIgnored private let session: any CaptureScreenshotCapturing
+    @ObservationIgnored private let screenCaptureGranted: () -> Bool
+    @ObservationIgnored private let requestScreenCapture: () -> Void
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var readObserver: NSObjectProtocol?
     @ObservationIgnored private var screenshotObserver: NSObjectProtocol?
@@ -17,7 +26,26 @@ final class CaptureToolsStore: FeatureModule {
     @ObservationIgnored private var generation = 0
 
     init() {
+        session = CaptureScreenshotSession()
+        screenCaptureGranted = { CGPreflightScreenCaptureAccess() }
+        requestScreenCapture = { IPC.post(IPC.Name.grantScreenRecording) }
         history = CaptureHistoryStore.load()
+        startObservers()
+    }
+
+    init(
+        session: any CaptureScreenshotCapturing,
+        screenCaptureGranted: @escaping () -> Bool,
+        requestScreenCapture: @escaping () -> Void
+    ) {
+        self.session = session
+        self.screenCaptureGranted = screenCaptureGranted
+        self.requestScreenCapture = requestScreenCapture
+        history = CaptureHistoryStore.load()
+        startObservers()
+    }
+
+    private func startObservers() {
         readObserver = IPC.observe(IPC.Name.requestScreenRead) { [weak self] in
             self?.start(.read)
         }
@@ -42,9 +70,9 @@ final class CaptureToolsStore: FeatureModule {
             cancel()
             return
         }
-        guard CGPreflightScreenCaptureAccess() else {
+        guard screenCaptureGranted() else {
             errorMessage = "Screen Recording access is required to capture the screen."
-            IPC.post(IPC.Name.grantScreenRecording)
+            requestScreenCapture()
             return
         }
         generation &+= 1

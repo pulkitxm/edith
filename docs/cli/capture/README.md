@@ -10,6 +10,9 @@ result after a screen read, keeps a bounded recent-read history, and shows a
 transient preview with Copy image, Save, Copy result, and Discard actions. A
 single strict HTTP or HTTPS code also gets an explicit Open action.
 
+The first capture requests Screen Recording access when it is missing. Recent
+reads can be copied again or cleared from Capture Tools settings.
+
 ## Commands
 
 | Command | What it does |
