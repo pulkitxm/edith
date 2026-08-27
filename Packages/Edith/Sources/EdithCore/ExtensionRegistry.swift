@@ -106,7 +106,7 @@ public enum ExtensionRegistry {
     public static let entries: [ExtensionRegistryEntry] = [
         ExtensionRegistryEntry(
             id: "attention", title: "Attention",
-            subtitle: "Understand where your time goes and protect focused work.",
+            subtitle: "Understand where your time goes and protect focused work!",
             symbolName: "hourglass", group: .utilities, featured: true,
             defaultsKey: "tabAttentionEnabled", requiredCapabilities: [.runningApplications]),
         ExtensionRegistryEntry(
