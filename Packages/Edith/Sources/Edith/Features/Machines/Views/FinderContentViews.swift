@@ -11,7 +11,8 @@ enum FileIcons {
         if entry.kind == .symlink { return cached(key: "__link", type: .symbolicLink) }
         let descriptor = FileIconCatalog.descriptor(
             name: entry.name, path: entry.path, fileExtension: entry.fileExtension)
-        let key = [descriptor.badge, descriptor.color.rawValue, descriptor.symbol].joined(separator: ":")
+        let key = [descriptor.badge, descriptor.color.rawValue, descriptor.symbol].joined(
+            separator: ":")
         if let existing = cache[key] { return existing }
         let image = FileIconRenderer.image(for: descriptor)
         cache[key] = image

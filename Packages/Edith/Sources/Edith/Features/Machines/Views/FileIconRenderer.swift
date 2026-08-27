@@ -50,7 +50,8 @@ enum FileIconRenderer {
         shape.lineWidth = 1.4
         shape.stroke()
 
-        let wash = NSBezierPath(roundedRect: NSRect(x: 9, y: 7, width: 43, height: 50), xRadius: 2, yRadius: 2)
+        let wash = NSBezierPath(
+            roundedRect: NSRect(x: 9, y: 7, width: 43, height: 50), xRadius: 2, yRadius: 2)
         accent.withAlphaComponent(0.08).setFill()
         wash.fill()
 
@@ -71,7 +72,8 @@ enum FileIconRenderer {
 
     private static func drawSymbol(_ descriptor: FileIconDescriptor) {
         let accent = color(descriptor.color)
-        let base = NSImage(systemSymbolName: descriptor.symbol, accessibilityDescription: nil)
+        let base =
+            NSImage(systemSymbolName: descriptor.symbol, accessibilityDescription: nil)
             ?? NSImage(systemSymbolName: "doc.fill", accessibilityDescription: nil)
         guard let base else { return }
         let configuration = NSImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
@@ -83,7 +85,8 @@ enum FileIconRenderer {
 
     private static func drawBadge(_ descriptor: FileIconDescriptor) {
         let accent = color(descriptor.color)
-        let badge = NSBezierPath(roundedRect: NSRect(x: 10, y: 8, width: 41, height: 17), xRadius: 5, yRadius: 5)
+        let badge = NSBezierPath(
+            roundedRect: NSRect(x: 10, y: 8, width: 41, height: 17), xRadius: 5, yRadius: 5)
         accent.setFill()
         badge.fill()
 
