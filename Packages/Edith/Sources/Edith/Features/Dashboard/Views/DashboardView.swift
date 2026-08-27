@@ -360,16 +360,22 @@ struct DashboardView: View {
 
     private func rangeButton(_ title: String, _ r: DashRange) -> some View {
         let active = isActive(r)
-        return Button(title) { model.range = r }
-            .buttonStyle(.edith(.borderless))
-            .font(DashSkin.mono(11, weight: active ? .semibold : .regular))
-            .padding(.horizontal, UIScale.pt(11)).padding(.vertical, UIScale.pt(5))
-            .widgetBar(
-                cornerRadius: 8,
-                fill: active ? AnyShapeStyle(acc) : AnyShapeStyle(DashSkin.paper2(dark)),
-                stroke: active ? Color.clear : DashSkin.lineStrong(dark)
-            )
-            .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
+        return Button {
+            model.range = r
+        } label: {
+            Text(title)
+                .font(DashSkin.mono(11, weight: active ? .semibold : .regular))
+                .padding(.horizontal, UIScale.pt(11))
+                .padding(.vertical, UIScale.pt(5))
+                .widgetBar(
+                    cornerRadius: 8,
+                    fill: active ? AnyShapeStyle(acc) : AnyShapeStyle(DashSkin.paper2(dark)),
+                    stroke: active ? Color.clear : DashSkin.lineStrong(dark)
+                )
+                .foregroundStyle(
+                    active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
+        }
+        .buttonStyle(.edith(.borderless))
     }
 
     private func isActive(_ r: DashRange) -> Bool {

@@ -612,38 +612,45 @@ private struct DrivePickerSheet: View {
     }
 
     private func folderRow(_ folder: String) -> some View {
-        HStack(spacing: UIScale.pt(10)) {
+        ZStack(alignment: .trailing) {
             Button {
                 model.toggleDrive(folder)
             } label: {
-                Image(
-                    systemName: model.isDriveSelected(folder)
-                        ? "checkmark.square.fill" : "square"
-                )
-                .foregroundStyle(model.isDriveSelected(folder) ? DashSkin.accent(dark) : .secondary)
+                HStack(spacing: UIScale.pt(10)) {
+                    Image(
+                        systemName: model.isDriveSelected(folder)
+                            ? "checkmark.square.fill" : "square"
+                    )
+                    .foregroundStyle(
+                        model.isDriveSelected(folder) ? DashSkin.accent(dark) : .secondary)
+                    Image(systemName: "folder.fill")
+                        .font(.system(size: UIScale.pt(12)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                    VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                        Text((folder as NSString).lastPathComponent)
+                            .font(.system(size: UIScale.pt(13), weight: .medium))
+                        Text((folder as NSString).abbreviatingWithTildeInPath)
+                            .font(.system(size: UIScale.pt(10.5), design: .monospaced))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .lineLimit(1).truncationMode(.middle)
+                    }
+                    Spacer()
+                    Color.clear.frame(width: UIScale.pt(28), height: UIScale.pt(28))
+                }
+                .padding(.horizontal, UIScale.pt(12)).padding(.vertical, UIScale.pt(8))
+                .widgetBar(cornerRadius: 8, fill: DashSkin.paper2(dark))
             }
             .buttonStyle(.edith(.borderless))
-            Image(systemName: "folder.fill")
-                .font(.system(size: UIScale.pt(12))).foregroundStyle(DashSkin.inkFaint(dark))
-            VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                Text((folder as NSString).lastPathComponent)
-                    .font(.system(size: UIScale.pt(13), weight: .medium))
-                Text((folder as NSString).abbreviatingWithTildeInPath)
-                    .font(.system(size: UIScale.pt(10.5), design: .monospaced))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .lineLimit(1).truncationMode(.middle)
-            }
-            Spacer()
             Button {
                 model.removeCustomFolder(folder)
             } label: {
                 Image(systemName: "trash").font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(.secondary)
             }
-            .buttonStyle(.edith(.borderless)).help("Remove this folder")
+            .buttonStyle(.edith(.borderless))
+            .padding(.trailing, UIScale.pt(12))
+            .help("Remove this folder")
         }
-        .padding(.horizontal, UIScale.pt(12)).padding(.vertical, UIScale.pt(8))
-        .widgetBar(cornerRadius: 8, fill: DashSkin.paper2(dark))
     }
 
     private func chooseFolder() {
@@ -679,19 +686,12 @@ private struct CleanerCategoryRow: View {
 
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
-            HStack(spacing: UIScale.pt(10)) {
-                Button {
-                    model.toggleCategory(category.id)
-                } label: {
-                    Image(systemName: checkboxSymbol)
-                        .foregroundStyle(
-                            category.selection == .none ? .secondary : DashSkin.accent(dark))
-                }
-                .buttonStyle(.edith(.borderless))
+            ZStack {
                 Button {
                     model.toggleExpand(category.id)
                 } label: {
-                    HStack(spacing: UIScale.pt(8)) {
+                    HStack(spacing: UIScale.pt(10)) {
+                        Color.clear.frame(width: UIScale.pt(28), height: UIScale.pt(28))
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                             .font(.system(size: UIScale.pt(9)))
                             .foregroundStyle(DashSkin.inkFaint(dark))
@@ -708,20 +708,38 @@ private struct CleanerCategoryRow: View {
                             .font(.system(size: UIScale.pt(12), design: .monospaced))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .frame(width: UIScale.pt(72), alignment: .trailing)
+                        Text("Clean")
+                            .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                            .hidden()
+                            .frame(minWidth: UIScale.pt(28), minHeight: UIScale.pt(28))
                     }
+                    .padding(.horizontal, UIScale.pt(6))
+                    .padding(.vertical, UIScale.pt(7))
+                    .background(
+                        RoundedRectangle(cornerRadius: UIScale.pt(7))
+                            .fill(headerHover ? DashSkin.inkFaint(dark).opacity(0.1) : .clear)
+                    )
                 }
                 .buttonStyle(.edith(.borderless))
-                Button("Clean") { confirmClean = true }
-                    .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                .onHover { headerHover = $0 }
+                HStack {
+                    Button {
+                        model.toggleCategory(category.id)
+                    } label: {
+                        Image(systemName: checkboxSymbol)
+                            .foregroundStyle(
+                                category.selection == .none ? .secondary : DashSkin.accent(dark))
+                    }
                     .buttonStyle(.edith(.borderless))
-                    .disabled(model.selectedItemCount(categoryID: category.id) == 0)
+                    Spacer()
+                    Button("Clean") { confirmClean = true }
+                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                        .buttonStyle(.edith(.borderless))
+                        .disabled(model.selectedItemCount(categoryID: category.id) == 0)
+                }
+                .padding(.horizontal, UIScale.pt(6))
+                .padding(.vertical, UIScale.pt(7))
             }
-            .padding(.horizontal, UIScale.pt(6)).padding(.vertical, UIScale.pt(7))
-            .background(
-                RoundedRectangle(cornerRadius: UIScale.pt(7))
-                    .fill(headerHover ? DashSkin.inkFaint(dark).opacity(0.1) : .clear)
-            )
-            .onHover { headerHover = $0 }
             if isExpanded {
                 if showItemFilter {
                     SearchField(

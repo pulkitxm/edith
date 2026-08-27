@@ -94,14 +94,14 @@ struct HerdrPage: View {
                 .font(.system(size: UIScale.pt(12), weight: .semibold))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+                .padding(UIScale.pt(4))
+                .widgetBar(
+                    cornerRadius: 8,
+                    fill: DashSkin.paper2(dark),
+                    stroke: DashSkin.line(dark)
+                )
         }
         .buttonStyle(.edith(.borderless))
-        .padding(UIScale.pt(4))
-        .widgetBar(
-            cornerRadius: 8,
-            fill: DashSkin.paper2(dark),
-            stroke: DashSkin.line(dark)
-        )
         .help(store.detailOpen ? "Hide details" : "Show details")
         .accessibilityLabel(store.detailOpen ? "Hide details" : "Show details")
     }
@@ -140,10 +140,14 @@ struct HerdrPage: View {
                 .font(.system(size: UIScale.pt(12), weight: .semibold))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+                .padding(UIScale.pt(4))
+                .widgetBar(
+                    cornerRadius: 8,
+                    fill: DashSkin.paper2(dark),
+                    stroke: DashSkin.line(dark)
+                )
         }
         .buttonStyle(.edith(.borderless))
-        .padding(UIScale.pt(4))
-        .widgetBar(cornerRadius: 8, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
         .help(store.railOpen ? "Hide the list" : "Show the list")
         .accessibilityLabel(store.railOpen ? "Hide the list" : "Show the list")
     }

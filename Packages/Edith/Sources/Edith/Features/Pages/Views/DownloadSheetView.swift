@@ -481,8 +481,14 @@ struct DownloadSheet: View {
         case .interrupted: isActive = false; tint = .orange
         default: isActive = false; tint = DashSkin.inkFaint(dark)
         }
+        let actionInset: CGFloat
+        switch item.status {
+        case .done: actionInset = UIScale.pt(64)
+        case .error, .interrupted: actionInset = UIScale.pt(48)
+        default: actionInset = UIScale.pt(34)
+        }
 
-        return HStack(spacing: UIScale.pt(10)) {
+        return ZStack(alignment: .trailing) {
             Button {
                 if case .done = item.status {
                     downloader.openResult(item)
@@ -573,61 +579,64 @@ struct DownloadSheet: View {
                     Spacer(minLength: 4)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, UIScale.pt(8))
+                .padding(.leading, UIScale.pt(10))
+                .padding(.trailing, UIScale.pt(10) + actionInset)
+                .background(
+                    isActive
+                        ? DashSkin.paper2(dark) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(9))
+                )
+                .overlay(
+                    isActive
+                        ? RoundedRectangle(cornerRadius: UIScale.pt(9)).strokeBorder(
+                            theme.opacity(0.3), lineWidth: UIScale.pt(1))
+                        : nil
+                )
             }
             .buttonStyle(.edith(.borderless))
 
-            switch item.status {
-            case .queued, .resolving, .downloading:
-                Button {
-                    downloader.cancel(item)
-                } label: {
-                    Image(systemName: "xmark")
-                }
-                .buttonStyle(.edith(.toolbar))
-                .font(.system(size: UIScale.pt(11)))
-                .foregroundStyle(.red)
-                .help("Cancel this download")
-            case .error, .interrupted:
-                Button("Retry") {
-                    downloader.retry(item)
-                }
-                .buttonStyle(.edith(.toolbar))
-                .font(.system(size: UIScale.pt(10), weight: .medium))
-                .foregroundStyle(theme)
-                .disabled(downloader.isRunning)
-            case .done:
-                HStack(spacing: UIScale.pt(4)) {
+            Group {
+                switch item.status {
+                case .queued, .resolving, .downloading:
                     Button {
-                        downloader.openResult(item)
+                        downloader.cancel(item)
                     } label: {
-                        Image(systemName: "arrow.up.forward.app")
+                        Image(systemName: "xmark")
                     }
-                    .help("Open downloaded file")
-                    Button {
-                        downloader.revealResult(item)
-                    } label: {
-                        Image(systemName: "folder")
+                    .buttonStyle(.edith(.toolbar))
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(.red)
+                    .help("Cancel this download")
+                case .error, .interrupted:
+                    Button("Retry") {
+                        downloader.retry(item)
                     }
-                    .help("Reveal downloaded file")
+                    .buttonStyle(.edith(.toolbar))
+                    .font(.system(size: UIScale.pt(10), weight: .medium))
+                    .foregroundStyle(theme)
+                    .disabled(downloader.isRunning)
+                case .done:
+                    HStack(spacing: UIScale.pt(4)) {
+                        Button {
+                            downloader.openResult(item)
+                        } label: {
+                            Image(systemName: "arrow.up.forward.app")
+                        }
+                        .help("Open downloaded file")
+                        Button {
+                            downloader.revealResult(item)
+                        } label: {
+                            Image(systemName: "folder")
+                        }
+                        .help("Reveal downloaded file")
+                    }
+                    .buttonStyle(.edith(.toolbar))
+                    .font(.system(size: UIScale.pt(11)))
                 }
-                .buttonStyle(.edith(.toolbar))
-                .font(.system(size: UIScale.pt(11)))
             }
-
+            .padding(.trailing, UIScale.pt(10))
         }
-        .padding(.vertical, UIScale.pt(8))
-        .padding(.horizontal, UIScale.pt(10))
-        .background(
-            isActive
-                ? DashSkin.paper2(dark) : Color.clear,
-            in: RoundedRectangle(cornerRadius: UIScale.pt(9))
-        )
-        .overlay(
-            isActive
-                ? RoundedRectangle(cornerRadius: UIScale.pt(9)).strokeBorder(
-                    theme.opacity(0.3), lineWidth: UIScale.pt(1))
-                : nil
-        )
     }
 
     private func historyRow(_ item: YoutubeDownloader.DownloadItem) -> some View {
