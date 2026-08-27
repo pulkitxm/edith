@@ -560,6 +560,39 @@ public enum ExtensionLifecycleCatalog {
                     "ed music players --json")
             ]),
         descriptor(
+            "mediaToolkit", "Convert and resize images or compress videos without uploading them.",
+            workflows: [
+                instruction(
+                    "images", "Convert images",
+                    "Process one or many images into JPEG, PNG or HEIC with optional resizing."),
+                instruction(
+                    "video", "Compress a video",
+                    "Encode a complete H.264 copy under a chosen file-size limit."),
+            ],
+            prerequisites: [
+                instruction(
+                    "files", "Choose local files",
+                    "Use image or video files that macOS can decode.")
+            ],
+            examples: [
+                "ed extensions enable mediaToolkit",
+                "ed media convert-images ~/Pictures/input.png --to ~/Pictures/Converted --json",
+                "ed media compress-video ~/Movies/input.mov --to ~/Movies --target-mb 20 --json",
+            ],
+            docs: [documentation("guide", "Media Toolkit guide", "docs/cli/media/README.md")],
+            recovery: [
+                instruction(
+                    "doctor", "Check Media Toolkit readiness",
+                    "Confirm local encoders and processing defaults are available.",
+                    "ed extensions doctor mediaToolkit --json")
+            ],
+            verification: [
+                instruction(
+                    "settings", "Inspect media defaults",
+                    "Confirm the extension and processing defaults are available.",
+                    "ed config ls --group media --json")
+            ]),
+        descriptor(
             "calendar", "See upcoming events beside the work they shape.",
             workflows: [
                 instruction(
@@ -585,38 +618,6 @@ public enum ExtensionLifecycleCatalog {
                 instruction(
                     "events", "List events", "Confirm upcoming events can be read.",
                     "ed calendar ls --json")
-            ]),
-        descriptor(
-            "mediaToolkit", "Convert and resize images or compress videos without uploading them.",
-            workflows: [
-                instruction(
-                    "images", "Convert images",
-                    "Process one or many images into JPEG, PNG or HEIC with optional resizing."),
-                instruction(
-                    "video", "Compress a video",
-                    "Encode a complete H.264 copy under a chosen file-size limit."),
-            ],
-            prerequisites: [
-                instruction(
-                    "files", "Choose local files",
-                    "Use image or video files that macOS can decode.")
-            ],
-            examples: [
-                "ed extensions enable mediaToolkit",
-                "ed media convert-images ~/Pictures/input.png --to ~/Pictures/Converted --json",
-                "ed media compress-video ~/Movies/input.mov --to ~/Movies --target-mb 20 --json",
-            ],
-            docs: [documentation("guide", "Media Toolkit guide", "docs/cli/media/README.md")],
-            recovery: [
-                instruction(
-                    "format", "Try another source format",
-                    "Open the input in QuickTime Player or Preview to confirm macOS can decode it.")
-            ],
-            verification: [
-                instruction(
-                    "settings", "Inspect media defaults",
-                    "Confirm the extension and processing defaults are available.",
-                    "ed config ls --group media --json")
             ]),
         descriptor(
             "notchShelf", "Park files and glance at media, camera and alerts around the notch.",

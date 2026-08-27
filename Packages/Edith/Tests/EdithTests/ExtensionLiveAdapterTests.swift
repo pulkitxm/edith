@@ -245,6 +245,21 @@ import EdithCore
                 == .failed("The configured music library path is not a folder."))
     }
 
+    @Test func mediaToolkitAdapterValidatesStoredDefaults() {
+        let suite = "test.extension-adapter.media-toolkit.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        #expect(
+            ExtensionLiveAdapters.mediaToolkitReadiness(defaults: defaults)
+                == .ready("ImageIO and AVFoundation processing defaults are ready."))
+        defaults.set("webp", forKey: AppStorageKeys.MediaToolkit.imageFormat)
+        #expect(
+            ExtensionLiveAdapters.mediaToolkitReadiness(defaults: defaults)
+                == .needsSetup(
+                    "Reset the stored Media Toolkit format, quality, dimensions or size limit."))
+    }
+
     @Test func calendarAdapterMapsPermissionAndContentStates() {
         #expect(
             ExtensionLiveAdapters.calendarReadiness(

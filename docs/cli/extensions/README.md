@@ -77,7 +77,7 @@ walks, and its order is the order `ls` prints. The registered entries are:
 
 The same extensions, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the
-eight the welcome tour shows before you ask it for all of them.
+entries the welcome tour prioritizes.
 
 | ID | Key | Featured | Required permissions | Optional permissions | Required tools | Optional tools |
 | --- | --- | --- | --- | --- | --- | --- |

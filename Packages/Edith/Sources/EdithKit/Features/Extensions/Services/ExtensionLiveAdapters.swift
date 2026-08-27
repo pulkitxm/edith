@@ -65,8 +65,8 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "attention", "usage", "quinjet", "system", "appMaintenance", "machines", "systemStats",
-        "micMute", "lidAwake", "music", "calendar", "notchShelf", "clipboard", "finderTools",
-        "focusDim", "presenter", "emoji", "colorPicker", "windowTools",
+        "micMute", "lidAwake", "music", "mediaToolkit", "calendar", "notchShelf", "clipboard",
+        "finderTools", "focusDim", "presenter", "emoji", "colorPicker", "windowTools",
     ]
 
     public static func provider(
@@ -101,6 +101,7 @@ public enum ExtensionLiveAdapters {
         case "micMute": microphoneReadiness()
         case "lidAwake": lidAwakeReadiness()
         case "music": musicReadiness()
+        case "mediaToolkit": mediaToolkitReadiness(defaults: defaults)
         case "calendar": calendarReadiness()
         case "notchShelf": shelfReadiness()
         case "clipboard": clipboardReadiness()
@@ -137,6 +138,31 @@ public enum ExtensionLiveAdapters {
             configured: configured,
             readyDetail: "Attention tracking is configured for the selected sources.",
             setupDetail: "Turn on application tracking, browser tracking, or both."
+        ).readiness
+    }
+
+    static func mediaToolkitReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
+        let format =
+            defaults.string(forKey: AppStorageKeys.MediaToolkit.imageFormat)
+            ?? MediaImageFormat.jpeg.rawValue
+        let maxDimension =
+            defaults.object(forKey: AppStorageKeys.MediaToolkit.imageMaxDimension)
+            as? Int ?? 1600
+        let quality =
+            defaults.object(forKey: AppStorageKeys.MediaToolkit.imageQuality)
+            as? Double ?? 0.82
+        let target =
+            defaults.object(forKey: AppStorageKeys.MediaToolkit.videoTargetMegabytes)
+            as? Int ?? 20
+        let configured =
+            MediaImageFormat(rawValue: format) != nil
+            && (0...20_000).contains(maxDimension)
+            && (0.1...1).contains(quality)
+            && (1...512).contains(target)
+        return ExtensionAdapterFacts(
+            configured: configured,
+            readyDetail: "ImageIO and AVFoundation processing defaults are ready.",
+            setupDetail: "Reset the stored Media Toolkit format, quality, dimensions or size limit."
         ).readiness
     }
 

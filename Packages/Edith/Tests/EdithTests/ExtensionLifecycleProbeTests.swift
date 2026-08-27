@@ -53,6 +53,9 @@ import EdithCore
             id: "music", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: ["yt-dlp"]),
         MatrixRow(
+            id: "mediaToolkit", helper: false, machine: false, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "calendar", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(

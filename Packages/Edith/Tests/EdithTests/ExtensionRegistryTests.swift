@@ -19,6 +19,7 @@ import Testing
         "micMuteEnabled",
         "lidAwakeEnabled",
         "tabMusicEnabled",
+        "tabMediaToolkitEnabled",
         "tabCalendarEnabled",
         "notchShelfEnabled",
         "clipboardEnabled",
@@ -144,7 +145,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard", "appMaintenance",
+                "clipboard", "appMaintenance", "mediaToolkit",
             ])
     }
 
@@ -233,6 +234,7 @@ import Testing
             "micMute": [],
             "lidAwake": [],
             "music": [],
+            "mediaToolkit": [],
             "calendar": [.calendar],
             "notchShelf": [],
             "clipboard": [],
@@ -256,6 +258,7 @@ import Testing
             "micMute": [],
             "lidAwake": [],
             "music": [],
+            "mediaToolkit": [],
             "calendar": [],
             "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation],
             "clipboard": [.accessibility],
