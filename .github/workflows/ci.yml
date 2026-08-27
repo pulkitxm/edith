@@ -289,24 +289,12 @@ jobs:
         run: cargo run --locked -- --migrate-only
         working-directory: apps/companion
 
-  release:
-    name: release
-    needs: [changes, checks, swift-build, swift-test, companion]
+  release-build:
+    name: release-build
+    needs: changes
     if: >-
-      always()
-      && github.ref == 'refs/heads/main'
+      github.ref == 'refs/heads/main'
       && needs.changes.result == 'success'
-      && needs.checks.result == 'success'
-      && !contains(needs.*.result, 'failure')
-      && !contains(needs.*.result, 'cancelled')
-      && (github.event_name == 'push'
-      || ((needs.changes.outputs.swift != 'true'
-      && needs.changes.outputs.workflows != 'true')
-      || needs.swift-build.result == 'success'))
-      && ((needs.changes.outputs.swift != 'true'
-      && needs.changes.outputs.workflows != 'true') || needs.swift-test.result == 'success')
-      && ((needs.changes.outputs.companion != 'true'
-      && needs.changes.outputs.workflows != 'true') || needs.companion.result == 'success')
       && ((github.event_name == 'push'
       && needs.changes.outputs.swift == 'true')
       || (github.event_name == 'workflow_dispatch' && inputs.release))
@@ -319,9 +307,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ github.sha }}
+          CI_RUN_ID: ${{ github.run_id }}
         run: >-
           gh workflow run release.yml
           --repo "$GITHUB_REPOSITORY"
           --ref main
           --field cut_release=true
           --field source_sha="$RELEASE_SHA"
+          --field ci_run_id="$CI_RUN_ID"
