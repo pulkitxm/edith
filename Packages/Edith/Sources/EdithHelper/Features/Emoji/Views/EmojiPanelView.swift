@@ -356,7 +356,7 @@ struct EmojiPanelView: View {
 
     private func openPreferences() {
         SharedDefaults.store.set("settings", forKey: AppStorageKeys.General.mainWindowSection)
-        SharedDefaults.store.set("emoji", forKey: "settingsSection")
+        SharedDefaults.store.set("emoji", forKey: AppStorageKeys.General.settingsSection)
         MainApp.openDashboard()
         onDismiss()
     }

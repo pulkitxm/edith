@@ -109,7 +109,7 @@ public enum ConfigCatalog {
             "extensionsExpand", .string, group: "panel",
             summary: "Extension card the Extensions page scrolls to and opens next."),
         SettingDefinition(
-            "settingsSection", .string, group: "panel",
+            AppStorageKeys.General.settingsSection, .string, group: "panel",
             summary: "Settings section a deep link opens on."),
         SettingDefinition(
             "mainWindowZoom", .number, group: "panel",

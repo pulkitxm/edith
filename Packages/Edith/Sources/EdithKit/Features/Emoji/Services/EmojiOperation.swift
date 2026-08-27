@@ -73,9 +73,6 @@ public enum EmojiOperationExecution {
             return ""
         case .insert:
             let character = try resolve(value, in: catalog, store: store)
-            var ledger = EmojiUsageLedger.load(from: store, key: AppStorageKeys.Emoji.usage)
-            ledger.record(character, at: Date())
-            ledger.save(to: store, key: AppStorageKeys.Emoji.usage)
             request(.insert, userInfo: ["character": character])
             return character
         case .tone:
@@ -100,18 +97,19 @@ public enum EmojiOperationExecution {
     ) throws -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw EmojiOperationError.unknownEmoji(value) }
-        if let match = catalog.emoji(matching: trimmed) {
-            return match.character == trimmed
-                ? match.character(tone: EmojiSkinTone.stored(forKey: AppStorageKeys.Emoji.skinTone))
-                : trimmed
+        let tone = EmojiSkinTone.stored(forKey: AppStorageKeys.Emoji.skinTone, store: store)
+        for candidate in [trimmed, character(fromHexcode: trimmed)].compactMap({ $0 }) {
+            if let match = catalog.emoji(matching: candidate) {
+                return match.toneVariants.contains(candidate)
+                    ? candidate : match.character(tone: tone)
+            }
+            if let match = presented(candidate, in: catalog) {
+                return match.character(tone: tone)
+            }
         }
-        if let hex = character(fromHexcode: trimmed), let match = catalog.emoji(matching: hex) {
-            return match.character(
-                tone: EmojiSkinTone.stored(forKey: AppStorageKeys.Emoji.skinTone))
-        }
-        let byName = EmojiSearch.results(in: catalog.emoji, query: trimmed, limit: 1)
-        guard let first = byName.first else { throw EmojiOperationError.unknownEmoji(value) }
-        return first.character(tone: EmojiSkinTone.stored(forKey: AppStorageKeys.Emoji.skinTone))
+        guard let first = EmojiSearch.results(in: catalog.emoji, query: trimmed, limit: 1).first
+        else { throw EmojiOperationError.unknownEmoji(value) }
+        return first.character(tone: tone)
     }
 
     public static func character(fromHexcode value: String) -> String? {
@@ -125,6 +123,19 @@ public enum EmojiOperationExecution {
             scalars.append(scalar)
         }
         return String(scalars)
+    }
+
+    private static func presented(_ value: String, in catalog: EmojiCatalog) -> Emoji? {
+        let selector: Unicode.Scalar = "\u{FE0F}"
+        var stripped = String.UnicodeScalarView()
+        for scalar in value.unicodeScalars where scalar != selector { stripped.append(scalar) }
+        return catalog.emoji.first {
+            var candidate = String.UnicodeScalarView()
+            for scalar in $0.character.unicodeScalars where scalar != selector {
+                candidate.append(scalar)
+            }
+            return String(candidate) == String(stripped)
+        }
     }
 }
 

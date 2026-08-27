@@ -160,10 +160,6 @@ struct EmojiInsertCommand: AsyncParsableCommand {
             ) { name, info in
                 AppBridge.post(name, userInfo: info)
             }
-            var ledger = EmojiUsageLedger.load(
-                from: CLIEnvironment.sharedDefaults, key: AppStorageKeys.Emoji.usage)
-            ledger.record(character, at: Date())
-            ledger.save(to: CLIEnvironment.sharedDefaults, key: AppStorageKeys.Emoji.usage)
             guard !json else {
                 CLIOut.json(
                     .object([
