@@ -183,6 +183,7 @@ final class CLIWorld: @unchecked Sendable {
         CLIEnvironment.isHelperRunning = { false }
         CLIEnvironment.isMainAppRunning = { false }
         CLIEnvironment.executableNamed = { _ in nil }
+        CLIEnvironment.homebrewClient = { HomebrewClient(executableURL: nil) }
         QuinjetCLIEnvironment.client = {
             QuinjetClient { _ in throw QuinjetClientError.notInstalled }
         }

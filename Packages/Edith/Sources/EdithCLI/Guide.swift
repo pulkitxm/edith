@@ -399,6 +399,10 @@ public enum Guide {
         ed machines terminal broadcast box -- uptime one line, every open tab for box
         ed apps ls                      what is running here
         ed apps quit Safari --yes | --all --yes
+        ed brew ls --outdated           installed Homebrew packages with updates
+        ed brew search firefox          available casks matching a query
+        ed brew install ripgrep         install one exact formula
+        ed brew uninstall ripgrep       preview before removing anything
         ed download ls                  the yt-dlp queue
         ed download status              lifecycle totals for the queue
         ed download add <url> --kind audio

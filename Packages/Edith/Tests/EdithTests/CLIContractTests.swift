@@ -22,6 +22,18 @@ enum JSONContract {
         JSONCase("ed guide", ["guide", "--json"]),
         JSONCase("ed version", ["version", "--json"]),
         JSONCase("ed status", ["status", "--json"]),
+        JSONCase("ed brew status", ["brew", "status", "--json"]),
+        JSONCase("ed brew ls", ["brew", "ls", "--json"]),
+        JSONCase("ed brew search", ["brew", "search", "edith", "--json"]),
+        JSONCase(
+            "ed brew install", ["brew", "install", "edith", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed brew upgrade", ["brew", "upgrade", "edith", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed brew uninstall", ["brew", "uninstall", "edith", "--yes", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed completions source", ["completions", "source", "--json"]),
         JSONCase("ed attention status", ["attention", "status", "--json"]),
         JSONCase("ed attention summary", ["attention", "summary", "--json"]),
