@@ -83,7 +83,9 @@ import Testing
             session: "default", pane: "w2:p1", kind: "Claude Code", status: .working,
             title: "Work", workspace: "edith", cwd: "/repo")
         #expect(!agent.isTerminal)
-        #expect(HerdrAttachCommand.line(for: agent) == "herdr --session default agent attach w2:p1")
+        #expect(
+            HerdrAttachCommand.line(for: agent)
+                == "herdr --session default agent attach w2:p1 --takeover")
     }
 
     @Test func aPlainPaneIsNotListedAsAnAgent() {

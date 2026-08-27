@@ -8,7 +8,6 @@ struct AboutPane: View {
     @State private var contributors: [Contributor] = []
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.compactLayout) private var compact
     private let inspection = AppInspectionCenter()
 
     private var theme: Color { themeColor(themeName) }
@@ -25,17 +24,14 @@ struct AboutPane: View {
         """
 
     var body: some View {
-        VStack(spacing: UIScale.pt(0)) {
-            PageHeader(
-                "About",
-                accessory: {
-                    Text("Every little Mac utility you would otherwise pay for, under one roof.")
-                        .font(.system(size: UIScale.pt(12)))
-                        .foregroundStyle(.secondary)
-                })
+        GeometryReader { proxy in
             ScrollView {
-                content
-                    .pageContent(compact, width: .readable)
+                VStack(spacing: UIScale.pt(0)) {
+                    Spacer(minLength: 44)
+                    content
+                    Spacer(minLength: 44)
+                }
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
         }
         .background(DashSkin.paper(scheme == .dark))
@@ -43,52 +39,33 @@ struct AboutPane: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
-            SkinCard(title: "Edith", note: version, dark: scheme == .dark) {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: UIScale.pt(18)) {
-                        appIcon
-                        storyBlock
-                    }
-                    VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                        appIcon
-                        storyBlock
-                    }
-                }
+        VStack(spacing: UIScale.pt(18)) {
+            if let icon = Brand.icon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: UIScale.pt(88), height: UIScale.pt(88))
+                    .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(20), style: .continuous))
+                    .shadow(color: .black.opacity(0.25), radius: UIScale.pt(12), y: 6)
+                    .accessibilityHidden(true)
             }
-            contributorWall
-            Text("Made with ♥ by Pulkit")
-                .font(.system(size: UIScale.pt(11)))
-                .foregroundStyle(.tertiary)
-        }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .task {
-            guard automaticActionsEnabled else { return }
-            let cacheSnapshot = Contributors.cacheSnapshot()
-            contributors = cacheSnapshot.people
-            contributors = await Contributors.load(cacheSnapshot: cacheSnapshot)
-        }
-    }
-
-    @ViewBuilder private var appIcon: some View {
-        if let icon = Brand.icon {
-            Image(nsImage: icon)
-                .resizable()
-                .interpolation(.high)
-                .frame(width: UIScale.pt(88), height: UIScale.pt(88))
-                .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(20), style: .continuous))
-                .shadow(color: .black.opacity(0.22), radius: UIScale.pt(10), y: 5)
-                .accessibilityHidden(true)
-        }
-    }
-
-    private var storyBlock: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            VStack(spacing: UIScale.pt(6)) {
+                Text("Edith")
+                    .font(.system(size: UIScale.pt(28), weight: .bold))
+                Text(version)
+                    .font(.system(size: UIScale.pt(12)))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            Text("Every little Mac utility you'd otherwise pay for, under one roof.")
+                .font(.system(size: UIScale.pt(14), weight: .medium))
+                .multilineTextAlignment(.center)
             Text(story)
                 .font(.system(size: UIScale.pt(13)))
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
                 .lineSpacing(3)
-                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: UIScale.pt(460))
             Button {
                 _ = try? inspection.openLink("repository", contributors: contributors)
             } label: {
@@ -97,11 +74,29 @@ struct AboutPane: View {
                     Text("pulkitxm/edith")
                         .font(.system(size: UIScale.pt(12), weight: .semibold))
                 }
+                .foregroundStyle(theme)
+                .padding(.horizontal, UIScale.pt(16))
+                .padding(.vertical, UIScale.pt(8))
+                .background(theme.opacity(0.16), in: Capsule())
+                .overlay(Capsule().strokeBorder(theme.opacity(0.38), lineWidth: 1))
             }
-            .buttonStyle(EdithButtonStyle(.secondary, tint: theme))
+            .buttonStyle(.plain)
+            .pointerCursor()
             .help("Open the repository on GitHub")
+            .padding(.top, UIScale.pt(2))
+            contributorWall
+            Text("Made with ♥ by Pulkit")
+                .font(.system(size: UIScale.pt(11)))
+                .foregroundStyle(.tertiary)
         }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, UIScale.pt(32))
+        .task {
+            guard automaticActionsEnabled else { return }
+            let cacheSnapshot = Contributors.cacheSnapshot()
+            contributors = cacheSnapshot.people
+            contributors = await Contributors.load(cacheSnapshot: cacheSnapshot)
+        }
     }
 
     @ViewBuilder private var githubMark: some View {
@@ -123,9 +118,10 @@ struct AboutPane: View {
 
     @ViewBuilder private var contributorWall: some View {
         if !contributors.isEmpty {
-            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                PageSectionHeader(
-                    "Contributors", subtitle: "People who have helped shape Edith")
+            VStack(spacing: UIScale.pt(10)) {
+                Text("Contributors")
+                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .foregroundStyle(.secondary)
                 LazyVGrid(columns: avatarColumns, spacing: UIScale.pt(10)) {
                     ForEach(contributors) { person in
                         Button {
@@ -139,9 +135,9 @@ struct AboutPane: View {
                         .accessibilityLabel("Open \(person.login) on GitHub")
                     }
                 }
-                .frame(maxWidth: UIScale.pt(520), alignment: .leading)
+                .frame(maxWidth: UIScale.pt(340))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, UIScale.pt(6))
         }
     }
 

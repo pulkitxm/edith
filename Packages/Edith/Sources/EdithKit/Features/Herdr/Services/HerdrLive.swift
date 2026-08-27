@@ -2,7 +2,6 @@ import Foundation
 
 public enum HerdrLive {
     static let remoteLeaseDuration = Duration.seconds(20)
-    static let replayReconcileDelay = Duration.milliseconds(600)
 
     public static func watch(_ yield: @escaping @Sendable ([HerdrHostSnapshot]) -> Void) async {
         let fleet = FleetBag(yield: yield)
@@ -147,29 +146,17 @@ public enum HerdrLive {
         await withTaskCancellationHandler {
             defer { stream.close() }
             do {
-                try await publishSnapshot(
-                    socket: socket, connect: connect, sessions: sessions, fleet: fleet)
-                try await stream.subscribeBoard()
                 let events = stream.events
+                try await stream.subscribeBoard()
+                fleet.put(
+                    sessions.applySnapshot(session: socket.name, text: try await stream.snapshot()))
                 await withTaskGroup(of: Void.self) { group in
                     group.addTask {
                         for await line in events {
                             fleet.put(sessions.applyEvent(session: socket.name, text: line))
                         }
                     }
-                    group.addTask {
-                        var delay = replayReconcileDelay
-                        while !Task.isCancelled {
-                            try? await Task.sleep(for: delay)
-                            guard !Task.isCancelled else { return }
-                            try? await publishSnapshot(
-                                socket: socket, connect: connect, sessions: sessions,
-                                fleet: fleet)
-                            delay = .seconds(20)
-                        }
-                    }
-                    await group.next()
-                    group.cancelAll()
+                    await group.waitForAll()
                 }
             } catch {
                 fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
@@ -179,23 +166,6 @@ public enum HerdrLive {
         }
     }
 
-    private static func publishSnapshot(
-        socket: (name: String, path: String),
-        connect: @escaping @Sendable (String) throws -> HerdrSocketClient,
-        sessions: SessionBag,
-        fleet: FleetBag
-    ) async throws {
-        let client = try connect(socket.path)
-        let line: String
-        do {
-            line = try await client.snapshot()
-            client.close()
-        } catch {
-            client.close()
-            throw error
-        }
-        fleet.put(sessions.applySnapshot(session: socket.name, text: line))
-    }
 }
 
 private final class FleetBag: @unchecked Sendable {

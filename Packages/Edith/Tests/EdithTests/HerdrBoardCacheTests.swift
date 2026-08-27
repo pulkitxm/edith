@@ -115,6 +115,18 @@ import Testing
         #expect(cache.agents.first { $0.pane == "w3:p1Q" }?.status == .idle)
     }
 
+    @Test func anAgentStatusEventUpdatesImmediatelyWithoutAPaneEvent() {
+        let cache = HerdrBoardCache(context: tuf)
+        cache.applySnapshot(tufSnapshot(agents: true, queryStatus: "idle", boardStatus: "idle"))
+        let updated = cache.applyEvent(
+            #"{"event":"pane_agent_status_changed","data":{"type":"pane_agent_status_changed","pane_id":"w3:p1N","workspace_id":"w3","agent":"opencode","agent_status":"working","title":"running tests"}}"#
+        )
+        let agent = updated.first { $0.pane == "w3:p1N" }
+        #expect(agent?.status == .working)
+        #expect(agent?.kind == "OpenCode")
+        #expect(agent?.title == "running tests")
+    }
+
     @Test func aLaterSnapshotWinsOverAStaleWorkingEvent() {
         let cache = HerdrBoardCache(context: tuf)
         cache.applySnapshot(tufSnapshot(agents: true, queryStatus: "idle", boardStatus: "idle"))

@@ -1,4 +1,5 @@
 import EdithKit
+import GhosttyTerminal
 import SwiftTerm
 import SwiftUI
 
@@ -51,6 +52,8 @@ struct HerdrSessionView: View {
     @State private var starting = false
     @State private var dragWidth: CGFloat?
     @State private var handleHovered = false
+    @State private var transferringDrop = false
+    @State private var dropError: String?
 
     private var dark: Bool { scheme == .dark }
     private var agent: HerdrAgent { tab.agent }
@@ -173,9 +176,25 @@ struct HerdrSessionView: View {
         ZStack {
             TerminalPane(
                 holder: tab.holder, palette: .edith(dark: dark),
-                active: presented && tab.view.showsAgent
+                active: presented && tab.view.showsAgent,
+                onDropFiles: agent.machineIsLocal ? nil : handleRemoteDrop
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if transferringDrop {
+                ProgressView()
+                    .controlSize(.small)
+                    .padding(UIScale.pt(10))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            }
+            if let dropError {
+                Text(dropError)
+                    .font(.system(size: UIScale.pt(11), weight: .medium))
+                    .foregroundStyle(DashSkin.warn)
+                    .padding(UIScale.pt(10))
+                    .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 8))
+                    .padding(UIScale.pt(10))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            }
             if let connectError {
                 Text(connectError)
                     .font(.system(size: UIScale.pt(13)))
@@ -187,6 +206,26 @@ struct HerdrSessionView: View {
         }
         .background(Color(nsColor: TerminalPalette.edith(dark: dark).background))
         .presenterCover(hideAgents, dark: dark)
+    }
+
+    private func handleRemoteDrop(_ payload: TerminalDropPayload) -> Bool {
+        Task { await transferRemoteDrop(payload) }
+        return true
+    }
+
+    private func transferRemoteDrop(_ payload: TerminalDropPayload) async {
+        transferringDrop = true
+        dropError = nil
+        defer {
+            transferringDrop = false
+            payload.removeTemporaryFiles()
+        }
+        do {
+            let paths = try await store.uploadDroppedFiles(payload.files, for: tab)
+            tab.holder.insertText(paths.map(ShellQuote.quote).joined(separator: " "))
+        } catch {
+            dropError = error.localizedDescription
+        }
     }
 
     private var diffPane: some View {

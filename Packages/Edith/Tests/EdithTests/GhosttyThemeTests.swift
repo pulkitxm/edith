@@ -32,7 +32,20 @@ import Testing
         #expect(text.contains("font-size = 13"))
         #expect(text.contains("copy-on-select = clipboard"))
         #expect(text.contains("mouse-shift-capture = false"))
+        #expect(text.contains("font-codepoint-map = U+E000-U+F8FF=Symbols Nerd Font Mono"))
+        #expect(text.contains("font-codepoint-map = U+F0000-U+FFFFD=Symbols Nerd Font Mono"))
+        #expect(text.contains("font-codepoint-map = U+100000-U+10FFFD=Symbols Nerd Font Mono"))
         #expect(text.contains(#"keybind = shift+enter=text:\x1b\r"#))
+    }
+
+    @Test func bundledSymbolsAreAvailableToTerminalRenderers() {
+        TerminalFontRegistry.register()
+        let font = TerminalFontRegistry.monospacedFont(ofSize: 12.5)
+        let cascade = font.fontDescriptor.object(forKey: .cascadeList) as? [NSFontDescriptor]
+        #expect(
+            cascade?.contains {
+                $0.object(forKey: .family) as? String == TerminalFontRegistry.family
+            } == true)
     }
 
     @Test func anUnsetSelectionIsLeftOutEntirely() {
