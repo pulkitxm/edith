@@ -64,6 +64,18 @@ public enum AppStorageKeys {
         public static let lastBackupAt = "lastClipboardBackupAt"
     }
 
+    public enum TextUtilities {
+        public static let enabled = "textUtilitiesEnabled"
+        public static let snippetsEnabled = "textUtilitiesSnippetsEnabled"
+        public static let snippets = "textUtilitiesSnippets"
+        public static let cleanCopiedURLs = "textUtilitiesCleanCopiedURLs"
+        public static let customTrackingParameters = "textUtilitiesCustomTrackingParameters"
+        public static let autoClearEnabled = "textUtilitiesAutoClearEnabled"
+        public static let autoClearDelay = "textUtilitiesAutoClearDelay"
+        public static let clearOnLock = "textUtilitiesClearOnLock"
+        public static let clearOnSleep = "textUtilitiesClearOnSleep"
+    }
+
     public enum ColorPicker {
         public static let copyFormat = "colorPickerCopyFormat"
         public static let enabled = "colorPickerEnabled"
