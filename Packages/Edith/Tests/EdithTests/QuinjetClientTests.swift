@@ -45,6 +45,40 @@ import Testing
         #expect(projects[0].defaultWorktree?.branch == "main")
     }
 
+    @Test func discoversThemesFromQuinjetCapabilitiesInReportedOrder() async throws {
+        let client = QuinjetClient { arguments in
+            #expect(arguments == ["capabilities", "--json"])
+            return Data(
+                """
+                {
+                  "commands": [
+                    {
+                      "path": "quinjet tui",
+                      "arguments": [
+                        {
+                          "id": "theme",
+                          "possibleValues": ["quinjet", "new-theme", "quinjet"]
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """.utf8)
+        }
+
+        let themes = try await client.themes()
+
+        #expect(themes.map(\.rawValue) == ["quinjet", "new-theme"])
+    }
+
+    @Test func rejectsCapabilitiesWithoutTerminalThemes() async {
+        let client = QuinjetClient { _ in Data(#"{"commands":[]}"#.utf8) }
+
+        await #expect(throws: QuinjetClientError.invalidResponse) {
+            try await client.themes()
+        }
+    }
+
     @Test func requestsWorktreesForCurrentPath() async throws {
         let client = QuinjetClient { arguments in
             #expect(
@@ -528,6 +562,47 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
                 ])
     }
 
+    @Test func appThemeLaunchSendsCompleteLightAndDarkPalettes() throws {
+        let configuration = QuinjetLaunchConfiguration(
+            terminal: .embedded, theme: .ayu, appearance: .dark,
+            hostTheme: .edith(appTheme: .orange))
+
+        let request = QuinjetOperationExecution.launchRequest(
+            executableURL: URL(fileURLWithPath: "/usr/local/bin/quinjet"),
+            worktreePath: Self.main.path, remote: nil, configuration: configuration,
+            managedByEdith: true, localHomeDirectory: "/Users/pulkit")
+        let marker = try #require(request.arguments.firstIndex(of: "--theme-palette"))
+        let payload = try #require(
+            JSONSerialization.jsonObject(with: Data(request.arguments[marker + 1].utf8))
+                as? [String: [String: String]])
+
+        #expect(!request.arguments.contains("--theme"))
+        #expect(payload["light"]?["background"] == "#f7f3ec")
+        #expect(payload["light"]?["accent"] == "#c93400")
+        #expect(payload["dark"]?["background"] == "#1a1714")
+        #expect(payload["dark"]?["accent"] == "#ff9f0a")
+        #expect(request.arguments.suffix(2) == ["--appearance", "dark"])
+    }
+
+    @Test func persistedAppThemeAndAppearanceRestoreAHostPalette() throws {
+        let name = "QuinjetClientTests.\(UUID().uuidString)"
+        let shared = try #require(UserDefaults(suiteName: name))
+        let standard = try #require(UserDefaults(suiteName: "\(name).standard"))
+        defer {
+            shared.removePersistentDomain(forName: name)
+            standard.removePersistentDomain(forName: "\(name).standard")
+        }
+        shared.set(QuinjetThemePreference.app, forKey: AppStorageKeys.Quinjet.theme)
+        shared.set(AppTheme.pink.rawValue, forKey: AppStorageKeys.General.theme)
+        shared.set("light", forKey: AppStorageKeys.General.appearance)
+
+        let configuration = QuinjetLaunchConfiguration.preferred(
+            sharedDefaults: shared, standardDefaults: standard)
+
+        #expect(configuration.appearance == .light)
+        #expect(configuration.hostTheme == .edith(appTheme: .pink))
+    }
+
     @Test func cmuxLaunchKeepsRemoteSessionWithoutEdithRouting() throws {
         let remote = QuinjetRemote(
             machineID: UUID(), machineName: "build", target: "pulkit@build",
@@ -688,7 +763,8 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
             launchEnabled: false)
         let selected = try #require(model.selectedTab?.id)
         let configuration = QuinjetLaunchConfiguration(
-            terminal: .embedded, theme: .github, appearance: .light)
+            terminal: .embedded, theme: .github, appearance: .light,
+            hostTheme: .edith(appTheme: .blue))
 
         model.apply(configuration, launchEnabled: false)
 

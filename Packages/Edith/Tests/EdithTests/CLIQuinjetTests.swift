@@ -229,6 +229,24 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
         #expect(overridden.object?["terminal"] as? String == "current")
     }
 
+    @Test func omittedThemeUsesThePersistedAppPalette() async throws {
+        let result = await CLIProbe.runInWorld([
+            "quinjet", "open", "/work/edith", "--json",
+        ]) { world in
+            world.shared.set(QuinjetThemePreference.app, forKey: AppStorageKeys.Quinjet.theme)
+            world.shared.set(AppTheme.orange.rawValue, forKey: AppStorageKeys.General.theme)
+            world.shared.set("light", forKey: AppStorageKeys.General.appearance)
+            CLIEnvironment.executableNamed = { _ in URL(fileURLWithPath: "/opt/bin/quinjet") }
+            QuinjetCLIEnvironment.client = { Self.client(path: "/work/edith") }
+        }
+
+        let arguments = try #require(result.object?["arguments"] as? [String])
+        #expect(result.code == 0)
+        #expect(arguments.contains("--theme-palette"))
+        #expect(!arguments.contains("--theme"))
+        #expect(arguments.suffix(2) == ["--appearance", "light"])
+    }
+
     @Test func conflictingTerminalOverridesAreRejected() async {
         let result = await CLIProbe.runInWorld([
             "quinjet", "open", "/work/edith", "--cmux", "--embedded",
@@ -248,8 +266,7 @@ private final class QuinjetRequestRecorder: @unchecked Sendable {
 
         #expect(result.code == 0, "\(result.stderr)")
         #expect(try result.decoded() is [String: Any])
-        #expect(!result.stdout.contains("--theme quinjet"))
-        #expect(result.stderr.contains("--theme quinjet"))
+        #expect(result.stderr.contains("--theme-palette"))
     }
 
     @Test func malformedOutputIsAnActionableFailure() async {

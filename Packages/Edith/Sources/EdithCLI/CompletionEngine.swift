@@ -220,6 +220,9 @@ public enum CompletionEngine {
             guard let previous, let definition = ConfigCatalog.definition(for: previous) else {
                 return []
             }
+            if definition.key == AppStorageKeys.Quinjet.theme {
+                return QuinjetTheme.allCases.map(\.rawValue)
+            }
             if !definition.allowed.isEmpty { return definition.allowed }
             return definition.type == .bool ? ["true", "false"] : []
         case .extensionID: return extensionIDs
