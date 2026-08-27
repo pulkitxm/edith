@@ -14,6 +14,7 @@ public final class GhosttyTerminalView: NSView {
     private var theme: GhosttyTheme?
     private var themeConfig: ghostty_config_t?
     private var owned: GhosttyConfigStrings?
+    var temporaryDropFiles = Set<URL>()
     private var closed = false
     private var drawScheduled = false
     var terminalCursor = NSCursor.iBeam
@@ -89,6 +90,8 @@ public final class GhosttyTerminalView: NSView {
             self.themeConfig = nil
         }
         owned = nil
+        TerminalDropPayload(files: [], temporaryFiles: temporaryDropFiles).removeTemporaryFiles()
+        temporaryDropFiles.removeAll()
     }
 
     public override func viewDidMoveToWindow() {

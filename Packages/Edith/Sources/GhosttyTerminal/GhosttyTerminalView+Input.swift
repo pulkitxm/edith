@@ -302,6 +302,16 @@ extension GhosttyTerminalView {
 
     @objc func pasteTerminalClipboard(_ sender: Any?) {
         guard surface != nil else { return }
+        if let payload = TerminalDropPayload.files(from: .general) {
+            _ = accept(payload)
+            return
+        }
+        let receivingPromises = TerminalDropPayload.receivePromisedFiles(
+            from: .general
+        ) { [weak self] payload in
+            _ = self?.accept(payload)
+        }
+        if receivingPromises { return }
         if performBindingAction("paste_from_clipboard") { return }
         guard let text = NSPasteboard.general.string(forType: .string) else { return }
         _ = insertText(text)

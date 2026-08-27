@@ -187,6 +187,11 @@ final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResp
     private(set) var reactivationDisplayPasses = 0
     private(set) var hasDeferredDisplay = false
     var onDropFiles: ((TerminalDropPayload) -> Bool)?
+    private var temporaryDropFiles = Set<URL>()
+
+    deinit {
+        TerminalDropPayload(files: [], temporaryFiles: temporaryDropFiles).removeTemporaryFiles()
+    }
 
     func setRenderingActive(_ active: Bool) {
         guard active != renderingActive else { return }
@@ -243,9 +248,9 @@ final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResp
     }
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        guard onDropFiles != nil, let types = sender.draggingPasteboard.types,
-            !Set(types).isDisjoint(with: Set(TerminalDropPayload.pasteboardTypes))
-        else { return super.draggingEntered(sender) }
+        guard TerminalDropPayload.canRead(sender.draggingPasteboard) else {
+            return super.draggingEntered(sender)
+        }
         return .copy
     }
 
@@ -254,10 +259,31 @@ final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResp
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        guard let onDropFiles,
-            let payload = TerminalDropPayload.files(from: sender.draggingPasteboard)
-        else { return super.performDragOperation(sender) }
-        return onDropFiles(payload)
+        if let payload = TerminalDropPayload.files(from: sender.draggingPasteboard) {
+            return accept(payload)
+        }
+        let receivingPromises = TerminalDropPayload.receivePromisedFiles(
+            from: sender.draggingPasteboard
+        ) { [weak self] payload in
+            _ = self?.accept(payload)
+        }
+        if receivingPromises { return true }
+        if let rawURL = sender.draggingPasteboard.string(forType: .URL), !rawURL.isEmpty {
+            send(Array(GhosttyTerminalView.quote(rawURL).utf8))
+            return true
+        }
+        guard let text = sender.draggingPasteboard.string(forType: .string), !text.isEmpty else {
+            return super.performDragOperation(sender)
+        }
+        send(Array(text.utf8))
+        return true
+    }
+
+    private func accept(_ payload: TerminalDropPayload) -> Bool {
+        if onDropFiles?(payload) == true { return true }
+        temporaryDropFiles.formUnion(payload.temporaryFiles)
+        send(Array(payload.shellText.utf8))
+        return true
     }
 
     enum DirectCommand {
