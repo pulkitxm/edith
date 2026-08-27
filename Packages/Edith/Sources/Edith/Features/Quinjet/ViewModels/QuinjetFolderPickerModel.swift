@@ -66,6 +66,11 @@ final class QuinjetFolderPickerModel {
 
     var canUndo: Bool { !history.isEmpty }
 
+    var canOpenCurrentDirectory: Bool {
+        let candidate = normalizedDirectory(path)
+        return !directory.isEmpty && !candidate.isEmpty && candidate == directory
+    }
+
     func start() async {
         loading = true
         errorMessage = nil
@@ -96,6 +101,8 @@ final class QuinjetFolderPickerModel {
     }
 
     func navigate(to value: String, recordHistory: Bool = true) async {
+        refreshTask?.cancel()
+        refreshTask = nil
         let target = normalizedDirectory(value)
         guard !target.isEmpty else { return }
         if recordHistory, !directory.isEmpty, directory != target {
@@ -112,10 +119,13 @@ final class QuinjetFolderPickerModel {
     }
 
     func moveSelection(by offset: Int) {
-        let count = entries.count + 1
-        guard count > 0 else { return }
-        let current = selectionIndex + 1
-        selectionIndex = (current + offset + count) % count - 1
+        let choices = (canOpenCurrentDirectory ? [-1] : []) + Array(entries.indices)
+        guard !choices.isEmpty else { return }
+        guard let current = choices.firstIndex(of: selectionIndex) else {
+            selectionIndex = offset < 0 ? choices[choices.count - 1] : choices[0]
+            return
+        }
+        selectionIndex = choices[(current + offset + choices.count) % choices.count]
     }
 
     func selectCurrentDirectory() {
@@ -135,7 +145,13 @@ final class QuinjetFolderPickerModel {
     }
 
     func activateSelection() async -> String? {
-        guard let selectedEntry else { return directory }
+        guard let selectedEntry else {
+            if canOpenCurrentDirectory { return directory }
+            let candidates = entries.filter(navigable)
+            guard candidates.count == 1, let candidate = candidates.first else { return nil }
+            await navigate(to: candidate.path)
+            return nil
+        }
         guard navigable(selectedEntry) else { return nil }
         await navigate(to: selectedEntry.path)
         return nil
@@ -154,13 +170,26 @@ final class QuinjetFolderPickerModel {
     private func refreshForInput() async {
         let value = path.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return }
-        if value == "/" || value.hasSuffix("/") {
-            await load(normalizedDirectory(value), filter: nil)
+        let target = normalizedDirectory(value)
+        if target == directory || value == "/" || value.hasSuffix("/") {
+            await load(target, filter: nil)
             return
         }
+        let origin = directory
         let parent = FileListing.parentPath(of: value) ?? "/"
         let prefix = URL(fileURLWithPath: value).lastPathComponent
         await load(parent, filter: prefix)
+        guard path.trimmingCharacters(in: .whitespacesAndNewlines) == value else { return }
+        guard
+            let exact = entries.first(where: {
+                navigable($0) && $0.name.localizedCaseInsensitiveCompare(prefix) == .orderedSame
+            })
+        else { return }
+        if !origin.isEmpty, origin != exact.path { history.append(origin) }
+        path = exact.path
+        selectionIndex = -1
+        refreshTask = nil
+        await load(exact.path, filter: nil)
     }
 
     private func load(_ target: String, filter: String?) async {

@@ -24,10 +24,49 @@ import Testing
         await model.waitForInputRefresh()
 
         #expect(model.entries.map(\.name) == ["Desktop"])
+        #expect(!model.canOpenCurrentDirectory)
         await model.completePath()
         #expect(model.path == "/home/pulkit/Desktop")
         #expect(model.directory == "/home/pulkit/Desktop")
         #expect(model.entries.map(\.name) == ["edith", "quinjet"])
+        #expect(model.canOpenCurrentDirectory)
+    }
+
+    @Test func exactTypedDirectoryBecomesTheCurrentDirectory() async {
+        let model = makeModel()
+        await model.start()
+
+        model.editPath("/home/pulkit/Desktop")
+        await model.waitForInputRefresh()
+
+        #expect(model.path == "/home/pulkit/Desktop")
+        #expect(model.directory == "/home/pulkit/Desktop")
+        #expect(model.entries.map(\.name) == ["edith", "quinjet"])
+        #expect(model.canOpenCurrentDirectory)
+    }
+
+    @Test func returnNavigatesToAUniqueFilteredDirectory() async {
+        let model = makeModel()
+        await model.start()
+
+        model.editPath("/home/pulkit/Desk")
+        await model.waitForInputRefresh()
+
+        #expect(await model.activateSelection() == nil)
+        #expect(model.path == "/home/pulkit/Desktop")
+        #expect(model.directory == "/home/pulkit/Desktop")
+    }
+
+    @Test func returnDoesNotOpenTheParentOfAnUnresolvedPath() async {
+        let model = makeModel()
+        await model.start()
+
+        model.editPath("/home/pulkit/Nowhere")
+        await model.waitForInputRefresh()
+
+        #expect(model.directory == "/home/pulkit")
+        #expect(!model.canOpenCurrentDirectory)
+        #expect(await model.activateSelection() == nil)
     }
 
     @Test func arrowsActivateDirectoriesAndCurrentFolder() async {
