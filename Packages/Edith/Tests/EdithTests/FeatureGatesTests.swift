@@ -61,7 +61,7 @@ import Testing
         #expect(
             ExtensionShortcutVisibility.visible(
                 clipboard: true, micMute: true, focusDim: true, presenter: true,
-                colorPicker: true)
+                colorPicker: true, radialLauncher: true)
                 == ExtensionShortcut.allCases)
     }
 

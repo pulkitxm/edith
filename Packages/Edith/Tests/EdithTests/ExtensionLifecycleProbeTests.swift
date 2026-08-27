@@ -67,6 +67,9 @@ import EdithCore
         MatrixRow(
             id: "colorPicker", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
+        MatrixRow(
+            id: "radialLauncher", helper: true, machine: false, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
     ]
 
     @Test func policiesCoverTheRegistryExactly() {
