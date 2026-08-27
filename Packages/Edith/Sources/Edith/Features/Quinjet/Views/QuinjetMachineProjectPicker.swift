@@ -197,6 +197,10 @@ private struct QuinjetRemoteProjectPicker: View {
             if picker.loading {
                 ProgressView()
                     .controlSize(.small)
+            } else if !picker.canOpenCurrentDirectory, !picker.path.isEmpty {
+                Text("matching")
+                    .font(DashSkin.mono(8.5))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
         .padding(.horizontal, UIScale.pt(11))
@@ -278,13 +282,13 @@ private struct QuinjetRemoteProjectPicker: View {
             } description: {
                 Text(error)
             } actions: {
-                Button("Dismiss") { tab.errorMessage = nil }
+                Button("Choose another folder") { tab.errorMessage = nil }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
                 LazyVStack(spacing: UIScale.pt(5)) {
-                    currentDirectoryRow
+                    if picker.canOpenCurrentDirectory { currentDirectoryRow }
                     ForEach(picker.entries) { entry in
                         entryRow(entry)
                     }
@@ -292,10 +296,10 @@ private struct QuinjetRemoteProjectPicker: View {
                 .padding(.top, UIScale.pt(2))
             }
             .overlay {
-                if picker.entries.isEmpty, !picker.loading {
+                if picker.entries.isEmpty, !picker.loading, !picker.canOpenCurrentDirectory {
                     ContentUnavailableView(
                         "No matching folders", systemImage: "folder",
-                        description: Text("Edit the path or open the current directory.")
+                        description: Text("Check the path or keep typing.")
                     )
                     .allowsHitTesting(false)
                 }
@@ -352,7 +356,11 @@ private struct QuinjetRemoteProjectPicker: View {
                     .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(1)
                 Spacer(minLength: 0)
-                if entry.isDirectory || entry.kind == .symlink {
+                if picker.selectedEntry == entry {
+                    Text("return")
+                        .font(DashSkin.mono(8.5))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                } else if entry.isDirectory || entry.kind == .symlink {
                     Image(systemName: "chevron.right")
                         .font(.system(size: UIScale.pt(9), weight: .semibold))
                         .foregroundStyle(DashSkin.inkFaint(dark))

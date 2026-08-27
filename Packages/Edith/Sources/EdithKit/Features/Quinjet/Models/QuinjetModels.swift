@@ -124,6 +124,11 @@ public enum QuinjetClientError: Error, Equatable, LocalizedError {
         case let .launchFailed(message):
             return "Quinjet could not start: \(message)"
         case let .commandFailed(message):
+            if message.localizedCaseInsensitiveContains("not a git repository") {
+                return
+                    "This folder is not a Git repository. "
+                    + "Choose the project folder that contains .git."
+            }
             return message.isEmpty ? "Quinjet could not load this workspace." : message
         case .invalidResponse:
             return "Quinjet returned project data in an unsupported format."
