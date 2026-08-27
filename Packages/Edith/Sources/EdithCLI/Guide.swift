@@ -40,6 +40,8 @@ public enum Guide {
         ed color copy 1 --format hex
         ed window status            Window Tools settings and available layouts
         ed window left-half         snap the active window to the left
+        ed windows ls               open and minimized windows Edith can focus
+        ed windows show             open the searchable Window Switcher
         ed emoji pick               open Edith's emoji picker
         ed usage sources            the agents that produced your usage history
         ed schema                   JSON Schema for the config document
@@ -342,6 +344,10 @@ public enum Guide {
         ed calendar join <event-id>     open the event's meeting link
         ed calendar directions <event>  open its location in Maps
         ed calendar open                open the Calendar application
+        ed windows ls                   open and minimized windows
+        ed windows show                 open the searchable switcher
+        ed windows activate <id>        restore and focus one listed window
+        ed windows cycle                next window of the front application
         ed presenter status | start | stop
         ed herdr ls                     live Herdr sessions here and over SSH
         ed herdr attach w3:p1N          attach this terminal to a live pane

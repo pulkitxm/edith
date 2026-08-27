@@ -443,19 +443,12 @@ private struct WindowSwitcherView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(.horizontal, 12)
-            .frame(height: 54)
-            .background(
-                selected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.035),
-                in: RoundedRectangle(cornerRadius: 10)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(selected ? Color.accentColor.opacity(0.5) : .clear)
-            }
+            .padding(.horizontal, 3)
+            .frame(height: 40)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.row, selected: selected))
+        .edithButtonTarget(.row)
         .id(window.id)
         .onHover { hovering in
             if hovering { store.select(id: window.id) }
