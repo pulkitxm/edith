@@ -14,6 +14,7 @@ final class AppServices {
     private(set) var clipboard: ClipboardStore?
     private(set) var focusDim: FocusDimEngine?
     private(set) var presenter: PresenterDetector?
+    private(set) var audioControls: AudioControlsEngine?
     private(set) var micMute: MicMuteEngine?
     private(set) var lidAwake: LidAwakeEngine?
     private(set) var systemStats: SystemStatsStatusItem?
@@ -100,6 +101,8 @@ final class AppServices {
     func prepareForTermination() async {
         startup.cancel()
         terminating = true
+        audioControls?.shutdown()
+        audioControls = nil
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
@@ -219,6 +222,7 @@ final class AppServices {
             player.shutdown()
             music = nil
         }
+        audioControls?.attachMusic(music)
     }
 
     private func reconcileSystemServices() {
@@ -255,6 +259,7 @@ final class AppServices {
         let audioMixerOn = SharedDefaults.store.bool(
             forKey: AppStorageKeys.Notch.audioMixerEnabled)
         if #available(macOS 14.4, *),
+            !Self.extensionEnabled(AppStorageKeys.Audio.enabled),
             !Self.audioMixerRuntimeEnabled(
                 notchShelfEnabled: notchShelfOn, mixerEnabled: audioMixerOn)
         {
@@ -327,6 +332,15 @@ final class AppServices {
     }
 
     private func reconcileHardwareServices() {
+        let audioOn = Self.extensionEnabled(AppStorageKeys.Audio.enabled)
+        if audioOn, audioControls == nil { audioControls = AudioControlsEngine() }
+        if !audioOn, let engine = audioControls {
+            engine.shutdown()
+            audioControls = nil
+        }
+        audioControls?.attachMusic(music)
+        audioControls?.syncSettings()
+
         let micOn = Self.extensionEnabled(AppStorageKeys.Mic.muteEnabled)
         if micOn, micMute == nil { micMute = MicMuteEngine() }
         if !micOn, let engine = micMute {

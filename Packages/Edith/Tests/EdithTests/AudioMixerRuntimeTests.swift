@@ -1,5 +1,6 @@
 import AppKit
 import CoreAudio
+import EdithKit
 import Testing
 @testable import EdithHelper
 
@@ -96,7 +97,7 @@ private final class AudioMixerTapProbe: AudioMixerTapControlling {
         #expect(engine.apps.first?.volume == 1)
     }
 
-    @Test func outputChangeDestroysTapAndResetsPublishedGain() throws {
+    @Test func outputChangeRebuildsTapAndPreservesPublishedGain() throws {
         guard #available(macOS 14.4, *) else { return }
         let app = mixerApp(objectID: 43)
         let tap = AudioMixerTapProbe()
@@ -112,8 +113,8 @@ private final class AudioMixerTapProbe: AudioMixerTapControlling {
         engine.refresh()
 
         #expect(tap.destroyCount == 1)
-        #expect(!engine.hasActiveTaps)
-        #expect(engine.apps.first?.volume == 1)
+        #expect(engine.hasActiveTaps)
+        #expect(engine.apps.first?.volume == 0.3)
     }
 
     @Test func vanishedAudioObjectDestroysItsTapAndGain() throws {
@@ -266,6 +267,61 @@ private final class AudioMixerTapProbe: AudioMixerTapControlling {
         #expect(!engine.isMonitoring)
         #expect(engine.visibleViewCount == 0)
         #expect(engine.apps.isEmpty)
+    }
+
+    @Test func savedRouteCreatesTapAtFullVolumeAndSystemRemovesIt() throws {
+        guard #available(macOS 14.4, *) else { return }
+        let suite = "test.audio-mixer.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let app = mixerApp(objectID: 52)
+        let output = AudioDeviceDescriptor(
+            uid: "output-b", name: "Headphones", supportsInput: false, supportsOutput: true,
+            isDefaultInput: false, isDefaultOutput: false, isHeadphones: true)
+        let tap = AudioMixerTapProbe()
+        var targets: [String] = []
+        let engine = MixerEngine(
+            snapshotLoader: {
+                AudioMixerSnapshot(
+                    apps: [app], outputUID: "output-a", outputs: [output])
+            },
+            tapFactory: { _, target, _ in
+                targets.append(target)
+                return .success(tap)
+            }, defaults: defaults)
+        defer { engine.shutdown() }
+
+        defaults.set(
+            [app.bundleID: output.uid], forKey: AppStorageKeys.Audio.appOutputRoutes)
+        engine.refresh()
+
+        #expect(targets == ["output-b"])
+        #expect(engine.apps.first?.outputUID == "output-b")
+        #expect(engine.hasActiveTaps)
+
+        engine.setOutput(try #require(engine.apps.first), nil)
+
+        #expect(tap.destroyCount == 1)
+        #expect(!engine.hasActiveTaps)
+        #expect(engine.apps.first?.outputUID == nil)
+        #expect(
+            AudioControlPolicy.routeMap(
+                defaults.dictionary(forKey: AppStorageKeys.Audio.appOutputRoutes)).isEmpty)
+    }
+
+    @Test func serviceOwnershipKeepsMonitoringWithoutAVisibleView() {
+        guard #available(macOS 14.4, *) else { return }
+        let engine = MixerEngine(
+            snapshotLoader: { AudioMixerSnapshot(apps: [], outputUID: "output-a") },
+            tapFactory: { _, _, _ in .failure(.processTap(-1)) })
+        defer { engine.shutdown() }
+
+        engine.startService()
+        #expect(engine.serviceEnabled)
+        #expect(engine.isMonitoring)
+        engine.stopService()
+        #expect(!engine.serviceEnabled)
+        #expect(!engine.isMonitoring)
     }
 
     private func mixerApp(
