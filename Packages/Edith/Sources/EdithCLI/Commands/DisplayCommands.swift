@@ -106,7 +106,8 @@ struct DisplayBrightnessCommand: AsyncParsableCommand {
         try await execute {
             let percent = try DisplayCLI.wholePercent(level)
             let levels = try DisplayPowerOperationExecution.setBrightness(
-                percent: percent, displayID: display, defaults: CLIEnvironment.sharedDefaults)
+                percent: percent, displayID: display, defaults: CLIEnvironment.sharedDefaults,
+                announce: { AppBridge.post(IPC.Name.settingsChanged) })
             if json {
                 CLIOut.json(
                     .object([
@@ -138,7 +139,8 @@ struct DisplayXDRCommand: AsyncParsableCommand {
             let normalized = level.lowercased()
             if ["off", "false", "disabled"].contains(normalized) {
                 try DisplayPowerOperationExecution.setXDR(
-                    enabled: false, defaults: CLIEnvironment.sharedDefaults)
+                    enabled: false, defaults: CLIEnvironment.sharedDefaults,
+                    announce: { AppBridge.post(IPC.Name.settingsChanged) })
                 if json {
                     CLIOut.json(.object(["enabled": .bool(false), "level": .int(0)]))
                 } else {
@@ -148,7 +150,8 @@ struct DisplayXDRCommand: AsyncParsableCommand {
             }
             let percent = try DisplayCLI.wholePercent(level)
             try DisplayPowerOperationExecution.setXDR(
-                enabled: percent > 0, percent: percent, defaults: CLIEnvironment.sharedDefaults)
+                enabled: percent > 0, percent: percent, defaults: CLIEnvironment.sharedDefaults,
+                announce: { AppBridge.post(IPC.Name.settingsChanged) })
             if json {
                 CLIOut.json(
                     .object(["enabled": .bool(percent > 0), "level": .int(percent)]))
@@ -176,7 +179,8 @@ struct DisplayBluetoothSleepCommand: AsyncParsableCommand {
                 throw CLIFailure("\(state) is not on or off", hint: "pass on, off, true or false")
             }
             DisplayPowerOperationExecution.setBluetoothSleep(
-                enabled, defaults: CLIEnvironment.sharedDefaults)
+                enabled, defaults: CLIEnvironment.sharedDefaults,
+                announce: { AppBridge.post(IPC.Name.settingsChanged) })
             if json {
                 CLIOut.json(.object(["enabled": .bool(enabled)]))
             } else {

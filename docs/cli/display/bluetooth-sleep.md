@@ -1,5 +1,7 @@
 # `ed display bluetooth-sleep`
 
+[Display and Power](./README.md) | [CLI reference](../README.md)
+
 Chooses whether Edith turns Bluetooth off while the Mac sleeps.
 
 ```bash

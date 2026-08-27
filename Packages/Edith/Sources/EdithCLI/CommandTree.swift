@@ -261,8 +261,9 @@ public enum CommandTree {
                 children: [
                     CommandNode("status", "Show displays and power behavior.", options: common),
                     CommandNode(
-                        "brightness", "Set display brightness.", options: ["--json", "--display"],
-                        arguments: [.free]),
+                        "brightness", "Set display brightness.",
+                        options: ["--json", "--help", "--display"],
+                        optionValues: ["--display": .free], arguments: [.free]),
                     CommandNode(
                         "xdr", "Set extra XDR brightness.", options: common,
                         arguments: [.free]),

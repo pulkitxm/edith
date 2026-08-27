@@ -339,8 +339,8 @@ final class AppServices {
         }
         micMute?.syncSettings()
 
-        BluetoothSleepController.restoreIfOwed()
         let displayPowerOn = Self.extensionEnabled(AppStorageKeys.DisplayPower.enabled)
+        if displayPower == nil { BluetoothSleepController.restoreIfOwed() }
         if displayPowerOn, displayPower == nil { displayPower = DisplayPowerRuntime() }
         if !displayPowerOn, let runtime = displayPower {
             runtime.shutdown()

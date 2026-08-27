@@ -1,8 +1,10 @@
 # Display and Power
 
+[CLI reference](../README.md)
+
 Display and Power controls the built-in display and connected monitors without taking over Edith's existing System or Lid Awake features.
 
-Internal displays and supported Apple displays use macOS brightness control. A single external monitor uses DDC/CI when its connection exposes the monitor's hardware controls. Other external configurations use a reversible per-display gamma adjustment, so adapters without DDC still have a useful brightness control. Disabling the extension or quitting Edith restores every software gamma table it changed.
+Internal displays and supported Apple displays use macOS brightness control. External monitors are matched to their connection and use DDC/CI when the connection exposes hardware controls. Other external configurations use a reversible per-display gamma adjustment, so adapters without DDC still have a useful brightness control. Disabling the extension or quitting Edith restores every software gamma table it changed.
 
 On a supported MacBook Pro, XDR extra brightness uses available HDR headroom. macOS can reduce that headroom for battery, thermal, or display-profile reasons. The overlay closes immediately when the feature or extension stops.
 
@@ -22,3 +24,10 @@ ed display bluetooth-sleep on
 ```
 
 Add `--json` to status and mutation commands for structured output.
+
+## Reference
+
+- [`ed display status`](./status.md)
+- [`ed display brightness`](./brightness.md)
+- [`ed display xdr`](./xdr.md)
+- [`ed display bluetooth-sleep`](./bluetooth-sleep.md)

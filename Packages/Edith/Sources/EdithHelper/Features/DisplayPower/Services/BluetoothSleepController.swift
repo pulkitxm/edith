@@ -9,6 +9,7 @@ final class BluetoothSleepController {
 
     private(set) var supported: Bool
     private var observers: [NSObjectProtocol] = []
+    private var sleeping = false
     private let changed: () -> Void
 
     init(changed: @escaping () -> Void) {
@@ -17,10 +18,16 @@ final class BluetoothSleepController {
     }
 
     func sync() {
-        Self.restoreIfOwed()
         let enabled = SharedDefaults.store.bool(
             forKey: AppStorageKeys.DisplayPower.bluetoothOffDuringSleep)
-        if enabled, supported { start() } else { stop() }
+        if enabled, supported {
+            if !sleeping { Self.restoreIfOwed() }
+            start()
+        } else {
+            stop()
+            sleeping = false
+            Self.restoreIfOwed()
+        }
         changed()
     }
 
@@ -52,6 +59,7 @@ final class BluetoothSleepController {
                 forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
             ) { [weak self] _ in
                 MainActor.assumeIsolated {
+                    self?.sleeping = false
                     Self.restoreIfOwed()
                     self?.changed()
                 }
@@ -66,6 +74,7 @@ final class BluetoothSleepController {
     }
 
     private func willSleep() {
+        sleeping = true
         let plan = DisplayPowerPolicy.bluetoothSleepPlan(isPoweredOn: Self.isPoweredOn)
         SharedDefaults.store.set(
             plan.owesRestore, forKey: AppStorageKeys.DisplayPower.bluetoothRestorePending)

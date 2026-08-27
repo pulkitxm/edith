@@ -1,5 +1,7 @@
 # `ed display status`
 
+[Display and Power](./README.md) | [CLI reference](../README.md)
+
 Shows every active display, the brightness route Edith selected, XDR availability, and Bluetooth sleep restoration state.
 
 ```bash

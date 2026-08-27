@@ -350,6 +350,16 @@ enum JSONContract {
         JSONCase(
             "ed lid-awake restore-on-quit",
             ["lid-awake", "restore-on-quit", "true", "--json"]),
+        JSONCase("ed display status", ["display", "status", "--json"]),
+        JSONCase(
+            "ed display brightness", ["display", "brightness", "50", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed display xdr", ["display", "xdr", "50", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed display bluetooth-sleep", ["display", "bluetooth-sleep", "on", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed permissions ls", ["permissions", "ls", "--json"]),
         JSONCase("ed permissions request", ["permissions", "request", "calendar", "--json"]),
         JSONCase("ed permissions refresh", ["permissions", "refresh", "--json"]),

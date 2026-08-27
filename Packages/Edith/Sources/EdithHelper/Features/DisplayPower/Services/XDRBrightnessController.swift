@@ -11,6 +11,7 @@ final class XDRBrightnessController {
     private var overlayLayer: CAMetalLayer?
     private var triggerWindow: NSWindow?
     private var triggerLayer: CAMetalLayer?
+    private var overlayDisplayID: UInt32?
     private var queue: MTLCommandQueue?
     private var timer: Timer?
     private var screenObserver: NSObjectProtocol?
@@ -63,6 +64,7 @@ final class XDRBrightnessController {
         overlayLayer = nil
         triggerWindow = nil
         triggerLayer = nil
+        overlayDisplayID = nil
         queue = nil
         screensAsleep = false
         boosting = false
@@ -81,7 +83,7 @@ final class XDRBrightnessController {
             workspace.addObserver(
                 forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main
             ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.screensAsleep = true }
+                MainActor.assumeIsolated { self?.screensDidSleep() }
             },
             workspace.addObserver(
                 forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main
@@ -119,7 +121,21 @@ final class XDRBrightnessController {
         changed()
     }
 
+    private func screensDidSleep() {
+        screensAsleep = true
+        if boosting {
+            boosting = false
+            changed()
+        }
+    }
+
     private func showOverlay(on screen: NSScreen) {
+        guard let displayID = screen.displayPowerID else { return }
+        if overlayDisplayID == displayID, overlayWindow?.frame == screen.frame {
+            overlayWindow?.orderFrontRegardless()
+            triggerWindow?.orderFrontRegardless()
+            return
+        }
         overlayWindow?.orderOut(nil)
         triggerWindow?.orderOut(nil)
         guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue()
@@ -157,6 +173,7 @@ final class XDRBrightnessController {
         window.contentView = view
         overlayWindow = window
         overlayLayer = layer
+        overlayDisplayID = displayID
         present(layer: layer, factor: 1.05, wait: true)
         window.orderFrontRegardless()
 
@@ -252,4 +269,10 @@ final class XDRBrightnessController {
         guard sysctlbyname("hw.model", &buffer, &size, nil, 0) == 0 else { return nil }
         return String(cString: buffer)
     }()
+}
+
+private extension NSScreen {
+    var displayPowerID: UInt32? {
+        (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
+    }
 }

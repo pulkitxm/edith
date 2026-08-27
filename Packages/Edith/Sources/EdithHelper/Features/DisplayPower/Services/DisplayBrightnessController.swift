@@ -19,6 +19,12 @@ final class DisplayBrightnessController {
         let maximum: UInt16
     }
 
+    private struct ExternalDisplay {
+        let id: UInt32
+        let name: String
+        let identity: DisplayPowerDisplayIdentity
+    }
+
     private(set) var displays: [DisplayPowerDisplay] = []
     private var routes: [UInt32: Route] = [:]
     private var gammaTables: [UInt32: GammaTable] = [:]
@@ -53,7 +59,7 @@ final class DisplayBrightnessController {
         let levels = DisplayPowerOperationExecution.brightnessLevels()
         var nextDisplays: [DisplayPowerDisplay] = []
         var nextRoutes: [UInt32: Route] = [:]
-        var external: [(UInt32, String)] = []
+        var external: [ExternalDisplay] = []
 
         for screen in NSScreen.screens {
             guard let id = screen.displayPowerID, CGDisplayMirrorsDisplay(id) == 0 else { continue }
@@ -74,39 +80,77 @@ final class DisplayBrightnessController {
                         id: id, name: screen.localizedName, builtIn: true,
                         method: .unavailable, brightness: 1))
             } else {
-                external.append((id, screen.localizedName))
+                external.append(
+                    ExternalDisplay(
+                        id: id, name: screen.localizedName,
+                        identity: Self.displayIdentity(
+                            id, info: DisplayBrightnessBridge.displayInfo(id))))
             }
         }
 
         let services = DisplayBrightnessBridge.externalServices()
-        if external.count == 1, services.count == 1 {
-            let (id, name) = external[0]
-            let service = services[0]
-            if let reading = ddcRead(service: service) {
-                let maximum = max(reading.maximum, 1)
-                let value = levels[id] ?? Double(reading.current) / Double(maximum)
-                nextDisplays.append(
-                    DisplayPowerDisplay(
-                        id: id, name: name, builtIn: false, method: .ddc,
-                        brightness: value))
-                nextRoutes[id] = Route(method: .ddc, service: service, maximum: maximum)
-                external.removeAll()
+        var scores: [(displayIndex: Int, serviceOrdinal: Int, score: Int)] = []
+        for (index, display) in external.enumerated() {
+            for service in services {
+                scores.append(
+                    (
+                        index, service.identity.ordinal,
+                        DisplayPowerPolicy.matchScore(
+                            service: service.identity, display: display.identity)
+                    ))
             }
         }
+        var assignment = DisplayPowerPolicy.assignServices(scores: scores)
+        let unassignedDisplays = external.indices.filter { assignment[$0] == nil }
+        let assignedServices = Set(assignment.values)
+        let unassignedServices = services.filter { !assignedServices.contains($0.identity.ordinal) }
+        if unassignedDisplays.count == 1, unassignedServices.count == 1 {
+            assignment[unassignedDisplays[0]] = unassignedServices[0].identity.ordinal
+        }
 
-        for (id, name) in external {
-            captureGamma(for: id)
-            let value = levels[id] ?? (dimmed.contains(id) ? currentBrightness(id) : 1)
+        for (index, display) in external.enumerated() {
+            if let ordinal = assignment[index],
+                let matched = services.first(where: { $0.identity.ordinal == ordinal })
+            {
+                let stored = levels[display.id]
+                switch ddcProbe(service: matched.service) {
+                case .replied(let current, let reportedMaximum):
+                    let maximum = reportedMaximum > 0 ? reportedMaximum : 100
+                    let value = stored ?? Double(current) / Double(maximum)
+                    nextDisplays.append(
+                        DisplayPowerDisplay(
+                            id: display.id, name: display.name, builtIn: false, method: .ddc,
+                            brightness: value))
+                    nextRoutes[display.id] = Route(
+                        method: .ddc, service: matched.service, maximum: maximum)
+                    continue
+                case .writeOnly:
+                    let value = stored ?? currentBrightness(display.id, fallback: 0.5)
+                    nextDisplays.append(
+                        DisplayPowerDisplay(
+                            id: display.id, name: display.name, builtIn: false, method: .ddc,
+                            brightness: value))
+                    nextRoutes[display.id] = Route(
+                        method: .ddc, service: matched.service, maximum: 100)
+                    continue
+                case .dead:
+                    break
+                }
+            }
+
+            captureGamma(for: display.id)
+            let value = levels[display.id] ?? currentBrightness(display.id, fallback: 1)
             nextDisplays.append(
                 DisplayPowerDisplay(
-                    id: id, name: name, builtIn: false,
-                    method: gammaTables[id] == nil ? .unavailable : .software,
+                    id: display.id, name: display.name, builtIn: false,
+                    method: gammaTables[display.id] == nil ? .unavailable : .software,
                     brightness: value))
-            if gammaTables[id] != nil {
-                nextRoutes[id] = Route(method: .software, service: nil, maximum: 100)
+            if gammaTables[display.id] != nil {
+                nextRoutes[display.id] = Route(method: .software, service: nil, maximum: 100)
             }
         }
 
+        restoreUnusedGamma(nextRoutes: nextRoutes)
         routes = nextRoutes
         displays = nextDisplays.sorted { left, right in
             if left.builtIn != right.builtIn { return left.builtIn }
@@ -159,8 +203,8 @@ final class DisplayBrightnessController {
         changed()
     }
 
-    private func currentBrightness(_ id: UInt32) -> Double {
-        displays.first(where: { $0.id == id })?.brightness ?? 1
+    private func currentBrightness(_ id: UInt32, fallback: Double) -> Double {
+        displays.first(where: { $0.id == id })?.brightness ?? fallback
     }
 
     private func captureGamma(for id: UInt32) {
@@ -199,6 +243,19 @@ final class DisplayBrightnessController {
         return applied
     }
 
+    private func restoreUnusedGamma(nextRoutes: [UInt32: Route]) {
+        let unused = gammaTables.filter {
+            nextRoutes[$0.key]?.method != .software
+                && $0.value.fingerprint == Self.fingerprint($0.key)
+        }
+        for (id, table) in unused {
+            _ = CGSetDisplayTransferByTable(
+                id, table.count, table.red, table.green, table.blue)
+            gammaTables.removeValue(forKey: id)
+            dimmed.remove(id)
+        }
+    }
+
     private func restoreGamma() {
         for (id, table) in gammaTables where table.fingerprint == Self.fingerprint(id) {
             _ = CGSetDisplayTransferByTable(
@@ -208,24 +265,26 @@ final class DisplayBrightnessController {
         dimmed.removeAll()
     }
 
-    private func ddcRead(service: CFTypeRef) -> (current: UInt16, maximum: UInt16)? {
+    private func ddcProbe(service: CFTypeRef) -> DisplayPowerDDCProbeOutcome {
         guard let write = DisplayBrightnessBridge.writeI2C,
             let read = DisplayBrightnessBridge.readI2C
-        else { return nil }
+        else { return .dead }
         var request = DisplayPowerPolicy.ddcReadPacket
+        var writeAccepted = false
         for _ in 0..<3 {
             usleep(10_000)
-            guard write(service, 0x37, 0x51, &request, UInt32(request.count)) == KERN_SUCCESS
-            else { continue }
+            if write(service, 0x37, 0x51, &request, UInt32(request.count)) == KERN_SUCCESS {
+                writeAccepted = true
+            }
             usleep(50_000)
             var reply = [UInt8](repeating: 0, count: 11)
             if read(service, 0x37, 0, &reply, UInt32(reply.count)) == KERN_SUCCESS,
                 let parsed = DisplayPowerPolicy.parseDDCReply(reply)
             {
-                return parsed
+                return .replied(current: parsed.current, maximum: parsed.maximum)
             }
         }
-        return nil
+        return DisplayPowerPolicy.ddcProbeOutcome(writeAccepted: writeAccepted, reply: nil)
     }
 
     private func ddcWrite(service: CFTypeRef, value: UInt16) -> Bool {
@@ -244,6 +303,28 @@ final class DisplayBrightnessController {
     private static func fingerprint(_ id: UInt32) -> String {
         "\(CGDisplayVendorNumber(id)):\(CGDisplayModelNumber(id)):\(CGDisplaySerialNumber(id))"
     }
+
+    private static func displayIdentity(
+        _ id: UInt32, info: NSDictionary?
+    ) -> DisplayPowerDisplayIdentity {
+        guard let info else {
+            return DisplayPowerDisplayIdentity(
+                vendorID: Int64(CGDisplayVendorNumber(id)),
+                productID: Int64(CGDisplayModelNumber(id)),
+                serialNumber: Int64(CGDisplaySerialNumber(id)))
+        }
+        let names = info["DisplayProductName"] as? [String: String]
+        return DisplayPowerDisplayIdentity(
+            vendorID: (info[kDisplayVendorID] as? NSNumber)?.int64Value,
+            productID: (info[kDisplayProductID] as? NSNumber)?.int64Value,
+            weekOfManufacture: (info[kDisplayWeekOfManufacture] as? NSNumber)?.int64Value,
+            yearOfManufacture: (info[kDisplayYearOfManufacture] as? NSNumber)?.int64Value,
+            horizontalImageSize: (info[kDisplayHorizontalImageSize] as? NSNumber)?.int64Value,
+            verticalImageSize: (info[kDisplayVerticalImageSize] as? NSNumber)?.int64Value,
+            ioDisplayLocation: info[kIODisplayLocationKey] as? String,
+            productName: names?["en_US"] ?? names?.first?.value,
+            serialNumber: (info[kDisplaySerialNumber] as? NSNumber)?.int64Value)
+    }
 }
 
 private extension NSScreen {
@@ -257,6 +338,8 @@ private enum DisplayBrightnessBridge {
     typealias SetBrightness = @convention(c) (UInt32, Float) -> Int32
     typealias CreateWithService =
         @convention(c) (CFAllocator?, io_service_t) -> Unmanaged<CFTypeRef>?
+    typealias CreateInfoDictionary =
+        @convention(c) (UInt32) -> Unmanaged<CFDictionary>?
     typealias WriteI2C =
         @convention(c) (CFTypeRef, UInt32, UInt32, UnsafeMutableRawPointer, UInt32) -> IOReturn
     typealias ReadI2C =
@@ -273,10 +356,21 @@ private enum DisplayBrightnessBridge {
         displayServices, "DisplayServicesSetBrightness")
     static let createWithService: CreateWithService? = symbol(
         coreDisplay, "IOAVServiceCreateWithService")
+    static let createInfoDictionary: CreateInfoDictionary? = symbol(
+        coreDisplay, "CoreDisplay_DisplayCreateInfoDictionary")
     static let writeI2C: WriteI2C? = symbol(coreDisplay, "IOAVServiceWriteI2C")
     static let readI2C: ReadI2C? = symbol(coreDisplay, "IOAVServiceReadI2C")
 
-    static func externalServices() -> [CFTypeRef] {
+    struct ExternalService {
+        let identity: DisplayPowerServiceIdentity
+        let service: CFTypeRef
+    }
+
+    static func displayInfo(_ id: UInt32) -> NSDictionary? {
+        createInfoDictionary?(id)?.takeRetainedValue() as NSDictionary?
+    }
+
+    static func externalServices() -> [ExternalService] {
         guard let createWithService else { return [] }
         let root = IORegistryGetRootEntry(kIOMainPortDefault)
         guard root != IO_OBJECT_NULL else { return [] }
@@ -288,23 +382,47 @@ private enum DisplayBrightnessBridge {
                 == KERN_SUCCESS
         else { return [] }
         defer { IOObjectRelease(iterator) }
-        var services: [CFTypeRef] = []
+        var services: [ExternalService] = []
+        var pending = DisplayPowerServiceIdentity()
+        var ordinal = 0
         while true {
             let entry = IOIteratorNext(iterator)
             guard entry != IO_OBJECT_NULL else { break }
             defer { IOObjectRelease(entry) }
             var name = [CChar](repeating: 0, count: 128)
-            guard IORegistryEntryGetName(entry, &name) == KERN_SUCCESS,
-                String(cString: name) == "DCPAVServiceProxy",
-                let location = IORegistryEntryCreateCFProperty(
-                    entry, "Location" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue()
-                    as? String,
-                location == "External",
+            guard IORegistryEntryGetName(entry, &name) == KERN_SUCCESS else { continue }
+            let entryName = String(cString: name)
+            if entryName.contains("AppleCLCD2")
+                || entryName.contains("IOMobileFramebufferShim")
+            {
+                ordinal += 1
+                pending = DisplayPowerServiceIdentity(ordinal: ordinal)
+                pending.edidUUID = property(entry, "EDID UUID") as? String ?? ""
+                var path = [CChar](repeating: 0, count: 512)
+                if IORegistryEntryGetPath(entry, kIOServicePlane, &path) == KERN_SUCCESS {
+                    pending.ioDisplayLocation = String(cString: path)
+                }
+                if let attributes = property(entry, "DisplayAttributes") as? NSDictionary,
+                    let product = attributes["ProductAttributes"] as? NSDictionary
+                {
+                    pending.productName = product["ProductName"] as? String ?? ""
+                    pending.serialNumber =
+                        (product["SerialNumber"] as? NSNumber)?.int64Value ?? 0
+                }
+            } else if entryName == "DCPAVServiceProxy",
+                property(entry, "Location") as? String == "External",
                 let service = createWithService(kCFAllocatorDefault, entry)?.takeRetainedValue()
-            else { continue }
-            services.append(service)
+            {
+                services.append(ExternalService(identity: pending, service: service))
+            }
         }
         return services
+    }
+
+    private static func property(_ entry: io_service_t, _ key: String) -> AnyObject? {
+        IORegistryEntryCreateCFProperty(
+            entry, key as CFString, kCFAllocatorDefault,
+            IOOptionBits(kIORegistryIterateRecursively))?.takeRetainedValue()
     }
 
     private static func symbol<T>(_ handle: UnsafeMutableRawPointer?, _ name: String) -> T? {

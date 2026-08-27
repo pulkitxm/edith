@@ -47,7 +47,8 @@ public enum ConfigCatalog {
     public static let groups = [
         "appearance", "panel", "attention", "usage", "limits", "menubar", "alerts", "budget",
         "dashboard",
-        "machines", "herdr", "quinjet", "companion", "finder", "system", "display", "cleaner", "music",
+        "machines", "herdr", "quinjet", "companion", "finder", "system", "display", "cleaner",
+        "music",
         "calendar",
         "clipboard",
         "notch", "focusdim", "presenter", "colorpicker", "micmute",

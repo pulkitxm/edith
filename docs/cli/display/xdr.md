@@ -1,5 +1,7 @@
 # `ed display xdr`
 
+[Display and Power](./README.md) | [CLI reference](../README.md)
+
 Sets extra brightness on a supported built-in XDR display, or disables the boost.
 
 ```bash

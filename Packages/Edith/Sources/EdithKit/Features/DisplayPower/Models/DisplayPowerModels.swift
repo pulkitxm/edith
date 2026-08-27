@@ -61,6 +61,60 @@ public struct DisplayPowerBluetoothSleepPlan: Equatable, Sendable {
     }
 }
 
+public struct DisplayPowerDisplayIdentity: Equatable, Sendable {
+    public var vendorID: Int64?
+    public var productID: Int64?
+    public var weekOfManufacture: Int64?
+    public var yearOfManufacture: Int64?
+    public var horizontalImageSize: Int64?
+    public var verticalImageSize: Int64?
+    public var ioDisplayLocation: String?
+    public var productName: String?
+    public var serialNumber: Int64?
+
+    public init(
+        vendorID: Int64? = nil, productID: Int64? = nil, weekOfManufacture: Int64? = nil,
+        yearOfManufacture: Int64? = nil, horizontalImageSize: Int64? = nil,
+        verticalImageSize: Int64? = nil, ioDisplayLocation: String? = nil,
+        productName: String? = nil, serialNumber: Int64? = nil
+    ) {
+        self.vendorID = vendorID
+        self.productID = productID
+        self.weekOfManufacture = weekOfManufacture
+        self.yearOfManufacture = yearOfManufacture
+        self.horizontalImageSize = horizontalImageSize
+        self.verticalImageSize = verticalImageSize
+        self.ioDisplayLocation = ioDisplayLocation
+        self.productName = productName
+        self.serialNumber = serialNumber
+    }
+}
+
+public struct DisplayPowerServiceIdentity: Equatable, Sendable {
+    public var edidUUID: String
+    public var ioDisplayLocation: String
+    public var productName: String
+    public var serialNumber: Int64
+    public var ordinal: Int
+
+    public init(
+        edidUUID: String = "", ioDisplayLocation: String = "", productName: String = "",
+        serialNumber: Int64 = 0, ordinal: Int = 0
+    ) {
+        self.edidUUID = edidUUID
+        self.ioDisplayLocation = ioDisplayLocation
+        self.productName = productName
+        self.serialNumber = serialNumber
+        self.ordinal = ordinal
+    }
+}
+
+public enum DisplayPowerDDCProbeOutcome: Equatable, Sendable {
+    case replied(current: UInt16, maximum: UInt16)
+    case writeOnly
+    case dead
+}
+
 public enum DisplayPowerPolicy {
     public static let xdrMacModels: Set<String> = [
         "MacBookPro18,1", "MacBookPro18,2", "MacBookPro18,3", "MacBookPro18,4",
@@ -76,7 +130,7 @@ public enum DisplayPowerPolicy {
     }
 
     public static func deviceBrightness(_ value: Double, maximum: UInt16) -> UInt16 {
-        let ceiling = max(maximum, 1)
+        let ceiling = maximum > 0 ? maximum : 100
         return UInt16((normalizedBrightness(value) * Double(ceiling)).rounded())
     }
 
@@ -106,6 +160,79 @@ public enum DisplayPowerPolicy {
             UInt16(reply[8]) << 8 | UInt16(reply[9]),
             UInt16(reply[6]) << 8 | UInt16(reply[7])
         )
+    }
+
+    public static func ddcProbeOutcome(
+        writeAccepted: Bool, reply: (current: UInt16, maximum: UInt16)?
+    ) -> DisplayPowerDDCProbeOutcome {
+        if let reply { return .replied(current: reply.current, maximum: reply.maximum) }
+        return writeAccepted ? .writeOnly : .dead
+    }
+
+    public static func matchScore(
+        service: DisplayPowerServiceIdentity, display: DisplayPowerDisplayIdentity
+    ) -> Int {
+        var score = 0
+        func uuidChunk(at location: Int) -> String {
+            String(service.edidUUID.prefix(location + 4).suffix(4))
+        }
+        if let vendor = display.vendorID, vendor > 0 {
+            let key = String(format: "%04X", UInt16(clamping: vendor))
+            if key != "0000", key == uuidChunk(at: 0) { score += 1 }
+        }
+        if let product = display.productID, product > 0 {
+            let value = UInt16(clamping: product)
+            let key = String(format: "%02X%02X", UInt8(value & 0xFF), UInt8(value >> 8))
+            if key != "0000", key == uuidChunk(at: 4) { score += 1 }
+        }
+        if let week = display.weekOfManufacture, let year = display.yearOfManufacture,
+            year >= 1990
+        {
+            let key = String(
+                format: "%02X%02X", UInt8(clamping: week), UInt8(clamping: year - 1990))
+            if key != "0000", key == uuidChunk(at: 19) { score += 1 }
+        }
+        if let horizontal = display.horizontalImageSize,
+            let vertical = display.verticalImageSize
+        {
+            let key = String(
+                format: "%02X%02X", UInt8(clamping: horizontal / 10),
+                UInt8(clamping: vertical / 10))
+            if key != "0000", key == uuidChunk(at: 30) { score += 1 }
+        }
+        if !service.ioDisplayLocation.isEmpty,
+            service.ioDisplayLocation == display.ioDisplayLocation
+        {
+            score += 10
+        }
+        if !service.productName.isEmpty,
+            service.productName.lowercased() == display.productName?.lowercased()
+        {
+            score += 1
+        }
+        if service.serialNumber != 0, service.serialNumber == display.serialNumber { score += 1 }
+        return score
+    }
+
+    public static func assignServices(
+        scores: [(displayIndex: Int, serviceOrdinal: Int, score: Int)]
+    ) -> [Int: Int] {
+        var assignment: [Int: Int] = [:]
+        var services = Set<Int>()
+        for entry in scores.sorted(by: { left, right in
+            if left.score != right.score { return left.score > right.score }
+            if left.displayIndex != right.displayIndex {
+                return left.displayIndex < right.displayIndex
+            }
+            return left.serviceOrdinal < right.serviceOrdinal
+        }) where entry.score > 0 {
+            guard assignment[entry.displayIndex] == nil,
+                !services.contains(entry.serviceOrdinal)
+            else { continue }
+            assignment[entry.displayIndex] = entry.serviceOrdinal
+            services.insert(entry.serviceOrdinal)
+        }
+        return assignment
     }
 
     public static func bluetoothSleepPlan(isPoweredOn: Bool) -> DisplayPowerBluetoothSleepPlan {
