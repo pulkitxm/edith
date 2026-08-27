@@ -124,6 +124,16 @@ enum JSONContract {
         JSONCase(
             "ed window restore", ["window", "restore", "--json"],
             mutatesTheMachine: true),
+        JSONCase("ed windows ls", ["windows", "ls", "--json"]),
+        JSONCase(
+            "ed windows show", ["windows", "show", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed windows activate", ["windows", "activate", "missing", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed windows cycle", ["windows", "cycle", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed calendar join", ["calendar", "join", "nothing-at-all", "--json"]),
         JSONCase(
             "ed calendar directions", ["calendar", "directions", "nothing-at-all", "--json"]),
