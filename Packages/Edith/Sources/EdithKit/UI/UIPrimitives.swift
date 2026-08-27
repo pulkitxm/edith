@@ -203,8 +203,8 @@ private struct EdithButtonBody<Label: View>: View {
             return Color.primary.opacity(contrast == .increased ? 0.34 : 0.18)
         case .primary, .destructive:
             return Color.white.opacity(contrast == .increased ? 0.7 : 0.2)
-        default:
-            return Color.primary.opacity(emphasized ? 0.16 : 0)
+        case .row, .selection, .borderless, .toolbar, .iconOnly:
+            return .clear
         }
     }
 
