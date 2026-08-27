@@ -1119,9 +1119,11 @@ final class UsageStore: FeatureModule {
         guard !terminating else { return }
         let generation = statsReloadGeneration.begin()
         let url = Repo.usageJSON
-        let mtime =
+        let mtime = await Task.detached(priority: .utility) {
             (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate])
-            as? Date
+                as? Date
+        }.value
+        guard !Task.isCancelled, statsReloadGeneration.accepts(generation) else { return }
         if let mtime, mtime == usageMtime { return }
 
         let parsed: UsageFile
@@ -1232,9 +1234,11 @@ final class UsageStore: FeatureModule {
         limitHistoryGeneration += 1
         let generation = limitHistoryGeneration
         let url = LimitsHistory.url
-        let mtime =
+        let mtime = await Task.detached(priority: .utility) {
             (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate])
-            as? Date
+                as? Date
+        }.value
+        guard !Task.isCancelled, limitHistoryGeneration == generation else { return }
         historyMtime = mtime
         let since = Date().addingTimeInterval(-24 * 3600)
         let points = await Task.detached(priority: .utility) {

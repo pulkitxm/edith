@@ -462,7 +462,11 @@ final class FinderModel {
         guard entry.isDirectory, folderSizes[entry.path] == nil else { return }
         folderSizes[entry.path] = -1
         if session.isLocal {
-            let count = (try? FileManager.default.contentsOfDirectory(atPath: entry.path).count)
+            let path = entry.path
+            let count = await Task.detached(priority: .utility) {
+                try? FileManager.default.contentsOfDirectory(atPath: path).count
+            }.value
+            guard !Task.isCancelled else { return }
             folderCounts[entry.path] = count ?? 0
         }
         let result = await MachineFileOperationExecution.info(path: entry.path) {

@@ -225,6 +225,21 @@ import Testing
         #expect(persisted.currentID == original.id)
     }
 
+    @Test func initialStoreLoadsWithoutBlockingInitialization() async throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-workspace-load-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let saved = WorkspaceLayout.single(machineID: UUID(), screen: .files)
+        try WorkspaceStore.save(
+            WorkspaceStore(layouts: [saved], currentID: saved.id), to: file)
+
+        let model = WorkspaceModel(machines: .shared, file: file)
+        await model.awaitInitialLoad()
+
+        #expect(model.layout.id == saved.id)
+        #expect(model.store.currentID == saved.id)
+    }
+
     @Test func paneActionsUseTheSharedExecutorAndSurfaceFailures() throws {
         let (model, file) = model()
         defer { try? FileManager.default.removeItem(at: file) }

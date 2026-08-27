@@ -35,7 +35,7 @@ final class FilePreviewModel {
     private let materializeFile: Materialize
     private let imageLoader: ImageLoader
 
-    static let textPreviewLimit = RemoteFileOperationExecution.previewLimit
+    nonisolated static let textPreviewLimit = RemoteFileOperationExecution.previewLimit
 
     init(
         materialize: @escaping Materialize = { entry, session, maximumBytes in
@@ -139,13 +139,19 @@ final class FilePreviewModel {
 
     private func loadText(entry: RemoteFileEntry, session: MachineSession) async {
         if session.isLocal {
-            guard let handle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: entry.path))
-            else {
+            let path = entry.path
+            let data: Data? = await Task.detached(priority: .utility) { () -> Data? in
+                guard let handle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: path))
+                else { return nil }
+                let data = handle.readData(ofLength: Self.textPreviewLimit + 1)
+                try? handle.close()
+                return data
+            }.value
+            guard !Task.isCancelled else { return }
+            guard let data else {
                 content = .failed("Could not read this file.")
                 return
             }
-            let data = handle.readData(ofLength: Self.textPreviewLimit + 1)
-            try? handle.close()
             let preview = RemoteFileOperationExecution.textPreview(data)
             content = .text(
                 preview.text, language: entry.fileExtension, truncated: preview.truncated)
