@@ -69,15 +69,24 @@ final class MediaToolkitPageModel {
 
     func add(_ urls: [URL]) {
         guard !isProcessing else { return }
-        let images = urls.filter(Self.isImage)
-        let videos = urls.filter(Self.isVideo)
+        var images: [URL] = []
+        var videos: [URL] = []
+        for url in urls.prefix(10_000) {
+            let standardized = url.standardizedFileURL
+            if Self.isImage(standardized) {
+                images.append(standardized)
+            } else if Self.isVideo(standardized) {
+                videos.append(standardized)
+            }
+        }
         if !images.isEmpty {
             mode = .images
-            var seen = Set(imageURLs.map(\.standardizedFileURL))
-            imageURLs += images.map(\.standardizedFileURL).filter { seen.insert($0).inserted }
+            var seen = Set<URL>()
+            for url in imageURLs { seen.insert(url) }
+            for url in images where seen.insert(url).inserted { imageURLs.append(url) }
         } else if let video = videos.first {
             mode = .video
-            videoURL = video.standardizedFileURL
+            videoURL = video
         } else {
             errorMessage = "Choose an image or video that macOS can read."
             return
