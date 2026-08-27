@@ -25,6 +25,17 @@ import Testing
         #expect(found[0].url == app)
         #expect(found[0].update?.latestVersion == "2.0")
         #expect(found[0].update?.source == "Homebrew")
+
+        let current = AppMaintenanceInventory.applyingHomebrewUpdates(
+            Data(
+                """
+                {"casks":[{"name":"example-app","installed_versions":["1.0"],"current_version":"1.0"}]}
+                """.utf8),
+            to: found.map {
+                InstalledApplication(
+                    id: $0.id, name: $0.name, bundleID: $0.bundleID, version: "1.0", url: $0.url)
+            })
+        #expect(current[0].update == nil)
     }
 
     @Test func scanIncludesOnlyExactBundleIdentifierPaths() throws {
@@ -70,6 +81,19 @@ import Testing
         #expect(moved.isEmpty)
         #expect(result.removed.isEmpty)
         #expect(result.failed.map(\.id) == [cacheItem.id])
+
+        plan = try AppMaintenanceExecution.plan(
+            applicationURL: app, applicationRoots: [applications], home: root)
+        let originalInfo = app.appendingPathComponent("Contents/Info.plist")
+        let replacementInfo = app.appendingPathComponent("Contents/Info.replacement.plist")
+        try Data("changed".utf8).write(to: replacementInfo)
+        try FileManager.default.removeItem(at: originalInfo)
+        try FileManager.default.moveItem(at: replacementInfo, to: originalInfo)
+        #expect(throws: AppMaintenanceError.applicationChanged) {
+            try AppMaintenanceExecution.remove(
+                plan: plan, selectedIDs: [app.path], trash: { moved.append($0) })
+        }
+        try makeInfoPlist(at: originalInfo, bundleID: "com.example.app", version: "1.0")
         plan = try AppMaintenanceExecution.plan(
             applicationURL: app, applicationRoots: [applications], home: root)
         let appItem = try #require(plan.items.first { $0.category == .application })
@@ -122,15 +146,22 @@ import Testing
     private func makeApp(at url: URL, bundleID: String, version: String) throws -> URL {
         let contents = url.appendingPathComponent("Contents", isDirectory: true)
         try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+        try makeInfoPlist(
+            at: contents.appendingPathComponent("Info.plist"), bundleID: bundleID,
+            version: version)
+        return url.standardizedFileURL
+    }
+
+    private func makeInfoPlist(at url: URL, bundleID: String, version: String) throws {
         let plist: [String: Any] = [
             "CFBundleIdentifier": bundleID,
-            "CFBundleName": url.deletingPathExtension().lastPathComponent,
+            "CFBundleName": url.deletingLastPathComponent().deletingLastPathComponent()
+                .deletingPathExtension().lastPathComponent,
             "CFBundleShortVersionString": version,
             "CFBundlePackageType": "APPL",
         ]
         let data = try PropertyListSerialization.data(
             fromPropertyList: plist, format: .xml, options: 0)
-        try data.write(to: contents.appendingPathComponent("Info.plist"))
-        return url.standardizedFileURL
+        try data.write(to: url)
     }
 }

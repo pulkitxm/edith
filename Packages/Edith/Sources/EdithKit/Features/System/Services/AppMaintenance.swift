@@ -106,11 +106,16 @@ public struct AppMaintenancePlan: Equatable, Sendable {
     public let application: InstalledApplication
     public let items: [AppMaintenanceItem]
     public let roots: [URL]
+    public let applicationInfoIdentity: AppMaintenanceFileIdentity
 
-    public init(application: InstalledApplication, items: [AppMaintenanceItem], roots: [URL]) {
+    public init(
+        application: InstalledApplication, items: [AppMaintenanceItem], roots: [URL],
+        applicationInfoIdentity: AppMaintenanceFileIdentity
+    ) {
         self.application = application
         self.items = items
         self.roots = roots
+        self.applicationInfoIdentity = applicationInfoIdentity
     }
 
     public var totalBytes: Int64 { items.reduce(0) { $0 + $1.sizeBytes } }
@@ -219,7 +224,9 @@ public enum AppMaintenanceInventory {
             grouping: applications, by: { normalizedName($0.name) })
         return applications.map { app in
             let key = normalizedName(app.name)
-            guard applicationKeys[key]?.count == 1, let update = updates[key] else { return app }
+            guard applicationKeys[key]?.count == 1, let update = updates[key],
+                normalizedVersion(app.version) != normalizedVersion(update.latest)
+            else { return app }
             return InstalledApplication(
                 id: app.id, name: app.name, bundleID: app.bundleID, version: app.version,
                 url: app.url,
@@ -267,6 +274,10 @@ public enum AppMaintenanceInventory {
         String(value.lowercased().unicodeScalars.filter(CharacterSet.alphanumerics.contains))
     }
 
+    private static func normalizedVersion(_ value: String) -> String {
+        value.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private static func homebrewOutdatedData() -> Data? {
         let paths = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"]
         guard let executable = paths.first(where: FileManager.default.isExecutableFile) else {
@@ -296,11 +307,13 @@ public enum AppMaintenanceExecution {
         home: URL = FileManager.default.homeDirectoryForCurrentUser
     ) throws -> AppMaintenancePlan {
         let appURL = applicationURL.standardizedFileURL
+        let infoURL = appURL.appendingPathComponent("Contents/Info.plist")
         guard
             applicationRoots.map(\.standardizedFileURL).contains(
                 appURL.deletingLastPathComponent()),
             appURL.pathExtension.caseInsensitiveCompare("app") == .orderedSame,
-            !isSymbolicLink(appURL), let bundle = Bundle(url: appURL),
+            !isSymbolicLink(appURL), !isSymbolicLink(infoURL),
+            let infoIdentity = identity(at: infoURL), let bundle = Bundle(url: appURL),
             let bundleID = AppMaintenanceInventory.verifiedBundleID(bundle.bundleIdentifier)
         else { throw AppMaintenanceError.invalidApplication }
         guard !AppMaintenanceInventory.isProtected(bundleID: bundleID, url: appURL) else {
@@ -347,7 +360,8 @@ public enum AppMaintenanceExecution {
         }
         return AppMaintenancePlan(
             application: application, items: items,
-            roots: applicationRoots + definitions.map { $0.1 })
+            roots: applicationRoots + definitions.map { $0.1 },
+            applicationInfoIdentity: infoIdentity)
     }
 
     public static func remove(
@@ -359,7 +373,9 @@ public enum AppMaintenanceExecution {
         let selected = plan.items.filter { selectedIDs.contains($0.id) }
         guard !selected.isEmpty else { throw AppMaintenanceError.emptySelection }
         guard let target = plan.items.first(where: { $0.category == .application }),
-            identity(at: target.url) == target.identity
+            identity(at: target.url) == target.identity,
+            identity(at: target.url.appendingPathComponent("Contents/Info.plist"))
+                == plan.applicationInfoIdentity
         else { throw AppMaintenanceError.applicationChanged }
         var removed: [AppMaintenanceItem] = []
         var failed: [AppMaintenanceItem] = []
