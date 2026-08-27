@@ -18,8 +18,11 @@ ed extensions info quinjet --json
 
 Choose `embedded` to run workspaces inside Edith. Choose `cmux` to open them in
 cmux, which must be installed separately in Applications. The default `app`
-theme follows Edith's selected theme and appearance. Choosing a named Quinjet
+theme sends Edith's own light and dark palettes to Quinjet. Changing Edith's
+theme or appearance updates every open Quinjet session. Choosing a named Quinjet
 theme keeps that explicit palette while still following light and dark appearance.
+Named themes are discovered from the installed Quinjet version, so new Quinjet
+palettes appear without an Edith update.
 Both settings are available to scripts:
 
 ```sh

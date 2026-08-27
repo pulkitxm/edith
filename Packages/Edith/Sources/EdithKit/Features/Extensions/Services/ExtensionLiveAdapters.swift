@@ -167,7 +167,10 @@ public enum ExtensionLiveAdapters {
         let terminalRaw = defaults.string(forKey: AppStorageKeys.Quinjet.terminal)
         let themeRaw = defaults.string(forKey: AppStorageKeys.Quinjet.theme)
         let terminalValid = terminalRaw == nil || QuinjetTerminal(rawValue: terminalRaw!) != nil
-        let themeValid = themeRaw == nil || QuinjetTheme(rawValue: themeRaw!) != nil
+        let themeValid =
+            themeRaw.map {
+                $0 == QuinjetThemePreference.app || QuinjetTheme(rawValue: $0) != nil
+            } ?? true
         let terminal = terminalRaw.flatMap(QuinjetTerminal.init(rawValue:)) ?? .embedded
         let configured = terminalValid && themeValid && (terminal != .cmux || cmux != nil)
         return ExtensionAdapterFacts(

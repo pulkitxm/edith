@@ -93,11 +93,13 @@ struct QuinjetPage: View {
 
     private var configuration: QuinjetLaunchConfiguration {
         let storedTerminal = QuinjetTerminal(rawValue: terminalName) ?? .embedded
+        let appTheme = AppTheme(storedName: appThemeName)
         return QuinjetLaunchConfiguration(
             terminal: storedTerminal.isAvailable ? storedTerminal : .embedded,
-            theme: QuinjetThemePreference.resolve(
-                themeName, appTheme: AppTheme(storedName: appThemeName)),
-            appearance: scheme == .dark ? .dark : .light)
+            theme: QuinjetThemePreference.resolve(themeName, appTheme: appTheme),
+            appearance: scheme == .dark ? .dark : .light,
+            hostTheme: themeName == QuinjetThemePreference.app
+                ? .edith(appTheme: appTheme) : nil)
     }
 
     private var terminalMenu: some View {
@@ -151,7 +153,7 @@ struct QuinjetPage: View {
             QuinjetMenuLabel(
                 icon: "paintpalette",
                 title: themeName == QuinjetThemePreference.app
-                    ? "App: \(configuration.theme.label)" : configuration.theme.label)
+                    ? "App theme" : configuration.theme.label)
         }
         .menuIndicator(.hidden)
         .menuStyle(.borderlessButton)
@@ -264,9 +266,7 @@ private struct QuinjetTerminalWorkspace: View {
 
     private var dark: Bool { scheme == .dark }
     private var palette: TerminalPalette {
-        .quinjet(
-            theme: tab.launchConfiguration.theme,
-            appearance: tab.launchConfiguration.appearance)
+        .quinjet(configuration: tab.launchConfiguration)
     }
 
     var body: some View {

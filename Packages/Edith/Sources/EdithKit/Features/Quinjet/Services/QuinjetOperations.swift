@@ -68,17 +68,125 @@ public enum QuinjetAppearance: String, CaseIterable, Sendable {
     case dark
 }
 
+public struct QuinjetHostPalette: Equatable, Sendable {
+    public let background: UInt32
+    public let panel: UInt32
+    public let panelAlt: UInt32
+    public let border: UInt32
+    public let muted: UInt32
+    public let text: UInt32
+    public let textStrong: UInt32
+    public let contrast: UInt32
+    public let removed: UInt32
+    public let orange: UInt32
+    public let modified: UInt32
+    public let added: UInt32
+    public let cyan: UInt32
+    public let accent: UInt32
+    public let purple: UInt32
+    public let brown: UInt32
+
+    public init(
+        background: UInt32, panel: UInt32, panelAlt: UInt32, border: UInt32,
+        muted: UInt32, text: UInt32, textStrong: UInt32, contrast: UInt32,
+        removed: UInt32, orange: UInt32, modified: UInt32, added: UInt32,
+        cyan: UInt32, accent: UInt32, purple: UInt32, brown: UInt32
+    ) {
+        self.background = background
+        self.panel = panel
+        self.panelAlt = panelAlt
+        self.border = border
+        self.muted = muted
+        self.text = text
+        self.textStrong = textStrong
+        self.contrast = contrast
+        self.removed = removed
+        self.orange = orange
+        self.modified = modified
+        self.added = added
+        self.cyan = cyan
+        self.accent = accent
+        self.purple = purple
+        self.brown = brown
+    }
+
+    fileprivate var argument: String {
+        let values = [
+            ("background", background), ("panel", panel), ("panelAlt", panelAlt),
+            ("border", border), ("muted", muted), ("text", text),
+            ("textStrong", textStrong), ("contrast", contrast), ("removed", removed),
+            ("orange", orange), ("modified", modified), ("added", added), ("cyan", cyan),
+            ("accent", accent), ("purple", purple), ("brown", brown),
+        ]
+        return "{" + values.map { "\"\($0.0)\":\"\(Self.hex($0.1))\"" }.joined(separator: ",")
+            + "}"
+    }
+
+    private static func hex(_ value: UInt32) -> String {
+        String(format: "#%06x", value & 0x00ff_ffff)
+    }
+}
+
+public struct QuinjetHostTheme: Equatable, Sendable {
+    public let light: QuinjetHostPalette
+    public let dark: QuinjetHostPalette
+
+    public init(light: QuinjetHostPalette, dark: QuinjetHostPalette) {
+        self.light = light
+        self.dark = dark
+    }
+
+    public func palette(for appearance: QuinjetAppearance) -> QuinjetHostPalette {
+        appearance == .dark ? dark : light
+    }
+
+    public var argument: String {
+        "{\"light\":\(light.argument),\"dark\":\(dark.argument)}"
+    }
+
+    public static func edith(appTheme: AppTheme) -> QuinjetHostTheme {
+        let accents: (UInt32, UInt32)
+        switch appTheme {
+        case .accent: accents = (0xd97757, 0xe08a6a)
+        case .blue: accents = (0x007aff, 0x0a84ff)
+        case .indigo: accents = (0x5856d6, 0x5e5ce6)
+        case .teal: accents = (0x1595a3, 0x40c8e0)
+        case .green: accents = (0x248a3d, 0x30d158)
+        case .purple: accents = (0x8944ab, 0xbf5af2)
+        case .pink: accents = (0xd30f45, 0xff375f)
+        case .red: accents = (0xd70015, 0xff453a)
+        case .orange: accents = (0xc93400, 0xff9f0a)
+        }
+        return QuinjetHostTheme(
+            light: QuinjetHostPalette(
+                background: 0xf7f3ec, panel: 0xfffdf8, panelAlt: 0xece5d8,
+                border: 0xd6cbb8, muted: 0x5c5247, text: 0x241f1a,
+                textStrong: 0x100f0d, contrast: 0x000000, removed: 0xc93c37,
+                orange: 0xc46b32, modified: 0x9a6700, added: 0x2f7d42, cyan: 0x1b7c83,
+                accent: accents.0, purple: 0x8250df, brown: 0x8f5e15),
+            dark: QuinjetHostPalette(
+                background: 0x1a1714, panel: 0x221d19, panelAlt: 0x2b2620,
+                border: 0x5f5549, muted: 0xbcae9c, text: 0xf1e9dc,
+                textStrong: 0xfffdf8, contrast: 0xffffff, removed: 0xff6961,
+                orange: 0xf0a35e, modified: 0xe5c07b, added: 0x78c091, cyan: 0x70c5ce,
+                accent: accents.1, purple: 0xc792ea, brown: 0xd7a65c))
+    }
+}
+
 public struct QuinjetLaunchConfiguration: Equatable, Sendable {
     public var terminal: QuinjetTerminal
     public var theme: QuinjetTheme
     public var appearance: QuinjetAppearance
+    public var hostTheme: QuinjetHostTheme?
 
     public init(
-        terminal: QuinjetTerminal, theme: QuinjetTheme, appearance: QuinjetAppearance
+        terminal: QuinjetTerminal, theme: QuinjetTheme, appearance: QuinjetAppearance,
+        hostTheme: QuinjetHostTheme? = nil
     ) {
         self.terminal = terminal
         self.theme = theme
         self.appearance = appearance
+        self.hostTheme = hostTheme
     }
 
     public static let `default` = QuinjetLaunchConfiguration(
@@ -108,7 +216,9 @@ public struct QuinjetLaunchConfiguration: Equatable, Sendable {
                 ? .dark : .light
         }
         return QuinjetLaunchConfiguration(
-            terminal: terminal, theme: theme, appearance: appearance)
+            terminal: terminal, theme: theme, appearance: appearance,
+            hostTheme: themePreference == QuinjetThemePreference.app
+                ? .edith(appTheme: appTheme) : nil)
     }
 }
 
@@ -141,10 +251,12 @@ public struct QuinjetLaunchRequest: Equatable, Sendable {
             ]
         }
         arguments += ["-C", worktreePath, "tui"]
-        arguments += [
-            "--theme", configuration.theme.rawValue,
-            "--appearance", configuration.appearance.rawValue,
-        ]
+        if let hostTheme = configuration.hostTheme {
+            arguments += ["--theme-palette", hostTheme.argument]
+        } else {
+            arguments += ["--theme", configuration.theme.rawValue]
+        }
+        arguments += ["--appearance", configuration.appearance.rawValue]
         self.executableURL = executableURL
         self.arguments = arguments
         self.terminal = configuration.terminal

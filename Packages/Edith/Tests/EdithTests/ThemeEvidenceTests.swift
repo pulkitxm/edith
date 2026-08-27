@@ -54,8 +54,10 @@ private struct ThemeEvidenceView: View {
 private struct ThemeEvidenceCard: View {
     let theme: AppTheme
 
-    private var quinjetTheme: QuinjetTheme {
-        QuinjetThemePreference.resolve(QuinjetThemePreference.app, appTheme: theme)
+    private var quinjetConfiguration: QuinjetLaunchConfiguration {
+        QuinjetLaunchConfiguration(
+            terminal: .embedded, theme: .quinjet, appearance: .dark,
+            hostTheme: .edith(appTheme: theme))
     }
 
     private var accent: Color {
@@ -71,7 +73,7 @@ private struct ThemeEvidenceCard: View {
                 Text(theme.rawValue.capitalized)
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                 Spacer()
-                Text("App: \(quinjetTheme.label)")
+                Text("App theme")
                     .font(.system(size: 14, weight: .semibold, design: .monospaced))
                     .foregroundStyle(accent)
             }
@@ -93,8 +95,8 @@ private struct ThemeEvidenceCard: View {
             )
 
             TerminalEvidence(
-                title: "Quinjet \(quinjetTheme.label)",
-                palette: TerminalPalette.quinjet(theme: quinjetTheme, appearance: .dark)
+                title: "Quinjet app palette",
+                palette: TerminalPalette.quinjet(configuration: quinjetConfiguration)
             )
         }
         .padding(20)

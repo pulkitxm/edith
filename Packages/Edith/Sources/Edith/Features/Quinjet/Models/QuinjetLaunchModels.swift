@@ -106,6 +106,16 @@ struct TerminalPalette: Equatable {
             dark: appearance == .dark)
     }
 
+    static func quinjet(configuration: QuinjetLaunchConfiguration) -> TerminalPalette {
+        guard let hostTheme = configuration.hostTheme else {
+            return quinjet(theme: configuration.theme, appearance: configuration.appearance)
+        }
+        let values = hostTheme.palette(for: configuration.appearance)
+        return make(
+            background: color(values.background), foreground: color(values.textStrong),
+            caret: color(values.accent), dark: configuration.appearance == .dark)
+    }
+
     private static func make(
         background: NSColor, foreground: NSColor, caret: NSColor, dark: Bool
     ) -> TerminalPalette {

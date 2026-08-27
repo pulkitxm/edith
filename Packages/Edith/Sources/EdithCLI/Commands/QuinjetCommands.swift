@@ -55,7 +55,8 @@ struct QuinjetLaunchOptions: ParsableArguments {
         }
         let terminal = cmux ? QuinjetTerminal.cmux : embedded ? .embedded : preferred.terminal
         return QuinjetLaunchConfiguration(
-            terminal: terminal, theme: theme, appearance: appearance)
+            terminal: terminal, theme: theme, appearance: appearance,
+            hostTheme: self.theme == nil ? preferred.hostTheme : nil)
     }
 }
 

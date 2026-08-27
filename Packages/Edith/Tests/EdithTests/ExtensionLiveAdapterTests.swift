@@ -99,6 +99,17 @@ import EdithCore
                 defaults: defaults, executable: executable, cmux: nil)
                 == .ready("Quinjet and its embedded terminal are ready."))
 
+        defaults.set(QuinjetThemePreference.app, forKey: AppStorageKeys.Quinjet.theme)
+        #expect(
+            ExtensionLiveAdapters.quinjetReadiness(
+                defaults: defaults, executable: executable, cmux: nil)
+                == .ready("Quinjet and its embedded terminal are ready."))
+        defaults.set("future-theme", forKey: AppStorageKeys.Quinjet.theme)
+        #expect(
+            ExtensionLiveAdapters.quinjetReadiness(
+                defaults: defaults, executable: executable, cmux: nil)
+                == .ready("Quinjet and its embedded terminal are ready."))
+
         defaults.set("cmux", forKey: AppStorageKeys.Quinjet.terminal)
         #expect(
             ExtensionLiveAdapters.quinjetReadiness(

@@ -77,8 +77,9 @@ Both commands accept these options:
 
 The app's terminal and theme menus persist through
 `ed config set quinjetTerminal embedded` and `ed config set quinjetTheme <name>`.
-Set `quinjetTheme` to `app` to map Edith's active theme to a compatible Quinjet
-palette automatically. A named Quinjet theme remains an explicit override.
+Set `quinjetTheme` to `app` to send Edith's active light and dark palettes to
+Quinjet automatically. A named Quinjet theme remains an explicit override and
+the app discovers available names from the installed Quinjet version.
 
 cmux must be installed in `/Applications`. If it is not,
 `launch --cmux` exits 4 with a hint to omit `--cmux`. `open --cmux` remains safe

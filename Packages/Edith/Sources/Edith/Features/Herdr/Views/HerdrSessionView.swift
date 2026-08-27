@@ -229,8 +229,7 @@ struct HerdrSessionView: View {
     }
 
     private var diffPane: some View {
-        let palette = TerminalPalette.quinjet(
-            theme: diffConfiguration.theme, appearance: diffConfiguration.appearance)
+        let palette = TerminalPalette.quinjet(configuration: diffConfiguration)
         return ZStack {
             Color(nsColor: palette.background)
             TerminalPane(
