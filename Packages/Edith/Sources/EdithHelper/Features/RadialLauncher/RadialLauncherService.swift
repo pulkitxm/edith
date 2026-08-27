@@ -365,7 +365,7 @@ private struct RadialLauncherWheel: View {
             )
             .animation(.snappy(duration: 0.16), value: service.highlightedIndex)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .accessibilityLabel("\(index + 1), \(item.displayName)")
     }
 
