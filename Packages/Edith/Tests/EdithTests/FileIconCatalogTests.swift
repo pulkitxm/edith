@@ -11,7 +11,8 @@ struct FileIconCatalogTests {
                 == FileIconDescriptor(badge: "RS", color: .orange, symbol: "gearshape.2.fill"))
         #expect(
             icon("Info.plist")
-                == FileIconDescriptor(badge: "XCD", color: .blue, symbol: "hammer.fill"))
+                == FileIconDescriptor(
+                    badge: "PLST", color: .blue, symbol: "list.bullet.rectangle.fill"))
         #expect(
             icon("schema.prisma")
                 == FileIconDescriptor(badge: "PR", color: .indigo, symbol: "cylinder.fill"))
@@ -49,6 +50,15 @@ struct FileIconCatalogTests {
         #expect(first.badge == "SAFE")
         #expect(other.badge == "CUST")
         #expect(first.color != other.color || first.badge != other.badge)
+    }
+
+    @Test("renders distinct high resolution document icons")
+    func rendering() {
+        let swift = FileIconRenderer.image(for: icon("Feature.swift"))
+        let terraform = FileIconRenderer.image(for: icon("main.tf"))
+        #expect(swift.size == FileIconRenderer.size)
+        #expect(terraform.size == FileIconRenderer.size)
+        #expect(swift.tiffRepresentation != terraform.tiffRepresentation)
     }
 
     private func icon(_ name: String, path: String = "") -> FileIconDescriptor {

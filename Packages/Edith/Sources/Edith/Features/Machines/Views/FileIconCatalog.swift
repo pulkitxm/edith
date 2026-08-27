@@ -244,11 +244,11 @@ enum FileIconCatalog {
         add(
             ["ini", "cfg", "conf", "config", "cnf", "properties"],
             descriptor("CFG", .gray, "gearshape.fill"), to: &result)
+        add(["plist"], descriptor("PLST", .blue, "list.bullet.rectangle.fill"), to: &result)
+        add(["entitlements"], descriptor("ENT", .blue, "checkmark.shield.fill"), to: &result)
         add(
-            [
-                "plist", "entitlements", "xcconfig", "pbxproj", "xcscheme", "xcworkspacedata",
-                "xcprivacy",
-            ], descriptor("XCD", .blue, "hammer.fill"), to: &result)
+            ["xcconfig", "pbxproj", "xcscheme", "xcworkspacedata", "xcprivacy"],
+            descriptor("XCD", .blue, "hammer.fill"), to: &result)
         add(["tf", "tfvars", "hcl"], descriptor("TF", .purple, "cube.fill"), to: &result)
         add(["bzl", "bazel", "bzlmod"], descriptor("BZ", .green, "hammer.fill"), to: &result)
         add(["cmake"], descriptor("CM", .blue, "hammer.fill"), to: &result)

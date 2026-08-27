@@ -9,12 +9,13 @@ enum FileIcons {
     static func icon(for entry: RemoteFileEntry) -> NSImage {
         if entry.isDirectory { return cached(key: "__folder", type: .folder) }
         if entry.kind == .symlink { return cached(key: "__link", type: .symbolicLink) }
-        let ext = entry.fileExtension
-        guard !ext.isEmpty else { return cached(key: "__data", type: .data) }
-        if let type = UTType(filenameExtension: ext) {
-            return cached(key: ext, type: type)
-        }
-        return cached(key: "__data", type: .data)
+        let descriptor = FileIconCatalog.descriptor(
+            name: entry.name, path: entry.path, fileExtension: entry.fileExtension)
+        let key = [descriptor.badge, descriptor.color.rawValue, descriptor.symbol].joined(separator: ":")
+        if let existing = cache[key] { return existing }
+        let image = FileIconRenderer.image(for: descriptor)
+        cache[key] = image
+        return image
     }
 
     private static func cached(key: String, type: UTType) -> NSImage {
