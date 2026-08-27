@@ -613,6 +613,16 @@ public enum CommandTree {
                         options: ["--json", "--yes"], destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
+                "capture", "Offline screen recognition and quick screenshots.",
+                children: [
+                    CommandNode(
+                        "read", "Select screen content and copy recognized text or codes.",
+                        options: common),
+                    CommandNode(
+                        "screenshot", "Select screen content for a quick preview.",
+                        options: common),
+                ]),
+            CommandNode(
                 "shelf", "The files parked on the notch shelf.",
                 children: [
                     CommandNode(

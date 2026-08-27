@@ -11,6 +11,7 @@ final class AppServices {
     private(set) var calendar: CalendarStore?
     private(set) var notchShelf: NotchShelfController?
     private(set) var colorPicker: ColorPickerStore?
+    private(set) var captureTools: CaptureToolsStore?
     private(set) var clipboard: ClipboardStore?
     private(set) var focusDim: FocusDimEngine?
     private(set) var presenter: PresenterDetector?
@@ -100,6 +101,8 @@ final class AppServices {
     func prepareForTermination() async {
         startup.cancel()
         terminating = true
+        captureTools?.shutdown()
+        captureTools = nil
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
@@ -276,6 +279,15 @@ final class AppServices {
             colorPicker = nil
         }
         colorPicker?.registerHotKey()
+
+        let captureToolsOn =
+            SharedDefaults.store.object(forKey: AppStorageKeys.Capture.enabled) as? Bool ?? false
+        if captureToolsOn, captureTools == nil { captureTools = CaptureToolsStore() }
+        if !captureToolsOn, let store = captureTools {
+            store.shutdown()
+            captureTools = nil
+        }
+        captureTools?.registerHotKeys()
 
         let clipboardOn =
             SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.enabled) as? Bool ?? false

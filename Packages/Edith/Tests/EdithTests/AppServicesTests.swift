@@ -40,6 +40,7 @@ private actor AppServicesCallProbe {
         #expect(services.calendar == nil)
         #expect(services.notchShelf == nil)
         #expect(services.colorPicker == nil)
+        #expect(services.captureTools == nil)
         #expect(services.clipboard == nil)
         #expect(services.focusDim == nil)
         #expect(services.presenter == nil)

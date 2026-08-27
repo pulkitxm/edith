@@ -295,6 +295,8 @@ enum GlobalHotKey {
         static let colorPicker: UInt32 = 5
         static let micMute: UInt32 = 6
         static let presenterToggle: UInt32 = 7
+        static let captureRead: UInt32 = 20
+        static let captureScreenshot: UInt32 = 21
     }
 
     fileprivate static var refs: [UInt32: EventHotKeyRef] = [:]
@@ -648,6 +650,31 @@ struct RootView: View {
                             }
                         }
                     }
+                }
+                if let captureTools = services.captureTools {
+                    Menu {
+                        Button {
+                            dismissPanel()
+                            captureTools.start(.read)
+                        } label: {
+                            Label("Read screen", systemImage: "text.viewfinder")
+                        }
+                        Button {
+                            dismissPanel()
+                            captureTools.start(.screenshot)
+                        } label: {
+                            Label("Screenshot", systemImage: "camera.viewfinder")
+                        }
+                    } label: {
+                        Image(systemName: captureTools.inProgress ? "xmark" : "viewfinder")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help(
+                        captureTools.inProgress
+                            ? "Cancel capture" : "Capture tools (\(CaptureToolsHotKeys.readLabel))")
                 }
                 if focusDimEnabled {
                     Button {

@@ -35,6 +35,10 @@ public enum IPC {
         public static let clipboardChanged = Notification.Name("com.pulkit.edith.clipboardChanged")
         public static let requestColorPick = Notification.Name(
             "com.pulkit.edith.requestColorPick")
+        public static let requestScreenRead = Notification.Name(
+            "com.pulkit.edith.requestScreenRead")
+        public static let requestScreenshot = Notification.Name(
+            "com.pulkit.edith.requestScreenshot")
         public static let shelfChanged = Notification.Name("com.pulkit.edith.shelfChanged")
         public static let shelfOperation = Notification.Name("com.pulkit.edith.shelfOperation")
         public static let shelfOperationResult = Notification.Name(

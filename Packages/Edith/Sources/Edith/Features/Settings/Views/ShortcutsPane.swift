@@ -10,6 +10,8 @@ struct ShortcutsSettingsPane: View {
     @AppStorage(AppStorageKeys.ColorPicker.enabled, store: SharedDefaults.store) private
         var colorPickerEnabled =
         false
+    @AppStorage(AppStorageKeys.Capture.enabled, store: SharedDefaults.store) private
+        var captureToolsEnabled = false
     @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var focusDimEnabled =
         false
     @AppStorage(AppStorageKeys.Mic.muteEnabled, store: SharedDefaults.store) private
@@ -21,7 +23,7 @@ struct ShortcutsSettingsPane: View {
     private var extensionShortcuts: [ExtensionShortcut] {
         ExtensionShortcutVisibility.visible(
             clipboard: clipboardEnabled, micMute: micMuteEnabled, focusDim: focusDimEnabled,
-            presenter: presenterEnabled, colorPicker: colorPickerEnabled)
+            colorPicker: colorPickerEnabled, captureTools: captureToolsEnabled)
     }
 
     var body: some View {
@@ -119,6 +121,14 @@ struct ShortcutsSettingsPane: View {
             shortcutRow(
                 "Pick a color", subtitle: "Summons the color picker loupe",
                 keyPrefix: "colorPickerHotKey", defaultLabel: "⌃⌥⌘C")
+        case .captureRead:
+            shortcutRow(
+                "Read screen", subtitle: "Recognizes text and codes in a selected region",
+                keyPrefix: "captureReadHotKey", defaultLabel: "⌃⌥⌘R")
+        case .captureScreenshot:
+            shortcutRow(
+                "Quick screenshot", subtitle: "Captures a selected region into a preview",
+                keyPrefix: "captureScreenshotHotKey", defaultLabel: "⌃⌥⌘S")
         }
     }
 }

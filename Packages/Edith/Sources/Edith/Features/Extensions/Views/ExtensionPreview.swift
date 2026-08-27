@@ -38,6 +38,7 @@ struct ExtensionPreview: View {
         case "focusDim": focusDimPreview(phase: phase)
         case "presenter": presenterPreview(phase: phase)
         case "colorPicker": colorPickerPreview(phase: phase)
+        case "captureTools": captureToolsPreview(phase: phase)
         default: staticPreview
         }
     }
@@ -480,6 +481,36 @@ struct ExtensionPreview: View {
                 }
                 .shadow(color: .black.opacity(dark ? 0.32 : 0.16), radius: UIScale.pt(3), y: 1)
                 .offset(x: CGFloat(-49 + travel * 98), y: -7)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func captureToolsPreview(phase: Double) -> some View {
+        let progress = loopProgress(phase, duration: 3.2)
+        let scan = CGFloat(abs(progress * 2 - 1))
+        return ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: UIScale.pt(8))
+                .fill(DashSkin.paper2(dark))
+                .overlay {
+                    VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                        Capsule().fill(DashSkin.inkFaint(dark)).frame(width: 72, height: 4)
+                        Capsule().fill(DashSkin.inkFaint(dark)).frame(width: 96, height: 4)
+                        Capsule().fill(DashSkin.inkFaint(dark)).frame(width: 54, height: 4)
+                    }
+                }
+            Rectangle()
+                .fill(DashSkin.accent(dark).opacity(0.75))
+                .frame(height: UIScale.pt(2))
+                .offset(y: UIScale.pt(8 + scan * 34))
+            Image(systemName: "qrcode")
+                .font(.system(size: UIScale.pt(13), weight: .medium))
+                .foregroundStyle(DashSkin.accent(dark))
+                .padding(UIScale.pt(6))
+        }
+        .frame(width: UIScale.pt(118), height: UIScale.pt(52))
+        .overlay {
+            RoundedRectangle(cornerRadius: UIScale.pt(8)).strokeBorder(
+                DashSkin.lineStrong(dark))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

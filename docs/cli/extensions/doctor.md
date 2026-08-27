@@ -1,6 +1,6 @@
 # `ed extensions doctor`
 
-Diagnoses setup and runtime problems for one extension or all seventeen.
+Diagnoses setup and runtime problems for one extension or all eighteen.
 
 ```
 ed extensions doctor [<id>] [--json]
@@ -15,7 +15,7 @@ Checks cover the stored enabled state, required and optional permissions,
 required and optional tools, helper availability, platform capabilities,
 configured machines and supported backend or session health. Checks that do not
 apply are omitted, and checks behind a disabled extension are skipped.
-All seventeen extensions have an explicit live adapter. A missing adapter is
+All eighteen extensions have an explicit live adapter. A missing adapter is
 reported as a runtime error instead of silently falling back to helper
 availability.
 

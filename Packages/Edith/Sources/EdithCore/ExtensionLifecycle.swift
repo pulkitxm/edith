@@ -685,6 +685,40 @@ public enum ExtensionLifecycleCatalog {
                     "history", "Read sampled colors",
                     "Confirm the color history repository responds.", "ed color ls --json")
             ]),
+        descriptor(
+            "captureTools", "Read text and codes from the screen without sending pixels anywhere.",
+            workflows: [
+                instruction(
+                    "read", "Read the screen",
+                    "Select a region, recognize its text and codes, and copy the result.",
+                    "ed capture read"),
+                instruction(
+                    "screenshot", "Take a quick screenshot",
+                    "Select a region and open a lightweight copy and save preview.",
+                    "ed capture screenshot"),
+            ],
+            prerequisites: [
+                instruction(
+                    "permission", "Grant Screen Recording",
+                    "Screen Recording lets Edith capture the region you select.",
+                    "ed permissions request screenRecording")
+            ],
+            examples: [
+                "ed extensions enable captureTools", "ed capture read --json",
+                "ed capture screenshot --json",
+            ],
+            docs: [documentation("guide", "Capture Tools guide", "docs/cli/capture/README.md")],
+            recovery: [
+                instruction(
+                    "permission", "Refresh capture access",
+                    "Refresh the mirrored Screen Recording grant.", "ed permissions refresh")
+            ],
+            verification: [
+                instruction(
+                    "config", "Inspect capture settings",
+                    "Confirm recognition, history, and screenshot preferences.",
+                    "ed config ls --group capture --json")
+            ]),
     ]
 
     public static let byID = Dictionary(uniqueKeysWithValues: descriptors.map { ($0.id, $0) })

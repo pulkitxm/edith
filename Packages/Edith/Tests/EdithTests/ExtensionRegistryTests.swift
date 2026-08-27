@@ -24,6 +24,7 @@ import Testing
         "focusDimEnabled",
         "presenterEnabled",
         "colorPickerEnabled",
+        "captureToolsEnabled",
     ]
 
     @Test func registryIdentifiersAreUnique() {
@@ -36,7 +37,7 @@ import Testing
             ExtensionRegistry.entries.map(\.id) == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
                 "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
-                "clipboard", "focusDim", "presenter", "colorPicker",
+                "clipboard", "focusDim", "presenter", "colorPicker", "captureTools",
             ])
     }
 
@@ -195,7 +196,7 @@ import Testing
         #expect(titleMatches.map(\.id) == ["usage"])
         #expect(subtitleMatches.map(\.id) == ["calendar"])
         #expect(categoryMatches.allSatisfy { $0.group == .utilities })
-        #expect(combinedMatches.map(\.id) == ["presenter"])
+        #expect(combinedMatches.map(\.id) == ["presenter", "captureTools"])
         #expect(attentionMatches.map(\.id) == ["attention"])
     }
 
@@ -243,6 +244,7 @@ import Testing
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
             "colorPicker": [.screenRecording],
+            "captureTools": [.screenRecording],
         ]
         let optional: [String: [ExtensionPermission]] = [
             "attention": [],
@@ -262,6 +264,7 @@ import Testing
             "focusDim": [],
             "presenter": [],
             "colorPicker": [],
+            "captureTools": [],
         ]
 
         let identifiers = Set(ExtensionRegistry.entries.map(\.id))
@@ -393,6 +396,7 @@ import Testing
             "focusDimEnabled": false,
             "presenterEnabled": true,
             "colorPickerEnabled": false,
+            "captureToolsEnabled": false,
         ]
         for (key, value) in expected {
             #expect(defaults.object(forKey: key) as? Bool == value)
