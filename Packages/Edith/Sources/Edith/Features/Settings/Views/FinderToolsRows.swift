@@ -31,7 +31,7 @@ struct FinderToolsRows: View {
                     "Paste copied images as PNG files",
                     isOn: $pasteImages.configured(AppStorageKeys.FinderTools.pasteImages))
                 Text(
-                    "Press ⌘V in Finder to save a copied PNG or TIFF into the open folder with a timestamped name."
+                    "Press ⌘V in Finder to save a copied image into the open folder as a PNG with a timestamped name."
                 )
                 .settingsCaption()
             }
