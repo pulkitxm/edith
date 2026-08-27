@@ -92,6 +92,7 @@ private final class KeyboardToolsEventTap: @unchecked Sendable {
     }
 
     private let lock = NSLock()
+    private let mappingLock = NSLock()
     private let mapper = KeyboardSuperMapper()
     private let performTapAction: @Sendable (KeyboardSuperTapAction) -> Void
     private let publishStatus: @Sendable (Bool, String?) -> Void
@@ -171,12 +172,13 @@ private final class KeyboardToolsEventTap: @unchecked Sendable {
                 pendingRestart = false
             }
         }
-        let cleanupError: String?
-        do {
-            try mapper.setEnabled(false)
-            cleanupError = nil
-        } catch {
-            cleanupError = error.localizedDescription
+        let cleanupError = mappingLock.withLock { () -> String? in
+            do {
+                try mapper.setEnabled(false)
+                return nil
+            } catch {
+                return error.localizedDescription
+            }
         }
         if restart, !snapshot.2 { start() }
         return cleanupError
@@ -208,10 +210,12 @@ private final class KeyboardToolsEventTap: @unchecked Sendable {
                     }, userInfo: Unmanaged.passUnretained(self).toOpaque())
             else {
                 var failure = "The keyboard event filter could not start."
-                do {
-                    try mapper.setEnabled(false)
-                } catch {
-                    failure += " \(error.localizedDescription)"
+                mappingLock.withLock {
+                    do {
+                        try mapper.setEnabled(false)
+                    } catch {
+                        failure += " \(error.localizedDescription)"
+                    }
                 }
                 publishStatus(false, failure)
                 finishThread()
@@ -234,19 +238,25 @@ private final class KeyboardToolsEventTap: @unchecked Sendable {
     }
 
     private func applyMappingIfNeeded() -> String? {
-        let wanted = lock.withLock { settings.superEnabled && !stopping }
-        guard wanted else {
-            try? mapper.setEnabled(false)
-            return nil
-        }
-        do {
-            try mapper.setEnabled(true)
-            lock.withLock { superActive = true }
-            return nil
-        } catch {
-            try? mapper.setEnabled(false)
-            lock.withLock { superActive = false }
-            return error.localizedDescription
+        mappingLock.withLock {
+            let wanted = lock.withLock { settings.superEnabled && !stopping }
+            guard wanted else {
+                try? mapper.setEnabled(false)
+                return nil
+            }
+            do {
+                try mapper.setEnabled(true)
+                let stopped = lock.withLock { () -> Bool in
+                    superActive = !stopping
+                    return stopping
+                }
+                if stopped { try mapper.setEnabled(false) }
+                return nil
+            } catch {
+                try? mapper.setEnabled(false)
+                lock.withLock { superActive = false }
+                return error.localizedDescription
+            }
         }
     }
 
