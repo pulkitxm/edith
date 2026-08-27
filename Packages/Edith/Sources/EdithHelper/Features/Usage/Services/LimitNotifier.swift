@@ -6,8 +6,10 @@ import UserNotifications
 final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
     private let defaults = UserDefaults.standard
     private var center: UNUserNotificationCenter { .current() }
+    private let reminderQueue: LimitReminderQueue
 
-    override init() {
+    init(reminderQueue: LimitReminderQueue = LimitReminderQueue()) {
+        self.reminderQueue = reminderQueue
         super.init()
         center.delegate = self
     }
@@ -37,9 +39,7 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func cancelReminders() {
-        center.removePendingNotificationRequests(withIdentifiers: [
-            "reminder_session", "reminder_weekly",
-        ])
+        reminderQueue.submit([])
     }
 
     func notifyTokenExpired() {
@@ -134,47 +134,31 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
     private func scheduleReminders(
         session: LimitWindow?, week: LimitWindow?, settings: NotifySettings
     ) {
-        center.removePendingNotificationRequests(withIdentifiers: [
-            "reminder_session", "reminder_weekly",
-        ])
+        var reminders: [LimitReminder] = []
         if settings.reminderSession,
             let fire = LimitNotifierLogic.reminderFireDate(
                 reset: session?.resetsAt, offsetMinutes: settings.reminderSessionOffsetMin)
         {
-            schedule(
-                id: "reminder_session",
-                title:
-                    "Session resets in \(LimitNotifierLogic.offsetLabel(minutes: settings.reminderSessionOffsetMin))",
-                body: "Save your spot or send it",
-                at: fire)
+            reminders.append(
+                LimitReminder(
+                    identifier: "reminder_session",
+                    title:
+                        "Session resets in \(LimitNotifierLogic.offsetLabel(minutes: settings.reminderSessionOffsetMin))",
+                    body: "Save your spot or send it",
+                    fireDate: fire))
         }
         if settings.reminderWeekly,
             let fire = LimitNotifierLogic.reminderFireDate(
                 reset: week?.resetsAt, offsetMinutes: settings.reminderWeeklyOffsetMin)
         {
-            schedule(
-                id: "reminder_weekly",
-                title:
-                    "Weekly resets in \(LimitNotifierLogic.offsetLabel(minutes: settings.reminderWeeklyOffsetMin))",
-                body: "Last lap on the cycle",
-                at: fire)
+            reminders.append(
+                LimitReminder(
+                    identifier: "reminder_weekly",
+                    title:
+                        "Weekly resets in \(LimitNotifierLogic.offsetLabel(minutes: settings.reminderWeeklyOffsetMin))",
+                    body: "Last lap on the cycle",
+                    fireDate: fire))
         }
-    }
-
-    private func schedule(id: String, title: String, body: String, at fire: Date) {
-        guard fire.timeIntervalSinceNow > 0 else { return }
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-        let comps = Calendar.current.dateComponents(
-            [.year, .month, .day, .hour, .minute, .second], from: fire)
-        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
-        center.add(UNNotificationRequest(identifier: id, content: content, trigger: trigger)) {
-            error in
-            if let error {
-                NSLog("Edith notifications: add failed (%@): %@", id, error.localizedDescription)
-            }
-        }
+        reminderQueue.submit(reminders)
     }
 }
