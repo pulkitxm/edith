@@ -141,16 +141,12 @@ final class LidAwakePrivilegedClient {
     }
 
     func setSleepDisabled(_ disable: Bool) async throws {
-        var currentState = state
-        if currentState == .awaitingApproval {
-            registerCurrent()
-            currentState = state
-        }
-        guard currentState == .enabled else {
+        let currentState = state
+        if let error = Self.requestError(for: currentState) {
             if currentState == .awaitingApproval {
                 SMAppService.openSystemSettingsLoginItems()
             }
-            throw LidAwakePrivilegedClientError.helperUnavailable(currentState)
+            throw error
         }
         let connection = makeConnection()
         defer { connection.invalidate() }
@@ -181,6 +177,13 @@ final class LidAwakePrivilegedClient {
                     }
                 }
             })
+    }
+
+    nonisolated static func requestError(
+        for state: LidAwakePrivilegedClientState
+    ) -> LidAwakePrivilegedClientError? {
+        guard state != .enabled else { return nil }
+        return .helperUnavailable(state)
     }
 
     private func makeConnection() -> NSXPCConnection {

@@ -571,6 +571,12 @@ private func lidAwakeProcessIDs(at url: URL) throws -> [pid_t] {
                 == true)
     }
 
+    @Test func privilegedRequestsDoNotRetryWhileApprovalIsPending() {
+        let error = LidAwakePrivilegedClient.requestError(for: .awaitingApproval)
+        #expect(error?.errorDescription?.contains("Approve Edith") == true)
+        #expect(LidAwakePrivilegedClient.requestError(for: .enabled) == nil)
+    }
+
     @Test func privilegedReplyTimesOutAndCancelsTheConnection() async {
         let reply = LidAwakePrivilegedReply()
         let probe = LidAwakeCancellationProbe()
