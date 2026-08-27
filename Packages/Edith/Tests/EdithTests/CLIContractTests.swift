@@ -76,6 +76,28 @@ enum JSONContract {
         JSONCase("ed clipboard rm", ["clipboard", "rm", "1", "--json"]),
         JSONCase("ed clipboard clear", ["clipboard", "clear", "--json"]),
         JSONCase("ed calendar open", ["calendar", "open", "--json"], mutatesTheMachine: true),
+        JSONCase("ed quick-actions status", ["quick-actions", "status", "--json"]),
+        JSONCase(
+            "ed quick-actions appearance", ["quick-actions", "appearance", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed quick-actions keyboard-light", ["quick-actions", "keyboard-light", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed quick-actions empty-trash", ["quick-actions", "empty-trash", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed quick-actions eject-disks", ["quick-actions", "eject-disks", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed quick-actions hidden-files", ["quick-actions", "hidden-files", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed quick-actions desktop-icons", ["quick-actions", "desktop-icons", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed quick-actions lock-screen", ["quick-actions", "lock-screen", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed calendar join", ["calendar", "join", "nothing-at-all", "--json"]),
         JSONCase(
             "ed calendar directions", ["calendar", "directions", "nothing-at-all", "--json"]),
