@@ -136,11 +136,13 @@ private let frequent = [
     @Test func frequentCountIsClampedToTheSupportedRange() {
         clearDefaults()
         defer { clearDefaults() }
-        #expect(EmojiStore.frequentCount == EmojiStore.defaultFrequentCount)
+        let (store, _) = makeStore()
+        for _ in 0..<3 { store.insert(catalog.emoji[0]) }
+        store.insert(catalog.emoji[2])
         SharedDefaults.store.set(-4, forKey: AppStorageKeys.Emoji.frequentCount)
-        #expect(EmojiStore.frequentCount == 0)
+        #expect(EmojiCatalogSummary.frequent(catalog: catalog).isEmpty)
         SharedDefaults.store.set(999, forKey: AppStorageKeys.Emoji.frequentCount)
-        #expect(EmojiStore.frequentCount == EmojiStore.maxFrequentCount)
+        #expect(EmojiCatalogSummary.frequent(catalog: catalog) == ["😀", "🚀"])
     }
 
     @Test func copyingPutsTheTonedCharacterOnThePasteboardAndCountsAsUse() {

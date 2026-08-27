@@ -658,6 +658,42 @@ public enum ExtensionLifecycleCatalog {
                     "ed config ls --group presenter --json")
             ]),
         descriptor(
+            "emoji", "Insert any emoji macOS can draw into whatever you are typing in.",
+            workflows: [
+                instruction(
+                    "pick", "Open the picker",
+                    "Open the emoji panel from its shortcut or the command line.",
+                    "ed emoji pick"),
+                instruction(
+                    "search", "Find an emoji",
+                    "Type a name, keyword or shortcode to filter every category."),
+                instruction(
+                    "tone", "Choose a skin tone",
+                    "Set the default tone applied to emoji that support one.",
+                    "ed emoji tone medium"),
+            ],
+            prerequisites: [
+                instruction(
+                    "permission", "Grant Accessibility",
+                    "macOS requires Accessibility to type into the frontmost app.",
+                    "ed permissions request accessibility")
+            ],
+            examples: [
+                "ed extensions enable emoji", "ed emoji ls --json",
+                "ed emoji insert 1F600",
+            ],
+            docs: [documentation("guide", "Emoji Picker guide", "docs/cli/emoji/README.md")],
+            recovery: [
+                instruction(
+                    "permission", "Refresh typing access",
+                    "Refresh the mirrored Accessibility grant.", "ed permissions refresh")
+            ],
+            verification: [
+                instruction(
+                    "catalog", "Read the emoji catalog",
+                    "Confirm the bundled catalog loads on this Mac.", "ed emoji ls --json")
+            ]),
+        descriptor(
             "colorPicker", "Sample an exact screen color and copy it in the format you need.",
             workflows: [
                 instruction(

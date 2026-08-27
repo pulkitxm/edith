@@ -25,6 +25,7 @@ import Testing
         "presenterEnabled",
         "colorPickerEnabled",
         "windowToolsEnabled",
+        "emojiEnabled",
     ]
 
     @Test func registryIdentifiersAreUnique() {
@@ -236,6 +237,7 @@ import Testing
             "presenter": [.screenRecording],
             "colorPicker": [.screenRecording],
             "windowTools": [.accessibility],
+            "emoji": [],
         ]
         let optional: [String: [ExtensionPermission]] = [
             "attention": [],
@@ -256,6 +258,7 @@ import Testing
             "presenter": [],
             "colorPicker": [],
             "windowTools": [],
+            "emoji": [.accessibility],
         ]
 
         let identifiers = Set(ExtensionRegistry.entries.map(\.id))
