@@ -208,20 +208,22 @@ private final class FinderShortcutService: @unchecked Sendable {
 
     private func handle(keyCode: Int64) -> Route {
         guard AXIsProcessTrusted(),
-            NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Self.finderID,
-            !focusedElementIsEditable()
+            NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Self.finderID
         else { return .pass }
         switch keyCode {
         case Key.f2:
-            return renameEnabled ? .rename : .pass
+            return renameEnabled && FinderToolsSupport.focusedRoleAllowsRename(focusedElementRole())
+                ? .rename : .pass
         case Key.x:
-            guard cutPasteEnabled else { return .pass }
+            guard cutPasteEnabled, !focusedElementIsEditable() else { return .pass }
             captureCut()
             return .swallow
         case Key.c:
+            guard !focusedElementIsEditable() else { return .pass }
             if cutPasteEnabled { clearCut() }
             return .pass
         case Key.v:
+            guard !focusedElementIsEditable() else { return .pass }
             if cutPasteEnabled, !cutURLs.isEmpty {
                 guard NSPasteboard.general.changeCount == cutChangeCount else {
                     clearCut()
@@ -310,7 +312,7 @@ private final class FinderShortcutService: @unchecked Sendable {
         let pasteboard = NSPasteboard.general
         let identifiers = (pasteboard.types ?? []).map(\.rawValue)
         guard let type = FinderToolsSupport.preferredImageType(in: identifiers),
-            let source = pasteboard.data(forType: NSPasteboard.PasteboardType(type.rawValue)),
+            let source = pasteboard.data(forType: NSPasteboard.PasteboardType(type.identifier)),
             source.count <= Self.maxImageBytes,
             let representation = NSBitmapImageRep(data: source),
             let png = type == .png
@@ -353,6 +355,11 @@ private final class FinderShortcutService: @unchecked Sendable {
     }
 
     private func focusedElementIsEditable() -> Bool {
+        guard let role = focusedElementRole() else { return false }
+        return !FinderToolsSupport.focusedRoleAllowsRename(role)
+    }
+
+    private func focusedElementRole() -> String? {
         let system = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(system, 0.15)
         var focused: CFTypeRef?
@@ -360,14 +367,14 @@ private final class FinderShortcutService: @unchecked Sendable {
             AXUIElementCopyAttributeValue(
                 system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
             let focused, CFGetTypeID(focused) == AXUIElementGetTypeID()
-        else { return false }
+        else { return nil }
         let element = focused as! AXUIElement
         var role: CFTypeRef?
         guard
             AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role) == .success,
             let role = role as? String
-        else { return false }
-        return ["AXTextField", "AXTextArea", "AXComboBox", "AXSecureTextField"].contains(role)
+        else { return nil }
+        return role
     }
 }
 

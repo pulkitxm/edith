@@ -9,7 +9,7 @@ ed extensions setup finderTools
 ed extensions status finderTools --json
 ```
 
-The extension can move Finder selections with Command-X and Command-V, rename the current selection with F2, save a copied image into the open Finder folder as a PNG file, and offer to install the single app found on a mounted disk image.
+The extension can move Finder selections with Command-X and Command-V, rename the current selection with F2, save a copied image into the open Finder folder as a PNG file, and offer to install the single app found on a mounted disk image. Copying an image file still uses Finder's normal file paste instead of creating a duplicate PNG.
 
 Accessibility is required for the Finder keyboard shortcuts. macOS asks for Finder Automation access on first use when Edith reads the current selection or destination. The disk image installer only accepts a real DMG mount containing exactly one executable app bundle. It verifies the copied app before placing it in `/Applications`, never replaces an existing app, ejects the disk image after a successful install, and only then moves the unchanged DMG to Trash.
 

@@ -9,8 +9,22 @@ import Testing
             FinderToolsSupport.preferredImageType(
                 in: ["public.tiff", "public.png", "public.utf8-plain-text"])
                 == .png)
-        #expect(FinderToolsSupport.preferredImageType(in: ["public.tiff"]) == .tiff)
-        #expect(FinderToolsSupport.preferredImageType(in: ["public.jpeg"]) == nil)
+        #expect(
+            FinderToolsSupport.preferredImageType(in: ["public.tiff"])
+                == .image("public.tiff"))
+        #expect(
+            FinderToolsSupport.preferredImageType(in: ["public.jpeg"])
+                == .image("public.jpeg"))
+        #expect(
+            FinderToolsSupport.preferredImageType(in: ["public.file-url", "public.png"])
+                == nil)
+    }
+
+    @Test func renameRequiresKnownNoneditableFocus() {
+        #expect(FinderToolsSupport.focusedRoleAllowsRename("AXOutline"))
+        #expect(!FinderToolsSupport.focusedRoleAllowsRename("AXTextField"))
+        #expect(!FinderToolsSupport.focusedRoleAllowsRename("AXTextArea"))
+        #expect(!FinderToolsSupport.focusedRoleAllowsRename(nil))
     }
 
     @Test func createsStableUniqueImageNames() {
@@ -76,5 +90,9 @@ import Testing
             FinderToolsSupport.applicationDestination(
                 for: URL(fileURLWithPath: "/Volumes/App/.Hidden.app"),
                 applicationsDirectory: applications) == nil)
+        #expect(
+            FinderToolsSupport.displayName(
+                preferred: "  Example\n  App  ",
+                application: URL(fileURLWithPath: "/Volumes/App/Fallback.app")) == "Example App")
     }
 }

@@ -1,8 +1,16 @@
 import Foundation
+import UniformTypeIdentifiers
 
-public enum FinderToolsImageType: String, Equatable, Sendable {
-    case png = "public.png"
-    case tiff = "public.tiff"
+public enum FinderToolsImageType: Equatable, Sendable {
+    case png
+    case image(String)
+
+    public var identifier: String {
+        switch self {
+        case .png: "public.png"
+        case let .image(identifier): identifier
+        }
+    }
 }
 
 public enum FinderToolsSupport {
@@ -13,9 +21,19 @@ public enum FinderToolsSupport {
     }
 
     public static func preferredImageType(in identifiers: [String]) -> FinderToolsImageType? {
-        if identifiers.contains(FinderToolsImageType.png.rawValue) { return .png }
-        if identifiers.contains(FinderToolsImageType.tiff.rawValue) { return .tiff }
-        return nil
+        guard !identifiers.contains(UTType.fileURL.identifier) else { return nil }
+        if identifiers.contains(UTType.png.identifier) { return .png }
+        guard
+            let identifier = identifiers.first(where: {
+                UTType($0)?.conforms(to: .image) == true
+            })
+        else { return nil }
+        return .image(identifier)
+    }
+
+    public static func focusedRoleAllowsRename(_ role: String?) -> Bool {
+        guard let role else { return false }
+        return !["AXTextField", "AXTextArea", "AXComboBox", "AXSecureTextField"].contains(role)
     }
 
     public static func imageFileName(at date: Date, calendar: Calendar = .current) -> String {
@@ -95,7 +113,8 @@ public enum FinderToolsSupport {
         let fallback = application.deletingPathExtension().lastPathComponent
         let trimmed = preferred?.trimmingCharacters(in: .whitespacesAndNewlines)
         let source = trimmed?.isEmpty == false ? trimmed! : fallback
-        let scalars = source.unicodeScalars.filter {
+        let words = source.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+        let scalars = words.joined(separator: " ").unicodeScalars.filter {
             !CharacterSet.controlCharacters.contains($0)
                 && !CharacterSet.illegalCharacters.contains($0)
         }
