@@ -20,6 +20,7 @@ import Testing
         IPC.Name.grantCamera,
         IPC.Name.requestTestNotification,
         IPC.Name.clipboardChanged,
+        IPC.Name.requestPlainTextPaste,
         IPC.Name.presenterAutoActiveChanged,
         IPC.Name.musicCommand,
         IPC.Name.musicState,

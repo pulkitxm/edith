@@ -41,6 +41,7 @@ private actor AppServicesCallProbe {
         #expect(services.notchShelf == nil)
         #expect(services.colorPicker == nil)
         #expect(services.clipboard == nil)
+        #expect(services.textUtilities == nil)
         #expect(services.focusDim == nil)
         #expect(services.presenter == nil)
         #expect(services.micMute == nil)
@@ -80,6 +81,21 @@ private actor AppServicesCallProbe {
         #expect(
             !AppServices.audioMixerRuntimeEnabled(
                 notchShelfEnabled: false, mixerEnabled: false))
+    }
+
+    @Test func clipboardRuntimeIsSharedByHistoryAndTextUtilities() {
+        #expect(
+            !AppServices.clipboardRuntimeEnabled(
+                historyEnabled: false, textUtilitiesEnabled: false))
+        #expect(
+            AppServices.clipboardRuntimeEnabled(
+                historyEnabled: true, textUtilitiesEnabled: false))
+        #expect(
+            AppServices.clipboardRuntimeEnabled(
+                historyEnabled: false, textUtilitiesEnabled: true))
+        #expect(
+            AppServices.clipboardRuntimeEnabled(
+                historyEnabled: true, textUtilitiesEnabled: true))
     }
 
     @Test func preferenceDefaultsToEnabledWhenUnset() {

@@ -78,7 +78,7 @@ Control-Option-Command-V and can be recorded again in settings.
 Create snippets with a trigger and replacement:
 
 ```bash
-ed text snippets add ';sig' 'Thanks,\nPulkit' --name Signature --folder Work
+ed text snippets add ';sig' $'Thanks,\nPulkit' --name Signature --folder Work
 ed text snippets add ';;today' '{{date}}' --mode immediate
 ed text snippets add ';clip' '{{clipboard}}' --ignore-case --json
 ```

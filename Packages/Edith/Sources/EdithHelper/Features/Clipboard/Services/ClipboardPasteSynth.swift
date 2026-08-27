@@ -28,7 +28,7 @@ enum ClipboardPasteSynth {
 
     static func pasteTemporarily(_ text: String, restoreAfter delay: TimeInterval = 0.2) {
         let pasteboard = NSPasteboard.general
-        let snapshot = PasteboardSnapshot(pasteboard)
+        let snapshot = ClipboardPasteboardSnapshot(pasteboard)
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
         pasteboard.setData(
@@ -42,7 +42,7 @@ enum ClipboardPasteSynth {
     }
 }
 
-private struct PasteboardSnapshot {
+struct ClipboardPasteboardSnapshot {
     struct Item {
         let values: [(NSPasteboard.PasteboardType, Data)]
     }

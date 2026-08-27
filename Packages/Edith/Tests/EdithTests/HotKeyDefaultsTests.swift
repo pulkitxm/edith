@@ -36,6 +36,14 @@ import Testing
         }
     }
 
+    @Test func textUtilitiesHotKeyDefaults() {
+        withCleanKeys("textUtilitiesHotKey") {
+            #expect(TextUtilitiesHotKey.code == kVK_ANSI_V)
+            #expect(TextUtilitiesHotKey.mods == controlKey | optionKey | cmdKey)
+            #expect(TextUtilitiesHotKey.label == "⌃⌥⌘V")
+        }
+    }
+
     @Test func focusDimHotKeyDefaults() {
         withCleanKeys("focusDimHotKey") {
             #expect(FocusDimHotKey.code == kVK_ANSI_F)

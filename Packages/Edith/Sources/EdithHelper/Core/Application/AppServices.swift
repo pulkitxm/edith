@@ -52,6 +52,12 @@ final class AppServices {
         notchShelfEnabled && mixerEnabled
     }
 
+    static func clipboardRuntimeEnabled(
+        historyEnabled: Bool, textUtilitiesEnabled: Bool
+    ) -> Bool {
+        historyEnabled || textUtilitiesEnabled
+    }
+
     static func lidAwakeDisableRecovery(_ outcome: LidAwakeOutcome) -> String? {
         guard case .failed(let message) = outcome else { return nil }
         return message
@@ -281,7 +287,9 @@ final class AppServices {
         let clipboardOn =
             SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.enabled) as? Bool ?? false
         let textUtilitiesOn = Self.extensionEnabled(AppStorageKeys.TextUtilities.enabled)
-        if clipboardOn || textUtilitiesOn {
+        if Self.clipboardRuntimeEnabled(
+            historyEnabled: clipboardOn, textUtilitiesEnabled: textUtilitiesOn)
+        {
             if clipboard == nil {
                 if clipboardOn { SettingsBackup.shared.restoreDataOnEnable(for: .clipboard) }
                 clipboard = ClipboardStore()

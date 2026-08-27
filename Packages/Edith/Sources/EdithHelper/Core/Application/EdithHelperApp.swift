@@ -413,6 +413,9 @@ enum TextUtilitiesHotKey {
         SharedDefaults.store.object(forKey: "textUtilitiesHotKeyMods") as? Int
             ?? (controlKey | optionKey | cmdKey)
     }
+    static var label: String {
+        SharedDefaults.store.string(forKey: "textUtilitiesHotKeyLabel") ?? "⌃⌥⌘V"
+    }
 
     static func register() {
         guard SharedDefaults.store.bool(forKey: AppStorageKeys.TextUtilities.enabled) else {

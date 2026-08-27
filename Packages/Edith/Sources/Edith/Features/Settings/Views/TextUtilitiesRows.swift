@@ -77,7 +77,11 @@ struct TextUtilitiesRows: View {
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
         .sheet(item: $editingSnippet) { snippet in
-            TextSnippetEditor(snippet: snippet) { saved in
+            TextSnippetEditor(
+                snippet: snippet,
+                existingTriggers: Set(
+                    snippets.filter { $0.id != snippet.id }.map { $0.trigger.lowercased() })
+            ) { saved in
                 save(saved)
                 editingSnippet = nil
             }
@@ -239,6 +243,13 @@ struct TextUtilitiesRows: View {
         var copy = snippet
         copy.id = UUID()
         copy.name += " Copy"
+        let triggers = Set(snippets.map(\.trigger))
+        var suffix = 2
+        copy.trigger += "-copy"
+        while triggers.contains(copy.trigger) {
+            copy.trigger = "\(snippet.trigger)-copy-\(suffix)"
+            suffix += 1
+        }
         store(snippets + [copy])
     }
 
@@ -269,10 +280,15 @@ struct TextUtilitiesRows: View {
 private struct TextSnippetEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draft: TextSnippet
+    let existingTriggers: Set<String>
     let save: (TextSnippet) -> Void
 
-    init(snippet: TextSnippet, save: @escaping (TextSnippet) -> Void) {
+    init(
+        snippet: TextSnippet, existingTriggers: Set<String>,
+        save: @escaping (TextSnippet) -> Void
+    ) {
         _draft = State(initialValue: snippet)
+        self.existingTriggers = existingTriggers
         self.save = save
     }
 
@@ -295,6 +311,11 @@ private struct TextSnippetEditor: View {
                     TextField("Name", text: $draft.name)
                     TextField("Trigger", text: $draft.trigger)
                     TextField("Folder", text: $draft.folder)
+                    if triggerExists {
+                        Text("That trigger is already in use.")
+                            .foregroundStyle(.red)
+                            .settingsCaption()
+                    }
                 }
                 Section("Expansion") {
                     Picker("Expand", selection: $draft.expansion) {
@@ -330,7 +351,11 @@ private struct TextSnippetEditor: View {
 
     private var canSave: Bool {
         !normalizedDraft.name.isEmpty && !normalizedDraft.trigger.isEmpty
-            && !normalizedDraft.replacement.isEmpty
+            && !normalizedDraft.replacement.isEmpty && !triggerExists
+    }
+
+    private var triggerExists: Bool {
+        existingTriggers.contains(normalizedDraft.trigger.lowercased())
     }
 
     private func variableButton(_ title: String, value: String) -> some View {
