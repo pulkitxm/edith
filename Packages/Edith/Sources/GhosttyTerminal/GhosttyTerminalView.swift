@@ -18,6 +18,7 @@ public final class GhosttyTerminalView: NSView {
     private var closed = false
     private var drawScheduled = false
     private var renderingActive = true
+    private var occlusionObserver: NSObjectProtocol?
     var terminalCursor = NSCursor.iBeam
     var cursorHidden = false
     var commandClickReleaseActive = false
@@ -105,6 +106,7 @@ public final class GhosttyTerminalView: NSView {
 
     deinit {
         if cursorHidden { NSCursor.unhide() }
+        if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
         shutdown()
         GhosttySurfaceRegistry.shared.unregister(self)
     }
@@ -125,7 +127,16 @@ public final class GhosttyTerminalView: NSView {
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard window != nil else { return }
+        if let occlusionObserver {
+            NotificationCenter.default.removeObserver(occlusionObserver)
+            self.occlusionObserver = nil
+        }
+        guard let window else { return }
+        occlusionObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
+        ) { [weak self] _ in
+            self?.applyPresentationState()
+        }
         startIfNeeded()
         applyPresentationState()
     }
@@ -238,13 +249,20 @@ public final class GhosttyTerminalView: NSView {
 
     private func applyPresentationState() {
         guard let surface else { return }
-        ghostty_surface_set_occlusion(surface, !renderingActive || isHidden || window == nil)
+        let visible = Self.shouldRender(
+            active: renderingActive, hidden: isHidden,
+            windowVisible: window?.occlusionState.contains(.visible) == true)
+        ghostty_surface_set_occlusion(surface, visible)
         if let number = window?.screen?.deviceDescription[.init("NSScreenNumber")] as? NSNumber {
             ghostty_surface_set_display_id(surface, number.uint32Value)
         }
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         ghostty_surface_set_color_scheme(
             surface, dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
+    }
+
+    static func shouldRender(active: Bool, hidden: Bool, windowVisible: Bool) -> Bool {
+        active && !hidden && windowVisible
     }
 
     public override func layout() {
