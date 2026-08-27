@@ -10,6 +10,7 @@ final class MouseControlsEngine {
     private var runLoopSource: CFRunLoopSource?
     private var frameTimer: Timer?
     private var pendingFocus: DispatchWorkItem?
+    private var focusGeneration: UInt64 = 0
     private var remainingVertical = 0.0
     private var remainingHorizontal = 0.0
     private var carryVertical = 0.0
@@ -328,6 +329,9 @@ final class MouseControlsEngine {
     }
 
     private func handlePointerMove(_ event: CGEvent) {
+        if focusFollowsPointer || !exclusions.isEmpty {
+            windowResolver.refresh(at: event.location)
+        }
         guard focusFollowsPointer, pressedButtons.isEmpty,
             !Self.hasBlockingModifiers(event.flags), !isExcluded(at: event.location)
         else {
@@ -336,29 +340,42 @@ final class MouseControlsEngine {
         }
         cancelFocus()
         let point = event.location
+        let generation = focusGeneration
         let work = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated { self?.focus(at: point) }
+            MainActor.assumeIsolated { self?.focus(at: point, generation: generation) }
         }
         pendingFocus = work
         DispatchQueue.main.asyncAfter(
             deadline: .now() + Double(focusDelay) / 1_000, execute: work)
     }
 
-    private func focus(at point: CGPoint) {
+    private func focus(at point: CGPoint, generation: UInt64) {
         pendingFocus = nil
-        guard focusFollowsPointer, pressedButtons.isEmpty,
+        guard generation == focusGeneration, focusFollowsPointer, pressedButtons.isEmpty,
+            !Self.hasBlockingModifiers(CGEventSource.flagsState(.combinedSessionState))
+        else { return }
+        windowResolver.focusTarget(at: point) { [weak self] target in
+            MainActor.assumeIsolated {
+                self?.applyFocus(target, generation: generation)
+            }
+        }
+    }
+
+    private func applyFocus(_ target: MouseWindowResolver.FocusTarget?, generation: UInt64) {
+        guard generation == focusGeneration, focusFollowsPointer, pressedButtons.isEmpty,
             !Self.hasBlockingModifiers(CGEventSource.flagsState(.combinedSessionState)),
-            let target = windowResolver.focusTarget(at: point), !isExcluded(target.application)
+            let target,
+            let application = NSRunningApplication(
+                processIdentifier: target.processID),
+            !isExcluded(application), application.activationPolicy == .regular,
+            !application.isTerminated, !application.isActive || !target.isFocused
         else { return }
-        guard target.application.activationPolicy == .regular,
-            !target.application.isTerminated,
-            !target.application.isActive || !target.isFocused
-        else { return }
-        target.application.activate()
+        application.activate()
         AXUIElementPerformAction(target.window, kAXRaiseAction as CFString)
     }
 
     private func cancelFocus() {
+        focusGeneration &+= 1
         pendingFocus?.cancel()
         pendingFocus = nil
     }
@@ -510,7 +527,8 @@ final class MouseControlsEngine {
     }
 
     private func isExcluded(at point: CGPoint) -> Bool {
-        isExcluded(windowResolver.application(at: point))
+        guard !exclusions.isEmpty else { return false }
+        return isExcluded(windowResolver.application(at: point))
     }
 
     private func isExcluded(_ app: NSRunningApplication?) -> Bool {
@@ -530,17 +548,25 @@ final class MouseControlsEngine {
     }
 }
 
-@MainActor
-private final class MouseWindowResolver {
-    struct FocusTarget {
-        let application: NSRunningApplication
+private final class MouseWindowResolver: @unchecked Sendable {
+    struct FocusTarget: @unchecked Sendable {
+        let processID: pid_t
         let window: AXUIElement
         let isFocused: Bool
     }
 
-    private var cachedFrame: CGRect?
-    private var cachedProcessID: pid_t?
-    private var cachedAt = -Double.infinity
+    private struct WindowTarget: Sendable {
+        let frame: CGRect?
+        let processID: pid_t?
+        let resolvedPoint: CGPoint
+        let resolvedAt: TimeInterval
+    }
+
+    private let queryQueue = DispatchQueue(label: "com.pulkit.edith.mouse-window-resolver")
+    private let lock = NSLock()
+    private var cachedTarget = WindowTarget(
+        frame: nil, processID: nil, resolvedPoint: .zero, resolvedAt: -.infinity)
+    private var refreshInFlight = false
     private static let ownProcessID = getpid()
     private let systemElement: AXUIElement = {
         let element = AXUIElementCreateSystemWide()
@@ -548,42 +574,77 @@ private final class MouseWindowResolver {
         return element
     }()
 
-    func focusTarget(at point: CGPoint) -> FocusTarget? {
-        var element: AXUIElement?
-        guard
-            AXUIElementCopyElementAtPosition(
-                systemElement, Float(point.x), Float(point.y), &element) == .success,
-            let element, let window = topLevelWindow(from: element)
-        else { return nil }
-        AXUIElementSetMessagingTimeout(window, 0.2)
-        var processID: pid_t = 0
-        guard AXUIElementGetPid(window, &processID) == .success,
-            processID != Self.ownProcessID,
-            let application = NSRunningApplication(processIdentifier: processID)
-        else { return nil }
-        var focusedValue: CFTypeRef?
-        let focused =
-            AXUIElementCopyAttributeValue(
-                window, kAXFocusedAttribute as CFString, &focusedValue) == .success
-            && (focusedValue as? Bool == true)
-        return FocusTarget(application: application, window: window, isFocused: focused)
+    func application(at point: CGPoint) -> NSRunningApplication? {
+        let processID = cachedProcessID(at: point)
+        if processID == nil { refresh(at: point) }
+        return processID.flatMap(NSRunningApplication.init(processIdentifier:))
+            ?? NSWorkspace.shared.frontmostApplication
     }
 
-    func application(at point: CGPoint) -> NSRunningApplication? {
+    func refresh(at point: CGPoint) {
+        lock.lock()
+        let current = cachedTarget
         let now = ProcessInfo.processInfo.systemUptime
-        if let cachedFrame, cachedFrame.contains(point), now - cachedAt < 0.5,
-            let cachedProcessID
-        {
-            return NSRunningApplication(processIdentifier: cachedProcessID)
+        let valid = Self.cacheHolds(current, point: point, now: now)
+        if valid || refreshInFlight {
+            lock.unlock()
+            return
         }
+        refreshInFlight = true
+        lock.unlock()
+        queryQueue.async { [weak self] in
+            guard let self else { return }
+            let target = Self.resolveWindow(at: point)
+            self.lock.lock()
+            self.cachedTarget = WindowTarget(
+                frame: target?.frame, processID: target?.processID, resolvedPoint: point,
+                resolvedAt: ProcessInfo.processInfo.systemUptime)
+            self.refreshInFlight = false
+            self.lock.unlock()
+        }
+    }
+
+    func focusTarget(
+        at point: CGPoint, completion: @escaping @Sendable (FocusTarget?) -> Void
+    ) {
+        queryQueue.async { [weak self] in
+            let target = self?.resolveFocusTarget(at: point)
+            DispatchQueue.main.async { completion(target) }
+        }
+    }
+
+    func invalidate() {
+        lock.lock()
+        cachedTarget = WindowTarget(
+            frame: nil, processID: nil, resolvedPoint: .zero, resolvedAt: -.infinity)
+        lock.unlock()
+    }
+
+    private func cachedProcessID(at point: CGPoint) -> pid_t? {
+        lock.lock()
+        defer { lock.unlock() }
+        let now = ProcessInfo.processInfo.systemUptime
+        return Self.cacheHolds(cachedTarget, point: point, now: now)
+            ? cachedTarget.processID : nil
+    }
+
+    private static func cacheHolds(
+        _ target: WindowTarget, point: CGPoint, now: TimeInterval
+    ) -> Bool {
+        guard now >= target.resolvedAt, now - target.resolvedAt < 0.5 else { return false }
+        guard let frame = target.frame else { return point == target.resolvedPoint }
+        return frame.contains(point)
+    }
+
+    private static func resolveWindow(at point: CGPoint) -> (frame: CGRect, processID: pid_t)? {
         guard
             let windows = CGWindowListCopyWindowInfo(
                 [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
                 as? [[String: Any]]
-        else { return NSWorkspace.shared.frontmostApplication }
+        else { return nil }
         for window in windows {
-            guard let pid = (window[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
-                pid != Self.ownProcessID,
+            guard let processID = (window[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
+                processID != ownProcessID,
                 let layer = (window[kCGWindowLayer as String] as? NSNumber)?.intValue,
                 (0...3).contains(layer),
                 (window[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 1 > 0,
@@ -594,22 +655,29 @@ private final class MouseWindowResolver {
                 let height = (bounds["Height"] as? NSNumber)?.doubleValue
             else { continue }
             let frame = CGRect(x: x, y: y, width: width, height: height)
-            guard frame.contains(point) else { continue }
-            cachedFrame = frame
-            cachedProcessID = pid
-            cachedAt = now
-            return NSRunningApplication(processIdentifier: pid)
+            if frame.contains(point) { return (frame, processID) }
         }
-        cachedFrame = nil
-        cachedProcessID = NSWorkspace.shared.frontmostApplication?.processIdentifier
-        cachedAt = now
-        return NSWorkspace.shared.frontmostApplication
+        return nil
     }
 
-    func invalidate() {
-        cachedFrame = nil
-        cachedProcessID = nil
-        cachedAt = -Double.infinity
+    private func resolveFocusTarget(at point: CGPoint) -> FocusTarget? {
+        var element: AXUIElement?
+        guard
+            AXUIElementCopyElementAtPosition(
+                systemElement, Float(point.x), Float(point.y), &element) == .success,
+            let element, let window = topLevelWindow(from: element)
+        else { return nil }
+        AXUIElementSetMessagingTimeout(window, 0.2)
+        var processID: pid_t = 0
+        guard AXUIElementGetPid(window, &processID) == .success,
+            processID != Self.ownProcessID
+        else { return nil }
+        var focusedValue: CFTypeRef?
+        let focused =
+            AXUIElementCopyAttributeValue(
+                window, kAXFocusedAttribute as CFString, &focusedValue) == .success
+            && (focusedValue as? Bool == true)
+        return FocusTarget(processID: processID, window: window, isFocused: focused)
     }
 
     private func topLevelWindow(from element: AXUIElement) -> AXUIElement? {
