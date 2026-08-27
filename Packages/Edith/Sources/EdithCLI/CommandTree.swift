@@ -525,6 +525,16 @@ public enum CommandTree {
                         options: ["--json", "--help", "--update"]),
                 ]),
             CommandNode(
+                "command-bar", "Calculate and convert with the Command Bar engine.",
+                children: [
+                    CommandNode(
+                        "calculate", "Evaluate a local arithmetic expression.", options: common,
+                        repeatingArgument: .free),
+                    CommandNode(
+                        "convert", "Convert a value between compatible units.", options: common,
+                        arguments: [.free, .free, .free]),
+                ]),
+            CommandNode(
                 "clipboard", "The clipboard history Edith keeps.",
                 children: [
                     CommandNode(

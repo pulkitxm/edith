@@ -18,6 +18,7 @@ final class AppServices {
     private(set) var lidAwake: LidAwakeEngine?
     private(set) var systemStats: SystemStatsStatusItem?
     private(set) var attention: AttentionTrackingService?
+    private(set) var commandBar: CommandBarController?
     private let startup = StartupCoordinator()
     private let lidAwakeRestorationGate = LidAwakeRestorationGate()
     private let lidAwakeOrphanRestorer: @MainActor @Sendable () async -> LidAwakeOutcome
@@ -101,6 +102,8 @@ final class AppServices {
         startup.cancel()
         terminating = true
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
+        commandBar?.shutdown()
+        commandBar = nil
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
     }
@@ -294,6 +297,13 @@ final class AppServices {
         }
         ClipboardPanel.shared.store = clipboard
 
+        let commandBarOn = Self.extensionEnabled(AppStorageKeys.CommandBar.enabled)
+        if commandBarOn, commandBar == nil { commandBar = CommandBarController(services: self) }
+        if !commandBarOn, let controller = commandBar {
+            controller.shutdown()
+            commandBar = nil
+        }
+
         notchShelf?.attachClipboard(clipboard)
         notchShelf?.attachUsage(usage)
         notchShelf?.attachCalendar(calendar)
@@ -405,6 +415,7 @@ final class AppServices {
         lidAwake?.syncSettings()
         focusDim?.applySettings()
         presenter?.applySettings()
+        commandBar?.syncSettings()
     }
 
     private static func reconcileAgentUsageSettings() -> AgentUsageSettingsState {

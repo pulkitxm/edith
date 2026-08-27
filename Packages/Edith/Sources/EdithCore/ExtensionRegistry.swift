@@ -185,6 +185,12 @@ public enum ExtensionRegistry {
             defaultsKey: "clipboardEnabled", requiredCapabilities: [.clipboardHistory],
             optionalCapabilities: [.globalPaste, .globalShortcuts]),
         ExtensionRegistryEntry(
+            id: "commandBar", title: "Command Bar",
+            subtitle: "Search Edith actions and apps, calculate, and convert from anywhere.",
+            symbolName: "command", group: .utilities, featured: true,
+            defaultsKey: "commandBarEnabled", requiredCapabilities: [.runningApplications],
+            optionalCapabilities: [.globalShortcuts]),
+        ExtensionRegistryEntry(
             id: "focusDim", title: "Focus Dim",
             subtitle: "Dims everything behind your active app.",
             symbolName: "circle.lefthalf.filled", group: .utilities, featured: false,

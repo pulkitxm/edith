@@ -71,6 +71,17 @@ public enum AppStorageKeys {
         public static let profile = "colorPickerProfile"
     }
 
+    public enum CommandBar {
+        public static let enabled = "commandBarEnabled"
+        public static let hotKeyCode = "commandBarHotKeyCode"
+        public static let hotKeyLabel = "commandBarHotKeyLabel"
+        public static let hotKeyMods = "commandBarHotKeyMods"
+        public static let learnRanking = "commandBarLearnRanking"
+        public static let registrationStatus = "commandBarHotKeyRegistrationStatus"
+        public static let showApplications = "commandBarShowApplications"
+        public static let usage = "commandBarUsage"
+    }
+
     public enum Companion {
         public static let endpoint = "companionEndpoint"
         public static let tab = "companionTab"

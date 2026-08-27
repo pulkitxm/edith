@@ -58,6 +58,7 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed herdr`](./herdr/README.md) | Live Herdr sessions on this Mac and your SSH machines |
 | [`ed quinjet`](./quinjet/README.md) | Discover, inspect and launch Quinjet review workspaces locally or on a configured machine |
 | [`ed clipboard`](./clipboard/README.md) | Clipboard history: read, copy, pin and prune |
+| [`ed command-bar`](./command-bar/README.md) | Local calculations and conversions from the Command Bar engine |
 | [`ed attention`](./attention/README.md) | Application, website, music, focus and distraction insight |
 | [`ed color`](./color/README.md) | Launching the colour picker and reading its swatch history |
 | [`ed download`](./download/README.md) | The download queue and the tools that back it |
