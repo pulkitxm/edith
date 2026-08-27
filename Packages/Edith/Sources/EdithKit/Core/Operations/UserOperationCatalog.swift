@@ -117,6 +117,9 @@ public enum UserOperationCatalog {
         + RunningAppOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + QuickAction.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + ColorPickerOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -1064,6 +1067,20 @@ private extension RunningAppOperation {
                     exampleArguments: ["--all", "--yes"]),
             ])
         }
+    }
+}
+
+private extension QuickAction {
+    var interfaceExposure: UserOperationExposure {
+        let arguments = self == .emptyTrash ? ["--yes"] : []
+        return .userInterface([
+            UserInterfaceActionPlacement(
+                surface: "Quick Actions panel", action: descriptor.summary,
+                exampleArguments: arguments),
+            UserInterfaceActionPlacement(
+                surface: "Quick Actions settings", action: descriptor.summary,
+                exampleArguments: arguments),
+        ])
     }
 }
 

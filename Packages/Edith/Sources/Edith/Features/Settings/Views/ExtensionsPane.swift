@@ -577,7 +577,7 @@ private struct ExtensionSettingsSheet: View {
         case "music": 460
         case "focusDim", "colorPicker": 430
         case "system": 500
-        case "notchShelf", "presenter": 580
+        case "notchShelf", "presenter", "quickActions": 580
         default: 620
         }
     }
@@ -928,6 +928,7 @@ private struct ExtensionDetailRows: View {
             case .herdr: HerdrRows()
             case .quinjet: QuinjetRows()
             case .system: SystemRows()
+            case .quickActions: QuickActionsRows()
             case .machines: MachinesRows()
             case .companion: CompanionRows()
             case .systemStats: SystemStatsRows()
