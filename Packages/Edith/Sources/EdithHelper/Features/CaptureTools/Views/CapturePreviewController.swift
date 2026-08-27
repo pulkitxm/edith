@@ -9,7 +9,7 @@ final class CapturePreviewController: NSObject, NSWindowDelegate {
 
     init(
         image: NSImage, pngData: Data, recognition: CaptureRecognition,
-        operation: CaptureToolOperation, copiedResult: Bool
+        operation: CaptureToolOperation, copyMode: CaptureCopyMode, copiedResult: Bool
     ) {
         panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 390, height: 360),
@@ -26,10 +26,10 @@ final class CapturePreviewController: NSObject, NSWindowDelegate {
         panel.contentView = NSHostingView(
             rootView: CapturePreviewView(
                 image: image, recognition: recognition, operation: operation,
-                copiedResult: copiedResult,
+                copyMode: copyMode, copiedResult: copiedResult,
                 copyImage: { Self.copyImage(pngData) },
                 saveImage: { Self.saveImage(pngData) },
-                copyResult: { Self.copyResult(recognition.output(for: .smart)) },
+                copyResult: { Self.copyResult(recognition.output(for: copyMode)) },
                 openResult: { Self.openResult(recognition) },
                 discard: { [weak self] in self?.close() },
                 hovering: { [weak self] inside in self?.setHovering(inside) }))
@@ -108,6 +108,7 @@ private struct CapturePreviewView: View {
     let image: NSImage
     let recognition: CaptureRecognition
     let operation: CaptureToolOperation
+    let copyMode: CaptureCopyMode
     let copiedResult: Bool
     let copyImage: () -> Void
     let saveImage: () -> Void
@@ -116,7 +117,8 @@ private struct CapturePreviewView: View {
     let discard: () -> Void
     let hovering: (Bool) -> Void
 
-    private var output: String { recognition.output(for: .smart) }
+    private var output: String { recognition.output(for: copyMode) }
+    private var resultIsPrimary: Bool { operation == .read && !output.isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -131,6 +133,11 @@ private struct CapturePreviewView: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.green)
                 }
+                if !recognition.codes.isEmpty {
+                    Label("\(recognition.codes.count)", systemImage: "qrcode")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
             Image(nsImage: image)
                 .resizable()
@@ -144,16 +151,28 @@ private struct CapturePreviewView: View {
                 .lineLimit(4)
                 .textSelection(.enabled)
             HStack(spacing: 8) {
-                Button("Copy image", action: copyImage)
+                Button(resultIsPrimary ? "Copy result" : "Copy image") {
+                    resultIsPrimary ? copyResult() : copyImage()
+                }
+                .keyboardShortcut("c", modifiers: .command)
+                if resultIsPrimary {
+                    Button("Copy image", action: copyImage)
+                        .keyboardShortcut("c", modifiers: [.command, .shift])
+                } else if !output.isEmpty {
+                    Button("Copy result", action: copyResult)
+                        .keyboardShortcut("c", modifiers: [.command, .shift])
+                }
                 Button("Save", action: saveImage)
-                if !output.isEmpty { Button("Copy result", action: copyResult) }
+                    .keyboardShortcut("s", modifiers: .command)
                 if recognition.codes.count == 1,
                     CaptureRecognizedLink.openable(recognition.codes[0].payload) != nil
                 {
                     Button("Open", action: openResult)
+                        .keyboardShortcut("o", modifiers: .command)
                 }
                 Spacer()
                 Button("Discard", role: .destructive, action: discard)
+                    .keyboardShortcut(.cancelAction)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)

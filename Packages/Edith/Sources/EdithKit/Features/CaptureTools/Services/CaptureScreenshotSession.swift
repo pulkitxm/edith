@@ -96,15 +96,24 @@ public enum CaptureScreenshotArchive {
             ).first
         else { throw CaptureScreenshotError.saveFailed }
         let directory = pictures.appendingPathComponent("Edith Captures", isDirectory: true)
+        return try save(data, to: directory, now: now)
+    }
+
+    public static func save(_ data: Data, to directory: URL, now: Date = Date()) throws -> URL {
         try FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true)
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-        let destination =
-            directory
-            .appendingPathComponent("Edith Capture \(formatter.string(from: now))")
-            .appendingPathExtension("png")
+        let name = "Edith Capture \(formatter.string(from: now))"
+        var destination = directory.appendingPathComponent(name).appendingPathExtension("png")
+        var suffix = 2
+        while FileManager.default.fileExists(atPath: destination.path) {
+            destination = directory
+                .appendingPathComponent("\(name) \(suffix)")
+                .appendingPathExtension("png")
+            suffix += 1
+        }
         do {
             try data.write(to: destination, options: .atomic)
             return destination

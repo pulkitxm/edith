@@ -39,8 +39,12 @@ final class CaptureToolsStore: FeatureModule {
 
     func start(_ operation: CaptureToolOperation) {
         if inProgress {
-            task?.cancel()
-            session.cancel()
+            cancel()
+            return
+        }
+        guard CGPreflightScreenCaptureAccess() else {
+            errorMessage = "Screen Recording access is required to capture the screen."
+            IPC.post(IPC.Name.grantScreenRecording)
             return
         }
         generation &+= 1
@@ -50,6 +54,16 @@ final class CaptureToolsStore: FeatureModule {
         task = Task { [weak self] in
             await self?.run(operation, token: token)
         }
+    }
+
+    func cancel() {
+        guard inProgress else { return }
+        generation &+= 1
+        task?.cancel()
+        task = nil
+        session.cancel()
+        inProgress = false
+        errorMessage = nil
     }
 
     func shutdown() {
@@ -96,14 +110,14 @@ final class CaptureToolsStore: FeatureModule {
             preview?.close()
             preview = CapturePreviewController(
                 image: sourceImage, pngData: data, recognition: result,
-                operation: operation, copiedResult: copied)
+                operation: operation, copyMode: copyMode(), copiedResult: copied)
             preview?.show()
         } catch CaptureScreenshotError.cancelled {
             errorMessage = nil
         } catch is CancellationError {
             errorMessage = nil
         } catch {
-            guard generation == token else { return }
+            guard generation == token, !Task.isCancelled else { return }
             errorMessage = error.localizedDescription
             NSSound.beep()
         }
@@ -133,13 +147,17 @@ final class CaptureToolsStore: FeatureModule {
     }
 
     private func copy(_ result: CaptureRecognition) -> Bool {
-        let raw = SharedDefaults.store.string(forKey: AppStorageKeys.Capture.copyMode) ?? ""
-        let output = result.output(for: CaptureCopyMode(rawValue: raw) ?? .smart)
+        let output = result.output(for: copyMode())
         guard !output.isEmpty else { return false }
         NSPasteboard.general.clearContents()
         let copied = NSPasteboard.general.setString(output, forType: .string)
         if copied { IPC.post(IPC.Name.clipboardChanged) }
         return copied
+    }
+
+    private func copyMode() -> CaptureCopyMode {
+        let raw = SharedDefaults.store.string(forKey: AppStorageKeys.Capture.copyMode) ?? ""
+        return CaptureCopyMode(rawValue: raw) ?? .smart
     }
 }
 

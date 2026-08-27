@@ -70,7 +70,7 @@ struct CaptureToolsRows: View {
             }
 
             if !history.isEmpty {
-                Section("Recent reads") {
+                Section {
                     ForEach(history.prefix(historySize)) { capture in
                         Button {
                             copy(capture.output(for: copyMode))
@@ -89,6 +89,17 @@ struct CaptureToolsRows: View {
                             }
                         }
                         .buttonStyle(.edith(.row))
+                    }
+                } header: {
+                    HStack {
+                        Text("Recent reads")
+                        Spacer()
+                        Button("Clear") {
+                            CaptureHistoryStore.clear()
+                            history = []
+                            IPC.post(IPC.Name.settingsChanged)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }

@@ -80,7 +80,7 @@ public enum CaptureRecognizedLink {
         guard !value.contains(where: { $0.isWhitespace }),
             let components = URLComponents(string: value),
             ["http", "https"].contains(components.scheme?.lowercased() ?? ""),
-            components.host?.isEmpty == false
+            components.host?.isEmpty == false, components.user == nil, components.password == nil
         else { return nil }
         return components.url
     }

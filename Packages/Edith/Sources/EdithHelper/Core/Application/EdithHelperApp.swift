@@ -652,29 +652,39 @@ struct RootView: View {
                     }
                 }
                 if let captureTools = services.captureTools {
-                    Menu {
+                    if captureTools.inProgress {
                         Button {
-                            dismissPanel()
-                            captureTools.start(.read)
+                            captureTools.cancel()
                         } label: {
-                            Label("Read screen", systemImage: "text.viewfinder")
+                            Image(systemName: "xmark")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
                         }
-                        Button {
-                            dismissPanel()
-                            captureTools.start(.screenshot)
+                        .buttonStyle(.edith(.toolbar))
+                        .help("Cancel capture")
+                    } else {
+                        Menu {
+                            Button {
+                                dismissPanel()
+                                captureTools.start(.read)
+                            } label: {
+                                Label("Read screen", systemImage: "text.viewfinder")
+                            }
+                            Button {
+                                dismissPanel()
+                                captureTools.start(.screenshot)
+                            } label: {
+                                Label("Screenshot", systemImage: "camera.viewfinder")
+                            }
                         } label: {
-                            Label("Screenshot", systemImage: "camera.viewfinder")
+                            Image(systemName: "viewfinder")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
                         }
-                    } label: {
-                        Image(systemName: captureTools.inProgress ? "xmark" : "viewfinder")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                        .help("Capture tools (\(CaptureToolsHotKeys.readLabel))")
                     }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                    .help(
-                        captureTools.inProgress
-                            ? "Cancel capture" : "Capture tools (\(CaptureToolsHotKeys.readLabel))")
                 }
                 if focusDimEnabled {
                     Button {

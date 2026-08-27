@@ -55,5 +55,19 @@ import Testing
         #expect(CaptureRecognizedLink.openable("javascript:alert(1)") == nil)
         #expect(CaptureRecognizedLink.openable("https://edith.app/a b") == nil)
         #expect(CaptureRecognizedLink.openable("https:///missing-host") == nil)
+        #expect(CaptureRecognizedLink.openable("https://edith.app@example.com") == nil)
+    }
+
+    @Test func archiveNeverOverwritesACaptureFromTheSameSecond() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("capture-archive-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let first = try CaptureScreenshotArchive.save(Data([1]), to: directory, now: now)
+        let second = try CaptureScreenshotArchive.save(Data([2]), to: directory, now: now)
+
+        #expect(first != second)
+        #expect(try Data(contentsOf: first) == Data([1]))
+        #expect(try Data(contentsOf: second) == Data([2]))
     }
 }
