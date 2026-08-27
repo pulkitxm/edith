@@ -256,18 +256,31 @@ public enum ExtensionLiveAdapters {
             plistName: LidAwakePrivilegedService.plistName
         ).status
     ) -> ExtensionAdapterReadiness {
-        switch status {
-        case .enabled:
-            return .ready("The privileged sleep helper is registered and enabled.")
-        case .requiresApproval:
-            return .needsSetup(
-                "The sleep helper needs approval in System Settings > General > Login Items.")
-        case .notRegistered:
-            return .uninstalled("The privileged sleep helper is not registered.")
-        case .notFound:
-            return .uninstalled("The privileged sleep helper is missing from Edith.app.")
+        return switch status {
+        case .enabled: lidAwakeReadiness(helperStatus: "enabled")
+        case .requiresApproval: lidAwakeReadiness(helperStatus: "awaitingApproval")
+        case .notRegistered: lidAwakeReadiness(helperStatus: "notRegistered")
+        case .notFound: lidAwakeReadiness(helperStatus: "notFound")
         @unknown default:
-            return .unsupported("This macOS version returned an unknown helper status.")
+            .unsupported("This macOS version returned an unknown helper status.")
+        }
+    }
+
+    public static func lidAwakeReadiness(
+        helperStatus: String
+    ) -> ExtensionAdapterReadiness {
+        switch helperStatus {
+        case "enabled":
+            .ready("The privileged sleep helper is registered and enabled.")
+        case "awaitingApproval":
+            .needsSetup(
+                "The sleep helper needs approval in System Settings > General > Login Items.")
+        case "notRegistered":
+            .uninstalled("The privileged sleep helper is not registered.")
+        case "notFound":
+            .uninstalled("The privileged sleep helper is missing from Edith.app.")
+        default:
+            .failed("The privileged sleep helper returned an unknown status: \(helperStatus).")
         }
     }
 

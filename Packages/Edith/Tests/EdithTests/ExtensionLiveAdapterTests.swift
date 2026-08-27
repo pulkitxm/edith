@@ -196,6 +196,10 @@ import EdithCore
         #expect(
             ExtensionLiveAdapters.lidAwakeReadiness(status: .notFound)
                 == .uninstalled("The privileged sleep helper is missing from Edith.app."))
+        #expect(
+            ExtensionLiveAdapters.lidAwakeReadiness(helperStatus: "awaitingApproval")
+                == .needsSetup(
+                    "The sleep helper needs approval in System Settings > General > Login Items."))
     }
 
     @Test func musicAdapterDetectsMissingEmptyReadyAndInvalidLibraries() throws {
