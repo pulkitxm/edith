@@ -187,26 +187,26 @@ public enum QuickActionError: LocalizedError, Equatable {
 
 public struct QuickActionEnvironment: @unchecked Sendable {
     public var appearance: () -> QuickActionAppearance
-    public var toggleAppearance: () throws -> Void
+    public var toggleAppearance: () async throws -> Void
     public var keyboardLight: () -> Float?
     public var setKeyboardLight: (Float) -> Bool
     public var finderFlag: (String, Bool) -> Bool
-    public var setFinderFlag: (String, Bool) throws -> Void
+    public var setFinderFlag: (String, Bool) async throws -> Void
     public var volumes: () -> [(url: URL, name: String)]
     public var eject: (URL) throws -> Void
-    public var emptyTrash: () throws -> Void
+    public var emptyTrash: () async throws -> Void
     public var lockScreen: () throws -> Void
 
     public init(
         appearance: @escaping () -> QuickActionAppearance,
-        toggleAppearance: @escaping () throws -> Void,
+        toggleAppearance: @escaping () async throws -> Void,
         keyboardLight: @escaping () -> Float?,
         setKeyboardLight: @escaping (Float) -> Bool,
         finderFlag: @escaping (String, Bool) -> Bool,
-        setFinderFlag: @escaping (String, Bool) throws -> Void,
+        setFinderFlag: @escaping (String, Bool) async throws -> Void,
         volumes: @escaping () -> [(url: URL, name: String)],
         eject: @escaping (URL) throws -> Void,
-        emptyTrash: @escaping () throws -> Void,
+        emptyTrash: @escaping () async throws -> Void,
         lockScreen: @escaping () throws -> Void
     ) {
         self.appearance = appearance
@@ -255,12 +255,12 @@ public struct QuickActionCenter: @unchecked Sendable {
             })
     }
 
-    public func perform(_ action: QuickAction) throws -> QuickActionResult {
+    public func perform(_ action: QuickAction) async throws -> QuickActionResult {
         let before = snapshot()
         var affectedCount = 0
         switch action {
         case .appearance:
-            try environment.toggleAppearance()
+            try await environment.toggleAppearance()
         case .keyboardLight:
             guard let enabled = before.keyboardLightEnabled else {
                 throw QuickActionError.unavailable(
@@ -270,16 +270,16 @@ public struct QuickActionCenter: @unchecked Sendable {
                 throw QuickActionError.failed("The keyboard backlight did not accept the change.")
             }
         case .emptyTrash:
-            try environment.emptyTrash()
+            try await environment.emptyTrash()
         case .ejectDisks:
             for volume in environment.volumes() {
                 try environment.eject(volume.url)
                 affectedCount += 1
             }
         case .hiddenFiles:
-            try environment.setFinderFlag("AppleShowAllFiles", !before.hiddenFilesShown)
+            try await environment.setFinderFlag("AppleShowAllFiles", !before.hiddenFilesShown)
         case .desktopIcons:
-            try environment.setFinderFlag("CreateDesktop", !before.desktopIconsShown)
+            try await environment.setFinderFlag("CreateDesktop", !before.desktopIconsShown)
         case .lockScreen:
             try environment.lockScreen()
         }
@@ -350,14 +350,11 @@ public struct QuickActionCenter: @unchecked Sendable {
         errorMessage = nil
         let center = center
         Task {
-            let result = await Task.detached(priority: .userInitiated) {
-                Result { try center.perform(action) }
-            }.value
-            switch result {
-            case let .success(value):
+            do {
+                let value = try await center.perform(action)
                 snapshot = value.snapshot
                 message = value.message
-            case let .failure(error):
+            } catch {
                 snapshot = center.snapshot()
                 errorMessage = error.localizedDescription
             }
@@ -376,8 +373,8 @@ private enum QuickActionSystem {
         return (value as? String)?.lowercased() == "dark" ? .dark : .light
     }
 
-    static func toggleAppearance() throws {
-        try runAppleScript(
+    static func toggleAppearance() async throws {
+        try await runAppleScript(
             "tell application \"System Events\" to tell appearance preferences to set dark mode to not dark mode"
         )
     }
@@ -403,15 +400,17 @@ private enum QuickActionSystem {
         }
     }
 
-    static func setFinderFlag(_ key: String, _ value: Bool) throws {
+    static func setFinderFlag(_ key: String, _ value: Bool) async throws {
         CFPreferencesSetAppValue(key as CFString, value as CFBoolean, finderDomain as CFString)
         guard CFPreferencesAppSynchronize(finderDomain as CFString) else {
             throw QuickActionError.failed("Finder did not save the new preference.")
         }
-        let result = runProcess("/usr/bin/killall", ["Finder"])
-        if result.status != 0 {
-            let running = runProcess("/usr/bin/pgrep", ["-x", "Finder"]).status == 0
-            if running { throw QuickActionError.failed("Finder could not restart.") }
+        let result = try await runProcess("/usr/bin/killall", ["Finder"])
+        if result.terminationStatus != 0 {
+            let running = try await runProcess("/usr/bin/pgrep", ["-x", "Finder"])
+            if running.terminationStatus == 0 {
+                throw QuickActionError.failed("Finder could not restart.")
+            }
         }
     }
 
@@ -435,8 +434,8 @@ private enum QuickActionSystem {
         }
     }
 
-    static func emptyTrash() throws {
-        try runAppleScript("tell application \"Finder\" to empty trash")
+    static func emptyTrash() async throws {
+        try await runAppleScript("tell application \"Finder\" to empty trash")
     }
 
     static func lockScreen() throws {
@@ -450,55 +449,35 @@ private enum QuickActionSystem {
         NSWorkspace.shared.openApplication(at: url, configuration: configuration)
     }
 
-    static func runAppleScript(_ source: String) throws {
-        let result = runProcess("/usr/bin/osascript", ["-"], input: source)
-        guard result.status == 0 else {
-            if result.error.contains("-1743")
-                || result.error.lowercased().contains("not authorized")
+    static func runAppleScript(_ source: String) async throws {
+        let result = try await runProcess("/usr/bin/osascript", ["-"], input: source)
+        guard result.terminationStatus == 0 else {
+            if result.output.contains("-1743")
+                || result.output.lowercased().contains("not authorized")
             {
                 throw QuickActionError.unavailable(
                     "Allow Automation access in System Settings, then try again.")
             }
             throw QuickActionError.failed(
-                result.error.isEmpty ? "macOS refused the action." : result.error)
+                result.output.isEmpty ? "macOS refused the action." : result.output)
         }
     }
 
     static func runProcess(
         _ executable: String, _ arguments: [String], input: String? = nil
-    ) -> (status: Int32, output: String, error: String) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = arguments
-        let output = Pipe()
-        let errors = Pipe()
-        process.standardOutput = output
-        process.standardError = errors
-        if let input {
-            let source = Pipe()
-            process.standardInput = source
-            do {
-                try process.run()
-                source.fileHandleForWriting.write(Data(input.utf8))
-                try? source.fileHandleForWriting.close()
-            } catch {
-                return (-1, "", error.localizedDescription)
-            }
-        } else {
-            do {
-                try process.run()
-            } catch {
-                return (-1, "", error.localizedDescription)
-            }
+    ) async throws -> CLICommandResult {
+        do {
+            return try await CLICommandRunner.run(
+                CLICommandRequest(
+                    executableURL: URL(fileURLWithPath: executable), arguments: arguments,
+                    environment: CLIToolEnvironment.sanitized(), timeout: 10,
+                    maximumOutputBytes: 64 * 1_024,
+                    standardInputData: input.map { Data($0.utf8) },
+                    terminatesProcessGroup: true)
+            ) { _ in }
+        } catch {
+            throw QuickActionError.failed("macOS action failed: \(error.localizedDescription)")
         }
-        process.waitUntilExit()
-        return (
-            process.terminationStatus,
-            String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-            String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        )
     }
 
     private static let lockScreenFunction: (@convention(c) () -> Int32)? = {

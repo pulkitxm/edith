@@ -28,39 +28,39 @@ import Testing
             snapshot.ejectableVolumes == [QuickActionVolume(name: "Work", path: "/Volumes/Work")])
     }
 
-    @Test func reversibleActionsToggleTheirState() throws {
+    @Test func reversibleActionsToggleTheirState() async throws {
         let state = State()
         let center = center(state)
 
-        #expect(try center.perform(.appearance).snapshot.appearance == .dark)
-        #expect(try center.perform(.keyboardLight).snapshot.keyboardLightEnabled == false)
-        #expect(try center.perform(.hiddenFiles).snapshot.hiddenFilesShown)
-        #expect(try !center.perform(.desktopIcons).snapshot.desktopIconsShown)
+        #expect(try await center.perform(.appearance).snapshot.appearance == .dark)
+        #expect(try await center.perform(.keyboardLight).snapshot.keyboardLightEnabled == false)
+        #expect(try await center.perform(.hiddenFiles).snapshot.hiddenFilesShown)
+        #expect(try await center.perform(.desktopIcons).snapshot.desktopIconsShown == false)
     }
 
-    @Test func operationalActionsReportEffects() throws {
+    @Test func operationalActionsReportEffects() async throws {
         let state = State()
         let center = center(state)
 
-        let trash = try center.perform(.emptyTrash)
+        let trash = try await center.perform(.emptyTrash)
         #expect(state.emptiedTrash)
         #expect(trash.changed)
 
-        let eject = try center.perform(.ejectDisks)
+        let eject = try await center.perform(.ejectDisks)
         #expect(eject.affectedCount == 1)
         #expect(eject.snapshot.ejectableVolumes.isEmpty)
 
-        let lock = try center.perform(.lockScreen)
+        let lock = try await center.perform(.lockScreen)
         #expect(state.locked)
         #expect(lock.changed)
     }
 
-    @Test func unsupportedKeyboardLightFailsWithoutChangingState() {
+    @Test func unsupportedKeyboardLightFailsWithoutChangingState() async {
         let state = State()
         state.keyboardLevel = nil
 
-        #expect(throws: QuickActionError.self) {
-            try center(state).perform(.keyboardLight)
+        await #expect(throws: QuickActionError.self) {
+            try await center(state).perform(.keyboardLight)
         }
         #expect(state.keyboardLevel == nil)
     }

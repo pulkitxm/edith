@@ -24,9 +24,9 @@ enum QuickActionsCLI {
         }
     }
 
-    static func perform(_ action: QuickAction, json: Bool) throws {
+    static func perform(_ action: QuickAction, json: Bool) async throws {
         try requireEnabled()
-        let result = try CLIEnvironment.quickActionCenter().perform(action)
+        let result = try await CLIEnvironment.quickActionCenter().perform(action)
         if json {
             CLIOut.json(resultJSON(result, applied: true))
         } else {
@@ -115,7 +115,7 @@ struct QuickActionsAppearanceCommand: AsyncParsableCommand {
         commandName: "appearance", abstract: QuickAction.appearance.descriptor.summary)
     @Flag(name: .long) var json = false
     func run() async throws {
-        try await execute { try QuickActionsCLI.perform(.appearance, json: json) }
+        try await execute { try await QuickActionsCLI.perform(.appearance, json: json) }
     }
 }
 
@@ -124,7 +124,7 @@ struct QuickActionsKeyboardLightCommand: AsyncParsableCommand {
         commandName: "keyboard-light", abstract: QuickAction.keyboardLight.descriptor.summary)
     @Flag(name: .long) var json = false
     func run() async throws {
-        try await execute { try QuickActionsCLI.perform(.keyboardLight, json: json) }
+        try await execute { try await QuickActionsCLI.perform(.keyboardLight, json: json) }
     }
 }
 
@@ -142,7 +142,7 @@ struct QuickActionsEmptyTrashCommand: AsyncParsableCommand {
                 action: "empty-trash", targets: ["Trash"], confirmed: yes, json: json,
                 fields: ["operation": .string(QuickAction.emptyTrash.descriptor.id.rawValue)])
             guard plan.shouldApply() else { return }
-            let result = try CLIEnvironment.quickActionCenter().perform(.emptyTrash)
+            let result = try await CLIEnvironment.quickActionCenter().perform(.emptyTrash)
             plan.finish(
                 changed: result.changed, plain: result.message,
                 fields: [
@@ -160,7 +160,7 @@ struct QuickActionsEjectDisksCommand: AsyncParsableCommand {
         commandName: "eject-disks", abstract: QuickAction.ejectDisks.descriptor.summary)
     @Flag(name: .long) var json = false
     func run() async throws {
-        try await execute { try QuickActionsCLI.perform(.ejectDisks, json: json) }
+        try await execute { try await QuickActionsCLI.perform(.ejectDisks, json: json) }
     }
 }
 
@@ -169,7 +169,7 @@ struct QuickActionsHiddenFilesCommand: AsyncParsableCommand {
         commandName: "hidden-files", abstract: QuickAction.hiddenFiles.descriptor.summary)
     @Flag(name: .long) var json = false
     func run() async throws {
-        try await execute { try QuickActionsCLI.perform(.hiddenFiles, json: json) }
+        try await execute { try await QuickActionsCLI.perform(.hiddenFiles, json: json) }
     }
 }
 
@@ -178,7 +178,7 @@ struct QuickActionsDesktopIconsCommand: AsyncParsableCommand {
         commandName: "desktop-icons", abstract: QuickAction.desktopIcons.descriptor.summary)
     @Flag(name: .long) var json = false
     func run() async throws {
-        try await execute { try QuickActionsCLI.perform(.desktopIcons, json: json) }
+        try await execute { try await QuickActionsCLI.perform(.desktopIcons, json: json) }
     }
 }
 
@@ -187,6 +187,6 @@ struct QuickActionsLockScreenCommand: AsyncParsableCommand {
         commandName: "lock-screen", abstract: QuickAction.lockScreen.descriptor.summary)
     @Flag(name: .long) var json = false
     func run() async throws {
-        try await execute { try QuickActionsCLI.perform(.lockScreen, json: json) }
+        try await execute { try await QuickActionsCLI.perform(.lockScreen, json: json) }
     }
 }
