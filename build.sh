@@ -165,7 +165,7 @@ mv "$HELPER/Contents/MacOS/EdithHelper" "$HELPER/Contents/MacOS/Edith"
 mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS" \
   "$(dirname "$STATUS_HELPER")" "$STATUS_LAUNCH_DAEMONS"
 cp "$PRIVILEGED_HELPER_BUILD" "$PRIVILEGED_HELPER"
-cp Resources/com.pulkit.edith.lidawake.plist "$LAUNCH_DAEMONS/"
+cp Resources/com.pulkit.edith.lidawake.v2.plist "$LAUNCH_DAEMONS/"
 cp "$PRIVILEGED_HELPER_BUILD" "$STATUS_HELPER"
 cp Resources/com.pulkit.edith.lidawake.plist "$STATUS_LAUNCH_DAEMONS/"
 

@@ -142,6 +142,7 @@ private final class LidAwakeDaemonRegistrar {
 
     private let service = SMAppService.daemon(plistName: LidAwakePrivilegedService.plistName)
     private var registrationInFlight = false
+    private var statusRefreshWorkItem: DispatchWorkItem?
 
     func register() {
         guard !registrationInFlight else { return }
@@ -155,20 +156,25 @@ private final class LidAwakeDaemonRegistrar {
             service.unregister { [weak self] error in
                 guard let self else { return }
                 self.registrationInFlight = false
-                guard error == nil else { return }
+                guard error == nil else {
+                    self.publishStatus()
+                    return
+                }
                 self.registerCurrent(fingerprint: fingerprint)
             }
         case .notRegistered, .notFound:
             registerCurrent(fingerprint: fingerprint)
         @unknown default:
-            break
+            publishStatus()
         }
+        publishStatus()
     }
 
     private func registerCurrent(fingerprint: String?) {
         do {
             try service.register()
             persist(fingerprint)
+            publishStatus()
         } catch {
             let failure = error as NSError
             if service.status == .requiresApproval
@@ -180,7 +186,27 @@ private final class LidAwakeDaemonRegistrar {
                     "Service Management registration failed (%@ %ld): %@", failure.domain,
                     failure.code, failure.localizedDescription)
             }
+            publishStatus()
         }
+    }
+
+    private func publishStatus() {
+        let state: String =
+            switch service.status {
+            case .notRegistered: "notRegistered"
+            case .enabled: "enabled"
+            case .requiresApproval: "awaitingApproval"
+            case .notFound: "notFound"
+            @unknown default: "notFound"
+            }
+        SharedDefaults.store.set(state, forKey: LidAwakePrivilegedService.stateKey)
+        statusRefreshWorkItem?.cancel()
+        guard state == "awaitingApproval" else { return }
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.publishStatus()
+        }
+        statusRefreshWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: workItem)
     }
 
     private func persist(_ fingerprint: String?) {

@@ -725,7 +725,8 @@ private func lidAwakeProcessIDs(at url: URL) throws -> [pid_t] {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let plistURL = root.appendingPathComponent("Resources/com.pulkit.edith.lidawake.plist")
+        let plistURL = root.appendingPathComponent(
+            "Resources/com.pulkit.edith.lidawake.v2.plist")
         let plistData = try Data(contentsOf: plistURL)
         let plist = try #require(
             PropertyListSerialization.propertyList(from: plistData, format: nil)
@@ -734,8 +735,7 @@ private func lidAwakeProcessIDs(at url: URL) throws -> [pid_t] {
             plist["BundleProgram"] as? String
                 == "Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake")
         let associated = plist["AssociatedBundleIdentifiers"] as? [String]
-        #expect(
-            associated?.contains(LidAwakePrivilegedService.clientBundleIdentifier) == true)
+        #expect(associated == ["com.pulkit.edith"])
         let build = try String(
             contentsOf: root.appendingPathComponent("build.sh"), encoding: .utf8)
         #expect(

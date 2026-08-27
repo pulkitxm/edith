@@ -42,8 +42,6 @@ enum LidAwakePrivilegedClientError: LocalizedError {
 
 @MainActor
 final class LidAwakePrivilegedClient {
-    private let service = SMAppService.daemon(
-        plistName: LidAwakePrivilegedService.plistName)
     private let requestTimeout: Duration
 
     init(requestTimeout: Duration = .seconds(15)) {
@@ -51,13 +49,12 @@ final class LidAwakePrivilegedClient {
     }
 
     var state: LidAwakePrivilegedClientState {
-        switch service.status {
-        case .notRegistered: .notRegistered
-        case .enabled: .enabled
-        case .requiresApproval: .awaitingApproval
-        case .notFound: .notFound
-        @unknown default: .notFound
-        }
+        guard
+            let rawValue = SharedDefaults.store.string(
+                forKey: LidAwakePrivilegedService.stateKey),
+            let state = LidAwakePrivilegedClientState(rawValue: rawValue)
+        else { return .notRegistered }
+        return state
     }
 
     var isUsable: Bool { state == .enabled }
@@ -106,6 +103,18 @@ final class LidAwakePrivilegedClient {
     ) -> LidAwakePrivilegedClientError? {
         guard state != .enabled else { return nil }
         return .helperUnavailable(state)
+    }
+
+    static func cleanupLegacyRegistration() {
+        let service = SMAppService.daemon(plistName: LidAwakePrivilegedService.legacyPlistName)
+        guard service.status != .notRegistered, service.status != .notFound else { return }
+        service.unregister { error in
+            if let error {
+                NSLog(
+                    "Retired Lid Awake helper cleanup failed: %@",
+                    (error as NSError).localizedDescription)
+            }
+        }
     }
 
     private func makeConnection() -> NSXPCConnection {
