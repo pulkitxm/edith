@@ -101,7 +101,10 @@ final class DisplayBrightnessController {
             }
         }
         var assignment = DisplayPowerPolicy.assignServices(scores: scores)
-        let unassignedDisplays = external.indices.filter { assignment[$0] == nil }
+        var unassignedDisplays: [Int] = []
+        for index in external.indices where assignment[index] == nil {
+            unassignedDisplays.append(index)
+        }
         let assignedServices = Set(assignment.values)
         let unassignedServices = services.filter { !assignedServices.contains($0.identity.ordinal) }
         if unassignedDisplays.count == 1, unassignedServices.count == 1 {
@@ -152,10 +155,12 @@ final class DisplayBrightnessController {
 
         restoreUnusedGamma(nextRoutes: nextRoutes)
         routes = nextRoutes
-        displays = nextDisplays.sorted { left, right in
+        var orderedDisplays = Array(nextDisplays.prefix(16))
+        orderedDisplays.sort { left, right in
             if left.builtIn != right.builtIn { return left.builtIn }
             return left.name.localizedStandardCompare(right.name) == .orderedAscending
         }
+        displays = orderedDisplays
         applyConfiguredLevels()
         changed()
     }
@@ -231,9 +236,12 @@ final class DisplayBrightnessController {
             return false
         }
         let factor = DisplayPowerPolicy.gammaFactor(value)
-        let red = table.red.map { $0 * factor }
-        let green = table.green.map { $0 * factor }
-        let blue = table.blue.map { $0 * factor }
+        var red = table.red
+        var green = table.green
+        var blue = table.blue
+        for index in red.indices { red[index] *= factor }
+        for index in green.indices { green[index] *= factor }
+        for index in blue.indices { blue[index] *= factor }
         let applied =
             CGSetDisplayTransferByTable(
                 id, table.count, red, green, blue) == .success
