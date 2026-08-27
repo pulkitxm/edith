@@ -25,7 +25,7 @@ struct UsageView: View {
     private var theme: Color { themeColor(themeName) }
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
     private var blurUsage: Bool { presenterState.active && presenterBlurUsage }
-    private var providers: [LimitProvider] { store.availableProviders }
+    private var providers: [LimitProvider] { store.enabledProviders }
     private var selected: LimitProvider {
         get {
             let saved = LimitProvider(rawValue: selectedRaw) ?? .claude
