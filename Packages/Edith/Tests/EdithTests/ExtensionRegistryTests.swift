@@ -150,7 +150,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard",
+                "clipboard", "radialLauncher",
             ])
     }
 
@@ -244,6 +244,7 @@ import Testing
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
             "colorPicker": [.screenRecording],
+            "radialLauncher": [],
         ]
         let optional: [String: [ExtensionPermission]] = [
             "attention": [],
@@ -263,6 +264,7 @@ import Testing
             "focusDim": [],
             "presenter": [],
             "colorPicker": [],
+            "radialLauncher": [.accessibility],
         ]
 
         let identifiers = Set(ExtensionRegistry.entries.map(\.id))

@@ -196,9 +196,14 @@ public enum RadialLauncherSelection {
 
 public enum RadialLauncherProfileStore {
     public static func decode(_ value: String?) -> RadialLauncherProfile {
-        guard let value, let data = value.data(using: .utf8),
+        guard let value, let profile = decodeIfValid(value) else { return .starter }
+        return profile
+    }
+
+    public static func decodeIfValid(_ value: String) -> RadialLauncherProfile? {
+        guard let data = value.data(using: .utf8),
             let profile = try? JSONDecoder().decode(RadialLauncherProfile.self, from: data)
-        else { return .starter }
+        else { return nil }
         return RadialLauncherProfile(id: profile.id, name: profile.name, items: profile.items)
     }
 

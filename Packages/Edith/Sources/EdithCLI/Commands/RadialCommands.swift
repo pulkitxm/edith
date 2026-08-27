@@ -68,6 +68,7 @@ struct RadialProfileCommand: AsyncParsableCommand {
                             "symbol": .string(item.effectiveSymbol),
                             "payload": .string(item.payload), "keyCode": .int(item.keyCode),
                             "modifiers": .int(item.modifiers),
+                            "configured": .bool(item.isConfigured),
                         ])
                     }),
             ]))

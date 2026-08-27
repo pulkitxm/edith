@@ -36,6 +36,7 @@ import EdithCore
         #expect(
             RadialLauncherProfileStore.decode("not json").items.map(\.kind)
                 == RadialLauncherItemKind.allCases)
+        #expect(RadialLauncherProfileStore.decodeIfValid("not json") == nil)
     }
 
     @Test func itemValidationMatchesExecutionRequirements() {
@@ -103,6 +104,31 @@ import EdithCore
         #expect(
             ConfigCatalog.definition(for: RadialLauncherPreferenceKeys.hotKeyCode)?.fallback
                 == .int(kVK_Space))
+    }
+
+    @Test func liveReadinessChecksProfileContentAndShortcutStorage() {
+        let suite = "test.radial-launcher.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        #expect(
+            ExtensionLiveAdapters.radialLauncherReadiness(defaults: defaults)
+                == .ready("Configured radial actions: 6."))
+        defaults.set(
+            RadialLauncherProfileStore.encode(RadialLauncherProfile(name: "Empty", items: [])),
+            forKey: RadialLauncherPreferenceKeys.profile)
+        #expect(
+            ExtensionLiveAdapters.radialLauncherReadiness(defaults: defaults)
+                == .empty("Add at least one complete action to the radial profile."))
+        defaults.set("invalid", forKey: RadialLauncherPreferenceKeys.profile)
+        #expect(
+            ExtensionLiveAdapters.radialLauncherReadiness(defaults: defaults)
+                == .needsSetup("The stored profile or global shortcut is invalid."))
+        defaults.removeObject(forKey: RadialLauncherPreferenceKeys.profile)
+        defaults.set(0, forKey: RadialLauncherPreferenceKeys.hotKeyMods)
+        #expect(
+            ExtensionLiveAdapters.radialLauncherReadiness(defaults: defaults)
+                == .needsSetup("The stored profile or global shortcut is invalid."))
     }
 
     @Test func operationsAndCommandsStayInParity() throws {
