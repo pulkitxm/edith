@@ -38,15 +38,18 @@ public final class HerdrBoardCache: @unchecked Sendable {
         }
         var next: [String: HerdrAgent] = [:]
         var nextWorkspace: [String: String] = [:]
+        var nextRevision: [String: Int] = [:]
         for pane in knownPanes {
             guard let record = records[pane] else {
                 if let old = agentsByPane[pane] {
                     next[pane] = old
                     if let id = paneWorkspace[pane] { nextWorkspace[pane] = id }
+                    if let revision = paneRevision[pane] { nextRevision[pane] = revision }
                 }
                 continue
             }
             if let id = record.workspaceID { nextWorkspace[pane] = id }
+            if let revision = record.revision { nextRevision[pane] = revision }
             if record.looksLikeAgent || agentsByPane[pane] != nil {
                 next[pane] = HerdrListParser.agent(
                     from: record, context: context, workspaceLabels: labels,
@@ -55,6 +58,7 @@ public final class HerdrBoardCache: @unchecked Sendable {
         }
         agentsByPane = next
         paneWorkspace = nextWorkspace
+        paneRevision = nextRevision
         return listed()
     }
 

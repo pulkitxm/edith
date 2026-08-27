@@ -2,6 +2,7 @@ import Foundation
 
 public enum HerdrLive {
     static let remoteLeaseDuration = Duration.seconds(20)
+    static let snapshotInterval = Duration.seconds(2)
 
     public static func watch(_ yield: @escaping @Sendable ([HerdrHostSnapshot]) -> Void) async {
         let fleet = FleetBag(yield: yield)
@@ -136,36 +137,27 @@ public enum HerdrLive {
         sessions: SessionBag,
         fleet: FleetBag
     ) async {
-        let stream: HerdrSocketClient
-        do {
-            stream = try connect(socket.path)
-        } catch {
-            fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
-            return
-        }
-        await withTaskCancellationHandler {
-            defer { stream.close() }
+        while !Task.isCancelled {
             do {
-                let events = stream.events
-                try await stream.subscribeBoard()
                 fleet.put(
-                    sessions.applySnapshot(session: socket.name, text: try await stream.snapshot()))
-                await withTaskGroup(of: Void.self) { group in
-                    group.addTask {
-                        for await line in events {
-                            fleet.put(sessions.applyEvent(session: socket.name, text: line))
-                        }
-                    }
-                    await group.waitForAll()
-                }
+                    sessions.applySnapshot(
+                        session: socket.name,
+                        text: try await snapshot(path: socket.path, connect: connect)))
             } catch {
                 fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
             }
-        } onCancel: {
-            stream.close()
+            try? await Task.sleep(for: snapshotInterval)
         }
     }
 
+    static func snapshot(
+        path: String,
+        connect: @escaping @Sendable (String) throws -> HerdrSocketClient
+    ) async throws -> String {
+        let stream = try connect(path)
+        defer { stream.close() }
+        return try await stream.snapshot()
+    }
 }
 
 private final class FleetBag: @unchecked Sendable {

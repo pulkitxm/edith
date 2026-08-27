@@ -64,6 +64,18 @@ import Testing
         #expect(latest.first { $0.pane == "w3:p1N" }?.status == .working)
     }
 
+    @Test func replayOlderThanTheSnapshotCannotUndoIt() {
+        let cache = HerdrBoardCache(context: tuf)
+        cache.applySnapshot(tufSnapshot(agents: true, queryStatus: "idle", boardStatus: "idle"))
+
+        let replayed = cache.applyEvent(
+            """
+            {"event":"pane_updated","data":{"type":"pane_updated","pane":{"pane_id":"w3:p1N","agent":"opencode","agent_status":"working","revision":0,"workspace_id":"w3"}}}
+            """)
+
+        #expect(replayed.first { $0.pane == "w3:p1N" }?.status == .idle)
+    }
+
     @Test func snapshotThatDropsAgentsKeepsTheLivePanes() {
         let cache = HerdrBoardCache(context: tuf)
         cache.applySnapshot(tufSnapshot(agents: true, queryStatus: "idle", boardStatus: "idle"))
@@ -177,17 +189,17 @@ import Testing
         let boardPane: String
         if hollow {
             queryPane = """
-                {"pane_id":"w3:p1N","agent":null,"agent_status":"unknown","terminal_title_stripped":null,"workspace_id":"w3","foreground_cwd":"/srv/app"}
+                {"pane_id":"w3:p1N","agent":null,"agent_status":"unknown","terminal_title_stripped":null,"workspace_id":"w3","foreground_cwd":"/srv/app","revision":5}
                 """
             boardPane = """
-                {"pane_id":"w3:p1Q","agent":null,"agent_status":"unknown","terminal_title_stripped":null,"workspace_id":"w3"}
+                {"pane_id":"w3:p1Q","agent":null,"agent_status":"unknown","terminal_title_stripped":null,"workspace_id":"w3","revision":5}
                 """
         } else {
             queryPane = """
-                {"pane_id":"w3:p1N","agent":"opencode","agent_status":"\(queryStatus)","terminal_title_stripped":"Image Query","workspace_id":"w3","foreground_cwd":"/srv/app"}
+                {"pane_id":"w3:p1N","agent":"opencode","agent_status":"\(queryStatus)","terminal_title_stripped":"Image Query","workspace_id":"w3","foreground_cwd":"/srv/app","revision":5}
                 """
             boardPane = """
-                {"pane_id":"w3:p1Q","agent":"claude","agent_status":"\(boardStatus)","terminal_title_stripped":"Waiting on a key","workspace_id":"w3"}
+                {"pane_id":"w3:p1Q","agent":"claude","agent_status":"\(boardStatus)","terminal_title_stripped":"Waiting on a key","workspace_id":"w3","revision":5}
                 """
         }
         let agentList =
