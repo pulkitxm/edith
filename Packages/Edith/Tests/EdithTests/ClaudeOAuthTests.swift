@@ -1,6 +1,8 @@
 import Darwin
 import EdithKit
 import Foundation
+import LocalAuthentication
+import Security
 import Testing
 
 @testable import EdithHelper
@@ -59,23 +61,6 @@ private final class ClaudeShellCredentialQueue: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return storedCalls
-    }
-}
-
-private final class ClaudeSecurityCommandCapture: @unchecked Sendable {
-    private let lock = NSLock()
-    private var stored: CLICommandRequest?
-
-    func record(_ request: CLICommandRequest) {
-        lock.lock()
-        stored = request
-        lock.unlock()
-    }
-
-    var request: CLICommandRequest? {
-        lock.lock()
-        defer { lock.unlock() }
-        return stored
     }
 }
 
@@ -694,48 +679,34 @@ private final class ClaudeCredentialDataCapture: @unchecked Sendable {
         #expect(ProcessInfo.processInfo.systemUptime - started < 5)
     }
 
-    @Test func keychainReadUsesBoundedSecretSafeExecution() async throws {
-        let capture = ClaudeSecurityCommandCapture()
+    @Test func keychainReadUsesNoninteractiveNativeLookup() throws {
         let credential = try credentialData("keychain-token")
+        var capturedQuery: [CFString: Any] = [:]
 
-        let result = await ClaudeCredentialStore.keychainData(
-            securityExecutable: URL(fileURLWithPath: "/usr/bin/security"), timeout: 0.5,
+        let result = ClaudeCredentialStore.keychainData(
             maximumOutputBytes: 4_096,
-            runCommand: { request in
-                capture.record(request)
-                return CLICommandResult(terminationStatus: 0, outputData: credential)
+            readItem: { query, item in
+                capturedQuery = query as? [CFString: Any] ?? [:]
+                item?.pointee = credential as CFData
+                return errSecSuccess
             })
 
-        let request = try #require(capture.request)
         #expect(result == .data(credential))
-        #expect(
-            request.arguments == ["find-generic-password", "-s", "Claude Code-credentials", "-w"])
-        #expect(request.timeout == 0.5)
-        #expect(request.maximumOutputBytes == 4_096)
-        #expect(request.standardInputData == nil)
-        #expect(request.discardsStandardError)
-        #expect(request.terminatesProcessGroup)
-        #expect(!request.arguments.joined().contains("keychain-token"))
-        #expect(!request.environment.values.joined().contains("keychain-token"))
+        #expect(capturedQuery[kSecClass] as? String == kSecClassGenericPassword as String)
+        #expect(capturedQuery[kSecAttrService] as? String == "Claude Code-credentials")
+        #expect(capturedQuery[kSecReturnData] as? Bool == true)
+        let context = try #require(
+            capturedQuery[kSecUseAuthenticationContext] as? LAContext)
+        #expect(context.interactionNotAllowed)
     }
 
-    @Test func keychainReadPreservesOperationalFailures() async {
-        let executable = URL(fileURLWithPath: "/usr/bin/security")
-        let missing = await ClaudeCredentialStore.keychainData(
-            securityExecutable: executable, timeout: 0.5, maximumOutputBytes: 1_024,
-            runCommand: { _ in CLICommandResult(terminationStatus: 44, output: "") })
-        let timedOut = await ClaudeCredentialStore.keychainData(
-            securityExecutable: executable, timeout: 0.5, maximumOutputBytes: 1_024,
-            runCommand: { _ in throw CLICommandRunnerError.timedOut })
-        let failed = await ClaudeCredentialStore.keychainData(
-            securityExecutable: executable, timeout: 0.5, maximumOutputBytes: 1_024,
-            runCommand: { _ in CLICommandResult(terminationStatus: 1, output: "") })
-        let cancelled = await ClaudeCredentialStore.keychainData(
-            securityExecutable: executable, timeout: 0.5, maximumOutputBytes: 1_024,
-            runCommand: { _ in throw CancellationError() })
+    @Test func keychainReadPreservesOperationalFailures() {
+        let missing = ClaudeCredentialStore.keychainData(readItem: { _, _ in errSecItemNotFound })
+        let failed = ClaudeCredentialStore.keychainData(readItem: { _, _ in errSecAuthFailed })
+        let cancelled = ClaudeCredentialStore.keychainData(
+            readItem: { _, _ in errSecUserCanceled })
 
         #expect(missing == .missing)
-        #expect(timedOut == .timedOut)
         #expect(failed == .failed)
         #expect(cancelled == .cancelled)
     }
@@ -752,16 +723,36 @@ private final class ClaudeCredentialDataCapture: @unchecked Sendable {
         #expect(capture.data == credential)
     }
 
-    @Test func oversizedSecurityOutputIsStoppedAndRejected() async throws {
-        let fixture = try shim("while :; do printf '01234567890123456789012345678901'; done")
-        defer { try? FileManager.default.removeItem(at: fixture.directory) }
-        let started = ProcessInfo.processInfo.systemUptime
+    @Test func keychainUpdateUsesNoninteractiveNativeLookup() throws {
+        let credential = try credentialData("keychain-token")
+        var capturedQuery: [CFString: Any] = [:]
+        var capturedAttributes: [CFString: Any] = [:]
 
-        let result = await ClaudeCredentialStore.keychainData(
-            securityExecutable: fixture.executable, timeout: 5, maximumOutputBytes: 1_024)
+        try ClaudeCredentialStore.updateKeychain(
+            credential,
+            updateItem: { query, attributes in
+                capturedQuery = query as? [CFString: Any] ?? [:]
+                capturedAttributes = attributes as? [CFString: Any] ?? [:]
+                return errSecSuccess
+            })
+
+        let context = try #require(
+            capturedQuery[kSecUseAuthenticationContext] as? LAContext)
+        #expect(context.interactionNotAllowed)
+        #expect(capturedAttributes[kSecValueData] as? Data == credential)
+    }
+
+    @Test func oversizedKeychainDataIsRejected() {
+        let credential = Data(repeating: 65, count: 1_025)
+
+        let result = ClaudeCredentialStore.keychainData(
+            maximumOutputBytes: 1_024,
+            readItem: { _, item in
+                item?.pointee = credential as CFData
+                return errSecSuccess
+            })
 
         #expect(result == .oversized)
-        #expect(ProcessInfo.processInfo.systemUptime - started < 4)
     }
 
     @Test func failedKeychainUpdateReturnsOnlyAGenericError() async throws {
@@ -776,22 +767,6 @@ private final class ClaudeCredentialDataCapture: @unchecked Sendable {
             #expect(error == .keychainUpdateFailed)
             #expect(error.localizedDescription == "Keychain update failed")
         }
-    }
-
-    private struct ShimFixture {
-        let directory: URL
-        let executable: URL
-    }
-
-    private func shim(_ body: String) throws -> ShimFixture {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
-            "edith-security-shim-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let executable = directory.appendingPathComponent("security")
-        try Data("#!/bin/sh\n\(body)\n".utf8).write(to: executable)
-        try FileManager.default.setAttributes(
-            [.posixPermissions: 0o700], ofItemAtPath: executable.path)
-        return ShimFixture(directory: directory, executable: executable)
     }
 
     private func credentialData(_ accessToken: String) throws -> Data {

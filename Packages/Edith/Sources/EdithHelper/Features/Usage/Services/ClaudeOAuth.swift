@@ -1,6 +1,6 @@
 import Darwin
-import EdithKit
 import Foundation
+import LocalAuthentication
 import Security
 
 enum ClaudeCredentialSource: Equatable {
@@ -124,24 +124,15 @@ enum ClaudeCredentialDataLookup: Equatable {
 }
 
 enum ClaudeCredentialStore {
-    typealias CommandRunner = @Sendable (CLICommandRequest) async throws -> CLICommandResult
+    typealias KeychainReader = (CFDictionary, UnsafeMutablePointer<CFTypeRef?>?) -> OSStatus
+    typealias KeychainItemUpdater = (CFDictionary, CFDictionary) -> OSStatus
     typealias KeychainUpdater = (Data) throws -> Void
 
     private static let keychainService = "Claude Code-credentials"
-    private static let securityURL = URL(fileURLWithPath: "/usr/bin/security")
-    private static let processTimeout: TimeInterval = 3
     private static let maximumCredentialBytes = 65_536
-    private static let maximumStatusBytes = 1_024
-    private static let itemNotFoundExitStatus = Int32(
-        UInt8(truncatingIfNeeded: errSecItemNotFound))
 
     static func read() async -> ClaudeCredentialLookup {
-        let keychain = await keychainData(
-            securityExecutable: securityURL, timeout: processTimeout,
-            maximumOutputBytes: maximumCredentialBytes,
-            runCommand: { request in
-                try await CLICommandRunner.run(request) { _ in }
-            })
+        let keychain = keychainData()
         return read(
             home: FileManager.default.homeDirectoryForCurrentUser,
             keychainData: keychain,
@@ -192,7 +183,7 @@ enum ClaudeCredentialStore {
     }
 
     static func persist(_ data: Data, source: ClaudeCredentialSource) async throws {
-        try await persist(data, source: source, keychainUpdater: updateKeychain)
+        try await persist(data, source: source, keychainUpdater: { try updateKeychain($0) })
     }
 
     static func persist(
@@ -218,32 +209,27 @@ enum ClaudeCredentialStore {
     }
 
     static func keychainData(
-        securityExecutable: URL, timeout: TimeInterval, maximumOutputBytes: Int,
-        runCommand: @escaping CommandRunner = { request in
-            try await CLICommandRunner.run(request) { _ in }
-        }
-    ) async -> ClaudeCredentialDataLookup {
-        let request = securityRequest(
-            executable: securityExecutable,
-            arguments: ["find-generic-password", "-s", keychainService, "-w"],
-            timeout: timeout, maximumOutputBytes: maximumOutputBytes)
-        do {
-            let result = try await runCommand(request)
-            switch result.terminationStatus {
-            case 0:
-                return .data(result.outputData)
-            case itemNotFoundExitStatus:
-                return .missing
-            default:
-                return .failed
-            }
-        } catch is CancellationError {
+        maximumOutputBytes: Int = maximumCredentialBytes,
+        readItem: KeychainReader = SecItemCopyMatching
+    ) -> ClaudeCredentialDataLookup {
+        let query: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: keychainService,
+            kSecReturnData: true,
+            kSecMatchLimit: kSecMatchLimitOne,
+            kSecUseAuthenticationContext: noninteractiveContext(),
+        ]
+        var item: CFTypeRef?
+        let status = readItem(query as CFDictionary, &item)
+        switch status {
+        case errSecSuccess:
+            guard let data = item as? Data else { return .failed }
+            return data.count <= maximumOutputBytes ? .data(data) : .oversized
+        case errSecItemNotFound:
+            return .missing
+        case errSecUserCanceled:
             return .cancelled
-        } catch CLICommandRunnerError.timedOut {
-            return .timedOut
-        } catch CLICommandRunnerError.outputLimitExceeded {
-            return .oversized
-        } catch {
+        default:
             return .failed
         }
     }
@@ -269,39 +255,24 @@ enum ClaudeCredentialStore {
         }
     }
 
-    private static func updateKeychain(_ data: Data) throws {
+    static func updateKeychain(
+        _ data: Data, updateItem: KeychainItemUpdater = SecItemUpdate
+    ) throws {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrAccount: NSUserName(),
             kSecAttrService: keychainService,
+            kSecUseAuthenticationContext: noninteractiveContext(),
         ]
         let attributes: [CFString: Any] = [kSecValueData: data]
-        guard SecItemUpdate(query as CFDictionary, attributes as CFDictionary) == errSecSuccess
-        else {
+        guard updateItem(query as CFDictionary, attributes as CFDictionary) == errSecSuccess else {
             throw ClaudeCredentialStoreError.keychainUpdateFailed
         }
     }
 
-    private static func securityRequest(
-        executable: URL, arguments: [String], timeout: TimeInterval,
-        maximumOutputBytes: Int, standardInputData: Data? = nil
-    ) -> CLICommandRequest {
-        let username = NSUserName()
-        return CLICommandRequest(
-            executableURL: executable,
-            arguments: arguments,
-            environment: [
-                "HOME": FileManager.default.homeDirectoryForCurrentUser.path,
-                "LANG": "en_US.UTF-8",
-                "LOGNAME": username,
-                "PATH": "/usr/bin:/bin",
-                "USER": username,
-            ],
-            currentDirectoryURL: FileManager.default.homeDirectoryForCurrentUser,
-            timeout: timeout,
-            maximumOutputBytes: maximumOutputBytes,
-            standardInputData: standardInputData,
-            discardsStandardError: true,
-            terminatesProcessGroup: true)
+    private static func noninteractiveContext() -> LAContext {
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        return context
     }
 }
