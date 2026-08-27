@@ -66,7 +66,7 @@ public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
         "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "colorPicker",
+        "colorPicker", "windowTools",
     ]
 
     public static func provider(
@@ -106,6 +106,7 @@ public enum ExtensionLiveAdapters {
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
+        case "windowTools": windowToolsReadiness(defaults: defaults)
         default: nil
         }
     }
@@ -446,6 +447,39 @@ public enum ExtensionLiveAdapters {
             emptyDetail: screenCount == 0
                 ? "No active display is available for color sampling."
                 : "Color sampling is ready and the history is empty."
+        ).readiness
+    }
+
+    static func windowToolsReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
+        let integerKeys = [
+            AppStorageKeys.WindowTools.leftHotKeyCode,
+            AppStorageKeys.WindowTools.leftHotKeyMods,
+            AppStorageKeys.WindowTools.rightHotKeyCode,
+            AppStorageKeys.WindowTools.rightHotKeyMods,
+            AppStorageKeys.WindowTools.maximizeHotKeyCode,
+            AppStorageKeys.WindowTools.maximizeHotKeyMods,
+            AppStorageKeys.WindowTools.restoreHotKeyCode,
+            AppStorageKeys.WindowTools.restoreHotKeyMods,
+        ]
+        let labelKeys = [
+            AppStorageKeys.WindowTools.leftHotKeyLabel,
+            AppStorageKeys.WindowTools.rightHotKeyLabel,
+            AppStorageKeys.WindowTools.maximizeHotKeyLabel,
+            AppStorageKeys.WindowTools.restoreHotKeyLabel,
+        ]
+        let greenButton = defaults.object(forKey: AppStorageKeys.WindowTools.greenButtonMaximizes)
+        let configured =
+            integerKeys.allSatisfy {
+                defaults.object(forKey: $0) == nil || defaults.object(forKey: $0) is Int
+            }
+            && labelKeys.allSatisfy {
+                defaults.object(forKey: $0) == nil || defaults.object(forKey: $0) is String
+            }
+            && (greenButton == nil || greenButton is Bool)
+        return ExtensionAdapterFacts(
+            configured: configured,
+            readyDetail: "Window layouts and shortcuts are configured.",
+            setupDetail: "A stored Window Tools shortcut is invalid."
         ).readiness
     }
 

@@ -76,6 +76,41 @@ enum JSONContract {
         JSONCase("ed clipboard rm", ["clipboard", "rm", "1", "--json"]),
         JSONCase("ed clipboard clear", ["clipboard", "clear", "--json"]),
         JSONCase("ed calendar open", ["calendar", "open", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed window left-half", ["window", "left-half", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window right-half", ["window", "right-half", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window top-half", ["window", "top-half", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window bottom-half", ["window", "bottom-half", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window top-left", ["window", "top-left", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window top-right", ["window", "top-right", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window bottom-left", ["window", "bottom-left", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window bottom-right", ["window", "bottom-right", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window center", ["window", "center", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed window maximize", ["window", "maximize", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window next-display", ["window", "next-display", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window restore", ["window", "restore", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed calendar join", ["calendar", "join", "nothing-at-all", "--json"]),
         JSONCase(
             "ed calendar directions", ["calendar", "directions", "nothing-at-all", "--json"]),

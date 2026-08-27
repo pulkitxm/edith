@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import EdithCLI
 @testable import EdithKit
 
 @Suite struct WindowLayoutTests {
@@ -59,5 +60,20 @@ import Testing
         #expect(name == IPC.Name.requestWindowLayout)
         #expect(payload?[WindowLayoutRequest.actionKey] as? String == "top-right")
         #expect(descriptor == WindowLayoutAction.topRight.descriptor)
+    }
+
+    @Test func cliDispatchesOneTypedJSONRequest() async {
+        await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.WindowTools.enabled)
+            world.helperRunning(true)
+            let result = await CLIProbe.capture(["window", "top-right", "--json"])
+
+            #expect(result.code == 0)
+            #expect(result.object?["action"] as? String == "top-right")
+            #expect(result.object?["operation"] as? String == "window.top-right")
+            #expect(
+                world.postedPayloads(for: IPC.Name.requestWindowLayout).first?[
+                    WindowLayoutRequest.actionKey] as? String == "top-right")
+        }
     }
 }
