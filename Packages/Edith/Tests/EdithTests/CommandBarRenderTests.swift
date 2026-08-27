@@ -6,6 +6,18 @@ import Testing
 @testable import EdithHelper
 
 @Suite @MainActor struct CommandBarRenderTests {
+    @Test func latestQueryPublishesRankedActions() async {
+        let model = CommandBarModel(services: AppServices())
+        model.query = "permissions"
+        model.query = "extensions"
+
+        for _ in 0..<100 where model.items.first?.id != "action.openExtensions" {
+            await Task.yield()
+        }
+
+        #expect(model.items.first?.id == "action.openExtensions")
+    }
+
     @Test func paletteRendersActionsAndCalculationAnswer() throws {
         let services = AppServices()
         let model = CommandBarModel(services: services)

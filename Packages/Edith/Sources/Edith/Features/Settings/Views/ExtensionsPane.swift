@@ -192,10 +192,10 @@ struct ExtensionsPane: View {
     }
 
     private func handleDeepLink(using proxy: ScrollViewProxy) {
-        guard let id = SharedDefaults.store.string(forKey: "extensionsExpand"),
+        guard let id = SharedDefaults.store.string(forKey: AppStorageKeys.General.extensionsExpand),
             let entry = ExtensionRegistry.entries.first(where: { $0.id == id })
         else { return }
-        SharedDefaults.store.removeObject(forKey: "extensionsExpand")
+        SharedDefaults.store.removeObject(forKey: AppStorageKeys.General.extensionsExpand)
         query = ""
         category = .all
         DispatchQueue.main.async {

@@ -2,7 +2,7 @@ import AppKit
 import EdithKit
 import Foundation
 
-enum CommandBarActionID: String, CaseIterable {
+enum CommandBarActionID: String, CaseIterable, Sendable {
     case openHome
     case openExtensions
     case openGeneralSettings
@@ -24,7 +24,7 @@ enum CommandBarActionID: String, CaseIterable {
     case focusDim
 }
 
-struct CommandBarApplication: Identifiable, Equatable {
+struct CommandBarApplication: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
     let url: URL
@@ -35,8 +35,8 @@ struct CommandBarApplication: Identifiable, Equatable {
     }
 }
 
-struct CommandBarItem: Identifiable {
-    enum Kind {
+struct CommandBarItem: Identifiable, Sendable {
+    enum Kind: Sendable {
         case action(CommandBarActionID)
         case application(CommandBarApplication)
         case answer(CommandBarAnswer)

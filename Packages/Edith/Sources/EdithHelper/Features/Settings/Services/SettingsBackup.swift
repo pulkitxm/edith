@@ -808,7 +808,8 @@ final class SettingsBackup {
     ]
 
     nonisolated static let deviceLocalKeys: Set<String> = [
-        "extensionsExpand", "hasPromptedPermissions", AppStorageKeys.Backup.lastBackupAt,
+        AppStorageKeys.General.extensionsExpand, "hasPromptedPermissions",
+        AppStorageKeys.Backup.lastBackupAt,
         AppStorageKeys.Music.lastBackupAt,
         AppStorageKeys.Clipboard.lastBackupAt, "micMuted", "migratedFromControlCenter",
         "notifSessionLevel", "notifSessionPacing", "notifTokenExpiredAt", "notifWeeklyLevel",

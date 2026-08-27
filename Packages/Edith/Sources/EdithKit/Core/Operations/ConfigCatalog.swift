@@ -105,7 +105,7 @@ public enum ConfigCatalog {
 
     private static let panel: [SettingDefinition] = [
         SettingDefinition(
-            "extensionsExpand", .string, group: "panel",
+            AppStorageKeys.General.extensionsExpand, .string, group: "panel",
             summary: "Extension card the Extensions page scrolls to and opens next."),
         SettingDefinition(
             AppStorageKeys.General.settingsSection, .string, group: "panel",
