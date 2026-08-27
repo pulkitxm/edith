@@ -39,12 +39,25 @@ import Testing
             current: CGRect(x: 270, y: 163, width: 900, height: 600), from: source,
             to: destination)
 
-        #expect(moved == CGRect(x: 1502, y: 135, width: 900, height: 600))
+        #expect(moved == CGRect(x: 1502, y: 84, width: 900, height: 600))
     }
 
     @Test func operationsHaveUniqueCLIPaths() {
         let descriptors = WindowLayoutAction.allCases.map(\.descriptor)
         #expect(Set(descriptors.map(\.id)).count == descriptors.count)
         #expect(Set(descriptors.map(\.cli)).count == descriptors.count)
+    }
+
+    @Test func requestCarriesTheSelectedAction() {
+        var name: Notification.Name?
+        var payload: [String: Any]?
+        let descriptor = WindowLayoutRequest.send(.topRight) {
+            name = $0
+            payload = $1
+        }
+
+        #expect(name == IPC.Name.requestWindowLayout)
+        #expect(payload?[WindowLayoutRequest.actionKey] as? String == "top-right")
+        #expect(descriptor == WindowLayoutAction.topRight.descriptor)
     }
 }

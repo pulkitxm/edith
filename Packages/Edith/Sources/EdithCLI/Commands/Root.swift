@@ -62,6 +62,7 @@ public struct EdRoot: AsyncParsableCommand {
             AppsCommand.self,
             ToolsCommand.self,
             ColorCommand.self,
+            WindowCommand.self,
             ShelfCommand.self,
             CleanerCommand.self,
             QuinjetCommand.self,

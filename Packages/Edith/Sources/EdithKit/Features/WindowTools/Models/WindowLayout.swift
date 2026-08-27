@@ -70,47 +70,47 @@ public enum WindowLayoutGeometry {
             CGRect(
                 x: visibleFrame.minX, y: visibleFrame.minY, width: halfWidth,
                 height: visibleFrame.height
-            ).integral
+            ).alignedToPixels
         case .rightHalf:
             CGRect(
                 x: visibleFrame.midX, y: visibleFrame.minY, width: halfWidth,
                 height: visibleFrame.height
-            ).integral
+            ).alignedToPixels
         case .topHalf:
             CGRect(
                 x: visibleFrame.minX, y: visibleFrame.midY, width: visibleFrame.width,
                 height: halfHeight
-            ).integral
+            ).alignedToPixels
         case .bottomHalf:
             CGRect(
                 x: visibleFrame.minX, y: visibleFrame.minY, width: visibleFrame.width,
                 height: halfHeight
-            ).integral
+            ).alignedToPixels
         case .topLeft:
             CGRect(
                 x: visibleFrame.minX, y: visibleFrame.midY, width: halfWidth, height: halfHeight
-            ).integral
+            ).alignedToPixels
         case .topRight:
             CGRect(
                 x: visibleFrame.midX, y: visibleFrame.midY, width: halfWidth, height: halfHeight
-            ).integral
+            ).alignedToPixels
         case .bottomLeft:
             CGRect(
                 x: visibleFrame.minX, y: visibleFrame.minY, width: halfWidth, height: halfHeight
-            ).integral
+            ).alignedToPixels
         case .bottomRight:
             CGRect(
                 x: visibleFrame.midX, y: visibleFrame.minY, width: halfWidth, height: halfHeight
-            ).integral
+            ).alignedToPixels
         case .center:
             CGRect(
                 x: visibleFrame.midX - min(current.width, visibleFrame.width) / 2,
                 y: visibleFrame.midY - min(current.height, visibleFrame.height) / 2,
                 width: min(current.width, visibleFrame.width),
                 height: min(current.height, visibleFrame.height)
-            ).integral
+            ).alignedToPixels
         case .maximize:
-            visibleFrame.integral
+            visibleFrame.alignedToPixels
         case .nextDisplay, .restore:
             nil
         }
@@ -131,7 +131,16 @@ public enum WindowLayoutGeometry {
             x: destination.minX + max(0, min(1, xProgress)) * (destination.width - width),
             y: destination.minY + max(0, min(1, yProgress)) * (destination.height - height),
             width: width, height: height
-        ).integral
+        ).alignedToPixels
+    }
+}
+
+private extension CGRect {
+    var alignedToPixels: CGRect {
+        let x = minX.rounded()
+        let y = minY.rounded()
+        return CGRect(
+            x: x, y: y, width: maxX.rounded() - x, height: maxY.rounded() - y)
     }
 }
 

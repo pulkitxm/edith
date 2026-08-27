@@ -20,7 +20,13 @@ an action or click its green button.
 ```bash
 ed window left-half
 ed window right-half
+ed window top-half
+ed window bottom-half
 ed window top-left
+ed window top-right
+ed window bottom-left
+ed window bottom-right
+ed window center
 ed window maximize
 ed window next-display
 ed window restore
@@ -41,3 +47,5 @@ keeping layouts and shortcuts available.
 Window Tools does not replace Edith's Dock reopen or quit-on-last-window behavior.
 Those are already part of Edith's main application lifecycle, so the extension
 keeps its runtime focused on arranging windows.
+
+[All `ed` commands](../README.md)
