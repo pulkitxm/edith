@@ -87,6 +87,55 @@ import Testing
                 connected: false))
     }
 
+    @Test func disconnectedTerminalOffersAWorkingConnectAction() {
+        let presentation = MachineTerminalPresentation.make(
+            state: .disconnected, target: "tuf-wired", isLocal: false, started: false,
+            exitMessage: nil, launchEnabled: true)
+
+        #expect(presentation.title == "Not connected")
+        #expect(presentation.detail == "Connect to tuf-wired to start a terminal.")
+        #expect(presentation.action == .connect)
+        #expect(presentation.showsTerminal == false)
+    }
+
+    @Test func reconnectingTerminalShowsTheLatestFailureWithoutAFakeRetry() {
+        let presentation = MachineTerminalPresentation.make(
+            state: .reconnecting(message: "Connection timed out."), target: "tuf-wired",
+            isLocal: false, started: false, exitMessage: nil, launchEnabled: true)
+
+        #expect(presentation.title == "Reconnecting to tuf-wired…")
+        #expect(presentation.detail == "Connection timed out.")
+        #expect(presentation.showsProgress)
+        #expect(presentation.action == nil)
+    }
+
+    @Test func failedTerminalShowsTheReasonAndARealRetry() {
+        let presentation = MachineTerminalPresentation.make(
+            state: .failed(message: "Connection refused.", recoverable: true),
+            target: "tuf-wired", isLocal: false, started: false,
+            exitMessage: "Session ended with status 255.",
+            launchEnabled: true)
+
+        #expect(presentation.title == "Couldn’t connect to tuf-wired")
+        #expect(presentation.detail == "Connection refused.")
+        #expect(presentation.action == .retry)
+        #expect(presentation.showsTerminal == false)
+    }
+
+    @Test func runningAndEndedTerminalsExposeOnlyValidActions() {
+        let running = MachineTerminalPresentation.make(
+            state: .connected(latencyMillis: 4), target: "tuf-wired", isLocal: false,
+            started: true, exitMessage: nil, launchEnabled: true)
+        let ended = MachineTerminalPresentation.make(
+            state: .connected(latencyMillis: 4), target: "tuf-wired", isLocal: false,
+            started: false, exitMessage: "Session ended.", launchEnabled: true)
+
+        #expect(running.showsTerminal)
+        #expect(running.action == .restart)
+        #expect(ended.showsTerminal == false)
+        #expect(ended.action == .start)
+    }
+
     @Test func terminalResponderBypassesTypeAheadAndMediaShortcuts() {
         let responder = TerminalSessionHolder().terminalView
         let clock = ContinuousClock()

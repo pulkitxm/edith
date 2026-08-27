@@ -201,7 +201,7 @@ public final class MachineSession {
     private func handleDrop() {
         guard state.isConnected else { return }
         cancelWork()
-        state = .reconnecting
+        state = .reconnecting()
         connect(afterFailures: 0, closingFirst: false)
     }
 
@@ -220,7 +220,7 @@ public final class MachineSession {
         switch state {
         case .connected: probeConnection()
         case .reconnecting, .failed:
-            state = .reconnecting
+            state = .reconnecting()
             connect(afterFailures: 0, closingFirst: false)
         case .connecting, .disconnected: break
         }

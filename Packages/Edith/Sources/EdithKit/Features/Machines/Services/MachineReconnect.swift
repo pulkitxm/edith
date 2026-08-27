@@ -14,6 +14,8 @@ public enum MachineReconnect {
     public static func state(afterFailures failures: Int, reason: String)
         -> MachineConnectionState
     {
-        failures <= quietFailures ? .reconnecting : .failed(message: reason, recoverable: true)
+        failures <= quietFailures
+            ? .reconnecting(message: reason)
+            : .failed(message: reason, recoverable: true)
     }
 }
