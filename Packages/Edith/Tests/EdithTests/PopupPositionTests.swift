@@ -4,7 +4,7 @@ import Testing
 @testable import EdithKit
 
 @MainActor
-@Suite struct ClipboardPopupPositionTests {
+@Suite struct PopupPositionTests {
     private let positionKeys = ["clipboardWindowPositionX", "clipboardWindowPositionY"]
 
     private func selectedScreen(_ point: NSPoint, _ size: NSSize) -> NSScreen? {
@@ -37,7 +37,7 @@ import Testing
         let size = NSSize(width: 100, height: 100)
         let visible = try #require(NSScreen.main).visibleFrame
         let point = NSPoint(x: visible.midX - 50, y: visible.midY - 50)
-        #expect(ClipboardPopupPosition.clampedToScreen(point, size) == point)
+        #expect(PopupPosition.clampedToScreen(point, size) == point)
     }
 
     @Test func pointPastLeftEdgeClampsToVisibleMinX() throws {
@@ -45,7 +45,7 @@ import Testing
         let globalMinX = try #require(NSScreen.screens.map(\.frame.minX).min())
         let point = NSPoint(x: globalMinX - 1000, y: 100)
         let visible = try #require(selectedScreen(point, size)).visibleFrame
-        let result = ClipboardPopupPosition.clampedToScreen(point, size)
+        let result = PopupPosition.clampedToScreen(point, size)
         #expect(result.x == visible.minX)
         #expect(result.y >= visible.minY)
         #expect(result.y <= max(visible.minY, visible.maxY - size.height))
@@ -56,7 +56,7 @@ import Testing
         let globalMaxX = try #require(NSScreen.screens.map(\.frame.maxX).max())
         let point = NSPoint(x: globalMaxX + 1000, y: 100)
         let visible = try #require(selectedScreen(point, size)).visibleFrame
-        let result = ClipboardPopupPosition.clampedToScreen(point, size)
+        let result = PopupPosition.clampedToScreen(point, size)
         #expect(result.x == max(visible.minX, visible.maxX - size.width))
         #expect(result.x < point.x)
     }
@@ -66,7 +66,7 @@ import Testing
         let globalMinY = try #require(NSScreen.screens.map(\.frame.minY).min())
         let point = NSPoint(x: 100, y: globalMinY - 1000)
         let visible = try #require(selectedScreen(point, size)).visibleFrame
-        let result = ClipboardPopupPosition.clampedToScreen(point, size)
+        let result = PopupPosition.clampedToScreen(point, size)
         #expect(result.y == visible.minY)
     }
 
@@ -75,7 +75,7 @@ import Testing
         let globalMaxY = try #require(NSScreen.screens.map(\.frame.maxY).max())
         let point = NSPoint(x: 100, y: globalMaxY + 1000)
         let visible = try #require(selectedScreen(point, size)).visibleFrame
-        let result = ClipboardPopupPosition.clampedToScreen(point, size)
+        let result = PopupPosition.clampedToScreen(point, size)
         #expect(result.y == max(visible.minY, visible.maxY - size.height))
         #expect(result.y < point.y)
     }
@@ -87,7 +87,7 @@ import Testing
         let size = NSSize(width: totalWidth + 1000, height: totalHeight + 1000)
         let point = NSPoint(x: 50, y: 50)
         let visible = try #require(selectedScreen(point, size)).visibleFrame
-        let result = ClipboardPopupPosition.clampedToScreen(point, size)
+        let result = PopupPosition.clampedToScreen(point, size)
         #expect(result.x == visible.minX)
         #expect(result.y == visible.minY)
     }
@@ -100,7 +100,7 @@ import Testing
         let frame = NSRect(
             x: bounds.minX + bounds.width * 0.25, y: bounds.minY + bounds.height * 0.25,
             width: 300, height: 200)
-        ClipboardPopupPosition.saveLastPosition(frame: frame, screen: screen)
+        PopupPosition.saveLastPosition(frame: frame, screen: screen, anchors: .clipboard)
         let store = SharedDefaults.store
         let relX = try #require(store.object(forKey: "clipboardWindowPositionX") as? Double)
         let relY = try #require(store.object(forKey: "clipboardWindowPositionY") as? Double)
@@ -121,9 +121,9 @@ import Testing
         let frame = NSRect(
             x: visible.midX - size.width / 2, y: visible.midY - size.height / 2,
             width: size.width, height: size.height)
-        ClipboardPopupPosition.saveLastPosition(frame: frame, screen: screen)
-        let origin = await ClipboardPopupPosition.lastPosition.origin(
-            size: size, statusItemFrame: nil)
+        PopupPosition.saveLastPosition(frame: frame, screen: screen, anchors: .clipboard)
+        let origin = await PopupPosition.lastPosition.origin(
+            size: size, statusItemFrame: nil, anchors: .clipboard)
         #expect(abs(origin.x - frame.minX) < 0.5)
         #expect(abs(origin.y - frame.minY) < 0.5)
     }
@@ -133,8 +133,8 @@ import Testing
         defer { restorePositionKeys(snapshot) }
         let store = SharedDefaults.store
         for key in positionKeys { store.removeObject(forKey: key) }
-        ClipboardPopupPosition.saveLastPosition(
-            frame: NSRect(x: 10, y: 10, width: 100, height: 100), screen: nil)
+        PopupPosition.saveLastPosition(
+            frame: NSRect(x: 10, y: 10, width: 100, height: 100), screen: nil, anchors: .clipboard)
         #expect(store.object(forKey: "clipboardWindowPositionX") == nil)
         #expect(store.object(forKey: "clipboardWindowPositionY") == nil)
     }

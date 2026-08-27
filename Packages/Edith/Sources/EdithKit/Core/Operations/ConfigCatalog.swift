@@ -623,7 +623,7 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Clipboard.popupAt, .string, group: "clipboard",
             summary: "Where the clipboard panel opens.",
-            allowed: ClipboardPopupPosition.allCases.map(\.rawValue),
+            allowed: PopupPosition.allCases.map(\.rawValue),
             fallback: .string("cursor")),
         SettingDefinition(
             AppStorageKeys.Clipboard.pinTo, .string, group: "clipboard",

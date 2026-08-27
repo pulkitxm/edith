@@ -41,14 +41,15 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         let height = min(
             ClipboardPanelView.estimatedHeight(entries: store.entries), Self.maxHeight)
         p.setContentSize(NSSize(width: Self.width, height: height))
-        let position = ClipboardPopupPosition.current
+        let position = PopupPosition.stored(forKey: AppStorageKeys.Clipboard.popupAt)
         let size = p.frame.size
         let statusItemFrame = PanelController.shared?.statusItemFrame
         showGeneration += 1
         let generation = showGeneration
         showTask?.cancel()
         showTask = Task.detached { [weak self] in
-            let origin = await position.origin(size: size, statusItemFrame: statusItemFrame)
+            let origin = await position.origin(
+                size: size, statusItemFrame: statusItemFrame, anchors: .clipboard)
             guard !Task.isCancelled else { return }
             await self?.finishShow(origin: origin, generation: generation)
         }
@@ -90,7 +91,7 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         var frame = panel.frame
         frame.origin.y += frame.height - clamped
         frame.size.height = clamped
-        frame.origin = ClipboardPopupPosition.clampedToScreen(frame.origin, frame.size)
+        frame.origin = PopupPosition.clampedToScreen(frame.origin, frame.size)
         panel.setFrame(frame, display: true)
     }
 
@@ -142,7 +143,8 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
             guard let panel = ClipboardPanel.shared.panel, panel.isVisible,
                 NSEvent.pressedMouseButtons & 1 == 1
             else { return }
-            ClipboardPopupPosition.saveLastPosition(frame: panel.frame, screen: panel.screen)
+            PopupPosition.saveLastPosition(
+                frame: panel.frame, screen: panel.screen, anchors: .clipboard)
         }
     }
 }

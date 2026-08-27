@@ -226,7 +226,7 @@ struct ClipboardRows: View {
     @ViewBuilder private var appearanceSections: some View {
         Section {
             Picker(selection: $popupAt.configured(AppStorageKeys.Clipboard.popupAt)) {
-                ForEach(ClipboardPopupPosition.allCases) { position in
+                ForEach(PopupPosition.allCases) { position in
                     Text(position.title).tag(position.rawValue)
                 }
             } label: {
