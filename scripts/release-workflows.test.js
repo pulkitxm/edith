@@ -12,41 +12,42 @@ const contributing = readFileSync("CONTRIBUTING.md", "utf8");
 const homebrewInternals = readFileSync("docs/homebrew-internals.md", "utf8");
 const sourceShaRef = ["$", "{{ inputs.source_sha || github.sha }}"].join("");
 const releaseTagRef = ["$", "{RELEASE_TAG}"].join("");
-const releaseJob = ciWorkflow.slice(ciWorkflow.indexOf("\n  release:"));
+const releaseBuildJob = ciWorkflow.slice(
+  ciWorkflow.indexOf("\n  release-build:"),
+);
+const ciGateJob = releaseWorkflow.slice(
+  releaseWorkflow.indexOf("\n  ci:"),
+  releaseWorkflow.indexOf("\n  publish:"),
+);
 
-test("CI gates and dispatches the release only on relevant checks", () => {
-  expect(ciWorkflow).toContain(
-    "needs: [changes, checks, swift-build, swift-test, companion]",
-  );
-  expect(releaseJob).not.toContain("promo-video");
-  expect(releaseJob).toContain("always()");
-  expect(releaseJob).toContain(
-    "always()\n      && github.ref == 'refs/heads/main'",
-  );
-  expect(releaseJob).toContain("github.event_name == 'push'");
-  expect(releaseJob).toContain("github.ref == 'refs/heads/main'");
-  expect(releaseJob).toContain("needs.checks.result == 'success'");
-  expect(releaseJob).toContain("!contains(needs.*.result, 'failure')");
-  expect(releaseJob).toContain("!contains(needs.*.result, 'cancelled')");
-  expect(releaseJob).toContain("&& (github.event_name == 'push'");
-  expect(releaseJob).toContain("|| needs.swift-build.result == 'success'))");
-  expect(releaseJob).not.toContain("needs.changes.outputs.docs != 'true'");
-  expect(releaseJob).toContain("|| needs.swift-test.result == 'success'");
-  expect(releaseJob).toContain(
+test("CI starts release builds as soon as release routing succeeds", () => {
+  expect(releaseBuildJob).toContain("needs: changes");
+  expect(releaseBuildJob).not.toContain("needs.swift-build");
+  expect(releaseBuildJob).not.toContain("needs.swift-test");
+  expect(releaseBuildJob).not.toContain("needs.companion");
+  expect(releaseBuildJob).not.toContain("promo-video");
+  expect(releaseBuildJob).toContain("github.event_name == 'push'");
+  expect(releaseBuildJob).toContain("github.ref == 'refs/heads/main'");
+  expect(releaseBuildJob).toContain("needs.changes.result == 'success'");
+  expect(releaseBuildJob).not.toContain("needs.changes.outputs.docs != 'true'");
+  expect(releaseBuildJob).toContain(
     "github.event_name == 'workflow_dispatch' && inputs.release",
   );
-  expect(releaseJob).toContain(
+  expect(releaseBuildJob).toContain(
     "&& ((github.event_name == 'push'\n      && needs.changes.outputs.swift == 'true')",
   );
-  expect(releaseJob).toContain(
+  expect(releaseBuildJob).toContain(
     "|| (github.event_name == 'workflow_dispatch' && inputs.release))",
   );
-  expect(releaseJob).toContain("actions: write");
-  expect(releaseJob).toContain("gh workflow run release.yml");
-  expect(releaseJob).toContain('--repo "$GITHUB_REPOSITORY"');
-  expect(releaseJob).toContain("--field cut_release=true");
-  expect(releaseJob).toContain('--field source_sha="$RELEASE_SHA"');
-  expect(releaseJob).not.toContain("uses: ./.github/workflows/release.yml");
+  expect(releaseBuildJob).toContain("actions: write");
+  expect(releaseBuildJob).toContain("gh workflow run release.yml");
+  expect(releaseBuildJob).toContain('--repo "$GITHUB_REPOSITORY"');
+  expect(releaseBuildJob).toContain("--field cut_release=true");
+  expect(releaseBuildJob).toContain('--field source_sha="$RELEASE_SHA"');
+  expect(releaseBuildJob).toContain('--field ci_run_id="$CI_RUN_ID"');
+  expect(releaseBuildJob).not.toContain(
+    "uses: ./.github/workflows/release.yml",
+  );
 });
 
 test("the standalone release supports gated cuts and manual rebuilds", () => {
@@ -54,11 +55,14 @@ test("the standalone release supports gated cuts and manual rebuilds", () => {
   expect(releaseWorkflow).toContain("workflow_dispatch:");
   expect(releaseWorkflow).toContain("inputs.rebuild");
   expect(releaseWorkflow).toContain("inputs.source_sha");
+  expect(releaseWorkflow).toContain("inputs.ci_run_id");
   expect(releaseWorkflow).toContain("cut_release:");
   expect(releaseWorkflow).toContain("CUT_RELEASE:");
   expect(releaseWorkflow).toContain("SOURCE_SHA:");
+  expect(releaseWorkflow).toContain("CI_RUN_ID:");
   expect(releaseWorkflow).toContain("new releases must pass through CI");
   expect(releaseWorkflow).toContain("CI must provide the approved commit");
+  expect(releaseWorkflow).toContain("CI must provide its run ID");
   expect(releaseWorkflow).toContain(
     "checkout does not match the approved commit",
   );
@@ -87,11 +91,25 @@ test("automated commits do not re-run CI", () => {
   expect(ciWorkflow).toContain("github.event_name != 'push'");
 });
 
-test("release waits for and publishes the macOS assets", () => {
-  expect(releaseWorkflow).toContain("needs: [version, dmg]");
+test("release publication waits for the exact successful CI run", () => {
+  expect(ciGateJob).toContain("needs: version");
+  expect(ciGateJob).toContain("actions: read");
+  expect(ciGateJob).toContain("inputs.ci_run_id");
+  expect(ciGateJob).toContain("needs.version.outputs.sha");
+  expect(ciGateJob).toContain('if [ -n "$REBUILD" ]; then');
+  expect(ciGateJob).toContain('gh run view "$CI_RUN_ID"');
+  expect(ciGateJob).toContain('gh run watch "$CI_RUN_ID"');
+  expect(ciGateJob).toContain("--exit-status");
+  expect(ciGateJob).toContain("workflowName");
+  expect(ciGateJob).toContain("headSha");
+  expect(ciGateJob).toContain("conclusion");
+  expect(releaseWorkflow).toContain("needs: [version, ci, dmg]");
+});
+
+test("release builds and publishes the macOS assets", () => {
   const dmgJob = releaseWorkflow.slice(
     releaseWorkflow.indexOf("\n  dmg:"),
-    releaseWorkflow.indexOf("\n  publish:"),
+    releaseWorkflow.indexOf("\n  ci:"),
   );
   expect(dmgJob).toContain("timeout-minutes: 60");
   expect(dmgJob).toContain("name: Cache libghostty");
@@ -135,7 +153,7 @@ test("superseded release builds yield the lane before packaging", () => {
       ?.length,
   ).toBe(9);
   expect(releaseWorkflow).toContain(
-    "needs: [version, dmg]\n    if: needs.dmg.outputs.superseded != 'true'",
+    "needs: [version, ci, dmg]\n    if: needs.dmg.outputs.superseded != 'true'",
   );
 });
 
@@ -163,7 +181,7 @@ test("the publisher uses a token that clears the ruleset", () => {
 test("build jobs cannot retain write credentials", () => {
   expect(releaseWorkflow).toContain("permissions:\n  contents: read");
   expect(releaseWorkflow).toContain(
-    "publish:\n    name: Publish release\n    needs: [version, dmg]\n    if: needs.dmg.outputs.superseded != 'true'\n    runs-on: ubuntu-latest\n    concurrency:\n      group: release-publication\n      cancel-in-progress: false\n    permissions:\n      contents: write",
+    "publish:\n    name: Publish release\n    needs: [version, ci, dmg]\n    if: needs.dmg.outputs.superseded != 'true'\n    runs-on: ubuntu-latest\n    concurrency:\n      group: release-publication\n      cancel-in-progress: false\n    permissions:\n      contents: write",
   );
   expect(releaseWorkflow.match(/persist-credentials: false/g)?.length).toBe(4);
   expect(releaseWorkflow.match(/persist-credentials: true/g)?.length).toBe(1);

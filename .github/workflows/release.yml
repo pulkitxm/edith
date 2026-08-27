@@ -13,6 +13,11 @@ on:
         type: string
         required: false
         default: ""
+      ci_run_id:
+        description: "CI run that must approve the source commit before publication."
+        type: string
+        required: false
+        default: ""
       rebuild:
         description: "Current release tag to rebuild and re-upload."
         type: string
@@ -44,6 +49,7 @@ jobs:
       REBUILD: ${{ inputs.rebuild }}
       CUT_RELEASE: ${{ inputs.cut_release }}
       SOURCE_SHA: ${{ inputs.source_sha }}
+      CI_RUN_ID: ${{ inputs.ci_run_id }}
       WORKFLOW_REF: ${{ github.ref }}
       HAS_SIGNING: ${{ secrets.MACOS_CERT_P12 != '' }}
       HAS_SPARKLE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY != '' }}
@@ -71,6 +77,8 @@ jobs:
               || { echo "release blocked: new releases must pass through CI" >&2; exit 1; }
             test -n "$SOURCE_SHA" \
               || { echo "release blocked: CI must provide the approved commit" >&2; exit 1; }
+            test -n "$CI_RUN_ID" \
+              || { echo "release blocked: CI must provide its run ID" >&2; exit 1; }
             test "$(git rev-parse HEAD)" = "$SOURCE_SHA" \
               || { echo "release blocked: checkout does not match the approved commit" >&2; exit 1; }
           fi
@@ -250,9 +258,45 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  ci:
+    name: Wait for CI
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    env:
+      REBUILD: ${{ inputs.rebuild }}
+      CI_RUN_ID: ${{ inputs.ci_run_id }}
+      BUILT_SHA: ${{ needs.version.outputs.sha }}
+    steps:
+      - name: Wait for the approved CI run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -n "$REBUILD" ]; then
+            exit 0
+          fi
+          CI_RESULT="$(gh run view "$CI_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --json headSha,workflowName)"
+          test "$(jq -r .workflowName <<<"$CI_RESULT")" = CI \
+            || { echo "release blocked: approval did not come from CI" >&2; exit 1; }
+          CI_SHA="$(jq -r .headSha <<<"$CI_RESULT")"
+          test "$CI_SHA" = "$BUILT_SHA" \
+            || { echo "release blocked: CI approved $CI_SHA, expected $BUILT_SHA" >&2; exit 1; }
+          gh run watch "$CI_RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status
+          CI_RESULT="$(gh run view "$CI_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --json conclusion,headSha,workflowName)"
+          test "$(jq -r .workflowName <<<"$CI_RESULT")" = CI \
+            || { echo "release blocked: approval did not come from CI" >&2; exit 1; }
+          test "$(jq -r .headSha <<<"$CI_RESULT")" = "$BUILT_SHA" \
+            || { echo "release blocked: CI changed commits while waiting" >&2; exit 1; }
+          test "$(jq -r .conclusion <<<"$CI_RESULT")" = success \
+            || { echo "release blocked: CI did not succeed" >&2; exit 1; }
+
   publish:
     name: Publish release
-    needs: [version, dmg]
+    needs: [version, ci, dmg]
     if: needs.dmg.outputs.superseded != 'true'
     runs-on: ubuntu-latest
     concurrency:
