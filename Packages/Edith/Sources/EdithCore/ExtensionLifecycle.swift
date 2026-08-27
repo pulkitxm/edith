@@ -590,6 +590,39 @@ public enum ExtensionLifecycleCatalog {
                     "ed clipboard ls --json")
             ]),
         descriptor(
+            "mouseControls", "Make a conventional mouse feel precise without changing trackpads.",
+            workflows: [
+                instruction(
+                    "scroll", "Tune the wheel",
+                    "Add a short glide and choose each wheel axis direction independently."),
+                instruction(
+                    "buttons", "Program extra buttons",
+                    "Keep Back and Forward or assign navigation, window, tab, and middle-click actions."
+                ),
+            ],
+            prerequisites: [
+                instruction(
+                    "permission", "Grant Accessibility",
+                    "Accessibility lets Edith observe and replace global mouse input.",
+                    "ed permissions request accessibility")
+            ],
+            examples: [
+                "ed extensions enable mouseControls", "ed config ls --group mouse --json",
+            ],
+            docs: [documentation("guide", "Mouse Controls guide", "docs/cli/mouse/README.md")],
+            recovery: [
+                instruction(
+                    "restart", "Restart input handling",
+                    "Disable and re-enable the extension after changing macOS access.",
+                    "ed extensions disable mouseControls")
+            ],
+            verification: [
+                instruction(
+                    "status", "Check runtime readiness",
+                    "Confirm the helper and Accessibility permission are ready.",
+                    "ed extensions verify mouseControls --json")
+            ]),
+        descriptor(
             "focusDim", "Reduce visual noise by dimming everything behind the active app.",
             workflows: [
                 instruction(

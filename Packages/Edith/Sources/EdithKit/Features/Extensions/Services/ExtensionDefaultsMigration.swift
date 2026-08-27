@@ -56,5 +56,6 @@ public enum ExtensionDefaultsMigration {
         AppStorageKeys.Presenter.enabled: true,
         AppStorageKeys.ColorPicker.enabled: false,
         LidAwakeState.enabledKey: false,
+        AppStorageKeys.Mouse.enabled: false,
     ]
 }

@@ -66,7 +66,7 @@ public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
         "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "colorPicker",
+        "colorPicker", "mouseControls",
     ]
 
     public static func provider(
@@ -103,6 +103,7 @@ public enum ExtensionLiveAdapters {
         case "calendar": calendarReadiness()
         case "notchShelf": shelfReadiness()
         case "clipboard": clipboardReadiness()
+        case "mouseControls": mouseControlsReadiness(defaults: defaults)
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
@@ -390,6 +391,28 @@ public enum ExtensionLiveAdapters {
             return .failed(
                 "Clipboard storage could not be read: \(error.localizedDescription)")
         }
+    }
+
+    static func mouseControlsReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
+        let step = defaults.object(forKey: AppStorageKeys.Mouse.scrollStep) as? Int
+        let delay = defaults.object(forKey: AppStorageKeys.Mouse.focusDelay) as? Int
+        let actionKeys = [
+            AppStorageKeys.Mouse.button4Action, AppStorageKeys.Mouse.button5Action,
+            AppStorageKeys.Mouse.button6Action, AppStorageKeys.Mouse.button7Action,
+            AppStorageKeys.Mouse.button8Action,
+        ]
+        let actionsValid = actionKeys.allSatisfy {
+            defaults.string(forKey: $0).map { MouseButtonAction(rawValue: $0) != nil } ?? true
+        }
+        let configured =
+            step.map(MouseControlSupport.scrollStepRange.contains) ?? true
+            && delay.map(MouseControlSupport.focusDelayRange.contains) ?? true
+            && actionsValid
+        return ExtensionAdapterFacts(
+            configured: configured,
+            readyDetail: "Mouse wheel, pointer focus, and extra-button settings are valid.",
+            setupDetail: "A stored scroll distance, focus delay, or button action is invalid."
+        ).readiness
     }
 
     static func focusDimReadiness(defaults: UserDefaults) async -> ExtensionAdapterReadiness {

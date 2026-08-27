@@ -185,6 +185,11 @@ public enum ExtensionRegistry {
             defaultsKey: "clipboardEnabled", requiredCapabilities: [.clipboardHistory],
             optionalCapabilities: [.globalPaste, .globalShortcuts]),
         ExtensionRegistryEntry(
+            id: "mouseControls", title: "Mouse Controls",
+            subtitle: "Smooth wheel scrolling, pointer focus, and programmable buttons.",
+            symbolName: "computermouse.fill", group: .utilities, featured: false,
+            defaultsKey: "mouseControlsEnabled", requiredCapabilities: [.pointerControl]),
+        ExtensionRegistryEntry(
             id: "focusDim", title: "Focus Dim",
             subtitle: "Dims everything behind your active app.",
             symbolName: "circle.lefthalf.filled", group: .utilities, featured: false,

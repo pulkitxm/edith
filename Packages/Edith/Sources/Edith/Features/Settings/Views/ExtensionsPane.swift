@@ -929,6 +929,7 @@ private struct ExtensionDetailRows: View {
             case .calendar: CalendarRows()
             case .notchShelf: NotchShelfRows()
             case .clipboard: ClipboardRows()
+            case .mouseControls: MouseControlsRows()
             case .focusDim: FocusDimRows()
             case .presenter: PresenterRows()
             case .colorPicker: ColorPickerRows()
