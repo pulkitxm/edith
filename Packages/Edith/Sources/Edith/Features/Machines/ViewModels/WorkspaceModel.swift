@@ -13,17 +13,26 @@ final class WorkspaceModel {
     var operationError: String?
 
     private let file: URL
+    private var loadTask: Task<Void, Never>?
+    private var mutationGeneration = 0
 
     init(machines: MachinesModel, file: URL = MachinePaths.workspacesFile) {
         self.file = file
-        let loaded = WorkspaceModel.load(file)
         let fallback = WorkspaceLayout.single(
             machineID: machines.allMachines.first?.id ?? MachinesModel.localMachineID)
-        store = loaded ?? WorkspaceStore(layouts: [fallback], currentID: fallback.id)
-        layout = loaded?.current ?? fallback
+        store = WorkspaceStore(layouts: [fallback], currentID: fallback.id)
+        layout = fallback
+        let generation = mutationGeneration
+        loadTask?.cancel()
+        loadTask = Task.detached(priority: .utility) { [weak self] in
+            let data = try? Data(contentsOf: file)
+            guard !Task.isCancelled else { return }
+            await self?.applyLoaded(data, generation: generation)
+        }
     }
 
     func persist() {
+        mutationGeneration += 1
         store.upsert(layout)
         guard let data = try? JSONEncoder().encode(store) else { return }
         try? FileManager.default.createDirectory(
@@ -31,9 +40,16 @@ final class WorkspaceModel {
         try? data.write(to: file, options: .atomic)
     }
 
-    private static func load(_ file: URL) -> WorkspaceStore? {
-        guard let data = try? Data(contentsOf: file) else { return nil }
-        return try? JSONDecoder().decode(WorkspaceStore.self, from: data)
+    private func applyLoaded(_ data: Data?, generation: Int) {
+        guard generation == mutationGeneration, let data,
+            let loaded = try? JSONDecoder().decode(WorkspaceStore.self, from: data)
+        else { return }
+        store = loaded
+        if let current = loaded.current { layout = current }
+    }
+
+    func awaitInitialLoad() async {
+        await loadTask?.value
     }
 
     func apply(_ change: (inout WorkspaceLayout) -> Void) {
@@ -42,6 +58,7 @@ final class WorkspaceModel {
     }
 
     func applyWithoutPersisting(_ change: (inout WorkspaceLayout) -> Void) {
+        mutationGeneration += 1
         change(&layout)
     }
 
@@ -56,6 +73,7 @@ final class WorkspaceModel {
 
     @discardableResult
     func perform(_ request: WorkspaceOperationRequest) -> WorkspaceOperationResult? {
+        mutationGeneration += 1
         var updated = store
         do {
             let result = try WorkspaceOperationExecution.perform(request, in: &updated)

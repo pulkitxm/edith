@@ -571,7 +571,8 @@ final class NotchShelfController: FeatureModule {
 
     private func fireGate() {
         gateWorkItem = nil
-        switch gate.fire(now: monotonicNow()) {
+        let transition = gate.fire(now: monotonicNow())
+        switch transition {
         case .opened:
             if let gateDisplay { expand(on: gateDisplay) }
         case .closed:
@@ -580,7 +581,9 @@ final class NotchShelfController: FeatureModule {
             } else {
                 collapseNow()
             }
-        case .none, .schedule, .cancelPending:
+        case .schedule:
+            handleGate(transition)
+        case .none, .cancelPending:
             break
         }
     }

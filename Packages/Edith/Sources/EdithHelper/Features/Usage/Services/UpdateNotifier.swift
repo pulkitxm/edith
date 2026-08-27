@@ -1,6 +1,5 @@
 import EdithKit
 import Foundation
-import UserNotifications
 
 enum UpdateNotifier {
     static let identifier = "update_ready"
@@ -23,18 +22,12 @@ enum UpdateNotifier {
             priority: .high, autoHide: 8, settingsTab: "updates")
     }
 
-    static func notify(version: String, center: UNUserNotificationCenter = .current()) {
-        let content = UNMutableNotificationContent()
-        content.title = title(for: version)
-        content.body = body
-        content.sound = .default
-        center.removeDeliveredNotifications(withIdentifiers: [identifier])
-        center.add(
-            UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
-        ) { error in
-            if let error {
-                NSLog("Edith notifications: update nudge failed: %@", error.localizedDescription)
-            }
-        }
+    static func notify(
+        version: String, queue: NotificationReplacementQueue = .shared
+    ) {
+        queue.submit(
+            NotificationReplacement(
+                identifier: identifier, title: title(for: version), body: body,
+                failureContext: "Edith notifications: update nudge failed"))
     }
 }

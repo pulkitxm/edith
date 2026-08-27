@@ -2,6 +2,12 @@ import Foundation
 import Testing
 @testable import EdithHelper
 
+private final class NotificationReplacementProbe: @unchecked Sendable {
+    let entered = DispatchSemaphore(value: 0)
+    let release = DispatchSemaphore(value: 0)
+    let returned = DispatchSemaphore(value: 0)
+}
+
 @Suite struct UpdateNotifierTests {
     @Test func versionIsReadFromTheIPCPayload() {
         #expect(UpdateNotifier.version(from: ["version": "0.0.25"]) == "0.0.25")
@@ -38,5 +44,24 @@ import Testing
         #expect(
             NotchAlertLogic.shouldPreempt(
                 current: existing, incoming: UpdateNotifier.alert(for: "0.0.25")))
+    }
+
+    @Test func stalledNotificationCenterDoesNotBlockUpdateCaller() {
+        let probe = NotificationReplacementProbe()
+        let queue = NotificationReplacementQueue(
+            label: "test.update-notifications.\(UUID().uuidString)"
+        ) { _ in
+            probe.entered.signal()
+            probe.release.wait()
+        }
+
+        DispatchQueue.global().async {
+            UpdateNotifier.notify(version: "0.0.25", queue: queue)
+            probe.returned.signal()
+        }
+
+        #expect(probe.entered.wait(timeout: .now() + 1) == .success)
+        #expect(probe.returned.wait(timeout: .now() + 0.2) == .success)
+        probe.release.signal()
     }
 }

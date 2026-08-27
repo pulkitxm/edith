@@ -18,6 +18,34 @@ func settingsBackupShouldImport(
     return cloudDate > localDate.addingTimeInterval(2)
 }
 
+enum SettingsBackupImportAction: Equatable, Sendable {
+    case finish
+    case awaitDownload
+    case importFile
+}
+
+func settingsBackupImportAction(
+    cloudFile: URL, localFile: URL, freshInstall: Bool
+) -> SettingsBackupImportAction {
+    let fm = FileManager.default
+    let placeholder = cloudFile.deletingLastPathComponent().appendingPathComponent(
+        ".\(cloudFile.lastPathComponent).icloud")
+    guard fm.fileExists(atPath: cloudFile.path) || fm.fileExists(atPath: placeholder.path) else {
+        return .finish
+    }
+    guard
+        let cloudDate = (try? fm.attributesOfItem(atPath: cloudFile.path))?[.modificationDate]
+            as? Date
+    else { return .awaitDownload }
+    let localExists = fm.fileExists(atPath: localFile.path)
+    let localDate =
+        (try? fm.attributesOfItem(atPath: localFile.path))?[.modificationDate] as? Date
+        ?? .distantPast
+    return settingsBackupShouldImport(
+        localFileExists: localExists, freshInstall: freshInstall,
+        cloudDate: cloudDate, localDate: localDate) ? .importFile : .finish
+}
+
 func settingsBackupMissingNames(cloudNames: Set<String>, localNames: Set<String>) -> Set<String> {
     cloudNames.subtracting(localNames)
 }
@@ -842,6 +870,7 @@ final class SettingsBackup {
     private var settingsRestoreDeadline: Date?
     private var settingsRestoreRetry: Timer?
     private var settingsImportTask: Task<Void, Never>?
+    private var settingsDownloadTask: Task<Void, Never>?
     private var settingsImportGeneration = 0
     private var musicDebounce: Timer?
     private var musicFolderObserver: NSObjectProtocol?
@@ -931,7 +960,9 @@ final class SettingsBackup {
                 || fm.fileExists(atPath: placeholderURL(for: cloudLimits).path)
         case .music:
             let directory = AppData.cloudDir.appendingPathComponent("music")
-            return !((try? fm.contentsOfDirectory(atPath: directory.path)) ?? []).isEmpty
+            var isDirectory = ObjCBool(false)
+            return fm.fileExists(atPath: directory.path, isDirectory: &isDirectory)
+                && isDirectory.boolValue
         case .clipboard:
             let index = cloudClipboardDir.appendingPathComponent("index.jsonl")
             return fm.fileExists(atPath: index.path)
@@ -1391,6 +1422,8 @@ final class SettingsBackup {
         settingsImportGeneration += 1
         settingsImportTask?.cancel()
         settingsImportTask = nil
+        settingsDownloadTask?.cancel()
+        settingsDownloadTask = nil
         for dataClass in SettingsBackupDataClass.allCases {
             restoreGenerationState.invalidate(dataClass)
             restoreTokens[dataClass]?.invalidate()
@@ -1417,6 +1450,8 @@ final class SettingsBackup {
         settingsImportGeneration += 1
         settingsImportTask?.cancel()
         settingsImportTask = nil
+        settingsDownloadTask?.cancel()
+        settingsDownloadTask = nil
     }
 
     func backupMusic() {
@@ -1808,45 +1843,38 @@ final class SettingsBackup {
         let generation = settingsImportGeneration
         settingsImportTask?.cancel()
         settingsImportTask = nil
+        settingsDownloadTask?.cancel()
+        settingsDownloadTask = nil
         guard decision.shouldRestore else {
             finishSettingsRestore()
             return
         }
-        let fm = FileManager.default
-        guard cloudFileExists(at: cloudFile) else {
-            finishSettingsRestore()
-            return
-        }
-        guard
-            let cloudDate = (try? fm.attributesOfItem(atPath: cloudFile.path))?[.modificationDate]
-                as? Date
-        else {
-            awaitSettingsDownload()
-            return
-        }
-        let localDate =
-            (try? fm.attributesOfItem(atPath: localFile.path))?[.modificationDate] as? Date
-            ?? .distantPast
-        guard
-            settingsBackupShouldImport(
-                localFileExists: fm.fileExists(atPath: localFile.path),
-                freshInstall: localSettingsAreEmpty,
-                cloudDate: cloudDate, localDate: localDate)
-        else {
-            finishSettingsRestore()
-            return
-        }
         let cloudFile = cloudFile
-        settingsImportTask = Task { [weak self] in
-            await self?.readAndApplyImportedSettings(at: cloudFile, generation: generation)
+        let localFile = localFile
+        let freshInstall = localSettingsAreEmpty
+        settingsImportTask = Task.detached(priority: .utility) { [weak self] in
+            let action = settingsBackupImportAction(
+                cloudFile: cloudFile, localFile: localFile, freshInstall: freshInstall)
+            let data =
+                action == .importFile
+                ? settingsBackupReadCloudSettingsFile(at: cloudFile) : nil
+            guard !Task.isCancelled else { return }
+            await self?.completeSettingsImport(action, data: data, generation: generation)
         }
     }
 
-    private func readAndApplyImportedSettings(at cloudFile: URL, generation: Int) async {
-        let data = await settingsBackupReadCloudSettingsFileAsync(at: cloudFile)
+    private func completeSettingsImport(
+        _ action: SettingsBackupImportAction, data: Data?, generation: Int
+    ) {
         guard !Task.isCancelled, generation == settingsImportGeneration else { return }
-        settingsImportTask = nil
-        applyImportedSettings(data)
+        switch action {
+        case .finish:
+            finishSettingsRestore()
+        case .awaitDownload:
+            awaitSettingsDownload()
+        case .importFile:
+            applyImportedSettings(data)
+        }
     }
 
     private func applyImportedSettings(_ data: Data?) {
@@ -1901,7 +1929,11 @@ final class SettingsBackup {
     }
 
     private func awaitSettingsDownload() {
-        try? FileManager.default.startDownloadingUbiquitousItem(at: cloudFile)
+        let cloudFile = cloudFile
+        settingsDownloadTask?.cancel()
+        settingsDownloadTask = Task.detached(priority: .utility) {
+            settingsBackupRequestCloudDownload(cloudFile)
+        }
         guard settingsRestorePending else { return }
         guard let deadline = settingsRestoreDeadline, Date() < deadline else {
             finishSettingsRestore()

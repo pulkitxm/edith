@@ -499,11 +499,7 @@ public final class YoutubeDownloader {
         p.terminationHandler = { [weak self] proc in
             outPipe.fileHandleForReading.readabilityHandler = nil
             errPipe.fileHandleForReading.readabilityHandler = nil
-            let tail =
-                (String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-                    ?? "")
-                + (String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
-                    ?? "")
+            let tail = Self.readTail(outPipe: outPipe, errPipe: errPipe)
 
             Task { @MainActor in
                 guard let self else { return }
@@ -556,6 +552,12 @@ public final class YoutubeDownloader {
             save()
             processNext()
         }
+    }
+
+    nonisolated private static func readTail(outPipe: Pipe, errPipe: Pipe) -> String {
+        (String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "")
+            + (String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+                ?? "")
     }
 
     private func indexOfItem(with id: UUID) -> Int? {

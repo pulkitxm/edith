@@ -1,6 +1,5 @@
 import EdithKit
 import Foundation
-import UserNotifications
 
 enum MachineAlert: Equatable, Sendable {
     case unreachable(machine: String)
@@ -264,19 +263,11 @@ final class MachineMonitor: FeatureModule {
     }
 
     nonisolated static func notify(
-        _ alert: MachineAlert, center: UNUserNotificationCenter = .current()
+        _ alert: MachineAlert, queue: NotificationReplacementQueue = .shared
     ) {
-        let content = UNMutableNotificationContent()
-        content.title = alert.title
-        content.body = alert.body
-        content.sound = .default
-        center.removeDeliveredNotifications(withIdentifiers: [alert.identifier])
-        center.add(
-            UNNotificationRequest(identifier: alert.identifier, content: content, trigger: nil)
-        ) { error in
-            if let error {
-                NSLog("Edith machines: alert failed: %@", error.localizedDescription)
-            }
-        }
+        queue.submit(
+            NotificationReplacement(
+                identifier: alert.identifier, title: alert.title, body: alert.body,
+                failureContext: "Edith machines: alert failed"))
     }
 }

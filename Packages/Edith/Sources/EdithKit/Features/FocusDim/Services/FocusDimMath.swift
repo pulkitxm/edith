@@ -28,7 +28,7 @@ public enum FocusDimDisplayMode: String, CaseIterable {
     }
 }
 
-public struct FocusDimWindowInfo: Equatable {
+public struct FocusDimWindowInfo: Equatable, Sendable {
     public let windowNumber: Int
     public let ownerPID: pid_t
     public let frame: CGRect

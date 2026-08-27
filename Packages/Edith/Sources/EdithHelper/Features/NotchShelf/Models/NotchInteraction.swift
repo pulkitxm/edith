@@ -52,7 +52,7 @@ struct NotchHoverGate {
 
     mutating func fire(now: TimeInterval) -> NotchGateTransition {
         guard let target = pendingTarget, let deadline = pendingDeadline else { return .none }
-        guard now >= deadline else { return .none }
+        guard now >= deadline else { return .schedule(deadline: deadline) }
         isOpen = target
         clearPending()
         return target ? .opened : .closed

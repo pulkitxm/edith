@@ -574,9 +574,11 @@ final class DashboardModel {
         let url = Repo.usageJSON
         defer { loadAttempted = true }
         for attempt in 0..<4 {
-            let m =
+            let m = await Task.detached(priority: .utility) {
                 (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate])
-                as? Date
+                    as? Date
+            }.value
+            guard !Task.isCancelled else { return }
             if let m, m == mtime, data != nil { return }
             if let parsed = try? await Task.detached(
                 priority: .utility,
