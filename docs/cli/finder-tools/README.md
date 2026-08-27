@@ -29,3 +29,5 @@ If shortcuts stop responding, refresh Accessibility after changing System Settin
 ed permissions refresh
 ed extensions doctor finderTools
 ```
+
+[Back to the CLI reference](../README.md)
