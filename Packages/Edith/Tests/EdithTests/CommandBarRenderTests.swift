@@ -18,6 +18,25 @@ import Testing
         #expect(model.items.first?.id == "action.openExtensions")
     }
 
+    @Test func paletteRendersRankedActions() async throws {
+        let model = CommandBarModel(services: AppServices())
+        model.query = "settings"
+        for _ in 0..<100 where model.items.first?.id != "action.openGeneralSettings" {
+            await Task.yield()
+        }
+
+        let view = ZStack {
+            Color(nsColor: .windowBackgroundColor)
+            CommandBarView(model: model)
+        }
+        .frame(width: CommandBarController.width, height: CommandBarController.height)
+        let image = try #require(render(view))
+
+        #expect(model.items.first?.title == "Open Settings")
+        #expect(distinctColours(in: image) > 30)
+        dump(image, named: "command-bar-actions")
+    }
+
     @Test func paletteRendersActionsAndCalculationAnswer() throws {
         let services = AppServices()
         let model = CommandBarModel(services: services)
