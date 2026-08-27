@@ -133,6 +133,22 @@ import Testing
         #expect(probe.activations == 1)
     }
 
+    @Test func siblingOverlayDeliversEachPointerEventExactlyOnce() async throws {
+        let probe = EdithButtonOverlayProbe()
+        let harness = EdithButtonHarness(rootView: EdithButtonOverlayFixture(probe: probe))
+        defer { harness.close() }
+
+        let frames = try await probe.frames()
+        harness.click(CGPoint(x: frames.primary.minX + 2, y: frames.primary.minY + 2))
+        harness.click(CGPoint(x: frames.secondary.minX - 12, y: frames.primary.midY))
+        #expect(probe.primaryActivations == 2)
+        #expect(probe.secondaryActivations == 0)
+
+        harness.click(CGPoint(x: frames.secondary.midX, y: frames.secondary.midY))
+        #expect(probe.primaryActivations == 2)
+        #expect(probe.secondaryActivations == 1)
+    }
+
 }
 
 @MainActor
@@ -145,6 +161,24 @@ private final class EdithButtonProbe {
 private final class EdithButtonGalleryProbe {
     var activations: [EdithButtonRole: Int] = [:]
     var frames: [EdithButtonRole: CGRect] = [:]
+}
+
+@MainActor
+private final class EdithButtonOverlayProbe {
+    var primaryActivations = 0
+    var secondaryActivations = 0
+    var primaryFrame: CGRect?
+    var secondaryFrame: CGRect?
+
+    func frames() async throws -> (primary: CGRect, secondary: CGRect) {
+        for _ in 0..<40 {
+            if let primaryFrame, let secondaryFrame {
+                return (primaryFrame, secondaryFrame)
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        throw EdithButtonHarnessError.missingFrames
+    }
 }
 
 private struct EdithButtonFrames {
@@ -225,6 +259,41 @@ private struct EdithButtonDelegatingStyle: ButtonStyle {
     }
 }
 
+private struct EdithButtonOverlayFixture: View {
+    let probe: EdithButtonOverlayProbe
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Button {
+                probe.primaryActivations += 1
+            } label: {
+                HStack {
+                    Text("Open row")
+                    Spacer(minLength: 0)
+                    Color.clear.frame(width: 28, height: 28)
+                }
+                .frame(width: 240)
+                .padding(8)
+                .background(Color.accentColor.opacity(0.2), in: RoundedRectangle(cornerRadius: 8))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.edith(.borderless))
+            .background(EdithButtonOverlayFrameReader(kind: .primary, probe: probe))
+
+            Button {
+                probe.secondaryActivations += 1
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.edith(.toolbar))
+            .background(EdithButtonOverlayFrameReader(kind: .secondary, probe: probe))
+            .padding(.trailing, 8)
+        }
+        .padding(40)
+        .frame(width: 360, height: 180)
+    }
+}
+
 private struct EdithButtonRoleGallery: View {
     let probe: EdithButtonGalleryProbe
     @State private var counts: [EdithButtonRole: Int] = [:]
@@ -286,6 +355,31 @@ private struct EdithButtonFrameReader: NSViewRepresentable {
         DispatchQueue.main.async {
             guard view.window != nil else { return }
             probe.buttonFrame = view.convert(view.bounds, to: nil)
+        }
+    }
+}
+
+private enum EdithButtonOverlayFrameKind {
+    case primary
+    case secondary
+}
+
+private struct EdithButtonOverlayFrameReader: NSViewRepresentable {
+    let kind: EdithButtonOverlayFrameKind
+    let probe: EdithButtonOverlayProbe
+
+    func makeNSView(context: Context) -> NSView {
+        NSView()
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async {
+            guard view.window != nil else { return }
+            let frame = view.convert(view.bounds, to: nil)
+            switch kind {
+            case .primary: probe.primaryFrame = frame
+            case .secondary: probe.secondaryFrame = frame
+            }
         }
     }
 }
