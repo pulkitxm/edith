@@ -100,22 +100,83 @@ struct HerdrTitlebarViewPicker: View {
     let store: HerdrStore
     let agentID: String
 
-    private var selection: Binding<HerdrAgentView> {
-        Binding(
-            get: { store.detachedTab(id: agentID)?.view ?? .agent },
-            set: { store.setView($0, for: agentID) })
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        AppTheme.accent.rawValue
+    @Environment(\.colorScheme) private var scheme
+
+    private var selection: HerdrAgentView {
+        store.detachedTab(id: agentID)?.view ?? .agent
+    }
+
+    private var theme: AppTheme { AppTheme(storedName: themeName) }
+    private var dark: Bool { scheme == .dark }
+    private var accent: Color { DashSkin.accent(dark, theme: theme) }
+
+    var body: some View {
+        HStack(spacing: UIScale.pt(2)) {
+            ForEach([HerdrAgentView.agent, .split, .diff], id: \.self) { mode in
+                HerdrTitlebarViewButton(
+                    mode: mode,
+                    selected: selection == mode,
+                    dark: dark,
+                    theme: theme
+                ) {
+                    store.setView(mode, for: agentID)
+                }
+            }
+        }
+        .padding(UIScale.pt(2))
+        .widgetBar(
+            cornerRadius: 8,
+            fill: DashSkin.paper(dark, theme: theme),
+            stroke: accent.opacity(dark ? 0.5 : 0.35)
+        )
+        .tint(accent)
+        .help("Choose the agent, split, or diff view")
+    }
+}
+
+private struct HerdrTitlebarViewButton: View {
+    let mode: HerdrAgentView
+    let selected: Bool
+    let dark: Bool
+    let theme: AppTheme
+    let select: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovered = false
+
+    private var accent: Color { DashSkin.accent(dark, theme: theme) }
+    private var foreground: Color {
+        selected ? accent : DashSkin.ink(dark, theme: theme).opacity(hovered ? 0.92 : 0.68)
     }
 
     var body: some View {
-        Picker("View", selection: selection) {
-            ForEach([HerdrAgentView.agent, .split, .diff], id: \.self) { mode in
-                Label(mode.shortTitle, systemImage: mode.icon)
-                    .tag(mode)
-            }
+        Button(action: select) {
+            Label(mode.shortTitle, systemImage: mode.icon)
+                .font(.system(size: UIScale.pt(10), weight: selected ? .semibold : .medium))
+                .foregroundStyle(foreground)
+                .padding(.horizontal, UIScale.pt(7))
+                .frame(maxWidth: .infinity, minHeight: UIScale.pt(22))
+                .background(
+                    selected
+                        ? accent.opacity(dark ? 0.24 : 0.16)
+                        : accent.opacity(hovered ? (dark ? 0.12 : 0.08) : 0),
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: UIScale.pt(6))
+                        .strokeBorder(
+                            accent.opacity(selected ? (dark ? 0.78 : 0.62) : 0),
+                            lineWidth: UIScale.pt(1))
+                }
+                .contentShape(Rectangle())
         }
-        .pickerStyle(.segmented)
-        .controlSize(.small)
-        .labelsHidden()
-        .help("Choose the agent, split, or diff view")
+        .buttonStyle(.edith(.borderless, selected: selected, tint: accent))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .help(mode.title)
+        .onHover { hovered = $0 }
+        .animation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: hovered)
+        .animation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: selected)
     }
 }

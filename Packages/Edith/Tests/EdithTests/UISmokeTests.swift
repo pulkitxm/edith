@@ -292,6 +292,28 @@ private func descendantViews(of view: NSView) -> [NSView] {
                 width: 240, height: 40))
     }
 
+    @Test func herdrTitlebarViewPickerRendersEveryThemeDistinctly() throws {
+        let key = AppStorageKeys.General.theme
+        let saved = SharedDefaults.store.object(forKey: key)
+        defer {
+            if let saved {
+                SharedDefaults.store.set(saved, forKey: key)
+            } else {
+                SharedDefaults.store.removeObject(forKey: key)
+            }
+        }
+        var appearances = Set<Data>()
+        for theme in AppTheme.allCases {
+            SharedDefaults.store.set(theme.rawValue, forKey: key)
+            let bitmap = try #require(
+                renderedBitmap(
+                    HerdrTitlebarViewPicker(store: HerdrStore(), agentID: "agent"),
+                    width: 240, height: 40))
+            appearances.insert(try #require(bitmap.representation(using: .png, properties: [:])))
+        }
+        #expect(appearances.count == AppTheme.allCases.count)
+    }
+
     @Test func herdrViewPickerUsesTheRightTitlebarAccessory() throws {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
