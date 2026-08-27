@@ -170,7 +170,7 @@ struct MediaCompressVideoCommand: AsyncParsableCommand {
             let result: MediaVideoResult
             do {
                 result = try await Task.detached(priority: .userInitiated) {
-                    try MediaToolkit.compressVideo(
+                    try await MediaToolkit.compressVideo(
                         inputURL, to: outputURL, options: options,
                         cancelled: { Task.isCancelled })
                 }.value

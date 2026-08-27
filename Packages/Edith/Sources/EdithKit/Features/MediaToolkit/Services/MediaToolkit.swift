@@ -184,41 +184,50 @@ public enum MediaToolkit {
         _ inputURL: URL, to outputDirectory: URL, options: MediaVideoOptions,
         progress: @Sendable (Double) -> Void = { _ in },
         cancelled: @Sendable () -> Bool = { false }
-    ) throws -> MediaVideoResult {
+    ) async throws -> MediaVideoResult {
         try FileManager.default.createDirectory(
             at: outputDirectory, withIntermediateDirectories: true)
         let asset = AVURLAsset(url: inputURL)
-        guard let videoTrack = asset.tracks(withMediaType: .video).first else {
+        guard let videoTrack = try await asset.loadTracks(withMediaType: .video).first else {
             throw MediaToolkitError.unsupportedVideo
         }
-        let duration = asset.duration.seconds
+        let duration = try await asset.load(.duration).seconds
         guard duration.isFinite, duration > 0 else { throw MediaToolkitError.unsupportedVideo }
-        let audioTracks = options.keepAudio ? asset.tracks(withMediaType: .audio) : []
-        let transformed = videoTrack.naturalSize.applying(videoTrack.preferredTransform)
+        let audioTracks =
+            options.keepAudio ? try await asset.loadTracks(withMediaType: .audio) : []
+        let naturalSize = try await videoTrack.load(.naturalSize)
+        let preferredTransform = try await videoTrack.load(.preferredTransform)
+        let nominalFrameRate = try await videoTrack.load(.nominalFrameRate)
+        let transformed = naturalSize.applying(preferredTransform)
         let sourceSize = CGSize(width: abs(transformed.width), height: abs(transformed.height))
-        let frameRate = max(1, Double(videoTrack.nominalFrameRate))
+        let frameRate = max(1, Double(nominalFrameRate))
         let outputURL = uniqueOutputURL(
             input: inputURL, directory: outputDirectory, extension: "mp4")
         var scale = 1.0
         var outputBytes: Int64 = 0
-        for pass in 0..<3 {
-            guard !cancelled() else { throw CancellationError() }
-            guard
-                let plan = videoPlan(
-                    targetBytes: options.targetBytes, duration: duration, sourceSize: sourceSize,
-                    frameRate: frameRate, hasAudio: !audioTracks.isEmpty, scale: scale)
-            else { throw MediaToolkitError.targetTooSmall }
-            try encodeVideo(
-                asset: asset, videoTrack: videoTrack, audioTracks: audioTracks,
-                duration: duration, plan: plan, outputURL: outputURL,
-                progress: progress, cancelled: cancelled)
-            outputBytes = fileSize(outputURL)
-            if outputBytes <= options.targetBytes { break }
-            guard pass < 2 else {
-                try? FileManager.default.removeItem(at: outputURL)
-                throw MediaToolkitError.targetTooSmall
+        do {
+            for pass in 0..<3 {
+                guard !cancelled() else { throw CancellationError() }
+                guard
+                    let plan = videoPlan(
+                        targetBytes: options.targetBytes, duration: duration,
+                        sourceSize: sourceSize,
+                        frameRate: frameRate, hasAudio: !audioTracks.isEmpty, scale: scale)
+                else { throw MediaToolkitError.targetTooSmall }
+                try encodeVideo(
+                    asset: asset, videoTrack: videoTrack, audioTracks: audioTracks,
+                    preferredTransform: preferredTransform, frameRate: frameRate,
+                    duration: duration, plan: plan, outputURL: outputURL,
+                    progress: progress, cancelled: cancelled)
+                outputBytes = fileSize(outputURL)
+                if outputBytes <= options.targetBytes { break }
+                guard pass < 2 else { throw MediaToolkitError.targetTooSmall }
+                scale *= min(
+                    0.9, Double(options.targetBytes) / Double(max(1, outputBytes)) * 0.9)
             }
-            scale *= min(0.9, Double(options.targetBytes) / Double(max(1, outputBytes)) * 0.9)
+        } catch {
+            try? FileManager.default.removeItem(at: outputURL)
+            throw error
         }
         return MediaVideoResult(
             inputURL: inputURL, outputURL: outputURL, inputBytes: fileSize(inputURL),
@@ -238,12 +247,13 @@ public enum MediaToolkit {
         let totalBitRate = Int(Double(targetBytes * 8) * 0.9 / duration)
         let videoBitRate = Int(Double(totalBitRate - audioBitRate) * scale)
         guard videoBitRate >= 240_000 else { return nil }
-        let sourceWidth = min(1920, max(2, Int(sourceSize.width.rounded())))
-        let sourceHeight = min(1920, max(2, Int(sourceSize.height.rounded())))
+        let dimensionScale = min(1, 1920 / max(sourceSize.width, sourceSize.height))
+        let sourceWidth = even(Int((sourceSize.width * dimensionScale).rounded()))
+        let sourceHeight = even(Int((sourceSize.height * dimensionScale).rounded()))
         let pixelBudget = Double(videoBitRate) / max(1, frameRate * 0.07)
         let pixelScale = min(1, sqrt(pixelBudget / Double(sourceWidth * sourceHeight)))
-        let width = max(160, even(Int(Double(sourceWidth) * pixelScale)))
-        let height = max(160, even(Int(Double(sourceHeight) * pixelScale)))
+        let width = even(Int(Double(sourceWidth) * pixelScale))
+        let height = even(Int(Double(sourceHeight) * pixelScale))
         return MediaVideoPlan(
             width: width, height: height, videoBitRate: videoBitRate,
             audioBitRate: audioBitRate)
@@ -291,7 +301,8 @@ public enum MediaToolkit {
 
     private static func encodeVideo(
         asset: AVAsset, videoTrack: AVAssetTrack, audioTracks: [AVAssetTrack],
-        duration: Double, plan: MediaVideoPlan, outputURL: URL,
+        preferredTransform: CGAffineTransform, frameRate: Double, duration: Double,
+        plan: MediaVideoPlan, outputURL: URL,
         progress: @Sendable (Double) -> Void, cancelled: @Sendable () -> Bool
     ) throws {
         try? FileManager.default.removeItem(at: outputURL)
@@ -311,17 +322,17 @@ public enum MediaToolkit {
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: plan.width,
             AVVideoHeightKey: plan.height,
-            AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill,
+            AVVideoScalingModeKey: AVVideoScalingModeResizeAspect,
             AVVideoCompressionPropertiesKey: [
                 AVVideoAverageBitRateKey: plan.videoBitRate,
-                AVVideoExpectedSourceFrameRateKey: max(1, Int(videoTrack.nominalFrameRate)),
+                AVVideoExpectedSourceFrameRateKey: max(1, Int(frameRate.rounded())),
                 AVVideoMaxKeyFrameIntervalDurationKey: 4,
                 AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
             ],
         ]
         let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         videoInput.expectsMediaDataInRealTime = false
-        videoInput.transform = videoTrack.preferredTransform
+        videoInput.transform = preferredTransform
         guard writer.canAdd(videoInput) else { throw MediaToolkitError.unsupportedVideo }
         writer.add(videoInput)
         var audioOutput: AVAssetReaderAudioMixOutput?
