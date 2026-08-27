@@ -13,6 +13,8 @@ final class ClipboardStore: FeatureModule {
     private var loaded = false
     private var timer: DispatchSourceTimer?
     private var lastChangeCount = NSPasteboard.general.changeCount
+    private var observedChangeCount: Int?
+    private var changedAt: Date?
     private var locked = false
     private var lockObservers: [NSObjectProtocol] = []
     private var sleepObserver: NSObjectProtocol?
@@ -40,6 +42,7 @@ final class ClipboardStore: FeatureModule {
                 [weak self] _ in
                 Task { @MainActor in
                     self?.locked = true
+                    self?.clearPasteboardIfConfigured(AppStorageKeys.TextUtilities.clearOnLock)
                     self?.stopTimer()
                 }
             },
@@ -54,7 +57,10 @@ final class ClipboardStore: FeatureModule {
         sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.stopTimer() }
+            Task { @MainActor in
+                self?.clearPasteboardIfConfigured(AppStorageKeys.TextUtilities.clearOnSleep)
+                self?.stopTimer()
+            }
         }
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
@@ -130,9 +136,73 @@ final class ClipboardStore: FeatureModule {
     private func tick() {
         guard loaded else { return }
         let pb = NSPasteboard.general
-        guard pb.changeCount != lastChangeCount else { return }
-        lastChangeCount = pb.changeCount
-        capture(from: pb)
+        if pb.changeCount != lastChangeCount {
+            handleChange(in: pb)
+            return
+        }
+        clearPasteboardAfterDelayIfNeeded(pb)
+    }
+
+    private func handleChange(in pasteboard: NSPasteboard) {
+        lastChangeCount = pasteboard.changeCount
+        let types = (pasteboard.types ?? []).map(\.rawValue)
+        let textUtilitiesOn = SharedDefaults.store.bool(
+            forKey: AppStorageKeys.TextUtilities.enabled)
+        if textUtilitiesOn, !ClipboardPasteboardFilter.shouldSkip(types: types) {
+            cleanCopiedURLIfNeeded(pasteboard)
+            observedChangeCount = pasteboard.changeCount
+            changedAt = Date()
+        } else {
+            observedChangeCount = nil
+            changedAt = nil
+        }
+        lastChangeCount = pasteboard.changeCount
+        guard SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.enabled) else { return }
+        capture(from: pasteboard)
+    }
+
+    private func cleanCopiedURLIfNeeded(_ pasteboard: NSPasteboard) {
+        guard SharedDefaults.store.bool(forKey: AppStorageKeys.TextUtilities.cleanCopiedURLs),
+            let text = pasteboard.string(forType: .string),
+            let cleaned = TextUtilitiesSupport.cleanURL(
+                text,
+                customParameters: TextUtilitiesSupport.customParameters(
+                    SharedDefaults.store.string(
+                        forKey: AppStorageKeys.TextUtilities.customTrackingParameters) ?? "")),
+            cleaned.value != text.trimmingCharacters(in: .whitespacesAndNewlines),
+            TextUtilitiesSupport.canRewritePasteboard(
+                types: (pasteboard.types ?? []).map(\.rawValue))
+        else { return }
+        pasteboard.clearContents()
+        pasteboard.setString(cleaned.value, forType: .string)
+        pasteboard.setString(cleaned.value, forType: .init("public.url"))
+    }
+
+    private func clearPasteboardAfterDelayIfNeeded(_ pasteboard: NSPasteboard) {
+        guard SharedDefaults.store.bool(forKey: AppStorageKeys.TextUtilities.enabled),
+            SharedDefaults.store.bool(forKey: AppStorageKeys.TextUtilities.autoClearEnabled)
+        else { return }
+        let delay = TextUtilitiesSupport.clampedAutoClearDelay(
+            SharedDefaults.store.integer(forKey: AppStorageKeys.TextUtilities.autoClearDelay))
+        guard TextUtilitiesSupport.shouldAutoClear(
+            observedChangeCount: observedChangeCount, currentChangeCount: pasteboard.changeCount,
+            changedAt: changedAt, now: Date(), delay: TimeInterval(delay))
+        else { return }
+        clearPasteboard(pasteboard)
+    }
+
+    private func clearPasteboardIfConfigured(_ key: String) {
+        guard SharedDefaults.store.bool(forKey: AppStorageKeys.TextUtilities.enabled),
+            SharedDefaults.store.bool(forKey: key)
+        else { return }
+        clearPasteboard(.general)
+    }
+
+    private func clearPasteboard(_ pasteboard: NSPasteboard) {
+        pasteboard.clearContents()
+        lastChangeCount = pasteboard.changeCount
+        observedChangeCount = nil
+        changedAt = nil
     }
 
     private func capture(from pb: NSPasteboard) {

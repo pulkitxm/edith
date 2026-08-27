@@ -128,6 +128,7 @@ public extension ExtensionRegistryEntry {
         switch id {
         case "calendar": [.calendar]
         case "focusDim", "presenter", "colorPicker": [.screenRecording]
+        case "textUtilities": [.accessibility, .inputMonitoring]
         default: []
         }
     }

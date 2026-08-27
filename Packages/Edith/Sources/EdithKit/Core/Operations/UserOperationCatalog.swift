@@ -129,6 +129,9 @@ public enum UserOperationCatalog {
         + ClipboardOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + TextUtilityOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + AttentionFocusOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -273,6 +276,23 @@ private func userInterface(
 
 private func commandLineOnly(_ reason: String) -> UserOperationExposure {
     .commandLineOnly(reason: reason)
+}
+
+private extension TextUtilityOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .cleanURL:
+            userInterface("Text Utilities settings", "clean a URL", ["https://example.com/?utm_source=x"])
+        case .pastePlain:
+            userInterface("Text Utilities settings", "paste clipboard text without formatting")
+        case .listSnippets:
+            userInterface("Text Utilities settings", "view saved snippets")
+        case .addSnippet:
+            userInterface("Text Utilities settings", "add a snippet", [";sig", "Thanks"])
+        case .removeSnippet:
+            userInterface("Text Utilities settings", "remove a snippet", ["1", "--yes"])
+        }
+    }
 }
 
 private extension MachineControlOperation {

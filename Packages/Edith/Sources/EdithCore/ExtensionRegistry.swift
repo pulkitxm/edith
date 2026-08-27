@@ -185,6 +185,12 @@ public enum ExtensionRegistry {
             defaultsKey: "clipboardEnabled", requiredCapabilities: [.clipboardHistory],
             optionalCapabilities: [.globalPaste, .globalShortcuts]),
         ExtensionRegistryEntry(
+            id: "textUtilities", title: "Text Utilities",
+            subtitle: "Snippets, plain text paste, clipboard clearing, and clean links.",
+            symbolName: "text.badge.checkmark", group: .utilities, featured: true,
+            defaultsKey: "textUtilitiesEnabled", requiredCapabilities: [.globalPaste],
+            optionalCapabilities: [.globalShortcuts]),
+        ExtensionRegistryEntry(
             id: "focusDim", title: "Focus Dim",
             subtitle: "Dims everything behind your active app.",
             symbolName: "circle.lefthalf.filled", group: .utilities, featured: false,

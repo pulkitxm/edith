@@ -295,6 +295,7 @@ enum GlobalHotKey {
         static let colorPicker: UInt32 = 5
         static let micMute: UInt32 = 6
         static let presenterToggle: UInt32 = 7
+        static let textUtilities: UInt32 = 9
     }
 
     fileprivate static var refs: [UInt32: EventHotKeyRef] = [:]
@@ -404,6 +405,29 @@ enum ClipboardHotKey {
     }
 }
 
+enum TextUtilitiesHotKey {
+    static var code: Int {
+        SharedDefaults.store.object(forKey: "textUtilitiesHotKeyCode") as? Int ?? kVK_ANSI_V
+    }
+    static var mods: Int {
+        SharedDefaults.store.object(forKey: "textUtilitiesHotKeyMods") as? Int
+            ?? (controlKey | optionKey | cmdKey)
+    }
+
+    static func register() {
+        guard SharedDefaults.store.bool(forKey: AppStorageKeys.TextUtilities.enabled) else {
+            unregister()
+            return
+        }
+        GlobalHotKey.set(id: GlobalHotKey.ID.textUtilities, keyCode: code, modifiers: mods) {
+            MainActor.assumeIsolated { AppState.services.textUtilities?.pastePlainText() }
+        }
+    }
+
+    static func unregister() {
+        GlobalHotKey.clear(id: GlobalHotKey.ID.textUtilities)
+    }
+}
 enum MicHotKey {
     static var code: Int {
         SharedDefaults.store.object(forKey: "micHotKeyCode") as? Int ?? kVK_ANSI_M

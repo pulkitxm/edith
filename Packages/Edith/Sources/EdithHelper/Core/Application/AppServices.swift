@@ -12,6 +12,7 @@ final class AppServices {
     private(set) var notchShelf: NotchShelfController?
     private(set) var colorPicker: ColorPickerStore?
     private(set) var clipboard: ClipboardStore?
+    private(set) var textUtilities: TextUtilitiesEngine?
     private(set) var focusDim: FocusDimEngine?
     private(set) var presenter: PresenterDetector?
     private(set) var micMute: MicMuteEngine?
@@ -279,22 +280,31 @@ final class AppServices {
 
         let clipboardOn =
             SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.enabled) as? Bool ?? false
-        if clipboardOn {
+        let textUtilitiesOn = Self.extensionEnabled(AppStorageKeys.TextUtilities.enabled)
+        if clipboardOn || textUtilitiesOn {
             if clipboard == nil {
-                SettingsBackup.shared.restoreDataOnEnable(for: .clipboard)
+                if clipboardOn { SettingsBackup.shared.restoreDataOnEnable(for: .clipboard) }
                 clipboard = ClipboardStore()
             }
+        }
+        if clipboardOn {
             ClipboardHotKey.register()
         } else {
             ClipboardHotKey.unregister()
-            if let store = clipboard {
-                store.shutdown()
-                clipboard = nil
-            }
         }
-        ClipboardPanel.shared.store = clipboard
-
-        notchShelf?.attachClipboard(clipboard)
+        if textUtilitiesOn, textUtilities == nil { textUtilities = TextUtilitiesEngine() }
+        if textUtilitiesOn { textUtilities?.syncSettings() }
+        if !textUtilitiesOn, let engine = textUtilities {
+            engine.shutdown()
+            textUtilities = nil
+        }
+        if !clipboardOn, !textUtilitiesOn, let store = clipboard {
+            store.shutdown()
+            clipboard = nil
+        }
+        let visibleClipboard = clipboardOn ? clipboard : nil
+        ClipboardPanel.shared.store = visibleClipboard
+        notchShelf?.attachClipboard(visibleClipboard)
         notchShelf?.attachUsage(usage)
         notchShelf?.attachCalendar(calendar)
         notchShelf?.attachColorPicker(colorPicker)

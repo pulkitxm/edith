@@ -111,6 +111,14 @@ public enum TextUtilitiesSupport {
                 .filter { !$0.isEmpty })
     }
 
+    public static func canRewritePasteboard(types: [String]) -> Bool {
+        let allowed: Set<String> = [
+            "public.utf8-plain-text", "public.url", "public.url-name", "NSStringPboardType",
+            "NSURLPboardType",
+        ]
+        return !types.isEmpty && Set(types).isSubset(of: allowed)
+    }
+
     public static func sanitizedTrigger(_ value: String) -> String {
         value.filter { !$0.isWhitespace }
     }

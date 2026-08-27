@@ -65,8 +65,8 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
-        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "colorPicker",
+        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "textUtilities", "focusDim",
+        "presenter", "colorPicker",
     ]
 
     public static func provider(
@@ -103,6 +103,8 @@ public enum ExtensionLiveAdapters {
         case "calendar": calendarReadiness()
         case "notchShelf": shelfReadiness()
         case "clipboard": clipboardReadiness()
+        case "textUtilities":
+            .ready("Text expansion and clipboard utilities are ready.")
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)

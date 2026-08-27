@@ -69,4 +69,15 @@ import Testing
         #expect(TextUtilitiesSupport.clampedAutoClearDelay(0) == 5)
         #expect(TextUtilitiesSupport.clampedAutoClearDelay(10_000) == 3_600)
     }
+
+    @Test func URLCleaningOnlyRewritesPlainURLPasteboards() {
+        #expect(TextUtilitiesSupport.canRewritePasteboard(types: ["public.utf8-plain-text"]))
+        #expect(
+            TextUtilitiesSupport.canRewritePasteboard(
+                types: ["public.utf8-plain-text", "public.url"]))
+        #expect(
+            !TextUtilitiesSupport.canRewritePasteboard(
+                types: ["public.utf8-plain-text", "public.rtf"]))
+        #expect(!TextUtilitiesSupport.canRewritePasteboard(types: []))
+    }
 }
