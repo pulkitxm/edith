@@ -33,10 +33,10 @@ enables immediately and reports missing grants in plain text or JSON.
 | `ed extensions enable <id>` | Turns one on, and names on stderr any required permission still missing |
 | `ed extensions disable <id>` | Turns one off |
 | `ed extensions info <id>` | Describes one: name, summary, key, group, state, permissions |
-| `ed extensions status [id]` | Summarises readiness for one extension or all seventeen |
+| `ed extensions status [id]` | Summarises readiness for one extension or every registered extension |
 | `ed extensions setup <id>` | Enables one and reports the setup that remains |
 | `ed extensions verify <id>` | Runs every readiness check for one extension |
-| `ed extensions doctor [id]` | Diagnoses one extension or all seventeen, with recovery commands |
+| `ed extensions doctor [id]` | Diagnoses one extension or every registered extension, with recovery commands |
 
 The Extensions pane and each extension settings modal use these same typed read
 operations. Marketplace browsing maps to `ls`, opening a modal maps to `info`,
@@ -52,7 +52,7 @@ operations as their command-line equivalents.
 ## The registry
 
 `ExtensionRegistry.entries` in EdithKit is the single list every command here
-walks, and its order is the order `ls` prints. Seventeen entries, in this order:
+walks, and its order is the order `ls` prints. Every current entry appears here:
 
 | ID | Name | Group | What it does |
 | --- | --- | --- | --- |
@@ -61,6 +61,7 @@ walks, and its order is the order `ls` prints. Seventeen entries, in this order:
 | `herdr` | Herdr | Agent | Live Herdr sessions on this Mac and your SSH machines |
 | `quinjet` | Quinjet | Agent | Pull request and live workspace review in a native terminal |
 | `system` | System | System | Running apps, prevent sleep, and the keyboard-cleaning lock |
+| `appMaintenance` | App Maintenance | System | Inventory, verify, install, and remove macOS applications safely |
 | `machines` | Machines | System | Your other computers over SSH: stats, files, Docker, and a terminal |
 | `companion` | Companion | Agent | Your notes, voice memos and activity, remembered and searchable |
 | `systemStats` | CPU & Memory in menu bar | System | Live CPU and memory readout as a menu bar item |
@@ -70,13 +71,17 @@ walks, and its order is the order `ls` prints. Seventeen entries, in this order:
 | `calendar` | Calendar | Media | Shows your schedule in the panel and the app |
 | `notchShelf` | Notch Shelf | Media | File shelf, now playing, camera, and alerts around the notch |
 | `clipboard` | Clipboard | Utilities | Clipboard history with instant paste |
+| `finderTools` | Finder Tools | Utilities | Cut and paste, quick rename, image paste, and disk image installation in Finder |
 | `focusDim` | Focus Dim | Utilities | Dims everything behind your active app |
 | `presenter` | Presenter | Utilities | Blurs sensitive numbers while sharing your screen |
+| `emoji` | Emoji Picker | Utilities | Search and insert emoji from a global shortcut |
 | `colorPicker` | Color Picker | Utilities | System loupe on a hotkey, sampled color to your clipboard |
+| `windowTools` | Window Tools | Utilities | Snap, center, maximize, and restore the active window |
+| `radialLauncher` | Radial Launcher | Utilities | Pointer-centered wheel for apps, files, links, shortcuts, controls, and Edith actions |
 
-The same seventeen, with what each one is made of. `Key` is the preference the app
+The same registry, with what each entry is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the
-eight the welcome tour shows before you ask it for all of them.
+entries the welcome tour shows before you ask it for all of them.
 
 | ID | Key | Featured | Required permissions | Optional permissions | Required tools | Optional tools |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -85,6 +90,7 @@ eight the welcome tour shows before you ask it for all of them.
 | `herdr` | `tabHerdrEnabled` | yes | none | none | none | none |
 | `quinjet` | `tabQuinjetEnabled` | yes | none | none | `quinjet` | none |
 | `system` | `tabSystemEnabled` | yes | none | `accessibility`, `inputMonitoring` | none | none |
+| `appMaintenance` | `appMaintenanceEnabled` | yes | none | none | none | none |
 | `machines` | `tabMachinesEnabled` | yes | none | `notifications` | none | none |
 | `companion` | `tabCompanionEnabled` | no | none | none | none | none |
 | `systemStats` | `menuBarSystemStats` | no | none | none | none | none |
@@ -94,9 +100,13 @@ eight the welcome tour shows before you ask it for all of them.
 | `calendar` | `tabCalendarEnabled` | no | `calendar` | none | none | none |
 | `notchShelf` | `notchShelfEnabled` | yes | none | `applicationAudio`, `bluetooth`, `camera`, `automation` | none | none |
 | `clipboard` | `clipboardEnabled` | yes | none | `accessibility` | none | none |
+| `finderTools` | `finderToolsEnabled` | no | `accessibility` | `automation` | none | none |
 | `focusDim` | `focusDimEnabled` | no | `screenRecording` | none | none | none |
 | `presenter` | `presenterEnabled` | no | `screenRecording` | none | none | none |
+| `emoji` | `emojiEnabled` | no | none | `accessibility` | none | none |
 | `colorPicker` | `colorPickerEnabled` | no | `screenRecording` | none | none | none |
+| `windowTools` | `windowToolsEnabled` | no | `accessibility` | none | none | none |
+| `radialLauncher` | `radialLauncherEnabled` | yes | none | `accessibility` | none | none |
 
 The JSON form also exposes the platform capability registry. Capabilities are
 not permission ids. They say which implementation an extension requires from
@@ -109,6 +119,7 @@ the current platform, and which missing implementations merely degrade it:
 | `herdr` | `herdrSessions` | none |
 | `quinjet` | `localTerminal` | none |
 | `system` | `runningApplications` | `preventSleep`, `inputSuppression` |
+| `appMaintenance` | `runningApplications` | none |
 | `machines` | `machineManagement` | `notifications` |
 | `companion` | `companionService` | none |
 | `systemStats` | `systemMetrics` | none |
@@ -118,9 +129,13 @@ the current platform, and which missing implementations merely degrade it:
 | `calendar` | `calendarEvents` | none |
 | `notchShelf` | `fileShelf` | `applicationAudio`, `bluetoothMonitoring`, `cameraPreview`, `externalMediaControl` |
 | `clipboard` | `clipboardHistory` | `globalPaste`, `globalShortcuts` |
+| `finderTools` | `globalShortcuts`, `runningApplications` | none |
 | `focusDim` | `windowDimming` | none |
 | `presenter` | `screenShareDetection` | none |
+| `emoji` | `emojiInsertion` | `globalShortcuts` |
 | `colorPicker` | `screenColorSampling` | `globalShortcuts` |
+| `windowTools` | `windowManagement` | `globalShortcuts` |
+| `radialLauncher` | `globalShortcuts` | `mediaControls` |
 
 An id is matched exactly and case-insensitively against the `ID` column first,
 then against the `Key` column, so `ed extensions info clipboard`,
