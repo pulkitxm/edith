@@ -577,7 +577,7 @@ private struct ExtensionSettingsSheet: View {
         case "music": 460
         case "focusDim", "colorPicker": 430
         case "system": 500
-        case "notchShelf", "presenter": 580
+        case "notchShelf", "presenter", "windowTools": 580
         default: 620
         }
     }
@@ -932,6 +932,7 @@ private struct ExtensionDetailRows: View {
             case .focusDim: FocusDimRows()
             case .presenter: PresenterRows()
             case .colorPicker: ColorPickerRows()
+            case .windowTools: WindowToolsRows()
             }
         } else {
             Section("Controls") {

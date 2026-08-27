@@ -85,6 +85,23 @@ public enum AppStorageKeys {
         public static let otherDisplaysMode = "focusDimOtherDisplaysMode"
     }
 
+    public enum WindowTools {
+        public static let enabled = "windowToolsEnabled"
+        public static let greenButtonMaximizes = "windowToolsGreenButtonMaximizes"
+        public static let leftHotKeyCode = "windowToolsLeftHotKeyCode"
+        public static let leftHotKeyLabel = "windowToolsLeftHotKeyLabel"
+        public static let leftHotKeyMods = "windowToolsLeftHotKeyMods"
+        public static let maximizeHotKeyCode = "windowToolsMaximizeHotKeyCode"
+        public static let maximizeHotKeyLabel = "windowToolsMaximizeHotKeyLabel"
+        public static let maximizeHotKeyMods = "windowToolsMaximizeHotKeyMods"
+        public static let restoreHotKeyCode = "windowToolsRestoreHotKeyCode"
+        public static let restoreHotKeyLabel = "windowToolsRestoreHotKeyLabel"
+        public static let restoreHotKeyMods = "windowToolsRestoreHotKeyMods"
+        public static let rightHotKeyCode = "windowToolsRightHotKeyCode"
+        public static let rightHotKeyLabel = "windowToolsRightHotKeyLabel"
+        public static let rightHotKeyMods = "windowToolsRightHotKeyMods"
+    }
+
     public enum Herdr {
         public static let agentViews = "herdrAgentViews"
         public static let ghosttyTerminal = "herdrGhosttyTerminal"

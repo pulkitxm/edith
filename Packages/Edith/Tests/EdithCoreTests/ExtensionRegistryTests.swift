@@ -20,5 +20,6 @@ import Testing
         #expect(requiredByExtension["music"]?.isEmpty == true)
         #expect(optionalByExtension["music"] == ["yt-dlp"])
         #expect(requiredByExtension["quinjet"] == ["quinjet"])
+        #expect(requiredByExtension["windowTools"]?.isEmpty == true)
     }
 }
