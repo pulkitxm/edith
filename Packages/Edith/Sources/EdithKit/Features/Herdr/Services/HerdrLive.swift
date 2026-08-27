@@ -147,31 +147,29 @@ public enum HerdrLive {
             return
         }
 
-        while !Task.isCancelled {
-            let stream: HerdrSocketClient
+        let stream: HerdrSocketClient
+        do {
+            stream = try connect(socket.path)
+        } catch {
+            fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
+            return
+        }
+        await withTaskCancellationHandler {
+            defer { stream.close() }
             do {
-                stream = try connect(socket.path)
+                let events = stream.events
+                try await stream.subscribeBoard()
+                for await line in events {
+                    fleet.put(sessions.applyEvent(session: socket.name, text: line))
+                }
             } catch {
                 fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
-                return
             }
-            await withTaskCancellationHandler {
-                defer { stream.close() }
-                do {
-                    let events = stream.events
-                    try await stream.subscribeBoard()
-                    for await line in events {
-                        fleet.put(sessions.applyEvent(session: socket.name, text: line))
-                    }
-                } catch {
-                    fleet.put(
-                        sessions.failed(session: socket.name, error: error.localizedDescription))
-                }
-            } onCancel: {
-                stream.close()
-            }
-            try? await Task.sleep(for: fallbackSnapshotDelay)
-            guard !Task.isCancelled else { return }
+        } onCancel: {
+            stream.close()
+        }
+
+        while !Task.isCancelled {
             do {
                 fleet.put(
                     sessions.applySnapshot(
@@ -180,6 +178,7 @@ public enum HerdrLive {
             } catch {
                 fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
             }
+            try? await Task.sleep(for: fallbackSnapshotDelay)
         }
     }
 
