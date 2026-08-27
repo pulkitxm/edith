@@ -24,6 +24,7 @@ import Testing
         "focusDimEnabled",
         "presenterEnabled",
         "colorPickerEnabled",
+        "windowToolsEnabled",
     ]
 
     @Test func registryIdentifiersAreUnique() {
@@ -234,6 +235,7 @@ import Testing
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
             "colorPicker": [.screenRecording],
+            "windowTools": [.accessibility],
         ]
         let optional: [String: [ExtensionPermission]] = [
             "attention": [],
@@ -253,6 +255,7 @@ import Testing
             "focusDim": [],
             "presenter": [],
             "colorPicker": [],
+            "windowTools": [],
         ]
 
         let identifiers = Set(ExtensionRegistry.entries.map(\.id))

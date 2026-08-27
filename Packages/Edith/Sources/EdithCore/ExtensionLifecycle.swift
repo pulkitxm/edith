@@ -689,6 +689,41 @@ public enum ExtensionLifecycleCatalog {
                     "history", "Read sampled colors",
                     "Confirm the color history repository responds.", "ed color ls --json")
             ]),
+        descriptor(
+            "windowTools", "Arrange the active window quickly while staying in the current Space.",
+            workflows: [
+                instruction(
+                    "arrange", "Arrange a window",
+                    "Use a shortcut, settings control, or command to place the active window."),
+                instruction(
+                    "maximize", "Maximize without a Space",
+                    "Make the green button fill the usable display and click it again to restore."),
+            ],
+            prerequisites: [
+                instruction(
+                    "permission", "Grant Accessibility",
+                    "Accessibility lets Edith read and move the active window.",
+                    "ed permissions request accessibility")
+            ],
+            examples: [
+                "ed extensions enable windowTools", "ed window left-half --json",
+                "ed window restore",
+            ],
+            docs: [
+                documentation("guide", "Window Tools guide", "docs/cli/window/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "permission", "Refresh Accessibility",
+                    "Refresh the mirrored grant after changing System Settings.",
+                    "ed permissions refresh")
+            ],
+            verification: [
+                instruction(
+                    "config", "Inspect Window Tools settings",
+                    "Confirm the extension, green button, and shortcuts are configured.",
+                    "ed config ls --group windowtools --json")
+            ]),
     ]
 
     public static let byID = Dictionary(uniqueKeysWithValues: descriptors.map { ($0.id, $0) })

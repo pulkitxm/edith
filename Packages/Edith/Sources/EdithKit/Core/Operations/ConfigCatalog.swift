@@ -50,15 +50,16 @@ public enum ConfigCatalog {
         "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
         "calendar",
         "clipboard",
-        "notch", "focusdim", "presenter", "colorpicker", "micmute", "backup", "permissions",
-        "terminal",
+        "notch", "focusdim", "windowtools", "presenter", "colorpicker", "micmute", "backup",
+        "permissions", "terminal",
     ]
 
     public static let settings: [SettingDefinition] =
         appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
         + system + cleaner
-        + music + calendar + clipboard + notch + focusDim + presenter + colorPicker + micMute
+        + music + calendar + clipboard + notch + focusDim + windowTools + presenter + colorPicker
+        + micMute
         + backup + permissions + terminal
 
     public static var keys: [String] { settings.map(\.key) }
@@ -728,6 +729,52 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.FocusDim.hotKeyLabel, .string, group: "focusdim",
             summary: "Printable label for the focus dim shortcut."),
+    ]
+
+    private static let windowTools: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.WindowTools.enabled, .bool, group: "windowtools",
+            summary: "Window Tools extension: arrange the active window.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.WindowTools.greenButtonMaximizes, .bool, group: "windowtools",
+            summary: "Make the green window button maximize without another Space.",
+            fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.WindowTools.leftHotKeyCode, .int, group: "windowtools",
+            summary: "Virtual key code of the left-half shortcut.", fallback: .int(123)),
+        SettingDefinition(
+            AppStorageKeys.WindowTools.leftHotKeyMods, .int, group: "windowtools",
+            summary: "Carbon modifier mask of the left-half shortcut.", fallback: .int(6144)),
+        SettingDefinition(
+            AppStorageKeys.WindowTools.leftHotKeyLabel, .string, group: "windowtools",
+            summary: "Printable label for the left-half shortcut.", fallback: .string("⌃⌥←")),
+        SettingDefinition(
+            AppStorageKeys.WindowTools.rightHotKeyCode, .int, group: "windowtools",
+            summary: "Virtual key code of the right-half shortcut.", fallback: .int(124)),
+        SettingDefinition(
+            AppStorageKeys.WindowTools.rightHotKeyMods, .int, group: "windowtools",
+            summary: "Carbon modifier mask of the right-half shortcut.", fallback: .int(6144)),
+        SettingDefinition(
+            AppStorageKeys.WindowTools.rightHotKeyLabel, .string, group: "windowtools",
+            summary: "Printable label for the right-half shortcut.", fallback: .string("⌃⌥→")),
+        SettingDefinition(
+            AppStorageKeys.WindowTools.maximizeHotKeyCode, .int, group: "windowtools",
+            summary: "Virtual key code of the maximize shortcut.", fallback: .int(46)),
+        SettingDefinition(
+            AppStorageKeys.WindowTools.maximizeHotKeyMods, .int, group: "windowtools",
+            summary: "Carbon modifier mask of the maximize shortcut.", fallback: .int(6144)),
+        SettingDefinition(
+            AppStorageKeys.WindowTools.maximizeHotKeyLabel, .string, group: "windowtools",
+            summary: "Printable label for the maximize shortcut.", fallback: .string("⌃⌥M")),
+        SettingDefinition(
+            AppStorageKeys.WindowTools.restoreHotKeyCode, .int, group: "windowtools",
+            summary: "Virtual key code of the restore shortcut.", fallback: .int(15)),
+        SettingDefinition(
+            AppStorageKeys.WindowTools.restoreHotKeyMods, .int, group: "windowtools",
+            summary: "Carbon modifier mask of the restore shortcut.", fallback: .int(6144)),
+        SettingDefinition(
+            AppStorageKeys.WindowTools.restoreHotKeyLabel, .string, group: "windowtools",
+            summary: "Printable label for the restore shortcut.", fallback: .string("⌃⌥R")),
     ]
 
     private static let presenter: [SettingDefinition] = [
