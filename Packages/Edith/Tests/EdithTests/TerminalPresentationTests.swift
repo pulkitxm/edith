@@ -131,4 +131,30 @@ import Testing
 
         #expect(first === second)
     }
+
+    @Test func ghosttyIsTheDefaultTerminalWithAnExplicitFallback() {
+        let key = AppStorageKeys.Herdr.ghosttyTerminal
+        let previous = SharedDefaults.store.object(forKey: key)
+        defer {
+            if let previous {
+                SharedDefaults.store.set(previous, forKey: key)
+            } else {
+                SharedDefaults.store.removeObject(forKey: key)
+            }
+        }
+
+        SharedDefaults.store.removeObject(forKey: key)
+        #expect(GhosttyTerminals.enabled)
+        SharedDefaults.store.set(false, forKey: key)
+        #expect(!GhosttyTerminals.enabled)
+    }
+
+    @Test func ghosttyRendersOnlyWhileItsSurfaceIsVisible() {
+        #expect(GhosttyTerminalView.shouldRender(active: true, hidden: false, windowVisible: true))
+        #expect(
+            !GhosttyTerminalView.shouldRender(active: false, hidden: false, windowVisible: true))
+        #expect(!GhosttyTerminalView.shouldRender(active: true, hidden: true, windowVisible: true))
+        #expect(
+            !GhosttyTerminalView.shouldRender(active: true, hidden: false, windowVisible: false))
+    }
 }

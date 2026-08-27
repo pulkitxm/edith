@@ -4,14 +4,32 @@ import GhosttyKit
 public final class GhosttyTerminalView: NSView {
     public var onClose: (() -> Void)?
     public var onDropFiles: ((TerminalDropPayload) -> Bool)?
+    public var onTitleChange: ((String) -> Void)?
+    public var onWorkingDirectoryChange: ((String) -> Void)?
 
     private(set) var surface: ghostty_surface_t?
+    public internal(set) var currentDirectory: String?
+    public internal(set) var hoveredLink: String?
     private var launch: GhosttyLaunch?
     private var theme: GhosttyTheme?
     private var themeConfig: ghostty_config_t?
     private var owned: GhosttyConfigStrings?
+    var temporaryDropFiles = Set<URL>()
     private var closed = false
     private var drawScheduled = false
+    private var renderingActive = true
+    var terminalCursor = NSCursor.iBeam
+    var cursorHidden = false
+    var commandClickReleaseActive = false
+    var commandClickOpenedTarget = false
+    var lastMousePoint: NSPoint?
+    let linkHoverView = TerminalLinkHoverView(frame: .zero)
+    let searchBar = TerminalSearchBar(frame: .zero)
+    let progressStrip = TerminalProgressStrip(frame: .zero)
+    var searchTotal: Int?
+    var searchSelected: Int?
+    let markedText = NSMutableAttributedString()
+    var keyTextAccumulator: [String]?
 
     public override var isFlipped: Bool { false }
 
@@ -29,8 +47,9 @@ public final class GhosttyTerminalView: NSView {
         var text = ghostty_text_s()
         guard ghostty_surface_read_selection(surface, &text) else { return nil }
         defer { ghostty_surface_free_text(surface, &text) }
-        guard let raw = text.text else { return nil }
-        return String(cString: raw)
+        guard let raw = text.text, text.text_len > 0 else { return nil }
+        return String(
+            decoding: UnsafeRawBufferPointer(start: raw, count: Int(text.text_len)), as: UTF8.self)
     }
 
     @discardableResult
@@ -52,15 +71,40 @@ public final class GhosttyTerminalView: NSView {
     public init(launch: GhosttyLaunch, theme: GhosttyTheme? = nil) {
         self.launch = launch
         self.theme = theme
+        currentDirectory = launch.workingDirectory
         super.init(frame: .zero)
         wantsLayer = true
         registerForDraggedTypes(Array(Self.dropTypes))
+        addSubview(linkHoverView)
+        searchBar.translatesAutoresizingMaskIntoConstraints = false
+        progressStrip.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(searchBar)
+        addSubview(progressStrip)
+        NSLayoutConstraint.activate([
+            searchBar.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            searchBar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            progressStrip.topAnchor.constraint(equalTo: topAnchor),
+            progressStrip.leadingAnchor.constraint(equalTo: leadingAnchor),
+            progressStrip.trailingAnchor.constraint(equalTo: trailingAnchor),
+            progressStrip.heightAnchor.constraint(equalToConstant: 3),
+        ])
+        searchBar.onQuery = { [weak self] query in
+            _ = self?.performBindingAction("search:\(query)")
+        }
+        searchBar.onNavigate = { [weak self] previous in
+            _ = self?.performBindingAction(
+                previous ? "navigate_search:previous" : "navigate_search:next")
+        }
+        searchBar.onClose = { [weak self] in
+            _ = self?.performBindingAction("end_search")
+        }
         GhosttySurfaceRegistry.shared.register(self)
     }
 
     required init?(coder: NSCoder) { nil }
 
     deinit {
+        if cursorHidden { NSCursor.unhide() }
         shutdown()
         GhosttySurfaceRegistry.shared.unregister(self)
     }
@@ -75,12 +119,15 @@ public final class GhosttyTerminalView: NSView {
             self.themeConfig = nil
         }
         owned = nil
+        TerminalDropPayload(files: [], temporaryFiles: temporaryDropFiles).removeTemporaryFiles()
+        temporaryDropFiles.removeAll()
     }
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard window != nil else { return }
         startIfNeeded()
+        applyPresentationState()
     }
 
     private func startIfNeeded() {
@@ -116,6 +163,7 @@ public final class GhosttyTerminalView: NSView {
             surface, config.scale_factor, config.scale_factor)
         applySize()
         ghostty_surface_set_focus(surface, window?.firstResponder === self)
+        applyPresentationState()
     }
 
     public func apply(theme newTheme: GhosttyTheme) {
@@ -169,6 +217,49 @@ public final class GhosttyTerminalView: NSView {
         let scale = window?.backingScaleFactor ?? 2
         ghostty_surface_set_content_scale(surface, scale, scale)
         applySize()
+        applyPresentationState()
+    }
+
+    public override func viewDidHide() {
+        super.viewDidHide()
+        applyPresentationState()
+    }
+
+    public override func viewDidUnhide() {
+        super.viewDidUnhide()
+        applyPresentationState()
+    }
+
+    public func setRenderingActive(_ active: Bool) {
+        guard renderingActive != active else { return }
+        renderingActive = active
+        applyPresentationState()
+    }
+
+    private func applyPresentationState() {
+        guard let surface else { return }
+        let visible = Self.shouldRender(
+            active: renderingActive, hidden: isHidden, windowVisible: window != nil)
+        ghostty_surface_set_occlusion(surface, visible)
+        if let number = window?.screen?.deviceDescription[.init("NSScreenNumber")] as? NSNumber {
+            ghostty_surface_set_display_id(surface, number.uint32Value)
+        }
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        ghostty_surface_set_color_scheme(
+            surface, dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
+    }
+
+    static func shouldRender(active: Bool, hidden: Bool, windowVisible: Bool) -> Bool {
+        active && !hidden && windowVisible
+    }
+
+    public override func layout() {
+        super.layout()
+        linkHoverView.frame = bounds
+    }
+
+    public override func resetCursorRects() {
+        addCursorRect(bounds, cursor: terminalCursor)
     }
 
     public override func becomeFirstResponder() -> Bool {

@@ -36,6 +36,13 @@ final class GhosttySurfaceRegistry {
         view(userdata)?.surface
     }
 
+    func view(_ target: ghostty_target_s) -> GhosttyTerminalView? {
+        guard target.tag == GHOSTTY_TARGET_SURFACE, let surface = target.target.surface else {
+            return nil
+        }
+        return view(ghostty_surface_userdata(surface))
+    }
+
     func render(_ target: ghostty_target_s) {
         guard target.tag == GHOSTTY_TARGET_SURFACE else { return }
         guard let surface = target.target.surface else { return }
