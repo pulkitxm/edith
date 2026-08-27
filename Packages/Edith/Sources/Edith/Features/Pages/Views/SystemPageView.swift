@@ -189,16 +189,23 @@ struct SystemPage: View {
     }
 
     private func percent(_ value: Double?) -> String {
-        value.map { String(format: "%.0f%%", $0) } ?? "Unavailable"
+        guard let value else { return "Unavailable" }
+        return String(format: "%.0f%%", value)
     }
 
     private var batteryValue: String {
-        monitorSnapshot?.battery.map { "\($0.percent)%" } ?? "No battery"
+        guard let battery = monitorSnapshot?.battery else { return "No battery" }
+        return "\(battery.percent)%"
     }
 
     private var batteryDetail: String {
         guard let battery = monitorSnapshot?.battery else { return "desktop power" }
-        let watts = battery.watts.map { String(format: " · %+.1f W", $0) } ?? ""
+        let watts: String
+        if let value = battery.watts {
+            watts = String(format: " · %+.1f W", value)
+        } else {
+            watts = ""
+        }
         return battery.status + watts
     }
 

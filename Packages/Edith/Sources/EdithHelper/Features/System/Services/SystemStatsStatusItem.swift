@@ -143,13 +143,26 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     }
 
     private func details(_ snapshot: SystemMonitorSnapshot) -> String {
-        let gpu = snapshot.gpuPercent.map { String(format: "%.0f%%", $0) } ?? "unavailable"
-        let storage =
-            snapshot.rootDiskUsedPercent.map { String(format: "%.0f%% used", $0) }
-            ?? "unavailable"
+        let gpu: String
+        if let value = snapshot.gpuPercent {
+            gpu = String(format: "%.0f%%", value)
+        } else {
+            gpu = "unavailable"
+        }
+        let storage: String
+        if let value = snapshot.rootDiskUsedPercent {
+            storage = String(format: "%.0f%% used", value)
+        } else {
+            storage = "unavailable"
+        }
         let battery: String
         if let value = snapshot.battery {
-            let watts = value.watts.map { String(format: " · %+.1f W", $0) } ?? ""
+            let watts: String
+            if let value = value.watts {
+                watts = String(format: " · %+.1f W", value)
+            } else {
+                watts = ""
+            }
             battery = "\(value.percent)% · \(value.status)\(watts)"
         } else {
             battery = "not installed"
@@ -192,7 +205,12 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         {
             SystemMonitorNotifier.send(.disk(snapshot.rootDiskUsedPercent ?? 0))
         }
-        let batteryValue = snapshot.battery.flatMap { $0.externalPower ? nil : Double($0.percent) }
+        let batteryValue: Double?
+        if let battery = snapshot.battery, !battery.externalPower {
+            batteryValue = Double(battery.percent)
+        } else {
+            batteryValue = nil
+        }
         if batteryAlert.evaluate(
             value: batteryValue,
             threshold: threshold(AppStorageKeys.MenuBar.statsBatteryThreshold, fallback: 20),

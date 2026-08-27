@@ -1,8 +1,8 @@
 # `ed system`
 
-`ed system` reports on the Mac you are typing on: a live CPU, memory, load and
-network sample, and the volumes that are mounted. It reads the machine directly
-through `sysctl`, the Mach host statistics, `/bin/ps` and `pmset`, so nothing
+`ed system` reports on the Mac you are typing on: live CPU, memory, GPU, load,
+network, disk, battery and power readings, and the volumes that are mounted. It
+reads the machine directly through native macOS APIs, so nothing
 here talks to the Edith app and nothing here needs it running. Reach for it when
 you want the numbers the app's This Mac view shows without opening a window, or
 when you want them on stdout as JSON.
@@ -15,7 +15,7 @@ same way.
 
 | Command | What it does |
 | --- | --- |
-| `ed system stats` | Samples CPU, memory, load, uptime, network and optionally the top processes. Streams with `--follow`. Runs when you type `ed system` with no subcommand. |
+| `ed system stats` | Samples CPU, memory, GPU, load, uptime, network, disk, battery, power and optionally the top processes. Streams with `--follow`. Runs when you type `ed system` with no subcommand. |
 | `ed system disks` | Lists mounted volumes, plus battery, temperature, fan, platform profile and GPU fields in JSON. |
 
 ## Commands
@@ -67,14 +67,12 @@ Neither command looks anything up by name and neither talks to the app, so 3 and
   pretty-printed document instead.
 - Object keys are sorted, in both the pretty and the compact form, so two runs
   diff cleanly.
-- `stats` is the same `LocalMachineSampler` the app drives for its This Mac
-  session, so the CLI and the window cannot disagree about a number. The window
-  samples every two seconds and refreshes its volume and battery half on every
-  fifteenth tick, about every thirty seconds; `ed system disks` reads it fresh
-  on every call.
-- The `systemStats` extension, the CPU and memory readout in the menu bar, is
-  unrelated to these commands. `ed system` never consults it, and both commands
-  work with every extension turned off.
+- `stats` combines the same `LocalMachineSampler` used for machine sessions with
+  the native `SystemMonitorSampler` used by the System page and menu bar helper.
+  The helper samples every two seconds, reads GPU utilization every ten seconds,
+  and refreshes battery and startup disk capacity about every thirty seconds.
+- The `systemStats` extension controls the menu bar readout and its sustained
+  alerts. `ed system` never requires the extension to be enabled.
 
 ## Where to go next
 
@@ -82,5 +80,5 @@ Neither command looks anything up by name and neither talks to the app, so 3 and
   over SSH, including the disk, steal and task fields this page reports as zero.
 - [`ed cleaner`](../cleaner/README.md) for acting on what `ed system disks` tells you
   about free space.
-- [`ed extensions`](../extensions/README.md) for the menu bar CPU and memory readout.
+- [`ed extensions`](../extensions/README.md) for the menu bar System Monitor and alerts.
 - [The `ed` command line](../README.md) for the rest of the reference.

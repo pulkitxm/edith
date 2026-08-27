@@ -22,7 +22,7 @@ quinjet      off    Agent      Quinjet
 system       on     System     System
 machines     on     System     Machines
 companion    off    Agent      Companion
-systemStats  off    System     CPU & Memory in menu bar
+systemStats  off    System     System Monitor
 micMute      off    System     Mic Mute
 lidAwake     off    System     Lid Awake
 music        off    Media      Music
