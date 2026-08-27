@@ -9,6 +9,7 @@ public enum ArgumentKind: Equatable, Sendable {
     case appLink
     case guideTopic
     case cleanerCategory
+    case homebrewKind
     case colorFormat
     case colorIndex
     case pruneTarget
@@ -667,6 +668,33 @@ public enum CommandTree {
                         optionValues: ["--category": .cleanerCategory],
                         destructivePolicy: .previewThenYes),
                     CommandNode("drives", "The volumes the cleaner can scan.", options: common),
+                ]),
+            CommandNode(
+                "brew", "Search and manage Homebrew formulae and casks.",
+                children: [
+                    CommandNode(
+                        "status", "Inspect the local Homebrew installation.", options: common),
+                    CommandNode(
+                        "ls", "List installed Homebrew packages.", aliases: ["list"],
+                        options: ["--json", "--help", "--kind", "--outdated"],
+                        optionValues: ["--kind": .homebrewKind]),
+                    CommandNode(
+                        "search", "Search available Homebrew packages.",
+                        options: ["--json", "--help", "--kind"],
+                        optionValues: ["--kind": .homebrewKind], arguments: [.free]),
+                    CommandNode(
+                        "install", "Install a Homebrew package.",
+                        options: ["--json", "--help", "--kind"],
+                        optionValues: ["--kind": .homebrewKind], arguments: [.free]),
+                    CommandNode(
+                        "upgrade", "Upgrade a Homebrew package.",
+                        options: ["--json", "--help", "--kind"],
+                        optionValues: ["--kind": .homebrewKind], arguments: [.free]),
+                    CommandNode(
+                        "uninstall", "Uninstall a Homebrew package.",
+                        options: ["--json", "--help", "--kind", "--yes"],
+                        optionValues: ["--kind": .homebrewKind], arguments: [.free],
+                        destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
                 "quinjet", "Discover and open Quinjet review workspaces.",

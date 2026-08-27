@@ -84,6 +84,10 @@ public enum CLIEnvironment {
         CLIToolEnvironment.executable(named: $0)
     }
 
+    nonisolated(unsafe) public static var homebrewClient: @Sendable () -> HomebrewClient = {
+        HomebrewClient()
+    }
+
     nonisolated(unsafe) public static var extensionToolReadiness:
         @Sendable (String) async -> ExtensionToolReadiness = { id in
             await ExtensionLifecycleProbeEnvironment.toolReadiness(
@@ -217,6 +221,7 @@ public enum CLIEnvironment {
         usageRefresh = UsageRefreshDriver.live
         installTool = { try await ToolInstaller().install($0, log: $1) }
         executableNamed = { CLIToolEnvironment.executable(named: $0) }
+        homebrewClient = { HomebrewClient() }
         extensionToolReadiness = { id in
             await ExtensionLifecycleProbeEnvironment.toolReadiness(
                 id, executableNamed: CLIEnvironment.executableNamed)
