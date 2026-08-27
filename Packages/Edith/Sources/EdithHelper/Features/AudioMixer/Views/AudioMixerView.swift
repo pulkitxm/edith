@@ -84,10 +84,11 @@ private struct AudioMixerView: View {
                         }
                     }
                 } label: {
-                    Text(outputName(app))
+                    Text(engine.serviceEnabled ? outputName(app) : "Turn on Audio Controls")
                         .lineLimit(1)
                 }
                 .menuStyle(.borderlessButton)
+                .disabled(!engine.serviceEnabled)
                 Spacer()
             }
             .font(.system(size: 10))

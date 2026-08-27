@@ -15,6 +15,7 @@ import Testing
         "tabMachinesEnabled",
         "tabCompanionEnabled",
         "menuBarSystemStats",
+        "audioControlsEnabled",
         "micMuteEnabled",
         "lidAwakeEnabled",
         "tabMusicEnabled",
@@ -35,8 +36,8 @@ import Testing
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
-                "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
-                "clipboard", "focusDim", "presenter", "colorPicker",
+                "systemStats", "micMute", "lidAwake", "music", "audioControls", "calendar",
+                "notchShelf", "clipboard", "focusDim", "presenter", "colorPicker",
             ])
     }
 
@@ -149,7 +150,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard",
+                "clipboard", "audioControls",
             ])
     }
 
@@ -234,6 +235,7 @@ import Testing
             "machines": [],
             "companion": [],
             "systemStats": [],
+            "audioControls": [],
             "micMute": [],
             "lidAwake": [],
             "music": [],
@@ -253,6 +255,7 @@ import Testing
             "machines": [.notifications],
             "companion": [],
             "systemStats": [],
+            "audioControls": [.applicationAudio],
             "micMute": [],
             "lidAwake": [],
             "music": [],

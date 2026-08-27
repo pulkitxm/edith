@@ -529,7 +529,7 @@ public enum ExtensionLifecycleCatalog {
             ],
             examples: [
                 "ed extensions enable audioControls", "ed audio status --json",
-                "ed audio input system", "ed audio output \"MacBook Pro Speakers\"",
+                "ed audio input system", "ed audio output BuiltInSpeakerDevice",
             ],
             docs: [documentation("guide", "Audio Controls guide", "docs/cli/audio/README.md")],
             recovery: [

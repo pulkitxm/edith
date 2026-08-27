@@ -293,7 +293,7 @@ private final class AudioMixerTapProbe: AudioMixerTapControlling {
 
         defaults.set(
             [app.bundleID: output.uid], forKey: AppStorageKeys.Audio.appOutputRoutes)
-        engine.refresh()
+        engine.startService()
 
         #expect(targets == ["output-b"])
         #expect(engine.apps.first?.outputUID == "output-b")
@@ -323,6 +323,43 @@ private final class AudioMixerTapProbe: AudioMixerTapControlling {
         engine.stopService()
         #expect(!engine.serviceEnabled)
         #expect(!engine.isMonitoring)
+    }
+
+    @Test func stoppingServiceRemovesRoutesAndPreservesIndependentVolume() throws {
+        guard #available(macOS 14.4, *) else { return }
+        let suite = "test.audio-mixer.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let app = mixerApp(objectID: 53)
+        let output = AudioDeviceDescriptor(
+            uid: "output-b", name: "Headphones", supportsInput: false, supportsOutput: true,
+            isDefaultInput: false, isDefaultOutput: false, isHeadphones: true)
+        var taps: [AudioMixerTapProbe] = []
+        var targets: [String] = []
+        let engine = MixerEngine(
+            snapshotLoader: {
+                AudioMixerSnapshot(apps: [app], outputUID: "output-a", outputs: [output])
+            },
+            tapFactory: { _, target, _ in
+                let tap = AudioMixerTapProbe()
+                taps.append(tap)
+                targets.append(target)
+                return .success(tap)
+            }, defaults: defaults)
+        defer { engine.shutdown() }
+
+        defaults.set(
+            [app.bundleID: output.uid], forKey: AppStorageKeys.Audio.appOutputRoutes)
+        engine.startService()
+        engine.setVolume(try #require(engine.apps.first), 0.4)
+        engine.stopService()
+
+        #expect(targets == ["output-b", "output-a"])
+        #expect(taps.first?.destroyCount == 1)
+        #expect(engine.apps.first?.outputUID == nil)
+        #expect(engine.apps.first?.volume == 0.4)
+        #expect(engine.hasActiveTaps)
+        #expect(engine.isMonitoring)
     }
 
     private func mixerApp(

@@ -318,9 +318,12 @@ final class MixerEngine {
 
     func stopService() {
         serviceEnabled = false
-        if visibleViewCount == 0 {
-            destroyAllTaps()
-            gains.removeAll()
+        destroyAllTaps()
+        for index in apps.indices { apps[index].outputUID = nil }
+        for app in apps where app.volume < 1 {
+            setVolume(app, app.volume)
+        }
+        if visibleViewCount == 0, taps.isEmpty {
             apps.removeAll()
         }
         reconcileMonitoring()
@@ -406,6 +409,11 @@ final class MixerEngine {
     }
 
     func setOutput(_ app: MixerApp, _ requestedUID: String?) {
+        guard serviceEnabled else {
+            actionError = "Turn on Audio Controls to route applications."
+            actionErrorObjectID = app.objectID
+            return
+        }
         guard apps.contains(where: { Self.sameProcess($0, app) }) else {
             actionError = "\(app.name) is no longer producing audio."
             actionErrorObjectID = app.objectID
@@ -465,7 +473,7 @@ final class MixerEngine {
         }
         outputUID = snapshot.outputUID
         outputDevices = snapshot.outputs
-        let routes = routeMap()
+        let routes = serviceEnabled ? routeMap() : [:]
 
         var previousApps: [AudioObjectID: MixerApp] = [:]
         for app in apps { previousApps[app.objectID] = app }
@@ -537,6 +545,7 @@ final class MixerEngine {
     }
 
     private func routeUID(for bundleID: String) -> String? {
+        guard serviceEnabled else { return nil }
         let uid = routeMap()[bundleID]
         return uid.flatMap { value in
             outputDevices.contains(where: { $0.uid == value }) ? value : nil
