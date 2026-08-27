@@ -131,4 +131,21 @@ import Testing
 
         #expect(first === second)
     }
+
+    @Test func ghosttyIsTheDefaultTerminalWithAnExplicitFallback() {
+        let key = AppStorageKeys.Herdr.ghosttyTerminal
+        let previous = SharedDefaults.store.object(forKey: key)
+        defer {
+            if let previous {
+                SharedDefaults.store.set(previous, forKey: key)
+            } else {
+                SharedDefaults.store.removeObject(forKey: key)
+            }
+        }
+
+        SharedDefaults.store.removeObject(forKey: key)
+        #expect(GhosttyTerminals.enabled)
+        SharedDefaults.store.set(false, forKey: key)
+        #expect(!GhosttyTerminals.enabled)
+    }
 }
