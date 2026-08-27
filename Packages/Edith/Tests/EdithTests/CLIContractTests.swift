@@ -78,6 +78,7 @@ enum JSONContract {
         JSONCase(
             "ed text clean-url",
             ["text", "clean-url", "https://example.com/?utm_source=x", "--json"]),
+        JSONCase("ed text status", ["text", "status", "--json"]),
         JSONCase(
             "ed text paste-plain", ["text", "paste-plain", "--json"],
             mutatesTheMachine: true),

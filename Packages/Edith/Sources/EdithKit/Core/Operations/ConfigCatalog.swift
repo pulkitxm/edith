@@ -666,6 +666,17 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.TextUtilities.clearOnSleep, .bool, group: "text",
             summary: "Clear clipboard contents before the Mac sleeps."),
+        SettingDefinition(
+            AppStorageKeys.TextUtilities.hotKeyCode, .int, group: "text",
+            summary: "Virtual key code of the plain-text paste shortcut.", fallback: .int(9)),
+        SettingDefinition(
+            AppStorageKeys.TextUtilities.hotKeyMods, .int, group: "text",
+            summary: "Carbon modifier mask of the plain-text paste shortcut.",
+            fallback: .int(6_400)),
+        SettingDefinition(
+            AppStorageKeys.TextUtilities.hotKeyLabel, .string, group: "text",
+            summary: "Printable label of the plain-text paste shortcut.",
+            fallback: .string("⌃⌥⌘V")),
     ]
 
     private static let notch: [SettingDefinition] = [

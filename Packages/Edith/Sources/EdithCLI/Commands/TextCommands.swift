@@ -6,8 +6,9 @@ struct TextCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "text", abstract: "Expand, clean, and protect text and links.",
         subcommands: [
-            TextCleanURLCommand.self, TextPastePlainCommand.self, TextSnippetsCommand.self,
-        ])
+            TextStatusCommand.self, TextCleanURLCommand.self, TextPastePlainCommand.self,
+            TextSnippetsCommand.self,
+        ], defaultSubcommand: TextStatusCommand.self)
 }
 
 enum TextCLI {
@@ -70,6 +71,57 @@ enum TextCLI {
             throw CLIFailure.usage("snippet replacements cannot be empty")
         }
         return (name, trigger, replacement)
+    }
+}
+
+struct TextStatusCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "status", abstract: "Show Text Utilities settings and saved snippet count.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let defaults = CLIEnvironment.sharedDefaults
+            let fields: [String: JSONValue] = [
+                "enabled": .bool(defaults.bool(forKey: AppStorageKeys.TextUtilities.enabled)),
+                "snippetsEnabled": .bool(
+                    defaults.object(forKey: AppStorageKeys.TextUtilities.snippetsEnabled) as? Bool
+                        ?? true),
+                "snippetCount": .int(TextCLI.snippets.count),
+                "cleanCopiedURLs": .bool(
+                    defaults.bool(forKey: AppStorageKeys.TextUtilities.cleanCopiedURLs)),
+                "autoClearEnabled": .bool(
+                    defaults.bool(forKey: AppStorageKeys.TextUtilities.autoClearEnabled)),
+                "autoClearDelay": .int(
+                    TextUtilitiesSupport.clampedAutoClearDelay(
+                        defaults.object(forKey: AppStorageKeys.TextUtilities.autoClearDelay) as? Int
+                            ?? TextUtilitiesSupport.defaultAutoClearDelay)),
+                "clearOnLock": .bool(
+                    defaults.bool(forKey: AppStorageKeys.TextUtilities.clearOnLock)),
+                "clearOnSleep": .bool(
+                    defaults.bool(forKey: AppStorageKeys.TextUtilities.clearOnSleep)),
+                "shortcut": .string(
+                    defaults.string(forKey: AppStorageKeys.TextUtilities.hotKeyLabel) ?? "⌃⌥⌘V"),
+            ]
+            guard !json else {
+                CLIOut.json(.object(fields))
+                return
+            }
+            CLIOut.out(
+                TextTable.render(
+                    headers: ["EXTENSION", "SNIPPETS", "CLEAN URLS", "AUTO CLEAR", "SHORTCUT"],
+                    rows: [[
+                        defaults.bool(forKey: AppStorageKeys.TextUtilities.enabled) ? "on" : "off",
+                        String(TextCLI.snippets.count),
+                        defaults.bool(forKey: AppStorageKeys.TextUtilities.cleanCopiedURLs)
+                            ? "on" : "off",
+                        defaults.bool(forKey: AppStorageKeys.TextUtilities.autoClearEnabled)
+                            ? "on" : "off",
+                        defaults.string(forKey: AppStorageKeys.TextUtilities.hotKeyLabel) ?? "⌃⌥⌘V",
+                    ]]))
+        }
     }
 }
 

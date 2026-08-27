@@ -557,6 +557,9 @@ public enum CommandTree {
                 "text", "Expand, clean, and protect text and links.",
                 children: [
                     CommandNode(
+                        "status", "Show Text Utilities settings and saved snippet count.",
+                        options: common),
+                    CommandNode(
                         "clean-url", "Remove tracking parameters from a URL.",
                         options: ["--json", "--help", "--parameters"], arguments: [.free]),
                     CommandNode(

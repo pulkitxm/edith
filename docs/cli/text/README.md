@@ -26,6 +26,7 @@ Text Utilities does not create a second polling loop.
 
 | Command | What it does |
 | --- | --- |
+| `ed text status` | Show extension settings and the saved snippet count |
 | `ed text clean-url <url>` | Remove known tracking query parameters |
 | `ed text paste-plain` | Ask the running helper to paste clipboard text without formatting |
 | `ed text snippets ls` | List saved snippets |
@@ -33,8 +34,9 @@ Text Utilities does not create a second polling loop.
 | `ed text snippets set <index>` | Change a snippet |
 | `ed text snippets rm <index>` | Preview removing a snippet, then apply with `--yes` |
 
-A bare `ed text snippets` runs `ed text snippets ls`. The list command also
-answers to `list`, and remove also answers to `remove`.
+A bare `ed text` runs `ed text status`. A bare `ed text snippets` runs
+`ed text snippets ls`. The list command also answers to `list`, and remove also
+answers to `remove`.
 
 ## Clean links
 

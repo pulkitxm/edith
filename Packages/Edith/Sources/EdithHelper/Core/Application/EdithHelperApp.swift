@@ -407,14 +407,15 @@ enum ClipboardHotKey {
 
 enum TextUtilitiesHotKey {
     static var code: Int {
-        SharedDefaults.store.object(forKey: "textUtilitiesHotKeyCode") as? Int ?? kVK_ANSI_V
+        SharedDefaults.store.object(forKey: AppStorageKeys.TextUtilities.hotKeyCode) as? Int
+            ?? kVK_ANSI_V
     }
     static var mods: Int {
-        SharedDefaults.store.object(forKey: "textUtilitiesHotKeyMods") as? Int
+        SharedDefaults.store.object(forKey: AppStorageKeys.TextUtilities.hotKeyMods) as? Int
             ?? (controlKey | optionKey | cmdKey)
     }
     static var label: String {
-        SharedDefaults.store.string(forKey: "textUtilitiesHotKeyLabel") ?? "⌃⌥⌘V"
+        SharedDefaults.store.string(forKey: AppStorageKeys.TextUtilities.hotKeyLabel) ?? "⌃⌥⌘V"
     }
 
     static func register() {

@@ -74,6 +74,9 @@ public enum AppStorageKeys {
         public static let autoClearDelay = "textUtilitiesAutoClearDelay"
         public static let clearOnLock = "textUtilitiesClearOnLock"
         public static let clearOnSleep = "textUtilitiesClearOnSleep"
+        public static let hotKeyCode = "textUtilitiesHotKeyCode"
+        public static let hotKeyMods = "textUtilitiesHotKeyMods"
+        public static let hotKeyLabel = "textUtilitiesHotKeyLabel"
     }
 
     public enum ColorPicker {

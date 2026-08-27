@@ -5,6 +5,23 @@ import Testing
 @testable import EdithKit
 
 @Suite(.serialized) struct CLITextUtilitiesTests {
+    @Test func statusIsTheSafeDefault() async {
+        await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.TextUtilities.enabled)
+            let snippet = TextSnippet(name: "Signature", trigger: ";sig", replacement: "Thanks")
+            world.shared.set(
+                TextUtilitiesSupport.encode([snippet]),
+                forKey: AppStorageKeys.TextUtilities.snippets)
+            let explicit = await CLIProbe.capture(["text", "status", "--json"])
+            let implicit = await CLIProbe.capture(["text", "--json"])
+
+            #expect(explicit.code == 0)
+            #expect(explicit.stdout == implicit.stdout)
+            #expect(explicit.object?["enabled"] as? Bool == true)
+            #expect(explicit.object?["snippetCount"] as? Int == 1)
+        }
+    }
+
     @Test func cleansTrackingParametersWithStableJSON() async {
         await CLIProbe.inWorld { _ in
             let result = await CLIProbe.capture([

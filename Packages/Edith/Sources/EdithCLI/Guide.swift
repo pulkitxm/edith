@@ -38,6 +38,8 @@ public enum Guide {
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler
         ed color copy 1 --format hex
+        ed text status              snippets, clean links and clipboard privacy
+        ed text clean-url <url>     remove tracking parameters from a link
         ed usage sources            the agents that produced your usage history
         ed schema                   JSON Schema for the config document
         ed version                  the CLI version, and whether the app is up
