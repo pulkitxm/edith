@@ -25,6 +25,8 @@ final class AppMaintenanceModel {
     var resultMessage: String?
     var installPlan: AppMaintenanceDiskImagePlan?
     private var task: Task<Void, Never>?
+    private var securityScopedURL: URL?
+    private var hasSecurityScopedAccess = false
 
     var selectedApplication: InstalledApplication? {
         applications.first { $0.id == selectedApplicationID }
@@ -128,17 +130,15 @@ final class AppMaintenanceModel {
 
     func prepareDiskImage(_ url: URL, destination: AppMaintenanceInstallDestination) {
         task?.cancel()
-        if let installPlan {
-            Task { await AppMaintenanceDiskImageInstaller.cancel(plan: installPlan) }
-        }
-        installPlan = nil
+        cancelInstallPlan()
         phase = .mounting
         errorMessage = nil
         resultMessage = nil
         task = Task {
             let accessing = url.startAccessingSecurityScopedResource()
+            var retainedAccess = false
             defer {
-                if accessing { url.stopAccessingSecurityScopedResource() }
+                if accessing, !retainedAccess { url.stopAccessingSecurityScopedResource() }
             }
             do {
                 let prepared = try await AppMaintenanceDiskImageInstaller.plan(
@@ -147,6 +147,9 @@ final class AppMaintenanceModel {
                     await AppMaintenanceDiskImageInstaller.cancel(plan: prepared)
                     return
                 }
+                securityScopedURL = url
+                hasSecurityScopedAccess = accessing
+                retainedAccess = true
                 installPlan = prepared
                 phase = .ready
             } catch {
@@ -164,6 +167,7 @@ final class AppMaintenanceModel {
         errorMessage = nil
         resultMessage = nil
         task = Task {
+            defer { releaseSecurityScopedAccess() }
             do {
                 let result = try await AppMaintenanceDiskImageInstaller.install(
                     plan: installPlan, replaceExisting: replaceExisting,
@@ -184,8 +188,11 @@ final class AppMaintenanceModel {
                 resultMessage = "Installed \(result.applicationURL.lastPathComponent).\(cleanup)"
                 phase = .ready
             } catch {
-                guard !Task.isCancelled else { return }
                 self.installPlan = nil
+                guard !Task.isCancelled else {
+                    phase = .ready
+                    return
+                }
                 errorMessage = error.localizedDescription
                 phase = .ready
             }
@@ -193,15 +200,23 @@ final class AppMaintenanceModel {
     }
 
     func cancelInstallPlan() {
-        guard let installPlan else { return }
-        self.installPlan = nil
-        Task { await AppMaintenanceDiskImageInstaller.cancel(plan: installPlan) }
+        if let installPlan {
+            self.installPlan = nil
+            Task { await AppMaintenanceDiskImageInstaller.cancel(plan: installPlan) }
+        }
+        releaseSecurityScopedAccess()
     }
 
     func cancel() {
         task?.cancel()
         task = nil
-        cancelInstallPlan()
+        if phase != .installing { cancelInstallPlan() }
+    }
+
+    private func releaseSecurityScopedAccess() {
+        if hasSecurityScopedAccess { securityScopedURL?.stopAccessingSecurityScopedResource() }
+        securityScopedURL = nil
+        hasSecurityScopedAccess = false
     }
 }
 
@@ -272,7 +287,7 @@ struct AppMaintenanceView: View {
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text("App Maintenance")
                     .font(.system(size: UIScale.pt(17), weight: .semibold))
-                Text("Review installed apps, available updates, and exact support files.")
+                Text("Install verified disk images, review updates, and remove apps safely.")
                     .settingsCaption()
             }
             Spacer()
