@@ -1,6 +1,12 @@
 import Foundation
 import Testing
 @testable import EdithKit
+@testable import EdithHelper
+
+private final class LimitReminderQueueProbe: @unchecked Sendable {
+    let entered = DispatchSemaphore(value: 0)
+    let release = DispatchSemaphore(value: 0)
+}
 
 @Suite struct LimitNotifierLogicTests {
     let now = Date(timeIntervalSince1970: 1_750_000_000)
@@ -132,5 +138,20 @@ import Testing
 
     @Test func reminderFireDateNilWhenResetIsNil() {
         #expect(LimitNotifierLogic.reminderFireDate(reset: nil, offsetMinutes: 30, now: now) == nil)
+    }
+
+    @Test func stalledNotificationReplacementDoesNotBlockTheCaller() {
+        let probe = LimitReminderQueueProbe()
+        let queue = LimitReminderQueue(
+            label: "test.limit-reminders.\(UUID().uuidString)"
+        ) { _ in
+            probe.entered.signal()
+            probe.release.wait()
+        }
+
+        queue.submit([])
+
+        #expect(probe.entered.wait(timeout: .now() + 1) == .success)
+        probe.release.signal()
     }
 }
