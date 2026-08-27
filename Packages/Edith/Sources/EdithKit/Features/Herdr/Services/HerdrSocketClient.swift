@@ -13,7 +13,6 @@ final class HerdrSocketClient: @unchecked Sendable {
         ["type": "pane.moved"],
         ["type": "pane.exited"],
         ["type": "pane.agent_detected"],
-        ["type": "pane.agent_status_changed"],
         ["type": "tab.created"],
         ["type": "tab.closed"],
         ["type": "tab.renamed"],

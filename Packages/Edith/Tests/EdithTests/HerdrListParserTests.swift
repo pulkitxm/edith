@@ -284,11 +284,15 @@ import Testing
 
     @Test func relayScriptTalksUnixSockets() {
         #expect(HerdrSocketClient.relayScript.contains("AF_UNIX"))
+    }
+
+    @Test func boardSubscriptionsOnlyContainGlobalEvents() {
         #expect(HerdrSocketClient.boardSubscriptions.contains { $0["type"] == "pane.updated" })
         #expect(
-            HerdrSocketClient.boardSubscriptions.contains {
+            !HerdrSocketClient.boardSubscriptions.contains {
                 $0["type"] == "pane.agent_status_changed"
             })
+        #expect(HerdrSocketClient.boardSubscriptions.allSatisfy { $0.count == 1 })
     }
 
     @Test func aMissingSocketThrowsInsteadOfAborting() {
