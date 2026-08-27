@@ -240,9 +240,13 @@ public enum CommandTree {
                 ]),
             CommandNode(
                 "window", "Arrange the active window.",
-                children: WindowLayoutAction.allCases.map {
-                    CommandNode($0.rawValue, $0.descriptor.summary, options: common)
-                }),
+                children: [
+                    CommandNode(
+                        "status", "Show Window Tools settings and actions.", options: common)
+                ]
+                    + WindowLayoutAction.allCases.map {
+                        CommandNode($0.rawValue, $0.descriptor.summary, options: common)
+                    }),
             CommandNode(
                 "lid-awake", "Keep the Mac running with its lid closed.",
                 children: [

@@ -5,11 +5,43 @@ struct WindowCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "window", abstract: "Arrange the active window.",
         subcommands: [
-            WindowLeftHalfCommand.self, WindowRightHalfCommand.self, WindowTopHalfCommand.self,
-            WindowBottomHalfCommand.self, WindowTopLeftCommand.self, WindowTopRightCommand.self,
-            WindowBottomLeftCommand.self, WindowBottomRightCommand.self, WindowCenterCommand.self,
-            WindowMaximizeCommand.self, WindowNextDisplayCommand.self, WindowRestoreCommand.self,
-        ])
+            WindowStatusCommand.self, WindowLeftHalfCommand.self, WindowRightHalfCommand.self,
+            WindowTopHalfCommand.self, WindowBottomHalfCommand.self, WindowTopLeftCommand.self,
+            WindowTopRightCommand.self, WindowBottomLeftCommand.self, WindowBottomRightCommand.self,
+            WindowCenterCommand.self, WindowMaximizeCommand.self, WindowNextDisplayCommand.self,
+            WindowRestoreCommand.self,
+        ], defaultSubcommand: WindowStatusCommand.self)
+}
+
+struct WindowStatusCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "status", abstract: "Show Window Tools settings and actions.")
+    @Flag(name: .long) var json = false
+
+    func run() async throws {
+        try await execute {
+            let enabled =
+                CLIEnvironment.sharedDefaults.object(forKey: AppStorageKeys.WindowTools.enabled)
+                as? Bool ?? false
+            let greenButton =
+                CLIEnvironment.sharedDefaults.object(
+                    forKey: AppStorageKeys.WindowTools.greenButtonMaximizes) as? Bool ?? true
+            if json {
+                CLIOut.json(
+                    .object([
+                        "actions": .strings(WindowLayoutAction.allCases.map(\.rawValue)),
+                        "enabled": .bool(enabled),
+                        "greenButtonMaximizes": .bool(greenButton),
+                    ]))
+            } else {
+                CLIOut.out("Window Tools: \(enabled ? "on" : "off")")
+                CLIOut.out("Green button maximize: \(greenButton ? "on" : "off")")
+                CLIOut.out(
+                    "Actions: \(WindowLayoutAction.allCases.map(\.rawValue).joined(separator: ", "))"
+                )
+            }
+        }
+    }
 }
 
 private func requestWindowLayout(_ action: WindowLayoutAction, json: Bool) async throws {

@@ -18,6 +18,7 @@ an action or click its green button.
 ## Commands
 
 ```bash
+ed window status
 ed window left-half
 ed window right-half
 ed window top-half

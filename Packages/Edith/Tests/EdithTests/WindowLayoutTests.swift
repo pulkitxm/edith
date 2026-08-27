@@ -76,4 +76,20 @@ import Testing
                     WindowLayoutRequest.actionKey] as? String == "top-right")
         }
     }
+
+    @Test func cliStatusIsTheSafeDefault() async {
+        await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.WindowTools.enabled)
+            let explicit = await CLIProbe.capture(["window", "status", "--json"])
+            let implicit = await CLIProbe.capture(["window", "--json"])
+
+            #expect(explicit.code == 0)
+            #expect(explicit.stdout == implicit.stdout)
+            #expect(explicit.object?["enabled"] as? Bool == true)
+            #expect(
+                explicit.object?["actions"] as? [String]
+                    == WindowLayoutAction.allCases.map(\.rawValue))
+            #expect(world.postedNames().isEmpty)
+        }
+    }
 }

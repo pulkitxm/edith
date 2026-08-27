@@ -76,6 +76,7 @@ enum JSONContract {
         JSONCase("ed clipboard rm", ["clipboard", "rm", "1", "--json"]),
         JSONCase("ed clipboard clear", ["clipboard", "clear", "--json"]),
         JSONCase("ed calendar open", ["calendar", "open", "--json"], mutatesTheMachine: true),
+        JSONCase("ed window status", ["window", "status", "--json"]),
         JSONCase(
             "ed window left-half", ["window", "left-half", "--json"],
             mutatesTheMachine: true),
