@@ -18,7 +18,6 @@ public final class GhosttyTerminalView: NSView {
     private var closed = false
     private var drawScheduled = false
     private var renderingActive = true
-    private var occlusionObserver: NSObjectProtocol?
     var terminalCursor = NSCursor.iBeam
     var cursorHidden = false
     var commandClickReleaseActive = false
@@ -106,7 +105,6 @@ public final class GhosttyTerminalView: NSView {
 
     deinit {
         if cursorHidden { NSCursor.unhide() }
-        if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
         shutdown()
         GhosttySurfaceRegistry.shared.unregister(self)
     }
@@ -127,16 +125,7 @@ public final class GhosttyTerminalView: NSView {
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if let occlusionObserver {
-            NotificationCenter.default.removeObserver(occlusionObserver)
-            self.occlusionObserver = nil
-        }
-        guard let window else { return }
-        occlusionObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
-        ) { [weak self] _ in
-            self?.applyPresentationState()
-        }
+        guard window != nil else { return }
         startIfNeeded()
         applyPresentationState()
     }
@@ -250,8 +239,7 @@ public final class GhosttyTerminalView: NSView {
     private func applyPresentationState() {
         guard let surface else { return }
         let visible = Self.shouldRender(
-            active: renderingActive, hidden: isHidden,
-            windowVisible: window?.occlusionState.contains(.visible) == true)
+            active: renderingActive, hidden: isHidden, windowVisible: window != nil)
         ghostty_surface_set_occlusion(surface, visible)
         if let number = window?.screen?.deviceDescription[.init("NSScreenNumber")] as? NSNumber {
             ghostty_surface_set_display_id(surface, number.uint32Value)
