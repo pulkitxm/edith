@@ -49,8 +49,26 @@ enum FileIconCatalog {
         if location.contains("/.storybook/") || location.hasPrefix(".storybook/") {
             return descriptor("SB", .pink, "book.pages.fill")
         }
+        if location.contains("/.vscode/") || location.hasPrefix(".vscode/") {
+            return descriptor("VS", .blue, "chevron.left.forwardslash.chevron.right")
+        }
+        if location.contains("/.idea/") || location.hasPrefix(".idea/") {
+            return descriptor("IDE", .purple, "hammer.fill")
+        }
+        if location.contains("/.cargo/") || location.hasPrefix(".cargo/") {
+            return descriptor("RS", .orange, "gearshape.2.fill")
+        }
+        if location.contains("/.changeset/") || location.hasPrefix(".changeset/") {
+            return descriptor("CS", .purple, "clock.arrow.circlepath")
+        }
+        if location.contains("/.circleci/") || location.hasPrefix(".circleci/") {
+            return descriptor("CI", .green, "arrow.triangle.branch")
+        }
         if filename.hasPrefix(".env") {
             return descriptor("ENV", .yellow, "key.fill")
+        }
+        if let exact = exactNames[filename] {
+            return exact
         }
         if filename.hasSuffix(".blade.php") {
             return descriptor("LV", .red, "curlybraces")
@@ -64,9 +82,6 @@ enum FileIconCatalog {
         if filename.contains(".stories.") || filename.contains(".story.") {
             return descriptor("SB", .pink, "book.pages.fill")
         }
-        if let exact = exactNames[filename] {
-            return exact
-        }
         if let framework = frameworkDescriptor(filename) {
             return framework
         }
@@ -79,9 +94,12 @@ enum FileIconCatalog {
     private static func frameworkDescriptor(_ filename: String) -> FileIconDescriptor? {
         let frameworks: [(String, FileIconDescriptor)] = [
             ("next.config.", descriptor("NX", .gray, "n.square.fill")),
+            ("next-sitemap.config.", descriptor("NX", .gray, "map.fill")),
+            ("next-i18next.config.", descriptor("NX", .gray, "globe")),
             ("nuxt.config.", descriptor("NU", .green, "n.square.fill")),
             ("vite.config.", descriptor("VT", .purple, "bolt.fill")),
             ("vitest.config.", descriptor("VI", .green, "checkmark.diamond.fill")),
+            ("vitest.workspace.", descriptor("VI", .green, "square.stack.3d.up.fill")),
             ("svelte.config.", descriptor("SV", .orange, "s.square.fill")),
             ("vue.config.", descriptor("VU", .green, "v.square.fill")),
             ("astro.config.", descriptor("AS", .purple, "sparkles")),
@@ -109,6 +127,14 @@ enum FileIconCatalog {
             ("sentry.client.config.", descriptor("SE", .purple, "ant.fill")),
             ("sentry.server.config.", descriptor("SE", .purple, "ant.fill")),
             ("sentry.edge.config.", descriptor("SE", .purple, "ant.fill")),
+            ("tsconfig.", descriptor("TS", .blue, "gearshape.fill")),
+            ("jsconfig.", descriptor("JS", .yellow, "gearshape.fill")),
+            ("typedoc.", descriptor("TD", .blue, "book.closed.fill")),
+            ("api-extractor.", descriptor("API", .blue, "shippingbox.fill")),
+            ("nodemon.", descriptor("ND", .green, "arrow.clockwise")),
+            ("lerna.", descriptor("LR", .blue, "square.stack.3d.up.fill")),
+            ("rush.", descriptor("RU", .orange, "square.stack.3d.up.fill")),
+            ("requirements-", descriptor("PY", .blue, "list.bullet.rectangle.fill")),
         ]
         return frameworks.first(where: { filename.hasPrefix($0.0) })?.1
     }
@@ -126,6 +152,12 @@ enum FileIconCatalog {
         "justfile": descriptor("JS", .purple, "hammer.fill"),
         "taskfile.yml": descriptor("TK", .blue, "checklist"),
         "taskfile.yaml": descriptor("TK", .blue, "checklist"),
+        "jenkinsfile": descriptor("JK", .red, "server.rack"),
+        "earthfile": descriptor("EA", .purple, "globe"),
+        "tiltfile": descriptor("TL", .red, "shippingbox.fill"),
+        "buck": descriptor("BK", .blue, "hammer.fill"),
+        ".buckconfig": descriptor("BK", .blue, "gearshape.fill"),
+        "pants.toml": descriptor("PT", .green, "hammer.fill"),
         "package.json": descriptor("NP", .red, "shippingbox.fill"),
         "package-lock.json": descriptor("NP", .red, "lock.fill"),
         "pnpm-lock.yaml": descriptor("PN", .orange, "lock.fill"),
@@ -143,12 +175,35 @@ enum FileIconCatalog {
         "biome.json": descriptor("BM", .green, "checkmark.seal.fill"),
         "biome.jsonc": descriptor("BM", .green, "checkmark.seal.fill"),
         "components.json": descriptor("UI", .gray, "square.grid.2x2.fill"),
+        "next-env.d.ts": descriptor("NX", .gray, "n.square.fill"),
+        "middleware.ts": descriptor("NX", .gray, "arrow.left.arrow.right"),
+        "instrumentation.ts": descriptor("NX", .gray, "gauge.with.dots.needle.67percent"),
+        "proxy.ts": descriptor("NX", .gray, "network"),
+        "route.ts": descriptor("NX", .gray, "arrow.triangle.branch"),
+        "page.tsx": descriptor("NX", .gray, "doc.text.fill"),
+        "layout.tsx": descriptor("NX", .gray, "rectangle.3.group.fill"),
+        "loading.tsx": descriptor("NX", .gray, "hourglass"),
+        "error.tsx": descriptor("NX", .red, "exclamationmark.triangle.fill"),
+        "not-found.tsx": descriptor("NX", .gray, "questionmark.folder.fill"),
+        "template.tsx": descriptor("NX", .gray, "doc.on.doc.fill"),
+        "default.tsx": descriptor("NX", .gray, "doc.fill"),
+        "typedoc.json": descriptor("TD", .blue, "book.closed.fill"),
+        "api-extractor.json": descriptor("API", .blue, "shippingbox.fill"),
+        "nodemon.json": descriptor("ND", .green, "arrow.clockwise"),
+        "lerna.json": descriptor("LR", .blue, "square.stack.3d.up.fill"),
+        "rush.json": descriptor("RU", .orange, "square.stack.3d.up.fill"),
+        "wrangler.toml": descriptor("CF", .orange, "cloud.fill"),
         "angular.json": descriptor("NG", .red, "a.square.fill"),
         "cargo.toml": descriptor("RS", .orange, "shippingbox.fill"),
         "cargo.lock": descriptor("RS", .orange, "lock.fill"),
+        "rust-project.json": descriptor("RS", .orange, "hammer.fill"),
+        "rust-analyzer.json": descriptor("RS", .orange, "gearshape.fill"),
+        "cargo-generate.toml": descriptor("RS", .orange, "doc.on.doc.fill"),
+        "makefile.toml": descriptor("RS", .orange, "hammer.fill"),
         "go.mod": descriptor("GO", .cyan, "shippingbox.fill"),
         "go.sum": descriptor("GO", .cyan, "checkmark.seal.fill"),
         "package.swift": descriptor("SW", .orange, "shippingbox.fill"),
+        "package.resolved": descriptor("SW", .orange, "lock.fill"),
         "podfile": descriptor("CP", .red, "shippingbox.fill"),
         "podfile.lock": descriptor("CP", .red, "lock.fill"),
         "cartfile": descriptor("CT", .blue, "shippingbox.fill"),
@@ -162,6 +217,12 @@ enum FileIconCatalog {
         "appfile": descriptor("FL", .purple, "app.fill"),
         "matchfile": descriptor("FL", .purple, "checkmark.seal.fill"),
         "snapfile": descriptor("FL", .purple, "camera.fill"),
+        "xcodegen.yml": descriptor("XG", .blue, "hammer.fill"),
+        "xcodegen.yaml": descriptor("XG", .blue, "hammer.fill"),
+        "periphery.yml": descriptor("PE", .purple, "checkmark.seal.fill"),
+        ".periphery.yml": descriptor("PE", .purple, "checkmark.seal.fill"),
+        "sourcery.yml": descriptor("SO", .orange, "wand.and.stars"),
+        ".sourcery.yml": descriptor("SO", .orange, "wand.and.stars"),
         "gemfile": descriptor("RB", .red, "diamond.fill"),
         "gemfile.lock": descriptor("RB", .red, "lock.fill"),
         "rakefile": descriptor("RB", .red, "hammer.fill"),
@@ -171,13 +232,20 @@ enum FileIconCatalog {
         "manage.py": descriptor("DJ", .green, "leaf.fill"),
         "pyproject.toml": descriptor("PY", .blue, "shippingbox.fill"),
         "requirements.txt": descriptor("PY", .blue, "list.bullet.rectangle.fill"),
+        "requirements-dev.txt": descriptor("PY", .blue, "list.bullet.rectangle.fill"),
+        "requirements-test.txt": descriptor("PY", .blue, "list.bullet.rectangle.fill"),
+        "constraints.txt": descriptor("PY", .blue, "list.bullet.rectangle.fill"),
         "setup.py": descriptor("PY", .blue, "shippingbox.fill"),
         "setup.cfg": descriptor("PY", .blue, "gearshape.fill"),
         "tox.ini": descriptor("TX", .green, "checkmark.circle.fill"),
         "pytest.ini": descriptor("PT", .green, "checkmark.circle.fill"),
         "poetry.lock": descriptor("PO", .purple, "lock.fill"),
+        "poetry.toml": descriptor("PO", .purple, "gearshape.fill"),
         "uv.lock": descriptor("UV", .purple, "lock.fill"),
         "pdm.lock": descriptor("PD", .blue, "lock.fill"),
+        "pdm.toml": descriptor("PD", .blue, "gearshape.fill"),
+        "pixi.toml": descriptor("PX", .purple, "shippingbox.fill"),
+        "conda-lock.yml": descriptor("CN", .green, "lock.fill"),
         "pipfile": descriptor("PI", .blue, "shippingbox.fill"),
         "pipfile.lock": descriptor("PI", .blue, "lock.fill"),
         "manifest.in": descriptor("PY", .blue, "list.bullet.rectangle.fill"),
@@ -186,6 +254,15 @@ enum FileIconCatalog {
         "mypy.ini": descriptor("MP", .blue, "checkmark.seal.fill"),
         "pyrightconfig.json": descriptor("PR", .blue, "checkmark.seal.fill"),
         "environment.yml": descriptor("CN", .green, "shippingbox.fill"),
+        "alembic.ini": descriptor("AL", .red, "cylinder.fill"),
+        "mkdocs.yml": descriptor("MK", .blue, "book.closed.fill"),
+        "mkdocs.yaml": descriptor("MK", .blue, "book.closed.fill"),
+        "dvc.yaml": descriptor("DVC", .purple, "point.3.connected.trianglepath.dotted"),
+        "dvc.lock": descriptor("DVC", .purple, "lock.fill"),
+        "py.typed": descriptor("PY", .blue, "checkmark.seal.fill"),
+        "wsgi.py": descriptor("WS", .green, "server.rack"),
+        "asgi.py": descriptor("AS", .green, "server.rack"),
+        "celery.py": descriptor("CL", .green, "leaf.fill"),
         "artisan": descriptor("LV", .red, "hammer.fill"),
         "mix.exs": descriptor("EX", .purple, "shippingbox.fill"),
         "mix.lock": descriptor("EX", .purple, "lock.fill"),
@@ -218,6 +295,17 @@ enum FileIconCatalog {
         "firebase.json": descriptor("FB", .amber, "flame.fill"),
         "supabase.toml": descriptor("SB", .green, "bolt.fill"),
         "devcontainer.json": descriptor("DEV", .blue, "shippingbox.fill"),
+        "dependabot.yml": descriptor("DB", .blue, "arrow.clockwise"),
+        "renovate.json": descriptor("RV", .blue, "arrow.clockwise"),
+        ".renovaterc": descriptor("RV", .blue, "arrow.clockwise"),
+        "codecov.yml": descriptor("CV", .pink, "gauge.with.dots.needle.67percent"),
+        ".codecov.yml": descriptor("CV", .pink, "gauge.with.dots.needle.67percent"),
+        ".gitlab-ci.yml": descriptor("CI", .orange, "arrow.triangle.branch"),
+        "azure-pipelines.yml": descriptor("CI", .blue, "arrow.triangle.branch"),
+        "buildkite.yml": descriptor("CI", .green, "arrow.triangle.branch"),
+        "bitrise.yml": descriptor("CI", .purple, "arrow.triangle.branch"),
+        "appveyor.yml": descriptor("CI", .green, "arrow.triangle.branch"),
+        ".travis.yml": descriptor("CI", .red, "arrow.triangle.branch"),
         "codeowners": descriptor("CO", .purple, "person.2.fill"),
         ".gitignore": descriptor("GT", .orange, "arrow.triangle.branch"),
         ".gitattributes": descriptor("GT", .orange, "arrow.triangle.branch"),

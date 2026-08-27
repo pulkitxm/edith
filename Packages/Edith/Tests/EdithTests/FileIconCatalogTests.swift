@@ -47,6 +47,20 @@ struct FileIconCatalogTests {
         #expect(icon("cache.tsbuildinfo").badge == "TS")
     }
 
+    @Test("recognizes convention based project files")
+    func conventions() {
+        #expect(icon("next-env.d.ts").badge == "NX")
+        #expect(icon("page.tsx").badge == "NX")
+        #expect(icon("tsconfig.build.json").badge == "TS")
+        #expect(icon("requirements-docs.txt").badge == "PY")
+        #expect(icon("package.resolved").badge == "SW")
+        #expect(icon("rust-project.json").badge == "RS")
+        #expect(icon("settings.json", path: ".vscode/settings.json").badge == "VS")
+        #expect(icon("config.toml", path: ".cargo/config.toml").badge == "RS")
+        #expect(icon("config.yml", path: ".circleci/config.yml").badge == "CI")
+        #expect(icon("change.md", path: ".changeset/change.md").badge == "CS")
+    }
+
     @Test("recognizes Python ecosystem files")
     func pythonEcosystem() {
         #expect(icon("pyproject.toml").badge == "PY")
