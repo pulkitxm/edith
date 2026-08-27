@@ -7,6 +7,8 @@ struct HomebrewPage: View {
     @State private var pendingUninstall: HomebrewPackage?
     @AppStorage(AppStorageKeys.Homebrew.defaultKind, store: SharedDefaults.store)
     private var kindRaw = HomebrewPackageKind.formula.rawValue
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
+    private var themeName = AppTheme.accent.rawValue
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
@@ -24,6 +26,8 @@ struct HomebrewPage: View {
     private var kind: HomebrewPackageKind {
         HomebrewPackageKind(rawValue: kindRaw) ?? .formula
     }
+
+    private var theme: Color { themeColor(themeName) }
 
     var body: some View {
         ScrollView {
@@ -164,17 +168,17 @@ struct HomebrewPage: View {
                 title: model.mode == .installed ? "Installed" : "Results",
                 value: String(
                     model.mode == .installed ? model.installedCount : model.packages.count),
-                detail: kind.pluralTitle, icon: "shippingbox.fill")
+                detail: kind.pluralTitle, icon: "shippingbox.fill", accent: theme)
             HomebrewMetric(
                 title: "Updates", value: String(model.updateCount),
                 detail: model.updateCount == 1 ? "package ready" : "packages ready",
-                icon: "arrow.up.circle.fill")
+                icon: "arrow.up.circle.fill", accent: theme)
             HomebrewMetric(
                 title: "Homebrew",
                 value: model.status?.available == true ? "Ready" : "Checking",
                 detail: model.status?.version ?? model.status?.executable
                     ?? "Local package manager",
-                icon: "checkmark.seal.fill")
+                icon: "checkmark.seal.fill", accent: theme)
         }
     }
 
@@ -263,7 +267,7 @@ struct HomebrewPage: View {
                         index, package in
                         if index > 0 { Divider() }
                         HomebrewPackageRow(
-                            package: package, disabled: model.isBusy,
+                            package: package, disabled: model.isBusy, accent: theme,
                             perform: {
                                 model.perform($0, package: package, query: query, kind: kind)
                             },
@@ -312,6 +316,7 @@ struct HomebrewPage: View {
 private struct HomebrewPackageRow: View {
     let package: HomebrewPackage
     let disabled: Bool
+    let accent: Color
     let perform: (HomebrewMutation) -> Void
     let uninstall: () -> Void
 
@@ -319,11 +324,9 @@ private struct HomebrewPackageRow: View {
         HStack(spacing: 14) {
             ZStack {
                 RoundedRectangle(cornerRadius: 9)
-                    .fill(
-                        package.kind == .cask
-                            ? Color.purple.opacity(0.12) : Color.blue.opacity(0.12))
+                    .fill(accent.opacity(0.12))
                 Image(systemName: package.kind == .cask ? "app.fill" : "terminal.fill")
-                    .foregroundStyle(package.kind == .cask ? .purple : .blue)
+                    .foregroundStyle(accent)
             }
             .frame(width: 38, height: 38)
 
@@ -371,13 +374,14 @@ private struct HomebrewMetric: View {
     let value: String
     let detail: String
     let icon: String
+    let accent: Color
 
     var body: some View {
         HomebrewCard {
             HStack(spacing: 12) {
                 Image(systemName: icon)
                     .font(.system(size: 20))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(accent)
                     .frame(width: 32)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
