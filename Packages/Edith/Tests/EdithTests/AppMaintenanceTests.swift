@@ -4,6 +4,19 @@ import Testing
 @testable import EdithCLI
 @testable import EdithKit
 
+private final class AppMaintenanceRequestCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: CLICommandRequest?
+
+    func record(_ request: CLICommandRequest) {
+        lock.withLock { stored = request }
+    }
+
+    func request() -> CLICommandRequest? {
+        lock.withLock { stored }
+    }
+}
+
 @Suite struct AppMaintenanceTests {
     @Test func inventoryFindsRegularAppsAndAppliesExactHomebrewUpdates() throws {
         let root = try temporaryDirectory()
@@ -36,6 +49,38 @@ import Testing
                     id: $0.id, name: $0.name, bundleID: $0.bundleID, version: "1.0", url: $0.url)
             })
         #expect(current[0].update == nil)
+    }
+
+    @Test func updateInventoryRunsABoundedHomebrewProbe() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let applications = root.appendingPathComponent("Applications", isDirectory: true)
+        try FileManager.default.createDirectory(at: applications, withIntermediateDirectories: true)
+        _ = try makeApp(
+            at: applications.appendingPathComponent("Example App.app"),
+            bundleID: "com.example.app", version: "1.0")
+        let capture = AppMaintenanceRequestCapture()
+
+        let found = await AppMaintenanceInventory.applicationsWithUpdates(
+            roots: [applications], home: root, homebrewPaths: ["/usr/bin/true"]
+        ) { request in
+            capture.record(request)
+            return CLICommandResult(
+                terminationStatus: 0,
+                output:
+                    """
+                    {"casks":[{"name":"example-app","installed_versions":["1.0"],"current_version":"2.0"}]}
+                    """)
+        }
+
+        let request = try #require(capture.request())
+        #expect(request.executableURL.path == "/usr/bin/true")
+        #expect(request.arguments == ["outdated", "--cask", "--greedy", "--json=v2"])
+        #expect(request.environment["HOMEBREW_NO_AUTO_UPDATE"] == "1")
+        #expect(request.timeout == 60)
+        #expect(request.maximumOutputBytes == 2 * 1_024 * 1_024)
+        #expect(request.terminatesProcessGroup)
+        #expect(found.first?.update?.latestVersion == "2.0")
     }
 
     @Test func scanIncludesOnlyExactBundleIdentifierPaths() throws {

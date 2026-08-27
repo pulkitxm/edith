@@ -33,7 +33,13 @@ final class AppMaintenanceModel {
     }
 
     var selectedItems: [AppMaintenanceItem] {
-        plan?.items.filter { selectedItemIDs.contains($0.id) } ?? []
+        guard let plan else { return [] }
+        var selected: [AppMaintenanceItem] = []
+        selected.reserveCapacity(plan.items.count)
+        for item in plan.items where selectedItemIDs.contains(item.id) {
+            selected.append(item)
+        }
+        return selected
     }
 
     var selectedBytes: Int64 { selectedItems.reduce(0) { $0 + $1.sizeBytes } }
@@ -45,7 +51,7 @@ final class AppMaintenanceModel {
         resultMessage = nil
         task = Task {
             let loaded = await Task.detached(priority: .userInitiated) {
-                AppMaintenanceInventory.applications()
+                await AppMaintenanceInventory.applicationsWithUpdates()
             }.value
             guard !Task.isCancelled else { return }
             applications = loaded
@@ -114,7 +120,7 @@ final class AppMaintenanceModel {
                         "Moved \(result.removed.count) items to the Trash. \(result.failed.count) items could not be moved."
                 }
                 applications = await Task.detached(priority: .userInitiated) {
-                    AppMaintenanceInventory.applications()
+                    await AppMaintenanceInventory.applicationsWithUpdates()
                 }.value
                 selectedApplicationID = nil
                 self.plan = nil
@@ -175,7 +181,7 @@ final class AppMaintenanceModel {
                 guard !Task.isCancelled else { return }
                 self.installPlan = nil
                 applications = await Task.detached(priority: .userInitiated) {
-                    AppMaintenanceInventory.applications()
+                    await AppMaintenanceInventory.applicationsWithUpdates()
                 }.value
                 let cleanup: String
                 if !result.ejected {

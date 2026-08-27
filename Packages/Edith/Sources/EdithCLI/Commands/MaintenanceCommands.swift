@@ -133,8 +133,10 @@ struct MaintenanceInventoryCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let disabledData = noUpdates ? Data() : nil
-            let applications = AppMaintenanceInventory.applications(updateData: disabledData)
+            let applications =
+                noUpdates
+                ? AppMaintenanceInventory.applications(updateData: Data())
+                : await AppMaintenanceInventory.applicationsWithUpdates()
             guard !json else {
                 CLIOut.json(.array(applications.map(MaintenanceCLI.applicationJSON)))
                 return

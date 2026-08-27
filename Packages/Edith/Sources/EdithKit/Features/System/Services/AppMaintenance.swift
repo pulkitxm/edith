@@ -204,10 +204,20 @@ public enum AppMaintenanceInventory {
                         version: displayName(version, fallback: "Unknown"), url: normalized))
             }
         }
-        let data = updateData ?? homebrewOutdatedData()
-        return applyingHomebrewUpdates(data, to: found).sorted {
+        return applyingHomebrewUpdates(updateData, to: found).sorted {
             $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
+    }
+
+    public static func applicationsWithUpdates(
+        roots: [URL] = defaultApplicationRoots,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        homebrewPaths: [String] = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"],
+        run: @escaping AppMaintenanceDiskImageInstaller.RunCommand =
+            AppMaintenanceDiskImageInstaller.liveRun
+    ) async -> [InstalledApplication] {
+        let data = await homebrewOutdatedData(paths: homebrewPaths, run: run)
+        return applications(roots: roots, home: home, updateData: data)
     }
 
     public static func applyingHomebrewUpdates(
@@ -285,25 +295,24 @@ public enum AppMaintenanceInventory {
         value.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func homebrewOutdatedData() -> Data? {
-        let paths = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"]
+    private static func homebrewOutdatedData(
+        paths: [String],
+        run: @escaping AppMaintenanceDiskImageInstaller.RunCommand
+    ) async -> Data? {
         guard let executable = paths.first(where: FileManager.default.isExecutableFile) else {
             return nil
         }
-        let process = Process()
-        let output = Pipe()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = ["outdated", "--cask", "--greedy", "--json=v2"]
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-        } catch {
+        var environment = CLIToolEnvironment.sanitized()
+        environment["HOMEBREW_NO_AUTO_UPDATE"] = "1"
+        let request = CLICommandRequest(
+            executableURL: URL(fileURLWithPath: executable),
+            arguments: ["outdated", "--cask", "--greedy", "--json=v2"],
+            environment: environment, timeout: 60, maximumOutputBytes: 2 * 1_024 * 1_024,
+            terminatesProcessGroup: true)
+        guard let result = try? await run(request), result.terminationStatus == 0 else {
             return nil
         }
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return process.terminationStatus == 0 ? data : nil
+        return result.outputData
     }
 }
 
