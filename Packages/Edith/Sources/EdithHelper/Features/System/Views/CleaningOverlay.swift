@@ -44,7 +44,6 @@ struct CleaningOverlayView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(themeColor(themeName))
                     .controlSize(.large)
-                    .pointerCursor()
                 } else {
                     Text("Starting in \(store.armingCountdown)…")
                         .font(.title)

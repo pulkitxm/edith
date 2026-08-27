@@ -80,8 +80,7 @@ struct QuinjetPage: View {
             } label: {
                 Image(systemName: "plus")
             }
-            .buttonStyle(HoverButtonStyle())
-            .pointerCursor()
+            .buttonStyle(.edith(.toolbar))
             .help("New Quinjet review")
             terminalMenu
             themeMenu
@@ -201,7 +200,6 @@ private struct QuinjetMenuLabel: View {
         }
         .contentShape(Rectangle())
         .onHover { hovered = $0 }
-        .pointerCursor()
     }
 }
 
@@ -217,32 +215,40 @@ private struct QuinjetTabButton: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        Button(action: select) {
-            HStack(spacing: UIScale.pt(6)) {
-                Image(systemName: tab.worktree == nil ? "plus.square" : "arrow.triangle.branch")
+        ZStack(alignment: .trailing) {
+            Button(action: select) {
+                HStack(spacing: UIScale.pt(6)) {
+                    Image(
+                        systemName: tab.worktree == nil
+                            ? "plus.square" : "arrow.triangle.branch"
+                    )
                     .font(.system(size: UIScale.pt(9.5)))
-                Text(tab.title)
-                    .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                    .lineLimit(1)
-                if canClose {
-                    Button(action: close) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: UIScale.pt(7.5), weight: .bold))
+                    Text(tab.title)
+                        .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                        .lineLimit(1)
+                    if canClose {
+                        Color.clear.frame(width: UIScale.pt(16), height: UIScale.pt(16))
                     }
-                    .buttonStyle(.plain)
                 }
+                .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
+                .padding(.horizontal, UIScale.pt(10))
+                .padding(.vertical, UIScale.pt(6))
+                .background(
+                    selected ? DashSkin.paper2(dark) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                )
+                .contentShape(Rectangle())
             }
-            .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
-            .padding(.horizontal, UIScale.pt(10))
-            .padding(.vertical, UIScale.pt(6))
-            .background(
-                selected ? DashSkin.paper2(dark) : Color.clear,
-                in: RoundedRectangle(cornerRadius: UIScale.pt(6))
-            )
-            .contentShape(Rectangle())
+            .buttonStyle(.edith(.borderless))
+            if canClose {
+                Button(action: close) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: UIScale.pt(7.5), weight: .bold))
+                }
+                .buttonStyle(.edith(.borderless))
+                .padding(.trailing, UIScale.pt(4))
+            }
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
     }
 }
 
@@ -312,9 +318,8 @@ private struct QuinjetTerminalWorkspace: View {
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(DashSkin.warn)
                 Button("Restart", action: restart)
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                    .pointerCursor()
             }
             if let message = tab.externalLaunchMessage {
                 Text(message)
@@ -330,7 +335,6 @@ private struct QuinjetTerminalWorkspace: View {
                     .padding(.vertical, UIScale.pt(7))
             }
             .buttonStyle(QuinjetWorktreeCountButtonStyle(dark: dark))
-            .pointerCursor()
             .popover(isPresented: $tab.showsWorktrees, arrowEdge: .bottom) {
                 worktreePopover
             }
@@ -403,10 +407,8 @@ private struct QuinjetTerminalWorkspace: View {
                         }
                     }
                     .buttonStyle(QuinjetToolbarButtonStyle())
-                    .pointerCursor()
                     Button("Use embedded terminal", action: useEmbedded)
                         .buttonStyle(QuinjetToolbarButtonStyle())
-                        .pointerCursor()
                 }
                 Text("Theme: \(tab.launchConfiguration.theme.label)")
                     .font(.system(size: UIScale.pt(10.5), weight: .medium))

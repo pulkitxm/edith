@@ -398,7 +398,6 @@ struct MachineTerminalTab: View {
             }
             Spacer(minLength: 0)
             Button(holder.started ? "Restart" : "Start") { restart() }
-                .pointerCursor()
                 .font(.system(size: UIScale.pt(11)))
         }
         .padding(.horizontal, PageMetrics.gutter(compact))
@@ -463,7 +462,6 @@ struct ContainerTerminalSheet: View {
                 }
                 Button("Done") { dismiss() }
                     .keyboardShortcut(.defaultAction)
-                    .pointerCursor()
             }
             .padding(UIScale.pt(14))
             Divider()

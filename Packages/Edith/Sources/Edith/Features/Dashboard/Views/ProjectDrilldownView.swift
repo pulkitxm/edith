@@ -69,8 +69,7 @@ struct ProjectDrilldownView: View {
                     Text(message).lineLimit(2)
                     Spacer(minLength: 0)
                     Button("Dismiss") { actions.dismissFailure() }
-                        .buttonStyle(.plain)
-                        .pointerCursor()
+                        .buttonStyle(.edith(.borderless))
                 }
                 .font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(DashSkin.danger)
@@ -141,8 +140,7 @@ struct ProjectDrilldownView: View {
             }
             .foregroundStyle(DashSkin.inkSoft(dark))
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
     }
 
     private var headerRow: some View {
@@ -178,7 +176,7 @@ struct ProjectDrilldownView: View {
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
             .frame(width: width, alignment: .leading)
         }
-        .buttonStyle(.plain).pointerCursor()
+        .buttonStyle(.edith(.borderless))
     }
 
     private func sortBy(_ key: ProjSortKey) {
@@ -291,13 +289,17 @@ private struct ProjectRow: View {
     private var hasChildren: Bool { node.children?.isEmpty == false }
 
     var body: some View {
-        content
-            .padding(.horizontal, UIScale.pt(8))
-            .frame(height: UIScale.pt(27))
-            .background(hovering ? DashSkin.inkFaint(dark).opacity(0.14) : Color.clear)
-            .contentShape(Rectangle())
-            .onHover { hovering = $0 }
-            .onTapGesture { if hasChildren { onToggle() } }
+        Button {
+            if hasChildren { onToggle() }
+        } label: {
+            content
+                .padding(.horizontal, UIScale.pt(8))
+                .frame(height: UIScale.pt(27))
+                .background(hovering ? DashSkin.inkFaint(dark).opacity(0.14) : Color.clear)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.borderless))
+        .onHover { hovering = $0 }
     }
 
     @ViewBuilder private var content: some View {
@@ -361,8 +363,7 @@ private struct ProjectRow: View {
                     rowLabel
                 }
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            .buttonStyle(.edith(.borderless))
         } else {
             iconView
             rowLabel
@@ -395,7 +396,7 @@ private struct ProjectRow: View {
                 actions.copyChatID(chatId)
             } label: {
                 img
-            }.buttonStyle(.plain).pointerCursor()
+            }.buttonStyle(.edith(.borderless))
         } else {
             img
         }

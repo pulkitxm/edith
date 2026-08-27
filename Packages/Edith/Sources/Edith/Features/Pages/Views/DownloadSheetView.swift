@@ -109,9 +109,8 @@ struct DownloadSheet: View {
                     .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                     .contentShape(Rectangle())
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .disabled(downloader.isRunning || downloader.isUpdatingYTDLP)
-            .pointerCursor()
             .help("Update yt-dlp")
             if let result = downloader.updateResult {
                 switch result {
@@ -136,9 +135,8 @@ struct DownloadSheet: View {
                     .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                     .contentShape(Rectangle())
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .disabled(downloader.isRunning)
-            .pointerCursor()
         }
         .padding(.horizontal, UIScale.pt(22))
         .padding(.vertical, UIScale.pt(14))
@@ -251,8 +249,7 @@ struct DownloadSheet: View {
                     Label("Paste", systemImage: "clipboard")
                         .font(.system(size: UIScale.pt(11)))
                 }
-                .buttonStyle(HoverButtonStyle())
-                .pointerCursor()
+                .buttonStyle(.edith(.toolbar))
             }
             .frame(height: UIScale.pt(16))
         }
@@ -268,7 +265,6 @@ struct DownloadSheet: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .pointerCursor()
             HStack(spacing: UIScale.pt(10)) {
                 ForEach(DownloadKind.allCases, id: \.rawValue) { kind in
                     sizeChip(kind)
@@ -357,9 +353,8 @@ struct DownloadSheet: View {
                 .background(canStart ? theme : Color.gray.opacity(0.35))
                 .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(9)))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .disabled(!canStart)
-            .pointerCursor()
         }
     }
 
@@ -372,9 +367,8 @@ struct DownloadSheet: View {
                     .font(.system(size: UIScale.pt(20)))
                     .foregroundStyle(canStart ? theme : Color.gray.opacity(0.4))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .disabled(!canStart)
-            .pointerCursor()
             .help("Add to queue")
         }
         .padding(.horizontal, UIScale.pt(22))
@@ -442,9 +436,8 @@ struct DownloadSheet: View {
                 Button("Retry All") {
                     downloader.retryAll()
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                .pointerCursor()
                 .disabled(downloader.isRunning)
             }
         }
@@ -488,150 +481,161 @@ struct DownloadSheet: View {
         case .interrupted: isActive = false; tint = .orange
         default: isActive = false; tint = DashSkin.inkFaint(dark)
         }
+        let actionInset: CGFloat
+        switch item.status {
+        case .done: actionInset = UIScale.pt(64)
+        case .error, .interrupted: actionInset = UIScale.pt(48)
+        default: actionInset = UIScale.pt(34)
+        }
 
-        return HStack(spacing: UIScale.pt(10)) {
+        return ZStack(alignment: .trailing) {
+            Button {
+                if case .done = item.status {
+                    downloader.openResult(item)
+                } else {
+                    logItem = item
+                }
+            } label: {
+                HStack(spacing: UIScale.pt(10)) {
+                    Group {
+                        switch item.status {
+                        case .queued:
+                            Image(systemName: "clock")
+                                .font(.system(size: UIScale.pt(12)))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                        case .resolving:
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .scaleEffect(0.55)
+                        case .downloading:
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .scaleEffect(0.55)
+                                .tint(theme)
+                        case .done:
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: UIScale.pt(15)))
+                                .foregroundStyle(.green)
+                        case .error:
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: UIScale.pt(15)))
+                                .foregroundStyle(.red)
+                        case .interrupted:
+                            Image(systemName: "pause.circle.fill")
+                                .font(.system(size: UIScale.pt(16)))
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    .frame(width: UIScale.pt(20))
+
+                    DownloadThumb(url: item.url, dark: dark, height: UIScale.pt(34))
+
+                    VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                        Text(item.resolvedTitle ?? displayURL(item.url))
+                            .font(.system(size: UIScale.pt(12)))
+                            .foregroundStyle(
+                                isActive ? AnyShapeStyle(tint) : AnyShapeStyle(DashSkin.ink(dark))
+                            )
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+
+                        switch item.status {
+                        case .queued:
+                            EmptyView()
+                        case .resolving:
+                            EmptyView()
+                        case let .downloading(progress, videoIndex, videoCount):
+                            HStack(spacing: UIScale.pt(4)) {
+                                if videoIndex > 0, videoCount > 0 {
+                                    Text("\(videoIndex)/\(videoCount)")
+                                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                                        .foregroundStyle(theme)
+                                }
+                                if !progress.isEmpty {
+                                    Text(progress)
+                                        .font(
+                                            .system(
+                                                size: UIScale.pt(11), weight: .medium,
+                                                design: .monospaced)
+                                        )
+                                        .foregroundStyle(theme)
+                                }
+                            }
+                        case let .done(output):
+                            Text(output)
+                                .font(.system(size: UIScale.pt(10.5)))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                                .lineLimit(1)
+                        case let .error(msg):
+                            Text(msg)
+                                .font(.system(size: UIScale.pt(10)))
+                                .foregroundStyle(.red)
+                                .lineLimit(2)
+                        case .interrupted:
+                            EmptyView()
+                        }
+                    }
+
+                    Spacer(minLength: 4)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, UIScale.pt(8))
+                .padding(.leading, UIScale.pt(10))
+                .padding(.trailing, UIScale.pt(10) + actionInset)
+                .background(
+                    isActive
+                        ? DashSkin.paper2(dark) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(9))
+                )
+                .overlay(
+                    isActive
+                        ? RoundedRectangle(cornerRadius: UIScale.pt(9)).strokeBorder(
+                            theme.opacity(0.3), lineWidth: UIScale.pt(1))
+                        : nil
+                )
+            }
+            .buttonStyle(.edith(.borderless))
+
             Group {
                 switch item.status {
-                case .queued:
-                    Image(systemName: "clock")
-                        .font(.system(size: UIScale.pt(12)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                case .resolving:
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .scaleEffect(0.55)
-                case .downloading:
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .scaleEffect(0.55)
-                        .tint(theme)
+                case .queued, .resolving, .downloading:
+                    Button {
+                        downloader.cancel(item)
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.edith(.toolbar))
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(.red)
+                    .help("Cancel this download")
+                case .error, .interrupted:
+                    Button("Retry") {
+                        downloader.retry(item)
+                    }
+                    .buttonStyle(.edith(.toolbar))
+                    .font(.system(size: UIScale.pt(10), weight: .medium))
+                    .foregroundStyle(theme)
+                    .disabled(downloader.isRunning)
                 case .done:
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: UIScale.pt(15)))
-                        .foregroundStyle(.green)
-                case .error:
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: UIScale.pt(15)))
-                        .foregroundStyle(.red)
-                case .interrupted:
-                    Image(systemName: "pause.circle.fill")
-                        .font(.system(size: UIScale.pt(16)))
-                        .foregroundStyle(.orange)
-                }
-            }
-            .frame(width: UIScale.pt(20))
-
-            DownloadThumb(url: item.url, dark: dark, height: UIScale.pt(34))
-
-            VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                Text(item.resolvedTitle ?? displayURL(item.url))
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(
-                        isActive ? AnyShapeStyle(tint) : AnyShapeStyle(DashSkin.ink(dark))
-                    )
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-
-                switch item.status {
-                case .queued:
-                    EmptyView()
-                case .resolving:
-                    EmptyView()
-                case let .downloading(progress, videoIndex, videoCount):
                     HStack(spacing: UIScale.pt(4)) {
-                        if videoIndex > 0, videoCount > 0 {
-                            Text("\(videoIndex)/\(videoCount)")
-                                .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                                .foregroundStyle(theme)
+                        Button {
+                            downloader.openResult(item)
+                        } label: {
+                            Image(systemName: "arrow.up.forward.app")
                         }
-                        if !progress.isEmpty {
-                            Text(progress)
-                                .font(
-                                    .system(
-                                        size: UIScale.pt(11), weight: .medium, design: .monospaced)
-                                )
-                                .foregroundStyle(theme)
+                        .help("Open downloaded file")
+                        Button {
+                            downloader.revealResult(item)
+                        } label: {
+                            Image(systemName: "folder")
                         }
+                        .help("Reveal downloaded file")
                     }
-                case let .done(output):
-                    Text(output)
-                        .font(.system(size: UIScale.pt(10.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .lineLimit(1)
-                case let .error(msg):
-                    Text(msg)
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(.red)
-                        .lineLimit(2)
-                case .interrupted:
-                    EmptyView()
+                    .buttonStyle(.edith(.toolbar))
+                    .font(.system(size: UIScale.pt(11)))
                 }
             }
-
-            Spacer(minLength: 4)
-
-            switch item.status {
-            case .queued, .resolving, .downloading:
-                Button {
-                    downloader.cancel(item)
-                } label: {
-                    Image(systemName: "xmark")
-                }
-                .buttonStyle(HoverButtonStyle())
-                .font(.system(size: UIScale.pt(11)))
-                .foregroundStyle(.red)
-                .pointerCursor()
-                .help("Cancel this download")
-            case .error, .interrupted:
-                Button("Retry") {
-                    downloader.retry(item)
-                }
-                .buttonStyle(HoverButtonStyle())
-                .font(.system(size: UIScale.pt(10), weight: .medium))
-                .foregroundStyle(theme)
-                .pointerCursor()
-                .disabled(downloader.isRunning)
-            case .done:
-                HStack(spacing: UIScale.pt(4)) {
-                    Button {
-                        downloader.openResult(item)
-                    } label: {
-                        Image(systemName: "arrow.up.forward.app")
-                    }
-                    .help("Open downloaded file")
-                    Button {
-                        downloader.revealResult(item)
-                    } label: {
-                        Image(systemName: "folder")
-                    }
-                    .help("Reveal downloaded file")
-                }
-                .buttonStyle(HoverButtonStyle())
-                .font(.system(size: UIScale.pt(11)))
-                .pointerCursor()
-            }
-
-        }
-        .padding(.vertical, UIScale.pt(8))
-        .padding(.horizontal, UIScale.pt(10))
-        .background(
-            isActive
-                ? DashSkin.paper2(dark) : Color.clear,
-            in: RoundedRectangle(cornerRadius: UIScale.pt(9))
-        )
-        .overlay(
-            isActive
-                ? RoundedRectangle(cornerRadius: UIScale.pt(9)).strokeBorder(
-                    theme.opacity(0.3), lineWidth: UIScale.pt(1))
-                : nil
-        )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if case .done = item.status {
-                downloader.openResult(item)
-            } else {
-                logItem = item
-            }
+            .padding(.trailing, UIScale.pt(10))
         }
     }
 
@@ -693,10 +697,9 @@ struct DownloadSheet: View {
                 Button("Retry") {
                     downloader.retry(item)
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(10), weight: .medium))
                 .foregroundStyle(theme)
-                .pointerCursor()
                 .disabled(downloader.isRunning)
             case .done:
                 HStack(spacing: UIScale.pt(4)) {
@@ -713,9 +716,8 @@ struct DownloadSheet: View {
                     }
                     .help("Reveal downloaded file")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(11)))
-                .pointerCursor()
             default:
                 EmptyView()
             }
@@ -725,10 +727,9 @@ struct DownloadSheet: View {
             } label: {
                 Image(systemName: "trash")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .font(.system(size: UIScale.pt(11)))
             .foregroundStyle(.red)
-            .pointerCursor()
             .help("Remove from download history")
         }
         .padding(.vertical, UIScale.pt(5))
@@ -753,8 +754,7 @@ struct DownloadSheet: View {
                         .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(HoverButtonStyle())
-                .pointerCursor()
+                .buttonStyle(.edith(.toolbar))
             }
             .padding(.horizontal, UIScale.pt(20))
             .padding(.vertical, UIScale.pt(12))
@@ -786,9 +786,8 @@ struct DownloadSheet: View {
                 Button("Clear History") {
                     confirmClearHistory = true
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(11)))
-                .pointerCursor()
                 .disabled(downloader.isRunning)
                 .confirmationDialog(
                     "Clear download history?", isPresented: $confirmClearHistory,
@@ -809,16 +808,14 @@ struct DownloadSheet: View {
                     Label("Cancel All", systemImage: "xmark")
                         .font(.system(size: UIScale.pt(11)))
                 }
-                .buttonStyle(HoverButtonStyle())
-                .pointerCursor()
+                .buttonStyle(.edith(.toolbar))
             }
             Spacer()
             Button("Close") {
                 dismiss()
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .font(.system(size: UIScale.pt(11)))
-            .pointerCursor()
         }
         .padding(.horizontal, UIScale.pt(22))
         .padding(.vertical, UIScale.pt(10))

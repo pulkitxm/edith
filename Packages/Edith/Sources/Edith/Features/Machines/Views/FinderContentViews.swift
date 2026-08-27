@@ -242,8 +242,7 @@ struct FinderListView: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
     }
 }
 
@@ -398,7 +397,7 @@ struct QuickLookOverlay: View {
             } label: {
                 Image(systemName: "xmark")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Close (space)")
             Spacer(minLength: 0)
             Text(entry?.name ?? "")
@@ -411,18 +410,17 @@ struct QuickLookOverlay: View {
             } label: {
                 Image(systemName: "chevron.up")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Previous")
             Button {
                 model.moveSelection(by: 1, extend: false)
             } label: {
                 Image(systemName: "chevron.down")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Next")
             if let entry, !entry.isDirectory {
                 Button("Open") { model.open(entry) }
-                    .pointerCursor()
                     .font(.system(size: UIScale.pt(11), weight: .medium))
             }
         }
@@ -462,7 +460,6 @@ struct QuickLookOverlay: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 Button("Open Folder") { model.open(entry) }
-                    .pointerCursor()
                     .padding(.top, UIScale.pt(4))
             }
             Spacer(minLength: 0)
@@ -543,8 +540,7 @@ private struct FinderSidebarRow: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
         .onHover { hovering = $0 }
         .onDrop(
             of: [MachineItemsPayload.typeIdentifier, UTType.fileURL.identifier],
@@ -605,11 +601,9 @@ struct FinderInfoSheet: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(summary.path, forType: .string)
                 }
-                .pointerCursor()
                 Spacer()
                 Button("Done") { dismiss() }
                     .keyboardShortcut(.defaultAction)
-                    .pointerCursor()
             }
             .padding(UIScale.pt(14))
         }

@@ -348,7 +348,7 @@ struct DockerContainerDetail: View {
                 Button(action: onBack) {
                     Image(systemName: "chevron.left")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help("Back to the list")
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(live.displayName)
@@ -381,7 +381,6 @@ struct DockerContainerDetail: View {
                                 NSWorkspace.shared.open(urls[0])
                             }
                         }
-                        .pointerCursor()
                     }
                 }
                 Button("Remove", role: .destructive, action: onRemove)
@@ -420,7 +419,6 @@ struct DockerContainerDetail: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .pointerCursor()
             .help("Switch to another container in this group")
         }
     }
@@ -458,8 +456,7 @@ struct DockerContainerDetail: View {
                         )
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .pointerCursor()
+                .buttonStyle(.edith(.borderless))
             }
             Spacer(minLength: 0)
             if tab == .logs {
@@ -479,14 +476,14 @@ struct DockerContainerDetail: View {
                 } label: {
                     Image(systemName: "textformat.size.smaller")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help("Smaller log text")
                 Button {
                     model.logFontSize = min(18, model.logFontSize + 1)
                 } label: {
                     Image(systemName: "textformat.size.larger")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help("Larger log text")
                 Button {
                     NSPasteboard.general.clearContents()
@@ -494,14 +491,14 @@ struct DockerContainerDetail: View {
                 } label: {
                     Image(systemName: "doc.on.doc")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help("Copy all visible log lines")
                 Button {
                     model.logs = []
                 } label: {
                     Image(systemName: "clear")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help("Clear the log view")
             }
         }
@@ -550,7 +547,6 @@ struct DockerContainerDetail: View {
                     Button("Reattach") {
                         model.startLogs(session: session, container: live)
                     }
-                    .pointerCursor()
                     .font(.system(size: UIScale.pt(11), weight: .medium))
                 }
                 .padding(.horizontal, UIScale.pt(12))
@@ -583,7 +579,6 @@ struct DockerContainerDetail: View {
                         Button("Retry") {
                             loadGeneration &+= 1
                         }
-                        .pointerCursor()
                         .font(.system(size: UIScale.pt(11), weight: .medium))
                     }
                 } else {
@@ -611,8 +606,7 @@ struct DockerContainerDetail: View {
                         Image(systemName: "doc.on.doc")
                             .font(.system(size: UIScale.pt(9)))
                     }
-                    .buttonStyle(.plain)
-                    .pointerCursor()
+                    .buttonStyle(.edith(.borderless))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .help("Copy \(title)")
                 }
@@ -706,7 +700,6 @@ struct DockerContainerDetail: View {
                     Button("Retry") {
                         loadGeneration &+= 1
                     }
-                    .pointerCursor()
                     .font(.system(size: UIScale.pt(11), weight: .medium))
                 }
                 .padding(UIScale.pt(16))
@@ -752,7 +745,7 @@ struct DockerContainerDetail: View {
                 } label: {
                     Image(systemName: "chevron.up")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .disabled(model.filePath == "/")
                 Text(model.filePath)
                     .font(DashSkin.mono(11))

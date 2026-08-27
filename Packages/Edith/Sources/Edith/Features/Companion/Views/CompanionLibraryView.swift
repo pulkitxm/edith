@@ -466,8 +466,7 @@ struct CompanionLibraryScreen: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
     }
 
     private func hitRow(_ hit: CompanionSearchHit) -> some View {
@@ -503,8 +502,7 @@ struct CompanionLibraryScreen: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
     }
 
     private func kindChip(_ kind: String) -> some View {
@@ -537,8 +535,7 @@ struct CompanionLibraryScreen: View {
                             .font(.system(size: UIScale.pt(12.5)))
                             .foregroundStyle(DashSkin.inkSoft(dark))
                     }
-                    .buttonStyle(.plain)
-                    .pointerCursor()
+                    .buttonStyle(.edith(.borderless))
                     .help("Open with the default app")
                     Button {
                         model.closeDetail()
@@ -547,8 +544,7 @@ struct CompanionLibraryScreen: View {
                             .font(.system(size: UIScale.pt(13)))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
-                    .buttonStyle(.plain)
-                    .pointerCursor()
+                    .buttonStyle(.edith(.borderless))
                     .help("Close")
                 }
                 if model.loadingDetail {
@@ -692,8 +688,7 @@ struct VoicePlayerBar: View {
                     .foregroundStyle(
                         playback.loaded ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            .buttonStyle(.edith(.borderless))
             .disabled(!playback.loaded)
             .help(playback.playing ? "Pause" : "Play")
             GeometryReader { geometry in

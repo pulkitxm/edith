@@ -30,14 +30,12 @@ struct QuinjetLocalProjectPicker: View {
                         Label("Choose folder", systemImage: "folder.badge.plus")
                     }
                     .buttonStyle(QuinjetToolbarButtonStyle())
-                    .pointerCursor()
                     Button {
                         Task { await model.refreshProjects() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
                     .buttonStyle(QuinjetToolbarButtonStyle())
-                    .pointerCursor()
                     .help("Refresh recent projects")
                 }
             } accessory: {
@@ -166,8 +164,7 @@ struct QuinjetProjectCard: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            .buttonStyle(.edith(.borderless))
 
             Button {
                 showsWorktrees = true
@@ -184,7 +181,6 @@ struct QuinjetProjectCard: View {
                 .padding(.vertical, UIScale.pt(10))
             }
             .buttonStyle(QuinjetWorktreeCountButtonStyle(dark: dark))
-            .pointerCursor()
             .popover(isPresented: $showsWorktrees, arrowEdge: .bottom) {
                 QuinjetWorktreePicker(
                     projectName: project.name, worktrees: project.availableWorktrees,
@@ -283,7 +279,6 @@ struct QuinjetWorktreePicker: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(QuinjetWorktreeRowStyle(dark: dark))
-                .pointerCursor()
             }
         }
     }
@@ -312,6 +307,7 @@ struct QuinjetWorktreeCountButtonStyle: ButtonStyle {
                     .strokeBorder(
                         hovering ? DashSkin.accent(dark).opacity(0.65) : DashSkin.lineStrong(dark))
             }
+            .edithButtonTarget(.toolbar)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .onHover { hovering = $0 }
     }
@@ -334,6 +330,7 @@ private struct QuinjetWorktreeRowStyle: ButtonStyle {
                     .strokeBorder(
                         hovering ? DashSkin.accent(dark).opacity(0.3) : Color.clear)
             }
+            .edithButtonTarget(.row)
             .onHover { hovering = $0 }
     }
 }
@@ -357,6 +354,7 @@ struct QuinjetToolbarButtonStyle: ButtonStyle {
                 RoundedRectangle(cornerRadius: UIScale.pt(7))
                     .strokeBorder(DashSkin.lineStrong(dark))
             }
+            .edithButtonTarget(.toolbar)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .onHover { hovering = $0 }
     }

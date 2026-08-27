@@ -35,7 +35,7 @@ struct UsageMachinesPicker: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 Spacer(minLength: 0)
                 Button("Done") { dismiss() }
-                    .buttonStyle(.plain).pointerCursor()
+                    .buttonStyle(.edith(.borderless))
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
             }
@@ -102,7 +102,6 @@ struct UsageMachinesPicker: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(MachineRowStyle(dark: dark))
-        .pointerCursor()
         .padding(.horizontal, UIScale.pt(2))
     }
 
@@ -125,6 +124,7 @@ private struct MachineRowStyle: ButtonStyle {
                 hovering ? DashSkin.inkFaint(dark).opacity(0.14) : Color.clear,
                 in: RoundedRectangle(cornerRadius: UIScale.pt(6))
             )
+            .edithButtonTarget(.row)
             .onHover { hovering = $0 }
     }
 }

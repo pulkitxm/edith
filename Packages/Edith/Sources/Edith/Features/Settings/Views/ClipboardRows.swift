@@ -63,7 +63,6 @@ struct ClipboardRows: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .pointerCursor()
             }
 
             Group {
@@ -87,7 +86,6 @@ struct ClipboardRows: View {
                     }
                 }
                 Button("Open history ▸") { showHistory = true }
-                    .pointerCursor()
             } header: {
                 Text("Recent")
             }
@@ -136,7 +134,6 @@ struct ClipboardRows: View {
                     )
                 }
             }
-            .pointerCursor()
             if autoPaste, !accessibilityGranted {
                 Text(
                     "Accessibility isn't granted yet - selecting an item only copies until you grant it."
@@ -147,7 +144,6 @@ struct ClipboardRows: View {
                 "Paste without formatting",
                 isOn: $pastePlainText.configured(AppStorageKeys.Clipboard.pastePlainText)
             )
-            .pointerCursor()
             Text("Strips fonts, colors and links so pasted text matches the destination.")
                 .settingsCaption()
         } header: {
@@ -159,13 +155,13 @@ struct ClipboardRows: View {
         Section {
             Toggle(
                 "Files", isOn: $saveFiles.configured(AppStorageKeys.Clipboard.saveFiles)
-            ).pointerCursor()
+            )
             Toggle(
                 "Images", isOn: $saveImages.configured(AppStorageKeys.Clipboard.saveImages)
-            ).pointerCursor()
+            )
             Toggle(
                 "Text", isOn: $saveText.configured(AppStorageKeys.Clipboard.saveText)
-            ).pointerCursor()
+            )
             Text("Change what types of copied content should be stored.")
                 .settingsCaption()
         } header: {
@@ -182,7 +178,6 @@ struct ClipboardRows: View {
                         in: 1...999
                     )
                     .labelsHidden()
-                    .pointerCursor()
                 }
             } label: {
                 HStack(spacing: UIScale.pt(6)) {
@@ -201,7 +196,6 @@ struct ClipboardRows: View {
                     )
                 }
             }
-            .pointerCursor()
             Picker(
                 selection: $maxAgeDays.configured(AppStorageKeys.Clipboard.maxAgeDays)
             ) {
@@ -215,7 +209,6 @@ struct ClipboardRows: View {
                     InfoDot("Removes entries older than N days, pinned items excepted.")
                 }
             }
-            .pointerCursor()
             Stepper(
                 value: $checkInterval.configured(AppStorageKeys.Clipboard.checkInterval),
                 in: 0.2...5, step: 0.1
@@ -227,7 +220,6 @@ struct ClipboardRows: View {
                     )
                 }
             }
-            .pointerCursor()
         }
     }
 
@@ -245,7 +237,6 @@ struct ClipboardRows: View {
                     )
                 }
             }
-            .pointerCursor()
             Picker(selection: $pinTo.configured(AppStorageKeys.Clipboard.pinTo)) {
                 Text("Top").tag("top")
                 Text("Bottom").tag("bottom")
@@ -255,14 +246,12 @@ struct ClipboardRows: View {
                     InfoDot("Whether pinned items stick to the top or the bottom of the list.")
                 }
             }
-            .pointerCursor()
             Toggle(isOn: $showFooter.configured(AppStorageKeys.Clipboard.showFooter)) {
                 HStack(spacing: UIScale.pt(6)) {
                     Text("Show footer")
                     InfoDot("Shows the Clear and Preferences rows at the bottom of the popup.")
                 }
             }
-            .pointerCursor()
         }
     }
 

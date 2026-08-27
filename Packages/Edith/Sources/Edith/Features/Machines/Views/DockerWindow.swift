@@ -261,8 +261,7 @@ struct DockerConsoleView: View {
                     )
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .pointerCursor()
+                .buttonStyle(.edith(.borderless))
                 .padding(.horizontal, UIScale.pt(6))
             }
             Spacer(minLength: 0)
@@ -325,7 +324,7 @@ struct DockerConsoleView: View {
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Refresh")
             Menu {
                 Button("Prune unused images…") { pendingPrune = PrunePlan(kind: .images) }

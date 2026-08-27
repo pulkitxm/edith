@@ -122,10 +122,8 @@ struct MachineToolsTab: View {
                         }
                     }
                     .disabled(session.mountHealth != .mounted)
-                    .pointerCursor()
                     Button("Unmount") { unmountDisk() }
                         .disabled(mounting || session.isRemounting)
-                        .pointerCursor()
                 } else {
                     Text(
                         MachineMounts.isAvailable
@@ -147,7 +145,6 @@ struct MachineToolsTab: View {
                         .disabled(
                             mounting || !MachineMounts.isAvailable || !session.state.isConnected
                         )
-                        .pointerCursor()
                 }
             }
         }
@@ -237,7 +234,6 @@ struct MachineToolsTab: View {
                                     ) { urls, _ in NSWorkspace.shared.open(urls[0]) }
                                 }
                             }
-                            .pointerCursor()
                             .font(.system(size: UIScale.pt(11)))
                         }
                         Toggle(
@@ -255,7 +251,7 @@ struct MachineToolsTab: View {
                         } label: {
                             Image(systemName: "trash")
                         }
-                        .buttonStyle(HoverButtonStyle())
+                        .buttonStyle(.edith(.toolbar))
                         .help("Remove")
                     }
                 }
@@ -274,7 +270,6 @@ struct MachineToolsTab: View {
                         .frame(width: UIScale.pt(90))
                     Button("Add") { addForward() }
                         .disabled(Int(newForwardLocal) == nil || Int(newForwardRemote) == nil)
-                        .pointerCursor()
                 }
             }
         }
@@ -297,14 +292,13 @@ struct MachineToolsTab: View {
                         Spacer(minLength: 0)
                         Button("Run") { run(snippet) }
                             .disabled(runningSnippet || !session.state.isConnected)
-                            .pointerCursor()
                             .font(.system(size: UIScale.pt(11)))
                         Button {
                             pendingSnippetRemoval = snippet
                         } label: {
                             Image(systemName: "trash")
                         }
-                        .buttonStyle(HoverButtonStyle())
+                        .buttonStyle(.edith(.toolbar))
                         .help("Remove")
                     }
                 }
@@ -319,7 +313,6 @@ struct MachineToolsTab: View {
                             snippetTitle.trimmingCharacters(in: .whitespaces).isEmpty
                                 || snippetCommand.trimmingCharacters(in: .whitespaces).isEmpty
                         )
-                        .pointerCursor()
                 }
                 if !snippetOutput.isEmpty {
                     TerminalLogView(
@@ -365,12 +358,10 @@ struct MachineToolsTab: View {
                             .lineLimit(1)
                         Spacer(minLength: 0)
                         Button("Restart") { runService("restart", unit: service.unit) }
-                            .pointerCursor()
                             .font(.system(size: UIScale.pt(11)))
                         Button(service.isRunning ? "Stop" : "Start") {
                             runService(service.isRunning ? "stop" : "start", unit: service.unit)
                         }
-                        .pointerCursor()
                         .font(.system(size: UIScale.pt(11)))
                     }
                 }

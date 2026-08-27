@@ -74,7 +74,7 @@ private struct AudioMixerView: View {
                         for: .applicationAudio)
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(.white.opacity(0.8))
         }

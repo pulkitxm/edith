@@ -1,41 +1,7 @@
 import AppKit
 import SwiftUI
 
-public struct HoverButton: ViewModifier {
-    @State private var hovering = false
-
-    public init() {}
-
-    @ViewBuilder
-    public func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) {
-            content
-                .padding(UIScale.pt(4))
-                .glassEffect(
-                    .regular.interactive(), in: RoundedRectangle(cornerRadius: UIScale.pt(6))
-                )
-                .onHover { hovering = $0 }
-                .animation(Motion.feedback, value: hovering)
-        } else {
-            content
-                .padding(UIScale.pt(4))
-                .background(
-                    .primary.opacity(hovering ? 0.07 : 0),
-                    in: RoundedRectangle(cornerRadius: UIScale.pt(6))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: UIScale.pt(6))
-                        .strokeBorder(
-                            .primary.opacity(hovering ? 0.18 : 0), lineWidth: UIScale.pt(0.5))
-                )
-                .shadow(color: .black.opacity(hovering ? 0.35 : 0), radius: UIScale.pt(4), y: 1)
-                .onHover { hovering = $0 }
-                .animation(Motion.feedback, value: hovering)
-        }
-    }
-}
-
-public enum EdithButtonRole: Sendable {
+public enum EdithButtonRole: Sendable, CaseIterable, Hashable {
     case primary
     case secondary
     case borderless
@@ -44,6 +10,15 @@ public enum EdithButtonRole: Sendable {
     case row
     case iconOnly
     case selection
+
+    var usesFeatureAppearance: Bool {
+        switch self {
+        case .borderless, .toolbar, .iconOnly:
+            true
+        case .primary, .secondary, .destructive, .row, .selection:
+            false
+        }
+    }
 }
 
 struct EdithButtonMetrics: Equatable, Sendable {
@@ -59,18 +34,10 @@ struct EdithButtonMetrics: Equatable, Sendable {
             Self(
                 horizontalPadding: 12, verticalPadding: 6, minimumWidth: 32,
                 minimumHeight: 32, cornerRadius: 7)
-        case .borderless:
+        case .borderless, .toolbar, .iconOnly:
             Self(
-                horizontalPadding: 5, verticalPadding: 4, minimumWidth: 28,
-                minimumHeight: 28, cornerRadius: 6)
-        case .toolbar:
-            Self(
-                horizontalPadding: 7, verticalPadding: 5, minimumWidth: 28,
-                minimumHeight: 28, cornerRadius: 6)
-        case .iconOnly:
-            Self(
-                horizontalPadding: 6, verticalPadding: 6, minimumWidth: 28,
-                minimumHeight: 28, cornerRadius: 6)
+                horizontalPadding: 0, verticalPadding: 0, minimumWidth: 0,
+                minimumHeight: 0, cornerRadius: 6)
         case .row, .selection:
             Self(
                 horizontalPadding: 9, verticalPadding: 7, minimumWidth: 32,
@@ -110,13 +77,36 @@ public struct EdithButtonStyle: ButtonStyle {
     }
 }
 
-public struct HoverButtonStyle: ButtonStyle {
-    public init() {}
+public struct EdithButtonTarget: ViewModifier {
+    public let role: EdithButtonRole
 
-    public func makeBody(configuration: Configuration) -> some View {
-        EdithButtonBody(
-            label: configuration.label, role: .toolbar, selected: false,
-            pressed: configuration.isPressed, tint: brandAccent)
+    public init(_ role: EdithButtonRole) {
+        self.role = role
+    }
+
+    public func body(content: Content) -> some View {
+        let metrics = EdithButtonMetrics.metrics(for: role)
+        let fillsWidth = role == .row || role == .selection
+        if role.usesFeatureAppearance {
+            content.contentShape(Rectangle())
+        } else {
+            content
+                .frame(
+                    minWidth: UIScale.pt(metrics.minimumWidth),
+                    maxWidth: fillsWidth ? .infinity : nil,
+                    minHeight: UIScale.pt(metrics.minimumHeight),
+                    alignment: fillsWidth ? .leading : .center
+                )
+                .contentShape(Rectangle())
+        }
+    }
+}
+
+extension ButtonStyle where Self == EdithButtonStyle {
+    public static func edith(
+        _ role: EdithButtonRole, selected: Bool = false, tint: Color = brandAccent
+    ) -> EdithButtonStyle {
+        EdithButtonStyle(role, selected: selected, tint: tint)
     }
 }
 
@@ -143,30 +133,36 @@ private struct EdithButtonBody<Label: View>: View {
     private var inactive: Bool { activeState == .inactive }
     private var emphasized: Bool { selected || pressed || hovering }
 
-    var body: some View {
-        label
-            .padding(.horizontal, UIScale.pt(metrics.horizontalPadding))
-            .padding(.vertical, UIScale.pt(metrics.verticalPadding))
-            .frame(
-                minWidth: UIScale.pt(metrics.minimumWidth),
-                maxWidth: fillsWidth ? .infinity : nil,
-                minHeight: UIScale.pt(metrics.minimumHeight),
-                alignment: fillsWidth ? .leading : .center
-            )
-            .foregroundStyle(foreground)
-            .background(background, in: shape)
-            .overlay(shape.strokeBorder(border, lineWidth: borderWidth))
-            .contentShape(shape)
-            .opacity(enabled ? (inactive ? 0.72 : 1) : 0.42)
-            .brightness(pressed && enabled ? -0.08 : 0)
-            .onHover { hovering = enabled && $0 }
-            .animation(
-                Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: hovering
-            )
-            .animation(
-                Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: pressed
-            )
-            .accessibilityAddTraits(selected ? .isSelected : AccessibilityTraits())
+    @ViewBuilder var body: some View {
+        if role.usesFeatureAppearance {
+            label
+                .contentShape(Rectangle())
+                .accessibilityAddTraits(selected ? .isSelected : AccessibilityTraits())
+        } else {
+            label
+                .padding(.horizontal, UIScale.pt(metrics.horizontalPadding))
+                .padding(.vertical, UIScale.pt(metrics.verticalPadding))
+                .frame(
+                    minWidth: UIScale.pt(metrics.minimumWidth),
+                    maxWidth: fillsWidth ? .infinity : nil,
+                    minHeight: UIScale.pt(metrics.minimumHeight),
+                    alignment: fillsWidth ? .leading : .center
+                )
+                .foregroundStyle(foreground)
+                .background(background, in: shape)
+                .overlay(shape.strokeBorder(border, lineWidth: borderWidth))
+                .contentShape(Rectangle())
+                .opacity(enabled ? (inactive ? 0.72 : 1) : 0.42)
+                .brightness(pressed && enabled ? -0.08 : 0)
+                .onHover { hovering = enabled && $0 }
+                .animation(
+                    Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: hovering
+                )
+                .animation(
+                    Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: pressed
+                )
+                .accessibilityAddTraits(selected ? .isSelected : AccessibilityTraits())
+        }
     }
 
     private var foreground: Color {
@@ -179,6 +175,7 @@ private struct EdithButtonBody<Label: View>: View {
     }
 
     private var background: Color {
+        guard !role.usesFeatureAppearance else { return .clear }
         let boost = contrast == .increased ? 0.05 : 0
         switch role {
         case .primary:
@@ -190,12 +187,15 @@ private struct EdithButtonBody<Label: View>: View {
         case .row, .selection:
             if selected { return tint.opacity(0.2 + boost) }
             return Color.primary.opacity((emphasized ? 0.08 : 0) + boost)
-        case .borderless, .toolbar, .iconOnly:
+        case .toolbar, .iconOnly:
             return Color.primary.opacity((emphasized ? 0.08 : 0) + boost)
+        case .borderless:
+            return .clear
         }
     }
 
     private var border: Color {
+        guard !role.usesFeatureAppearance else { return .clear }
         if focused { return tint.opacity(0.95) }
         if selected, differentiateWithoutColor { return Color.primary.opacity(0.75) }
         switch role {
@@ -203,8 +203,8 @@ private struct EdithButtonBody<Label: View>: View {
             return Color.primary.opacity(contrast == .increased ? 0.34 : 0.18)
         case .primary, .destructive:
             return Color.white.opacity(contrast == .increased ? 0.7 : 0.2)
-        default:
-            return Color.primary.opacity(emphasized ? 0.16 : 0)
+        case .row, .selection, .borderless, .toolbar, .iconOnly:
+            return .clear
         }
     }
 
@@ -215,21 +215,8 @@ private struct EdithButtonBody<Label: View>: View {
 }
 
 extension View {
-    public func hoverButton() -> some View { modifier(HoverButton()) }
-
-    @ViewBuilder
-    public func pointerCursor() -> some View {
-        if #available(macOS 15.0, *) {
-            pointerStyle(.link)
-        } else {
-            onContinuousHover { phase in
-                if case .active = phase {
-                    NSCursor.pointingHand.set()
-                } else {
-                    NSCursor.arrow.set()
-                }
-            }
-        }
+    public func edithButtonTarget(_ role: EdithButtonRole) -> some View {
+        modifier(EdithButtonTarget(role))
     }
 
     @ViewBuilder

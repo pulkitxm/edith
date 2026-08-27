@@ -129,9 +129,8 @@ struct OnboardingView: View {
                     OnboardingFlow.skip()
                     onFinish()
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .foregroundStyle(DashSkin.inkSoft(dark))
-                .pointerCursor()
             }
             .frame(width: UIScale.pt(210))
             .padding(.top, UIScale.pt(30))
@@ -173,9 +172,8 @@ struct OnboardingView: View {
                     .keyboardShortcut(.defaultAction)
                     .disabled(cloudChecking)
                     Button("Start fresh") { move(to: .picks, direction: 1) }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.edith(.borderless))
                         .foregroundStyle(DashSkin.inkSoft(dark))
-                        .pointerCursor()
                 }
             }
             .frame(width: UIScale.pt(230))
@@ -299,8 +297,7 @@ struct OnboardingView: View {
                     .strokeBorder(DashSkin.lineStrong(dark), style: StrokeStyle(dash: [4, 4]))
             }
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
     }
 
     private var permissionsStep: some View {
@@ -379,7 +376,6 @@ struct OnboardingView: View {
                 .overlay {
                     RoundedRectangle(cornerRadius: UIScale.pt(10)).strokeBorder(DashSkin.line(dark))
                 }
-                .pointerCursor()
                 if cloudBackupFound {
                     Text("We found an existing Edith backup in iCloud.")
                         .font(.system(size: UIScale.pt(10.5)))
@@ -442,9 +438,8 @@ struct OnboardingView: View {
         HStack(spacing: UIScale.pt(10)) {
             if step == .restore || step == .picks || step == .permissions {
                 Button("Back") { goBack() }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .foregroundStyle(DashSkin.inkSoft(dark))
-                    .pointerCursor()
             }
             Spacer()
             if step == .picks {
@@ -630,8 +625,7 @@ private struct ExtensionChoiceCard: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            .buttonStyle(.edith(.borderless))
             .accessibilityLabel("\(entry.title), \(selected ? "selected" : "not selected")")
             HStack(spacing: UIScale.pt(4)) {
                 Button(action: action) {
@@ -640,8 +634,7 @@ private struct ExtensionChoiceCard: View {
                         .foregroundStyle(selected ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                         .lineLimit(1)
                 }
-                .buttonStyle(.plain)
-                .pointerCursor()
+                .buttonStyle(.edith(.borderless))
                 if !permissions.isEmpty {
                     PermissionInfoButton(permissions: permissions)
                 }
@@ -715,7 +708,6 @@ private struct OnboardingPermissionCard: View {
             {
                 Button("Grant", action: grant)
                     .controlSize(.small)
-                    .pointerCursor()
             } else {
                 Text("On first use")
                     .font(.system(size: UIScale.pt(10), weight: .medium))
@@ -748,8 +740,8 @@ private struct OnboardingPrimaryButtonStyle: ButtonStyle {
                 DashSkin.accent(dark).opacity(configuration.isPressed ? 0.78 : 1),
                 in: RoundedRectangle(cornerRadius: compact ? 8 : 10)
             )
+            .edithButtonTarget(.primary)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
-            .pointerCursor()
     }
 }

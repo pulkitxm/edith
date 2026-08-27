@@ -325,8 +325,7 @@ private struct WorldClocksCard: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
         .help("Add a timezone clock")
         .popover(isPresented: $showAdd, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
@@ -350,8 +349,7 @@ private struct WorldClocksCard: View {
                                 .padding(.vertical, UIScale.pt(5))
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
-                            .pointerCursor()
+                            .buttonStyle(.edith(.borderless))
                         }
                         if matches.isEmpty {
                             Text("No matching timezones")
@@ -397,8 +395,7 @@ private struct ClockTile: View {
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .background(Circle().fill(DashSkin.paper2(dark)))
                         }
-                        .buttonStyle(.plain)
-                        .pointerCursor()
+                        .buttonStyle(.edith(.borderless))
                         .offset(x: 5, y: -5)
                         .help("Remove clock")
                     }
@@ -648,8 +645,7 @@ private struct QuickActionsCard: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
         .help(sub)
     }
 }
@@ -734,7 +730,7 @@ private struct MeetingsCard: View {
                         .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(theme)
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help("Join meeting")
             }
         }
@@ -759,7 +755,7 @@ private struct MeetingsCard: View {
             Button("Grant…") {
                 _ = try? MainPermissionOperations.center.request(.calendar)
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .font(.system(size: UIScale.pt(11)))
             .foregroundStyle(theme)
         }
@@ -791,8 +787,7 @@ struct JumpLink: View {
             .font(.system(size: UIScale.pt(11.5), weight: .medium))
             .foregroundStyle(DashSkin.accentDeep(dark))
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
         .padding(.top, UIScale.pt(10))
     }
 }
@@ -1009,7 +1004,7 @@ private struct MusicCard: View {
                     .font(.system(size: UIScale.pt(15)))
                     .foregroundStyle(theme)
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             Button {
                 remote.next()
             } label: {
@@ -1017,7 +1012,7 @@ private struct MusicCard: View {
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(theme)
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
         }
     }
 
@@ -1039,8 +1034,7 @@ private struct MusicCard: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
     }
 }
 

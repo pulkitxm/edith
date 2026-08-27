@@ -149,7 +149,7 @@ struct TerminalTabsView: View {
                                         Image(systemName: "xmark")
                                             .font(.system(size: UIScale.pt(7.5), weight: .bold))
                                     }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(.edith(.borderless))
                                 }
                             }
                             .foregroundStyle(
@@ -164,8 +164,7 @@ struct TerminalTabsView: View {
                             )
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
-                        .pointerCursor()
+                        .buttonStyle(.edith(.borderless))
                     }
                 }
             }
@@ -174,7 +173,7 @@ struct TerminalTabsView: View {
             } label: {
                 Image(systemName: "plus")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("New terminal (⌘T)")
 
             Toggle("Broadcast", isOn: $model.broadcast)
@@ -187,7 +186,7 @@ struct TerminalTabsView: View {
             } label: {
                 Image(systemName: "macwindow")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Open terminals in their own window")
         }
         .padding(.horizontal, UIScale.pt(12))
@@ -203,7 +202,6 @@ struct TerminalTabsView: View {
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(sendBroadcast)
             Button("Send", action: sendBroadcast)
-                .pointerCursor()
             if let broadcastError {
                 Text(broadcastError)
                     .font(.system(size: UIScale.pt(11)))

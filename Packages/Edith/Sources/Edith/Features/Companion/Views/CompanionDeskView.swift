@@ -314,10 +314,9 @@ struct CompanionDeskScreen: View {
                                 overrideNote = ""
                                 overrideTarget = discrepancy
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.edith(.borderless))
                             .font(.system(size: UIScale.pt(11.5), weight: .medium))
                             .foregroundStyle(DashSkin.accent(dark))
-                            .pointerCursor()
                         }
                     }
                 }
@@ -347,7 +346,6 @@ struct CompanionDeskScreen: View {
                     }
                 }
                 CompanionButton(title: "Cancel") { overrideTarget = nil }
-                    .pointerCursor()
             }
         }
         .padding(UIScale.pt(18))

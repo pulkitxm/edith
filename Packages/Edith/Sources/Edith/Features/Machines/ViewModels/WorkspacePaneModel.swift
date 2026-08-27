@@ -289,46 +289,46 @@ struct WorkspacePaneView: View {
         let machine = machines.allMachines.first { $0.id == tab.target.machineID }
         let foreign = tab.target.machineID != paneMachineID
         let selected = tab.id == pane.selected
-        return Button {
-            model.apply { layout in
-                layout.focused = pane.id
-                layout.root.updatePane(pane.id) { $0.selected = tab.id }
-            }
-        } label: {
-            HStack(spacing: UIScale.pt(5)) {
-                Image(systemName: tab.target.screen.icon)
-                    .font(.system(size: UIScale.pt(9.5)))
-                Text(
-                    foreign
-                        ? "\(machine?.name ?? "Machine") · \(tab.target.screen.title)"
-                        : tab.target.screen.title
-                )
-                .font(.system(size: UIScale.pt(11), weight: .medium))
-                .lineLimit(1)
-                Button {
-                    closeTab(tab)
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: UIScale.pt(7.5), weight: .bold))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .padding(UIScale.pt(2))
-                        .contentShape(Rectangle())
+        return ZStack(alignment: .trailing) {
+            Button {
+                model.apply { layout in
+                    layout.focused = pane.id
+                    layout.root.updatePane(pane.id) { $0.selected = tab.id }
                 }
-                .buttonStyle(.plain)
-                .pointerCursor()
-                .help("Close this tab")
+            } label: {
+                HStack(spacing: UIScale.pt(5)) {
+                    Image(systemName: tab.target.screen.icon)
+                        .font(.system(size: UIScale.pt(9.5)))
+                    Text(
+                        foreign
+                            ? "\(machine?.name ?? "Machine") · \(tab.target.screen.title)"
+                            : tab.target.screen.title
+                    )
+                    .font(.system(size: UIScale.pt(11), weight: .medium))
+                    .lineLimit(1)
+                    Color.clear.frame(width: UIScale.pt(16), height: UIScale.pt(16))
+                }
+                .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
+                .padding(.horizontal, UIScale.pt(8))
+                .padding(.vertical, UIScale.pt(4))
+                .background(
+                    selected ? DashSkin.paper2(dark) : .clear,
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                )
+                .contentShape(Rectangle())
             }
-            .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
-            .padding(.horizontal, UIScale.pt(8))
-            .padding(.vertical, UIScale.pt(4))
-            .background(
-                selected ? DashSkin.paper2(dark) : .clear,
-                in: RoundedRectangle(cornerRadius: UIScale.pt(6))
-            )
-            .contentShape(Rectangle())
+            .buttonStyle(.edith(.borderless))
+            Button {
+                closeTab(tab)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: UIScale.pt(7.5), weight: .bold))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+            }
+            .buttonStyle(.edith(.borderless))
+            .padding(.trailing, UIScale.pt(2))
+            .help("Close this tab")
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
         .contextMenu {
             Button("Close Tab") { closeTab(tab) }
             Divider()

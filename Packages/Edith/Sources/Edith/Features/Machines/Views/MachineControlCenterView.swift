@@ -289,13 +289,12 @@ struct MachineControlCenterButton: View {
                 }
                 .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(7)))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .accessibilityLabel("Machine controls")
         .onHover {
             hovering = $0
             if $0 { model.refreshIfStale() }
         }
-        .pointerCursor()
         .help("Control this machine's hardware and wireless settings")
         .popover(isPresented: $presented, arrowEdge: .top) {
             MachineControlCenterView(model: model)
@@ -471,10 +470,9 @@ struct MachineControlCenterView: View {
                     .frame(width: UIScale.pt(24), height: UIScale.pt(24))
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .disabled(isBusy)
             .opacity(isBusy ? 0.35 : 1)
-            .pointerCursor()
             .help("Refresh available controls")
         }
     }
@@ -542,7 +540,6 @@ struct MachineControlCenterView: View {
                 }
                 .controlSize(.small)
                 .disabled(session.state.isBusy)
-                .pointerCursor()
                 .padding(.top, UIScale.pt(3))
             }
         }
@@ -676,7 +673,6 @@ struct MachineControlCenterView: View {
             .controlSize(.small)
             .tint(DashSkin.accent(dark))
             .disabled(controlsDisabled)
-            .pointerCursor()
         }
         .padding(.horizontal, UIScale.pt(8))
         .padding(.vertical, UIScale.pt(9))
@@ -687,32 +683,34 @@ struct MachineControlCenterView: View {
     private func toggleRow(
         _ title: String, symbol: String, value: Bool, onChange: @escaping (Bool) -> Void
     ) -> some View {
-        HStack(spacing: UIScale.pt(9)) {
-            Image(systemName: symbol)
-                .font(.system(size: UIScale.pt(11.5)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-                .frame(width: UIScale.pt(18))
-            Text(title)
-                .font(.system(size: UIScale.pt(12.5)))
-                .foregroundStyle(DashSkin.ink(dark))
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Toggle("", isOn: .constant(value))
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .allowsHitTesting(false)
-        }
-        .padding(.horizontal, UIScale.pt(8))
-        .padding(.vertical, UIScale.pt(8))
-        .background(rowBackground(title))
-        .contentShape(Rectangle())
-        .opacity(controlsDisabled ? 0.55 : 1)
-        .onTapGesture {
+        Button {
             guard !controlsDisabled else { return }
             onChange(!value)
+        } label: {
+            HStack(spacing: UIScale.pt(9)) {
+                Image(systemName: symbol)
+                    .font(.system(size: UIScale.pt(11.5)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .frame(width: UIScale.pt(18))
+                Text(title)
+                    .font(.system(size: UIScale.pt(12.5)))
+                    .foregroundStyle(DashSkin.ink(dark))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Toggle("", isOn: .constant(value))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .allowsHitTesting(false)
+            }
+            .padding(.horizontal, UIScale.pt(8))
+            .padding(.vertical, UIScale.pt(8))
+            .background(rowBackground(title))
+            .contentShape(Rectangle())
+            .opacity(controlsDisabled ? 0.55 : 1)
         }
+        .buttonStyle(.edith(.borderless))
+        .disabled(controlsDisabled)
         .onHover { updateHover(title, hovering: $0) }
-        .pointerCursor()
     }
 
     private var coolingControls: some View {
@@ -772,7 +770,6 @@ struct MachineControlCenterView: View {
                 .controlSize(.small)
                 .frame(width: UIScale.pt(132))
                 .disabled(controlsDisabled)
-                .pointerCursor()
             }
             HStack(spacing: UIScale.pt(9)) {
                 Image(systemName: "timer")
@@ -792,11 +789,9 @@ struct MachineControlCenterView: View {
                 .controlSize(.small)
                 .frame(width: UIScale.pt(92))
                 .disabled(controlsDisabled)
-                .pointerCursor()
                 Button("Apply") { model.applyProfile() }
                     .controlSize(.small)
                     .disabled(model.selectedProfile.isEmpty || controlsDisabled)
-                    .pointerCursor()
             }
             HStack(spacing: UIScale.pt(8)) {
                 Text(profileStatus(profile))

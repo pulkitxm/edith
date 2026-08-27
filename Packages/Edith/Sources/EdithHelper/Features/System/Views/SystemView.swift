@@ -32,7 +32,6 @@ struct SystemView: View {
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .tint(theme)
-                    .pointerCursor()
                 }
             }
             .card()
@@ -61,7 +60,7 @@ struct SystemView: View {
                         .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
                         Button("Relaunch") { store.relaunch() }
-                            .buttonStyle(HoverButtonStyle())
+                            .buttonStyle(.edith(.toolbar))
                             .font(.system(size: 11))
                             .foregroundStyle(theme)
                             .help("macOS applies fresh grants only to a fresh process")
@@ -78,7 +77,7 @@ struct SystemView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 6)
                     }
-                    .buttonStyle(HoverButtonStyle())
+                    .buttonStyle(.edith(.toolbar))
                     .foregroundStyle(theme)
                     .disabled(store.phase != .idle)
                     .help("3-second countdown, then the keyboard locks until Done")
@@ -101,7 +100,7 @@ struct SystemView: View {
             Spacer()
             if !granted {
                 Button("Grant…") { grant() }
-                    .buttonStyle(HoverButtonStyle())
+                    .buttonStyle(.edith(.toolbar))
                     .font(.system(size: 11))
                     .foregroundStyle(theme)
                     .help("Opens System Settings on the right pane")

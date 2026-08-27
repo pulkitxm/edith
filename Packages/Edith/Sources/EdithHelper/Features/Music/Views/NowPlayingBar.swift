@@ -46,7 +46,7 @@ struct NowPlayingBar: View {
                             .font(.system(size: 12))
                             .foregroundStyle(theme)
                     }
-                    .buttonStyle(HoverButtonStyle())
+                    .buttonStyle(.edith(.toolbar))
                     Button {
                         player.perform(.toggle)
                     } label: {
@@ -54,7 +54,7 @@ struct NowPlayingBar: View {
                             .font(.system(size: 15))
                             .foregroundStyle(theme)
                     }
-                    .buttonStyle(HoverButtonStyle())
+                    .buttonStyle(.edith(.toolbar))
                     Button {
                         player.perform(.next)
                     } label: {
@@ -62,7 +62,7 @@ struct NowPlayingBar: View {
                             .font(.system(size: 12))
                             .foregroundStyle(theme)
                     }
-                    .buttonStyle(HoverButtonStyle())
+                    .buttonStyle(.edith(.toolbar))
                     Button {
                         player.perform(.shuffle(!player.isShuffling))
                     } label: {
@@ -70,7 +70,7 @@ struct NowPlayingBar: View {
                             .font(.system(size: 12))
                             .foregroundStyle(player.isShuffling ? theme : .secondary)
                     }
-                    .buttonStyle(HoverButtonStyle())
+                    .buttonStyle(.edith(.toolbar))
                     .help(
                         player.isShuffling
                             ? "Shuffling this folder and everything in it" : "Play in order")
@@ -81,7 +81,7 @@ struct NowPlayingBar: View {
                             .font(.system(size: 12))
                             .foregroundStyle(player.isLooping ? theme : .secondary)
                     }
-                    .buttonStyle(HoverButtonStyle())
+                    .buttonStyle(.edith(.toolbar))
                     .help(player.isLooping ? "Repeating this track" : "Play through the queue")
                     Slider(
                         value: Binding(
@@ -92,7 +92,6 @@ struct NowPlayingBar: View {
                     .controlSize(.mini)
                     .tint(theme)
                     .frame(width: 60)
-                    .pointerCursor()
                 }
                 scrubber
             }
@@ -140,7 +139,6 @@ struct NowPlayingBar: View {
             )
         }
         .frame(height: 5)
-        .pointerCursor()
     }
 
     private func fill(_ width: CGFloat, _ knob: CGFloat) -> some View {

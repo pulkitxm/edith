@@ -78,7 +78,7 @@ struct HerdrPage: View {
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .disabled(store.refreshing)
             },
             accessory: { filters })
@@ -94,15 +94,14 @@ struct HerdrPage: View {
                 .font(.system(size: UIScale.pt(12), weight: .semibold))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+                .padding(UIScale.pt(4))
+                .widgetBar(
+                    cornerRadius: 8,
+                    fill: DashSkin.paper2(dark),
+                    stroke: DashSkin.line(dark)
+                )
         }
-        .buttonStyle(.plain)
-        .padding(UIScale.pt(4))
-        .widgetBar(
-            cornerRadius: 8,
-            fill: DashSkin.paper2(dark),
-            stroke: DashSkin.line(dark)
-        )
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
         .help(store.detailOpen ? "Hide details" : "Show details")
         .accessibilityLabel(store.detailOpen ? "Hide details" : "Show details")
     }
@@ -141,11 +140,14 @@ struct HerdrPage: View {
                 .font(.system(size: UIScale.pt(12), weight: .semibold))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+                .padding(UIScale.pt(4))
+                .widgetBar(
+                    cornerRadius: 8,
+                    fill: DashSkin.paper2(dark),
+                    stroke: DashSkin.line(dark)
+                )
         }
-        .buttonStyle(.plain)
-        .padding(UIScale.pt(4))
-        .widgetBar(cornerRadius: 8, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
         .help(store.railOpen ? "Hide the list" : "Show the list")
         .accessibilityLabel(store.railOpen ? "Hide the list" : "Show the list")
     }
@@ -168,8 +170,7 @@ struct HerdrPage: View {
                         .background(
                             selected ? DashSkin.accent(dark).opacity(0.18) : Color.clear)
                 }
-                .buttonStyle(.plain)
-                .pointerCursor()
+                .buttonStyle(.edith(.borderless))
                 .accessibilityAddTraits(selected ? .isSelected : [])
                 .help(mode.title)
             }
@@ -223,8 +224,7 @@ struct HerdrPage: View {
                                 ? DashSkin.accent(dark).opacity(0.55) : DashSkin.line(dark),
                             strokeWidth: selected ? 1.4 : 1)
                     }
-                    .buttonStyle(.plain)
-                    .pointerCursor()
+                    .buttonStyle(.edith(.borderless))
                     .modifier(KindPillHelp(enabled: showsKindMark))
                     .accessibilityAddTraits(selected ? .isSelected : [])
                 }
@@ -304,7 +304,7 @@ struct HerdrPage: View {
                         store.copiedID == agent.id
                             ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .help(store.copiedID == agent.id ? "Copied" : "Copy attach command")
             }
             if closable {
@@ -315,7 +315,7 @@ struct HerdrPage: View {
                         .font(.system(size: UIScale.pt(9), weight: .semibold))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .help("Close")
             }
         }
@@ -342,7 +342,6 @@ struct HerdrPage: View {
         .offset(x: draggingTab == id ? dragTranslation : 0)
         .zIndex(draggingTab == id ? 1 : 0)
         .onTapGesture { store.selectedTab = id }
-        .pointerCursor()
         .gesture(
             id == HerdrStore.boardID
                 ? nil
@@ -515,8 +514,7 @@ struct HerdrPage: View {
                     ? DashSkin.accent(dark).opacity(hovered ? 0.7 : 0.45)
                     : HerdrStatusColor.stroke(agent, dark: dark, selected: hovered))
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
         .onHover { inside in
             if inside {
                 hoveredCard = agent.id
@@ -608,8 +606,7 @@ struct HerdrPage: View {
             .padding(.bottom, UIScale.pt(4))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
         .help(collapsed ? "Show \(title.lowercased())" : "Hide \(title.lowercased())")
         .accessibilityLabel("\(title), \(collapsed ? "collapsed" : "expanded")")
     }
@@ -660,8 +657,7 @@ struct HerdrPage: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
     }
 
     private func rowDetail(_ agent: HerdrAgent) -> String {

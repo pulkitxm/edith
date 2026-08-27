@@ -136,7 +136,7 @@ struct TitlebarChrome: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 22, height: 22)
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Toggle sidebar (⌘B)")
             .keyboardShortcut("b", modifiers: .command)
 
@@ -218,21 +218,22 @@ private struct SidebarNavRow: View {
                 }
             }
 
-            if let disclosureExpanded {
-                Button {
-                    disclosureAction?()
-                } label: {
+            if let disclosureExpanded, let disclosureAction {
+                Button(action: disclosureAction) {
                     disclosureIcon(expanded: disclosureExpanded)
+                        .frame(
+                            width: UIScale.pt(SidebarDisclosureGeometry.controlSlotWidth),
+                            height: UIScale.pt(SidebarDisclosureGeometry.controlSlotWidth)
+                        )
+                        .background(
+                            Color.primary.opacity(rowHovered ? 0.055 : 0),
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                        )
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(EdithButtonStyle(.iconOnly, tint: theme))
-                .background(
-                    Color.primary.opacity(disclosureAction != nil && rowHovered ? 0.055 : 0),
-                    in: RoundedRectangle(cornerRadius: UIScale.pt(6))
-                )
+                .buttonStyle(.edith(.borderless))
                 .padding(.trailing, UIScale.pt(2))
                 .zIndex(1)
-                .allowsHitTesting(disclosureAction != nil)
-                .accessibilityHidden(disclosureAction == nil)
                 .accessibilityLabel(
                     disclosureExpanded
                         ? "Collapse settings categories" : "Expand settings categories"
@@ -253,18 +254,6 @@ private struct SidebarNavRow: View {
             .rotationEffect(.degrees(expanded ? 90 : 0))
             .animation(
                 Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: expanded)
-    }
-}
-
-enum SidebarDisclosureInteraction {
-    static func expansionAfterRowActivation(
-        isSelected: Bool, currentlyExpanded: Bool
-    ) -> Bool {
-        isSelected ? !currentlyExpanded : true
-    }
-
-    static func showsSeparateControl(isSelected: Bool) -> Bool {
-        !isSelected
     }
 }
 
@@ -412,7 +401,7 @@ struct MainWindowView: View {
         var sidebarWidth = 230.0
     @AppStorage(
         AppStorageKeys.General.settingsCategoriesExpanded, store: SharedDefaults.store
-    ) private var settingsCategoriesExpanded = false
+    ) private var settingsCategoriesExpanded = true
     @AppStorage(AppStorageKeys.Tabs.attentionEnabled, store: SharedDefaults.store) private
         var attentionEnabled = false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
@@ -860,27 +849,14 @@ struct MainWindowView: View {
                     .padding(.top, UIScale.pt(14))
                     .padding(.bottom, UIScale.pt(4))
                 ForEach(MainDestination.appItems) { item in
-                    let settingsSelected = item == .settings && destination == .settings
                     SidebarNavRow(
                         item: item, selected: destination == item, theme: theme,
                         shortcutHint: shortcutHint(for: item),
-                        action: {
-                            if item == .settings {
-                                settingsCategoriesExpanded =
-                                    SidebarDisclosureInteraction.expansionAfterRowActivation(
-                                        isSelected: settingsSelected,
-                                        currentlyExpanded: settingsCategoriesExpanded)
-                                if !settingsSelected { select(item) }
-                            } else {
-                                select(item)
-                            }
-                        },
+                        action: { select(item) },
                         detach: item == .about || item == .settings ? nil : { detach(item) },
                         disclosureExpanded: item == .settings
                             ? settingsCategoriesExpanded : nil,
                         disclosureAction: item == .settings
-                            && SidebarDisclosureInteraction.showsSeparateControl(
-                                isSelected: settingsSelected)
                             ? { settingsCategoriesExpanded.toggle() } : nil)
                     if item == .settings {
                         CollapsibleSidebarLayout(
@@ -1070,8 +1046,7 @@ struct MainWindowView: View {
             .frame(height: UIScale.pt(28))
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
         .help("Show update options")
     }
 
@@ -1148,8 +1123,7 @@ struct MainWindowView: View {
                 .padding(.vertical, UIScale.pt(8))
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            .buttonStyle(.edith(.borderless))
             .help("Blur sensitive numbers and track names everywhere in Edith")
 
             Rectangle()
@@ -1165,8 +1139,7 @@ struct MainWindowView: View {
                     .frame(width: UIScale.pt(30), height: UIScale.pt(46))
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            .buttonStyle(.edith(.borderless))
             .help("Choose what Presenter mode blurs")
             .popover(isPresented: $presenterQuickActionsPresented, arrowEdge: .leading) {
                 presenterQuickActionsPopover
@@ -1219,26 +1192,28 @@ struct MainWindowView: View {
     }
 
     private func presenterQuickActionToggle(_ title: String, isOn: Binding<Bool>) -> some View {
-        HStack(spacing: UIScale.pt(12)) {
-            Text(title)
-                .font(.system(size: UIScale.pt(12.5)))
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .allowsHitTesting(false)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, UIScale.pt(8))
-        .padding(.vertical, UIScale.pt(8))
-        .background(
-            hoveredPresenterQuickAction == title ? Color.primary.opacity(0.06) : Color.clear
-        )
-        .contentShape(Rectangle())
-        .onTapGesture {
+        Button {
             isOn.wrappedValue.toggle()
+        } label: {
+            HStack(spacing: UIScale.pt(12)) {
+                Text(title)
+                    .font(.system(size: UIScale.pt(12.5)))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Toggle("", isOn: isOn)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .allowsHitTesting(false)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, UIScale.pt(8))
+            .padding(.vertical, UIScale.pt(8))
+            .background(
+                hoveredPresenterQuickAction == title ? Color.primary.opacity(0.06) : Color.clear
+            )
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.edith(.borderless))
         .onHover { hovering in
             if hovering {
                 hoveredPresenterQuickAction = title
@@ -1246,7 +1221,6 @@ struct MainWindowView: View {
                 hoveredPresenterQuickAction = nil
             }
         }
-        .pointerCursor()
     }
 
     private func quickActionTile(
@@ -1271,8 +1245,7 @@ struct MainWindowView: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
         .help(help)
     }
 
@@ -1322,10 +1295,9 @@ struct MainWindowView: View {
                 Button("Pulkit") {
                     _ = try? AppInspectionCenter().openLink("creator", contributors: [])
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .fontWeight(.semibold)
                 .foregroundStyle(theme)
-                .pointerCursor()
                 .help("pulkit.page")
                 Spacer(minLength: 0)
                 Button {
@@ -1336,7 +1308,7 @@ struct MainWindowView: View {
                         .foregroundStyle(.tertiary)
                         .frame(width: UIScale.pt(16), height: UIScale.pt(16))
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help("Hide this")
             }
             .font(.system(size: UIScale.pt(10)))
@@ -1362,8 +1334,7 @@ struct MainWindowView: View {
             .background(
                 Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
     }
 
     @ViewBuilder

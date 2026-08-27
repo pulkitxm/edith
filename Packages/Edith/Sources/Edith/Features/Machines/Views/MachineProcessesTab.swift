@@ -184,8 +184,7 @@ private struct ProcessRow: View {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
-                    .pointerCursor()
+                    .buttonStyle(.edith(.borderless))
                     .help("End this process")
                 } else {
                     Color.clear

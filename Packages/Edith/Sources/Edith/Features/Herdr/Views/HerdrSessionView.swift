@@ -276,7 +276,6 @@ struct HerdrSessionView: View {
                 Task { await prepareDiff(restarting: true) }
             }
             .buttonStyle(QuinjetToolbarButtonStyle())
-            .pointerCursor()
         }
         .padding(UIScale.pt(28))
         .frame(maxWidth: UIScale.pt(420))
@@ -346,7 +345,7 @@ struct HerdrSessionView: View {
                                 systemImage: store.copiedID == agent.id
                                     ? "checkmark" : "doc.on.doc")
                         }
-                        .buttonStyle(HoverButtonStyle())
+                        .buttonStyle(.edith(.toolbar))
                     }
                 }
             }

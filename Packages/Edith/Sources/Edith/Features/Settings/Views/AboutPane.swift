@@ -80,8 +80,7 @@ struct AboutPane: View {
                 .background(theme.opacity(0.16), in: Capsule())
                 .overlay(Capsule().strokeBorder(theme.opacity(0.38), lineWidth: 1))
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            .buttonStyle(.edith(.borderless))
             .help("Open the repository on GitHub")
             .padding(.top, UIScale.pt(2))
             contributorWall
@@ -130,8 +129,7 @@ struct AboutPane: View {
                         } label: {
                             avatar(for: person)
                         }
-                        .buttonStyle(.plain)
-                        .pointerCursor()
+                        .buttonStyle(.edith(.borderless))
                         .help(person.login)
                         .accessibilityLabel("Open \(person.login) on GitHub")
                     }

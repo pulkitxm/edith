@@ -243,8 +243,7 @@ struct ClipboardPanelView: View {
                             .resizable()
                             .frame(width: 11, height: 11)
                     }
-                    .buttonStyle(.plain)
-                    .pointerCursor()
+                    .buttonStyle(.edith(.borderless))
                     .padding(.trailing, 5)
                 }
             }
@@ -316,25 +315,30 @@ struct ClipboardPanelView: View {
 
     private func row(_ entry: ClipboardEntry) -> some View {
         let selected = selectedID == entry.id
-        return HStack(spacing: 6) {
-            if entry.pinned {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: 9))
-                    .foregroundStyle(selected ? Color.white.opacity(0.8) : Color.secondary)
+        return Button {
+            activate(entry, plainText: false)
+        } label: {
+            HStack(spacing: 6) {
+                if entry.pinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 9))
+                        .foregroundStyle(selected ? Color.white.opacity(0.8) : Color.secondary)
+                }
+                rowContent(entry)
+                Spacer(minLength: 8)
+                if let digit = digitShortcuts[entry.id] {
+                    Text("⌘\(digit)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(selected ? Color.white.opacity(0.8) : Color.secondary)
+                }
             }
-            rowContent(entry)
-            Spacer(minLength: 8)
-            if let digit = digitShortcuts[entry.id] {
-                Text("⌘\(digit)")
-                    .font(.system(size: 11))
-                    .foregroundStyle(selected ? Color.white.opacity(0.8) : Color.secondary)
-            }
+            .padding(.horizontal, 8)
+            .frame(height: Self.rowHeight(for: entry))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .foregroundStyle(selected ? Color.white : Color.primary)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 8)
-        .frame(height: Self.rowHeight(for: entry))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .foregroundStyle(selected ? Color.white : Color.primary)
-        .contentShape(Rectangle())
+        .buttonStyle(.edith(.borderless))
         .onContinuousHover { phase in
             guard case .active = phase else { return }
             let location = NSEvent.mouseLocation
@@ -342,7 +346,6 @@ struct ClipboardPanelView: View {
             lastMouse = location
             selectedID = entry.id
         }
-        .onTapGesture { activate(entry, plainText: false) }
     }
 
     @ViewBuilder private func rowContent(_ entry: ClipboardEntry) -> some View {
@@ -529,23 +532,25 @@ private struct FooterRow: View {
     @State private var hovered = false
 
     var body: some View {
-        HStack {
-            Text(label)
-                .font(.system(size: 13))
-            Spacer()
-            Text(shortcut)
-                .font(.system(size: 11))
-                .foregroundStyle(hovered ? Color.white.opacity(0.8) : Color.secondary)
+        Button(action: action) {
+            HStack {
+                Text(label)
+                    .font(.system(size: 13))
+                Spacer()
+                Text(shortcut)
+                    .font(.system(size: 11))
+                    .foregroundStyle(hovered ? Color.white.opacity(0.8) : Color.secondary)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 21)
+            .foregroundStyle(hovered ? Color.white : Color.primary)
+            .background(
+                hovered ? themeColor(themeName) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 4)
+            )
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 8)
-        .frame(height: 21)
-        .foregroundStyle(hovered ? Color.white : Color.primary)
-        .background(
-            hovered ? themeColor(themeName) : Color.clear,
-            in: RoundedRectangle(cornerRadius: 4)
-        )
-        .contentShape(Rectangle())
+        .buttonStyle(.edith(.borderless))
         .onHover { hovered = $0 }
-        .onTapGesture(perform: action)
     }
 }

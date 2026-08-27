@@ -36,7 +36,6 @@ struct ClipboardHistoryView: View {
                 }
                 Spacer()
                 Button("Done") { dismiss() }
-                    .pointerCursor()
             }
             .padding()
             Divider()
@@ -92,20 +91,20 @@ struct ClipboardHistoryView: View {
             } label: {
                 Image(systemName: "doc.on.doc")
             }
-            .buttonStyle(.plain).pointerCursor()
+            .buttonStyle(.edith(.borderless))
             Button {
                 togglePin(entry)
             } label: {
                 Image(systemName: entry.pinned ? "pin.fill" : "pin")
                     .foregroundStyle(entry.pinned ? themeColor(themeName) : .secondary)
             }
-            .buttonStyle(.plain).pointerCursor()
+            .buttonStyle(.edith(.borderless))
             Button(role: .destructive) {
                 delete(entry)
             } label: {
                 Image(systemName: "trash")
             }
-            .buttonStyle(.plain).pointerCursor()
+            .buttonStyle(.edith(.borderless))
         }
         .padding(.vertical, UIScale.pt(4))
     }

@@ -25,6 +25,9 @@ import Testing
         #expect(navigation.contains("CollapsibleSidebarLayout"))
         #expect(navigation.contains(".clipped()"))
         #expect(navigation.contains("disclosureAction: item == .settings"))
+        #expect(navigation.contains("Button(action: disclosureAction)"))
+        #expect(navigation.contains("action: { select(item) }"))
+        #expect(!navigation.contains("SidebarDisclosureInteraction"))
         #expect(navigation.contains(".zIndex(1)"))
         #expect(!navigation.contains(".move(edge: .top).combined(with: .opacity)"))
         #expect(navigation.contains("rotationEffect(.degrees(expanded ? 90 : 0))"))
@@ -75,20 +78,4 @@ import Testing
         #expect(SidebarDisclosureGeometry.visibleHeight(contentHeight: 180, progress: 1.2) == 180)
     }
 
-    @Test func selectedSettingsMovesDisclosureBehaviorToTheWholeRow() {
-        #expect(
-            SidebarDisclosureInteraction.expansionAfterRowActivation(
-                isSelected: false, currentlyExpanded: false))
-        #expect(
-            SidebarDisclosureInteraction.expansionAfterRowActivation(
-                isSelected: false, currentlyExpanded: true))
-        #expect(
-            !SidebarDisclosureInteraction.expansionAfterRowActivation(
-                isSelected: true, currentlyExpanded: true))
-        #expect(
-            SidebarDisclosureInteraction.expansionAfterRowActivation(
-                isSelected: true, currentlyExpanded: false))
-        #expect(!SidebarDisclosureInteraction.showsSeparateControl(isSelected: true))
-        #expect(SidebarDisclosureInteraction.showsSeparateControl(isSelected: false))
-    }
 }

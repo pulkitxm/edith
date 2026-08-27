@@ -28,10 +28,9 @@ struct UsageMachineRows: View {
                     Spacer(minLength: 0)
                     if collecting != nil {
                         ProgressView().controlSize(.small)
-                        Button("Stop") { stop() }.pointerCursor()
+                        Button("Stop") { stop() }
                     } else {
                         Button("Collect now") { collect() }
-                            .pointerCursor()
                             .disabled(counted.isEmpty)
                     }
                 }
@@ -68,7 +67,6 @@ struct UsageMachineRows: View {
                         .settingsCaption()
                 }
             }
-            .pointerCursor()
             Spacer(minLength: 0)
             if summary != nil {
                 Button {
@@ -77,7 +75,6 @@ struct UsageMachineRows: View {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.borderless)
-                .pointerCursor()
                 .help("Drop what \(machine.name) gave and stop counting it")
             }
         }

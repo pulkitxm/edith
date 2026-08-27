@@ -84,12 +84,12 @@ struct FilterMultiSelect: View {
                     Button("Select all") {
                         apply(MultiSelectLogic.selectAll(order: options.map(\.id)))
                     }
-                    .buttonStyle(.plain).pointerCursor()
+                    .buttonStyle(.edith(.borderless))
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                 }
                 Button("Done") { dismiss() }
-                    .buttonStyle(.plain).pointerCursor()
+                    .buttonStyle(.edith(.borderless))
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
                     .foregroundStyle(DashSkin.accent(dark))
             }
@@ -128,54 +128,66 @@ private struct FilterSelectRow: View {
     }
 
     var body: some View {
-        HStack(spacing: UIScale.pt(8)) {
-            Button {
-                onToggle(modifiers.contains(.shift))
-            } label: {
-                checkbox
-            }
-            .buttonStyle(.plain).pointerCursor()
+        ZStack {
             Button {
                 let flags = modifiers
                 onRowClick(
                     flags.contains(.command) || flags.contains(.control),
                     flags.contains(.shift))
             } label: {
-                HStack(spacing: 0) {
+                HStack(spacing: UIScale.pt(8)) {
+                    Color.clear.frame(width: UIScale.pt(28), height: UIScale.pt(28))
                     Text(label)
                         .font(.system(size: UIScale.pt(11.5)))
                         .foregroundStyle(DashSkin.ink(dark))
                         .lineLimit(1)
-                    Spacer(minLength: UIScale.pt(8))
+                    Spacer(minLength: 0)
+                    Text(actionLabel)
+                        .font(.system(size: UIScale.pt(10)))
+                        .padding(.horizontal, UIScale.pt(6))
+                        .padding(.vertical, UIScale.pt(2))
+                        .frame(minWidth: UIScale.pt(28), minHeight: UIScale.pt(28))
+                        .hidden()
                 }
+                .padding(.horizontal, UIScale.pt(6))
+                .padding(.vertical, UIScale.pt(4))
+                .background(
+                    hovering ? DashSkin.inkFaint(dark).opacity(0.14) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                )
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain).pointerCursor()
-            Button(action: onAction) {
-                Text(actionLabel)
-                    .font(.system(size: UIScale.pt(10)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .padding(.horizontal, UIScale.pt(6))
-                    .padding(.vertical, UIScale.pt(2))
-                    .background(
-                        DashSkin.paper2(dark),
-                        in: RoundedRectangle(cornerRadius: UIScale.pt(5))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: UIScale.pt(5))
-                            .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1))
-                    )
+            .buttonStyle(.edith(.borderless))
+            HStack(spacing: UIScale.pt(8)) {
+                Button {
+                    onToggle(modifiers.contains(.shift))
+                } label: {
+                    checkbox
+                }
+                .buttonStyle(.edith(.borderless))
+                Spacer(minLength: 0)
+                Button(action: onAction) {
+                    Text(actionLabel)
+                        .font(.system(size: UIScale.pt(10)))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                        .padding(.horizontal, UIScale.pt(6))
+                        .padding(.vertical, UIScale.pt(2))
+                        .background(
+                            DashSkin.paper2(dark),
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(5))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: UIScale.pt(5))
+                                .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1))
+                        )
+                }
+                .buttonStyle(.edith(.borderless))
+                .opacity(hovering ? 1 : 0)
+                .allowsHitTesting(hovering)
             }
-            .buttonStyle(.plain).pointerCursor()
-            .opacity(hovering ? 1 : 0)
-            .allowsHitTesting(hovering)
+            .padding(.horizontal, UIScale.pt(6))
+            .padding(.vertical, UIScale.pt(4))
         }
-        .padding(.horizontal, UIScale.pt(6))
-        .padding(.vertical, UIScale.pt(4))
-        .background(
-            hovering ? DashSkin.inkFaint(dark).opacity(0.14) : Color.clear,
-            in: RoundedRectangle(cornerRadius: UIScale.pt(6))
-        )
         .onHover { hovering = $0 }
     }
 

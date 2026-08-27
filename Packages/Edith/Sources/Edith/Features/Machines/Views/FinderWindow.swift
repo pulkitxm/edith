@@ -189,7 +189,7 @@ struct FinderBody: View {
             } label: {
                 Image(systemName: "sidebar.left")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Hide or show the sidebar (⌃⌘S)")
 
             HStack(spacing: UIScale.pt(2)) {
@@ -221,7 +221,7 @@ struct FinderBody: View {
                 }
                 .help("Home folder")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
 
             Picker("", selection: viewModeBinding) {
                 ForEach(FileViewMode.allCases, id: \.self) { mode in
@@ -356,8 +356,7 @@ struct FinderBody: View {
                             crumb.path == model.path
                                 ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
                     }
-                    .buttonStyle(.plain)
-                    .pointerCursor()
+                    .buttonStyle(.edith(.borderless))
                     if crumb.path != model.path {
                         Image(systemName: "chevron.compact.right")
                             .font(.system(size: UIScale.pt(9)))

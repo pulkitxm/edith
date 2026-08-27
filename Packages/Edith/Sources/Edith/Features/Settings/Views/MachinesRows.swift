@@ -52,9 +52,7 @@ struct MachinesRows: View {
         Section("Setup") {
             HStack {
                 Button("Add machine...") { addSheetPresented = true }
-                    .pointerCursor()
                 Button("Open Machines") { SectionWindow.open(.machines) }
-                    .pointerCursor()
             }
             Text("Add an SSH host here or manage existing connections on the Machines page.")
                 .settingsCaption()

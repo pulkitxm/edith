@@ -51,7 +51,7 @@ struct NotchCameraTab: View {
                 .background(.black.opacity(0.55), in: Circle())
                 .contentShape(Circle())
         }
-        .buttonStyle(.plain).shelfPointer()
+        .buttonStyle(.edith(.borderless))
         .padding(14)
         .help("Switch camera")
     }
@@ -87,14 +87,12 @@ struct NotchCameraTab: View {
                 Button("Allow Camera", action: action)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .shelfPointer()
                 Button("All Permissions") {
                     PermissionOperationCenter.application.openPermissionOverview()
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .font(.system(size: 11))
                 .foregroundStyle(.white.opacity(0.55))
-                .shelfPointer()
             }
             .padding(.top, 2)
         }
@@ -114,7 +112,7 @@ struct NotchCameraTab: View {
             .foregroundStyle(.white.opacity(0.7))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .buttonStyle(.plain).shelfPointer()
+        .buttonStyle(.edith(.borderless))
     }
 }
 

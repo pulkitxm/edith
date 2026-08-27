@@ -438,8 +438,7 @@ struct CompanionSetupSheet: View {
             }
             .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(10)))
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
     }
 
     private var deployChecklist: some View {

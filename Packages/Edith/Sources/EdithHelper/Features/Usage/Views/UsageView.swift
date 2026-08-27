@@ -80,7 +80,7 @@ struct UsageView: View {
                         .font(.system(size: 11))
                         .foregroundStyle(showDiagnostics ? theme : Color.secondary)
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help("Show diagnostic log")
                 Button {
                     Task { await store.refreshLimits(force: true) }
@@ -98,7 +98,7 @@ struct UsageView: View {
                     }
                     .frame(width: 16, height: 16)
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .disabled(store.refreshingLimits)
                 .help("Refresh limits now")
             }
@@ -273,7 +273,7 @@ struct UsageView: View {
                     }
                     .frame(width: 16, height: 16)
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .foregroundStyle(.secondary)
                 .disabled(store.updating)
                 .help("Refresh usage data")
@@ -283,7 +283,7 @@ struct UsageView: View {
                     Image(systemName: "terminal")
                         .foregroundStyle(showLog ? theme : Color.secondary)
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .help("Show refresh log")
                 Button {
                     MainApp.openDashboard()
@@ -291,7 +291,7 @@ struct UsageView: View {
                 } label: {
                     Image(systemName: "chart.bar.xaxis")
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .foregroundStyle(.secondary)
                 .help("Open the full dashboard")
             }
@@ -367,9 +367,9 @@ struct UsageView: View {
             }
             .font(.system(size: 12))
             .foregroundStyle(.secondary)
-            .hoverButton()
         }
         .menuStyle(.borderlessButton)
+        .buttonStyle(.edith(.toolbar))
         .fixedSize()
     }
 

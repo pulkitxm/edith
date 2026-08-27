@@ -101,7 +101,6 @@ struct MachinesPage: View {
                 } label: {
                     Label("Add machine", systemImage: "plus")
                 }
-                .pointerCursor()
             },
             accessory: { machineStrip })
     }
@@ -183,7 +182,6 @@ struct MachinesPage: View {
             .multilineTextAlignment(.center)
             .frame(maxWidth: UIScale.pt(420))
             Button("Add machine") { addSheetPresented = true }
-                .pointerCursor()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

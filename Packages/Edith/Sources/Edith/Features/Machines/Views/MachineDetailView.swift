@@ -54,8 +54,7 @@ struct MachineDetailView: View {
                     }
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .pointerCursor()
+                .buttonStyle(.edith(.borderless))
                 .help("\(item.title) (⌘-click to open it in its own window)")
             }
             Button {
@@ -72,8 +71,7 @@ struct MachineDetailView: View {
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            .buttonStyle(.edith(.borderless))
             .help("Browse files in their own window")
 
             Spacer(minLength: 0)
@@ -147,10 +145,9 @@ struct ConnectionPill: View {
                 .truncationMode(.tail)
             if session.state.isRetryable {
                 Button("Retry") { session.retry() }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
                     .foregroundStyle(DashSkin.accent(dark))
-                    .pointerCursor()
             }
         }
     }

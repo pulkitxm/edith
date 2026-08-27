@@ -138,7 +138,6 @@ struct TerminalSettingsPane: View {
                     )
                 }
             }
-            .pointerCursor()
         } header: {
             Text("On launch")
         }
@@ -351,7 +350,6 @@ private struct ActionButton: View {
                 Text(title)
             }
         }
-        .pointerCursor()
         .disabled(!enabled || phase == .running)
         .animation(.easeInOut(duration: 0.18), value: phase)
     }

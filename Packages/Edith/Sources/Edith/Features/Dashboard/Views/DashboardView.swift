@@ -170,7 +170,7 @@ struct DashboardView: View {
                 }
                 .frame(width: UIScale.pt(18), height: UIScale.pt(18))
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .disabled(isLoading)
             .help(helperText)
         }
@@ -293,13 +293,13 @@ struct DashboardView: View {
                     } label: {
                         Label("Month", systemImage: "calendar.badge.clock")
                             .font(.system(size: UIScale.pt(11)))
+                            .modifier(FilterChip(dark: dark))
                     }
-                    .menuStyle(.borderlessButton).pointerCursor().fixedSize()
-                    .modifier(FilterChip(dark: dark))
+                    .menuStyle(.borderlessButton).fixedSize()
                 }
                 if !model.machineGroups.isEmpty { machineMenu }
                 Button("Reset") { model.reset() }
-                    .buttonStyle(.plain).pointerCursor().font(DashSkin.mono(11))
+                    .buttonStyle(.edith(.borderless)).font(DashSkin.mono(11))
                     .foregroundStyle(acc)
                     .padding(.vertical, UIScale.pt(5))
             }
@@ -328,7 +328,7 @@ struct DashboardView: View {
                     }),
                 in: (model.dataRange ?? Date()...Date()), displayedComponents: .date
             )
-            .labelsHidden().datePickerStyle(.field).pointerCursor().controlSize(.small)
+            .labelsHidden().datePickerStyle(.field).controlSize(.small)
             Text("→").font(.system(size: UIScale.pt(10))).foregroundStyle(DashSkin.inkFaint(dark))
             DatePicker(
                 "",
@@ -340,7 +340,7 @@ struct DashboardView: View {
                     }),
                 in: (model.dataRange ?? Date()...Date()), displayedComponents: .date
             )
-            .labelsHidden().datePickerStyle(.field).pointerCursor().controlSize(.small)
+            .labelsHidden().datePickerStyle(.field).controlSize(.small)
         }
     }
 
@@ -360,17 +360,22 @@ struct DashboardView: View {
 
     private func rangeButton(_ title: String, _ r: DashRange) -> some View {
         let active = isActive(r)
-        return Button(title) { model.range = r }
-            .buttonStyle(.plain)
-            .pointerCursor()
-            .font(DashSkin.mono(11, weight: active ? .semibold : .regular))
-            .padding(.horizontal, UIScale.pt(11)).padding(.vertical, UIScale.pt(5))
-            .widgetBar(
-                cornerRadius: 8,
-                fill: active ? AnyShapeStyle(acc) : AnyShapeStyle(DashSkin.paper2(dark)),
-                stroke: active ? Color.clear : DashSkin.lineStrong(dark)
-            )
-            .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
+        return Button {
+            model.range = r
+        } label: {
+            Text(title)
+                .font(DashSkin.mono(11, weight: active ? .semibold : .regular))
+                .padding(.horizontal, UIScale.pt(11))
+                .padding(.vertical, UIScale.pt(5))
+                .widgetBar(
+                    cornerRadius: 8,
+                    fill: active ? AnyShapeStyle(acc) : AnyShapeStyle(DashSkin.paper2(dark)),
+                    stroke: active ? Color.clear : DashSkin.lineStrong(dark)
+                )
+                .foregroundStyle(
+                    active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
+        }
+        .buttonStyle(.edith(.borderless))
     }
 
     private func isActive(_ r: DashRange) -> Bool {
@@ -389,9 +394,9 @@ struct DashboardView: View {
             Label(folderScopeLabel, systemImage: "folder")
                 .font(.system(size: UIScale.pt(11)))
                 .lineLimit(1)
+                .modifier(FilterChip(dark: dark))
         }
-        .buttonStyle(.plain).pointerCursor().fixedSize()
-        .modifier(FilterChip(dark: dark))
+        .buttonStyle(.edith(.borderless)).fixedSize()
         .popover(isPresented: $folderPickerOpen, arrowEdge: .bottom) {
             FolderScopePicker(model: model, dark: dark) { folderPickerOpen = false }
         }
@@ -413,9 +418,9 @@ struct DashboardView: View {
         } label: {
             Label(sourceSummary, systemImage: "square.stack.3d.up")
                 .font(.system(size: UIScale.pt(11)))
+                .modifier(FilterChip(dark: dark))
         }
-        .buttonStyle(.plain).pointerCursor().fixedSize()
-        .modifier(FilterChip(dark: dark))
+        .buttonStyle(.edith(.borderless)).fixedSize()
         .popover(isPresented: $sourcePickerOpen, arrowEdge: .bottom) {
             FilterMultiSelect(
                 options: model.allSources.map { FilterSelectOption(id: $0.id, label: $0.label) },
@@ -443,9 +448,9 @@ struct DashboardView: View {
                     systemImage: stale.isEmpty ? "server.rack" : "exclamationmark.triangle.fill"
                 )
                 .font(.system(size: UIScale.pt(11)))
+                .modifier(FilterChip(dark: dark))
             }
-            .buttonStyle(.plain).pointerCursor().fixedSize()
-            .modifier(FilterChip(dark: dark))
+            .buttonStyle(.edith(.borderless)).fixedSize()
         }
         .popover(isPresented: $machinePickerOpen, arrowEdge: .bottom) {
             UsageMachinesPicker(model: model, dark: dark) { machinePickerOpen = false }
@@ -483,9 +488,9 @@ struct DashboardView: View {
         } label: {
             Label("\(model.selectedModels.count) models", systemImage: "cpu")
                 .font(.system(size: UIScale.pt(11)))
+                .modifier(FilterChip(dark: dark))
         }
-        .buttonStyle(.plain).pointerCursor().fixedSize()
-        .modifier(FilterChip(dark: dark))
+        .buttonStyle(.edith(.borderless)).fixedSize()
         .popover(isPresented: $modelPickerOpen, arrowEdge: .bottom) {
             FilterMultiSelect(
                 options: model.allModels.map {
@@ -692,8 +697,7 @@ struct DashboardView: View {
             .frame(width: width, alignment: width == nil ? .leading : .trailing)
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
     }
 
     private var tokenMixDomain: [String] { ["input", "output", "cache write", "cache read"] }

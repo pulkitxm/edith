@@ -44,7 +44,6 @@ struct ICloudPane: View {
                         )
                     }
                 }
-                .pointerCursor()
                 Text(backupSubtitle).settingsCaption()
             } header: {
                 Text("iCloud backup")
@@ -58,7 +57,6 @@ struct ICloudPane: View {
                 Toggle(
                     "Settings", isOn: $backupSettings.configured(AppStorageKeys.Backup.settings)
                 )
-                .pointerCursor()
                 .disabled(!icloudBackup)
                 Text("Every preference in this app: toggles, colors, shortcuts, and layouts.")
                     .settingsCaption()
@@ -66,7 +64,6 @@ struct ICloudPane: View {
                     Toggle(
                         "Usage data", isOn: $backupUsage.configured(AppStorageKeys.Backup.usage)
                     )
-                    .pointerCursor()
                     .disabled(!icloudBackup)
                     Text("The token and cost history behind the Agent Usage charts.")
                         .settingsCaption()
@@ -74,7 +71,6 @@ struct ICloudPane: View {
                         "Session history",
                         isOn: $backupLimits.configured(AppStorageKeys.Backup.limits)
                     )
-                    .pointerCursor()
                     .disabled(!icloudBackup)
                     Text("Rate-limit snapshots that draw the session and weekly limit charts.")
                         .settingsCaption()
@@ -95,7 +91,6 @@ struct ICloudPane: View {
                             "Music folder",
                             isOn: $musicBackup.configured(AppStorageKeys.Music.backup)
                         )
-                        .pointerCursor()
                         .disabled(!icloudBackup || !cloudAvailable)
                         Text(musicSubtitle).font(.system(size: UIScale.pt(10))).foregroundStyle(
                             .secondary)
@@ -111,7 +106,6 @@ struct ICloudPane: View {
                                 )
                             }
                         }
-                        .pointerCursor()
                         .disabled(!icloudBackup || !cloudAvailable)
                         Text(clipboardSubtitle).font(.system(size: UIScale.pt(10))).foregroundStyle(
                             .secondary)
@@ -126,14 +120,12 @@ struct ICloudPane: View {
                     Button("Open") {
                         _ = try? inspection.openPath(.appData)
                     }
-                    .pointerCursor()
                 }
                 if icloudBackup, cloudAvailable {
                     LabeledContent("iCloud folder") {
                         Button("Open") {
                             _ = try? inspection.openPath(.icloud)
                         }
-                        .pointerCursor()
                     }
                 }
             } header: {

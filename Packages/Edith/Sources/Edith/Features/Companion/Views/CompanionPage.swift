@@ -162,8 +162,7 @@ struct CompanionPage: View {
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .pointerCursor()
+                    .buttonStyle(.edith(.borderless))
                     .help("Refresh this screen")
                     Button {
                         select(.setup)
@@ -178,8 +177,7 @@ struct CompanionPage: View {
                         }
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .pointerCursor()
+                    .buttonStyle(.edith(.borderless))
                     .help(healthHelp)
                 }
             },
@@ -246,8 +244,7 @@ struct CompanionPage: View {
                     }
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .pointerCursor()
+                .buttonStyle(.edith(.borderless))
                 .help(item.title)
             }
             Spacer(minLength: 0)

@@ -38,7 +38,6 @@ struct SelectableChipRow<Trailing: View>: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
     }
 }

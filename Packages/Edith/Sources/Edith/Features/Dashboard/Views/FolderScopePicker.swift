@@ -61,7 +61,7 @@ struct FolderScopePicker: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 Spacer(minLength: 0)
                 Button("Done") { dismiss() }
-                    .buttonStyle(.plain).pointerCursor()
+                    .buttonStyle(.edith(.borderless))
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
                     .foregroundStyle(DashSkin.accent(dark))
             }
@@ -117,7 +117,6 @@ struct FolderScopePicker: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(HoverRowStyle(dark: dark))
-        .pointerCursor()
     }
 
     private func chooseFolder() {
@@ -142,6 +141,7 @@ private struct HoverRowStyle: ButtonStyle {
                 hovering ? DashSkin.inkFaint(dark).opacity(0.14) : Color.clear,
                 in: RoundedRectangle(cornerRadius: UIScale.pt(6))
             )
+            .edithButtonTarget(.row)
             .onHover { hovering = $0 }
     }
 }

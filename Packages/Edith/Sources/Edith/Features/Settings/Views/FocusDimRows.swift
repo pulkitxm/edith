@@ -17,7 +17,6 @@ struct FocusDimRows: View {
     var body: some View {
         Section {
             Toggle("Dim now", isOn: $active.configured(FocusDimState.activeKey))
-                .pointerCursor()
             Text(
                 "Turns the dimming on and off. The shortcut keeps working either way; removing the extension is a separate switch."
             )
@@ -32,7 +31,6 @@ struct FocusDimRows: View {
                     value: $intensity.configured(AppStorageKeys.FocusDim.intensity),
                     in: FocusDimMath.intensityRange
                 )
-                .pointerCursor()
                 Text("How dark the background gets.")
                     .settingsCaption()
             }
@@ -47,7 +45,6 @@ struct FocusDimRows: View {
                         AppStorageKeys.FocusDim.animationDuration),
                     in: FocusDimMath.animationDurationRange
                 )
-                .pointerCursor()
                 Text("How quickly the dim follows you when switching apps.")
                     .settingsCaption()
             }
@@ -61,7 +58,6 @@ struct FocusDimRows: View {
                     Text("Dim unfocused fully").tag(FocusDimDisplayMode.dimUnfocused)
                 }
                 .pickerStyle(.segmented)
-                .pointerCursor()
                 Text(
                     "Highlight the front window on each screen, or fully dim displays without keyboard focus so you can tell where you're typing."
                 )

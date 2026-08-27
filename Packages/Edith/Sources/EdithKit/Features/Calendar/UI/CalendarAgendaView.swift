@@ -91,7 +91,7 @@ public struct CalendarPermissionPrompt: View {
                 Button("Grant…") {
                     _ = try? PermissionOperationCenter.application.request(.calendar)
                 }
-                .buttonStyle(HoverButtonStyle())
+                .buttonStyle(.edith(.toolbar))
                 .font(.system(size: style.permissionButtonSize))
                 .foregroundStyle(accentColor)
                 .help("Opens System Settings on the right pane")
@@ -411,8 +411,7 @@ private struct CalendarEventRow: View {
                         .foregroundStyle(color)
                 }
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            .buttonStyle(.edith(.borderless))
             .help("Join meeting at \(url.host ?? url.absoluteString)")
         }
     }
@@ -436,8 +435,7 @@ private struct CalendarActionButton: View {
                 .background(color.opacity(hovering ? 0.17 : 0.1), in: Capsule())
                 .overlay(Capsule().strokeBorder(color.opacity(hovering ? 0.34 : 0.2), lineWidth: 1))
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
         .onHover { hovering = $0 }
         .help(help)
     }

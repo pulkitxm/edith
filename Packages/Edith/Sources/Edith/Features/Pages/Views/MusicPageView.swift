@@ -886,7 +886,7 @@ struct MusicPage: View {
             } label: {
                 Image(systemName: gridView ? "list.bullet" : "square.grid.2x2")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help(gridView ? "Show as list" : "Show as grid")
             Button {
                 if remote.showingFavourites {
@@ -900,7 +900,7 @@ struct MusicPage: View {
                         remote.showingFavourites
                             ? AnyShapeStyle(theme) : AnyShapeStyle(.primary))
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help(remote.showingFavourites ? "Back to your folders" : "Show favourites")
             Button {
                 newFolderName = ""
@@ -908,28 +908,28 @@ struct MusicPage: View {
             } label: {
                 Image(systemName: "folder.badge.plus")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("New folder")
             Button {
                 _ = try? MusicLibraryOperationExecution.openLibrary()
             } label: {
                 Image(systemName: "folder")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Open music folder in Finder")
             Button {
                 remote.rescan()
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Rescan music folder")
             Button {
                 showDownloader = true
             } label: {
                 Image(systemName: "arrow.down.circle")
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
             .help("Download YouTube audio")
         }
     }
@@ -984,8 +984,7 @@ struct MusicPage: View {
                     .padding(.vertical, UIScale.pt(7))
                     .liquidGlass(in: Capsule(), tint: theme, interactive: true, dark: dark)
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            .buttonStyle(.edith(.borderless))
             .help(
                 remote.showingFavourites
                     ? "Play your favourites" : "Play everything in this folder")
@@ -1023,7 +1022,6 @@ struct MusicPage: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .pointerCursor()
             .help("Jump to a folder here")
         }
     }
@@ -1183,7 +1181,6 @@ struct SeekBar: View {
             )
         }
         .frame(height: height)
-        .pointerCursor()
     }
 
     private func fill(_ width: CGFloat, _ knob: CGFloat) -> some View {
@@ -1219,23 +1216,23 @@ private struct CrumbButton: View {
     @State private var dropTargeted = false
 
     var body: some View {
-        HStack(spacing: UIScale.pt(3)) {
-            if let systemImage {
-                Image(systemName: systemImage).font(.system(size: UIScale.pt(10)))
+        Button(action: onTap) {
+            HStack(spacing: UIScale.pt(3)) {
+                if let systemImage {
+                    Image(systemName: systemImage).font(.system(size: UIScale.pt(10)))
+                }
+                Text(name).lineLimit(1)
             }
-            Text(name).lineLimit(1)
+            .font(.system(size: UIScale.pt(12), weight: isCurrent ? .semibold : .regular))
+            .foregroundStyle(isCurrent ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
+            .padding(.horizontal, UIScale.pt(7))
+            .padding(.vertical, UIScale.pt(4))
+            .background(
+                dropTargeted ? theme.opacity(0.2) : .clear,
+                in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+            )
         }
-        .font(.system(size: UIScale.pt(12), weight: isCurrent ? .semibold : .regular))
-        .foregroundStyle(isCurrent ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
-        .padding(.horizontal, UIScale.pt(7))
-        .padding(.vertical, UIScale.pt(4))
-        .background(
-            dropTargeted ? theme.opacity(0.2) : .clear,
-            in: RoundedRectangle(cornerRadius: UIScale.pt(6))
-        )
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
         .dropDestination(for: String.self) { paths, _ in
             guard !isCurrent else { return false }
             onDrop(paths)
@@ -1289,16 +1286,14 @@ private struct MusicFolderRow: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            .buttonStyle(.edith(.borderless))
 
             Button(action: onPlay) {
                 Image(systemName: "play.circle.fill")
                     .font(.system(size: UIScale.pt(22)))
                     .foregroundStyle(theme)
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            .buttonStyle(.edith(.borderless))
             .help("Play this folder")
             .opacity(hovering || trackCount == 0 ? 1 : 0.55)
 
@@ -1367,8 +1362,7 @@ private struct MusicPageRow: View {
             Button(action: onOpenDetails) {
                 PageArtworkThumb(track: track, size: 34)
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            .buttonStyle(.edith(.borderless))
             .help("Show details")
             Button(action: onToggle) {
                 HStack(spacing: UIScale.pt(10)) {
@@ -1400,8 +1394,7 @@ private struct MusicPageRow: View {
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            .buttonStyle(.edith(.borderless))
 
             Button(action: onToggleFavourite) {
                 Image(systemName: isFavourite ? "heart.fill" : "heart")
@@ -1409,8 +1402,7 @@ private struct MusicPageRow: View {
                     .foregroundStyle(isFavourite ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            .buttonStyle(.edith(.borderless))
             .help(isFavourite ? "Remove from favourites" : "Add to favourites")
             .opacity(hovering || isFavourite ? 1 : 0)
         }
@@ -1499,30 +1491,29 @@ private struct MusicFolderTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
-            ZStack {
-                RoundedRectangle(cornerRadius: UIScale.pt(12))
-                    .fill(theme.opacity(0.16))
-                Image(systemName: "folder.fill")
-                    .font(.system(size: UIScale.pt(34)))
-                    .foregroundStyle(theme)
-            }
-            .frame(width: MusicTile.artSize, height: MusicTile.artSize)
-            .overlay(alignment: .bottomTrailing) {
+            ZStack(alignment: .bottomTrailing) {
+                Button(action: onOpen) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: UIScale.pt(12))
+                            .fill(theme.opacity(0.16))
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: UIScale.pt(34)))
+                            .foregroundStyle(theme)
+                    }
+                    .frame(width: MusicTile.artSize, height: MusicTile.artSize)
+                }
+                .buttonStyle(.edith(.borderless))
                 Button(action: onPlay) {
                     Image(systemName: "play.circle.fill")
                         .font(.system(size: UIScale.pt(24)))
                         .symbolRenderingMode(.palette)
                         .foregroundStyle(.white, theme)
                 }
-                .buttonStyle(.plain)
-                .pointerCursor()
+                .buttonStyle(.edith(.borderless))
                 .help("Play this folder")
                 .opacity(hovering ? 1 : 0)
                 .padding(UIScale.pt(7))
             }
-            .contentShape(Rectangle())
-            .onTapGesture(perform: onOpen)
-            .pointerCursor()
 
             VStack(spacing: UIScale.pt(1)) {
                 Text(folder.name)
@@ -1587,54 +1578,52 @@ private struct MusicTrackTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
-            PageArtworkThumb(track: track, size: MusicTile.artSize)
-                .overlay(alignment: .bottomTrailing) {
-                    Image(
-                        systemName: isCurrent && isPlaying
-                            ? "pause.circle.fill" : "play.circle.fill"
-                    )
-                    .font(.system(size: UIScale.pt(24)))
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white, theme)
-                    .opacity(hovering || isCurrent ? 1 : 0)
-                    .padding(UIScale.pt(7))
+            ZStack(alignment: .topTrailing) {
+                Button(action: onToggle) {
+                    PageArtworkThumb(track: track, size: MusicTile.artSize)
+                        .overlay(alignment: .bottomTrailing) {
+                            Image(
+                                systemName: isCurrent && isPlaying
+                                    ? "pause.circle.fill" : "play.circle.fill"
+                            )
+                            .font(.system(size: UIScale.pt(24)))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, theme)
+                            .opacity(hovering || isCurrent ? 1 : 0)
+                            .padding(UIScale.pt(7))
+                        }
                 }
-                .overlay(alignment: .topTrailing) {
-                    Button(action: onToggleFavourite) {
-                        Image(systemName: isFavourite ? "heart.fill" : "heart")
-                            .font(.system(size: UIScale.pt(13), weight: .semibold))
-                            .foregroundStyle(isFavourite ? theme : .white)
-                            .shadow(color: .black.opacity(0.5), radius: UIScale.pt(2))
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .pointerCursor()
-                    .help(isFavourite ? "Remove from favourites" : "Add to favourites")
-                    .opacity(hovering || isFavourite ? 1 : 0)
-                    .padding(UIScale.pt(7))
+                .buttonStyle(.edith(.borderless))
+                Button(action: onToggleFavourite) {
+                    Image(systemName: isFavourite ? "heart.fill" : "heart")
+                        .font(.system(size: UIScale.pt(13), weight: .semibold))
+                        .foregroundStyle(isFavourite ? theme : .white)
+                        .shadow(color: .black.opacity(0.5), radius: UIScale.pt(2))
                 }
-                .contentShape(Rectangle())
-                .onTapGesture(perform: onToggle)
-                .pointerCursor()
-
-            VStack(spacing: UIScale.pt(1)) {
-                Text(track.title)
-                    .font(.system(size: UIScale.pt(12)))
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(isCurrent ? theme : .primary)
-                    .presenterBlur(blur)
-                Text(location ?? duration ?? " ")
-                    .font(.system(size: UIScale.pt(10.5)))
-                    .monospacedDigit()
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
+                .buttonStyle(.edith(.borderless))
+                .help(isFavourite ? "Remove from favourites" : "Add to favourites")
+                .opacity(hovering || isFavourite ? 1 : 0)
+                .padding(UIScale.pt(7))
             }
-            .frame(width: MusicTile.artSize)
-            .contentShape(Rectangle())
-            .onTapGesture(perform: onOpenDetails)
-            .pointerCursor()
+
+            Button(action: onOpenDetails) {
+                VStack(spacing: UIScale.pt(1)) {
+                    Text(track.title)
+                        .font(.system(size: UIScale.pt(12)))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(isCurrent ? theme : .primary)
+                        .presenterBlur(blur)
+                    Text(location ?? duration ?? " ")
+                        .font(.system(size: UIScale.pt(10.5)))
+                        .monospacedDigit()
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
+                .frame(width: MusicTile.artSize)
+            }
+            .buttonStyle(.edith(.borderless))
             .help("Show details")
         }
         .padding(UIScale.pt(6))
@@ -1804,8 +1793,7 @@ private struct MusicDetailSheet: View {
                 .background(DashSkin.paper2(dark).opacity(0.6), in: Circle())
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
         .help(help)
     }
 
@@ -1862,8 +1850,7 @@ private struct MusicDetailSheet: View {
             .background(theme.opacity(0.1), in: Capsule())
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
         .help("Show this folder in Music")
     }
 
@@ -1880,10 +1867,9 @@ private struct MusicDetailSheet: View {
                         .frame(width: UIScale.pt(52), height: UIScale.pt(52))
                         .contentShape(Circle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .liquidGlass(in: Circle(), tint: theme, interactive: true, dark: dark)
                 .shadow(color: .black.opacity(0.28), radius: UIScale.pt(8), y: UIScale.pt(3))
-                .pointerCursor()
                 .help(isPlaying ? "Pause" : "Play")
                 .offset(x: UIScale.pt(10), y: UIScale.pt(10))
             }
@@ -1956,8 +1942,7 @@ private struct MusicDetailSheet: View {
             .padding(.vertical, UIScale.pt(8))
             .background(theme.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
     }
 
     private var renameReveal: some View {
@@ -1967,9 +1952,8 @@ private struct MusicDetailSheet: View {
                 .frame(height: UIScale.pt(Self.renameButtonHeight))
                 .foregroundStyle(.white)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .background(theme, in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
-        .pointerCursor()
         .font(.system(size: UIScale.pt(12.5), weight: .semibold))
         .padding(.top, UIScale.pt(Self.renameButtonGap))
         .frame(height: canRename ? UIScale.pt(Self.renameRowHeight) : 0, alignment: .top)
@@ -2085,27 +2069,30 @@ struct MusicFooter: View {
             } label: {
                 PageArtworkThumb(track: track, size: 44)
             }
-            .buttonStyle(.plain)
-            .pointerCursor()
+            .buttonStyle(.edith(.borderless))
             .help(track.isVideo ? "Watch this video" : "Show details")
-            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                Text(track.title)
-                    .font(.system(size: UIScale.pt(13), weight: .semibold))
-                    .lineLimit(1)
-                    .presenterBlur(blur)
-                Text(remote.isPlaying ? "Now playing" : "Paused")
-                    .font(.system(size: UIScale.pt(10.5)))
-                    .foregroundStyle(.secondary)
-                    .frame(width: UIScale.pt(78), alignment: .leading)
+            Button {
+                remote.reveal(track)
+            } label: {
+                HStack(spacing: UIScale.pt(11)) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                        Text(track.title)
+                            .font(.system(size: UIScale.pt(13), weight: .semibold))
+                            .lineLimit(1)
+                            .presenterBlur(blur)
+                        Text(remote.isPlaying ? "Now playing" : "Paused")
+                            .font(.system(size: UIScale.pt(10.5)))
+                            .foregroundStyle(.secondary)
+                            .frame(width: UIScale.pt(78), alignment: .leading)
+                    }
+                    PlaybackWave(
+                        playing: remote.isPlaying && visibility.visible, color: theme.opacity(0.9),
+                        maxHeight: UIScale.pt(13))
+                }
             }
-            PlaybackWave(
-                playing: remote.isPlaying && visibility.visible, color: theme.opacity(0.9),
-                maxHeight: UIScale.pt(13))
+            .buttonStyle(.edith(.borderless))
+            .help("Show this track in Music")
         }
-        .contentShape(Rectangle())
-        .onTapGesture { remote.reveal(track) }
-        .pointerCursor()
-        .help("Show this track in Music")
     }
 
     private var transport: some View {
@@ -2139,8 +2126,7 @@ struct MusicFooter: View {
                 .frame(width: UIScale.pt(diameter), height: UIScale.pt(diameter))
                 .contentShape(Circle())
         }
-        .buttonStyle(.plain)
-        .pointerCursor()
+        .buttonStyle(.edith(.borderless))
         .liquidGlass(in: Circle(), tint: tint, interactive: true, dark: dark)
     }
 
@@ -2211,7 +2197,6 @@ struct MusicFooter: View {
                 .controlSize(.mini)
                 .tint(theme)
                 .frame(width: UIScale.pt(80))
-                .pointerCursor()
             }
             .padding(.horizontal, UIScale.pt(12))
             .padding(.vertical, UIScale.pt(7))
@@ -2235,7 +2220,7 @@ struct MusicFooter: View {
                     .font(.system(size: UIScale.pt(11), weight: .medium))
                     .foregroundStyle(theme)
             }
-            .buttonStyle(HoverButtonStyle())
+            .buttonStyle(.edith(.toolbar))
         }
         .padding(.horizontal, UIScale.pt(22))
     }

@@ -140,7 +140,6 @@ struct HotKeyRecorderControl: View {
                 .padding(.vertical, UIScale.pt(2))
                 .padding(.horizontal, UIScale.pt(6))
         }
-        .pointerCursor()
         .onAppear { label = currentLabel }
         .onDisappear { if recording { stop() } }
         .help("Click, then press the new shortcut (Esc cancels)")

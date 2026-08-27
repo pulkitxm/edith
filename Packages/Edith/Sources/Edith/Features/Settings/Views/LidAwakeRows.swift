@@ -68,7 +68,6 @@ struct LidAwakeRows: View {
                         )
                     }
                 }
-                .pointerCursor()
                 Text(
                     "The first activation may open Login Items for one-time approval of Edith's background helper. After that, shelf toggles are silent."
                 )
@@ -78,14 +77,12 @@ struct LidAwakeRows: View {
                         Text(session.title).tag(session)
                     }
                 }
-                .pointerCursor()
                 Picker("Auto-pause below", selection: batteryBinding) {
                     Text("Off").tag(0)
                     Text("10% battery").tag(10)
                     Text("20% battery").tag(20)
                     Text("30% battery").tag(30)
                 }
-                .pointerCursor()
                 Text(
                     "When the Mac is on battery and reaches this floor, lid awake pauses until it is charged again. Starting it manually below the floor overrides the pause for that discharge."
                 )
@@ -98,7 +95,6 @@ struct LidAwakeRows: View {
                         )
                     }
                 }
-                .pointerCursor()
                 Text(
                     "While this is on the Mac stays awake with a closed lid, so it keeps drawing power and shedding heat. Do not put it in a bag like this."
                 )

@@ -182,9 +182,8 @@ struct PermissionsPane: View {
             Button("Browse Extensions") {
                 mainWindowSection = MainDestination.extensions.rawValue
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .foregroundStyle(accent)
-            .pointerCursor()
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, UIScale.pt(40))
@@ -269,7 +268,6 @@ private struct PermissionCard: View {
     @ViewBuilder private var action: some View {
         if MainPermissionOperations.center.remediation(for: permission).action == .request {
             Button("Grant...") { grant(usage) }
-                .pointerCursor()
         }
     }
 
