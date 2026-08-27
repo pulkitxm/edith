@@ -674,7 +674,7 @@ check jobs run for the areas that moved, and a final `release` job calls
 `.github/workflows/release.yml` through its gated dispatch inputs.
 
 That `release` job requires a push to `main`, a successful routing and policy job,
-no applicable job failure or cancellation, and a change to the macOS app. The
+no applicable job failure or cancellation, and a change in the routed Swift area. The
 macOS build, Swift tests and Companion backend are each required when their routed
 area changed. Checks and release are therefore the same run, and the release cannot
 start until every applicable check has gone green.

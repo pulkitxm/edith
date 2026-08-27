@@ -77,16 +77,6 @@ test("every change area covers its repository inputs", () => {
       "apps/companion/compose.mac.yaml",
       "apps/companion/compose.gpu.yaml",
     ],
-    release_artifact: [
-      "Packages/Edith/Package.swift",
-      "Packages/Edith/Package.resolved",
-      "Packages/Edith/Sources/Edith/App.swift",
-      "Packages/Edith/Sources/ed/EdithCLI.swift",
-      "Packages/Edith/Vendor/Highlighter/Package.swift",
-      "Resources/Info.plist",
-      "edth.xcodeproj/project.pbxproj",
-      "build.sh",
-    ],
   };
 
   for (const [area, paths] of Object.entries(cases)) {
@@ -96,41 +86,13 @@ test("every change area covers its repository inputs", () => {
   }
 });
 
-test("automatic releases ignore changes outside shipped artifacts", () => {
-  const paths = [
-    "Packages/Edith/Tests/EdithTests/CLIShapeTests.swift",
-    "Packages/Edith/test.sh",
-    ".github/workflows/ci.yml",
-    "scripts/run-current-release-build.sh",
-    "apps/companion/src/main.rs",
-    "apps/site/index.html",
-    "apps/promo-video/src/Promo.tsx",
-    "docs/cli/README.md",
-    "README.md",
-    "Makefile",
-    ".swift-format",
-  ];
-
-  for (const path of paths) {
-    expect(matchesArea("release_artifact", path), path).toBeFalse();
-  }
-});
-
-test("main push release routing compares against the latest release tag", () => {
-  expect(ciWorkflow).toContain(
-    'if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ]',
+test("a main push releases when the Swift area changed", () => {
+  const releaseJob = ciWorkflow.slice(ciWorkflow.indexOf("\n  release:"));
+  expect(releaseJob).toContain(
+    "&& ((github.event_name == 'push'\n      && needs.changes.outputs.swift == 'true')",
   );
-  expect(ciWorkflow).toContain("./scripts/release-artifact-changed.sh");
-  expect(ciWorkflow).toContain(
-    'echo "release_artifact=true" >> "$GITHUB_OUTPUT"',
-  );
-  expect(ciWorkflow).toContain(
-    'echo "release_artifact=false" >> "$GITHUB_OUTPUT"',
-  );
-  expect(ciWorkflow).toContain(
-    "./scripts/release-artifact-changed.sh || release_status=$?",
-  );
-  expect(ciWorkflow).toContain('exit "$release_status"');
+  expect(ciWorkflow).not.toContain("release_artifact");
+  expect(ciWorkflow).not.toContain("release-artifact-changed.sh");
 });
 
 test("embedded companion runtime changes run their focused guard", () => {

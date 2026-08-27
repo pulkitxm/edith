@@ -36,7 +36,7 @@ test("CI gates and dispatches the release only on relevant checks", () => {
     "github.event_name == 'workflow_dispatch' && inputs.release",
   );
   expect(releaseJob).toContain(
-    "&& ((github.event_name == 'push'\n      && needs.changes.outputs.release_artifact == 'true')",
+    "&& ((github.event_name == 'push'\n      && needs.changes.outputs.swift == 'true')",
   );
   expect(releaseJob).toContain(
     "|| (github.event_name == 'workflow_dispatch' && inputs.release))",
