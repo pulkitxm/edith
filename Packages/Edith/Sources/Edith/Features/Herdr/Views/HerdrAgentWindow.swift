@@ -48,7 +48,7 @@ enum HerdrAgentWindow {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private static func addViewControls(
+    static func addViewControls(
         to window: NSWindow, store: HerdrStore, agentID: String
     ) {
         let accessory = NSTitlebarAccessoryViewController()

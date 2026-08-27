@@ -292,6 +292,23 @@ private func descendantViews(of view: NSView) -> [NSView] {
                 width: 240, height: 40))
     }
 
+    @Test func herdrViewPickerUsesTheRightTitlebarAccessory() throws {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
+            styleMask: [.titled, .closable, .resizable, .miniaturizable],
+            backing: .buffered, defer: false)
+        defer { window.orderOut(nil) }
+
+        HerdrAgentWindow.addViewControls(
+            to: window, store: HerdrStore(), agentID: "agent")
+
+        let accessory = try #require(window.titlebarAccessoryViewControllers.first)
+        #expect(window.titlebarAccessoryViewControllers.count == 1)
+        #expect(accessory.layoutAttribute == .right)
+        #expect(accessory.view.fittingSize.width >= 228)
+        #expect(accessory.view.fittingSize.height <= 36)
+    }
+
     @Test func panelTabBarRenders() {
         let tabs: [(id: String, title: String)] = allTabs.map { ($0.id, $0.title) }
         #expect(
