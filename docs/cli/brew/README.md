@@ -14,4 +14,3 @@
 | [`ed brew uninstall`](./uninstall.md) | Previews an uninstall, or applies it with `--yes`. |
 
 Commands run locally without requiring Edith to be open. Automatic Homebrew updates, analytics, environment hints, and interactive prompts are disabled. Read operations have a 60-second limit, mutations have a 30-minute limit, retained output is capped at 2 MB, and cancellation terminates the complete process group.
-
