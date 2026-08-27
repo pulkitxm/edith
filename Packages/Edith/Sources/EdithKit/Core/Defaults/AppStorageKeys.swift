@@ -3,6 +3,7 @@ import Foundation
 public enum AppStorageKeys {
     public enum AppMaintenance {
         public static let enabled = "appMaintenanceEnabled"
+        public static let installDestination = "appMaintenanceInstallDestination"
     }
 
     public enum Update {

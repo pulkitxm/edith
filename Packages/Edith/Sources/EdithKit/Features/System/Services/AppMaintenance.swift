@@ -6,6 +6,7 @@ public enum AppMaintenanceOperation: String, CaseIterable, Sendable {
     case inventory
     case scan
     case remove
+    case install
 
     public var descriptor: UserOperationDescriptor {
         switch self {
@@ -24,6 +25,12 @@ public enum AppMaintenanceOperation: String, CaseIterable, Sendable {
                 id: UserOperationID(rawValue: "maintenance.remove"),
                 summary: "Move a reviewed application selection to the Trash.",
                 cli: ["maintenance", "remove"], effect: .destructive,
+                requiresPreview: true)
+        case .install:
+            UserOperationDescriptor(
+                id: UserOperationID(rawValue: "maintenance.install"),
+                summary: "Verify and install the single app inside a disk image.",
+                cli: ["maintenance", "install"], effect: .destructive,
                 requiresPreview: true)
         }
     }

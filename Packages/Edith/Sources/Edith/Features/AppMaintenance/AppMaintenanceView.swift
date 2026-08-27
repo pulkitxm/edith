@@ -2,6 +2,7 @@ import AppKit
 import EdithKit
 import Observation
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 @Observable
@@ -11,6 +12,8 @@ final class AppMaintenanceModel {
         case ready
         case scanning
         case removing
+        case mounting
+        case installing
     }
 
     var applications: [InstalledApplication] = []
@@ -20,6 +23,7 @@ final class AppMaintenanceModel {
     var phase = Phase.loading
     var errorMessage: String?
     var resultMessage: String?
+    var installPlan: AppMaintenanceDiskImagePlan?
     private var task: Task<Void, Never>?
 
     var selectedApplication: InstalledApplication? {
@@ -122,9 +126,82 @@ final class AppMaintenanceModel {
         }
     }
 
+    func prepareDiskImage(_ url: URL, destination: AppMaintenanceInstallDestination) {
+        task?.cancel()
+        if let installPlan {
+            Task { await AppMaintenanceDiskImageInstaller.cancel(plan: installPlan) }
+        }
+        installPlan = nil
+        phase = .mounting
+        errorMessage = nil
+        resultMessage = nil
+        task = Task {
+            let accessing = url.startAccessingSecurityScopedResource()
+            defer {
+                if accessing { url.stopAccessingSecurityScopedResource() }
+            }
+            do {
+                let prepared = try await AppMaintenanceDiskImageInstaller.plan(
+                    imageURL: url, destination: destination)
+                guard !Task.isCancelled else {
+                    await AppMaintenanceDiskImageInstaller.cancel(plan: prepared)
+                    return
+                }
+                installPlan = prepared
+                phase = .ready
+            } catch {
+                guard !Task.isCancelled else { return }
+                errorMessage = error.localizedDescription
+                phase = .ready
+            }
+        }
+    }
+
+    func installDiskImage(replaceExisting: Bool, moveImageToTrash: Bool) {
+        guard let installPlan else { return }
+        task?.cancel()
+        phase = .installing
+        errorMessage = nil
+        resultMessage = nil
+        task = Task {
+            do {
+                let result = try await AppMaintenanceDiskImageInstaller.install(
+                    plan: installPlan, replaceExisting: replaceExisting,
+                    moveImageToTrash: moveImageToTrash)
+                guard !Task.isCancelled else { return }
+                self.installPlan = nil
+                applications = await Task.detached(priority: .userInitiated) {
+                    AppMaintenanceInventory.applications()
+                }.value
+                let cleanup: String
+                if !result.ejected {
+                    cleanup = " The disk image is still mounted."
+                } else if moveImageToTrash, !result.imageMovedToTrash {
+                    cleanup = " The disk image was kept."
+                } else {
+                    cleanup = ""
+                }
+                resultMessage = "Installed \(result.applicationURL.lastPathComponent).\(cleanup)"
+                phase = .ready
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.installPlan = nil
+                errorMessage = error.localizedDescription
+                phase = .ready
+            }
+        }
+    }
+
+    func cancelInstallPlan() {
+        guard let installPlan else { return }
+        self.installPlan = nil
+        Task { await AppMaintenanceDiskImageInstaller.cancel(plan: installPlan) }
+    }
+
     func cancel() {
         task?.cancel()
         task = nil
+        cancelInstallPlan()
     }
 }
 
@@ -133,6 +210,9 @@ struct AppMaintenanceView: View {
     @State private var model = AppMaintenanceModel()
     @State private var query = ""
     @State private var confirmingRemoval = false
+    @State private var showingDiskImagePicker = false
+    @AppStorage(AppStorageKeys.AppMaintenance.installDestination, store: SharedDefaults.store)
+    private var installDestinationRaw = AppMaintenanceInstallDestination.user.rawValue
 
     private var filteredApplications: [InstalledApplication] {
         let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -157,6 +237,23 @@ struct AppMaintenanceView: View {
         .frame(width: UIScale.pt(900), height: UIScale.pt(640))
         .task { model.refresh() }
         .onDisappear { model.cancel() }
+        .fileImporter(
+            isPresented: $showingDiskImagePicker,
+            allowedContentTypes: [UTType(filenameExtension: "dmg") ?? .data]
+        ) { result in
+            guard case .success(let url) = result else { return }
+            model.prepareDiskImage(url, destination: installDestination)
+        }
+        .sheet(item: installPlanBinding) { plan in
+            AppMaintenanceInstallReview(
+                plan: plan, installing: model.phase == .installing,
+                onCancel: { model.cancelInstallPlan() },
+                onInstall: { replaceExisting, moveImageToTrash in
+                    model.installDiskImage(
+                        replaceExisting: replaceExisting,
+                        moveImageToTrash: moveImageToTrash)
+                })
+        }
         .alert("Move selected items to the Trash?", isPresented: $confirmingRemoval) {
             Button("Cancel", role: .cancel) {}
             Button("Move to Trash", role: .destructive) { model.removeSelected() }
@@ -179,12 +276,28 @@ struct AppMaintenanceView: View {
                     .settingsCaption()
             }
             Spacer()
+            Menu {
+                Picker("Destination", selection: $installDestinationRaw) {
+                    ForEach(AppMaintenanceInstallDestination.allCases, id: \.rawValue) {
+                        destination in
+                        Text(destination.title).tag(destination.rawValue)
+                    }
+                }
+            } label: {
+                Label(installDestination.title, systemImage: "folder")
+            }
+            Button {
+                showingDiskImagePicker = true
+            } label: {
+                Label("Install Disk Image", systemImage: "externaldrive.badge.plus")
+            }
+            .disabled(model.phase != .ready)
             Button {
                 model.refresh()
             } label: {
                 Label("Refresh", systemImage: "arrow.clockwise")
             }
-            .disabled(model.phase == .loading || model.phase == .removing)
+            .disabled(model.phase != .ready)
             Button("Done") { dismiss() }
                 .keyboardShortcut(.defaultAction)
         }
@@ -236,17 +349,34 @@ struct AppMaintenanceView: View {
             })
     }
 
+    private var installDestination: AppMaintenanceInstallDestination {
+        AppMaintenanceInstallDestination(rawValue: installDestinationRaw) ?? .user
+    }
+
+    private var installPlanBinding: Binding<AppMaintenanceDiskImagePlan?> {
+        Binding(
+            get: { model.installPlan },
+            set: { value in
+                if value == nil, model.installPlan != nil { model.cancelInstallPlan() }
+            })
+    }
+
+    private var progressMessage: String {
+        switch model.phase {
+        case .removing: "Moving selected items"
+        case .mounting: "Mounting and verifying disk image"
+        default: "Finding exact support files"
+        }
+    }
+
     @ViewBuilder
     private var detail: some View {
-        if model.phase == .scanning || model.phase == .removing {
+        if model.phase == .scanning || model.phase == .removing || model.phase == .mounting {
             VStack(spacing: UIScale.pt(12)) {
                 ProgressView()
                     .controlSize(.large)
-                Text(
-                    model.phase == .removing
-                        ? "Moving selected items" : "Finding exact support files"
-                )
-                .foregroundStyle(.secondary)
+                Text(progressMessage)
+                    .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let application = model.selectedApplication, let plan = model.plan {
@@ -417,5 +547,84 @@ private struct AppMaintenanceItemRow: View {
             .buttonStyle(.edith(.borderless))
             .help("Reveal in Finder")
         }
+    }
+}
+
+private struct AppMaintenanceInstallReview: View {
+    let plan: AppMaintenanceDiskImagePlan
+    let installing: Bool
+    let onCancel: () -> Void
+    let onInstall: (Bool, Bool) -> Void
+    @State private var replaceExisting = false
+    @State private var moveImageToTrash = true
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: UIScale.pt(12)) {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: plan.sourceApplication.url.path))
+                    .resizable()
+                    .frame(width: UIScale.pt(52), height: UIScale.pt(52))
+                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                    Text("Install \(plan.sourceApplication.name)")
+                        .font(.system(size: UIScale.pt(18), weight: .semibold))
+                    Text(
+                        "\(plan.sourceApplication.bundleID) · \(plan.sourceApplication.version)"
+                    )
+                    .settingsCaption()
+                }
+                Spacer()
+                Label("Verified", systemImage: "checkmark.seal.fill")
+                    .foregroundStyle(.green)
+            }
+            .padding(UIScale.pt(20))
+            Divider()
+            Form {
+                Section("Reviewed installation") {
+                    LabeledContent("Disk image", value: plan.imageURL.lastPathComponent)
+                    LabeledContent("Image size", value: JunkScanner.format(plan.imageSizeBytes))
+                    LabeledContent("Destination", value: plan.destinationURL.path)
+                    LabeledContent("Code signature", value: "Accepted")
+                    LabeledContent("Gatekeeper", value: "Accepted")
+                }
+                if let existing = plan.existingApplication {
+                    Section("Existing application") {
+                        LabeledContent("Installed version", value: existing.version)
+                        Text(
+                            "The existing app will move to the Trash before the verified replacement is installed."
+                        )
+                        .settingsCaption()
+                        Toggle("Replace the existing application", isOn: $replaceExisting)
+                    }
+                }
+                Section("Cleanup") {
+                    Toggle("Move the disk image to Trash after ejecting", isOn: $moveImageToTrash)
+                    Text(
+                        "The app is staged and verified again before installation. The download only moves after the mounted image ejects successfully."
+                    )
+                    .settingsCaption()
+                }
+            }
+            .formStyle(.grouped)
+            Divider()
+            HStack {
+                if installing {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Installing verified application")
+                        .settingsCaption()
+                }
+                Spacer()
+                Button("Cancel", role: .cancel, action: onCancel)
+                    .disabled(installing)
+                Button(plan.replacesExisting ? "Replace App" : "Install App") {
+                    onInstall(replaceExisting, moveImageToTrash)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(installing || plan.replacesExisting && !replaceExisting)
+            }
+            .padding(UIScale.pt(16))
+        }
+        .frame(width: UIScale.pt(620), height: UIScale.pt(560))
+        .interactiveDismissDisabled(installing)
     }
 }

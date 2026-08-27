@@ -127,13 +127,16 @@ import Testing
 
     @Test func commandTreeAndParserExposeMaintenanceFlow() throws {
         let node = try #require(CommandTree.root.child("maintenance"))
-        #expect(node.children.map(\.name) == ["inventory", "scan", "remove"])
+        #expect(node.children.map(\.name) == ["inventory", "scan", "remove", "install"])
         #expect(
             try EdRoot.parseAsRoot(["maintenance", "inventory", "--no-updates"])
                 is MaintenanceInventoryCommand)
         #expect(
             try EdRoot.parseAsRoot(["maintenance", "remove", "/Applications/Test.app"])
                 is MaintenanceRemoveCommand)
+        #expect(
+            try EdRoot.parseAsRoot(["maintenance", "install", "/tmp/Test.dmg"])
+                is MaintenanceInstallCommand)
     }
 
     private func temporaryDirectory() throws -> URL {

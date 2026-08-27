@@ -12,7 +12,7 @@ struct MaintenanceCommand: AsyncParsableCommand {
             """,
         subcommands: [
             MaintenanceInventoryCommand.self, MaintenanceScanCommand.self,
-            MaintenanceRemoveCommand.self,
+            MaintenanceRemoveCommand.self, MaintenanceInstallCommand.self,
         ],
         defaultSubcommand: MaintenanceInventoryCommand.self)
 }
@@ -22,6 +22,14 @@ enum MaintenanceCLI {
         let url = URL(fileURLWithPath: path.expandingTilde()).standardizedFileURL
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw CLIFailure.notFound("there is no application at \(path)")
+        }
+        return url
+    }
+
+    static func diskImageURL(_ path: String) throws -> URL {
+        let url = URL(fileURLWithPath: path.expandingTilde()).standardizedFileURL
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw CLIFailure.notFound("there is no disk image at \(path)")
         }
         return url
     }
@@ -59,6 +67,19 @@ enum MaintenanceCLI {
         ])
     }
 
+    static func installPlanJSON(_ plan: AppMaintenanceDiskImagePlan) -> JSONValue {
+        .object([
+            "application": applicationJSON(plan.sourceApplication),
+            "destination": .string(plan.destination.rawValue),
+            "destinationPath": .string(plan.destinationURL.path),
+            "diskImage": .string(plan.imageURL.path),
+            "diskImageBytes": .number(plan.imageSizeBytes),
+            "existingApplication": plan.existingApplication.map(applicationJSON) ?? .null,
+            "replacesExisting": .bool(plan.replacesExisting),
+            "verified": .bool(true),
+        ])
+    }
+
     static func plan(_ path: String) throws -> AppMaintenancePlan {
         do {
             return try AppMaintenanceExecution.plan(applicationURL: applicationURL(path))
@@ -82,6 +103,19 @@ enum MaintenanceCLI {
         CLIOut.out("")
         let total = selected.reduce(Int64(0)) { $0 + $1.sizeBytes }
         CLIOut.out("selected \(selected.count) items, \(ByteFormatter.string(total))")
+    }
+
+    static func printInstallPlan(_ plan: AppMaintenanceDiskImagePlan) {
+        CLIOut.out("reviewed \(plan.sourceApplication.name) \(plan.sourceApplication.version)")
+        CLIOut.out("bundle: \(plan.sourceApplication.bundleID)")
+        CLIOut.out("image: \(plan.imageURL.path)")
+        CLIOut.out("destination: \(plan.destinationURL.path)")
+        CLIOut.out("verification: code signature and Gatekeeper accepted")
+        if let existing = plan.existingApplication {
+            CLIOut.out("replacement: \(existing.name) \(existing.version) moves to the Trash")
+        } else {
+            CLIOut.out("replacement: none")
+        }
     }
 }
 
@@ -197,6 +231,99 @@ struct MaintenanceRemoveCommand: AsyncParsableCommand {
             )
             if !result.failed.isEmpty {
                 CLIOut.note("\(result.failed.count) reviewed items could not be moved")
+            }
+        }
+    }
+}
+
+struct MaintenanceInstallCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "install",
+        abstract: "Verify and install the single app inside a disk image.",
+        discussion: """
+            The image is mounted read-only, and the one top-level app must pass code-signing
+            and Gatekeeper checks. Without --yes, the image is ejected after printing the plan.
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Flag(help: "Install in /Applications instead of ~/Applications.")
+    var system = false
+
+    @Flag(help: "Move an existing app with the same bundle ID to the Trash.")
+    var replace = false
+
+    @Flag(help: "Keep the disk image after a successful installation.")
+    var keepImage = false
+
+    @Flag(help: "Apply the reviewed installation plan.")
+    var yes = false
+
+    @Argument(help: "Path to a disk image containing one top-level application.")
+    var diskImage: String
+
+    func run() async throws {
+        try await execute {
+            let destination =
+                system
+                ? AppMaintenanceInstallDestination.system : .user
+            let plan: AppMaintenanceDiskImagePlan
+            do {
+                plan = try await AppMaintenanceDiskImageInstaller.plan(
+                    imageURL: MaintenanceCLI.diskImageURL(diskImage),
+                    destination: destination)
+            } catch let error as AppMaintenanceDiskImageError {
+                throw CLIFailure(error.localizedDescription)
+            }
+            guard yes else {
+                if json {
+                    var preview = MaintenanceCLI.installPlanJSON(plan)
+                    if case var .object(object) = preview {
+                        object["applied"] = .bool(false)
+                        preview = .object(object)
+                    }
+                    CLIOut.json(preview)
+                } else {
+                    MaintenanceCLI.printInstallPlan(plan)
+                    CLIOut.note("pass --yes to install this verified application")
+                    if plan.replacesExisting {
+                        CLIOut.note("pass --replace with --yes to move the existing app to Trash")
+                    }
+                }
+                await AppMaintenanceDiskImageInstaller.cancel(plan: plan)
+                return
+            }
+            if plan.replacesExisting, !replace {
+                await AppMaintenanceDiskImageInstaller.cancel(plan: plan)
+                throw CLIFailure(
+                    "the destination already contains this app",
+                    hint: "review the plan, then pass --replace with --yes")
+            }
+            let result: AppMaintenanceInstallResult
+            do {
+                result = try await AppMaintenanceDiskImageInstaller.install(
+                    plan: plan, replaceExisting: replace,
+                    moveImageToTrash: !keepImage)
+            } catch let error as AppMaintenanceDiskImageError {
+                throw CLIFailure(error.localizedDescription)
+            }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "applied": .bool(true),
+                        "applicationPath": .string(result.applicationURL.path),
+                        "diskImageMovedToTrash": .bool(result.imageMovedToTrash),
+                        "ejected": .bool(result.ejected),
+                        "replacedExisting": .bool(result.replacedExisting),
+                    ]))
+                return
+            }
+            CLIOut.out("installed \(result.applicationURL.path)")
+            if !result.ejected {
+                CLIOut.note("the app is installed, but the disk image is still mounted")
+            } else if !keepImage, !result.imageMovedToTrash {
+                CLIOut.note("the app is installed, but the disk image was kept")
             }
         }
     }

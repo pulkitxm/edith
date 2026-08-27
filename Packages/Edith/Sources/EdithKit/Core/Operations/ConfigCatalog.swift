@@ -482,8 +482,13 @@ public enum ConfigCatalog {
             fallback: .bool(false)),
         SettingDefinition(
             AppStorageKeys.AppMaintenance.enabled, .bool, group: "system",
-            summary: "App Maintenance extension: inventory, updates and safe removal.",
+            summary: "App Maintenance extension: inventory, installation and safe removal.",
             fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.installDestination, .string, group: "system",
+            summary: "Default disk image installation destination.",
+            allowed: AppMaintenanceInstallDestination.allCases.map(\.rawValue),
+            fallback: .string(AppMaintenanceInstallDestination.user.rawValue)),
         SettingDefinition(
             AppStorageKeys.General.preventSleep, .bool, group: "system",
             summary: "Keep the Mac awake (Keep Awake).", fallback: .bool(false)),

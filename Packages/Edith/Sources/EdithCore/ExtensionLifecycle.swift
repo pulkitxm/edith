@@ -345,6 +345,10 @@ public enum ExtensionLifecycleCatalog {
                 instruction(
                     "remove", "Remove an app safely",
                     "Choose exact bundle-identifier matches and move only the selection to Trash."),
+                instruction(
+                    "install", "Install a disk image safely",
+                    "Verify the single app in a disk image, stage it, install it and clean up recoverably."
+                ),
             ],
             prerequisites: [
                 instruction(
@@ -355,6 +359,7 @@ public enum ExtensionLifecycleCatalog {
             examples: [
                 "ed extensions enable appMaintenance", "ed maintenance inventory --json",
                 "ed maintenance scan /Applications/Example.app --json",
+                "ed maintenance install ~/Downloads/Example.dmg --json",
             ],
             docs: [
                 documentation(

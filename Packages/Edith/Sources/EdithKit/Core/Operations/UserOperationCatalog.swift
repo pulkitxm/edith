@@ -1253,6 +1253,10 @@ private extension AppMaintenanceOperation {
             userInterface(
                 "App Maintenance", "move selected reviewed items to the Trash",
                 ["/Applications/Example.app", "--yes"])
+        case .install:
+            userInterface(
+                "App Maintenance", "verify and install one app from a disk image",
+                ["~/Downloads/Example.dmg", "--yes"])
         }
     }
 }

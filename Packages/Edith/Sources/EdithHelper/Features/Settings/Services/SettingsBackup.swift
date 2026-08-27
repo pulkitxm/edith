@@ -720,6 +720,7 @@ final class SettingsBackup {
         AppStorageKeys.General.mainWindowSection, AppStorageKeys.General.settingsTab,
         AppStorageKeys.General.mainSidebarOpen, AppStorageKeys.General.mainSidebarWidth,
         AppStorageKeys.General.settingsCategoriesExpanded, AppStorageKeys.AppMaintenance.enabled,
+        AppStorageKeys.AppMaintenance.installDestination,
     ]
 
     nonisolated static let sharedKeys: Set<String> = [
@@ -839,7 +840,7 @@ final class SettingsBackup {
         AppStorageKeys.General.showDockIcon,
         AppStorageKeys.Music.gridView, "musicFavourites",
         AppStorageKeys.General.mainWindowSection, AppStorageKeys.General.settingsTab,
-        AppStorageKeys.AppMaintenance.enabled,
+        AppStorageKeys.AppMaintenance.enabled, AppStorageKeys.AppMaintenance.installDestination,
         AppStorageKeys.General.mainSidebarOpen, AppStorageKeys.General.mainSidebarWidth,
         AppStorageKeys.General.settingsCategoriesExpanded,
     ]

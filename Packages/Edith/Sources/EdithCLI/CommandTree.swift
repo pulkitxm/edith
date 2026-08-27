@@ -713,6 +713,11 @@ public enum CommandTree {
                         "remove", "Move a reviewed app selection to the Trash.",
                         options: ["--json", "--help", "--only-app", "--yes"],
                         arguments: [.localPath], destructivePolicy: .previewThenYes),
+                    CommandNode(
+                        "install", "Verify and install one app from a disk image.",
+                        options: [
+                            "--json", "--help", "--system", "--replace", "--keep-image", "--yes",
+                        ], arguments: [.localPath], destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
                 "quinjet", "Discover and open Quinjet review workspaces.",
