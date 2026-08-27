@@ -76,6 +76,17 @@ public enum AppStorageKeys {
         public static let setupDeclined = "companionSetupDeclined"
     }
 
+    public enum Emoji {
+        public static let enabled = "emojiEnabled"
+        public static let frequentCount = "emojiFrequentCount"
+        public static let hotKeyCode = "emojiHotKeyCode"
+        public static let hotKeyLabel = "emojiHotKeyLabel"
+        public static let hotKeyMods = "emojiHotKeyMods"
+        public static let popupAt = "emojiPopupAt"
+        public static let skinTone = "emojiSkinTone"
+        public static let usage = "emojiUsage"
+    }
+
     public enum FocusDim {
         public static let animationDuration = "focusDimAnimationDuration"
         public static let hotKeyCode = "focusDimHotKeyCode"

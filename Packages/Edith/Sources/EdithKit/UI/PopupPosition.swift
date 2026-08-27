@@ -1,6 +1,21 @@
 import AppKit
 
-public enum ClipboardPopupPosition: String, CaseIterable, Identifiable, Sendable {
+public struct PopupAnchorKeys: Sendable {
+    public let positionX: String
+    public let positionY: String
+
+    public init(positionX: String, positionY: String) {
+        self.positionX = positionX
+        self.positionY = positionY
+    }
+
+    public static let clipboard = PopupAnchorKeys(
+        positionX: "clipboardWindowPositionX", positionY: "clipboardWindowPositionY")
+    public static let emoji = PopupAnchorKeys(
+        positionX: "emojiWindowPositionX", positionY: "emojiWindowPositionY")
+}
+
+public enum PopupPosition: String, CaseIterable, Identifiable, Sendable {
     case cursor
     case statusItem
     case window
@@ -19,20 +34,23 @@ public enum ClipboardPopupPosition: String, CaseIterable, Identifiable, Sendable
         }
     }
 
-    public static var current: ClipboardPopupPosition {
-        ClipboardPopupPosition(
-            rawValue: SharedDefaults.store.string(forKey: AppStorageKeys.Clipboard.popupAt) ?? "")
-            ?? .cursor
+    public static func stored(forKey key: String) -> PopupPosition {
+        PopupPosition(rawValue: SharedDefaults.store.string(forKey: key) ?? "") ?? .cursor
     }
 
     @MainActor
-    public func origin(size: NSSize, statusItemFrame: NSRect?) async -> NSPoint {
-        let origin = await unclampedOrigin(size: size, statusItemFrame: statusItemFrame)
+    public func origin(size: NSSize, statusItemFrame: NSRect?, anchors: PopupAnchorKeys)
+        async -> NSPoint
+    {
+        let origin = await unclampedOrigin(
+            size: size, statusItemFrame: statusItemFrame, anchors: anchors)
         return Self.clampedToScreen(origin, size)
     }
 
     @MainActor
-    private func unclampedOrigin(size: NSSize, statusItemFrame: NSRect?) async -> NSPoint {
+    private func unclampedOrigin(
+        size: NSSize, statusItemFrame: NSRect?, anchors: PopupAnchorKeys
+    ) async -> NSPoint {
         switch self {
         case .cursor:
             let fallback = NSEvent.mouseLocation
@@ -66,8 +84,8 @@ public enum ClipboardPopupPosition: String, CaseIterable, Identifiable, Sendable
         case .lastPosition:
             guard let screen = Self.popupScreen() else { return .zero }
             let store = SharedDefaults.store
-            let relX = store.object(forKey: "clipboardWindowPositionX") as? Double ?? 0.5
-            let relY = store.object(forKey: "clipboardWindowPositionY") as? Double ?? 0.8
+            let relX = store.object(forKey: anchors.positionX) as? Double ?? 0.5
+            let relY = store.object(forKey: anchors.positionY) as? Double ?? 0.8
             let frame = screen.frame
             return NSPoint(
                 x: frame.minX + frame.width * relX - size.width / 2,
@@ -88,17 +106,17 @@ public enum ClipboardPopupPosition: String, CaseIterable, Identifiable, Sendable
     }
 
     @MainActor
-    public static func saveLastPosition(frame: NSRect, screen: NSScreen?) {
+    public static func saveLastPosition(
+        frame: NSRect, screen: NSScreen?, anchors: PopupAnchorKeys
+    ) {
         guard let screen else { return }
         let bounds = screen.frame
         guard bounds.width > 0, bounds.height > 0 else { return }
         let store = SharedDefaults.store
         store.set(
-            Double((frame.midX - bounds.minX) / bounds.width),
-            forKey: "clipboardWindowPositionX")
+            Double((frame.midX - bounds.minX) / bounds.width), forKey: anchors.positionX)
         store.set(
-            Double((frame.maxY - bounds.minY) / bounds.height),
-            forKey: "clipboardWindowPositionY")
+            Double((frame.maxY - bounds.minY) / bounds.height), forKey: anchors.positionY)
     }
 
     nonisolated private static func focusedTextRect(
