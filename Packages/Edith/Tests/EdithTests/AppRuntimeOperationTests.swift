@@ -99,6 +99,19 @@ import Testing
         #expect(capture.value == "music")
     }
 
+    @Test func keyboardCleaningPayloadsPreserveCorrelationAndState() {
+        let requestID = UUID().uuidString
+        for state in [
+            KeyboardCleaningState.arming, .cleaning, .inputMonitoringRequired,
+            .accessibilityRequired, .unavailable,
+        ] {
+            let payload = KeyboardCleaningIPC.payload(requestID: requestID, state: state)
+            #expect(payload[KeyboardCleaningIPC.requestIDKey] as? String == requestID)
+            #expect(KeyboardCleaningIPC.state(from: payload) == state)
+            #expect(state.accepted == (state == .arming || state == .cleaning))
+        }
+    }
+
     @Test func relaunchStartsTheBundleBeforeTerminatingThroughTheTypedOperation() {
         final class Capture {
             var events: [String] = []

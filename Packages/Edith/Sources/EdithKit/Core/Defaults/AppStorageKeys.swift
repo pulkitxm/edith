@@ -1,11 +1,6 @@
 import Foundation
 
 public enum AppStorageKeys {
-    public enum AppMaintenance {
-        public static let enabled = "appMaintenanceEnabled"
-        public static let installDestination = "appMaintenanceInstallDestination"
-    }
-
     public enum Update {
         public static let automaticChecks = "SUEnableAutomaticChecks"
         public static let checkInterval = "SUScheduledCheckInterval"
@@ -82,17 +77,6 @@ public enum AppStorageKeys {
         public static let setupDeclined = "companionSetupDeclined"
     }
 
-    public enum Emoji {
-        public static let enabled = "emojiEnabled"
-        public static let frequentCount = "emojiFrequentCount"
-        public static let hotKeyCode = "emojiHotKeyCode"
-        public static let hotKeyLabel = "emojiHotKeyLabel"
-        public static let hotKeyMods = "emojiHotKeyMods"
-        public static let popupAt = "emojiPopupAt"
-        public static let skinTone = "emojiSkinTone"
-        public static let usage = "emojiUsage"
-    }
-
     public enum FocusDim {
         public static let animationDuration = "focusDimAnimationDuration"
         public static let hotKeyCode = "focusDimHotKeyCode"
@@ -100,31 +84,6 @@ public enum AppStorageKeys {
         public static let hotKeyMods = "focusDimHotKeyMods"
         public static let intensity = "focusDimIntensity"
         public static let otherDisplaysMode = "focusDimOtherDisplaysMode"
-    }
-
-    public enum WindowTools {
-        public static let enabled = "windowToolsEnabled"
-        public static let greenButtonMaximizes = "windowToolsGreenButtonMaximizes"
-        public static let leftHotKeyCode = "windowToolsLeftHotKeyCode"
-        public static let leftHotKeyLabel = "windowToolsLeftHotKeyLabel"
-        public static let leftHotKeyMods = "windowToolsLeftHotKeyMods"
-        public static let maximizeHotKeyCode = "windowToolsMaximizeHotKeyCode"
-        public static let maximizeHotKeyLabel = "windowToolsMaximizeHotKeyLabel"
-        public static let maximizeHotKeyMods = "windowToolsMaximizeHotKeyMods"
-        public static let restoreHotKeyCode = "windowToolsRestoreHotKeyCode"
-        public static let restoreHotKeyLabel = "windowToolsRestoreHotKeyLabel"
-        public static let restoreHotKeyMods = "windowToolsRestoreHotKeyMods"
-        public static let rightHotKeyCode = "windowToolsRightHotKeyCode"
-        public static let rightHotKeyLabel = "windowToolsRightHotKeyLabel"
-        public static let rightHotKeyMods = "windowToolsRightHotKeyMods"
-    }
-
-    public enum FinderTools {
-        public static let cutPaste = "finderToolsCutPaste"
-        public static let diskImageInstaller = "finderToolsDiskImageInstaller"
-        public static let enabled = "finderToolsEnabled"
-        public static let pasteImages = "finderToolsPasteImages"
-        public static let rename = "finderToolsRename"
     }
 
     public enum Herdr {
@@ -171,11 +130,6 @@ public enum AppStorageKeys {
         public static let lowColorHex = "menuBarLowColorHex"
         public static let midColorHex = "menuBarMidColorHex"
         public static let statsColorHex = "menuBarStatsColorHex"
-        public static let statsAlerts = "systemMonitorAlerts"
-        public static let statsBatteryThreshold = "systemMonitorBatteryThreshold"
-        public static let statsCPUThreshold = "systemMonitorCPUThreshold"
-        public static let statsDiskThreshold = "systemMonitorDiskThreshold"
-        public static let statsMemoryThreshold = "systemMonitorMemoryThreshold"
         public static let subColorHex = "menuBarSubColorHex"
         public static let systemStats = "menuBarSystemStats"
     }

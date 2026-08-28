@@ -81,35 +81,6 @@ public enum MachineReports {
         ])
     }
 
-    public static func systemMonitor(_ value: SystemMonitorSnapshot) -> JSONValue {
-        let battery =
-            value.battery.map { battery in
-                JSONValue.object([
-                    "percent": .int(battery.percent),
-                    "status": .string(battery.status),
-                    "charging": .bool(battery.isCharging),
-                    "externalPower": .bool(battery.externalPower),
-                    "watts": .optional(battery.watts),
-                ])
-            } ?? .null
-        return .object([
-            "sampledUptimeSeconds": .double(value.sampledAt),
-            "cpuPercent": .double(value.cpuPercent),
-            "memoryPercent": .double(value.memoryPercent),
-            "gpuPercent": .optional(value.gpuPercent),
-            "network": .object([
-                "downloadBps": .double(value.network.inboundBytesPerSecond),
-                "uploadBps": .double(value.network.outboundBytesPerSecond),
-            ]),
-            "disk": .object([
-                "readBps": .double(value.disk.inboundBytesPerSecond),
-                "writeBps": .double(value.disk.outboundBytesPerSecond),
-                "rootUsedPercent": .optional(value.rootDiskUsedPercent),
-            ]),
-            "power": battery,
-        ])
-    }
-
     public static func slow(_ value: MachineSlow) -> JSONValue {
         .object([
             "filesystems": .array(

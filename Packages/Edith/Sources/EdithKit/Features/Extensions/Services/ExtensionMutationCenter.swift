@@ -76,7 +76,6 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case herdr
     case quinjet
     case system
-    case appMaintenance
     case machines
     case companion
     case systemStats
@@ -87,12 +86,9 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case calendar
     case notchShelf
     case clipboard
-    case finderTools
     case focusDim
     case presenter
     case colorPicker
-    case windowTools
-    case emoji
 }
 
 public enum ExtensionModalMutationOutcome: Equatable, Sendable {

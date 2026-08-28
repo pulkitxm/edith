@@ -123,31 +123,6 @@ import Testing
         #expect(fields["load"] == .doubles([1, 2, 3]))
     }
 
-    @Test func systemMonitorEncodesEveryMetricFamily() {
-        let monitor = SystemMonitorSnapshot(
-            sampledAt: 12, cpuPercent: 25, memoryPercent: 60, gpuPercent: 40,
-            network: SystemMonitorThroughput(
-                inboundBytesPerSecond: 1000, outboundBytesPerSecond: 500),
-            disk: SystemMonitorThroughput(
-                inboundBytesPerSecond: 2000, outboundBytesPerSecond: 750),
-            rootDiskUsedPercent: 70,
-            battery: SystemMonitorBattery(
-                percent: 80, isCharging: true, externalPower: true, watts: 12.5))
-        guard case let .object(fields) = MachineReports.systemMonitor(monitor),
-            case let .object(network)? = fields["network"],
-            case let .object(disk)? = fields["disk"],
-            case let .object(power)? = fields["power"]
-        else {
-            Issue.record("monitor should be a nested object")
-            return
-        }
-        #expect(fields["gpuPercent"] == .double(40))
-        #expect(network["downloadBps"] == .double(1000))
-        #expect(disk["rootUsedPercent"] == .double(70))
-        #expect(power["percent"] == .int(80))
-        #expect(power["watts"] == .double(12.5))
-    }
-
     @Test func dockerAvailabilityIsReportedAsAState() {
         #expect(
             MachineReports.availability(DockerAvailability(status: .missing))

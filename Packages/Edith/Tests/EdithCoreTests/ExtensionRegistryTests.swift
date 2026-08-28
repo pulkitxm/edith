@@ -10,6 +10,15 @@ import Testing
         #expect(Set(entries.map(\.defaultsKey)).count == entries.count)
     }
 
+    @Test func identifiersMatchSupportedExtensions() {
+        #expect(
+            ExtensionRegistry.entries.map(\.id) == [
+                "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
+                "systemStats", "micMute", "lidAwake", "music", "mediaToolkit", "calendar",
+                "notchShelf", "clipboard", "focusDim", "presenter", "colorPicker",
+            ])
+    }
+
     @Test func toolRequirementsUsePortableIdentifiers() {
         let requiredByExtension = Dictionary(
             uniqueKeysWithValues: ExtensionRegistry.entries.map { ($0.id, $0.requiredToolIDs) })
@@ -20,6 +29,5 @@ import Testing
         #expect(requiredByExtension["music"]?.isEmpty == true)
         #expect(optionalByExtension["music"] == ["yt-dlp"])
         #expect(requiredByExtension["quinjet"] == ["quinjet"])
-        #expect(requiredByExtension["windowTools"]?.isEmpty == true)
     }
 }

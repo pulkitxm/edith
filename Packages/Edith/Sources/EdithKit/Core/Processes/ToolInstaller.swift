@@ -44,7 +44,7 @@ public struct ToolInstaller: Sendable {
             arguments = [executableName] + versionArguments
         }
         return await ToolVersionProbe.version(
-            env(arguments, timeout: 5),
+            env(arguments, timeout: tool.versionProbeTimeout),
             runCommand: { request, onLine in
                 try await runCommand(request) { line in
                     log(line)

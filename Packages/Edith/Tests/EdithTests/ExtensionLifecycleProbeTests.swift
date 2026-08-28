@@ -32,9 +32,6 @@ import EdithCore
             id: "system", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "appMaintenance", helper: false, machine: false, toolRule: .all, adapter: true,
-            requiredTools: [], optionalTools: []),
-        MatrixRow(
             id: "machines", helper: true, machine: true, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
@@ -65,22 +62,13 @@ import EdithCore
             id: "clipboard", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "finderTools", helper: true, machine: false, toolRule: .all, adapter: true,
-            requiredTools: [], optionalTools: []),
-        MatrixRow(
             id: "focusDim", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
             id: "presenter", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "emoji", helper: true, machine: false, toolRule: .all, adapter: true,
-            requiredTools: [], optionalTools: []),
-        MatrixRow(
             id: "colorPicker", helper: true, machine: false, toolRule: .all, adapter: true,
-            requiredTools: [], optionalTools: []),
-        MatrixRow(
-            id: "windowTools", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
     ]
 

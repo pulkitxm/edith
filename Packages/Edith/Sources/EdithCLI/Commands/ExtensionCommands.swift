@@ -88,10 +88,30 @@ enum ExtensionLookup {
                 return ExtensionLiveAdapters.lidAwakeReadiness(
                     helperStatus: snapshot.helperStatus)
             }
+            if id == "calendar", AppBridge.helperIsRunning,
+                CLIEnvironment.sharedDefaults.bool(
+                    forKey: AppStorageKeys.Permissions.calendarGranted)
+            {
+                return await calendarReadiness()
+            }
             if let readiness = await liveAdapters(id) { return readiness }
             return await existingAdapters(id)
         }
         return ExtensionLifecycleProbe(environment: environment)
+    }
+
+    static func calendarReadiness() async -> ExtensionAdapterReadiness {
+        do {
+            _ = try await CalendarBridge.events(CalendarEventQuery(days: 1))
+            return .ready("Calendar access is granted through the Edith menu bar helper.")
+        } catch let failure as CLIFailure {
+            if failure.message.contains("has not granted") || failure.message.contains("is off") {
+                return .needsSetup(failure.message)
+            }
+            return .failed(failure.message)
+        } catch {
+            return .failed("Calendar readiness failed: \(error.localizedDescription)")
+        }
     }
 
     static func grantedPermissions() -> [ExtensionPermission: Bool] {

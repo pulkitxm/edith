@@ -158,6 +158,49 @@ import Testing
         }
     }
 
+    @Test func calendarDoctorUsesTheAuthorizedHelper() async {
+        await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Tabs.calendarEnabled)
+            world.shared.set(true, forKey: AppStorageKeys.Permissions.calendarGranted)
+            world.helperRunning(true)
+            world.answers { name in
+                guard name == IPC.Name.calendarEvents else { return nil }
+                return [
+                    CalendarEventBridge.statusKey: "ok",
+                    CalendarEventBridge.payloadKey: CalendarEventBridge.encode([]),
+                ]
+            }
+
+            let result = await CLIProbe.capture([
+                "extensions", "doctor", "calendar", "--json",
+            ])
+
+            #expect(result.object?["verified"] as? Bool == true)
+            #expect(
+                (result.object?["state"] as? [String: Any])?["phase"] as? String == "ready")
+        }
+    }
+
+    @Test func calendarDoctorTrustsAHelperRejectionOverMirroredPermission() async {
+        await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Tabs.calendarEnabled)
+            world.shared.set(true, forKey: AppStorageKeys.Permissions.calendarGranted)
+            world.helperRunning(true)
+            world.answers { name in
+                guard name == IPC.Name.calendarEvents else { return nil }
+                return [CalendarEventBridge.statusKey: "notAuthorized"]
+            }
+
+            let result = await CLIProbe.capture([
+                "extensions", "doctor", "calendar", "--json",
+            ])
+
+            #expect(result.object?["verified"] as? Bool == false)
+            #expect(
+                (result.object?["state"] as? [String: Any])?["phase"] as? String == "needsSetup")
+        }
+    }
+
     @Test func statusIncludesTheLiveRuntimeAdapter() async {
         await CLIProbe.inWorld { world in
             world.shared.set(true, forKey: AppStorageKeys.Tabs.quinjetEnabled)

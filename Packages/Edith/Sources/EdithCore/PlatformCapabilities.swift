@@ -7,7 +7,6 @@ public enum PlatformCapability: String, CaseIterable, Codable, Hashable, Sendabl
     case cameraPreview
     case clipboardHistory
     case companionService
-    case emojiInsertion
     case externalMediaControl
     case fileShelf
     case globalPaste
@@ -28,7 +27,6 @@ public enum PlatformCapability: String, CaseIterable, Codable, Hashable, Sendabl
     case systemMetrics
     case usageCollection
     case windowDimming
-    case windowManagement
 }
 
 public enum PlatformCapabilityState: Equatable, Sendable {
@@ -92,14 +90,12 @@ public struct PlatformCapabilities: Equatable, Sendable {
                     .bluetoothMonitoring: .permissionRequired,
                     .calendarEvents: .permissionRequired,
                     .cameraPreview: .permissionRequired,
-                    .emojiInsertion: .permissionRequired,
                     .globalPaste: .permissionRequired,
                     .inputSuppression: .permissionRequired,
                     .notifications: .permissionRequired,
                     .screenColorSampling: .permissionRequired,
                     .screenShareDetection: .permissionRequired,
                     .windowDimming: .permissionRequired,
-                    .windowManagement: .permissionRequired,
                 ]))
     }
 

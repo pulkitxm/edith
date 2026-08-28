@@ -170,13 +170,6 @@ struct EdithApp: App {
                 SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
             services.sync()
         }
-        _ = IPC.observe(IPC.Name.requestEmojiPanel) {
-            MainActor.assumeIsolated { EmojiPanel.shared.toggle() }
-        }
-        _ = IPC.observe(IPC.Name.requestEmojiInsert) { info in
-            guard let character = info["character"] as? String else { return }
-            MainActor.assumeIsolated { services.emoji?.insert(character: character) }
-        }
         _ = IPC.observe(IPC.Name.presenterAutoActiveChanged) {
             services.usage?.refreshMenuBarItem()
         }
@@ -193,11 +186,19 @@ struct EdithApp: App {
             services.notchShelf?.postAlert(UpdateNotifier.alert(for: version))
             UpdateNotifier.notify(version: version)
         }
-        _ = IPC.observe(IPC.Name.requestKeyboardClean) {
-            AppRuntimeCenter().perform(.cleanKeys) {
-                services.system?.beginCleaning()
-            }
-        }
+        _ = IPC.observe(
+            IPC.Name.requestKeyboardClean,
+            info: { info in
+                let state = AppRuntimeCenter().perform(.cleanKeys) {
+                    services.system?.beginCleaning() ?? .unavailable
+                }
+                guard let requestID = info[KeyboardCleaningIPC.requestIDKey] as? String else {
+                    return
+                }
+                IPC.post(
+                    IPC.Name.keyboardCleanResult,
+                    userInfo: KeyboardCleaningIPC.payload(requestID: requestID, state: state))
+            })
         _ = IPC.observe(IPC.Name.requestAppDiagnostics) {
             IPC.post(
                 IPC.Name.appDiagnostics,
@@ -294,11 +295,6 @@ enum GlobalHotKey {
         static let colorPicker: UInt32 = 5
         static let micMute: UInt32 = 6
         static let presenterToggle: UInt32 = 7
-        static let emoji: UInt32 = 8
-        static let windowLeft: UInt32 = 20
-        static let windowRight: UInt32 = 21
-        static let windowMaximize: UInt32 = 22
-        static let windowRestore: UInt32 = 23
     }
 
     fileprivate static var refs: [UInt32: EventHotKeyRef] = [:]
@@ -405,42 +401,6 @@ enum ClipboardHotKey {
         SharedDefaults.store.set(code, forKey: "clipboardHotKeyCode")
         SharedDefaults.store.set(mods, forKey: "clipboardHotKeyMods")
         SharedDefaults.store.set(label, forKey: "clipboardHotKeyLabel")
-    }
-}
-
-enum EmojiHotKey {
-    static var code: Int {
-        SharedDefaults.store.object(forKey: AppStorageKeys.Emoji.hotKeyCode) as? Int
-            ?? kVK_ANSI_E
-    }
-    static var mods: Int {
-        SharedDefaults.store.object(forKey: AppStorageKeys.Emoji.hotKeyMods) as? Int
-            ?? (controlKey | shiftKey)
-    }
-    static var label: String {
-        SharedDefaults.store.string(forKey: AppStorageKeys.Emoji.hotKeyLabel) ?? "⌃⇧E"
-    }
-
-    static func register() {
-        let enabled =
-            SharedDefaults.store.object(forKey: AppStorageKeys.Emoji.enabled) as? Bool ?? false
-        guard enabled else {
-            GlobalHotKey.clear(id: GlobalHotKey.ID.emoji)
-            return
-        }
-        GlobalHotKey.set(id: GlobalHotKey.ID.emoji, keyCode: code, modifiers: mods) {
-            MainActor.assumeIsolated { EmojiPanel.shared.toggle() }
-        }
-    }
-
-    static func unregister() {
-        GlobalHotKey.clear(id: GlobalHotKey.ID.emoji)
-    }
-
-    static func save(code: Int, mods: Int, label: String) {
-        SharedDefaults.store.set(code, forKey: AppStorageKeys.Emoji.hotKeyCode)
-        SharedDefaults.store.set(mods, forKey: AppStorageKeys.Emoji.hotKeyMods)
-        SharedDefaults.store.set(label, forKey: AppStorageKeys.Emoji.hotKeyLabel)
     }
 }
 

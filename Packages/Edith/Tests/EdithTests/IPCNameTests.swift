@@ -25,6 +25,7 @@ import Testing
         IPC.Name.musicState,
         IPC.Name.requestMusicState,
         IPC.Name.requestKeyboardClean,
+        IPC.Name.keyboardCleanResult,
         IPC.Name.openPanel,
         IPC.Name.requestLidAwakeAction,
         IPC.Name.lidAwakeActionResult,

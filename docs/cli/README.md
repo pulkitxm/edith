@@ -48,11 +48,10 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed config`](./config/README.md) | Every setting the UI exposes, and the full setting catalogue |
 | [`ed app`](./app/README.md) | App identity, diagnostics, paths, external links, and one-shot actions |
 | [`ed extensions`](./extensions/README.md) | Enabling features, checking readiness, planning setup, verifying live adapters, and recovering failures |
-| [Finder Tools](./finder-tools/README.md) | Finder cut and paste, F2 rename, copied-image PNG files and disk image app installation |
 | [`ed lid-awake`](./lid-awake/README.md) | Closed-lid sessions, battery auto-pause and live state |
 | [`ed permissions`](./permissions/README.md) | Inspecting and requesting Edith's macOS permissions |
 | [`ed usage`](./usage/README.md) | Agent usage: limits, cost, tokens, projects, sources, and machine attribution |
-| [`ed system`](./system/README.md) | CPU, memory, GPU, load, network, disk, battery and power |
+| [`ed system`](./system/README.md) | CPU, memory, load, network and mounted volumes |
 | [`ed music`](./music/README.md) | Playback control and the local music library |
 | [`ed calendar`](./calendar/README.md) | Your agenda |
 | [`ed presenter`](./presenter/README.md) | Manual presenter mode at runtime |
@@ -61,15 +60,12 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed clipboard`](./clipboard/README.md) | Clipboard history: read, copy, pin and prune |
 | [`ed attention`](./attention/README.md) | Application, website, music, focus and distraction insight |
 | [`ed color`](./color/README.md) | Launching the colour picker and reading its swatch history |
-| [`ed window`](./window/README.md) | Window layouts, display moves, restore history, and Space-free maximize |
-| [`ed emoji`](./emoji/README.md) | Opening the emoji picker, listing what this Mac can render, typing one, and the default skin tone |
 | [`ed media`](./media/README.md) | Local batch image conversion, resizing and bounded video compression |
 | [`ed download`](./download/README.md) | The download queue and the tools that back it |
 | [`ed apps`](./apps/README.md) | Running applications, and quitting them |
 | [`ed tools`](./tools/README.md) | The command line tools Edith can install for you |
 | [`ed shelf`](./shelf/README.md) | The notch shelf's staged files |
 | [`ed cleaner`](./cleaner/README.md) | Scanning and reclaiming disk space |
-| [`ed maintenance`](./maintenance/README.md) | Verified app installs, updates, inventory, and review-first removal |
 | [`ed companion`](./companion/README.md) | Local memory health, status, Markdown ingest and episodes |
 
 ## Other machines

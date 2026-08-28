@@ -63,7 +63,7 @@ walks, and its order is the order `ls` prints. The registered entries are:
 | `system` | System | System | Running apps, prevent sleep, and the keyboard-cleaning lock |
 | `machines` | Machines | System | Your other computers over SSH: stats, files, Docker, and a terminal |
 | `companion` | Companion | Agent | Your notes, voice memos and activity, remembered and searchable |
-| `systemStats` | System Monitor | System | Native metrics and sustained pressure alerts with CPU and memory in the menu bar |
+| `systemStats` | CPU & Memory in menu bar | System | Live CPU and memory readout as a menu bar item |
 | `micMute` | Mic Mute | System | Mute every microphone system-wide with ⌘⇧M or the menu bar icon |
 | `lidAwake` | Lid Awake | System | Keeps this Mac running with the lid shut, on battery and unplugged |
 | `music` | Music | Media | Plays your local music folder, with media keys |
@@ -88,7 +88,7 @@ entries the welcome tour prioritizes.
 | `system` | `tabSystemEnabled` | yes | none | `accessibility`, `inputMonitoring` | none | none |
 | `machines` | `tabMachinesEnabled` | yes | none | `notifications` | none | none |
 | `companion` | `tabCompanionEnabled` | no | none | none | none | none |
-| `systemStats` | `menuBarSystemStats` | no | none | `notifications` | none | none |
+| `systemStats` | `menuBarSystemStats` | no | none | none | none | none |
 | `micMute` | `micMuteEnabled` | no | none | none | none | none |
 | `lidAwake` | `lidAwakeEnabled` | no | none | none | none | none |
 | `music` | `tabMusicEnabled` | no | none | none | none | `yt-dlp` |
@@ -113,7 +113,7 @@ the current platform, and which missing implementations merely degrade it:
 | `system` | `runningApplications` | `preventSleep`, `inputSuppression` |
 | `machines` | `machineManagement` | `notifications` |
 | `companion` | `companionService` | none |
-| `systemStats` | `systemMetrics` | `notifications` |
+| `systemStats` | `systemMetrics` | none |
 | `micMute` | `microphoneControl` | `globalShortcuts` |
 | `lidAwake` | `preventSleep` | none |
 | `music` | `localMusicPlayback` | `mediaControls` |

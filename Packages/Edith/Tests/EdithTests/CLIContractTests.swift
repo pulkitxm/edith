@@ -35,18 +35,6 @@ enum JSONContract {
                 "media", "compress-video", "/path/that/does/not/exist.mov", "--to", "/tmp",
                 "--json",
             ]),
-        JSONCase(
-            "ed maintenance inventory", ["maintenance", "inventory", "--no-updates", "--json"]),
-        JSONCase(
-            "ed maintenance scan",
-            ["maintenance", "scan", "/path/that/does/not/exist.app", "--json"]),
-        JSONCase(
-            "ed maintenance remove",
-            ["maintenance", "remove", "/path/that/does/not/exist.app", "--json"]),
-        JSONCase(
-            "ed maintenance install",
-            ["maintenance", "install", "/path/that/does/not/exist.dmg", "--json"],
-            mutatesTheMachine: true),
         JSONCase("ed completions source", ["completions", "source", "--json"]),
         JSONCase("ed attention status", ["attention", "status", "--json"]),
         JSONCase("ed attention summary", ["attention", "summary", "--json"]),
@@ -101,42 +89,6 @@ enum JSONContract {
         JSONCase("ed clipboard rm", ["clipboard", "rm", "1", "--json"]),
         JSONCase("ed clipboard clear", ["clipboard", "clear", "--json"]),
         JSONCase("ed calendar open", ["calendar", "open", "--json"], mutatesTheMachine: true),
-        JSONCase("ed window status", ["window", "status", "--json"]),
-        JSONCase(
-            "ed window left-half", ["window", "left-half", "--json"],
-            mutatesTheMachine: true),
-        JSONCase(
-            "ed window right-half", ["window", "right-half", "--json"],
-            mutatesTheMachine: true),
-        JSONCase(
-            "ed window top-half", ["window", "top-half", "--json"],
-            mutatesTheMachine: true),
-        JSONCase(
-            "ed window bottom-half", ["window", "bottom-half", "--json"],
-            mutatesTheMachine: true),
-        JSONCase(
-            "ed window top-left", ["window", "top-left", "--json"],
-            mutatesTheMachine: true),
-        JSONCase(
-            "ed window top-right", ["window", "top-right", "--json"],
-            mutatesTheMachine: true),
-        JSONCase(
-            "ed window bottom-left", ["window", "bottom-left", "--json"],
-            mutatesTheMachine: true),
-        JSONCase(
-            "ed window bottom-right", ["window", "bottom-right", "--json"],
-            mutatesTheMachine: true),
-        JSONCase(
-            "ed window center", ["window", "center", "--json"], mutatesTheMachine: true),
-        JSONCase(
-            "ed window maximize", ["window", "maximize", "--json"],
-            mutatesTheMachine: true),
-        JSONCase(
-            "ed window next-display", ["window", "next-display", "--json"],
-            mutatesTheMachine: true),
-        JSONCase(
-            "ed window restore", ["window", "restore", "--json"],
-            mutatesTheMachine: true),
         JSONCase("ed calendar join", ["calendar", "join", "nothing-at-all", "--json"]),
         JSONCase(
             "ed calendar directions", ["calendar", "directions", "nothing-at-all", "--json"]),
@@ -211,13 +163,6 @@ enum JSONContract {
             "ed color copy", ["color", "copy", "1", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed color clear", ["color", "clear", "--json"]),
-        JSONCase("ed emoji pick", ["emoji", "pick", "--json"], mutatesTheMachine: true),
-        JSONCase("ed emoji ls", ["emoji", "ls", "--json"]),
-        JSONCase(
-            "ed emoji insert", ["emoji", "insert", "1F600", "--json"],
-            mutatesTheMachine: true),
-        JSONCase("ed emoji tone", ["emoji", "tone", "medium", "--json"], mutatesTheMachine: true),
-        JSONCase("ed emoji clear", ["emoji", "clear", "--json"]),
         JSONCase("ed shelf ls", ["shelf", "ls", "--json"]),
         JSONCase("ed shelf path", ["shelf", "path", "1", "--json"]),
         JSONCase("ed shelf open", ["shelf", "open", "999999", "--json"]),

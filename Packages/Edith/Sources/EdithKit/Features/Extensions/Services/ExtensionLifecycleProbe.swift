@@ -191,8 +191,6 @@ public struct ExtensionLifecycleProbe: Sendable {
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "system": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
-        "appMaintenance": Policy(
-            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "machines": Policy(
             requiresHelper: true, requiresMachine: true, toolRule: .all, adapter: true),
         "companion": Policy(
@@ -213,17 +211,11 @@ public struct ExtensionLifecycleProbe: Sendable {
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "clipboard": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
-        "finderTools": Policy(
-            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "focusDim": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "presenter": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "colorPicker": Policy(
-            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
-        "windowTools": Policy(
-            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
-        "emoji": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
     ]
 

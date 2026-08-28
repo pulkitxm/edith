@@ -1,5 +1,4 @@
 import Foundation
-import EdithKit
 
 public enum ArgumentKind: Equatable, Sendable {
     case machine
@@ -12,9 +11,6 @@ public enum ArgumentKind: Equatable, Sendable {
     case cleanerCategory
     case colorFormat
     case colorIndex
-    case emojiTone
-    case emojiGroup
-    case emojiCharacter
     case pruneTarget
     case composeProject
     case historyIndex
@@ -241,15 +237,6 @@ public enum CommandTree {
                         "doctor", "Diagnose extension problems.", options: common,
                         arguments: [.extensionID]),
                 ]),
-            CommandNode(
-                "window", "Arrange the active window.",
-                children: [
-                    CommandNode(
-                        "status", "Show Window Tools settings and actions.", options: common)
-                ]
-                    + WindowLayoutAction.allCases.map {
-                        CommandNode($0.rawValue, $0.descriptor.summary, options: common)
-                    }),
             CommandNode(
                 "lid-awake", "Keep the Mac running with its lid closed.",
                 children: [
@@ -626,24 +613,6 @@ public enum CommandTree {
                         options: ["--json", "--yes"], destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
-                "emoji", "The emoji picker and the emoji it knows about.",
-                children: [
-                    CommandNode("pick", "Open Edith's emoji picker.", options: common),
-                    CommandNode(
-                        "ls", "List the emoji this Mac can render.", aliases: ["list"],
-                        options: [
-                            "--json", "--help", "--frequent", "--search", "--group", "--limit",
-                        ],
-                        optionValues: ["--group": .emojiGroup]),
-                    CommandNode(
-                        "insert", "Type an emoji into the frontmost app.",
-                        options: common, arguments: [.emojiCharacter]),
-                    CommandNode(
-                        "tone", "Set the default emoji skin tone.",
-                        options: common, arguments: [.emojiTone]),
-                    CommandNode("clear", "Forget the frequently used emoji.", options: common),
-                ]),
-            CommandNode(
                 "media", "Convert images and compress videos locally.",
                 children: [
                     CommandNode(
@@ -718,26 +687,6 @@ public enum CommandTree {
                         optionValues: ["--category": .cleanerCategory],
                         destructivePolicy: .previewThenYes),
                     CommandNode("drives", "The volumes the cleaner can scan.", options: common),
-                ]),
-            CommandNode(
-                "maintenance", "Installed app inventory, updates, and review-first removal.",
-                children: [
-                    CommandNode(
-                        "inventory", "List installed applications and Homebrew updates.",
-                        aliases: ["ls", "list"],
-                        options: ["--json", "--help", "--no-updates"]),
-                    CommandNode(
-                        "scan", "Preview an app and its exact support files.",
-                        options: common, arguments: [.localPath]),
-                    CommandNode(
-                        "remove", "Move a reviewed app selection to the Trash.",
-                        options: ["--json", "--help", "--only-app", "--yes"],
-                        arguments: [.localPath], destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "install", "Verify and install one app from a disk image.",
-                        options: [
-                            "--json", "--help", "--system", "--replace", "--keep-image", "--yes",
-                        ], arguments: [.localPath], destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
                 "quinjet", "Discover and open Quinjet review workspaces.",

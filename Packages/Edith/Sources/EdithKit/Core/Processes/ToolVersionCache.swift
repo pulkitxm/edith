@@ -2,34 +2,68 @@ import Foundation
 
 public enum ToolVersionCache {
     public struct Stamp: Codable, Equatable, Sendable {
+        public let resolvedPath: String
         public let size: Int64
         public let modified: Double
+        public let systemNumber: UInt64
+        public let systemFileNumber: UInt64
         public let version: String
+    }
+
+    struct Identity: Equatable, Sendable {
+        let resolvedPath: String
+        let size: Int64
+        let modified: Double
+        let systemNumber: UInt64
+        let systemFileNumber: UInt64
     }
 
     nonisolated(unsafe) public static var storeURL: URL = AppData.supportDir
         .appendingPathComponent("tool-versions.json")
 
     public static func stamp(for executable: URL) -> (size: Int64, modified: Double)? {
-        guard let attributes = try? FileManager.default.attributesOfItem(atPath: executable.path),
+        guard let identity = identity(for: executable) else { return nil }
+        return (identity.size, identity.modified)
+    }
+
+    static func identity(for executable: URL) -> Identity? {
+        let resolved = executable.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: resolved.path),
+            attributes[.type] as? FileAttributeType == .typeRegular,
             let size = attributes[.size] as? Int64,
-            let modified = attributes[.modificationDate] as? Date
+            let modified = attributes[.modificationDate] as? Date,
+            let systemNumber = attributes[.systemNumber] as? NSNumber,
+            let systemFileNumber = attributes[.systemFileNumber] as? NSNumber
         else { return nil }
-        return (size, modified.timeIntervalSince1970)
+        return Identity(
+            resolvedPath: resolved.path,
+            size: size,
+            modified: modified.timeIntervalSince1970,
+            systemNumber: systemNumber.uint64Value,
+            systemFileNumber: systemFileNumber.uint64Value)
     }
 
     public static func cached(for executable: URL) -> String? {
-        guard let current = stamp(for: executable), let entry = load()[executable.path],
-            entry.size == current.size, abs(entry.modified - current.modified) < 0.001
+        guard let current = identity(for: executable), let entry = load()[executable.path],
+            entry.resolvedPath == current.resolvedPath,
+            entry.size == current.size,
+            abs(entry.modified - current.modified) < 0.001
+                && entry.systemNumber == current.systemNumber
+                && entry.systemFileNumber == current.systemFileNumber
         else { return nil }
         return entry.version
     }
 
     public static func remember(_ version: String, for executable: URL) {
-        guard let current = stamp(for: executable) else { return }
+        guard let current = identity(for: executable) else { return }
         var entries = load()
         entries[executable.path] = Stamp(
-            size: current.size, modified: current.modified, version: version)
+            resolvedPath: current.resolvedPath,
+            size: current.size,
+            modified: current.modified,
+            systemNumber: current.systemNumber,
+            systemFileNumber: current.systemFileNumber,
+            version: version)
         guard let data = try? JSONEncoder().encode(entries) else { return }
         try? data.write(to: storeURL, options: .atomic)
     }

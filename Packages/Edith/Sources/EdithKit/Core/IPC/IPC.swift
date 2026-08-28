@@ -35,10 +35,6 @@ public enum IPC {
         public static let clipboardChanged = Notification.Name("com.pulkit.edith.clipboardChanged")
         public static let requestColorPick = Notification.Name(
             "com.pulkit.edith.requestColorPick")
-        public static let requestEmojiPanel = Notification.Name(
-            "com.pulkit.edith.requestEmojiPanel")
-        public static let requestEmojiInsert = Notification.Name(
-            "com.pulkit.edith.requestEmojiInsert")
         public static let shelfChanged = Notification.Name("com.pulkit.edith.shelfChanged")
         public static let shelfOperation = Notification.Name("com.pulkit.edith.shelfOperation")
         public static let shelfOperationResult = Notification.Name(
@@ -80,6 +76,8 @@ public enum IPC {
             "com.pulkit.edith.requestMusicLevels")
         public static let requestKeyboardClean = Notification.Name(
             "com.pulkit.edith.requestKeyboardClean")
+        public static let keyboardCleanResult = Notification.Name(
+            "com.pulkit.edith.keyboardCleanResult")
         public static let openPanel = Notification.Name("com.pulkit.edith.openPanel")
         public static let permissionHintDue = Notification.Name(
             "com.pulkit.edith.permissionHintDue")
@@ -107,8 +105,6 @@ public enum IPC {
         public static let revealResult = Notification.Name("com.pulkit.edith.revealResult")
         public static let requestWindowSnapshot = Notification.Name(
             "com.pulkit.edith.requestWindowSnapshot")
-        public static let requestWindowLayout = Notification.Name(
-            "com.pulkit.edith.requestWindowLayout")
         public static let windowSnapshotResult = Notification.Name(
             "com.pulkit.edith.windowSnapshotResult")
         public static let requestAppDiagnostics = Notification.Name(

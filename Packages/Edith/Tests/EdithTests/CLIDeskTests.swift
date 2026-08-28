@@ -44,7 +44,6 @@ import Testing
 
     @Test func eachActionPostsItsOwnNotificationAndNoOther() async throws {
         let expected: [String: Notification.Name] = [
-            "clean-keys": IPC.Name.requestKeyboardClean,
             "test-notification": IPC.Name.requestTestNotification,
             "open": IPC.Name.openPanel,
         ]
@@ -55,6 +54,44 @@ import Testing
                 #expect(result.code == 0, "\(name) exited \(result.code)")
                 #expect(world.postedNames() == [notification.rawValue])
             }
+        }
+    }
+
+    @Test func keyboardCleaningWaitsForTheHelperToArm() async throws {
+        await CLIProbe.inWorld { world in
+            world.helperRunning(true)
+            world.answers { name in
+                guard name == IPC.Name.keyboardCleanResult,
+                    let requestID = world.postedPayloads(for: IPC.Name.requestKeyboardClean)
+                        .last?[KeyboardCleaningIPC.requestIDKey] as? String
+                else { return nil }
+                return KeyboardCleaningIPC.payload(requestID: requestID, state: .arming)
+            }
+
+            let result = await CLIProbe.capture(["app", "clean-keys", "--json"])
+
+            #expect(result.code == 0)
+            #expect(result.object?["state"] as? String == KeyboardCleaningState.arming.rawValue)
+            #expect(world.postedNames() == [IPC.Name.requestKeyboardClean.rawValue])
+        }
+    }
+
+    @Test func keyboardCleaningReportsThePermissionTheHelperActuallyNeeds() async throws {
+        await CLIProbe.inWorld { world in
+            world.helperRunning(true)
+            world.answers { name in
+                guard name == IPC.Name.keyboardCleanResult,
+                    let requestID = world.postedPayloads(for: IPC.Name.requestKeyboardClean)
+                        .last?[KeyboardCleaningIPC.requestIDKey] as? String
+                else { return nil }
+                return KeyboardCleaningIPC.payload(
+                    requestID: requestID, state: .inputMonitoringRequired)
+            }
+
+            let result = await CLIProbe.capture(["app", "clean-keys", "--json"])
+
+            #expect(result.code == ExitCodes.unavailable)
+            #expect(result.stderr.contains("Input Monitoring"))
         }
     }
 
