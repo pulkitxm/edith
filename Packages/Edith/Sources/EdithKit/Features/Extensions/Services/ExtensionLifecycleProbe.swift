@@ -215,7 +215,7 @@ public struct ExtensionLifecycleProbe: Sendable {
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "colorPicker": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
-        "emoji": Policy(
+        "windowTools": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
     ]
 

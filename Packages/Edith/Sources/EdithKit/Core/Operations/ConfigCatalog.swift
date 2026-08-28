@@ -50,7 +50,7 @@ public enum ConfigCatalog {
         "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
         "calendar",
         "clipboard",
-        "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
+        "notch", "focusdim", "windowtools", "presenter", "colorpicker", "micmute",
         "backup", "permissions", "terminal",
     ]
 
@@ -58,7 +58,7 @@ public enum ConfigCatalog {
         appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
         + system + cleaner
-        + music + calendar + clipboard + notch + focusDim + presenter + colorPicker + emoji
+        + music + calendar + clipboard + notch + focusDim + windowTools + presenter + colorPicker
         + micMute
         + backup + permissions + terminal
 

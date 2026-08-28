@@ -88,7 +88,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case focusDim
     case presenter
     case colorPicker
-    case emoji
+    case windowTools
 }
 
 public enum ExtensionModalMutationOutcome: Equatable, Sendable {

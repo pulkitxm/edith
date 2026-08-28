@@ -264,7 +264,7 @@ import Testing
             ("focusDim", "FocusDimRows", "enabled", "FocusDimRows.swift"),
             ("presenter", "PresenterRows", "presenterEnabled", "PresenterRows.swift"),
             ("colorPicker", "ColorPickerRows", "colorPickerEnabled", "ColorPickerRows.swift"),
-            ("emoji", "EmojiRows", "emojiEnabled", "EmojiRows.swift"),
+            ("windowTools", "WindowToolsRows", "enabled", "WindowToolsRows.swift"),
         ]
 
         #expect(Set(routes.map(\.id)) == Set(ExtensionDetailRoute.allCases.map(\.rawValue)))

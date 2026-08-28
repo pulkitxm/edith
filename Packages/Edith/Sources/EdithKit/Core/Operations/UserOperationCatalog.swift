@@ -123,7 +123,7 @@ public enum UserOperationCatalog {
         + ColorSwatchOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + EmojiOperation.allCases.map {
+        + WindowLayoutAction.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         + CompanionSettingsOperation.allCases.map {
