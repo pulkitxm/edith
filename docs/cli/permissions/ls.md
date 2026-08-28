@@ -48,11 +48,12 @@ the fixed order of the table above. Trimmed here to three of the ten rows:
       "id": "screenRecording",
       "name": "Screen Recording",
       "optionalFor": [],
-      "reason": "Required to detect shared content or sample colors from the screen.",
+      "reason": "Required to detect shared content, sample colors, or capture a selected screen region.",
       "requiredBy": [
         "focusDim",
         "presenter",
-        "colorPicker"
+        "colorPicker",
+        "captureTools"
       ],
       "usedByEnabledExtension": true
     },
@@ -108,7 +109,7 @@ notifications    granted                 usage,machines
 accessibility    granted                 system,clipboard
 inputMonitoring  granted                 system
 fullDisk         no
-screenRecording  granted                 focusDim,presenter,colorPicker
+screenRecording  granted                 focusDim,presenter,colorPicker,captureTools
 applicationAudio on first use            notchShelf
 camera           granted                 notchShelf
 bluetooth        on first use            notchShelf

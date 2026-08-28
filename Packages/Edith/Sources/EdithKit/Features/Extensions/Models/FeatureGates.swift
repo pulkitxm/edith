@@ -28,11 +28,14 @@ public enum ExtensionShortcut: String, CaseIterable, Hashable, Sendable {
     case focusDim
     case presenter
     case colorPicker
+    case captureRead
+    case captureScreenshot
 }
 
 public enum ExtensionShortcutVisibility {
     public static func visible(
-        clipboard: Bool, micMute: Bool, focusDim: Bool, presenter: Bool, colorPicker: Bool
+        clipboard: Bool, micMute: Bool, focusDim: Bool, presenter: Bool,
+        colorPicker: Bool, captureTools: Bool
     ) -> [ExtensionShortcut] {
         let states: [(ExtensionShortcut, Bool)] = [
             (.clipboard, clipboard),
@@ -40,6 +43,8 @@ public enum ExtensionShortcutVisibility {
             (.focusDim, focusDim),
             (.presenter, presenter),
             (.colorPicker, colorPicker),
+            (.captureRead, captureTools),
+            (.captureScreenshot, captureTools),
         ]
         return states.compactMap { shortcut, enabled in enabled ? shortcut : nil }
     }

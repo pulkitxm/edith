@@ -295,6 +295,8 @@ enum GlobalHotKey {
         static let colorPicker: UInt32 = 5
         static let micMute: UInt32 = 6
         static let presenterToggle: UInt32 = 7
+        static let captureRead: UInt32 = 20
+        static let captureScreenshot: UInt32 = 21
     }
 
     fileprivate static var refs: [UInt32: EventHotKeyRef] = [:]
@@ -647,6 +649,41 @@ struct RootView: View {
                                 Button(swatch.string(for: .hex)) { colorPicker.copyDefault(swatch) }
                             }
                         }
+                    }
+                }
+                if let captureTools = services.captureTools {
+                    if captureTools.inProgress {
+                        Button {
+                            captureTools.cancel()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.edith(.toolbar))
+                        .help("Cancel capture")
+                    } else {
+                        Menu {
+                            Button {
+                                dismissPanel()
+                                captureTools.start(.read)
+                            } label: {
+                                Label("Read screen", systemImage: "text.viewfinder")
+                            }
+                            Button {
+                                dismissPanel()
+                                captureTools.start(.screenshot)
+                            } label: {
+                                Label("Screenshot", systemImage: "camera.viewfinder")
+                            }
+                        } label: {
+                            Image(systemName: "viewfinder")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                        }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                        .help("Capture tools (\(CaptureToolsHotKeys.readLabel))")
                     }
                 }
                 if focusDimEnabled {

@@ -123,6 +123,9 @@ public enum UserOperationCatalog {
         + ColorSwatchOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + CaptureToolOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + CompanionSettingsOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -1088,6 +1091,17 @@ private extension ColorSwatchOperation {
                     surface: "Color Picker settings", action: "copy a swatch in one format",
                     exampleArguments: ["1", "--format", "hex"]),
             ])
+        }
+    }
+}
+
+private extension CaptureToolOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .read:
+            userInterface("Capture Tools settings", "read text and codes from the screen")
+        case .screenshot:
+            userInterface("Capture Tools settings", "take a quick screenshot")
         }
     }
 }

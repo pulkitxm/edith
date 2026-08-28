@@ -46,22 +46,22 @@ import Testing
         #expect(
             ExtensionShortcutVisibility.visible(
                 clipboard: false, micMute: false, focusDim: false, presenter: false,
-                colorPicker: false
+                colorPicker: false, captureTools: false
             ).isEmpty)
         #expect(
             ExtensionShortcutVisibility.visible(
                 clipboard: true, micMute: false, focusDim: false, presenter: true,
-                colorPicker: false)
+                colorPicker: false, captureTools: false)
                 == [.clipboard, .presenter])
         #expect(
             ExtensionShortcutVisibility.visible(
                 clipboard: false, micMute: true, focusDim: false, presenter: false,
-                colorPicker: false)
+                colorPicker: false, captureTools: false)
                 == [.micMute])
         #expect(
             ExtensionShortcutVisibility.visible(
                 clipboard: true, micMute: true, focusDim: true, presenter: true,
-                colorPicker: true)
+                colorPicker: true, captureTools: true)
                 == ExtensionShortcut.allCases)
     }
 

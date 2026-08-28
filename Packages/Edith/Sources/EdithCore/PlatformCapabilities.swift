@@ -22,6 +22,7 @@ public enum PlatformCapability: String, CaseIterable, Codable, Hashable, Sendabl
     case preventSleep
     case runningApplications
     case screenColorSampling
+    case screenContentRecognition
     case screenShareDetection
     case systemMetrics
     case usageCollection
@@ -93,6 +94,7 @@ public struct PlatformCapabilities: Equatable, Sendable {
                     .inputSuppression: .permissionRequired,
                     .notifications: .permissionRequired,
                     .screenColorSampling: .permissionRequired,
+                    .screenContentRecognition: .permissionRequired,
                     .screenShareDetection: .permissionRequired,
                     .windowDimming: .permissionRequired,
                 ]))

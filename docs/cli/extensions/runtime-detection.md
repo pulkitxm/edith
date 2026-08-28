@@ -38,6 +38,7 @@ system query failure produces `failed` with runtime phase `error`.
 | Focus Dim | finite intensity and animation values plus a valid display mode | active display count | `ed config ls --group focusdim --json`; `ed permissions refresh` |
 | Presenter | at least one protected data category and coherent detector settings | manual protection or automatic detectors can operate | `ed presenter status --json`; `ed config ls --group presenter --json` |
 | Color Picker | valid copy format, color profile, history limit, and decodable history | active display and saved sample count | `ed color ls --json`; `ed permissions refresh` |
+| Capture Tools | valid copy mode, history limit, and decodable read history | active display and saved read count | `ed config ls --group capture --json`; `ed permissions refresh` |
 
 ## Agent workflow
 

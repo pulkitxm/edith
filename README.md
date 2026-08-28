@@ -66,6 +66,7 @@ and platform details.
 - **Music player** - your local music folder with thumbnails, drag-to-seek, fades, auto-advance and media keys; also controls Spotify and Apple Music.
 - **Clipboard history** - a global paste panel with search and paste-in-place.
 - **Color picker** - system-wide eyedropper on a hotkey, with swatch history.
+- **Capture tools** - offline screen OCR, QR recognition, and quick screenshot previews.
 - **Notch shelf** - the notch becomes a hover-to-open shelf for drag-and-drop file staging, now-playing controls and a camera check.
 - **Calendar** - your agenda grouped by day, with one-tap join links.
 - **Audio mixer** - per-app volume control.
@@ -104,6 +105,9 @@ Lid Awake needs one-time approval for Edith's background helper. Read the
 Usage data never leaves your Mac. There is no account and no telemetry.
 Rate-limit checks go directly from your machine to your provider. Optional iCloud
 backup merges selected app data across your own Macs and nowhere else.
+
+Screen reads use macOS Vision locally. Selected images are temporary unless you
+save them or enable screenshot retention.
 
 The optional Companion stores its memory on the machine you choose. Local
 embedding, vision and speech models run there. Reasoning can stay on that host or

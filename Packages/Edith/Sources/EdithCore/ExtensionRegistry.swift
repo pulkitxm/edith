@@ -200,5 +200,12 @@ public enum ExtensionRegistry {
             symbolName: "eyedropper", group: .utilities, featured: false,
             defaultsKey: "colorPickerEnabled", requiredCapabilities: [.screenColorSampling],
             optionalCapabilities: [.globalShortcuts]),
+        ExtensionRegistryEntry(
+            id: "captureTools", title: "Capture Tools",
+            subtitle: "Offline screen OCR, QR recognition, and quick screenshots.",
+            symbolName: "viewfinder", group: .utilities, featured: false,
+            defaultsKey: "captureToolsEnabled",
+            requiredCapabilities: [.screenContentRecognition],
+            optionalCapabilities: [.globalShortcuts]),
     ]
 }

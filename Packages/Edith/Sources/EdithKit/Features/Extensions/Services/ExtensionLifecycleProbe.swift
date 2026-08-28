@@ -215,6 +215,8 @@ public struct ExtensionLifecycleProbe: Sendable {
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "colorPicker": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
+        "captureTools": Policy(
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
     ]
 
     public let environment: ExtensionLifecycleProbeEnvironment

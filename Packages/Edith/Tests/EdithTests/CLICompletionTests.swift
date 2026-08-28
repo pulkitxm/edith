@@ -140,6 +140,11 @@ import Testing
         #expect(result.candidates.contains("clear"))
     }
 
+    @Test func captureOperationsComplete() {
+        let result = Self.plan(["ed", "capture", ""], 2)
+        #expect(result.candidates == ["read", "screenshot"])
+    }
+
     @Test func lidAwakeCommandsAndFlagsComplete() {
         let commands = Self.plan(["ed", "lid-awake", ""], 2)
         #expect(
