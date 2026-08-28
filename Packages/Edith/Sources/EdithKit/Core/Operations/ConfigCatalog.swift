@@ -59,7 +59,8 @@ public enum ConfigCatalog {
         appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
         + system + cleaner
-        + music + audio + calendar + clipboard + notch + focusDim + presenter + colorPicker + micMute
+        + music + audio + calendar + clipboard + notch + focusDim + presenter
+        + colorPicker + micMute
         + backup + permissions + terminal
 
     public static var keys: [String] { settings.map(\.key) }
