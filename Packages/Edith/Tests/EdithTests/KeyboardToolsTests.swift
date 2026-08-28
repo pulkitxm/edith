@@ -48,6 +48,50 @@ import Testing
         #expect(!alternating)
     }
 
+    @Test func debounceSuppressesHeldKeyBouncePair() {
+        var state = KeyboardDebounceState()
+        let firstDown = state.shouldSuppress(
+            keyCode: 0, repeatEvent: false, kind: .down, timestamp: 1_000_000_000,
+            settings: settings)
+        let bounceDown = state.shouldSuppress(
+            keyCode: 0, repeatEvent: false, kind: .down, timestamp: 1_010_000_000,
+            settings: settings)
+        let bounceUp = state.shouldSuppress(
+            keyCode: 0, repeatEvent: false, kind: .up, timestamp: 1_020_000_000,
+            settings: settings)
+        let physicalUp = state.shouldSuppress(
+            keyCode: 0, repeatEvent: false, kind: .up, timestamp: 1_100_000_000,
+            settings: settings)
+
+        #expect(!firstDown)
+        #expect(bounceDown)
+        #expect(bounceUp)
+        #expect(!physicalUp)
+    }
+
+    @Test func debounceSuppressesReleasedKeyBouncePair() {
+        var state = KeyboardDebounceState()
+        _ = state.shouldSuppress(
+            keyCode: 0, repeatEvent: false, kind: .down, timestamp: 1_000_000_000,
+            settings: settings)
+        _ = state.shouldSuppress(
+            keyCode: 0, repeatEvent: false, kind: .up, timestamp: 1_010_000_000,
+            settings: settings)
+        let bounceDown = state.shouldSuppress(
+            keyCode: 0, repeatEvent: false, kind: .down, timestamp: 1_020_000_000,
+            settings: settings)
+        let bounceUp = state.shouldSuppress(
+            keyCode: 0, repeatEvent: false, kind: .up, timestamp: 1_030_000_000,
+            settings: settings)
+        let laterDown = state.shouldSuppress(
+            keyCode: 0, repeatEvent: false, kind: .down, timestamp: 1_100_000_000,
+            settings: settings)
+
+        #expect(bounceDown)
+        #expect(bounceUp)
+        #expect(!laterDown)
+    }
+
     @Test func superKeySeparatesTapFromChord() {
         var state = KeyboardSuperState()
         let tapDown = state.decide(

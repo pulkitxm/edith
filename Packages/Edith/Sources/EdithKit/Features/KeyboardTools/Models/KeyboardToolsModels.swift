@@ -96,6 +96,7 @@ public struct KeyboardDebounceState {
 
     private struct KeyState {
         var down = false
+        var suppressedPresses = 0
         var lastPress: UInt64?
         var lastRelease: UInt64?
         var lastEvent: UInt64?
@@ -121,32 +122,46 @@ public struct KeyboardDebounceState {
             return false
         }
         var key = sanitizedKey(keyCode, timestamp: timestamp)
-        defer {
-            key.lastEvent = timestamp
-            keys[keyCode] = key
-        }
         guard kind == .down else {
+            if key.suppressedPresses > 0 {
+                key.suppressedPresses -= 1
+                key.lastEvent = timestamp
+                keys[keyCode] = key
+                return true
+            }
             if key.down {
                 key.down = false
                 key.lastRelease = timestamp
             }
+            key.lastEvent = timestamp
+            keys[keyCode] = key
             return false
         }
         guard !repeatEvent else {
             key.down = true
+            key.lastEvent = timestamp
+            keys[keyCode] = key
             return false
         }
         let window = UInt64(settings.debounceWindow) * 1_000_000
         if key.down, let press = key.lastPress, timestamp >= press, timestamp - press < window {
+            key.suppressedPresses += 1
+            key.lastEvent = timestamp
+            keys[keyCode] = key
             return true
         }
         if let release = key.lastRelease, lastAcceptedKey == keyCode, timestamp >= release,
             timestamp - release < window
         {
+            key.suppressedPresses += 1
+            key.lastEvent = timestamp
+            keys[keyCode] = key
             return true
         }
         key.down = true
         key.lastPress = timestamp
+        key.lastEvent = timestamp
+        keys[keyCode] = key
         lastAcceptedKey = keyCode
         return false
     }
