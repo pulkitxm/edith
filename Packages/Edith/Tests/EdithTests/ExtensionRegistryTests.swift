@@ -32,12 +32,12 @@ import Testing
         #expect(Set(identifiers).count == identifiers.count)
     }
 
-    @Test func registryMatchesPreUtilityBaseline() {
+    @Test func registryMatchesCurrentExtensionSet() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
-                "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
-                "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
-                "clipboard", "focusDim", "presenter", "colorPicker",
+                "attention", "usage", "herdr", "quinjet", "system", "homebrew", "machines",
+                "companion", "systemStats", "micMute", "lidAwake", "music", "calendar",
+                "notchShelf", "clipboard", "focusDim", "presenter", "colorPicker",
             ])
     }
 
