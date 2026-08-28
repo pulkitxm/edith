@@ -69,4 +69,21 @@ import Testing
             #expect(ClipboardHotKey.label == "⌃⌥V")
         }
     }
+
+    @Test func globalHotKeyIdentifiersAreUnique() {
+        let identifiers = [
+            GlobalHotKey.ID.panel,
+            GlobalHotKey.ID.clipboard,
+            GlobalHotKey.ID.notchShelf,
+            GlobalHotKey.ID.focusDim,
+            GlobalHotKey.ID.colorPicker,
+            GlobalHotKey.ID.micMute,
+            GlobalHotKey.ID.presenterToggle,
+            GlobalHotKey.ID.emoji,
+            GlobalHotKey.ID.captureRead,
+            GlobalHotKey.ID.captureScreenshot,
+        ]
+
+        #expect(Set(identifiers).count == identifiers.count)
+    }
 }

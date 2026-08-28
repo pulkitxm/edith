@@ -1,7 +1,7 @@
 # `ed config`
 
 Every preference the Edith UI writes is a key in the same defaults the app
-reads, and `ed config` is that surface from the command line: 263 settings in 31
+reads, and `ed config` is that surface from the command line: 237 settings in 29
 groups, each with a type, a default, a scope and a one-line summary. Reach for
 it when you want to know what a switch in Settings is actually called, flip one
 without opening the window, or move a whole setup to another Mac.
@@ -227,8 +227,6 @@ not here cannot be set, and `import` skips it.
 | `SUScheduledCheckInterval` | number | `86400` | standard | Seconds between scheduled update checks. |
 | `SUAutomaticallyUpdate` | bool | `true` | standard | Download and install updates automatically. |
 | `tabSystemEnabled` | bool | `false` | shared | System extension: running apps, prevent sleep and the cleaning lock. |
-| `appMaintenanceEnabled` | bool | `false` | shared | App Maintenance extension: inventory, installation and safe removal. |
-| `appMaintenanceInstallDestination` | string: `user`, `system` | `user` | shared | Default disk image installation destination. |
 | `preventSleep` | bool | `false` | shared | Keep the Mac awake (Keep Awake). |
 | `lidAwakeEnabled` | bool | `false` | shared | Enable the Lid Awake extension. |
 | `lidAwakeRestoreOnQuit` | bool | `true` | shared | Restore normal lid-close sleep when Edith quits. |
@@ -298,16 +296,6 @@ not here cannot be set, and `import` skips it.
 | `clipboardWindowPositionX` | number | none | shared | Last clipboard panel x position. |
 | `clipboardWindowPositionY` | number | none | shared | Last clipboard panel y position. |
 
-### `findertools`
-
-| Key | Type | Default | Scope | What it controls |
-| --- | --- | --- | --- | --- |
-| `finderToolsEnabled` | bool | `false` | shared | Finder Tools extension: file shortcuts and disk image installs. |
-| `finderToolsCutPaste` | bool | `true` | shared | Move Finder selections with Command-X and Command-V. |
-| `finderToolsRename` | bool | `true` | shared | Rename the Finder selection with F2. |
-| `finderToolsPasteImages` | bool | `true` | shared | Save copied images as PNG files with Command-V in Finder. |
-| `finderToolsDiskImageInstaller` | bool | `true` | shared | Offer to install the single app found on a mounted disk image. |
-
 ### `notch`
 
 | Key | Type | Default | Scope | What it controls |
@@ -340,25 +328,6 @@ not here cannot be set, and `import` skips it.
 | `focusDimHotKeyCode` | int | none | shared | Virtual key code of the focus dim shortcut. |
 | `focusDimHotKeyMods` | int | none | shared | Carbon modifier mask of the focus dim shortcut. |
 | `focusDimHotKeyLabel` | string | none | shared | Printable label for the focus dim shortcut. |
-
-### `windowtools`
-
-| Key | Type | Default | Scope | What it controls |
-| --- | --- | --- | --- | --- |
-| `windowToolsEnabled` | bool | `false` | shared | Window Tools extension: arrange the active window. |
-| `windowToolsGreenButtonMaximizes` | bool | `true` | shared | Make the green window button maximize without another Space. |
-| `windowToolsLeftHotKeyCode` | int | `123` | shared | Virtual key code of the left-half shortcut. |
-| `windowToolsLeftHotKeyMods` | int | `6144` | shared | Carbon modifier mask of the left-half shortcut. |
-| `windowToolsLeftHotKeyLabel` | string | `⌃⌥←` | shared | Printable label for the left-half shortcut. |
-| `windowToolsRightHotKeyCode` | int | `124` | shared | Virtual key code of the right-half shortcut. |
-| `windowToolsRightHotKeyMods` | int | `6144` | shared | Carbon modifier mask of the right-half shortcut. |
-| `windowToolsRightHotKeyLabel` | string | `⌃⌥→` | shared | Printable label for the right-half shortcut. |
-| `windowToolsMaximizeHotKeyCode` | int | `46` | shared | Virtual key code of the maximize shortcut. |
-| `windowToolsMaximizeHotKeyMods` | int | `6144` | shared | Carbon modifier mask of the maximize shortcut. |
-| `windowToolsMaximizeHotKeyLabel` | string | `⌃⌥M` | shared | Printable label for the maximize shortcut. |
-| `windowToolsRestoreHotKeyCode` | int | `15` | shared | Virtual key code of the restore shortcut. |
-| `windowToolsRestoreHotKeyMods` | int | `6144` | shared | Carbon modifier mask of the restore shortcut. |
-| `windowToolsRestoreHotKeyLabel` | string | `⌃⌥R` | shared | Printable label for the restore shortcut. |
 
 ### `presenter`
 

@@ -8,7 +8,7 @@ ed extensions enable <id> [--json]
 
 | Argument | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `id` | one of the twenty-one ids, or a defaults key | required | The extension to turn on |
+| `id` | one of the nineteen ids, or a defaults key | required | The extension to turn on |
 
 | Option | Type / values | Default | What it does |
 | --- | --- | --- | --- |
@@ -75,7 +75,7 @@ known id as the hint:
 ```
 $ ed extensions enable clipbored
 error: no extension named clipbored
-hint: known ids: attention, usage, herdr, quinjet, system, machines, companion, systemStats, micMute, lidAwake, music, calendar, notchShelf, clipboard, finderTools, focusDim, presenter, emoji, colorPicker, windowTools, captureTools
+hint: known ids: attention, usage, herdr, quinjet, system, machines, companion, systemStats, micMute, lidAwake, music, calendar, notchShelf, clipboard, focusDim, presenter, emoji, colorPicker, captureTools
 ```
 
 Enabling never asks for a permission and never installs a tool. Agent Usage
