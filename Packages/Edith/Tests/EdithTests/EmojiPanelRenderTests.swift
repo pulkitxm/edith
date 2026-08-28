@@ -51,7 +51,7 @@ import Testing
     }
 
     @Test func panelRendersTheRealCatalogWithoutCollapsing() throws {
-        let store = EmojiStore(catalog: .shared, typeCharacter: { _ in })
+        let store = EmojiStore(catalog: .shared, typeCharacter: { _ in true })
         let rep = try #require(render(EmojiPanelView(store: store, onDismiss: {})))
         #expect(rep.pixelsWide >= Int(EmojiPanel.width))
         #expect(rep.pixelsHigh >= Int(EmojiPanel.height))
@@ -60,7 +60,7 @@ import Testing
     }
 
     @Test func everyGridColumnStaysInsideThePanelEdges() throws {
-        let store = EmojiStore(catalog: .shared, typeCharacter: { _ in })
+        let store = EmojiStore(catalog: .shared, typeCharacter: { _ in true })
         let rep = try #require(render(EmojiPanelView(store: store, onDismiss: {})))
         let rowRange = rep.pixelsHigh / 4..<rep.pixelsHigh / 2
         var leftMost = rep.pixelsWide
@@ -95,7 +95,7 @@ import Testing
             for _ in 0...(5 - index) { ledger.record(character, at: moment) }
         }
         ledger.save(to: store, key: key)
-        let emoji = EmojiStore(catalog: .shared, typeCharacter: { _ in })
+        let emoji = EmojiStore(catalog: .shared, typeCharacter: { _ in true })
         #expect(emoji.frequent.map(\.character).prefix(2) == ["🚀", "🎉"])
         let sections = EmojiPanelView.sections(
             catalog: emoji.catalog, frequent: emoji.frequent, query: "")
@@ -104,7 +104,7 @@ import Testing
     }
 
     @Test func panelKeepsRenderingWhenASearchFindsNothing() throws {
-        let store = EmojiStore(catalog: .shared, typeCharacter: { _ in })
+        let store = EmojiStore(catalog: .shared, typeCharacter: { _ in true })
         let sections = EmojiPanelView.sections(
             catalog: store.catalog, frequent: store.frequent, query: "zzzznothing")
         #expect(sections.isEmpty)

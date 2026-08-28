@@ -139,6 +139,20 @@ public enum EmojiOperationExecution {
     }
 }
 
+public enum EmojiInsertIPC {
+    public static let requestIDKey = "requestID"
+    public static let characterKey = "character"
+    public static let insertedKey = "inserted"
+
+    public static func requestPayload(requestID: String, character: String) -> [String: Any] {
+        [requestIDKey: requestID, characterKey: character]
+    }
+
+    public static func resultPayload(requestID: String, inserted: Bool) -> [String: Any] {
+        [requestIDKey: requestID, insertedKey: inserted]
+    }
+}
+
 extension EmojiSkinTone {
     public var token: String {
         switch self {

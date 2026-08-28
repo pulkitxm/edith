@@ -75,7 +75,12 @@ private let frequent = [
 @Suite @MainActor struct EmojiStoreTests {
     private func makeStore() -> (EmojiStore, Box) {
         let box = Box()
-        let store = EmojiStore(catalog: catalog, typeCharacter: { box.typed.append($0) })
+        let store = EmojiStore(
+            catalog: catalog, insertionDelay: .zero,
+            typeCharacter: {
+                box.typed.append($0)
+                return true
+            })
         return (store, box)
     }
 
@@ -108,7 +113,8 @@ private let frequent = [
             character: "👍", name: "thumbs up", groupIndex: 0, unicodeVersion: 0.6,
             toneVariants: ["👍🏻", "👍🏼", "👍🏽", "👍🏾", "👍🏿"])
         let store = EmojiStore(
-            catalog: EmojiCatalog(groups: catalog.groups, emoji: [toned]), typeCharacter: { _ in })
+            catalog: EmojiCatalog(groups: catalog.groups, emoji: [toned]),
+            insertionDelay: .zero, typeCharacter: { _ in true })
         #expect(store.character(for: toned) == "👍")
         store.skinTone = .medium
         #expect(store.character(for: toned) == "👍🏽")
@@ -158,8 +164,39 @@ private let frequent = [
     @Test func insertingAnUnknownCharacterIsIgnored() {
         clearDefaults()
         defer { clearDefaults() }
-        let (store, _) = makeStore()
-        store.insert(character: "")
+        let (store, box) = makeStore()
+        store.insert(character: "not emoji")
+        #expect(store.frequent.isEmpty)
+        #expect(box.typed.isEmpty)
+    }
+
+    @Test func failedTypingDoesNotRecordUsage() {
+        clearDefaults()
+        defer { clearDefaults() }
+        let store = EmojiStore(
+            catalog: catalog, insertionDelay: .zero, typeCharacter: { _ in false })
+        var inserted: Bool?
+        store.insert(character: "🚀") { inserted = $0 }
+        #expect(inserted == false)
+        #expect(store.frequent.isEmpty)
+    }
+
+    @Test func shutdownCancelsPendingTypingAndCompletesTheRequest() async {
+        clearDefaults()
+        defer { clearDefaults() }
+        let box = Box()
+        let store = EmojiStore(
+            catalog: catalog, insertionDelay: .milliseconds(100),
+            typeCharacter: {
+                box.typed.append($0)
+                return true
+            })
+        var inserted: Bool?
+        store.insert(character: "🚀") { inserted = $0 }
+        store.shutdown()
+        try? await Task.sleep(for: .milliseconds(150))
+        #expect(inserted == false)
+        #expect(box.typed.isEmpty)
         #expect(store.frequent.isEmpty)
     }
 }

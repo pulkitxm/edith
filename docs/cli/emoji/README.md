@@ -44,10 +44,10 @@ extension off. `ed emoji` with nothing after it is `ed emoji ls`.
 
 | Code | When this group produces it |
 | --- | --- |
-| 0 | The picker request was sent, the listing printed, an emoji was typed, the tone was written, or the ledger was cleared. Also an empty listing, and help. |
+| 0 | The picker request was sent, the listing printed, the helper acknowledged an emoji insertion, the tone was written, or the ledger was cleared. Also an empty listing, and help. |
 | 2 | `--limit` was negative (`--limit cannot be negative`), or the command line was wrong in ArgumentParser's own terms: an unknown flag, `--search`, `--group` or `--limit` with no value, a `--limit` value that is not an integer, or `insert` and `tone` with no argument at all. |
 | 3 | Nothing in the catalog matches the argument to `insert`, `tone` was given something other than the six tone tokens, or `--group` named a category that does not exist. |
-| 4 | `pick` or `insert` found the Emoji Picker extension off, or Edith's menu bar app closed. |
+| 4 | `pick` or `insert` found the Emoji Picker extension off, Edith's menu bar app closed, the helper did not answer, or Accessibility prevented insertion. |
 
 Nothing in this group exits 1. The two commands that reach the desktop are the
 only ones that can exit 4, and the three that only touch defaults never do:
@@ -153,9 +153,10 @@ hint: categories: smileys-emotion, people-body, animals-nature, food-drink, trav
   listening.
 - **Typing is synthetic key events.** `insert` hands the character to the app,
   which posts a key down and a key up carrying the Unicode string to the session
-  event tap. That means Edith wants Accessibility, and it means an app with
-  secure keyboard entry on, such as a password field, will ignore the event and
-  leave you with nothing typed and a recorded use.
+  event tap. That means Edith wants Accessibility. If the grant is missing,
+  macOS is asked to show its prompt, the command exits 4, and the attempt is not
+  added to frequently used. An app with secure keyboard entry on, such as a
+  password field, can still ignore an event that macOS accepted.
 - **There is no per-emoji forget from the command line.** `clear` empties the
   ledger whole, and the only way to drop a single emoji from the frequently used
   row is the panel's own context menu.

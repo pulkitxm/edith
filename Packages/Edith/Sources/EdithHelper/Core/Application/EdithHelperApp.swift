@@ -174,8 +174,34 @@ struct EdithApp: App {
             MainActor.assumeIsolated { EmojiPanel.shared.toggle() }
         }
         _ = IPC.observe(IPC.Name.requestEmojiInsert) { info in
-            guard let character = info["character"] as? String else { return }
-            MainActor.assumeIsolated { services.emoji?.insert(character: character) }
+            let requestID = info[EmojiInsertIPC.requestIDKey] as? String
+            guard let character = info[EmojiInsertIPC.characterKey] as? String else {
+                if let requestID {
+                    IPC.post(
+                        IPC.Name.emojiInsertResult,
+                        userInfo: EmojiInsertIPC.resultPayload(
+                            requestID: requestID, inserted: false))
+                }
+                return
+            }
+            MainActor.assumeIsolated {
+                guard let store = services.emoji else {
+                    if let requestID {
+                        IPC.post(
+                            IPC.Name.emojiInsertResult,
+                            userInfo: EmojiInsertIPC.resultPayload(
+                                requestID: requestID, inserted: false))
+                    }
+                    return
+                }
+                store.insert(character: character) { inserted in
+                    guard let requestID else { return }
+                    IPC.post(
+                        IPC.Name.emojiInsertResult,
+                        userInfo: EmojiInsertIPC.resultPayload(
+                            requestID: requestID, inserted: inserted))
+                }
+            }
         }
         _ = IPC.observe(IPC.Name.presenterAutoActiveChanged) {
             services.usage?.refreshMenuBarItem()

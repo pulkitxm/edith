@@ -155,10 +155,30 @@ struct EmojiInsertCommand: AsyncParsableCommand {
             try EmojiBridge.requireExtension()
             let character = try EmojiBridge.resolve(emoji)
             try AppBridge.requireHelper("inserting an emoji")
-            let descriptor = EmojiOperationExecution.request(
-                .insert, userInfo: ["character": character]
-            ) { name, info in
-                AppBridge.post(name, userInfo: info)
+            let requestID = UUID().uuidString
+            let descriptor = EmojiOperation.insert.descriptor
+            guard
+                let reply = await AppBridge.awaitReply(
+                    IPC.Name.emojiInsertResult, timeout: 5,
+                    matching: { $0[EmojiInsertIPC.requestIDKey] as? String == requestID },
+                    trigger: {
+                        EmojiOperationExecution.request(
+                            .insert,
+                            userInfo: EmojiInsertIPC.requestPayload(
+                                requestID: requestID, character: character)
+                        ) { name, info in
+                            AppBridge.post(name, userInfo: info)
+                        }
+                    })
+            else {
+                throw AppBridge.silence(
+                    "emoji insertion", extensionKey: AppStorageKeys.Emoji.enabled,
+                    permission: ExtensionPermission.accessibility.rawValue)
+            }
+            guard reply[EmojiInsertIPC.insertedKey] as? Bool == true else {
+                throw CLIFailure.unavailable(
+                    "Edith could not insert the emoji into the frontmost app",
+                    hint: "grant Accessibility with `ed permissions request accessibility`")
             }
             guard !json else {
                 CLIOut.json(

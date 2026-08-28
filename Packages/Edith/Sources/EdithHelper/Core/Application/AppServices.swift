@@ -101,6 +101,7 @@ final class AppServices {
     func prepareForTermination() async {
         startup.cancel()
         terminating = true
+        shutDownEmojiRuntime()
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
@@ -300,17 +301,20 @@ final class AppServices {
             if emoji == nil { emoji = EmojiStore() }
             EmojiHotKey.register()
         } else {
-            EmojiHotKey.unregister()
-            if let store = emoji {
-                store.shutdown()
-                emoji = nil
-            }
+            shutDownEmojiRuntime()
         }
         EmojiPanel.shared.store = emoji
         notchShelf?.attachClipboard(clipboard)
         notchShelf?.attachUsage(usage)
         notchShelf?.attachCalendar(calendar)
         notchShelf?.attachColorPicker(colorPicker)
+    }
+
+    private func shutDownEmojiRuntime() {
+        EmojiHotKey.unregister()
+        emoji?.shutdown()
+        emoji = nil
+        EmojiPanel.shared.store = nil
     }
 
     private func reconcilePresentationServices() {

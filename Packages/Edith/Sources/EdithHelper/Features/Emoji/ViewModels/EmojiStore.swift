@@ -19,14 +19,22 @@ final class EmojiStore: FeatureModule {
 
     private var ledger: EmojiUsageLedger
     private var settingsObserver: NSObjectProtocol?
-    private let typeCharacter: @MainActor (String) -> Void
+    private var insertionTasks: [UUID: Task<Void, Never>] = [:]
+    private var insertionCompletions: [UUID: @MainActor (Bool) -> Void] = [:]
+    private var isShutDown = false
+    private let insertionDelay: Duration
+    private let typeCharacter: @MainActor (String) -> Bool
 
     required convenience init() {
         self.init(catalog: .shared, typeCharacter: { EmojiTypeSynth.type($0) })
     }
 
-    init(catalog: EmojiCatalog, typeCharacter: @escaping @MainActor (String) -> Void) {
+    init(
+        catalog: EmojiCatalog, insertionDelay: Duration = .milliseconds(50),
+        typeCharacter: @escaping @MainActor (String) -> Bool
+    ) {
         self.catalog = catalog
+        self.insertionDelay = insertionDelay
         self.typeCharacter = typeCharacter
         ledger = EmojiUsageLedger.load(from: SharedDefaults.store, key: AppStorageKeys.Emoji.usage)
         skinTone = EmojiSkinTone.stored(forKey: AppStorageKeys.Emoji.skinTone)
@@ -37,8 +45,15 @@ final class EmojiStore: FeatureModule {
     }
 
     func shutdown() {
+        guard !isShutDown else { return }
+        isShutDown = true
         if let settingsObserver { IPC.stopObserving(settingsObserver) }
         settingsObserver = nil
+        insertionTasks.values.forEach { $0.cancel() }
+        insertionTasks.removeAll()
+        let completions = insertionCompletions.values
+        insertionCompletions.removeAll()
+        completions.forEach { $0(false) }
     }
 
     func emoji(inGroup index: Int) -> [Emoji] {
@@ -53,11 +68,31 @@ final class EmojiStore: FeatureModule {
         insert(character: emoji.character(tone: tone ?? skinTone))
     }
 
-    func insert(character: String) {
-        guard !character.isEmpty else { return }
-        record(character)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [typeCharacter] in
-            typeCharacter(character)
+    func insert(
+        character: String, completion: @escaping @MainActor (Bool) -> Void = { _ in }
+    ) {
+        guard !isShutDown, catalog.emoji(matching: character) != nil else {
+            completion(false)
+            return
+        }
+        if insertionDelay == .zero {
+            let inserted = typeCharacter(character)
+            if inserted { record(character) }
+            completion(inserted)
+            return
+        }
+        let id = UUID()
+        insertionCompletions[id] = completion
+        insertionTasks[id] = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: self?.insertionDelay ?? .zero)
+            } catch {
+                return
+            }
+            guard let self, !Task.isCancelled else { return }
+            let inserted = self.typeCharacter(character)
+            if inserted { self.record(character) }
+            self.finishInsertion(id: id, inserted: inserted)
         }
     }
 
@@ -85,6 +120,12 @@ final class EmojiStore: FeatureModule {
         ledger.record(character, at: Date())
         persistLedger()
         refreshFrequent()
+    }
+
+    private func finishInsertion(id: UUID, inserted: Bool) {
+        insertionTasks[id] = nil
+        let completion = insertionCompletions.removeValue(forKey: id)
+        completion?(inserted)
     }
 
     private func persistLedger() {

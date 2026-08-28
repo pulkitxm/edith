@@ -66,10 +66,10 @@ Exit codes:
 
 | Code | Meaning |
 | --- | --- |
-| 0 | The character was resolved, the request was sent, and the use was recorded. |
+| 0 | The character was resolved, the helper posted its key events, and the use was recorded. |
 | 2 | The command line was invalid, including no argument at all. |
 | 3 | Nothing in the catalog matches the argument. |
-| 4 | The Emoji Picker extension is off, or Edith's menu bar app is not running. |
+| 4 | The Emoji Picker extension is off, Edith's menu bar app is not running or answering, or Accessibility prevented insertion. |
 
 The checks happen in that order: extension, then resolution, then the app. So a
 nonsense argument is a 3 even with Edith closed, and a good argument with Edith
@@ -81,20 +81,16 @@ error: no emoji matches xyzzy
 hint: run `ed emoji ls` to see what this Mac can render
 ```
 
-Behaviour: the command hands the character to the running app and exits. The app
-posts a key down and a key up carrying the Unicode string to the session event
-tap about fifty milliseconds later, so the emoji lands in the app that has focus
-at that moment, not necessarily the one that had focus when you pressed Return.
-Nothing is put on the pasteboard, and nothing is undone if the target app
-refuses the event: an app with secure keyboard entry on, such as a password
-field, drops it silently and the use is still recorded. Because Edith types
-rather than presses a key, Accessibility access is what makes this work.
-
-The insert is recorded twice over, once by `ed` and once by the running app, and
-each of them rewrites the whole `emojiUsage` key from its own copy. The two
-writes are not ordered against each other, so a single insert can land as one
-count or as two. That only shifts the ordering of your frequently used row, and
-[`ed emoji clear`](./clear.md) resets it either way.
+Behaviour: the command hands the character to the running app and waits for the
+matching acknowledgement. The app posts a key down and a key up carrying the
+Unicode string to the session event tap about fifty milliseconds later, records
+the use once, and then answers. The emoji therefore lands in the app that has
+focus at that moment, not necessarily the one that had focus when you pressed
+Return. Nothing is put on the pasteboard. Because Edith types rather than
+presses a key, Accessibility access is what makes this work. If the grant is
+missing, macOS is asked to show its prompt, no use is recorded, and the command
+exits 4. An app with secure keyboard entry on, such as a password field, can
+still ignore an event after macOS accepted it.
 
 ## Where to go next
 
