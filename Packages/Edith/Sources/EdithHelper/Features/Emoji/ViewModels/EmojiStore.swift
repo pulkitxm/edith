@@ -134,14 +134,21 @@ final class EmojiStore: FeatureModule {
     }
 
     private func refreshFrequent() {
-        frequent = EmojiCatalogSummary.frequent(catalog: catalog, store: SharedDefaults.store)
-            .compactMap { character in
-                guard let entry = catalog.emoji(matching: character) else { return nil }
-                return Emoji(
-                    character: character, name: entry.name, groupIndex: entry.groupIndex,
-                    unicodeVersion: entry.unicodeVersion, terms: entry.terms)
+        var refreshed: [Emoji] = []
+        for character in EmojiCatalogSummary.frequent(
+            catalog: catalog, store: SharedDefaults.store)
+        {
+            if let entry = catalog.emoji(matching: character) {
+                refreshed.append(
+                    Emoji(
+                        character: character, name: entry.name, groupIndex: entry.groupIndex,
+                        unicodeVersion: entry.unicodeVersion, terms: entry.terms))
             }
-        frequentIDs = Set(frequent.map(\.id))
+        }
+        frequent = refreshed
+        var refreshedIDs: Set<String> = []
+        for emoji in refreshed { refreshedIDs.insert(emoji.id) }
+        frequentIDs = refreshedIDs
         revision += 1
     }
 

@@ -152,17 +152,23 @@ final class EmojiPanelModel {
     func rows(for section: EmojiSection) -> [EmojiPanelRow] {
         let count = section.emoji.count
         guard count > 0 else { return [] }
-        return stride(from: 0, to: count, by: EmojiPanelView.columns).map { start in
+        var rows: [EmojiPanelRow] = []
+        for start in stride(from: 0, to: count, by: EmojiPanelView.columns) {
             let end = min(start + EmojiPanelView.columns, count)
             let row = start / EmojiPanelView.columns
-            return EmojiPanelRow(
-                id: EmojiPanelRow.ID(sectionID: section.id, rowIndex: row),
-                sectionID: section.id,
-                cells: section.emoji[start..<end].map {
+            var rowCells: [EmojiPanelCell] = []
+            for emoji in section.emoji[start..<end] {
+                rowCells.append(
                     EmojiPanelCell(
-                        id: EmojiPanelCell.ID(sectionID: section.id, emojiID: $0.id), emoji: $0)
-                }, isRenderBoundary: end == count)
+                        id: EmojiPanelCell.ID(sectionID: section.id, emojiID: emoji.id),
+                        emoji: emoji))
+            }
+            rows.append(
+                EmojiPanelRow(
+                    id: EmojiPanelRow.ID(sectionID: section.id, rowIndex: row),
+                    sectionID: section.id, cells: rowCells, isRenderBoundary: end == count))
         }
+        return rows
     }
 
     static func baseSections(catalog: EmojiCatalog, frequent: [Emoji]) -> [EmojiSection] {
