@@ -47,4 +47,38 @@ import Testing
         #expect(WindowSwitcherIPC.decode(encoded) == windows)
         #expect(WindowSwitcherIPC.decode("invalid").isEmpty)
     }
+
+    @Test func applicationProjectionFiltersRulesAndOrdersTheFrontAppFirst() {
+        let candidates = [
+            WindowSwitcherApplicationCandidate(
+                pid: 10, appName: "Zulu", bundleIdentifier: "com.example.zulu", regular: true,
+                terminated: false),
+            WindowSwitcherApplicationCandidate(
+                pid: 20, appName: "Alpha", bundleIdentifier: "com.example.alpha", regular: true,
+                terminated: false),
+            WindowSwitcherApplicationCandidate(
+                pid: 30, appName: "Helper", bundleIdentifier: "com.example.helper",
+                regular: false, terminated: false),
+            WindowSwitcherApplicationCandidate(
+                pid: 40, appName: "Hidden", bundleIdentifier: "com.example.hidden", regular: true,
+                terminated: false),
+            WindowSwitcherApplicationCandidate(
+                pid: 50, appName: "Stopped", bundleIdentifier: "com.example.stopped",
+                regular: true, terminated: true),
+        ]
+        let rules = WindowSwitcherRuleSet(
+            included: ["com.example.helper"], hidden: ["com.example.hidden"])
+
+        #expect(
+            WindowSwitcherCollection.orderedApplicationPIDs(
+                candidates, rules: rules, frontPID: 10, selfPID: 30)
+                == [10, 20])
+    }
+
+    @Test func visibleIdentifiersFollowSearchResults() {
+        #expect(
+            WindowSwitcherCollection.visibleIDs(windows, query: "Safari")
+                == ["100:0", "100:1"])
+        #expect(WindowSwitcherCollection.visibleIDs(windows, query: "missing").isEmpty)
+    }
 }

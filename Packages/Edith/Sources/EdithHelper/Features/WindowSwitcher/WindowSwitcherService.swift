@@ -19,40 +19,44 @@ enum WindowSwitcherEnumerator {
             includedCSV: defaults.string(forKey: AppStorageKeys.WindowSwitcher.includedApps) ?? "",
             hiddenCSV: defaults.string(forKey: AppStorageKeys.WindowSwitcher.hiddenApps) ?? "")
         let frontPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
-        let applications = NSWorkspace.shared.runningApplications
-            .filter { !$0.isTerminated && $0.processIdentifier != getpid() }
-            .filter { application in
-                guard let identifier = application.bundleIdentifier else { return false }
-                return rules.permits(
-                    bundleIdentifier: identifier,
-                    regular: application.activationPolicy == .regular)
-            }
-            .sorted { left, right in
-                if left.processIdentifier == frontPID { return true }
-                if right.processIdentifier == frontPID { return false }
-                return (left.localizedName ?? "").localizedStandardCompare(
-                    right.localizedName ?? "") == .orderedAscending
-            }
-
-        return applications.flatMap { application -> [WindowSwitcherRuntimeWindow] in
-            guard let bundleIdentifier = application.bundleIdentifier else { return [] }
+        var applicationsByPID: [Int32: NSRunningApplication] = [:]
+        var candidates: [WindowSwitcherApplicationCandidate] = []
+        for application in NSWorkspace.shared.runningApplications {
+            let pid = application.processIdentifier
+            applicationsByPID[pid] = application
+            candidates.append(
+                WindowSwitcherApplicationCandidate(
+                    pid: pid, appName: application.localizedName ?? "",
+                    bundleIdentifier: application.bundleIdentifier,
+                    regular: application.activationPolicy == .regular,
+                    terminated: application.isTerminated))
+        }
+        let orderedPIDs = WindowSwitcherCollection.orderedApplicationPIDs(
+            candidates, rules: rules, frontPID: frontPID, selfPID: getpid())
+        var result: [WindowSwitcherRuntimeWindow] = []
+        for pid in orderedPIDs {
+            guard let application = applicationsByPID[pid],
+                let bundleIdentifier = application.bundleIdentifier
+            else { continue }
             let appName = application.localizedName ?? bundleIdentifier
             let appElement = AXUIElementCreateApplication(application.processIdentifier)
             let elements: [AXUIElement] =
                 attribute(appElement, kAXWindowsAttribute as CFString) ?? []
-            return elements.enumerated().compactMap { index, element in
+            for (index, element) in elements.enumerated() {
                 let role: String? = attribute(element, kAXRoleAttribute as CFString)
-                guard role == kAXWindowRole as String else { return nil }
+                guard role == kAXWindowRole as String else { continue }
                 let title: String = attribute(element, kAXTitleAttribute as CFString) ?? ""
                 let minimized: Bool = attribute(element, kAXMinimizedAttribute as CFString) ?? false
                 let value = WindowSwitcherWindow(
                     id: "\(application.processIdentifier):\(index)", appName: appName,
                     bundleIdentifier: bundleIdentifier, title: title, isMinimized: minimized,
                     pid: application.processIdentifier)
-                return WindowSwitcherRuntimeWindow(
-                    value: value, element: element, application: application)
+                result.append(
+                    WindowSwitcherRuntimeWindow(
+                        value: value, element: element, application: application))
             }
         }
+        return result
     }
 
     static func activate(_ window: WindowSwitcherRuntimeWindow) -> Bool {
@@ -69,7 +73,10 @@ enum WindowSwitcherEnumerator {
 
     static func cycleFrontApplication() -> Bool {
         guard let application = NSWorkspace.shared.frontmostApplication else { return false }
-        let candidates = windows().filter { $0.value.pid == application.processIdentifier }
+        var candidates: [WindowSwitcherRuntimeWindow] = []
+        for window in windows() where window.value.pid == application.processIdentifier {
+            candidates.append(window)
+        }
         guard !candidates.isEmpty else { return false }
         let appElement = AXUIElementCreateApplication(application.processIdentifier)
         let focused: AXUIElement? = attribute(
@@ -104,13 +111,20 @@ final class WindowSwitcherStore: ObservableObject {
     @Published private(set) var grouped = true
 
     var visible: [WindowSwitcherRuntimeWindow] {
-        let identifiers = Set(
-            WindowSwitcherCollection.filtered(windows.map(\.value), query: query).map(\.id))
-        return windows.filter { identifiers.contains($0.value.id) }
+        var values: [WindowSwitcherWindow] = []
+        for window in windows { values.append(window.value) }
+        let identifiers = WindowSwitcherCollection.visibleIDs(values, query: query)
+        var result: [WindowSwitcherRuntimeWindow] = []
+        for window in windows where identifiers.contains(window.value.id) {
+            result.append(window)
+        }
+        return result
     }
 
     var groups: [WindowSwitcherGroup] {
-        WindowSwitcherCollection.grouped(visible.map(\.value))
+        var values: [WindowSwitcherWindow] = []
+        for window in visible { values.append(window.value) }
+        return WindowSwitcherCollection.grouped(values)
     }
 
     func reload() {

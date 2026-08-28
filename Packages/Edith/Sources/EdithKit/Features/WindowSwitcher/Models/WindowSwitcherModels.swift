@@ -34,6 +34,25 @@ public struct WindowSwitcherGroup: Equatable, Identifiable, Sendable {
     public var id: String { windows.first?.bundleIdentifier ?? appName }
 }
 
+public struct WindowSwitcherApplicationCandidate: Equatable, Sendable {
+    public let pid: Int32
+    public let appName: String
+    public let bundleIdentifier: String?
+    public let regular: Bool
+    public let terminated: Bool
+
+    public init(
+        pid: Int32, appName: String, bundleIdentifier: String?, regular: Bool,
+        terminated: Bool
+    ) {
+        self.pid = pid
+        self.appName = appName
+        self.bundleIdentifier = bundleIdentifier
+        self.regular = regular
+        self.terminated = terminated
+    }
+}
+
 public struct WindowSwitcherRuleSet: Equatable, Sendable {
     public let included: Set<String>
     public let hidden: Set<String>
@@ -63,6 +82,32 @@ public struct WindowSwitcherRuleSet: Equatable, Sendable {
 }
 
 public enum WindowSwitcherCollection {
+    public static func orderedApplicationPIDs(
+        _ candidates: [WindowSwitcherApplicationCandidate], rules: WindowSwitcherRuleSet,
+        frontPID: Int32?, selfPID: Int32
+    ) -> [Int32] {
+        candidates
+            .filter { candidate in
+                guard !candidate.terminated, candidate.pid != selfPID,
+                    let bundleIdentifier = candidate.bundleIdentifier
+                else { return false }
+                return rules.permits(
+                    bundleIdentifier: bundleIdentifier, regular: candidate.regular)
+            }
+            .sorted { left, right in
+                if left.pid == frontPID { return true }
+                if right.pid == frontPID { return false }
+                return left.appName.localizedStandardCompare(right.appName) == .orderedAscending
+            }
+            .map(\.pid)
+    }
+
+    public static func visibleIDs(
+        _ windows: [WindowSwitcherWindow], query: String
+    ) -> Set<String> {
+        Set(filtered(windows, query: query).map(\.id))
+    }
+
     public static func filtered(
         _ windows: [WindowSwitcherWindow], query: String
     ) -> [WindowSwitcherWindow] {
