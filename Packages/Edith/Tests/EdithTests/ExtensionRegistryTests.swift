@@ -12,7 +12,6 @@ import Testing
         "tabHerdrEnabled",
         "tabQuinjetEnabled",
         "tabSystemEnabled",
-        "appMaintenanceEnabled",
         "tabMachinesEnabled",
         "tabCompanionEnabled",
         "menuBarSystemStats",
@@ -22,11 +21,9 @@ import Testing
         "tabCalendarEnabled",
         "notchShelfEnabled",
         "clipboardEnabled",
-        "finderToolsEnabled",
         "focusDimEnabled",
         "presenterEnabled",
         "colorPickerEnabled",
-        "windowToolsEnabled",
         "emojiEnabled",
     ]
 
@@ -144,7 +141,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard", "appMaintenance",
+                "clipboard",
             ])
     }
 
@@ -226,7 +223,6 @@ import Testing
             "herdr": [],
             "quinjet": [],
             "system": [],
-            "appMaintenance": [],
             "machines": [],
             "companion": [],
             "systemStats": [],
@@ -236,11 +232,9 @@ import Testing
             "calendar": [.calendar],
             "notchShelf": [],
             "clipboard": [],
-            "finderTools": [.accessibility],
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
             "colorPicker": [.screenRecording],
-            "windowTools": [.accessibility],
             "emoji": [],
         ]
         let optional: [String: [ExtensionPermission]] = [
@@ -249,21 +243,18 @@ import Testing
             "herdr": [],
             "quinjet": [],
             "system": [.accessibility, .inputMonitoring],
-            "appMaintenance": [],
             "machines": [.notifications],
             "companion": [],
-            "systemStats": [.notifications],
+            "systemStats": [],
             "micMute": [],
             "lidAwake": [],
             "music": [],
             "calendar": [],
             "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation],
             "clipboard": [.accessibility],
-            "finderTools": [.automation],
             "focusDim": [],
             "presenter": [],
             "colorPicker": [],
-            "windowTools": [],
             "emoji": [.accessibility],
         ]
 
@@ -393,7 +384,6 @@ import Testing
             "tabCalendarEnabled": true,
             "notchShelfEnabled": false,
             "clipboardEnabled": true,
-            "finderToolsEnabled": false,
             "focusDimEnabled": false,
             "presenterEnabled": true,
             "colorPickerEnabled": false,

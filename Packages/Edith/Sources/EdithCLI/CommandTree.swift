@@ -1,5 +1,4 @@
 import Foundation
-import EdithKit
 
 public enum ArgumentKind: Equatable, Sendable {
     case machine
@@ -241,15 +240,6 @@ public enum CommandTree {
                         "doctor", "Diagnose extension problems.", options: common,
                         arguments: [.extensionID]),
                 ]),
-            CommandNode(
-                "window", "Arrange the active window.",
-                children: [
-                    CommandNode(
-                        "status", "Show Window Tools settings and actions.", options: common)
-                ]
-                    + WindowLayoutAction.allCases.map {
-                        CommandNode($0.rawValue, $0.descriptor.summary, options: common)
-                    }),
             CommandNode(
                 "lid-awake", "Keep the Mac running with its lid closed.",
                 children: [
@@ -698,26 +688,6 @@ public enum CommandTree {
                         optionValues: ["--category": .cleanerCategory],
                         destructivePolicy: .previewThenYes),
                     CommandNode("drives", "The volumes the cleaner can scan.", options: common),
-                ]),
-            CommandNode(
-                "maintenance", "Installed app inventory, updates, and review-first removal.",
-                children: [
-                    CommandNode(
-                        "inventory", "List installed applications and Homebrew updates.",
-                        aliases: ["ls", "list"],
-                        options: ["--json", "--help", "--no-updates"]),
-                    CommandNode(
-                        "scan", "Preview an app and its exact support files.",
-                        options: common, arguments: [.localPath]),
-                    CommandNode(
-                        "remove", "Move a reviewed app selection to the Trash.",
-                        options: ["--json", "--help", "--only-app", "--yes"],
-                        arguments: [.localPath], destructivePolicy: .previewThenYes),
-                    CommandNode(
-                        "install", "Verify and install one app from a disk image.",
-                        options: [
-                            "--json", "--help", "--system", "--replace", "--keep-image", "--yes",
-                        ], arguments: [.localPath], destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
                 "quinjet", "Discover and open Quinjet review workspaces.",

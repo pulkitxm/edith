@@ -25,7 +25,6 @@ the sample itself:
 $ ed system stats
 Studio MacBook Pro  macOS Version 26.5.2 (Build 25F84)  14 cores
 cpu  53.3%   mem 73% of 25.8 GB   load 16.54 19.29 17.56   net down 36.6 KB/s up 9.1 KB/s
-gpu 42%   disk read 5.2 MB/s write 1.1 MB/s   storage 71%   power 84% Battery
 ```
 
 `--processes n` appends a table of the top `n` processes by CPU under the
@@ -57,9 +56,9 @@ cpu  65.0%   mem 74% of 25.8 GB   load 17.81 19.27 17.67   net down 49.4 KB/s up
 
 ## `--json` shape
 
-One object with a `host` object that never changes, the portable machine
-`sample`, and a native `monitor` object. This is a real document, trimmed to one
-process, one network interface and three of the fourteen `corePercent` entries:
+One object with a `host` half that never changes and a `sample` half that does.
+This is a real document, trimmed to one process, one network interface and
+three of the fourteen `corePercent` entries:
 
 ```json
 {
@@ -73,28 +72,6 @@ process, one network interface and three of the fourteen `corePercent` entries:
     "os": "macOS Version 26.5.2 (Build 25F84)",
     "osID": "macos",
     "virtual": false
-  },
-  "monitor": {
-    "cpuPercent": 52.8,
-    "disk": {
-      "readBps": 5214822,
-      "rootUsedPercent": 71.2,
-      "writeBps": 1132441
-    },
-    "gpuPercent": 42,
-    "memoryPercent": 73.3,
-    "network": {
-      "downloadBps": 58471,
-      "uploadBps": 436707
-    },
-    "power": {
-      "charging": false,
-      "externalPower": false,
-      "percent": 84,
-      "status": "Battery",
-      "watts": -8.4
-    },
-    "sampledUptimeSeconds": 97895.4
   },
   "sample": {
     "at": "2026-08-08T16:37:59Z",
@@ -174,10 +151,6 @@ What the fields mean:
   has one entry per logical core in core order.
 - Every `*KB` number is kilobytes and every `*Bps` number is bytes per second.
   `memory.usedPercent` is `usedKB` over `totalKB`.
-- `monitor.gpuPercent` is the graphics accelerator's device utilization when
-  macOS exposes it. `monitor.disk` is aggregate physical-disk throughput plus
-  startup disk capacity. `monitor.power` is `null` on a Mac without a battery;
-  battery watts are positive while charging and negative while discharging.
 - `load` is the one, five and fifteen minute load averages, in that order.
 - `processes` is present even when it is empty, so the key never disappears
   between runs.
@@ -197,8 +170,7 @@ Nothing is mutated and nothing is written: the command samples and prints.
 Neither the Edith app nor the menu bar helper has to be running, and no macOS
 permission is involved, so this never exits 4.
 
-The first sample costs about half a second. `ed` takes throwaway machine and
-monitor samples,
+The first sample costs about half a second. `ed` takes a throwaway sample,
 sleeps 500 ms, then takes the one it prints, because CPU and network figures are
 deltas between two readings and the first reading has nothing to compare
 against. That is also why `intervalSeconds` on the first line of a `--follow`

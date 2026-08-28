@@ -131,12 +131,7 @@ not here cannot be set, and `import` skips it.
 | `menuBarMidColorHex` | string | none | shared | Hex colour used between the warning and critical thresholds. |
 | `menuBarHighColorHex` | string | none | shared | Hex colour used above the critical threshold. |
 | `menuBarStatsColorHex` | string | none | shared | Hex colour of the CPU and memory menu bar readout. |
-| `systemMonitorAlerts` | bool | `false` | shared | Notify when system pressure stays above a configured threshold. |
-| `systemMonitorCPUThreshold` | number | `90` | shared | Sustained CPU usage alert threshold. |
-| `systemMonitorMemoryThreshold` | number | `90` | shared | Sustained memory usage alert threshold. |
-| `systemMonitorDiskThreshold` | number | `90` | shared | Sustained startup disk usage alert threshold. |
-| `systemMonitorBatteryThreshold` | number | `20` | shared | Sustained low battery alert threshold. |
-| `menuBarSystemStats` | bool | `false` | shared | System Monitor readout as a menu bar item. |
+| `menuBarSystemStats` | bool | `false` | shared | CPU and memory readout as a menu bar item. |
 
 ### `alerts`
 

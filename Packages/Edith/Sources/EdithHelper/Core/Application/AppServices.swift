@@ -13,14 +13,12 @@ final class AppServices {
     private(set) var colorPicker: ColorPickerStore?
     private(set) var clipboard: ClipboardStore?
     private(set) var emoji: EmojiStore?
-    private(set) var finderTools: FinderToolsService?
     private(set) var focusDim: FocusDimEngine?
     private(set) var presenter: PresenterDetector?
     private(set) var micMute: MicMuteEngine?
     private(set) var lidAwake: LidAwakeEngine?
     private(set) var systemStats: SystemStatsStatusItem?
     private(set) var attention: AttentionTrackingService?
-    private(set) var windowTools: WindowToolsEngine?
     private let startup = StartupCoordinator()
     private let lidAwakeRestorationGate = LidAwakeRestorationGate()
     private let lidAwakeOrphanRestorer: @MainActor @Sendable () async -> LidAwakeOutcome
@@ -104,7 +102,6 @@ final class AppServices {
         startup.cancel()
         terminating = true
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
-        finderTools?.shutdown()
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
     }
@@ -314,24 +311,9 @@ final class AppServices {
         notchShelf?.attachUsage(usage)
         notchShelf?.attachCalendar(calendar)
         notchShelf?.attachColorPicker(colorPicker)
-
-        let finderToolsOn = Self.extensionEnabled(AppStorageKeys.FinderTools.enabled)
-        if finderToolsOn, finderTools == nil { finderTools = FinderToolsService() }
-        if !finderToolsOn {
-            finderTools?.shutdown()
-            finderTools = nil
-        }
-        finderTools?.syncSettings()
     }
 
     private func reconcilePresentationServices() {
-        let windowToolsOn = Self.extensionEnabled(AppStorageKeys.WindowTools.enabled)
-        if windowToolsOn, windowTools == nil { windowTools = WindowToolsEngine() }
-        if !windowToolsOn, let engine = windowTools {
-            engine.shutdown()
-            windowTools = nil
-        }
-
         let focusDimOn = FocusDimState.isEnabled()
         if focusDimOn, focusDim == nil { focusDim = FocusDimEngine() }
         if !focusDimOn, let engine = focusDim {
@@ -436,7 +418,6 @@ final class AppServices {
         lidAwake?.syncSettings()
         focusDim?.applySettings()
         presenter?.applySettings()
-        windowTools?.applySettings()
     }
 
     private static func reconcileAgentUsageSettings() -> AgentUsageSettingsState {

@@ -49,8 +49,8 @@ public enum ConfigCatalog {
         "dashboard",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
         "calendar",
-        "clipboard", "findertools",
-        "notch", "focusdim", "windowtools", "presenter", "colorpicker", "emoji", "micmute",
+        "clipboard",
+        "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
         "backup", "permissions", "terminal",
     ]
 
@@ -58,8 +58,8 @@ public enum ConfigCatalog {
         appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
         + system + cleaner
-        + music + calendar + clipboard + finderTools + notch + focusDim + windowTools + presenter
-        + colorPicker + emoji
+        + music + calendar + clipboard + notch + focusDim + presenter + colorPicker
+        + emoji
         + micMute
         + backup + permissions + terminal
 
@@ -237,24 +237,8 @@ public enum ConfigCatalog {
             AppStorageKeys.MenuBar.statsColorHex, .string, group: "menubar",
             summary: "Hex colour of the CPU and memory menu bar readout."),
         SettingDefinition(
-            AppStorageKeys.MenuBar.statsAlerts, .bool, group: "menubar",
-            summary: "Notify when system pressure stays above a configured threshold.",
-            fallback: .bool(false)),
-        SettingDefinition(
-            AppStorageKeys.MenuBar.statsCPUThreshold, .number, group: "menubar",
-            summary: "Sustained CPU usage alert threshold.", fallback: .double(90)),
-        SettingDefinition(
-            AppStorageKeys.MenuBar.statsMemoryThreshold, .number, group: "menubar",
-            summary: "Sustained memory usage alert threshold.", fallback: .double(90)),
-        SettingDefinition(
-            AppStorageKeys.MenuBar.statsDiskThreshold, .number, group: "menubar",
-            summary: "Sustained startup disk usage alert threshold.", fallback: .double(90)),
-        SettingDefinition(
-            AppStorageKeys.MenuBar.statsBatteryThreshold, .number, group: "menubar",
-            summary: "Sustained low battery alert threshold.", fallback: .double(20)),
-        SettingDefinition(
             AppStorageKeys.MenuBar.systemStats, .bool, group: "menubar",
-            summary: "System Monitor readout as a menu bar item.", fallback: .bool(false)),
+            summary: "CPU and memory readout as a menu bar item.", fallback: .bool(false)),
     ]
 
     private static let alerts: [SettingDefinition] = [
@@ -481,15 +465,6 @@ public enum ConfigCatalog {
             summary: "System extension: running apps, prevent sleep and the cleaning lock.",
             fallback: .bool(false)),
         SettingDefinition(
-            AppStorageKeys.AppMaintenance.enabled, .bool, group: "system",
-            summary: "App Maintenance extension: inventory, installation and safe removal.",
-            fallback: .bool(false)),
-        SettingDefinition(
-            AppStorageKeys.AppMaintenance.installDestination, .string, group: "system",
-            summary: "Default disk image installation destination.",
-            allowed: AppMaintenanceInstallDestination.allCases.map(\.rawValue),
-            fallback: .string(AppMaintenanceInstallDestination.user.rawValue)),
-        SettingDefinition(
             AppStorageKeys.General.preventSleep, .bool, group: "system",
             summary: "Keep the Mac awake (Keep Awake).", fallback: .bool(false)),
         SettingDefinition(
@@ -662,28 +637,6 @@ public enum ConfigCatalog {
             summary: "Last clipboard panel y position."),
     ]
 
-    private static let finderTools: [SettingDefinition] = [
-        SettingDefinition(
-            AppStorageKeys.FinderTools.enabled, .bool, group: "findertools",
-            summary: "Finder Tools extension: file shortcuts and disk image installs.",
-            fallback: .bool(false)),
-        SettingDefinition(
-            AppStorageKeys.FinderTools.cutPaste, .bool, group: "findertools",
-            summary: "Move Finder selections with Command-X and Command-V.",
-            fallback: .bool(true)),
-        SettingDefinition(
-            AppStorageKeys.FinderTools.rename, .bool, group: "findertools",
-            summary: "Rename the Finder selection with F2.", fallback: .bool(true)),
-        SettingDefinition(
-            AppStorageKeys.FinderTools.pasteImages, .bool, group: "findertools",
-            summary: "Save copied images as PNG files with Command-V in Finder.",
-            fallback: .bool(true)),
-        SettingDefinition(
-            AppStorageKeys.FinderTools.diskImageInstaller, .bool, group: "findertools",
-            summary: "Offer to install the single app found on a mounted disk image.",
-            fallback: .bool(true)),
-    ]
-
     private static let notch: [SettingDefinition] = [
         SettingDefinition(
             AppStorageKeys.Notch.shelfEnabled, .bool, group: "notch",
@@ -761,52 +714,6 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.FocusDim.hotKeyLabel, .string, group: "focusdim",
             summary: "Printable label for the focus dim shortcut."),
-    ]
-
-    private static let windowTools: [SettingDefinition] = [
-        SettingDefinition(
-            AppStorageKeys.WindowTools.enabled, .bool, group: "windowtools",
-            summary: "Window Tools extension: arrange the active window.", fallback: .bool(false)),
-        SettingDefinition(
-            AppStorageKeys.WindowTools.greenButtonMaximizes, .bool, group: "windowtools",
-            summary: "Make the green window button maximize without another Space.",
-            fallback: .bool(true)),
-        SettingDefinition(
-            AppStorageKeys.WindowTools.leftHotKeyCode, .int, group: "windowtools",
-            summary: "Virtual key code of the left-half shortcut.", fallback: .int(123)),
-        SettingDefinition(
-            AppStorageKeys.WindowTools.leftHotKeyMods, .int, group: "windowtools",
-            summary: "Carbon modifier mask of the left-half shortcut.", fallback: .int(6144)),
-        SettingDefinition(
-            AppStorageKeys.WindowTools.leftHotKeyLabel, .string, group: "windowtools",
-            summary: "Printable label for the left-half shortcut.", fallback: .string("⌃⌥←")),
-        SettingDefinition(
-            AppStorageKeys.WindowTools.rightHotKeyCode, .int, group: "windowtools",
-            summary: "Virtual key code of the right-half shortcut.", fallback: .int(124)),
-        SettingDefinition(
-            AppStorageKeys.WindowTools.rightHotKeyMods, .int, group: "windowtools",
-            summary: "Carbon modifier mask of the right-half shortcut.", fallback: .int(6144)),
-        SettingDefinition(
-            AppStorageKeys.WindowTools.rightHotKeyLabel, .string, group: "windowtools",
-            summary: "Printable label for the right-half shortcut.", fallback: .string("⌃⌥→")),
-        SettingDefinition(
-            AppStorageKeys.WindowTools.maximizeHotKeyCode, .int, group: "windowtools",
-            summary: "Virtual key code of the maximize shortcut.", fallback: .int(46)),
-        SettingDefinition(
-            AppStorageKeys.WindowTools.maximizeHotKeyMods, .int, group: "windowtools",
-            summary: "Carbon modifier mask of the maximize shortcut.", fallback: .int(6144)),
-        SettingDefinition(
-            AppStorageKeys.WindowTools.maximizeHotKeyLabel, .string, group: "windowtools",
-            summary: "Printable label for the maximize shortcut.", fallback: .string("⌃⌥M")),
-        SettingDefinition(
-            AppStorageKeys.WindowTools.restoreHotKeyCode, .int, group: "windowtools",
-            summary: "Virtual key code of the restore shortcut.", fallback: .int(15)),
-        SettingDefinition(
-            AppStorageKeys.WindowTools.restoreHotKeyMods, .int, group: "windowtools",
-            summary: "Carbon modifier mask of the restore shortcut.", fallback: .int(6144)),
-        SettingDefinition(
-            AppStorageKeys.WindowTools.restoreHotKeyLabel, .string, group: "windowtools",
-            summary: "Printable label for the restore shortcut.", fallback: .string("⌃⌥R")),
     ]
 
     private static let presenter: [SettingDefinition] = [

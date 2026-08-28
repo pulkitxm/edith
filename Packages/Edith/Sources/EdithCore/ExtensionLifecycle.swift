@@ -336,56 +336,6 @@ public enum ExtensionLifecycleCatalog {
                     "ed apps ls --json")
             ]),
         descriptor(
-            "appMaintenance",
-            "Review installed applications, available Homebrew updates and exact support files.",
-            workflows: [
-                instruction(
-                    "inventory", "Review installed apps",
-                    "See versions and Homebrew update status for regular Applications folders."),
-                instruction(
-                    "remove", "Remove an app safely",
-                    "Choose exact bundle-identifier matches and move only the selection to Trash."),
-                instruction(
-                    "install", "Install a disk image safely",
-                    "Verify the single app in a disk image, stage it, install it and clean up recoverably."
-                ),
-            ],
-            prerequisites: [
-                instruction(
-                    "access", "Use regular Applications folders",
-                    "User-owned apps need no extra access. macOS may refuse protected or administrator-owned items."
-                )
-            ],
-            examples: [
-                "ed extensions enable appMaintenance", "ed maintenance inventory --json",
-                "ed maintenance scan /Applications/Example.app --json",
-                "ed maintenance install ~/Downloads/Example.dmg --json",
-            ],
-            docs: [
-                documentation(
-                    "guide", "App Maintenance guide", "docs/app-maintenance.md")
-            ],
-            recovery: [
-                instruction(
-                    "rescan", "Rescan a changed app",
-                    "Build a fresh removal plan when an app changes after review.",
-                    "ed maintenance scan /Applications/Example.app"),
-                instruction(
-                    "image", "Retry a changed disk image",
-                    "Choose the download again, review it and explicitly retry installation.",
-                    "ed maintenance install ~/Downloads/Example.dmg --yes"),
-            ],
-            verification: [
-                instruction(
-                    "inventory", "List installed apps",
-                    "Confirm the Applications folders and optional Homebrew status are readable.",
-                    "ed maintenance inventory --json"),
-                instruction(
-                    "installer", "Review an installer",
-                    "Mount, verify, preview and eject a single-app disk image without installing it.",
-                    "ed maintenance install ~/Downloads/Example.dmg --json"),
-            ]),
-        descriptor(
             "machines", "Operate SSH computers, files, services and containers from Edith.",
             workflows: [
                 instruction(
@@ -441,14 +391,11 @@ public enum ExtensionLifecycleCatalog {
                     "ed companion status --json")
             ]),
         descriptor(
-            "systemStats", "Monitor system pressure and throughput without opening a window.",
+            "systemStats", "Keep current CPU and memory pressure visible in the menu bar.",
             workflows: [
                 instruction(
                     "glance", "Monitor the Mac",
-                    "Watch CPU and memory in the menu bar, with full metrics one click away."),
-                instruction(
-                    "alerts", "Catch sustained pressure",
-                    "Notify after CPU, memory, storage, or battery pressure persists."),
+                    "Watch live CPU and memory without opening a window.")
             ],
             prerequisites: [
                 instruction(
@@ -465,8 +412,7 @@ public enum ExtensionLifecycleCatalog {
             ],
             verification: [
                 instruction(
-                    "sample", "Sample metrics",
-                    "Confirm every available metric family can be read.",
+                    "sample", "Sample metrics", "Confirm CPU and memory data can be read.",
                     "ed system stats --json")
             ]),
         descriptor(
@@ -644,43 +590,6 @@ public enum ExtensionLifecycleCatalog {
                     "ed clipboard ls --json")
             ]),
         descriptor(
-            "finderTools", "Make Finder file operations faster without replacing Finder.",
-            workflows: [
-                instruction(
-                    "shortcuts", "Use Finder shortcuts",
-                    "Move files with Command-X and Command-V, rename with F2, and paste images as PNG files."
-                ),
-                instruction(
-                    "install", "Install from disk images",
-                    "Install the single verified app on a mounted DMG, then eject and trash the download."
-                ),
-            ],
-            prerequisites: [
-                instruction(
-                    "access", "Grant Accessibility",
-                    "Accessibility lets Edith handle Finder-only keyboard shortcuts.",
-                    "ed permissions request accessibility")
-            ],
-            examples: [
-                "ed extensions enable finderTools",
-                "ed config ls --group findertools --json",
-            ],
-            docs: [
-                documentation("guide", "Finder Tools guide", "docs/cli/finder-tools/README.md")
-            ],
-            recovery: [
-                instruction(
-                    "doctor", "Check Finder Tools readiness",
-                    "Inspect the helper, permissions, and enabled Finder features.",
-                    "ed extensions doctor finderTools --json")
-            ],
-            verification: [
-                instruction(
-                    "status", "Inspect Finder Tools",
-                    "Confirm the helper and selected features are ready.",
-                    "ed extensions status finderTools --json")
-            ]),
-        descriptor(
             "focusDim", "Reduce visual noise by dimming everything behind the active app.",
             workflows: [
                 instruction(
@@ -811,41 +720,6 @@ public enum ExtensionLifecycleCatalog {
                 instruction(
                     "history", "Read sampled colors",
                     "Confirm the color history repository responds.", "ed color ls --json")
-            ]),
-        descriptor(
-            "windowTools", "Arrange the active window quickly while staying in the current Space.",
-            workflows: [
-                instruction(
-                    "arrange", "Arrange a window",
-                    "Use a shortcut, settings control, or command to place the active window."),
-                instruction(
-                    "maximize", "Maximize without a Space",
-                    "Make the green button fill the usable display and click it again to restore."),
-            ],
-            prerequisites: [
-                instruction(
-                    "permission", "Grant Accessibility",
-                    "Accessibility lets Edith read and move the active window.",
-                    "ed permissions request accessibility")
-            ],
-            examples: [
-                "ed extensions enable windowTools", "ed window left-half --json",
-                "ed window restore",
-            ],
-            docs: [
-                documentation("guide", "Window Tools guide", "docs/cli/window/README.md")
-            ],
-            recovery: [
-                instruction(
-                    "permission", "Refresh Accessibility",
-                    "Refresh the mirrored grant after changing System Settings.",
-                    "ed permissions refresh")
-            ],
-            verification: [
-                instruction(
-                    "config", "Inspect Window Tools settings",
-                    "Confirm the extension, green button, and shortcuts are configured.",
-                    "ed config ls --group windowtools --json")
             ]),
     ]
 
