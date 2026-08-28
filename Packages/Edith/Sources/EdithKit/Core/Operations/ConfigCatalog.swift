@@ -58,7 +58,8 @@ public enum ConfigCatalog {
         appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
         + system + cleaner
-        + music + calendar + clipboard + notch + focusDim + presenter + colorPicker + emoji
+        + music + calendar + clipboard + notch + focusDim + presenter + colorPicker
+        + emoji
         + micMute
         + backup + permissions + terminal
 
