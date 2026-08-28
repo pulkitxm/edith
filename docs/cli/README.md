@@ -68,7 +68,6 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed tools`](./tools/README.md) | The command line tools Edith can install for you |
 | [`ed shelf`](./shelf/README.md) | The notch shelf's staged files |
 | [`ed cleaner`](./cleaner/README.md) | Scanning and reclaiming disk space |
-| [`ed maintenance`](./maintenance/README.md) | Verified app installs, updates, inventory, and review-first removal |
 | [`ed companion`](./companion/README.md) | Local memory health, status, Markdown ingest and episodes |
 
 ## Other machines

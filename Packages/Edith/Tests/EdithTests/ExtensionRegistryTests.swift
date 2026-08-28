@@ -12,7 +12,6 @@ import Testing
         "tabHerdrEnabled",
         "tabQuinjetEnabled",
         "tabSystemEnabled",
-        "appMaintenanceEnabled",
         "tabMachinesEnabled",
         "tabCompanionEnabled",
         "menuBarSystemStats",
@@ -144,7 +143,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard", "appMaintenance",
+                "clipboard",
             ])
     }
 
@@ -226,7 +225,6 @@ import Testing
             "herdr": [],
             "quinjet": [],
             "system": [],
-            "appMaintenance": [],
             "machines": [],
             "companion": [],
             "systemStats": [],
@@ -249,7 +247,6 @@ import Testing
             "herdr": [],
             "quinjet": [],
             "system": [.accessibility, .inputMonitoring],
-            "appMaintenance": [],
             "machines": [.notifications],
             "companion": [],
             "systemStats": [.notifications],

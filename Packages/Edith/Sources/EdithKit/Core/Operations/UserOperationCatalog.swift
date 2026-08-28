@@ -141,9 +141,6 @@ public enum UserOperationCatalog {
         + CleanerOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + AppMaintenanceOperation.allCases.map {
-            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
-        }
         + WorkspaceOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -1236,27 +1233,6 @@ private extension CleanerOperation {
                     surface: "Cleaner card", action: "clean one category",
                     exampleArguments: ["--category", "npm", "--yes"]),
             ])
-        }
-    }
-}
-
-private extension AppMaintenanceOperation {
-    var interfaceExposure: UserOperationExposure {
-        switch self {
-        case .inventory:
-            userInterface("App Maintenance", "list installed applications and updates")
-        case .scan:
-            userInterface(
-                "App Maintenance", "review exact support files",
-                ["/Applications/Example.app"])
-        case .remove:
-            userInterface(
-                "App Maintenance", "move selected reviewed items to the Trash",
-                ["/Applications/Example.app", "--yes"])
-        case .install:
-            userInterface(
-                "App Maintenance", "verify and install one app from a disk image",
-                ["~/Downloads/Example.dmg", "--yes"])
         }
     }
 }
