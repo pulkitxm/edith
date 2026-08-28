@@ -65,8 +65,8 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
-        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "colorPicker", "mouseControls",
+        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "mouseControls", "focusDim",
+        "presenter", "colorPicker",
     ]
 
     public static func provider(
