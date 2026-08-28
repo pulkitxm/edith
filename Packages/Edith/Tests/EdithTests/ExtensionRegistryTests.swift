@@ -245,7 +245,7 @@ import Testing
             "system": [.accessibility, .inputMonitoring],
             "machines": [.notifications],
             "companion": [],
-            "systemStats": [.notifications],
+            "systemStats": [],
             "micMute": [],
             "lidAwake": [],
             "music": [],

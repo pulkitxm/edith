@@ -391,14 +391,11 @@ public enum ExtensionLifecycleCatalog {
                     "ed companion status --json")
             ]),
         descriptor(
-            "systemStats", "Monitor system pressure and throughput without opening a window.",
+            "systemStats", "Keep current CPU and memory pressure visible in the menu bar.",
             workflows: [
                 instruction(
                     "glance", "Monitor the Mac",
-                    "Watch CPU and memory in the menu bar, with full metrics one click away."),
-                instruction(
-                    "alerts", "Catch sustained pressure",
-                    "Notify after CPU, memory, storage, or battery pressure persists."),
+                    "Watch live CPU and memory without opening a window.")
             ],
             prerequisites: [
                 instruction(
@@ -415,8 +412,7 @@ public enum ExtensionLifecycleCatalog {
             ],
             verification: [
                 instruction(
-                    "sample", "Sample metrics",
-                    "Confirm every available metric family can be read.",
+                    "sample", "Sample metrics", "Confirm CPU and memory data can be read.",
                     "ed system stats --json")
             ]),
         descriptor(

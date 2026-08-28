@@ -212,13 +212,15 @@ struct ExtensionPreview: View {
         let percentages = [38, 47, 62, 54]
         let percentageIndex = min(Int(progress * Double(percentages.count)), percentages.count - 1)
         let percentage = percentages[percentageIndex]
-        return VStack(spacing: UIScale.pt(7)) {
-            HStack(spacing: UIScale.pt(9)) {
-                previewMetric("CPU", "\(percentage)%")
-                previewMetric("GPU", "42%")
-                previewMetric("NET", "1.4M")
-                previewMetric("BAT", "84%")
-            }
+        return HStack(spacing: UIScale.pt(10)) {
+            Text("CPU")
+                .font(DashSkin.mono(7, weight: .semibold))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+            Text("\(percentage)%")
+                .font(DashSkin.mono(10, weight: .semibold))
+                .foregroundStyle(DashSkin.ink(dark))
+                .contentTransition(.numericText())
+                .animation(.easeOut(duration: 0.28), value: percentage)
             HStack(alignment: .bottom, spacing: UIScale.pt(3)) {
                 ForEach(0..<6) { index in
                     let wave = sin(
@@ -235,17 +237,6 @@ struct ExtensionPreview: View {
         }
         .padding(.horizontal, UIScale.pt(13))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func previewMetric(_ label: String, _ value: String) -> some View {
-        VStack(spacing: UIScale.pt(1)) {
-            Text(label)
-                .font(DashSkin.mono(6, weight: .semibold))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            Text(value)
-                .font(DashSkin.mono(8, weight: .semibold))
-                .foregroundStyle(DashSkin.ink(dark))
-        }
     }
 
     private func micMutePreview(phase: Double) -> some View {

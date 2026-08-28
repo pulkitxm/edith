@@ -1707,16 +1707,6 @@ private struct SystemStatsRows: View {
     @AppStorage(AppStorageKeys.MenuBar.statsColorHex, store: SharedDefaults.store) private
         var statsColorHex =
         "FFFFFF"
-    @AppStorage(AppStorageKeys.MenuBar.statsAlerts, store: SharedDefaults.store) private
-        var alerts = false
-    @AppStorage(AppStorageKeys.MenuBar.statsCPUThreshold, store: SharedDefaults.store) private
-        var cpuThreshold = 90.0
-    @AppStorage(AppStorageKeys.MenuBar.statsMemoryThreshold, store: SharedDefaults.store) private
-        var memoryThreshold = 90.0
-    @AppStorage(AppStorageKeys.MenuBar.statsDiskThreshold, store: SharedDefaults.store) private
-        var diskThreshold = 90.0
-    @AppStorage(AppStorageKeys.MenuBar.statsBatteryThreshold, store: SharedDefaults.store) private
-        var batteryThreshold = 20.0
 
     var body: some View {
         Section {
@@ -1730,46 +1720,11 @@ private struct SystemStatsRows: View {
                             $0.hex6
                     }),
                 supportsOpacity: false)
-            Toggle(
-                "Sustained alerts",
-                isOn: $alerts.configured(AppStorageKeys.MenuBar.statsAlerts))
-            if alerts {
-                thresholdRow(
-                    "CPU",
-                    value: $cpuThreshold.configured(
-                        AppStorageKeys.MenuBar.statsCPUThreshold))
-                thresholdRow(
-                    "Memory",
-                    value: $memoryThreshold.configured(
-                        AppStorageKeys.MenuBar.statsMemoryThreshold))
-                thresholdRow(
-                    "Startup disk",
-                    value: $diskThreshold.configured(
-                        AppStorageKeys.MenuBar.statsDiskThreshold))
-                thresholdRow(
-                    "Low battery",
-                    value: $batteryThreshold.configured(
-                        AppStorageKeys.MenuBar.statsBatteryThreshold), range: 5...50)
-            }
-            Text(
-                "CPU, memory, network, and disk throughput update every 2 seconds. GPU updates every 10 seconds; battery and capacity every 30 seconds. Alerts require 12 seconds of sustained pressure."
-            )
-            .settingsCaption()
+            Text("Sampled every couple of seconds; costs nothing measurable.")
+                .settingsCaption()
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
-    }
-
-    private func thresholdRow(
-        _ label: String, value: Binding<Double>, range: ClosedRange<Double> = 50...100
-    ) -> some View {
-        HStack {
-            Text(label)
-            Slider(value: value, in: range, step: 5)
-            Text("\(Int(value.wrappedValue))%")
-                .monospacedDigit()
-                .frame(width: UIScale.pt(40), alignment: .trailing)
-        }
     }
 }
 
