@@ -148,6 +148,24 @@ import Testing
         #expect(power["watts"] == .double(12.5))
     }
 
+    @Test func systemStatsCommandPublishesTheMonitorContract() async {
+        let result = await CLIProbe.run(["system", "stats", "--json"])
+        let monitor = result.object?["monitor"] as? [String: Any]
+        let network = monitor?["network"] as? [String: Any]
+        let disk = monitor?["disk"] as? [String: Any]
+
+        #expect(result.code == 0)
+        #expect(monitor?["cpuPercent"] is Double)
+        #expect(monitor?["memoryPercent"] is Double)
+        #expect(monitor?.keys.contains("gpuPercent") == true)
+        #expect(network?["downloadBps"] is Double)
+        #expect(network?["uploadBps"] is Double)
+        #expect(disk?["readBps"] is Double)
+        #expect(disk?["writeBps"] is Double)
+        #expect(disk?.keys.contains("rootUsedPercent") == true)
+        #expect(monitor?.keys.contains("power") == true)
+    }
+
     @Test func dockerAvailabilityIsReportedAsAState() {
         #expect(
             MachineReports.availability(DockerAvailability(status: .missing))
