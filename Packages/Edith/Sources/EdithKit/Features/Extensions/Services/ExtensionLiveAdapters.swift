@@ -112,11 +112,20 @@ public enum ExtensionLiveAdapters {
     }
 
     static func finderToolsReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
-        let keys = [
+        let shortcutKeys = [
             AppStorageKeys.FinderTools.cutPaste, AppStorageKeys.FinderTools.rename,
-            AppStorageKeys.FinderTools.pasteImages, AppStorageKeys.FinderTools.diskImageInstaller,
+            AppStorageKeys.FinderTools.pasteImages,
         ]
+        let keys = shortcutKeys + [AppStorageKeys.FinderTools.diskImageInstaller]
         let enabled = keys.filter { defaults.object(forKey: $0) as? Bool ?? true }
+        let shortcutsEnabled = shortcutKeys.contains {
+            defaults.object(forKey: $0) as? Bool ?? true
+        }
+        if shortcutsEnabled,
+            !defaults.bool(forKey: AppStorageKeys.Permissions.accessibilityGranted)
+        {
+            return .needsSetup("Grant Accessibility to use Finder keyboard shortcuts.")
+        }
         return ExtensionAdapterFacts(
             configured: !enabled.isEmpty,
             readyDetail: "Finder Tools features enabled: \(enabled.count).",

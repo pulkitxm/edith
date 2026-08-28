@@ -56,6 +56,7 @@ import EdithCore
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
 
+        defaults.set(true, forKey: AppStorageKeys.Permissions.accessibilityGranted)
         #expect(
             ExtensionLiveAdapters.finderToolsReadiness(defaults: defaults)
                 == .ready("Finder Tools features enabled: 4."))
@@ -68,6 +69,17 @@ import EdithCore
         #expect(
             ExtensionLiveAdapters.finderToolsReadiness(defaults: defaults)
                 == .needsSetup("Turn on at least one Finder Tools feature."))
+
+        defaults.set(true, forKey: AppStorageKeys.FinderTools.diskImageInstaller)
+        defaults.set(false, forKey: AppStorageKeys.Permissions.accessibilityGranted)
+        #expect(
+            ExtensionLiveAdapters.finderToolsReadiness(defaults: defaults)
+                == .ready("Finder Tools features enabled: 1."))
+
+        defaults.set(true, forKey: AppStorageKeys.FinderTools.rename)
+        #expect(
+            ExtensionLiveAdapters.finderToolsReadiness(defaults: defaults)
+                == .needsSetup("Grant Accessibility to use Finder keyboard shortcuts."))
     }
 
     @Test func usageDetectsMissingLoadingEmptyReadyAndCorruptData() throws {

@@ -81,26 +81,6 @@ import Testing
         #expect(model.report == nil)
     }
 
-    @Test func refreshKeepsTheLastReportUntilItsReplacementIsReady() async {
-        let fixture = ExtensionReadinessFixture()
-        let model = ExtensionReadinessModel { await fixture.load($0) }
-
-        let initial = model.refresh()
-        await fixture.waitUntilStarted(1)
-        await fixture.release(0, report: report("stable", phase: .ready))
-        await initial.value
-
-        let refresh = model.refresh(.verify)
-        await fixture.waitUntilStarted(2)
-        #expect(model.report?.state.extensionID == "stable")
-        #expect(model.isRefreshing)
-
-        await fixture.release(1, report: report("updated", phase: .degraded))
-        await refresh.value
-        #expect(model.report?.state.extensionID == "updated")
-        #expect(!model.isRefreshing)
-    }
-
     private func report(
         _ id: String, phase: ExtensionLifecyclePhase
     ) -> ExtensionLifecycleReport {

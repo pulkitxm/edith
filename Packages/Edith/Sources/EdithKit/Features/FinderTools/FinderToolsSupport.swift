@@ -13,6 +13,12 @@ public enum FinderToolsImageType: Equatable, Sendable {
     }
 }
 
+public enum FinderToolsMoveOutcome: Equatable, Sendable {
+    case completed
+    case reverted
+    case incomplete
+}
+
 public enum FinderToolsSupport {
     public static func enabled(
         _ key: String, defaults: UserDefaults = SharedDefaults.store, fallback: Bool = true
@@ -33,7 +39,58 @@ public enum FinderToolsSupport {
 
     public static func focusedRoleAllowsRename(_ role: String?) -> Bool {
         guard let role else { return false }
-        return !["AXTextField", "AXTextArea", "AXComboBox", "AXSecureTextField"].contains(role)
+        return ["AXBrowser", "AXGrid", "AXList", "AXOutline", "AXTable"].contains(role)
+    }
+
+    public static func focusedRoleIsEditable(_ role: String?) -> Bool {
+        guard let role else { return false }
+        return ["AXTextField", "AXTextArea", "AXComboBox", "AXSecureTextField"].contains(role)
+    }
+
+    public static func imageDimensionsAreSafe(
+        width: Int, height: Int, maxDimension: Int = 16_384, maxPixels: Int = 40_000_000
+    ) -> Bool {
+        guard width > 0, height > 0, width <= maxDimension, height <= maxDimension,
+            maxPixels > 0
+        else { return false }
+        return width <= maxPixels / height
+    }
+
+    public static func codeSignatureFingerprint(in output: String) -> String? {
+        let value = output.split(whereSeparator: \Character.isNewline).first { line in
+            line.hasPrefix("CDHash=")
+        }?.dropFirst("CDHash=".count)
+        guard let value else { return nil }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let hexadecimal = CharacterSet(charactersIn: "0123456789abcdef")
+        guard normalized.count >= 40,
+            normalized.unicodeScalars.allSatisfy({ hexadecimal.contains($0) })
+        else { return nil }
+        return normalized
+    }
+
+    public static func move(
+        _ pairs: [(source: URL, destination: URL)],
+        using moveItem: (URL, URL) throws -> Void
+    ) -> FinderToolsMoveOutcome {
+        var moved: [(source: URL, destination: URL)] = []
+        do {
+            for pair in pairs where pair.source != pair.destination {
+                try moveItem(pair.source, pair.destination)
+                moved.append(pair)
+            }
+            return .completed
+        } catch {
+            var rollbackFailed = false
+            for pair in moved.reversed() {
+                do {
+                    try moveItem(pair.destination, pair.source)
+                } catch {
+                    rollbackFailed = true
+                }
+            }
+            return rollbackFailed ? .incomplete : .reverted
+        }
     }
 
     public static func imageFileName(at date: Date, calendar: Calendar = .current) -> String {

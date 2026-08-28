@@ -4,6 +4,7 @@ import CoreGraphics
 import Darwin
 import EdithKit
 import Foundation
+import ImageIO
 
 @MainActor
 final class FinderToolsService {
@@ -68,6 +69,7 @@ private final class FinderShortcutService: @unchecked Sendable {
     private var stopping = false
     private var cutURLs: [URL] = []
     private var cutChangeCount = 0
+    private var cutRequestGeneration = 0
     private var moving = false
     private var savingImage = false
     private var cutPasteEnabled = true
@@ -75,6 +77,8 @@ private final class FinderShortcutService: @unchecked Sendable {
     private var pasteImagesEnabled = true
     private static let finderID = "com.apple.finder"
     private static let maxImageBytes = 64 * 1_024 * 1_024
+    private static let imageQueue = DispatchQueue(
+        label: "com.pulkit.edith.finder-tools.images", qos: .userInitiated)
 
     init() {
         syncSettings()
@@ -190,6 +194,7 @@ private final class FinderShortcutService: @unchecked Sendable {
             && !flags.contains(.maskCommand) && !flags.contains(.maskControl)
             && !flags.contains(.maskAlternate) && !flags.contains(.maskShift)
         guard commandCandidate || renameCandidate else { return Unmanaged.passUnretained(event) }
+        guard event.getIntegerValueField(.keyboardEventAutorepeat) == 0 else { return nil }
 
         var result = Route.pass
         DispatchQueue.main.sync { result = handle(keyCode: keyCode) }
@@ -249,9 +254,21 @@ private final class FinderShortcutService: @unchecked Sendable {
     }
 
     private func captureCut() {
+        cutRequestGeneration &+= 1
+        let generation = cutRequestGeneration
+        let invocationChangeCount = NSPasteboard.general.changeCount
+        let finderProcessID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        let startedAt = DispatchTime.now().uptimeNanoseconds
         FinderToolsBridge.selection { [weak self] urls in
             guard let self else { return }
             DispatchQueue.main.async {
+                let elapsed = DispatchTime.now().uptimeNanoseconds - startedAt
+                guard self.cutRequestGeneration == generation,
+                    NSPasteboard.general.changeCount == invocationChangeCount,
+                    NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Self.finderID,
+                    NSWorkspace.shared.frontmostApplication?.processIdentifier == finderProcessID,
+                    elapsed <= 1_000_000_000
+                else { return }
                 guard !urls.isEmpty else {
                     self.clearCut()
                     NSSound.beep()
@@ -272,7 +289,7 @@ private final class FinderShortcutService: @unchecked Sendable {
         FinderToolsBridge.insertionLocation { [weak self] directory in
             guard let self else { return }
             guard let directory else {
-                DispatchQueue.main.async { self.finishMove(failed: true) }
+                DispatchQueue.main.async { self.finishMove(.reverted) }
                 return
             }
             DispatchQueue.global(qos: .userInitiated).async {
@@ -284,27 +301,28 @@ private final class FinderShortcutService: @unchecked Sendable {
                 guard destinations.count == sources.count,
                     Set(destinations.map(\.path)).count == destinations.count
                 else {
-                    DispatchQueue.main.async { self.finishMove(failed: true) }
+                    DispatchQueue.main.async { self.finishMove(.reverted) }
                     return
                 }
-                var failed = false
-                for (source, destination) in zip(sources, destinations) {
-                    if destination == source { continue }
-                    do {
-                        try fileManager.moveItem(at: source, to: destination)
-                    } catch {
-                        failed = true
-                    }
+                let outcome = FinderToolsSupport.move(Array(zip(sources, destinations))) {
+                    try fileManager.moveItem(at: $0, to: $1)
                 }
-                DispatchQueue.main.async { self.finishMove(failed: failed) }
+                DispatchQueue.main.async { self.finishMove(outcome) }
             }
         }
     }
 
-    private func finishMove(failed: Bool) {
+    private func finishMove(_ outcome: FinderToolsMoveOutcome) {
         moving = false
-        clearCut()
-        if failed { NSSound.beep() }
+        switch outcome {
+        case .completed:
+            clearCut()
+        case .reverted:
+            NSSound.beep()
+        case .incomplete:
+            clearCut()
+            NSSound.beep()
+        }
     }
 
     private func saveClipboardImage() {
@@ -313,35 +331,56 @@ private final class FinderShortcutService: @unchecked Sendable {
         let identifiers = (pasteboard.types ?? []).map(\.rawValue)
         guard let type = FinderToolsSupport.preferredImageType(in: identifiers),
             let source = pasteboard.data(forType: NSPasteboard.PasteboardType(type.identifier)),
-            source.count <= Self.maxImageBytes,
-            let representation = NSBitmapImageRep(data: source),
-            let png = type == .png
-                ? source : representation.representation(using: .png, properties: [:]),
-            png.count <= Self.maxImageBytes
+            source.count <= Self.maxImageBytes
         else {
             savingImage = false
             NSSound.beep()
             return
         }
-        FinderToolsBridge.insertionLocation { [weak self] directory in
+        Self.imageQueue.async { [weak self] in
             guard let self else { return }
-            DispatchQueue.global(qos: .userInitiated).async {
-                guard let directory else {
-                    DispatchQueue.main.async { self.finishImageSave(failed: true) }
-                    return
-                }
-                let manager = FileManager.default
-                let name = FinderToolsSupport.imageFileName(at: Date())
-                let destination = FinderToolsSupport.uniqueImageURL(
-                    named: name, in: directory, fileExists: manager.fileExists(atPath:))
-                do {
-                    try png.write(to: destination, options: [.atomic, .withoutOverwriting])
-                    DispatchQueue.main.async { self.finishImageSave(failed: false) }
-                } catch {
-                    DispatchQueue.main.async { self.finishImageSave(failed: true) }
+            guard let png = Self.preparedPNGData(source, type: type) else {
+                DispatchQueue.main.async { self.finishImageSave(failed: true) }
+                return
+            }
+            FinderToolsBridge.insertionLocation { [weak self] directory in
+                guard let self else { return }
+                Self.imageQueue.async {
+                    guard let directory else {
+                        DispatchQueue.main.async { self.finishImageSave(failed: true) }
+                        return
+                    }
+                    let manager = FileManager.default
+                    let name = FinderToolsSupport.imageFileName(at: Date())
+                    let destination = FinderToolsSupport.uniqueImageURL(
+                        named: name, in: directory, fileExists: manager.fileExists(atPath:))
+                    do {
+                        try png.write(to: destination, options: [.atomic, .withoutOverwriting])
+                        DispatchQueue.main.async { self.finishImageSave(failed: false) }
+                    } catch {
+                        DispatchQueue.main.async { self.finishImageSave(failed: true) }
+                    }
                 }
             }
         }
+    }
+
+    private static func preparedPNGData(
+        _ source: Data, type: FinderToolsImageType
+    ) -> Data? {
+        guard let imageSource = CGImageSourceCreateWithData(source as CFData, nil),
+            let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil)
+                as? [CFString: Any],
+            let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
+            let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue,
+            FinderToolsSupport.imageDimensionsAreSafe(width: width, height: height)
+        else { return nil }
+        if type == .png { return source }
+        guard let representation = NSBitmapImageRep(data: source),
+            let png = representation.representation(using: .png, properties: [:]),
+            png.count <= Self.maxImageBytes
+        else { return nil }
+        return png
     }
 
     private func finishImageSave(failed: Bool) {
@@ -350,13 +389,13 @@ private final class FinderShortcutService: @unchecked Sendable {
     }
 
     private func clearCut() {
+        cutRequestGeneration &+= 1
         cutURLs = []
         cutChangeCount = 0
     }
 
     private func focusedElementIsEditable() -> Bool {
-        guard let role = focusedElementRole() else { return false }
-        return !FinderToolsSupport.focusedRoleAllowsRename(role)
+        FinderToolsSupport.focusedRoleIsEditable(focusedElementRole())
     }
 
     private func focusedElementRole() -> String? {
@@ -427,8 +466,10 @@ private final class DiskImageAppInstaller {
     private struct Candidate: Sendable {
         let mount: URL
         let application: URL
+        let applicationIdentity: FileIdentity
         let image: URL
         let imageIdentity: FileIdentity
+        let signature: String
         let destination: URL
         let name: String
     }
@@ -448,6 +489,7 @@ private final class DiskImageAppInstaller {
     private struct CommandResult: Sendable {
         let status: Int32
         let output: Data
+        let error: Data
     }
 
     private let queue = DispatchQueue(label: "com.pulkit.edith.disk-image-installer", qos: .utility)
@@ -565,6 +607,8 @@ private final class DiskImageAppInstaller {
             return validApplication(url)
         }
         guard applications.count == 1, let application = applications.first,
+            let applicationIdentity = fileIdentity(application, expectedType: S_IFDIR),
+            let signature = verifiedSignature(application),
             let destination = FinderToolsSupport.applicationDestination(
                 for: application,
                 applicationsDirectory: URL(fileURLWithPath: "/Applications", isDirectory: true)),
@@ -574,13 +618,18 @@ private final class DiskImageAppInstaller {
             Bundle(url: application)?.object(
                 forInfoDictionaryKey: "CFBundleDisplayName") as? String
         return Candidate(
-            mount: mount, application: application, image: image, imageIdentity: identity,
-            destination: destination,
+            mount: mount, application: application, applicationIdentity: applicationIdentity,
+            image: image, imageIdentity: identity, signature: signature, destination: destination,
             name: FinderToolsSupport.displayName(preferred: preferred, application: application))
     }
 
     nonisolated private static func install(_ candidate: Candidate) -> Outcome {
         let manager = FileManager.default
+        guard candidateIsCurrent(candidate) else {
+            return .failed(
+                "The mounted disk image or its app changed while Edith was waiting. Nothing was installed."
+            )
+        }
         guard !manager.fileExists(atPath: candidate.destination.path) else {
             return .failed(
                 "An app with this name already exists in Applications. Edith did not replace it.")
@@ -602,7 +651,7 @@ private final class DiskImageAppInstaller {
         guard copied.status == 0, validApplication(staged) else {
             return .failed("The app could not be copied from the disk image.")
         }
-        guard gatekeeperAccepts(staged) else {
+        guard verifiedSignature(staged) == candidate.signature else {
             return .failed("macOS could not verify this app, so Edith left it on the disk image.")
         }
         do {
@@ -613,6 +662,7 @@ private final class DiskImageAppInstaller {
         } catch {
             return .failed("The verified app could not be placed in Applications.")
         }
+        guard mountedImageMatches(candidate) else { return .installedKeepingMount }
         do {
             try NSWorkspace.shared.unmountAndEjectDevice(at: candidate.mount)
         } catch {
@@ -644,19 +694,49 @@ private final class DiskImageAppInstaller {
             ).status == 0
         else { return false }
         let status = run("/usr/sbin/spctl", ["--status"], timeout: 10)
-        if String(data: status.output, encoding: .utf8)?.localizedCaseInsensitiveContains(
-            "disabled") == true
-        {
+        let statusText = String(decoding: status.output + status.error, as: UTF8.self)
+        if statusText.localizedCaseInsensitiveContains("disabled") {
             return true
         }
         return run("/usr/sbin/spctl", ["-a", "-t", "exec", url.path], timeout: 120).status
             == 0
     }
 
-    nonisolated private static func fileIdentity(_ url: URL) -> FileIdentity? {
+    nonisolated private static func verifiedSignature(_ url: URL) -> String? {
+        guard gatekeeperAccepts(url) else { return nil }
+        let result = run("/usr/bin/codesign", ["-d", "--verbose=4", url.path], timeout: 120)
+        guard result.status == 0 else { return nil }
+        return FinderToolsSupport.codeSignatureFingerprint(
+            in: String(decoding: result.output + result.error, as: UTF8.self))
+    }
+
+    nonisolated private static func candidateIsCurrent(_ expected: Candidate) -> Bool {
+        guard let current = candidate(mountedAt: expected.mount) else { return false }
+        return current.mount.standardizedFileURL == expected.mount.standardizedFileURL
+            && current.application.standardizedFileURL == expected.application.standardizedFileURL
+            && current.applicationIdentity == expected.applicationIdentity
+            && current.image.standardizedFileURL == expected.image.standardizedFileURL
+            && current.imageIdentity == expected.imageIdentity
+            && current.signature == expected.signature
+            && current.destination.standardizedFileURL == expected.destination.standardizedFileURL
+    }
+
+    nonisolated private static func mountedImageMatches(_ candidate: Candidate) -> Bool {
+        let info = run("/usr/bin/hdiutil", ["info", "-plist"], timeout: 10)
+        guard info.status == 0,
+            let image = FinderToolsSupport.diskImageURL(
+                mountedAt: candidate.mount, hdiutilInfo: info.output)
+        else { return false }
+        return image.standardizedFileURL == candidate.image.standardizedFileURL
+            && fileIdentity(image) == candidate.imageIdentity
+    }
+
+    nonisolated private static func fileIdentity(
+        _ url: URL, expectedType: mode_t = S_IFREG
+    ) -> FileIdentity? {
         var value = stat()
         guard url.path.withCString({ lstat($0, &value) }) == 0,
-            value.st_mode & S_IFMT == S_IFREG
+            value.st_mode & S_IFMT == expectedType
         else { return nil }
         return FileIdentity(device: UInt64(value.st_dev), inode: UInt64(value.st_ino))
     }
@@ -671,12 +751,13 @@ private final class DiskImageAppInstaller {
                 executableURL: URL(fileURLWithPath: executable), arguments: arguments,
                 timeout: timeout)
             guard !result.timedOut, !result.cancelled else {
-                return CommandResult(status: -1, output: Data())
+                return CommandResult(status: -1, output: Data(), error: Data())
             }
             return CommandResult(
-                status: result.terminationStatus, output: Data(result.standardOutput.utf8))
+                status: result.terminationStatus, output: Data(result.standardOutput.utf8),
+                error: Data(result.standardError.utf8))
         } catch {
-            return CommandResult(status: -1, output: Data())
+            return CommandResult(status: -1, output: Data(), error: Data())
         }
     }
 }

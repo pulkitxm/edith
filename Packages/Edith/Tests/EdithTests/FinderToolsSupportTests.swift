@@ -20,11 +20,46 @@ import Testing
                 == nil)
     }
 
-    @Test func renameRequiresKnownNoneditableFocus() {
-        #expect(FinderToolsSupport.focusedRoleAllowsRename("AXOutline"))
+    @Test func renameRequiresAFileCollectionAndEditingDetectionIsIndependent() {
+        for role in ["AXBrowser", "AXGrid", "AXList", "AXOutline", "AXTable"] {
+            #expect(FinderToolsSupport.focusedRoleAllowsRename(role))
+        }
+        for role in ["AXButton", "AXDialog", "AXGroup", "AXScrollArea", "AXTextField"] {
+            #expect(!FinderToolsSupport.focusedRoleAllowsRename(role))
+        }
         #expect(!FinderToolsSupport.focusedRoleAllowsRename("AXTextField"))
-        #expect(!FinderToolsSupport.focusedRoleAllowsRename("AXTextArea"))
         #expect(!FinderToolsSupport.focusedRoleAllowsRename(nil))
+        #expect(FinderToolsSupport.focusedRoleIsEditable("AXTextField"))
+        #expect(FinderToolsSupport.focusedRoleIsEditable("AXTextArea"))
+        #expect(FinderToolsSupport.focusedRoleIsEditable("AXComboBox"))
+        #expect(FinderToolsSupport.focusedRoleIsEditable("AXSecureTextField"))
+        #expect(!FinderToolsSupport.focusedRoleIsEditable("AXOutline"))
+        #expect(!FinderToolsSupport.focusedRoleIsEditable(nil))
+    }
+
+    @Test func imageDimensionsBoundDecodedMemory() {
+        #expect(FinderToolsSupport.imageDimensionsAreSafe(width: 7_680, height: 4_320))
+        #expect(!FinderToolsSupport.imageDimensionsAreSafe(width: 16_385, height: 1))
+        #expect(!FinderToolsSupport.imageDimensionsAreSafe(width: 10_000, height: 10_000))
+        #expect(!FinderToolsSupport.imageDimensionsAreSafe(width: 0, height: 100))
+        #expect(!FinderToolsSupport.imageDimensionsAreSafe(width: 100, height: -1))
+        #expect(
+            FinderToolsSupport.imageDimensionsAreSafe(
+                width: 20, height: 20, maxDimension: 20, maxPixels: 400))
+    }
+
+    @Test func parsesOnlyValidCodeSignatureFingerprints() {
+        let hash = "0123456789abcdef0123456789abcdef01234567"
+        #expect(
+            FinderToolsSupport.codeSignatureFingerprint(
+                in: "Identifier=com.example.App\nCDHash=\(hash.uppercased())\nTeamIdentifier=ABCDE")
+                == hash)
+        #expect(
+            FinderToolsSupport.codeSignatureFingerprint(in: "Identifier=com.example.App") == nil)
+        #expect(FinderToolsSupport.codeSignatureFingerprint(in: "CDHash=1234") == nil)
+        #expect(
+            FinderToolsSupport.codeSignatureFingerprint(
+                in: "CDHash=0123456789abcdef0123456789abcdef0123456z") == nil)
     }
 
     @Test func createsStableUniqueImageNames() {
@@ -60,6 +95,51 @@ import Testing
                 fileExists: { _ in false }) == nil)
     }
 
+    @Test func fileMovesCompleteOrRollBackInReverseOrder() {
+        struct MoveFailure: Error {}
+        let first = (
+            source: URL(fileURLWithPath: "/source/a"),
+            destination: URL(fileURLWithPath: "/target/a")
+        )
+        let second = (
+            source: URL(fileURLWithPath: "/source/b"),
+            destination: URL(fileURLWithPath: "/target/b")
+        )
+        var operations: [String] = []
+        let outcome = FinderToolsSupport.move([first, second]) { source, destination in
+            operations.append("\(source.path)->\(destination.path)")
+            if source == second.source { throw MoveFailure() }
+        }
+        #expect(outcome == .reverted)
+        #expect(
+            operations == [
+                "/source/a->/target/a", "/source/b->/target/b", "/target/a->/source/a",
+            ])
+
+        operations = []
+        let completed = FinderToolsSupport.move([first, second]) { source, destination in
+            operations.append("\(source.path)->\(destination.path)")
+        }
+        #expect(completed == .completed)
+        #expect(operations.count == 2)
+    }
+
+    @Test func fileMovesReportAnIncompleteRollback() {
+        struct MoveFailure: Error {}
+        let first = (
+            source: URL(fileURLWithPath: "/source/a"),
+            destination: URL(fileURLWithPath: "/target/a")
+        )
+        let second = (
+            source: URL(fileURLWithPath: "/source/b"),
+            destination: URL(fileURLWithPath: "/target/b")
+        )
+        let outcome = FinderToolsSupport.move([first, second]) { source, _ in
+            if source == second.source || source == first.destination { throw MoveFailure() }
+        }
+        #expect(outcome == .incomplete)
+    }
+
     @Test func mapsOnlyOneRealDiskImageToTheMount() throws {
         let root: [String: Any] = [
             "images": [
@@ -78,6 +158,23 @@ import Testing
         #expect(
             FinderToolsSupport.diskImageURL(
                 mountedAt: URL(fileURLWithPath: "/Volumes/Other"), hdiutilInfo: data) == nil)
+
+        let ambiguous = try PropertyListSerialization.data(
+            fromPropertyList: [
+                "images": [
+                    [
+                        "image-path": "/Users/me/Downloads/App.dmg",
+                        "system-entities": [["mount-point": "/Volumes/App"]],
+                    ],
+                    [
+                        "image-path": "/Users/me/Downloads/Other.dmg",
+                        "system-entities": [["mount-point": "/Volumes/App"]],
+                    ],
+                ]
+            ], format: .xml, options: 0)
+        #expect(
+            FinderToolsSupport.diskImageURL(
+                mountedAt: URL(fileURLWithPath: "/Volumes/App"), hdiutilInfo: ambiguous) == nil)
     }
 
     @Test func applicationDestinationsStayInsideApplications() {
