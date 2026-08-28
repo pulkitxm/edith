@@ -135,6 +135,24 @@ public enum WindowLayoutGeometry {
     }
 }
 
+public enum WindowCoordinateGeometry {
+    public static func appKitFrame(
+        fromAccessibility frame: CGRect, menuBarScreenTopY: CGFloat
+    ) -> CGRect {
+        CGRect(
+            x: frame.minX, y: menuBarScreenTopY - frame.maxY, width: frame.width,
+            height: frame.height)
+    }
+
+    public static func accessibilityFrame(
+        fromAppKit frame: CGRect, menuBarScreenTopY: CGFloat
+    ) -> CGRect {
+        CGRect(
+            x: frame.minX, y: menuBarScreenTopY - frame.maxY, width: frame.width,
+            height: frame.height)
+    }
+}
+
 private extension CGRect {
     var alignedToPixels: CGRect {
         let x = minX.rounded()

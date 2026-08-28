@@ -16,13 +16,19 @@ final class WindowToolsEngine: FeatureModule {
 
     private struct GreenTarget {
         let window: AXUIElement
+        let button: AXUIElement
         let origin: CGPoint
+    }
+
+    private struct WindowIdentity: Hashable {
+        let processIdentifier: pid_t
+        let windowNumber: Int
     }
 
     private var activationObserver: NSObjectProtocol?
     private var requestObserver: NSObjectProtocol?
     private var lastExternalApplication: NSRunningApplication?
-    private var history: [UInt: [CGRect]] = [:]
+    private var history = WindowFrameHistory<WindowIdentity>()
     private var eventTap: CFMachPort?
     private var eventSource: CFRunLoopSource?
     private var greenTarget: GreenTarget?
@@ -132,11 +138,12 @@ final class WindowToolsEngine: FeatureModule {
     private func apply(_ action: WindowLayoutAction, to window: AXUIElement) {
         guard let currentAX = frame(of: window) else { return }
         let current = appKitFrame(from: currentAX)
-        let key = CFHash(window)
+        let key = windowIdentity(window)
         if action == .restore {
-            guard var frames = history[key], let previous = frames.popLast() else { return }
-            if frames.isEmpty { history.removeValue(forKey: key) } else { history[key] = frames }
-            _ = setFrame(axFrame(from: previous), on: window)
+            guard let previous = history.last(for: key),
+                setFrame(axFrame(from: previous), on: window)
+            else { return }
+            _ = history.pop(for: key)
             return
         }
         guard let screen = bestScreen(for: current) else { return }
@@ -153,24 +160,32 @@ final class WindowToolsEngine: FeatureModule {
         }
         guard let target, !close(current, target) else { return }
         if setFrame(axFrame(from: target), on: window) {
-            var frames = history[key, default: []]
-            if frames.last.map({ !close($0, current) }) ?? true { frames.append(current) }
-            history[key] = Array(frames.suffix(8))
+            if history.last(for: key).map({ !close($0, current) }) ?? true {
+                history.record(current, for: key)
+            }
         }
     }
 
-    private func toggleMaximize(_ window: AXUIElement) {
-        guard let currentAX = frame(of: window) else { return }
+    private func toggleMaximize(_ window: AXUIElement) -> Bool {
+        guard let currentAX = frame(of: window) else { return false }
         let current = appKitFrame(from: currentAX)
-        let key = CFHash(window)
+        let key = windowIdentity(window)
         if let screen = bestScreen(for: current), close(current, screen.visibleFrame),
-            var frames = history[key], let previous = frames.popLast()
+            let previous = history.last(for: key)
         {
-            if frames.isEmpty { history.removeValue(forKey: key) } else { history[key] = frames }
-            _ = setFrame(axFrame(from: previous), on: window)
-            return
+            guard setFrame(axFrame(from: previous), on: window) else { return false }
+            _ = history.pop(for: key)
+            return true
         }
-        apply(.maximize, to: window)
+        guard let screen = bestScreen(for: current) else { return false }
+        let target = screen.visibleFrame
+        guard !close(current, target), setFrame(axFrame(from: target), on: window) else {
+            return false
+        }
+        if history.last(for: key).map({ !close($0, current) }) ?? true {
+            history.record(current, for: key)
+        }
+        return true
     }
 
     private func startEventTap() {
@@ -217,27 +232,29 @@ final class WindowToolsEngine: FeatureModule {
             guard
                 event.flags.intersection([.maskCommand, .maskControl, .maskAlternate, .maskShift])
                     .isEmpty,
-                let window = greenButtonWindow(at: event.location)
+                let target = greenButtonTarget(at: event.location)
             else {
                 greenTarget = nil
                 return Unmanaged.passUnretained(event)
             }
-            greenTarget = GreenTarget(window: window, origin: event.location)
+            greenTarget = target
             return nil
         }
         if type == .leftMouseUp, let target = greenTarget {
             greenTarget = nil
             let delta = hypot(
                 event.location.x - target.origin.x, event.location.y - target.origin.y)
-            if delta <= 8, CFEqual(target.window, greenButtonWindow(at: event.location)) {
-                toggleMaximize(target.window)
+            if delta <= 8, let fresh = greenButtonTarget(at: event.location),
+                CFEqual(target.window, fresh.window), !toggleMaximize(fresh.window)
+            {
+                AXUIElementPerformAction(fresh.button, kAXPressAction as CFString)
             }
             return nil
         }
         return Unmanaged.passUnretained(event)
     }
 
-    private func greenButtonWindow(at point: CGPoint) -> AXUIElement? {
+    private func greenButtonTarget(at point: CGPoint) -> GreenTarget? {
         let system = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(system, 0.35)
         var hit: AXUIElement?
@@ -245,11 +262,12 @@ final class WindowToolsEngine: FeatureModule {
             AXUIElementCopyElementAtPosition(system, Float(point.x), Float(point.y), &hit)
                 == .success,
             let hit, let window = topLevelWindow(from: hit),
+            !boolAttribute(window, "AXFullScreen", default: false),
             let button = elementAttribute(window, kAXZoomButtonAttribute as String),
             boolAttribute(button, kAXEnabledAttribute as String, default: true),
             let buttonFrame = frame(of: button), buttonFrame.insetBy(dx: -3, dy: -3).contains(point)
         else { return nil }
-        return window
+        return GreenTarget(window: window, button: button, origin: point)
     }
 
     private func topLevelWindow(from element: AXUIElement) -> AXUIElement? {
@@ -257,6 +275,9 @@ final class WindowToolsEngine: FeatureModule {
             return element
         }
         if let window = elementAttribute(element, kAXWindowAttribute as String) { return window }
+        if let window = elementAttribute(element, kAXTopLevelUIElementAttribute as String) {
+            return window
+        }
         var current = element
         for _ in 0..<8 {
             guard let parent = elementAttribute(current, kAXParentAttribute as String) else {
@@ -273,27 +294,24 @@ final class WindowToolsEngine: FeatureModule {
     private func bestScreen(for frame: CGRect) -> NSScreen? {
         NSScreen.screens.max {
             $0.frame.intersection(frame).area < $1.frame.intersection(frame).area
-        }
+        } ?? NSScreen.main ?? NSScreen.screens.first
     }
 
     private func axFrame(from frame: CGRect) -> CGRect {
-        let top = desktopTop(fallback: frame.maxY)
-        return CGRect(x: frame.minX, y: top - frame.maxY, width: frame.width, height: frame.height)
+        WindowCoordinateGeometry.accessibilityFrame(
+            fromAppKit: frame, menuBarScreenTopY: menuBarScreenTopY(fallback: frame.maxY))
     }
 
     private func appKitFrame(from frame: CGRect) -> CGRect {
-        let top = desktopTop(fallback: frame.maxY)
-        return CGRect(x: frame.minX, y: top - frame.maxY, width: frame.width, height: frame.height)
+        WindowCoordinateGeometry.appKitFrame(
+            fromAccessibility: frame, menuBarScreenTopY: menuBarScreenTopY(fallback: frame.maxY))
     }
 
-    private func desktopTop(fallback: CGFloat) -> CGFloat {
-        let screens = NSScreen.screens
-        guard let first = screens.first else { return fallback }
-        var top = first.frame.maxY
-        for screen in screens.dropFirst() {
-            top = max(top, screen.frame.maxY)
+    private func menuBarScreenTopY(fallback: CGFloat) -> CGFloat {
+        let menuBarScreen = NSScreen.screens.first {
+            abs($0.frame.minX) < 0.5 && abs($0.frame.minY) < 0.5
         }
-        return top
+        return (menuBarScreen ?? NSScreen.main ?? NSScreen.screens.first)?.frame.maxY ?? fallback
     }
 
     private func frame(of element: AXUIElement) -> CGRect? {
@@ -305,6 +323,7 @@ final class WindowToolsEngine: FeatureModule {
     }
 
     private func setFrame(_ frame: CGRect, on element: AXUIElement) -> Bool {
+        guard canSetFrame(on: element) else { return false }
         var origin = frame.origin
         var size = frame.size
         guard let originValue = AXValueCreate(.cgPoint, &origin),
@@ -322,12 +341,38 @@ final class WindowToolsEngine: FeatureModule {
         return moved && resized && settled
     }
 
+    private func canSetFrame(on element: AXUIElement) -> Bool {
+        var positionSettable = DarwinBoolean(false)
+        var sizeSettable = DarwinBoolean(false)
+        let positionStatus = AXUIElementIsAttributeSettable(
+            element, kAXPositionAttribute as CFString, &positionSettable)
+        let sizeStatus = AXUIElementIsAttributeSettable(
+            element, kAXSizeAttribute as CFString, &sizeSettable)
+        return positionStatus == .success && sizeStatus == .success && positionSettable.boolValue
+            && sizeSettable.boolValue
+    }
+
     private func elementAttribute(_ element: AXUIElement, _ name: String) -> AXUIElement? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success,
-            let value
+            let value, CFGetTypeID(value) == AXUIElementGetTypeID()
         else { return nil }
         return (value as! AXUIElement)
+    }
+
+    private func windowIdentity(_ window: AXUIElement) -> WindowIdentity {
+        var processIdentifier: pid_t = 0
+        AXUIElementGetPid(window, &processIdentifier)
+        var value: CFTypeRef?
+        let number: Int
+        if AXUIElementCopyAttributeValue(window, "AXWindowNumber" as CFString, &value) == .success,
+            let stored = value as? NSNumber
+        {
+            number = stored.intValue
+        } else {
+            number = Int(CFHash(window))
+        }
+        return WindowIdentity(processIdentifier: processIdentifier, windowNumber: number)
     }
 
     private func stringAttribute(_ element: AXUIElement, _ name: String) -> String? {
@@ -375,6 +420,51 @@ final class WindowToolsEngine: FeatureModule {
 
     private static func isEdith(_ application: NSRunningApplication) -> Bool {
         application.bundleIdentifier?.hasPrefix("com.pulkit.edith") == true
+    }
+}
+
+struct WindowFrameHistory<Key: Hashable> {
+    private var frames: [Key: [CGRect]] = [:]
+    private var order: [Key] = []
+    private let maximumWindows: Int
+    private let maximumFramesPerWindow: Int
+
+    init(maximumWindows: Int = 32, maximumFramesPerWindow: Int = 8) {
+        self.maximumWindows = max(1, maximumWindows)
+        self.maximumFramesPerWindow = max(1, maximumFramesPerWindow)
+    }
+
+    var windowCount: Int { frames.count }
+
+    func last(for key: Key) -> CGRect? {
+        frames[key]?.last
+    }
+
+    mutating func record(_ frame: CGRect, for key: Key) {
+        order.removeAll { $0 == key }
+        order.append(key)
+        var values = frames[key, default: []]
+        values.append(frame)
+        frames[key] = Array(values.suffix(maximumFramesPerWindow))
+        while order.count > maximumWindows {
+            frames.removeValue(forKey: order.removeFirst())
+        }
+    }
+
+    mutating func pop(for key: Key) -> CGRect? {
+        guard var values = frames[key], let frame = values.popLast() else { return nil }
+        if values.isEmpty {
+            frames.removeValue(forKey: key)
+            order.removeAll { $0 == key }
+        } else {
+            frames[key] = values
+        }
+        return frame
+    }
+
+    mutating func removeAll() {
+        frames.removeAll()
+        order.removeAll()
     }
 }
 

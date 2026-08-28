@@ -26,16 +26,28 @@ struct WindowStatusCommand: AsyncParsableCommand {
             let greenButton =
                 CLIEnvironment.sharedDefaults.object(
                     forKey: AppStorageKeys.WindowTools.greenButtonMaximizes) as? Bool ?? true
+            let helperRunning = AppBridge.helperIsRunning
+            let accessibilityGranted =
+                PermissionsStatus.granted(defaults: CLIEnvironment.sharedDefaults)[.accessibility]
+                ?? false
+            let available = enabled && helperRunning && accessibilityGranted
             if json {
                 CLIOut.json(
                     .object([
                         "actions": .strings(WindowLayoutAction.allCases.map(\.rawValue)),
+                        "accessibilityGranted": .bool(accessibilityGranted),
+                        "available": .bool(available),
                         "enabled": .bool(enabled),
                         "greenButtonMaximizes": .bool(greenButton),
+                        "helperRunning": .bool(helperRunning),
                     ]))
             } else {
                 CLIOut.out("Window Tools: \(enabled ? "on" : "off")")
                 CLIOut.out("Green button maximize: \(greenButton ? "on" : "off")")
+                CLIOut.out("Helper: \(helperRunning ? "running" : "not running")")
+                CLIOut.out(
+                    "Accessibility: \(accessibilityGranted ? "granted" : "not granted")")
+                CLIOut.out("Available: \(available ? "yes" : "no")")
                 CLIOut.out(
                     "Actions: \(WindowLayoutAction.allCases.map(\.rawValue).joined(separator: ", "))"
                 )
