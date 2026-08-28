@@ -22,7 +22,6 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         StatusItemMenu.attach(to: item, target: self, action: #selector(clicked))
-        update()
         startTimer()
         let workspace = NSWorkspace.shared.notificationCenter
         sleepObservers = [
@@ -275,6 +274,13 @@ private enum SystemMonitorNotifier {
         content.sound = .default
         center.removeDeliveredNotifications(withIdentifiers: [alert.identifier])
         center.add(
-            UNNotificationRequest(identifier: alert.identifier, content: content, trigger: nil))
+            UNNotificationRequest(identifier: alert.identifier, content: content, trigger: nil)
+        ) { error in
+            if let error {
+                NSLog(
+                    "Edith System Monitor notification failed (%@): %@", alert.identifier,
+                    error.localizedDescription)
+            }
+        }
     }
 }

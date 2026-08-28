@@ -70,16 +70,24 @@ enum SystemMonitorSamplingKind {
 }
 
 enum SystemMonitorSamplingPolicy {
-    static let gpuStride = 5
-    static let slowStride = 15
+    static let gpuInterval: TimeInterval = 10
+    static let slowInterval: TimeInterval = 30
 
-    static func shouldSample(_ kind: SystemMonitorSamplingKind, index: Int) -> Bool {
-        guard index > 0 else { return true }
+    static func shouldSample(
+        _ kind: SystemMonitorSamplingKind, lastReadAt: TimeInterval?, at uptime: TimeInterval
+    ) -> Bool {
         return switch kind {
         case .fast: true
-        case .gpu: index.isMultiple(of: gpuStride)
-        case .slow: index.isMultiple(of: slowStride)
+        case .gpu: due(lastReadAt, at: uptime, interval: gpuInterval)
+        case .slow: due(lastReadAt, at: uptime, interval: slowInterval)
         }
+    }
+
+    private static func due(
+        _ lastReadAt: TimeInterval?, at uptime: TimeInterval, interval: TimeInterval
+    ) -> Bool {
+        guard let lastReadAt else { return true }
+        return uptime < lastReadAt || uptime - lastReadAt >= interval
     }
 }
 
@@ -130,10 +138,11 @@ public struct SustainedThresholdGate: Equatable, Sendable {
 }
 
 public final class SystemMonitorSampler: @unchecked Sendable {
-    private var sampleIndex = 0
     private var previousCPU: CPUTicks?
     private var previousNetwork: (read: UInt64, written: UInt64, at: TimeInterval)?
     private var previousDisk: (read: UInt64, written: UInt64, at: TimeInterval)?
+    private var gpuReadAt: TimeInterval?
+    private var slowReadAt: TimeInterval?
     private var gpuPercent: Double?
     private var rootDiskUsedPercent: Double?
     private var battery: SystemMonitorBattery?
@@ -159,16 +168,17 @@ public final class SystemMonitorSampler: @unchecked Sendable {
         let disk = throughput(
             current: Self.readDiskCounters(), previous: &previousDisk, at: uptime)
 
-        if SystemMonitorSamplingPolicy.shouldSample(.gpu, index: sampleIndex) {
+        if SystemMonitorSamplingPolicy.shouldSample(.gpu, lastReadAt: gpuReadAt, at: uptime) {
             gpuPercent = Self.readGPUPercent()
+            gpuReadAt = uptime
         }
-        if SystemMonitorSamplingPolicy.shouldSample(.slow, index: sampleIndex) {
+        if SystemMonitorSamplingPolicy.shouldSample(.slow, lastReadAt: slowReadAt, at: uptime) {
             rootDiskUsedPercent = Self.readRootDiskUsedPercent()
             battery = Self.readBattery()
             storageReadAt = uptime
             batteryReadAt = battery == nil ? nil : uptime
+            slowReadAt = uptime
         }
-        sampleIndex += 1
 
         return SystemMonitorSnapshot(
             sampledAt: uptime, cpuPercent: cpuPercent,
@@ -178,10 +188,11 @@ public final class SystemMonitorSampler: @unchecked Sendable {
     }
 
     public func reset() {
-        sampleIndex = 0
         previousCPU = nil
         previousNetwork = nil
         previousDisk = nil
+        gpuReadAt = nil
+        slowReadAt = nil
         gpuPercent = nil
         rootDiskUsedPercent = nil
         battery = nil

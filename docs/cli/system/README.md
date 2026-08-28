@@ -70,9 +70,12 @@ Neither command looks anything up by name and neither talks to the app, so 3 and
 - `stats` combines the same `LocalMachineSampler` used for machine sessions with
   the native `SystemMonitorSampler` used by the System page and menu bar helper.
   The helper samples every two seconds, reads GPU utilization every ten seconds,
-  and refreshes battery and startup disk capacity about every thirty seconds.
+  and refreshes battery and startup disk capacity every thirty seconds. Those
+  slower refresh intervals remain time-based when `--follow` uses another interval.
 - The `systemStats` extension controls the menu bar readout and its sustained
-  alerts. `ed system` never requires the extension to be enabled.
+  alerts. CPU and memory must remain above their threshold for twelve seconds.
+  Battery and capacity are confirmed on the next fresh thirty-second reading.
+  `ed system` never requires the extension to be enabled.
 
 ## Where to go next
 

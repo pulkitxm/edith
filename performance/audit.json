@@ -202,8 +202,8 @@
     {
       "area": "backgroundWorker",
       "status": "protected",
-      "finding": "Usage collection runs in a cancellable utility subprocess, while System Monitor uses native counters and fixed slow-metric strides.",
-      "measurement": "The usage.refresh interval covers the worker lifetime, and deterministic monitor tests protect GPU and battery or capacity cadence.",
+      "finding": "Usage collection runs in a cancellable utility subprocess, while System Monitor uses native counters and fixed time-based slow-metric cadence.",
+      "measurement": "The usage.refresh interval covers the worker lifetime, and deterministic monitor tests protect ten-second GPU and thirty-second battery or capacity cadence regardless of caller frequency.",
       "regressionProperty": "Usage refresh remains asynchronous and cancellable, while continuous monitoring keeps expensive metric families off its two-second path.",
       "evidence": [
         {
@@ -216,7 +216,7 @@
         },
         {
           "path": "Packages/Edith/Sources/EdithKit/Features/System/Services/SystemMonitorSampler.swift",
-          "contains": "static let slowStride = 15"
+          "contains": "static let slowInterval: TimeInterval = 30"
         },
         {
           "path": "Packages/Edith/Tests/EdithTests/SystemStatsTests.swift",

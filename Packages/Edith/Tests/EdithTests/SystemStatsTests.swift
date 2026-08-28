@@ -37,12 +37,13 @@ import Testing
     }
 
     @Test func monitorCadenceKeepsExpensiveMetricsOffTheFastPath() {
-        #expect(SystemMonitorSamplingPolicy.shouldSample(.fast, index: 1))
-        #expect(SystemMonitorSamplingPolicy.shouldSample(.gpu, index: 0))
-        #expect(!SystemMonitorSamplingPolicy.shouldSample(.gpu, index: 4))
-        #expect(SystemMonitorSamplingPolicy.shouldSample(.gpu, index: 5))
-        #expect(!SystemMonitorSamplingPolicy.shouldSample(.slow, index: 14))
-        #expect(SystemMonitorSamplingPolicy.shouldSample(.slow, index: 15))
+        #expect(SystemMonitorSamplingPolicy.shouldSample(.fast, lastReadAt: 100, at: 101))
+        #expect(SystemMonitorSamplingPolicy.shouldSample(.gpu, lastReadAt: nil, at: 100))
+        #expect(!SystemMonitorSamplingPolicy.shouldSample(.gpu, lastReadAt: 100, at: 109.9))
+        #expect(SystemMonitorSamplingPolicy.shouldSample(.gpu, lastReadAt: 100, at: 110))
+        #expect(!SystemMonitorSamplingPolicy.shouldSample(.slow, lastReadAt: 100, at: 129.9))
+        #expect(SystemMonitorSamplingPolicy.shouldSample(.slow, lastReadAt: 100, at: 130))
+        #expect(SystemMonitorSamplingPolicy.shouldSample(.slow, lastReadAt: 100, at: 90))
     }
 
     @Test func counterRatesRejectResetsAndLongSamplingGaps() {

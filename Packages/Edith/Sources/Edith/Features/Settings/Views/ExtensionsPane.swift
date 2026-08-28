@@ -1739,7 +1739,7 @@ private struct SystemStatsRows: View {
                 supportsOpacity: false)
             Toggle(
                 "Sustained alerts",
-                isOn: $alerts.configured(AppStorageKeys.MenuBar.statsAlerts))
+                isOn: alertsBinding)
             if alerts {
                 thresholdRow(
                     "CPU",
@@ -1759,12 +1759,26 @@ private struct SystemStatsRows: View {
                         AppStorageKeys.MenuBar.statsBatteryThreshold), range: 5...50)
             }
             Text(
-                "CPU, memory, network, and disk throughput update every 2 seconds. GPU updates every 10 seconds; battery and capacity every 30 seconds. Alerts require 12 seconds of sustained pressure."
+                "CPU, memory, network, and disk throughput update every 2 seconds. GPU updates every 10 seconds; battery and capacity every 30 seconds. CPU and memory alerts require 12 seconds of sustained pressure; slow metrics confirm on their next fresh reading."
             )
             .settingsCaption()
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
+    }
+
+    private var alertsBinding: Binding<Bool> {
+        Binding(
+            get: { alerts },
+            set: { enabled in
+                $alerts.configured(AppStorageKeys.MenuBar.statsAlerts).wrappedValue = enabled
+                if enabled
+                    && !SharedDefaults.store.bool(
+                        forKey: AppStorageKeys.Permissions.notificationsGranted)
+                {
+                    _ = try? MainPermissionOperations.center.request(.notifications)
+                }
+            })
     }
 
     private func thresholdRow(
