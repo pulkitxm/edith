@@ -21,7 +21,7 @@ struct FinderToolsRows: View {
                     "Cut and paste files with ⌘X and ⌘V",
                     isOn: $cutPaste.configured(AppStorageKeys.FinderTools.cutPaste))
                 Text(
-                    "Edith moves the selected files into the folder open in Finder. Existing files are never replaced."
+                    "Edith moves the selected files into the folder open in Finder. Existing files are never replaced, and a failed batch is rolled back when possible."
                 )
                 .settingsCaption()
                 Toggle(
@@ -31,7 +31,7 @@ struct FinderToolsRows: View {
                     "Paste copied images as PNG files",
                     isOn: $pasteImages.configured(AppStorageKeys.FinderTools.pasteImages))
                 Text(
-                    "Press ⌘V in Finder to save a copied image into the open folder as a PNG with a timestamped name."
+                    "Press ⌘V in Finder to save a copied image into the open folder as a PNG with a timestamped name. Large or invalid images are rejected before decoding."
                 )
                 .settingsCaption()
             }
@@ -42,7 +42,7 @@ struct FinderToolsRows: View {
                     isOn: $diskImageInstaller.configured(
                         AppStorageKeys.FinderTools.diskImageInstaller))
                 Text(
-                    "When a mounted DMG contains exactly one verified app, Edith can install it in Applications, eject the image, and move the unchanged download to Trash. Existing apps are never replaced."
+                    "When a mounted DMG contains exactly one verified app, Edith can install it in Applications, eject the image, and move the unchanged download to Trash. Edith rechecks the app before copying and never replaces an existing app."
                 )
                 .settingsCaption()
             }
@@ -51,7 +51,7 @@ struct FinderToolsRows: View {
                 LabeledContent("Accessibility", value: "Finder keyboard shortcuts")
                 LabeledContent("Automation", value: "Finder selection and destination")
                 Text(
-                    "Finder Automation is requested by macOS on first use. Disk image installation does not need Full Disk Access."
+                    "Accessibility is only needed for keyboard features. Finder Automation is requested on first use of selection or destination access. Disk image installation needs neither permission nor Full Disk Access."
                 )
                 .settingsCaption()
             }
