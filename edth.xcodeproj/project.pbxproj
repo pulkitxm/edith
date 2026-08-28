@@ -25,7 +25,6 @@
 		A32E72901AF888B4A1E13D0F /* ed in Embed CLI Tools */ = {isa = PBXBuildFile; fileRef = 6687BAF8A3552A0AA85404C5 /* ed */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		AE432717A8BA5DF0A8AE3C81 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 79153EBC5647B887B9985B8D /* AppIcon.icns */; };
 		B2B16D5A6E0D43DBA670160A /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = CCC83B99D6204A92B3072609 /* SwiftTerm */; };
-		D16E8B788F6F0018D8246F52 /* EdithFiles.app in Embed Applications */ = {isa = PBXBuildFile; fileRef = B58D5576268A68555AD2FCF2 /* EdithFiles.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D948A502324B5C4B9D9AF49B /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F7FD5DA1D56566638BEC52FB /* Cocoa.framework */; };
 		E342837369B43CEB0E422EE8 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F7FD5DA1D56566638BEC52FB /* Cocoa.framework */; };
 		EEFDB4D0000A2A9F5B4E685E /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 79153EBC5647B887B9985B8D /* AppIcon.icns */; };
@@ -75,17 +74,6 @@
 				55E29D247B2AF1C7EE207A52 /* edh in Embed CLI Tools */,
 			);
 			name = "Embed CLI Tools";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		3F35960FE95F460299BF1E2F /* Embed Applications */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = Contents/Library/Applications;
-			dstSubfolderSpec = 1;
-			files = (
-				D16E8B788F6F0018D8246F52 /* EdithFiles.app in Embed Applications */,
-			);
-			name = "Embed Applications";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -271,7 +259,6 @@
 				A75A04546DAD6894543DC788 /* Sources */,
 				F7E174DC5FA459FC21F0F72F /* Frameworks */,
 				75E6FBC5AB873DCBE015D82E /* Resources */,
-				3F35960FE95F460299BF1E2F /* Embed Applications */,
 				1C869EB7BA6F352ED934A6B5 /* Embed CLI Tools */,
 				894E33B83968A6646E7A6B4F /* Embed Login Item Helper */,
 			);
@@ -279,7 +266,6 @@
 			);
 			dependencies = (
 				552E2BEE97435C5606A3B52E /* PBXTargetDependency */,
-				3EA622D2238B0A011B91D598 /* PBXTargetDependency */,
 				A9B3DEA154B6AACB43EB6321 /* PBXTargetDependency */,
 				433AD7B7D4E5BEFBAB0DE22A /* PBXTargetDependency */,
 			);
