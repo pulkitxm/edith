@@ -181,6 +181,10 @@ jobs:
           test "$BUILT" = "$RELEASE_VERSION" \
             || { echo "release blocked: built $BUILT, expected $RELEASE_VERSION" >&2; exit 1; }
 
+      - name: Verify the release bundle
+        if: steps.release_build.outputs.superseded != 'true'
+        run: make verify-bundle
+
       - name: Package the DMG
         if: steps.release_build.outputs.superseded != 'true'
         run: |

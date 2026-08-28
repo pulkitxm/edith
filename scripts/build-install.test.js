@@ -5,6 +5,15 @@ import { resolve } from "node:path";
 const script = readFileSync(resolve("build.sh"), "utf8");
 
 describe("build install lifecycle", () => {
+  test("packages edh as a relative alias of the signed ed executable", () => {
+    const alias = script.indexOf('ln -sfn ed "$APP/Contents/MacOS/edh"');
+    const sign = script.indexOf('sign_tool "$APP/Contents/MacOS/ed"');
+
+    expect(alias).toBeGreaterThan(-1);
+    expect(sign).toBeGreaterThan(alias);
+    expect(script).not.toContain('sign_tool "$APP/Contents/MacOS/edh"');
+  });
+
   test("requests a normal application quit before replacing the bundle", () => {
     const stop = script.indexOf("stop_installed_app");
     const replace = script.indexOf('rm -rf "/Applications/Edith.app"');
