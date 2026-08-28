@@ -70,6 +70,128 @@ private let frequent = [
         let gaps = CGFloat(EmojiPanelView.columns - 1) * EmojiPanelView.cellSpacing
         #expect(cells + gaps + 20 <= EmojiPanel.width)
     }
+
+    @Test func initialRenderingStateIsBoundedAcrossTheFullCatalog() {
+        let model = EmojiPanelModel(catalog: .shared, frequent: [])
+        let completeCount = model.sections.reduce(0) { $0 + $1.emoji.count }
+        let initialBound =
+            EmojiPanelModel.pageSize
+            + max(model.sections.count - 1, 0) * EmojiPanelView.columns
+
+        #expect(completeCount == EmojiCatalog.shared.emoji.count)
+        #expect(model.renderedCellCount <= initialBound)
+        #expect(model.renderedCellCount < completeCount)
+    }
+
+    @Test func pageExpansionKeepsSelectionAndStableCellIDs() {
+        let model = EmojiPanelModel(catalog: .shared, frequent: [])
+        let section = model.sections[0]
+        let selectedID = model.selectedID
+        let originalIDs = Set(model.rows(for: model.renderedSections[0]).flatMap(\.cells).map(\.id))
+
+        model.extend(sectionID: section.id)
+
+        let expanded = model.renderedSections[0]
+        let expandedIDs = Set(model.rows(for: expanded).flatMap(\.cells).map(\.id))
+        #expect(model.selectedID == selectedID)
+        #expect(originalIDs.isSubset(of: expandedIDs))
+        #expect(expanded.emoji.count > originalIDs.count)
+    }
+
+    @Test func keyboardSelectionRendersItsTargetBeforeScrolling() {
+        let model = EmojiPanelModel(catalog: .shared, frequent: [])
+        let selectedID = model.moveSelection(delta: EmojiPanelModel.pageSize + 10)
+
+        #expect(selectedID != nil)
+        #expect(
+            model.renderedSections
+                .flatMap { model.rows(for: $0) }
+                .flatMap(\.cells)
+                .contains { $0.id == selectedID })
+    }
+
+    @Test func categoryJumpKeepsEveryCategoryReachableFromTheBoundedState() throws {
+        let model = EmojiPanelModel(catalog: .shared, frequent: [])
+        let target = try #require(model.sections.last)
+
+        #expect(model.revealSection(target.id) == target.id)
+        #expect(
+            model.renderedSections.first(where: { $0.id == target.id })?.emoji.first
+                == target.emoji.first)
+    }
+
+    @Test func structuredPositionsKeepSeparatorBearingIDsIntact() {
+        let unusual = EmojiCatalog(
+            groups: [
+                EmojiGroup(
+                    id: "group:with|separators", name: "Unusual", symbolName: "number")
+            ],
+            emoji: [
+                Emoji(
+                    character: "value:with|separators", name: "separator fixture", groupIndex: 0,
+                    unicodeVersion: 1)
+            ])
+        let model = EmojiPanelModel(catalog: unusual, frequent: [])
+        let expected = EmojiPanelCell.ID(
+            sectionID: "group:with|separators", emojiID: "value:with|separators")
+
+        #expect(model.selectedID == expected)
+        #expect(model.sectionOffset(for: "group:with|separators") == 0)
+        #expect(model.revealSection("group:with|separators") == "group:with|separators")
+        #expect(model.moveSelection(delta: 1) == expected)
+    }
+
+    @Test func staleSearchCannotReplaceTheNewestQueryOrPublishAfterCancellation() async {
+        let fixture = EmojiPanelSearchFixture()
+        let model = EmojiPanelModel(
+            catalog: catalog, frequent: [], search: { await fixture.search($0) })
+
+        model.setQuery("smile")
+        await fixture.waitUntilStarted(1)
+        model.setQuery("rocket")
+        await fixture.waitUntilStarted(2)
+        await fixture.release(1, result: [catalog.emoji[2]])
+        for _ in 0..<100 where model.isSearching { await Task.yield() }
+
+        #expect(model.query == "rocket")
+        #expect(model.sections.flatMap(\.emoji).map(\.character) == ["🚀"])
+
+        await fixture.release(0, result: [catalog.emoji[0], catalog.emoji[1]])
+        await Task.yield()
+        #expect(model.sections.flatMap(\.emoji).map(\.character) == ["🚀"])
+
+        model.setQuery("love")
+        await fixture.waitUntilStarted(3)
+        model.cancelSearch()
+        await fixture.release(2, result: [catalog.emoji[1]])
+        await Task.yield()
+        #expect(model.sections.flatMap(\.emoji).map(\.character) == ["🚀"])
+        #expect(!model.isSearching)
+    }
+}
+
+private actor EmojiPanelSearchFixture {
+    private var started = 0
+    private var startWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+    private var searchWaiters: [Int: CheckedContinuation<[Emoji], Never>] = [:]
+
+    func search(_ query: String) async -> [Emoji] {
+        let index = started
+        started += 1
+        let ready = startWaiters.filter { started >= $0.0 }
+        startWaiters.removeAll { started >= $0.0 }
+        ready.forEach { $0.1.resume() }
+        return await withCheckedContinuation { searchWaiters[index] = $0 }
+    }
+
+    func waitUntilStarted(_ count: Int) async {
+        guard started < count else { return }
+        await withCheckedContinuation { startWaiters.append((count, $0)) }
+    }
+
+    func release(_ index: Int, result: [Emoji]) {
+        searchWaiters.removeValue(forKey: index)?.resume(returning: result)
+    }
 }
 
 @Suite @MainActor struct EmojiStoreTests {

@@ -12,11 +12,9 @@ struct EmojiSection: Identifiable, Hashable {
 struct EmojiPanelView: View {
     var store: EmojiStore
     var onDismiss: () -> Void
+    var onCellAppear: (EmojiPanelCell.ID) -> Void
 
-    @State private var query = ""
-    @State private var sections: [EmojiSection] = []
-    @State private var flattened: [Emoji] = []
-    @State private var selection = 0
+    @State private var model: EmojiPanelModel
     @State private var scrollTick = 0
     @State private var pendingSectionScroll: String?
     @FocusState private var searchFocused: Bool
@@ -28,6 +26,17 @@ struct EmojiPanelView: View {
     static let cellSpacing: CGFloat = 4
     static let frequentSectionID = "frequent"
     static let resultsSectionID = "results"
+
+    init(
+        store: EmojiStore, onDismiss: @escaping () -> Void,
+        onCellAppear: @escaping (EmojiPanelCell.ID) -> Void = { _ in }
+    ) {
+        self.store = store
+        self.onDismiss = onDismiss
+        self.onCellAppear = onCellAppear
+        _model = State(
+            initialValue: EmojiPanelModel(catalog: store.catalog, frequent: store.frequent))
+    }
 
     static func sections(catalog: EmojiCatalog, frequent: [Emoji], query: String) -> [EmojiSection]
     {
@@ -41,21 +50,7 @@ struct EmojiPanelView: View {
                     emoji: matches)
             ]
         }
-        var built: [EmojiSection] = []
-        if !frequent.isEmpty {
-            built.append(
-                EmojiSection(
-                    id: frequentSectionID, title: "Frequently used", symbolName: "clock",
-                    emoji: frequent))
-        }
-        for (index, group) in catalog.groups.enumerated() {
-            let emoji = catalog.emoji(inGroup: index)
-            guard !emoji.isEmpty else { continue }
-            built.append(
-                EmojiSection(
-                    id: group.id, title: group.name, symbolName: group.symbolName, emoji: emoji))
-        }
-        return built
+        return EmojiPanelModel.baseSections(catalog: catalog, frequent: frequent)
     }
 
     static func nextSelection(from index: Int, delta: Int, count: Int) -> Int {
@@ -77,8 +72,11 @@ struct EmojiPanelView: View {
         .onReceive(NotificationCenter.default.publisher(for: EmojiPanel.willShow)) { _ in
             resetForShow()
         }
-        .onChange(of: query) { _, _ in rebuild(resetSelection: true) }
-        .onChange(of: store.revision) { _, _ in rebuild(resetSelection: false) }
+        .onReceive(NotificationCenter.default.publisher(for: EmojiPanel.didHide)) { _ in
+            model.cancelSearch()
+        }
+        .onChange(of: store.revision) { _, _ in model.updateFrequent(store.frequent) }
+        .onDisappear { model.cancelSearch() }
     }
 
     private var header: some View {
@@ -100,28 +98,36 @@ struct EmojiPanelView: View {
                     .frame(width: 11, height: 11)
                     .padding(.leading, 5)
                     .opacity(0.8)
-                TextField("Search emoji", text: $query)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .lineLimit(1)
-                    .disableAutocorrection(true)
-                    .focused($searchFocused)
-                    .padding(.horizontal, 4)
-                    .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow]) { press in
-                        handleArrow(press)
-                    }
-                    .onKeyPress(.escape) {
-                        onDismiss()
-                        return .handled
-                    }
-                    .onKeyPress(keys: [.return]) { press in
-                        activate(selected, copyOnly: press.modifiers.contains(.option))
-                        return .handled
-                    }
-                    .onKeyPress { press in handle(press) }
-                if !query.isEmpty {
+                TextField(
+                    "Search emoji",
+                    text: Binding(get: { model.query }, set: { model.setQuery($0) })
+                )
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .lineLimit(1)
+                .disableAutocorrection(true)
+                .focused($searchFocused)
+                .padding(.horizontal, 4)
+                .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow]) { press in
+                    handleArrow(press)
+                }
+                .onKeyPress(.escape) {
+                    onDismiss()
+                    return .handled
+                }
+                .onKeyPress(keys: [.return]) { press in
+                    activate(model.selected, copyOnly: press.modifiers.contains(.option))
+                    return .handled
+                }
+                .onKeyPress { press in handle(press) }
+                ProgressView()
+                    .controlSize(.small)
+                    .scaleEffect(0.6)
+                    .frame(width: 12, height: 12)
+                    .opacity(model.isSearching ? 1 : 0)
+                if !model.query.isEmpty {
                     Button {
-                        query = ""
+                        model.setQuery("")
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .resizable()
@@ -158,14 +164,14 @@ struct EmojiPanelView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8, pinnedViews: [.sectionHeaders]) {
-                    if sections.isEmpty {
-                        Text("No emoji match \u{201C}\(query)\u{201D}")
+                    if model.renderedSections.isEmpty {
+                        Text("No emoji match \u{201C}\(model.query)\u{201D}")
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.top, 24)
                     }
-                    ForEach(sections) { section in
+                    ForEach(model.renderedSections) { section in
                         Section {
                             sectionGrid(section)
                         } header: {
@@ -178,8 +184,10 @@ struct EmojiPanelView: View {
             }
             .scrollIndicators(.never)
             .onChange(of: scrollTick) { _, _ in
-                guard let emoji = selected else { return }
-                withAnimation(.easeOut(duration: 0.1)) { proxy.scrollTo(emoji.id, anchor: .center) }
+                guard let selectedID = model.selectedID else { return }
+                withAnimation(.easeOut(duration: 0.1)) {
+                    proxy.scrollTo(selectedID, anchor: .center)
+                }
             }
             .onChange(of: pendingSectionScroll) { _, target in
                 guard let target else { return }
@@ -201,22 +209,28 @@ struct EmojiPanelView: View {
     }
 
     private func sectionGrid(_ section: EmojiSection) -> some View {
-        LazyVGrid(
-            columns: Array(
-                repeating: GridItem(.fixed(Self.cellSize), spacing: Self.cellSpacing),
-                count: Self.columns),
-            spacing: Self.cellSpacing
-        ) {
-            ForEach(section.emoji) { emoji in
-                cell(emoji)
+        LazyVStack(spacing: Self.cellSpacing) {
+            ForEach(model.rows(for: section)) { row in
+                HStack(spacing: Self.cellSpacing) {
+                    ForEach(row.cells) { cell in
+                        emojiCell(cell)
+                    }
+                    ForEach(0..<(Self.columns - row.cells.count), id: \.self) { _ in
+                        Color.clear.frame(width: Self.cellSize, height: Self.cellSize)
+                    }
+                }
+                .onAppear {
+                    if row.isRenderBoundary { model.extend(sectionID: row.sectionID) }
+                }
             }
         }
         .padding(.horizontal, 10)
     }
 
-    private func cell(_ emoji: Emoji) -> some View {
+    private func emojiCell(_ cell: EmojiPanelCell) -> some View {
+        let emoji = cell.emoji
         let character = store.character(for: emoji)
-        let isSelected = selected?.id == emoji.id
+        let isSelected = model.selectedID == cell.id
         return Button {
             activate(emoji, copyOnly: false)
         } label: {
@@ -230,7 +244,8 @@ struct EmojiPanelView: View {
                                 ? themeColor(themeName).opacity(0.28) : Color.clear))
         }
         .buttonStyle(.edith(.borderless))
-        .id(emoji.id)
+        .id(cell.id)
+        .onAppear { onCellAppear(cell.id) }
         .help(emoji.name)
         .contextMenu { contextMenu(for: emoji) }
     }
@@ -246,7 +261,7 @@ struct EmojiPanelView: View {
                 }
             }
         }
-        if store.frequent.contains(where: { $0.id == emoji.id }) {
+        if store.frequentIDs.contains(emoji.id) {
             Divider()
             Button("Remove from frequently used") { store.forget(emoji.character) }
         }
@@ -254,7 +269,7 @@ struct EmojiPanelView: View {
 
     private var preview: some View {
         HStack(spacing: 8) {
-            if let emoji = selected {
+            if let emoji = model.selected {
                 Text(store.character(for: emoji))
                     .font(.system(size: 20))
                 Text(emoji.name)
@@ -267,7 +282,7 @@ struct EmojiPanelView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
-            if selected?.supportsSkinTones == true {
+            if model.selected?.supportsSkinTones == true {
                 Text("\u{2325}\u{2318}1-5 tone")
                     .font(.system(size: 10))
                     .foregroundStyle(.tertiary)
@@ -279,9 +294,9 @@ struct EmojiPanelView: View {
 
     private var categoryBar: some View {
         HStack(spacing: 0) {
-            ForEach(sections) { section in
+            ForEach(model.sections) { section in
                 Button {
-                    pendingSectionScroll = section.id
+                    pendingSectionScroll = model.revealSection(section.id)
                 } label: {
                     Image(systemName: section.symbolName)
                         .font(.system(size: 12))
@@ -295,24 +310,12 @@ struct EmojiPanelView: View {
         }
         .padding(.horizontal, 8)
         .padding(.bottom, 6)
-        .opacity(sections.count > 1 ? 1 : 0)
-    }
-
-    private var selected: Emoji? {
-        flattened.indices.contains(selection) ? flattened[selection] : nil
+        .opacity(model.sections.count > 1 ? 1 : 0)
     }
 
     private func resetForShow() {
-        query = ""
-        rebuild(resetSelection: true)
+        model.reset(frequent: store.frequent)
         DispatchQueue.main.async { searchFocused = true }
-    }
-
-    private func rebuild(resetSelection: Bool) {
-        sections = Self.sections(
-            catalog: store.catalog, frequent: store.frequent, query: query)
-        flattened = sections.flatMap(\.emoji)
-        if resetSelection || selection >= flattened.count { selection = 0 }
     }
 
     private func handleArrow(_ press: KeyPress) -> KeyPress.Result {
@@ -323,7 +326,7 @@ struct EmojiPanelView: View {
         case .upArrow: delta = -Self.columns
         default: delta = Self.columns
         }
-        selection = Self.nextSelection(from: selection, delta: delta, count: flattened.count)
+        _ = model.moveSelection(delta: delta)
         scrollTick += 1
         return .handled
     }
@@ -331,7 +334,7 @@ struct EmojiPanelView: View {
     private func handle(_ press: KeyPress) -> KeyPress.Result {
         if press.modifiers.contains([.option, .command]),
             let digit = press.key.character.wholeNumberValue, (1...5).contains(digit),
-            let emoji = selected, emoji.supportsSkinTones,
+            let emoji = model.selected, emoji.supportsSkinTones,
             let tone = EmojiSkinTone(rawValue: digit)
         {
             activate(emoji, copyOnly: false, tone: tone)

@@ -63,6 +63,29 @@ private let corpus = [
         }
         #expect(EmojiSearch.results(in: catalog.emoji, query: "rocket").first?.character == "🚀")
     }
+
+    @Test func indexedSearchReturnsEveryMatchingCatalogEntry() {
+        let catalog = EmojiCatalog.shared
+        let index = EmojiSearchIndex(catalog.emoji)
+        for query in ["face", "heart", "rocket", "flag", "thumbs up", "party"] {
+            let normalized = EmojiSearch.normalize(query)
+            let expected = catalog.emoji.filter { EmojiSearch.score($0, query: normalized) != nil }
+            let actual = index.results(query: query)
+            #expect(actual.count == expected.count)
+            #expect(Set(actual.map(\.id)) == Set(expected.map(\.id)))
+        }
+    }
+
+    @Test func indexedCatalogSearchStaysWithinAnInteractiveBudget() {
+        let index = EmojiSearchIndex(EmojiCatalog.shared.emoji)
+        let queries = ["face", "heart", "rocket", "flag", "thumbs", "party", "india"]
+        let clock = ContinuousClock()
+        let started = clock.now
+        for _ in 0..<10 {
+            for query in queries { _ = index.results(query: query) }
+        }
+        #expect(started.duration(to: clock.now) < .seconds(1))
+    }
 }
 
 @Suite struct EmojiOperationResolveTests {

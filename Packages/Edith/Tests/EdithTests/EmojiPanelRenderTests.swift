@@ -59,6 +59,20 @@ import Testing
         dump(EmojiPanelView(store: store, onDismiss: {}), named: "emoji-panel")
     }
 
+    @Test func realCatalogRenderingMaterializesOnlyTheVisibleCells() throws {
+        let store = EmojiStore(catalog: .shared, typeCharacter: { _ in true })
+        var appeared: Set<EmojiPanelCell.ID> = []
+        let rep = try #require(
+            render(
+                EmojiPanelView(
+                    store: store, onDismiss: {}, onCellAppear: { appeared.insert($0) })))
+
+        #expect(rep.pixelsWide >= Int(EmojiPanel.width))
+        #expect(!appeared.isEmpty)
+        #expect(appeared.count <= EmojiPanelModel.pageSize)
+        #expect(appeared.count < store.catalog.emoji.count)
+    }
+
     @Test func everyGridColumnStaysInsideThePanelEdges() throws {
         let store = EmojiStore(catalog: .shared, typeCharacter: { _ in true })
         let rep = try #require(render(EmojiPanelView(store: store, onDismiss: {})))

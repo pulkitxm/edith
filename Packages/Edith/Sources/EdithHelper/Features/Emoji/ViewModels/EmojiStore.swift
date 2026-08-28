@@ -7,6 +7,7 @@ import Foundation
 final class EmojiStore: FeatureModule {
     private(set) var catalog: EmojiCatalog
     private(set) var frequent: [Emoji] = []
+    private(set) var frequentIDs: Set<String> = []
     private(set) var revision = 0
 
     var skinTone: EmojiSkinTone {
@@ -140,6 +141,7 @@ final class EmojiStore: FeatureModule {
                     character: character, name: entry.name, groupIndex: entry.groupIndex,
                     unicodeVersion: entry.unicodeVersion, terms: entry.terms)
             }
+        frequentIDs = Set(frequent.map(\.id))
         revision += 1
     }
 

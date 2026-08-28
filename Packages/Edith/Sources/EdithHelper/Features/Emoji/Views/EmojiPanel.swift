@@ -13,6 +13,7 @@ final class EmojiPanel: NSObject, NSWindowDelegate {
     static let width: CGFloat = 364
     static let height: CGFloat = 396
     static let willShow = Notification.Name("emojiPanelWillShow")
+    static let didHide = Notification.Name("emojiPanelDidHide")
 
     weak var store: EmojiStore? {
         didSet {
@@ -67,6 +68,7 @@ final class EmojiPanel: NSObject, NSWindowDelegate {
         showTask?.cancel()
         showTask = nil
         panel?.orderOut(nil)
+        NotificationCenter.default.post(name: Self.didHide, object: nil)
     }
 
     private func mountRootView() {
