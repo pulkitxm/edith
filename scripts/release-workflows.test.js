@@ -162,16 +162,12 @@ test("superseded release builds yield the lane before packaging", () => {
   );
 });
 
-test("bundle verification rejects a second edh executable", () => {
+test("bundle verification requires one executable under two names", () => {
+  expect(makefile).toContain("test ! -L dist/Edith.app/Contents/MacOS/Edith");
   expect(makefile).toContain("test ! -L dist/Edith.app/Contents/MacOS/ed");
-  expect(makefile).toContain("test -L dist/Edith.app/Contents/MacOS/edh");
-  expect(makefile).toContain(
-    'test "$$(readlink dist/Edith.app/Contents/MacOS/edh)" = ed',
-  );
+  expect(makefile).toContain("test ! -e dist/Edith.app/Contents/MacOS/edh");
   expect(makefile).toContain("-type f \\( -name ed -o -name edh \\)");
-  expect(makefile).toContain(
-    "codesign --verify --strict dist/Edith.app/Contents/MacOS/edh",
-  );
+  expect(makefile).toContain("for name in ed edith; do");
 });
 
 test("macOS notarization is conditional on its optional credentials", () => {

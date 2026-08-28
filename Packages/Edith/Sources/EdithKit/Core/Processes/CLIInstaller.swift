@@ -17,7 +17,7 @@ public struct CLIInstallResult: Equatable, Sendable {
 }
 
 public enum CLIInstaller {
-    public static let toolNames = ["ed", "edh", "edith"]
+    public static let toolNames = ["ed", "edith"]
     public static let primaryTool = "ed"
 
     public static func bundledToolsDirectory(

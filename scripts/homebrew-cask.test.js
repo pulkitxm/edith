@@ -27,7 +27,9 @@ test("the cask names a released disk image by version", () => {
 
 test("the cask ships both CLI names and defers updates to Sparkle", () => {
   expect(cask).toContain('binary "#{appdir}/Edith.app/Contents/MacOS/ed"');
-  expect(cask).toContain('binary "#{appdir}/Edith.app/Contents/MacOS/edh"');
+  expect(cask).toContain(
+    'binary "#{appdir}/Edith.app/Contents/MacOS/ed", target: "edith"',
+  );
   expect(cask).toContain("auto_updates true");
   expect(cask).toContain('depends_on macos: ">= :sonoma"');
   expect(cask).toContain("depends_on arch: :arm64");

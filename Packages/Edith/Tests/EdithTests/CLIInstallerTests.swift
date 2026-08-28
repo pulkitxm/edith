@@ -24,7 +24,7 @@ import Testing
         try Self.makeTool("ed", in: tools)
 
         let result = CLIInstaller.install(toolsDirectory: tools, into: bin)
-        #expect(result.linked == ["ed", "edh", "edith"])
+        #expect(result.linked == ["ed", "edith"])
         for name in CLIInstaller.toolNames {
             let destination = try FileManager.default.destinationOfSymbolicLink(
                 atPath: bin.appendingPathComponent(name).path)
@@ -171,7 +171,7 @@ import Testing
             #expect(script.contains("edith"))
             #expect(script.contains("__complete"))
         }
-        #expect(CompletionScripts.script(for: .zsh).hasPrefix("#compdef ed edh edith"))
+        #expect(CompletionScripts.script(for: .zsh).hasPrefix("#compdef ed edith"))
     }
 
     @Test func completionScriptsGoWhereTheirShellLooksForThem() {
