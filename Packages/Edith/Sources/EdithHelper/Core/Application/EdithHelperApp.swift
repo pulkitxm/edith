@@ -199,6 +199,19 @@ struct EdithApp: App {
                     IPC.Name.keyboardCleanResult,
                     userInfo: KeyboardCleaningIPC.payload(requestID: requestID, state: state))
             })
+        _ = IPC.observe(
+            IPC.Name.requestPlainTextPaste,
+            info: { info in
+                let state = MainActor.assumeIsolated {
+                    services.textUtilities?.pastePlainText() ?? .unavailable
+                }
+                guard let requestID = info[PlainTextPasteIPC.requestIDKey] as? String else {
+                    return
+                }
+                IPC.post(
+                    IPC.Name.plainTextPasteResult,
+                    userInfo: PlainTextPasteIPC.payload(requestID: requestID, state: state))
+            })
         _ = IPC.observe(IPC.Name.requestAppDiagnostics) {
             IPC.post(
                 IPC.Name.appDiagnostics,
@@ -295,6 +308,7 @@ enum GlobalHotKey {
         static let colorPicker: UInt32 = 5
         static let micMute: UInt32 = 6
         static let presenterToggle: UInt32 = 7
+        static let textUtilities: UInt32 = 9
     }
 
     fileprivate static var refs: [UInt32: EventHotKeyRef] = [:]
@@ -404,6 +418,33 @@ enum ClipboardHotKey {
     }
 }
 
+enum TextUtilitiesHotKey {
+    static var code: Int {
+        SharedDefaults.store.object(forKey: AppStorageKeys.TextUtilities.hotKeyCode) as? Int
+            ?? kVK_ANSI_V
+    }
+    static var mods: Int {
+        SharedDefaults.store.object(forKey: AppStorageKeys.TextUtilities.hotKeyMods) as? Int
+            ?? (controlKey | optionKey | cmdKey)
+    }
+    static var label: String {
+        SharedDefaults.store.string(forKey: AppStorageKeys.TextUtilities.hotKeyLabel) ?? "⌃⌥⌘V"
+    }
+
+    static func register() {
+        guard SharedDefaults.store.bool(forKey: AppStorageKeys.TextUtilities.enabled) else {
+            unregister()
+            return
+        }
+        GlobalHotKey.set(id: GlobalHotKey.ID.textUtilities, keyCode: code, modifiers: mods) {
+            MainActor.assumeIsolated { _ = AppState.services.textUtilities?.pastePlainText() }
+        }
+    }
+
+    static func unregister() {
+        GlobalHotKey.clear(id: GlobalHotKey.ID.textUtilities)
+    }
+}
 enum MicHotKey {
     static var code: Int {
         SharedDefaults.store.object(forKey: "micHotKeyCode") as? Int ?? kVK_ANSI_M

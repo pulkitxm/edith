@@ -229,7 +229,8 @@ enum CommandCrawler {
             "ed companion connectors", "ed companion db", "ed companion stack",
             "ed machines terminal",
             "ed lid-awake",
-            "ed attention", "ed attention categories", "ed attention focus",
+            "ed attention", "ed attention categories", "ed attention focus", "ed text",
+            "ed text snippets",
             "ed quinjet",
         ]
         for walk in Self.commands where !exempt.contains(walk.label) {

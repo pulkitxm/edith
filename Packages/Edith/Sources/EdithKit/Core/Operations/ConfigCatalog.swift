@@ -49,7 +49,7 @@ public enum ConfigCatalog {
         "dashboard",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
         "calendar",
-        "clipboard",
+        "clipboard", "text",
         "notch", "focusdim", "presenter", "colorpicker", "micmute",
         "backup", "permissions", "terminal",
     ]
@@ -58,7 +58,8 @@ public enum ConfigCatalog {
         appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
         + system + cleaner
-        + music + calendar + clipboard + notch + focusDim + presenter + colorPicker + micMute
+        + music + calendar + clipboard + textUtilities + notch + focusDim
+        + presenter + colorPicker + micMute
         + backup + permissions + terminal
 
     public static var keys: [String] { settings.map(\.key) }
@@ -633,6 +634,49 @@ public enum ConfigCatalog {
         SettingDefinition(
             "clipboardWindowPositionY", .number, group: "clipboard",
             summary: "Last clipboard panel y position."),
+    ]
+
+    private static let textUtilities: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.TextUtilities.enabled, .bool, group: "text",
+            summary: "Text Utilities extension: snippets and clipboard text controls.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.TextUtilities.snippetsEnabled, .bool, group: "text",
+            summary: "Expand enabled snippets while typing.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.TextUtilities.snippets, .string, group: "text",
+            summary: "JSON encoded text snippet library.", fallback: .string("[]")),
+        SettingDefinition(
+            AppStorageKeys.TextUtilities.cleanCopiedURLs, .bool, group: "text",
+            summary: "Remove tracking parameters from copied web links."),
+        SettingDefinition(
+            AppStorageKeys.TextUtilities.customTrackingParameters, .csv, group: "text",
+            summary: "Additional query parameter names removed from links."),
+        SettingDefinition(
+            AppStorageKeys.TextUtilities.autoClearEnabled, .bool, group: "text",
+            summary: "Clear unchanged clipboard contents after a delay."),
+        SettingDefinition(
+            AppStorageKeys.TextUtilities.autoClearDelay, .int, group: "text",
+            summary: "Seconds before unchanged clipboard contents are cleared.",
+            integerRange: 5...3_600, fallback: .int(TextUtilitiesSupport.defaultAutoClearDelay)),
+        SettingDefinition(
+            AppStorageKeys.TextUtilities.clearOnLock, .bool, group: "text",
+            summary: "Clear clipboard contents when the screen locks."),
+        SettingDefinition(
+            AppStorageKeys.TextUtilities.clearOnSleep, .bool, group: "text",
+            summary: "Clear clipboard contents before the Mac sleeps."),
+        SettingDefinition(
+            AppStorageKeys.TextUtilities.hotKeyCode, .int, group: "text",
+            summary: "Virtual key code of the plain-text paste shortcut.", fallback: .int(9)),
+        SettingDefinition(
+            AppStorageKeys.TextUtilities.hotKeyMods, .int, group: "text",
+            summary: "Carbon modifier mask of the plain-text paste shortcut.",
+            fallback: .int(6_400)),
+        SettingDefinition(
+            AppStorageKeys.TextUtilities.hotKeyLabel, .string, group: "text",
+            summary: "Printable label of the plain-text paste shortcut.",
+            fallback: .string("⌃⌥⌘V")),
     ]
 
     private static let notch: [SettingDefinition] = [

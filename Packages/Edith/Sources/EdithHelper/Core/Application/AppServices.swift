@@ -12,6 +12,7 @@ final class AppServices {
     private(set) var notchShelf: NotchShelfController?
     private(set) var colorPicker: ColorPickerStore?
     private(set) var clipboard: ClipboardStore?
+    private(set) var textUtilities: TextUtilitiesEngine?
     private(set) var focusDim: FocusDimEngine?
     private(set) var presenter: PresenterDetector?
     private(set) var micMute: MicMuteEngine?
@@ -49,6 +50,12 @@ final class AppServices {
 
     static func audioMixerRuntimeEnabled(notchShelfEnabled: Bool, mixerEnabled: Bool) -> Bool {
         notchShelfEnabled && mixerEnabled
+    }
+
+    static func clipboardRuntimeEnabled(
+        historyEnabled: Bool, textUtilitiesEnabled: Bool
+    ) -> Bool {
+        historyEnabled || textUtilitiesEnabled
     }
 
     static func lidAwakeDisableRecovery(_ outcome: LidAwakeOutcome) -> String? {
@@ -100,9 +107,24 @@ final class AppServices {
     func prepareForTermination() async {
         startup.cancel()
         terminating = true
+        shutdownClipboardRuntime()
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
+    }
+
+    private func shutdownClipboardRuntime() {
+        let hadRuntime = clipboard != nil || textUtilities != nil
+        textUtilities?.shutdown()
+        textUtilities = nil
+        clipboard?.shutdown()
+        clipboard = nil
+        TextUtilitiesHotKey.unregister()
+        ClipboardHotKey.unregister()
+        if hadRuntime {
+            ClipboardPanel.shared.store = nil
+            notchShelf?.attachClipboard(nil)
+        }
     }
 
     var lidAwakeRestorationInFlight: Bool {
@@ -279,22 +301,33 @@ final class AppServices {
 
         let clipboardOn =
             SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.enabled) as? Bool ?? false
-        if clipboardOn {
+        let textUtilitiesOn = Self.extensionEnabled(AppStorageKeys.TextUtilities.enabled)
+        if Self.clipboardRuntimeEnabled(
+            historyEnabled: clipboardOn, textUtilitiesEnabled: textUtilitiesOn)
+        {
             if clipboard == nil {
-                SettingsBackup.shared.restoreDataOnEnable(for: .clipboard)
+                if clipboardOn { SettingsBackup.shared.restoreDataOnEnable(for: .clipboard) }
                 clipboard = ClipboardStore()
             }
+        }
+        if clipboardOn {
             ClipboardHotKey.register()
         } else {
             ClipboardHotKey.unregister()
-            if let store = clipboard {
-                store.shutdown()
-                clipboard = nil
-            }
         }
-        ClipboardPanel.shared.store = clipboard
-
-        notchShelf?.attachClipboard(clipboard)
+        if textUtilitiesOn, textUtilities == nil { textUtilities = TextUtilitiesEngine() }
+        if textUtilitiesOn { textUtilities?.syncSettings() }
+        if !textUtilitiesOn, let engine = textUtilities {
+            engine.shutdown()
+            textUtilities = nil
+        }
+        if !clipboardOn, !textUtilitiesOn, let store = clipboard {
+            store.shutdown()
+            clipboard = nil
+        }
+        let visibleClipboard = clipboardOn ? clipboard : nil
+        ClipboardPanel.shared.store = visibleClipboard
+        notchShelf?.attachClipboard(visibleClipboard)
         notchShelf?.attachUsage(usage)
         notchShelf?.attachCalendar(calendar)
         notchShelf?.attachColorPicker(colorPicker)

@@ -590,6 +590,40 @@ public enum ExtensionLifecycleCatalog {
                     "ed clipboard ls --json")
             ]),
         descriptor(
+            "textUtilities", "Expand reusable text, paste cleanly, and keep copied links private.",
+            workflows: [
+                instruction(
+                    "snippets", "Expand snippets",
+                    "Save triggers with folders and clipboard, date, or time variables."),
+                instruction(
+                    "clipboard", "Control copied text",
+                    "Paste without formatting, clear after a delay, and remove URL trackers."),
+            ],
+            prerequisites: [
+                instruction(
+                    "access", "Grant input access",
+                    "Accessibility pastes expansions and Input Monitoring sees typed triggers.",
+                    "ed permissions ls --json")
+            ],
+            examples: [
+                "ed extensions enable textUtilities",
+                "ed text clean-url https://example.com/?utm_source=x",
+                "ed text snippets ls --json",
+            ],
+            docs: [documentation("guide", "Text Utilities guide", "docs/cli/text/README.md")],
+            recovery: [
+                instruction(
+                    "permissions", "Refresh input access",
+                    "Refresh Edith's mirrored Accessibility and Input Monitoring state.",
+                    "ed permissions refresh")
+            ],
+            verification: [
+                instruction(
+                    "snippets", "Read saved snippets",
+                    "Confirm the shared text utility settings are readable.",
+                    "ed text snippets ls --json")
+            ]),
+        descriptor(
             "focusDim", "Reduce visual noise by dimming everything behind the active app.",
             workflows: [
                 instruction(

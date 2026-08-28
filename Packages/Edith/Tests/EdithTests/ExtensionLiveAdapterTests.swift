@@ -37,6 +37,12 @@ import EdithCore
             ])
     }
 
+    @Test func textUtilitiesHasAReadyRuntimeAdapter() async {
+        #expect(
+            await ExtensionLiveAdapters.readiness(for: "textUtilities")
+                == .ready("Text expansion and clipboard utilities are ready."))
+    }
+
     @Test func attentionRequiresAnEnabledTrackingSource() {
         #expect(
             ExtensionLiveAdapters.attentionReadiness(settings: AttentionSettings())

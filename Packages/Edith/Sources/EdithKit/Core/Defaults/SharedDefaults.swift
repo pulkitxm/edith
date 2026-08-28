@@ -10,6 +10,8 @@ public enum SharedDefaults {
         CompletionScripts.autoRefreshKey: true,
         MusicFade.enabledKey: true,
         MusicFade.secondsKey: MusicFade.defaultSeconds,
+        AppStorageKeys.TextUtilities.snippetsEnabled: true,
+        AppStorageKeys.TextUtilities.autoClearDelay: TextUtilitiesSupport.defaultAutoClearDelay,
     ]
     public static let store: UserDefaults = {
         let store = UserDefaults(suiteName: activeSuiteName) ?? .standard
