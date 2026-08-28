@@ -22,6 +22,8 @@ enum JSONContract {
         JSONCase("ed guide", ["guide", "--json"]),
         JSONCase("ed version", ["version", "--json"]),
         JSONCase("ed status", ["status", "--json"]),
+        JSONCase("ed radial profile", ["radial", "profile", "--json"]),
+        JSONCase("ed radial show", ["radial", "show", "--json"]),
         JSONCase("ed completions source", ["completions", "source", "--json"]),
         JSONCase("ed attention status", ["attention", "status", "--json"]),
         JSONCase("ed attention summary", ["attention", "summary", "--json"]),

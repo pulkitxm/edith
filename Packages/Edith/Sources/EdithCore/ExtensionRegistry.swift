@@ -61,6 +61,15 @@ public enum ExtensionMarketplaceFilter {
     }
 }
 
+public enum RadialLauncherPreferenceKeys {
+    public static let enabled = "radialLauncherEnabled"
+    public static let profile = "radialLauncherProfile"
+    public static let atPointer = "radialLauncherAtPointer"
+    public static let hotKeyCode = "radialLauncherHotKeyCode"
+    public static let hotKeyMods = "radialLauncherHotKeyMods"
+    public static let hotKeyLabel = "radialLauncherHotKeyLabel"
+}
+
 public struct ExtensionRegistryEntry: Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String
@@ -200,5 +209,11 @@ public enum ExtensionRegistry {
             symbolName: "eyedropper", group: .utilities, featured: false,
             defaultsKey: "colorPickerEnabled", requiredCapabilities: [.screenColorSampling],
             optionalCapabilities: [.globalShortcuts]),
+        ExtensionRegistryEntry(
+            id: "radialLauncher", title: "Radial Launcher",
+            subtitle: "Your favorite actions in a pointer-centered wheel.",
+            symbolName: "circle.hexagongrid.fill", group: .utilities, featured: true,
+            defaultsKey: RadialLauncherPreferenceKeys.enabled,
+            requiredCapabilities: [.globalShortcuts], optionalCapabilities: [.mediaControls]),
     ]
 }

@@ -17,11 +17,14 @@ struct ShortcutsSettingsPane: View {
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
         var presenterEnabled =
         false
+    @AppStorage(RadialLauncherPreferenceKeys.enabled, store: SharedDefaults.store) private
+        var radialLauncherEnabled = false
 
     private var extensionShortcuts: [ExtensionShortcut] {
         ExtensionShortcutVisibility.visible(
             clipboard: clipboardEnabled, micMute: micMuteEnabled, focusDim: focusDimEnabled,
-            presenter: presenterEnabled, colorPicker: colorPickerEnabled)
+            presenter: presenterEnabled, colorPicker: colorPickerEnabled,
+            radialLauncher: radialLauncherEnabled)
     }
 
     var body: some View {
@@ -119,6 +122,10 @@ struct ShortcutsSettingsPane: View {
             shortcutRow(
                 "Pick a color", subtitle: "Summons the color picker loupe",
                 keyPrefix: "colorPickerHotKey", defaultLabel: "⌃⌥⌘C")
+        case .radialLauncher:
+            shortcutRow(
+                "Radial Launcher", subtitle: "Opens the action wheel at the pointer",
+                keyPrefix: "radialLauncherHotKey", defaultLabel: "⌥⌘Space")
         }
     }
 }

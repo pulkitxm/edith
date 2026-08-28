@@ -685,6 +685,42 @@ public enum ExtensionLifecycleCatalog {
                     "history", "Read sampled colors",
                     "Confirm the color history repository responds.", "ed color ls --json")
             ]),
+        descriptor(
+            "radialLauncher", "Open apps, files, links, shortcuts and controls around the pointer.",
+            workflows: [
+                instruction(
+                    "launch", "Summon the wheel",
+                    "Press the global shortcut, point at a slice and release or click.",
+                    "ed radial show"),
+                instruction(
+                    "configure", "Build your wheel",
+                    "Choose up to eight actions in the extension settings."),
+            ],
+            prerequisites: [
+                instruction(
+                    "accessibility", "Allow key combinations",
+                    "Accessibility is only needed by slices that send a key combination.",
+                    "ed permissions request accessibility")
+            ],
+            examples: [
+                "ed extensions enable radialLauncher", "ed radial show",
+                "ed radial profile --json",
+            ],
+            docs: [
+                documentation("guide", "Radial Launcher guide", "docs/cli/radial/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "doctor", "Check launcher readiness",
+                    "Inspect the helper, shortcut and optional Accessibility grant.",
+                    "ed extensions doctor radialLauncher --json")
+            ],
+            verification: [
+                instruction(
+                    "profile", "Read the active profile",
+                    "Confirm the wheel has at least one configured action.",
+                    "ed radial profile --json")
+            ]),
     ]
 
     public static let byID = Dictionary(uniqueKeysWithValues: descriptors.map { ($0.id, $0) })

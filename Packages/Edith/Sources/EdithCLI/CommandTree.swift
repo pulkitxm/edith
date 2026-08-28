@@ -453,6 +453,12 @@ public enum CommandTree {
                     CommandNode("stop", "Stop manual presenter mode.", options: common),
                 ]),
             CommandNode(
+                "radial", "Show and inspect the Radial Launcher.",
+                children: [
+                    CommandNode("show", "Show the launcher at the pointer.", options: common),
+                    CommandNode("profile", "Print the active launcher profile.", options: common),
+                ]),
+            CommandNode(
                 "herdr", "Live Herdr sessions on this Mac and your SSH machines.",
                 children: [
                     CommandNode(
