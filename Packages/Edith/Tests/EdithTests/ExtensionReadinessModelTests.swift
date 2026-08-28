@@ -5,6 +5,45 @@ import Testing
 
 @MainActor
 @Suite struct ExtensionReadinessModelTests {
+    @Test func firstRefreshPublishesLoadingThenTheReport() async {
+        let fixture = ExtensionReadinessFixture()
+        let model = ExtensionReadinessModel { await fixture.load($0) }
+
+        let task = model.refresh()
+
+        #expect(model.report == nil)
+        #expect(model.isRefreshing)
+        await fixture.waitUntilStarted(1)
+        await fixture.release(0, report: report("first", phase: .ready))
+        await task.value
+
+        #expect(model.report?.state.extensionID == "first")
+        #expect(!model.isRefreshing)
+    }
+
+    @Test func repeatedRefreshRetainsThePublishedReportUntilReplacementArrives() async {
+        let fixture = ExtensionReadinessFixture()
+        let model = ExtensionReadinessModel { await fixture.load($0) }
+
+        let first = model.refresh()
+        await fixture.waitUntilStarted(1)
+        await fixture.release(0, report: report("published", phase: .ready))
+        await first.value
+
+        let second = model.refresh(.verify)
+        await fixture.waitUntilStarted(2)
+
+        #expect(model.report?.state.extensionID == "published")
+        #expect(model.isRefreshing)
+
+        await fixture.release(1, report: report("replacement", phase: .degraded))
+        await second.value
+
+        #expect(model.report?.state.extensionID == "replacement")
+        #expect(model.report?.state.phase == .degraded)
+        #expect(!model.isRefreshing)
+    }
+
     @Test func newestRefreshOwnsPublicationWhenAnOlderLoadFinishesLast() async {
         let fixture = ExtensionReadinessFixture()
         let model = ExtensionReadinessModel { await fixture.load($0) }
