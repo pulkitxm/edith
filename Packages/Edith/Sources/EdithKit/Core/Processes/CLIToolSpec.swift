@@ -45,12 +45,14 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
     public let requirement: CLIToolRequirement
     public let presenceStrategy: CLIToolPresenceStrategy
     public let installStrategy: CLIToolInstallStrategy
+    public let versionProbeTimeout: TimeInterval
 
     public init(
         id: String, displayName: String, why: String,
         requirement: CLIToolRequirement = .always,
         presenceStrategy: CLIToolPresenceStrategy,
-        installStrategy: CLIToolInstallStrategy
+        installStrategy: CLIToolInstallStrategy,
+        versionProbeTimeout: TimeInterval = 5
     ) {
         self.id = id
         self.displayName = displayName
@@ -58,6 +60,7 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
         self.requirement = requirement
         self.presenceStrategy = presenceStrategy
         self.installStrategy = installStrategy
+        self.versionProbeTimeout = versionProbeTimeout
     }
 
     public static let youtubeDownloader = CLIToolSpec(
@@ -72,7 +75,8 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
             destinationName: "yt-dlp",
             instruction:
                 "Download yt-dlp_macos from the official yt-dlp release and place it in a folder on PATH."
-        ))
+        ),
+        versionProbeTimeout: 30)
 
     public static let claudeCode = CLIToolSpec(
         id: "claude", displayName: "Claude Code",

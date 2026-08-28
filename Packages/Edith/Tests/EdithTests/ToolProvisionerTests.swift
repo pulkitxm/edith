@@ -187,6 +187,13 @@ private final class CommandRecorder: @unchecked Sendable {
         #expect(version == nil)
     }
 
+    @Test func largeStandaloneToolsHaveAColdStartProbeBudget() {
+        #expect(CLIToolSpec.youtubeDownloader.versionProbeTimeout == 30)
+        #expect(CLIToolSpec.claudeCode.versionProbeTimeout == 5)
+        #expect(CLIToolSpec.codex.versionProbeTimeout == 5)
+        #expect(CLIToolSpec.quinjet.versionProbeTimeout == 5)
+    }
+
     @Test func versionProbeStopsAtItsDeadline() async {
         let request = CLICommandRequest(
             executableURL: URL(fileURLWithPath: "/bin/sleep"), arguments: ["60"], environment: [:],
