@@ -11,8 +11,6 @@ public struct PopupAnchorKeys: Sendable {
 
     public static let clipboard = PopupAnchorKeys(
         positionX: "clipboardWindowPositionX", positionY: "clipboardWindowPositionY")
-    public static let emoji = PopupAnchorKeys(
-        positionX: "emojiWindowPositionX", positionY: "emojiWindowPositionY")
 }
 
 public enum PopupPosition: String, CaseIterable, Identifiable, Sendable {

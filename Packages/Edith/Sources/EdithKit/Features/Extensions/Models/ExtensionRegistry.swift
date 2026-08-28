@@ -49,7 +49,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
     public var reason: String {
         switch self {
         case .calendar: "Required to read and show your schedule in Calendar."
-        case .notifications: "Asked when you enable usage, machine, or system pressure alerts."
+        case .notifications: "Asked when you enable usage limit, pacing, or reset alerts."
         case .accessibility:
             "Required for global keyboard tools and window controls that act outside Edith."
         case .inputMonitoring:
@@ -61,7 +61,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
             "Asked when you first use the Notch Shelf per-app volume mixer."
         case .camera: "Asked when you first open the Notch Shelf camera preview."
         case .bluetooth: "Asked when Notch Shelf first checks for device connections."
-        case .automation: "Asked when Edith first controls Finder or external playback."
+        case .automation: "Asked when Notch Shelf first controls external playback."
         }
     }
 
@@ -111,7 +111,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .bluetooth:
             "macOS will ask for Bluetooth access when connection alerts first run."
         case .automation:
-            "macOS will ask for Automation access when Edith first controls Finder or playback."
+            "macOS will ask for Automation access when Notch Shelf first controls playback."
         case .applicationAudio:
             "macOS will ask for application audio access when the mixer first changes an app."
         default: nil
@@ -129,18 +129,16 @@ public extension ExtensionRegistryEntry {
         case "calendar": [.calendar]
         case "windowSwitcher": [.accessibility]
         case "focusDim", "presenter", "colorPicker": [.screenRecording]
-        case "finderTools", "windowTools": [.accessibility]
         default: []
         }
     }
 
     var optionalPermissions: [ExtensionPermission] {
         switch id {
-        case "usage", "machines", "systemStats": [.notifications]
+        case "usage", "machines": [.notifications]
         case "system": [.accessibility, .inputMonitoring]
         case "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation]
-        case "clipboard", "emoji": [.accessibility]
-        case "finderTools": [.automation]
+        case "clipboard": [.accessibility]
         default: []
         }
     }

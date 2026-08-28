@@ -10,9 +10,6 @@ struct ShortcutsSettingsPane: View {
     @AppStorage(AppStorageKeys.ColorPicker.enabled, store: SharedDefaults.store) private
         var colorPickerEnabled =
         false
-    @AppStorage(AppStorageKeys.Emoji.enabled, store: SharedDefaults.store) private
-        var emojiEnabled =
-        false
     @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var focusDimEnabled =
         false
     @AppStorage(AppStorageKeys.Mic.muteEnabled, store: SharedDefaults.store) private
@@ -23,9 +20,8 @@ struct ShortcutsSettingsPane: View {
 
     private var extensionShortcuts: [ExtensionShortcut] {
         ExtensionShortcutVisibility.visible(
-            clipboard: clipboardEnabled, emoji: emojiEnabled, micMute: micMuteEnabled,
-            focusDim: focusDimEnabled, presenter: presenterEnabled,
-            colorPicker: colorPickerEnabled)
+            clipboard: clipboardEnabled, micMute: micMuteEnabled, focusDim: focusDimEnabled,
+            presenter: presenterEnabled, colorPicker: colorPickerEnabled)
     }
 
     var body: some View {
@@ -107,10 +103,6 @@ struct ShortcutsSettingsPane: View {
             shortcutRow(
                 "Clipboard history", subtitle: "Opens the clipboard history popup",
                 keyPrefix: "clipboardHotKey", defaultLabel: "⌃⇧C")
-        case .emoji:
-            shortcutRow(
-                "Emoji picker", subtitle: "Opens the emoji picker over whatever you are typing in",
-                keyPrefix: "emojiHotKey", defaultLabel: "⌃⇧E")
         case .micMute:
             shortcutRow(
                 "Mic mute", subtitle: "Mutes or unmutes every microphone system-wide",

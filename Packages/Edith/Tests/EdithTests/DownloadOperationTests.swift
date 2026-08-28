@@ -133,6 +133,9 @@ import Testing
     @Test func toolStatusAndUpdateUseTheSameInjectedCommandRunner() async throws {
         let executable = URL(fileURLWithPath: "/tmp/yt-dlp")
         let run: ToolVersionProbe.RunCommand = { request, _ in
+            if request.arguments == ["--version"] {
+                #expect(request.timeout == 30)
+            }
             let output = request.arguments == ["-U"] ? "updated\n" : "2026.08.23\n"
             return CLICommandResult(terminationStatus: 0, output: output)
         }

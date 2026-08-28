@@ -37,20 +37,6 @@ import EdithCore
             ])
     }
 
-    @Test func windowToolsValidatesStoredShortcuts() {
-        let suite = "test.extension-adapter.window-tools.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-
-        #expect(
-            ExtensionLiveAdapters.windowToolsReadiness(defaults: defaults)
-                == .ready("Window layouts and shortcuts are configured."))
-        defaults.set("left", forKey: AppStorageKeys.WindowTools.leftHotKeyCode)
-        #expect(
-            ExtensionLiveAdapters.windowToolsReadiness(defaults: defaults)
-                == .needsSetup("A stored Window Tools shortcut is invalid."))
-    }
-
     @Test func attentionRequiresAnEnabledTrackingSource() {
         #expect(
             ExtensionLiveAdapters.attentionReadiness(settings: AttentionSettings())
@@ -63,25 +49,6 @@ import EdithCore
             ExtensionLiveAdapters.attentionReadiness(
                 settings: AttentionSettings(isEnabled: true, browserTrackingEnabled: true))
                 == .ready("Attention tracking is configured for the selected sources."))
-    }
-
-    @Test func finderToolsRequiresAtLeastOneSelectedFeature() {
-        let suite = "test.extension-adapter.finder-tools.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-
-        #expect(
-            ExtensionLiveAdapters.finderToolsReadiness(defaults: defaults)
-                == .ready("Finder Tools features enabled: 4."))
-        for key in [
-            AppStorageKeys.FinderTools.cutPaste, AppStorageKeys.FinderTools.rename,
-            AppStorageKeys.FinderTools.pasteImages, AppStorageKeys.FinderTools.diskImageInstaller,
-        ] {
-            defaults.set(false, forKey: key)
-        }
-        #expect(
-            ExtensionLiveAdapters.finderToolsReadiness(defaults: defaults)
-                == .needsSetup("Turn on at least one Finder Tools feature."))
     }
 
     @Test func windowSwitcherRequiresAccessibility() {

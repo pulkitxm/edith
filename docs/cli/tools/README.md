@@ -132,9 +132,9 @@ install that did not land.
   ```
 
   Each answer is then kept in
-  `~/Library/Application Support/Edith/tool-versions.json` against that binary's
-  size and modification time, so the next run reads the file and launches
-  nothing:
+  `~/Library/Application Support/Edith/tool-versions.json` against the resolved
+  executable's path, filesystem identity, size and modification time, so the
+  next run reads the file and launches nothing:
 
   ```
   $ time ed tools ls > /dev/null
@@ -142,8 +142,12 @@ install that did not land.
   ```
 
   Update or replace a tool and its stamp stops matching, so the next `ls` probes
-  that one again. The four probes run concurrently, so a cold run costs the
-  slowest tool rather than the sum. Each probe has a five-second deadline.
+  that one again. Symlink targets are resolved before stamping, which covers
+  package managers that keep the PATH entry unchanged while replacing the real
+  executable. Cache entries created by older Edith releases are probed once and
+  replaced with the resolved identity. The four probes run concurrently, so a
+  cold run costs the slowest tool rather than the sum. Each probe has a
+  five-second deadline.
 - `installed` means the executable answered `--version` with exit status 0.
   An executable file that times out or exits non-zero is shown as `broken`,
   with its path retained and `installed: false` in JSON. The app provisioner

@@ -64,9 +64,9 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "attention", "usage", "quinjet", "system", "appMaintenance", "machines", "systemStats",
-        "micMute", "lidAwake", "music", "calendar", "notchShelf", "clipboard", "finderTools",
-        "windowSwitcher", "focusDim", "presenter", "emoji", "colorPicker", "windowTools",
+        "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
+        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "windowSwitcher", "focusDim",
+        "presenter", "colorPicker",
     ]
 
     public static func provider(
@@ -95,7 +95,6 @@ public enum ExtensionLiveAdapters {
         case "quinjet":
             quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
         case "system": await systemReadiness()
-        case "appMaintenance": appMaintenanceReadiness()
         case "machines": machinesReadiness()
         case "systemStats": systemStatsReadiness()
         case "micMute": microphoneReadiness()
@@ -104,28 +103,12 @@ public enum ExtensionLiveAdapters {
         case "calendar": calendarReadiness()
         case "notchShelf": shelfReadiness()
         case "clipboard": clipboardReadiness()
-        case "finderTools": finderToolsReadiness(defaults: defaults)
         case "windowSwitcher": windowSwitcherReadiness(defaults: defaults)
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
-        case "windowTools": windowToolsReadiness(defaults: defaults)
-        case "emoji": emojiReadiness(defaults: defaults)
         default: nil
         }
-    }
-
-    static func finderToolsReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
-        let keys = [
-            AppStorageKeys.FinderTools.cutPaste, AppStorageKeys.FinderTools.rename,
-            AppStorageKeys.FinderTools.pasteImages, AppStorageKeys.FinderTools.diskImageInstaller,
-        ]
-        let enabled = keys.filter { defaults.object(forKey: $0) as? Bool ?? true }
-        return ExtensionAdapterFacts(
-            configured: !enabled.isEmpty,
-            readyDetail: "Finder Tools features enabled: \(enabled.count).",
-            setupDetail: "Turn on at least one Finder Tools feature."
-        ).readiness
     }
 
     static func windowSwitcherReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
@@ -217,21 +200,6 @@ public enum ExtensionLiveAdapters {
         return ExtensionAdapterFacts(
             contentCount: count, readyDetail: "Running application control is available.",
             emptyDetail: "No regular applications are visible to the system runtime."
-        ).readiness
-    }
-
-    static func appMaintenanceReadiness() -> ExtensionAdapterReadiness {
-        let roots = AppMaintenanceInventory.defaultApplicationRoots
-        let available = roots.contains { FileManager.default.isReadableFile(atPath: $0.path) }
-        let tools = ["/usr/bin/hdiutil", "/usr/bin/codesign", "/usr/sbin/spctl", "/usr/bin/ditto"]
-        let installerAvailable = tools.allSatisfy(FileManager.default.isExecutableFile(atPath:))
-        return ExtensionAdapterFacts(
-            configured: available && installerAvailable,
-            readyDetail:
-                "Verified disk image installation, app inventory and safe Trash review are available.",
-            setupDetail: available
-                ? "Required macOS disk image verification tools are unavailable."
-                : "No readable Applications folder is available."
         ).readiness
     }
 
@@ -501,59 +469,6 @@ public enum ExtensionLiveAdapters {
             emptyDetail: screenCount == 0
                 ? "No active display is available for color sampling."
                 : "Color sampling is ready and the history is empty."
-        ).readiness
-    }
-
-    static func windowToolsReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
-        let integerKeys = [
-            AppStorageKeys.WindowTools.leftHotKeyCode,
-            AppStorageKeys.WindowTools.leftHotKeyMods,
-            AppStorageKeys.WindowTools.rightHotKeyCode,
-            AppStorageKeys.WindowTools.rightHotKeyMods,
-            AppStorageKeys.WindowTools.maximizeHotKeyCode,
-            AppStorageKeys.WindowTools.maximizeHotKeyMods,
-            AppStorageKeys.WindowTools.restoreHotKeyCode,
-            AppStorageKeys.WindowTools.restoreHotKeyMods,
-        ]
-        let labelKeys = [
-            AppStorageKeys.WindowTools.leftHotKeyLabel,
-            AppStorageKeys.WindowTools.rightHotKeyLabel,
-            AppStorageKeys.WindowTools.maximizeHotKeyLabel,
-            AppStorageKeys.WindowTools.restoreHotKeyLabel,
-        ]
-        let greenButton = defaults.object(forKey: AppStorageKeys.WindowTools.greenButtonMaximizes)
-        let configured =
-            integerKeys.allSatisfy {
-                defaults.object(forKey: $0) == nil || defaults.object(forKey: $0) is Int
-            }
-            && labelKeys.allSatisfy {
-                defaults.object(forKey: $0) == nil || defaults.object(forKey: $0) is String
-            }
-            && (greenButton == nil || greenButton is Bool)
-        return ExtensionAdapterFacts(
-            configured: configured,
-            readyDetail: "Window layouts and shortcuts are configured.",
-            setupDetail: "A stored Window Tools shortcut is invalid."
-        ).readiness
-    }
-
-    static func emojiReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
-        let catalog = EmojiCatalog.shared
-        guard !catalog.emoji.isEmpty else {
-            return .failed("The bundled emoji catalog could not be read.")
-        }
-        let toneRaw = defaults.object(forKey: AppStorageKeys.Emoji.skinTone) as? Int
-        let frequentCount = defaults.object(forKey: AppStorageKeys.Emoji.frequentCount) as? Int
-        let configured =
-            (toneRaw == nil || EmojiSkinTone(rawValue: toneRaw!) != nil)
-            && (frequentCount == nil || (0...24).contains(frequentCount!))
-        let ledger = EmojiUsageLedger.load(from: defaults, key: AppStorageKeys.Emoji.usage)
-        return ExtensionAdapterFacts(
-            configured: configured, contentCount: ledger.entries.count,
-            readyDetail:
-                "\(catalog.emoji.count) emoji available, \(ledger.entries.count) used recently.",
-            setupDetail: "The stored skin tone or frequently used count is invalid.",
-            emptyDetail: "\(catalog.emoji.count) emoji are ready and nothing has been used yet."
         ).readiness
     }
 

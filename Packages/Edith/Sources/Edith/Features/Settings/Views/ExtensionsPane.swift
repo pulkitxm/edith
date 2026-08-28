@@ -575,9 +575,9 @@ private struct ExtensionSettingsSheet: View {
         case "machines": 420
         case "lidAwake": 400
         case "music": 460
-        case "focusDim", "colorPicker", "finderTools", "windowSwitcher": 430
+        case "focusDim", "colorPicker", "windowSwitcher": 430
         case "system": 500
-        case "notchShelf", "presenter", "windowTools": 580
+        case "notchShelf", "presenter": 580
         default: 620
         }
     }
@@ -632,14 +632,11 @@ private struct ExtensionLifecycleRows: View {
                     Button {
                         readiness.refresh(.verify)
                     } label: {
-                        if readiness.isRefreshing {
-                            HStack(spacing: UIScale.pt(6)) {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text("Checking...")
-                            }
-                        } else {
+                        HStack(spacing: UIScale.pt(6)) {
                             Text("Check again")
+                            ProgressView()
+                                .controlSize(.small)
+                                .opacity(readiness.isRefreshing ? 1 : 0)
                         }
                     }
                     .disabled(readiness.isRefreshing)
@@ -931,7 +928,6 @@ private struct ExtensionDetailRows: View {
             case .herdr: HerdrRows()
             case .quinjet: QuinjetRows()
             case .system: SystemRows()
-            case .appMaintenance: AppMaintenanceRows()
             case .machines: MachinesRows()
             case .companion: CompanionRows()
             case .systemStats: SystemStatsRows()
@@ -941,13 +937,10 @@ private struct ExtensionDetailRows: View {
             case .calendar: CalendarRows()
             case .notchShelf: NotchShelfRows()
             case .clipboard: ClipboardRows()
-            case .finderTools: FinderToolsRows()
             case .windowSwitcher: WindowSwitcherRows()
             case .focusDim: FocusDimRows()
             case .presenter: PresenterRows()
             case .colorPicker: ColorPickerRows()
-            case .windowTools: WindowToolsRows()
-            case .emoji: EmojiRows()
             }
         } else {
             Section("Controls") {
@@ -1722,16 +1715,6 @@ private struct SystemStatsRows: View {
     @AppStorage(AppStorageKeys.MenuBar.statsColorHex, store: SharedDefaults.store) private
         var statsColorHex =
         "FFFFFF"
-    @AppStorage(AppStorageKeys.MenuBar.statsAlerts, store: SharedDefaults.store) private
-        var alerts = false
-    @AppStorage(AppStorageKeys.MenuBar.statsCPUThreshold, store: SharedDefaults.store) private
-        var cpuThreshold = 90.0
-    @AppStorage(AppStorageKeys.MenuBar.statsMemoryThreshold, store: SharedDefaults.store) private
-        var memoryThreshold = 90.0
-    @AppStorage(AppStorageKeys.MenuBar.statsDiskThreshold, store: SharedDefaults.store) private
-        var diskThreshold = 90.0
-    @AppStorage(AppStorageKeys.MenuBar.statsBatteryThreshold, store: SharedDefaults.store) private
-        var batteryThreshold = 20.0
 
     var body: some View {
         Section {
@@ -1745,46 +1728,11 @@ private struct SystemStatsRows: View {
                             $0.hex6
                     }),
                 supportsOpacity: false)
-            Toggle(
-                "Sustained alerts",
-                isOn: $alerts.configured(AppStorageKeys.MenuBar.statsAlerts))
-            if alerts {
-                thresholdRow(
-                    "CPU",
-                    value: $cpuThreshold.configured(
-                        AppStorageKeys.MenuBar.statsCPUThreshold))
-                thresholdRow(
-                    "Memory",
-                    value: $memoryThreshold.configured(
-                        AppStorageKeys.MenuBar.statsMemoryThreshold))
-                thresholdRow(
-                    "Startup disk",
-                    value: $diskThreshold.configured(
-                        AppStorageKeys.MenuBar.statsDiskThreshold))
-                thresholdRow(
-                    "Low battery",
-                    value: $batteryThreshold.configured(
-                        AppStorageKeys.MenuBar.statsBatteryThreshold), range: 5...50)
-            }
-            Text(
-                "CPU, memory, network, and disk throughput update every 2 seconds. GPU updates every 10 seconds; battery and capacity every 30 seconds. Alerts require 12 seconds of sustained pressure."
-            )
-            .settingsCaption()
+            Text("Sampled every couple of seconds; costs nothing measurable.")
+                .settingsCaption()
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
-    }
-
-    private func thresholdRow(
-        _ label: String, value: Binding<Double>, range: ClosedRange<Double> = 50...100
-    ) -> some View {
-        HStack {
-            Text(label)
-            Slider(value: value, in: range, step: 5)
-            Text("\(Int(value.wrappedValue))%")
-                .monospacedDigit()
-                .frame(width: UIScale.pt(40), alignment: .trailing)
-        }
     }
 }
 
@@ -1924,35 +1872,6 @@ private struct SystemRows: View {
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
-    }
-}
-
-private struct AppMaintenanceRows: View {
-    @AppStorage(AppStorageKeys.AppMaintenance.enabled, store: SharedDefaults.store) private
-        var enabled = false
-    @AppStorage(AppStorageKeys.AppMaintenance.installDestination, store: SharedDefaults.store)
-    private var installDestination = AppMaintenanceInstallDestination.user.rawValue
-    @State private var showingMaintenance = false
-
-    var body: some View {
-        Section("Maintenance") {
-            LabeledContent("Removal", value: "Review first, then move to Trash")
-            Text(
-                "Inventory regular Applications folders, verify single-app disk images and select exact support files before removal."
-            )
-            .settingsCaption()
-            Picker("Disk image destination", selection: $installDestination) {
-                ForEach(AppMaintenanceInstallDestination.allCases, id: \.rawValue) { destination in
-                    Text(destination.title).tag(destination.rawValue)
-                }
-            }
-            Button("Open App Maintenance") { showingMaintenance = true }
-        }
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.5)
-        .sheet(isPresented: $showingMaintenance) {
-            AppMaintenanceView()
-        }
     }
 }
 

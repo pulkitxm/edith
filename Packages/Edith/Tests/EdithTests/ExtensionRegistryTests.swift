@@ -12,7 +12,6 @@ import Testing
         "tabHerdrEnabled",
         "tabQuinjetEnabled",
         "tabSystemEnabled",
-        "appMaintenanceEnabled",
         "tabMachinesEnabled",
         "tabCompanionEnabled",
         "menuBarSystemStats",
@@ -22,18 +21,24 @@ import Testing
         "tabCalendarEnabled",
         "notchShelfEnabled",
         "clipboardEnabled",
-        "finderToolsEnabled",
         "windowSwitcherEnabled",
         "focusDimEnabled",
         "presenterEnabled",
         "colorPickerEnabled",
-        "windowToolsEnabled",
-        "emojiEnabled",
     ]
 
     @Test func registryIdentifiersAreUnique() {
         let identifiers = ExtensionRegistry.entries.map(\.id)
         #expect(Set(identifiers).count == identifiers.count)
+    }
+
+    @Test func registryMatchesCurrentExtensions() {
+        #expect(
+            ExtensionRegistry.entries.map(\.id) == [
+                "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
+                "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
+                "clipboard", "windowSwitcher", "focusDim", "presenter", "colorPicker",
+            ])
     }
 
     @Test func lifecycleCatalogCoversEveryRegistryEntry() throws {
@@ -145,7 +150,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard", "appMaintenance", "windowSwitcher",
+                "clipboard", "windowSwitcher",
             ])
     }
 
@@ -227,7 +232,6 @@ import Testing
             "herdr": [],
             "quinjet": [],
             "system": [],
-            "appMaintenance": [],
             "machines": [],
             "companion": [],
             "systemStats": [],
@@ -237,13 +241,10 @@ import Testing
             "calendar": [.calendar],
             "notchShelf": [],
             "clipboard": [],
-            "finderTools": [.accessibility],
             "windowSwitcher": [.accessibility],
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
             "colorPicker": [.screenRecording],
-            "windowTools": [.accessibility],
-            "emoji": [],
         ]
         let optional: [String: [ExtensionPermission]] = [
             "attention": [],
@@ -251,23 +252,19 @@ import Testing
             "herdr": [],
             "quinjet": [],
             "system": [.accessibility, .inputMonitoring],
-            "appMaintenance": [],
             "machines": [.notifications],
             "companion": [],
-            "systemStats": [.notifications],
+            "systemStats": [],
             "micMute": [],
             "lidAwake": [],
             "music": [],
             "calendar": [],
             "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation],
             "clipboard": [.accessibility],
-            "finderTools": [.automation],
             "windowSwitcher": [],
             "focusDim": [],
             "presenter": [],
             "colorPicker": [],
-            "windowTools": [],
-            "emoji": [.accessibility],
         ]
 
         let identifiers = Set(ExtensionRegistry.entries.map(\.id))
@@ -396,7 +393,6 @@ import Testing
             "tabCalendarEnabled": true,
             "notchShelfEnabled": false,
             "clipboardEnabled": true,
-            "finderToolsEnabled": false,
             "windowSwitcherEnabled": false,
             "focusDimEnabled": false,
             "presenterEnabled": true,

@@ -38,11 +38,8 @@ public enum Guide {
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler
         ed color copy 1 --format hex
-        ed window status            Window Tools settings and available layouts
-        ed window left-half         snap the active window to the left
         ed windows ls               open and minimized windows Edith can focus
         ed windows show             open the searchable Window Switcher
-        ed emoji pick               open Edith's emoji picker
         ed usage sources            the agents that produced your usage history
         ed schema                   JSON Schema for the config document
         ed version                  the CLI version, and whether the app is up
@@ -408,10 +405,6 @@ public enum Guide {
         ed machines terminal broadcast box -- uptime one line, every open tab for box
         ed apps ls                      what is running here
         ed apps quit Safari --yes | --all --yes
-        ed maintenance inventory        installed apps and Homebrew updates
-        ed maintenance scan <app>       exact app and support-file Trash plan
-        ed maintenance remove <app>     preview the reviewed selection
-        ed maintenance remove <app> --yes
         ed download ls                  the yt-dlp queue
         ed download status              lifecycle totals for the queue
         ed download add <url> --kind audio
@@ -430,9 +423,6 @@ public enum Guide {
         ed clipboard rm 3 --yes | clear --yes
         ed color ls --format hex        the colours you picked
         ed color copy 1                 copy the newest using your configured format
-        ed emoji ls --search rocket     the emoji this Mac can render
-        ed emoji insert 1F600           type one into the app in front of you
-        ed emoji tone medium            the default skin tone
         ed shelf ls                     what is parked on the notch shelf
         ed shelf add ./report.pdf
         ed shelf open 1 | reveal 1 | share 1

@@ -56,7 +56,7 @@ enum ToolsBridge {
         }
         let request = CLICommandRequest(
             executableURL: executable, arguments: arguments,
-            environment: CLIToolEnvironment.sanitized(), timeout: 5)
+            environment: CLIToolEnvironment.sanitized(), timeout: spec.versionProbeTimeout)
         let version = await ToolVersionProbe.version(request)
         if let version { ToolVersionCache.remember(version, for: executable) }
         return Status(spec: spec, path: executable, version: version)

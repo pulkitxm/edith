@@ -12,15 +12,12 @@ final class AppServices {
     private(set) var notchShelf: NotchShelfController?
     private(set) var colorPicker: ColorPickerStore?
     private(set) var clipboard: ClipboardStore?
-    private(set) var emoji: EmojiStore?
-    private(set) var finderTools: FinderToolsService?
     private(set) var focusDim: FocusDimEngine?
     private(set) var presenter: PresenterDetector?
     private(set) var micMute: MicMuteEngine?
     private(set) var lidAwake: LidAwakeEngine?
     private(set) var systemStats: SystemStatsStatusItem?
     private(set) var attention: AttentionTrackingService?
-    private(set) var windowTools: WindowToolsEngine?
     private(set) var windowSwitcher: WindowSwitcherService?
     private let startup = StartupCoordinator()
     private let lidAwakeRestorationGate = LidAwakeRestorationGate()
@@ -105,7 +102,6 @@ final class AppServices {
         startup.cancel()
         terminating = true
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
-        finderTools?.shutdown()
         windowSwitcher?.shutdown()
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
@@ -300,30 +296,10 @@ final class AppServices {
         }
         ClipboardPanel.shared.store = clipboard
 
-        let emojiOn = Self.extensionEnabled(AppStorageKeys.Emoji.enabled)
-        if emojiOn {
-            if emoji == nil { emoji = EmojiStore() }
-            EmojiHotKey.register()
-        } else {
-            EmojiHotKey.unregister()
-            if let store = emoji {
-                store.shutdown()
-                emoji = nil
-            }
-        }
-        EmojiPanel.shared.store = emoji
         notchShelf?.attachClipboard(clipboard)
         notchShelf?.attachUsage(usage)
         notchShelf?.attachCalendar(calendar)
         notchShelf?.attachColorPicker(colorPicker)
-
-        let finderToolsOn = Self.extensionEnabled(AppStorageKeys.FinderTools.enabled)
-        if finderToolsOn, finderTools == nil { finderTools = FinderToolsService() }
-        if !finderToolsOn {
-            finderTools?.shutdown()
-            finderTools = nil
-        }
-        finderTools?.syncSettings()
 
         let windowSwitcherOn = Self.extensionEnabled(AppStorageKeys.WindowSwitcher.enabled)
         if windowSwitcherOn, windowSwitcher == nil { windowSwitcher = WindowSwitcherService() }
@@ -335,13 +311,6 @@ final class AppServices {
     }
 
     private func reconcilePresentationServices() {
-        let windowToolsOn = Self.extensionEnabled(AppStorageKeys.WindowTools.enabled)
-        if windowToolsOn, windowTools == nil { windowTools = WindowToolsEngine() }
-        if !windowToolsOn, let engine = windowTools {
-            engine.shutdown()
-            windowTools = nil
-        }
-
         let focusDimOn = FocusDimState.isEnabled()
         if focusDimOn, focusDim == nil { focusDim = FocusDimEngine() }
         if !focusDimOn, let engine = focusDim {
@@ -446,7 +415,6 @@ final class AppServices {
         lidAwake?.syncSettings()
         focusDim?.applySettings()
         presenter?.applySettings()
-        windowTools?.applySettings()
     }
 
     func performWindowSwitcherOperation(_ info: [AnyHashable: Any]) {

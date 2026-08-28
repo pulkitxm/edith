@@ -105,7 +105,8 @@ public enum DownloadToolOperationExecution {
         guard let executable else { return DownloadToolStatus(executable: nil, version: nil) }
         let request = CLICommandRequest(
             executableURL: executable, arguments: ["--version"],
-            environment: CLIToolEnvironment.sanitized(), timeout: 5)
+            environment: CLIToolEnvironment.sanitized(),
+            timeout: CLIToolSpec.youtubeDownloader.versionProbeTimeout)
         return DownloadToolStatus(
             executable: executable,
             version: await ToolVersionProbe.version(request, runCommand: runCommand))

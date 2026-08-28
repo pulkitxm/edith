@@ -133,11 +133,6 @@ public enum ExtensionRegistry {
             defaultsKey: "tabSystemEnabled", requiredCapabilities: [.runningApplications],
             optionalCapabilities: [.preventSleep, .inputSuppression]),
         ExtensionRegistryEntry(
-            id: "appMaintenance", title: "App Maintenance",
-            subtitle: "Verified disk image installs, app updates, and review-first removal.",
-            symbolName: "shippingbox.and.arrow.backward", group: .system, featured: true,
-            defaultsKey: "appMaintenanceEnabled", requiredCapabilities: [.runningApplications]),
-        ExtensionRegistryEntry(
             id: "machines", title: "Machines",
             subtitle: "Your other computers over SSH: stats, files, Docker, and a terminal.",
             symbolName: "server.rack", group: .system, featured: true,
@@ -149,11 +144,10 @@ public enum ExtensionRegistry {
             symbolName: "brain.head.profile", group: .agent, featured: false,
             defaultsKey: "tabCompanionEnabled", requiredCapabilities: [.companionService]),
         ExtensionRegistryEntry(
-            id: "systemStats", title: "System Monitor",
-            subtitle: "CPU, memory, GPU, network, disk, battery, power, and sustained alerts.",
+            id: "systemStats", title: "CPU & Memory in menu bar",
+            subtitle: "Live CPU and memory readout as a menu bar item.",
             symbolName: "gauge.with.needle", group: .system, featured: false,
-            defaultsKey: "menuBarSystemStats", requiredCapabilities: [.systemMetrics],
-            optionalCapabilities: [.notifications]),
+            defaultsKey: "menuBarSystemStats", requiredCapabilities: [.systemMetrics]),
         ExtensionRegistryEntry(
             id: "micMute", title: "Mic Mute",
             subtitle: "Mute every microphone system-wide with ⌘⇧M or the menu bar icon.",
@@ -191,12 +185,6 @@ public enum ExtensionRegistry {
             defaultsKey: "clipboardEnabled", requiredCapabilities: [.clipboardHistory],
             optionalCapabilities: [.globalPaste, .globalShortcuts]),
         ExtensionRegistryEntry(
-            id: "finderTools", title: "Finder Tools",
-            subtitle: "Cut and paste, F2 rename, image paste, and safe DMG installs.",
-            symbolName: "folder.badge.gearshape", group: .utilities, featured: false,
-            defaultsKey: "finderToolsEnabled",
-            requiredCapabilities: [.globalShortcuts, .runningApplications]),
-        ExtensionRegistryEntry(
             id: "windowSwitcher", title: "Window Switcher",
             subtitle: "Search every window or cycle through the front app.",
             symbolName: "rectangle.stack.fill", group: .utilities, featured: true,
@@ -213,22 +201,10 @@ public enum ExtensionRegistry {
             symbolName: "theatermasks.fill", group: .utilities, featured: false,
             defaultsKey: "presenterEnabled", requiredCapabilities: [.screenShareDetection]),
         ExtensionRegistryEntry(
-            id: "emoji", title: "Emoji Picker",
-            subtitle: "Every macOS emoji on a hotkey, straight into the app you are typing in.",
-            symbolName: "face.smiling", group: .utilities, featured: false,
-            defaultsKey: "emojiEnabled", requiredCapabilities: [.emojiInsertion],
-            optionalCapabilities: [.globalShortcuts]),
-        ExtensionRegistryEntry(
             id: "colorPicker", title: "Color Picker",
             subtitle: "System loupe on a hotkey, sampled color to your clipboard.",
             symbolName: "eyedropper", group: .utilities, featured: false,
             defaultsKey: "colorPickerEnabled", requiredCapabilities: [.screenColorSampling],
-            optionalCapabilities: [.globalShortcuts]),
-        ExtensionRegistryEntry(
-            id: "windowTools", title: "Window Tools",
-            subtitle: "Snap, center, restore, and maximize windows without another Space.",
-            symbolName: "rectangle.3.group", group: .utilities, featured: false,
-            defaultsKey: "windowToolsEnabled", requiredCapabilities: [.windowManagement],
             optionalCapabilities: [.globalShortcuts]),
     ]
 }

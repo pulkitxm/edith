@@ -149,6 +149,33 @@ import Testing
         #expect(probe.secondaryActivations == 1)
     }
 
+    @Test func harnessRemainsInactiveAndHiddenWhileRenderingAndDeliveringInput() async throws {
+        let application = NSApplication.shared
+        let wasActive = application.isActive
+        let probe = EdithButtonProbe()
+        let harness = EdithButtonHarness(
+            rootView: EdithButtonInteractionFixture(
+                role: .secondary, spaceAction: true, probe: probe))
+        defer { harness.close() }
+
+        let frames = try await harness.frames(probe, role: .secondary)
+        let firstCapture = try #require(harness.capture())
+        let secondCapture = try #require(harness.capture())
+        harness.click(CGPoint(x: frames.button.midX, y: frames.button.midY))
+        harness.key(code: 49, characters: " ")
+
+        #expect(!wasActive)
+        #expect(application.isActive == wasActive)
+        #expect(!harness.isKey)
+        #expect(!harness.isMain)
+        #expect(!harness.isExposedOnDesktop)
+        #expect(firstCapture.size == CGSize(width: 360, height: 180))
+        #expect(
+            firstCapture.representation(using: .png, properties: [:])
+                == secondCapture.representation(using: .png, properties: [:]))
+        #expect(probe.activations == 2)
+    }
+
 }
 
 @MainActor
@@ -387,20 +414,32 @@ private struct EdithButtonOverlayFrameReader: NSViewRepresentable {
 @MainActor
 private final class EdithButtonHarness {
     private static var retained: [EdithButtonHarness] = []
+    private let host: NSView
     private let window: NSWindow
 
+    var isKey: Bool { window.isKeyWindow }
+    var isMain: Bool { window.isMainWindow }
+    var isExposedOnDesktop: Bool {
+        window.isVisible && NSScreen.screens.contains { $0.frame.intersects(window.frame) }
+    }
+
     init<Content: View>(rootView: Content, size: CGSize = CGSize(width: 360, height: 180)) {
-        NSApplication.shared.activate()
         let host = NSHostingView(rootView: rootView)
         host.frame = CGRect(origin: .zero, size: size)
+        self.host = host
         window = EdithButtonWindow(
             contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.acceptsMouseMovedEvents = true
         window.contentView = host
-        window.center()
-        window.makeKeyAndOrderFront(nil)
+        let desktopMinX = NSScreen.screens.map(\.frame.minX).min() ?? 0
+        let desktopMinY = NSScreen.screens.map(\.frame.minY).min() ?? 0
+        window.setFrameOrigin(
+            CGPoint(x: desktopMinX - size.width - 1_000, y: desktopMinY - size.height - 1_000))
+        window.orderBack(nil)
         window.makeFirstResponder(host)
+        window.layoutIfNeeded()
         host.layoutSubtreeIfNeeded()
+        host.displayIfNeeded()
     }
 
     func frames(_ probe: EdithButtonProbe, role: EdithButtonRole) async throws
@@ -444,6 +483,15 @@ private final class EdithButtonHarness {
         key(.keyDown, code: code, characters: characters)
         key(.keyUp, code: code, characters: characters)
         settle()
+    }
+
+    func capture() -> NSBitmapImageRep? {
+        window.layoutIfNeeded()
+        host.layoutSubtreeIfNeeded()
+        host.displayIfNeeded()
+        guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        return bitmap
     }
 
     func close() {
