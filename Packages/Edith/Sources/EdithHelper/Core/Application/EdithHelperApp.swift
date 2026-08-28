@@ -170,6 +170,9 @@ struct EdithApp: App {
                 SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
             services.sync()
         }
+        _ = IPC.observe(IPC.Name.permissionsRefreshed) {
+            services.finderTools?.syncSettings()
+        }
         _ = IPC.observe(IPC.Name.presenterAutoActiveChanged) {
             services.usage?.refreshMenuBarItem()
         }

@@ -128,7 +128,6 @@ public extension ExtensionRegistryEntry {
         switch id {
         case "calendar": [.calendar]
         case "focusDim", "presenter", "colorPicker": [.screenRecording]
-        case "finderTools": [.accessibility]
         default: []
         }
     }
@@ -139,7 +138,7 @@ public extension ExtensionRegistryEntry {
         case "system": [.accessibility, .inputMonitoring]
         case "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation]
         case "clipboard": [.accessibility]
-        case "finderTools": [.automation]
+        case "finderTools": [.accessibility, .automation]
         default: []
         }
     }
