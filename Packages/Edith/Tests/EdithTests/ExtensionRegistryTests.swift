@@ -21,6 +21,7 @@ import Testing
         "tabCalendarEnabled",
         "notchShelfEnabled",
         "clipboardEnabled",
+        "mouseControlsEnabled",
         "focusDimEnabled",
         "presenterEnabled",
         "colorPickerEnabled",
@@ -31,12 +32,12 @@ import Testing
         #expect(Set(identifiers).count == identifiers.count)
     }
 
-    @Test func registryMatchesPreUtilityBaseline() {
+    @Test func registryMatchesCurrentProductSet() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
                 "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
-                "clipboard", "focusDim", "presenter", "colorPicker",
+                "clipboard", "mouseControls", "focusDim", "presenter", "colorPicker",
             ])
     }
 
@@ -240,6 +241,7 @@ import Testing
             "calendar": [.calendar],
             "notchShelf": [],
             "clipboard": [],
+            "mouseControls": [.accessibility],
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
             "colorPicker": [.screenRecording],
@@ -259,6 +261,7 @@ import Testing
             "calendar": [],
             "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation],
             "clipboard": [.accessibility],
+            "mouseControls": [],
             "focusDim": [],
             "presenter": [],
             "colorPicker": [],
@@ -390,6 +393,7 @@ import Testing
             "tabCalendarEnabled": true,
             "notchShelfEnabled": false,
             "clipboardEnabled": true,
+            "mouseControlsEnabled": false,
             "focusDimEnabled": false,
             "presenterEnabled": true,
             "colorPickerEnabled": false,

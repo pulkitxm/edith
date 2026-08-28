@@ -149,6 +149,24 @@ public enum AppStorageKeys {
         public static let shuffling = "musicShuffling"
     }
 
+    public enum Mouse {
+        public static let button4Action = "mouseButton4Action"
+        public static let button5Action = "mouseButton5Action"
+        public static let button6Action = "mouseButton6Action"
+        public static let button7Action = "mouseButton7Action"
+        public static let button8Action = "mouseButton8Action"
+        public static let enabled = "mouseControlsEnabled"
+        public static let excludedApps = "mouseExcludedApps"
+        public static let focusDelay = "mouseFocusDelay"
+        public static let focusFollowsPointer = "mouseFocusFollowsPointer"
+        public static let middleClick = "mouseMiddleClick"
+        public static let reverseHorizontal = "mouseReverseHorizontal"
+        public static let reverseVertical = "mouseReverseVertical"
+        public static let sideNavigation = "mouseSideNavigation"
+        public static let smoothScroll = "mouseSmoothScroll"
+        public static let scrollStep = "mouseScrollStep"
+    }
+
     public enum Notch {
         public static let alertAudio = "notchAlertAudio"
         public static let alertBattery = "notchAlertBattery"

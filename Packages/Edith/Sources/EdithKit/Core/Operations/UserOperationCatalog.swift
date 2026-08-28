@@ -243,6 +243,9 @@ public enum UserInterfaceActionCatalog {
             surface: "Machine terminal", state: "mouse capture",
             reason: "Mouse capture controls input delivery within the current terminal view."),
         UserInterfacePresentationState(
+            surface: "Global mouse input", state: "pointer routing",
+            reason: "Wheel, focus, and button events change presentation without a domain effect."),
+        UserInterfacePresentationState(
             surface: "Clipboard panel", state: "history search filtering",
             reason: "Searching filters the entries already loaded into the clipboard panel."),
         UserInterfacePresentationState(
