@@ -59,10 +59,10 @@ The installer finds the binaries to link by walking up from the directory of the
 executable that is running and taking the first directory that holds an
 executable called `ed`, checking `Contents/MacOS` at each step. Run it through a
 link that is already on your `PATH` and that search stops at the link directory
-itself, so `ed` and `edh` are relinked onto themselves and stop working, and
-`edith` is then reported as skipped because its source no longer resolves. Run
-it from the copy inside the app, or from the build product, never through the
-link:
+itself, so `ed` is relinked onto itself and stops working, and the remaining
+names are then reported as skipped because their shared source no longer
+resolves. Run it from the copy inside the app, or from the build product, never
+through the link:
 
 ```
 /Applications/Edith.app/Contents/MacOS/ed install

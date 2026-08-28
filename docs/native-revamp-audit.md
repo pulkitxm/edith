@@ -74,9 +74,10 @@ Lid Awake controls, clipboard history, and notch shelf actions.
 
 ### Command line
 
-`ed` and `edh` expose the same command implementation. The command tree contains 390
-paths including root and generated help, 340 leaves, 337 reference pages, and 40
-explicit destructive routes. Top-level groups cover guide and schema discovery,
+`ed` exposes the command implementation and `edh` is its packaged alias. The
+command tree contains 390 paths including root and generated help, 340 leaves,
+337 reference pages, and 40 explicit destructive routes. Top-level groups cover
+guide and schema discovery,
 configuration, app operations, extensions, permissions, usage, system, music, calendar,
 presenter mode, Herdr, clipboard, attention, downloads, running apps, tools, color,
 shelf, cleaner, Quinjet, machines, and Companion.

@@ -6,11 +6,10 @@ reaches everything the UI reaches: settings, extensions, permissions, agent
 usage, this Mac's metrics, playback, your calendar, and the machines Edith can
 talk to over SSH.
 
-`ed`, `edh` and `edith` are one command line under three names. `ed` and
-`edith` are symlinks to the same binary, `edh` is a second executable built from
-the same sources, and all three run the same entry point with the same
-arguments, so every example on this page and everywhere else works with any of
-them. Pick whichever name your shell leaves free.
+`ed`, `edh` and `edith` are one command line under three names. The app ships one
+`ed` executable and a relative `edh` alias, while the installer links all three
+names directly to `ed`. Every example on this page and everywhere else works
+with any of them. Pick whichever name your shell leaves free.
 
 This page covers the commands you meet before any of the others: getting the
 links in place, reading the built-in manual, printing the config schema,
@@ -50,9 +49,9 @@ current user can write to it, `~/.local/bin` if not. `ed install --directory`
 overrides it and creates the directory when it is missing. `ed uninstall` does
 not take the flag at all, and only ever looks in the default one.
 
-The three links are not identical. `ed` and `edith` both point at the bundled
-`ed` binary; `edh` points at the separate `edh` binary beside it. That is why a
-build that produced only one of them links some names and skips others.
+All three installed links point at the bundled `ed` executable. The `edh` alias
+inside the app keeps that command name available to Homebrew and direct bundle
+invocations without packaging another executable.
 
 Building from source without the app bundle:
 
@@ -60,7 +59,7 @@ Building from source without the app bundle:
 make cli
 ```
 
-That builds `ed` and `edh` in release configuration, runs
+That builds `ed` in release configuration, runs
 `.build/release/ed install --directory $HOME/.local/bin`, and then
 `.build/release/ed completions install`. It is the supported way to get a
 working `ed` out of a checkout, and running `install` from the build product
@@ -226,8 +225,8 @@ anything that does.
   a field with no value is present as `null` rather than dropped. `ed install
   --json` always has a `message` key even when nothing went wrong.
 - Run `ed install` from the app's own copy or from a fresh build, never through
-  a link already on your `PATH`, or you will relink `ed` and `edh` onto
-  themselves. `make cli` gets this right.
+  a link already on your `PATH`, or you will relink `ed` onto itself and break
+  all three names. `make cli` gets this right.
 - `ed uninstall` looks only in the default directory. Links placed with
   `ed install --directory` survive it.
 - `ed install` replaces any symlink at those names, and `ed uninstall` removes

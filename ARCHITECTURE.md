@@ -31,10 +31,10 @@ history, notifications, media controls, and machine monitoring. Both use shared
 defaults and narrow IPC messages from EdithKit rather than reaching into each
 other's UI state.
 
-The `ed` and `edh` executables expose the same domain operations for scripts and
-automation. Read commands provide JSON, logs use standard error, and exit codes
-carry success or failure. Remote-machine operations execute through SSH using
-the user's configured host and credentials.
+The `ed` executable exposes domain operations for scripts and automation, with
+`edh` packaged as a relative alias. Read commands provide JSON, logs use standard
+error, and exit codes carry success or failure. Remote-machine operations execute
+through SSH using the user's configured host and credentials.
 
 ### User operation parity
 
@@ -64,10 +64,10 @@ only when the user configures and selects it.
 ## Distribution
 
 Xcode assembles the main application, menu bar companion, nested file browser,
-CLI executables, privileged helper, resources, and Sparkle framework into one
-bundle. Release automation signs the bundle, optionally notarizes it, creates a
-DMG and signed appcast, publishes a GitHub Release, and mirrors the Homebrew
-cask. GitHub Pages deploys `apps/site` independently.
+CLI executable and alias, privileged helper, resources, and Sparkle framework
+into one bundle. Release automation signs the bundle, optionally notarizes it,
+creates a DMG and signed appcast, publishes a GitHub Release, and mirrors the
+Homebrew cask. GitHub Pages deploys `apps/site` independently.
 
 ## Trust Boundaries
 

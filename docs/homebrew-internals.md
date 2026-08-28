@@ -152,7 +152,7 @@ a prebuilt binary by definition: Homebrew downloads exactly what the vendor
 published, checks its hash, and moves it into place.
 
 Edith is a cask. It is a signed `.app` bundle distributed as a `.dmg`, which is the
-canonical cask shape. The fact that the bundle also contains two command line tools
+canonical cask shape. The fact that the bundle also exposes two command line names
 does not make it a formula: the unit of distribution is still the application.
 
 An important consequence of "cask means macOS only": nothing about the cask can be
@@ -639,8 +639,9 @@ takes the bundle.
 **The two `binary` lines** point inside the installed bundle, using `appdir`, which
 is Homebrew's variable for the applications directory rather than a hard-coded
 `/Applications`. This is the mechanism that makes `ed` and `edh` work immediately
-after install, with no separate `ed install` step, and it is also the most
-consequential line in the file, for reasons in section 15.
+after install, with no separate `ed install` step. The `edh` source path is a
+relative alias of the one signed `ed` executable. These are also the most
+consequential lines in the file, for reasons in section 15.
 
 **`uninstall quit:`** lists all three bundle identifiers, as covered in section 8.
 They are not guesses: `com.pulkit.edith` is `Resources/Info.plist`,
@@ -1068,8 +1069,9 @@ about which claims are tested and which are structural.
   `Resources/HelperInfo.plist`, `MainApp.swift` and `AppBridge.swift`.
 - The zap paths match `EdithCore/AppDirectories.swift` and
   `EdithKit/Core/Defaults/SharedDefaults.swift`.
-- `ed` and `edh` exist at the linked paths inside the built bundle, asserted by
-  `make verify-bundle`.
+- `ed` is the only regular CLI executable and `edh` is the relative alias `ed`,
+  asserted by `make verify-bundle` together with both names' signatures and
+  behavior.
 - Homebrew's name resolution rules, quoted in sections 4 and 5, from
   `tap_constants.rb` and `cmd/install.rb`.
 - `scripts/homebrew-cask.test.js` guards the cask's shape, the release job's
