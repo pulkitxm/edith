@@ -295,6 +295,7 @@ enum GlobalHotKey {
         static let colorPicker: UInt32 = 5
         static let micMute: UInt32 = 6
         static let presenterToggle: UInt32 = 7
+        static let emoji: UInt32 = 8
     }
 
     fileprivate static var refs: [UInt32: EventHotKeyRef] = [:]

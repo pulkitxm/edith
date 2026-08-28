@@ -26,6 +26,7 @@ public enum PlatformCapability: String, CaseIterable, Codable, Hashable, Sendabl
     case systemMetrics
     case usageCollection
     case windowDimming
+    case windowManagement
 }
 
 public enum PlatformCapabilityState: Equatable, Sendable {
@@ -95,6 +96,7 @@ public struct PlatformCapabilities: Equatable, Sendable {
                     .screenColorSampling: .permissionRequired,
                     .screenShareDetection: .permissionRequired,
                     .windowDimming: .permissionRequired,
+                    .windowManagement: .permissionRequired,
                 ]))
     }
 

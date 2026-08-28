@@ -123,6 +123,9 @@ public enum UserOperationCatalog {
         + ColorSwatchOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + EmojiOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + CompanionSettingsOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -1089,6 +1092,21 @@ private extension ColorSwatchOperation {
                     exampleArguments: ["1", "--format", "hex"]),
             ])
         }
+    }
+}
+
+private extension WindowLayoutAction {
+    var interfaceExposure: UserOperationExposure {
+        var placements = [
+            UserInterfaceActionPlacement(
+                surface: "Window Tools settings", action: title.lowercased())
+        ]
+        if [.leftHalf, .rightHalf, .maximize, .restore].contains(self) {
+            placements.append(
+                UserInterfaceActionPlacement(
+                    surface: "Window Tools shortcut", action: title.lowercased()))
+        }
+        return .userInterface(placements)
     }
 }
 
