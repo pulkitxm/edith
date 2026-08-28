@@ -106,6 +106,18 @@ public enum AppStorageKeys {
         public static let warnPercent = "warnPercent"
     }
 
+    public enum KeyboardTools {
+        public static let debounceEnabled = "keyboardDebounceEnabled"
+        public static let debounceWindow = "keyboardDebounceWindowMs"
+        public static let enabled = "keyboardToolsEnabled"
+        public static let mappingApplied = "keyboardSuperMappingApplied"
+        public static let runtimeActive = "keyboardToolsRuntimeActive"
+        public static let runtimeError = "keyboardToolsRuntimeError"
+        public static let superEnabled = "keyboardSuperEnabled"
+        public static let superHoldAction = "keyboardSuperHoldAction"
+        public static let superTapAction = "keyboardSuperTapAction"
+    }
+
     public enum Machines {
         public static let autoConnect = "machinesAutoConnect"
         public static let diskThreshold = "machinesDiskThreshold"

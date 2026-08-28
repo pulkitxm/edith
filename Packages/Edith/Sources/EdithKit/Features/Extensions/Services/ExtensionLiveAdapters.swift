@@ -65,8 +65,8 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
-        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "colorPicker",
+        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "keyboardTools", "focusDim",
+        "presenter", "colorPicker",
     ]
 
     public static func provider(
@@ -103,6 +103,7 @@ public enum ExtensionLiveAdapters {
         case "calendar": calendarReadiness()
         case "notchShelf": shelfReadiness()
         case "clipboard": clipboardReadiness()
+        case "keyboardTools": keyboardToolsReadiness(defaults: defaults)
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
@@ -390,6 +391,17 @@ public enum ExtensionLiveAdapters {
             return .failed(
                 "Clipboard storage could not be read: \(error.localizedDescription)")
         }
+    }
+
+    static func keyboardToolsReadiness(
+        defaults: UserDefaults = SharedDefaults.store
+    ) -> ExtensionAdapterReadiness {
+        let settings = KeyboardToolsSettings.load(defaults)
+        return ExtensionAdapterFacts(
+            configured: settings.debounceEnabled || settings.superEnabled,
+            readyDetail: "The keyboard event filter is configured and ready.",
+            setupDetail: "Turn on Debounce, Super key, or both."
+        ).readiness
     }
 
     static func focusDimReadiness(defaults: UserDefaults) async -> ExtensionAdapterReadiness {

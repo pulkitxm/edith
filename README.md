@@ -66,6 +66,7 @@ and platform details.
 - **Music player** - your local music folder with thumbnails, drag-to-seek, fades, auto-advance and media keys; also controls Spotify and Apple Music.
 - **Clipboard history** - a global paste panel with search and paste-in-place.
 - **Color picker** - system-wide eyedropper on a hotkey, with swatch history.
+- **Keyboard Tools** - suppress accidental duplicate presses and use Caps Lock as a configurable tap or modifier chord.
 - **Notch shelf** - the notch becomes a hover-to-open shelf for drag-and-drop file staging, now-playing controls and a camera check.
 - **Calendar** - your agenda grouped by day, with one-tap join links.
 - **Audio mixer** - per-app volume control.

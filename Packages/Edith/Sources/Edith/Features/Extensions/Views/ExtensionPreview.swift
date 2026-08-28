@@ -34,6 +34,7 @@ struct ExtensionPreview: View {
         case "calendar": calendarPreview(phase: phase)
         case "notchShelf": notchPreview(phase: phase)
         case "clipboard": clipboardPreview(phase: phase)
+        case "keyboardTools": keyboardToolsPreview(phase: phase)
         case "music": musicPreview(animating: animating)
         case "focusDim": focusDimPreview(phase: phase)
         case "presenter": presenterPreview(phase: phase)
@@ -370,6 +371,45 @@ struct ExtensionPreview: View {
             }
         }
         .padding(.horizontal, UIScale.pt(25))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func keyboardToolsPreview(phase: Double) -> some View {
+        let pressed = max(0, sin(phase * 2.1))
+        return HStack(spacing: UIScale.pt(7)) {
+            Text("CAPS")
+                .font(DashSkin.mono(7, weight: .semibold))
+                .foregroundStyle(DashSkin.accent(dark))
+                .frame(width: UIScale.pt(40), height: UIScale.pt(27))
+                .background(
+                    DashSkin.accent(dark).opacity(0.12),
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: UIScale.pt(6))
+                        .strokeBorder(DashSkin.accent(dark).opacity(0.7))
+                }
+                .offset(y: CGFloat(pressed * 2))
+            Image(systemName: "arrow.right")
+                .font(.system(size: UIScale.pt(9), weight: .semibold))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+            HStack(spacing: UIScale.pt(3)) {
+                ForEach(["⌃", "⌥", "⇧", "⌘"], id: \.self) { symbol in
+                    Text(symbol)
+                        .font(.system(size: UIScale.pt(9), weight: .semibold))
+                        .foregroundStyle(DashSkin.ink(dark))
+                        .frame(width: UIScale.pt(21), height: UIScale.pt(23))
+                        .background(
+                            DashSkin.paper2(dark),
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(5))
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: UIScale.pt(5))
+                                .strokeBorder(DashSkin.lineStrong(dark))
+                        }
+                }
+            }
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
