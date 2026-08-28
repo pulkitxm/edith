@@ -64,6 +64,7 @@ and platform details.
 **Everything else on the shelf**
 
 - **Music player** - your local music folder with thumbnails, drag-to-seek, fades, auto-advance and media keys; also controls Spotify and Apple Music.
+- **Media Toolkit** - batch image conversion and aspect-preserving resizing, plus local video compression to a hard file-size limit.
 - **Clipboard history** - a global paste panel with search and paste-in-place.
 - **Color picker** - system-wide eyedropper on a hotkey, with swatch history.
 - **Notch shelf** - the notch becomes a hover-to-open shelf for drag-and-drop file staging, now-playing controls and a camera check.

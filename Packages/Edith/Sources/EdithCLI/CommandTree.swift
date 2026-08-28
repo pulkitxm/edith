@@ -613,6 +613,26 @@ public enum CommandTree {
                         options: ["--json", "--yes"], destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
+                "media", "Convert images and compress videos locally.",
+                children: [
+                    CommandNode(
+                        "status", "Show Media Toolkit defaults and supported formats.",
+                        options: common),
+                    CommandNode(
+                        "convert-images", "Convert and resize one or more images.",
+                        options: [
+                            "--json", "--help", "--to", "--format", "--quality",
+                            "--max-dimension",
+                        ],
+                        optionValues: ["--to": .localPath],
+                        repeatingArgument: .localPath),
+                    CommandNode(
+                        "compress-video", "Compress a complete video under a size limit.",
+                        options: ["--json", "--help", "--to", "--target-mb", "--no-audio"],
+                        optionValues: ["--to": .localPath],
+                        arguments: [.localPath]),
+                ]),
+            CommandNode(
                 "shelf", "The files parked on the notch shelf.",
                 children: [
                     CommandNode(

@@ -35,11 +35,39 @@ struct ExtensionPreview: View {
         case "notchShelf": notchPreview(phase: phase)
         case "clipboard": clipboardPreview(phase: phase)
         case "music": musicPreview(animating: animating)
+        case "mediaToolkit": mediaToolkitPreview(phase: phase)
         case "focusDim": focusDimPreview(phase: phase)
         case "presenter": presenterPreview(phase: phase)
         case "colorPicker": colorPickerPreview(phase: phase)
         default: staticPreview
         }
+    }
+
+    private func mediaToolkitPreview(phase: Double) -> some View {
+        let progress = CGFloat(0.42 + (sin(phase * 1.8) + 1) * 0.22)
+        return VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            HStack(spacing: UIScale.pt(7)) {
+                ForEach(["photo", "photo.on.rectangle", "film"], id: \.self) { icon in
+                    RoundedRectangle(cornerRadius: UIScale.pt(5))
+                        .fill(DashSkin.paper2(dark))
+                        .overlay {
+                            Image(systemName: icon)
+                                .font(.system(size: UIScale.pt(9)))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                        }
+                        .frame(width: UIScale.pt(30), height: UIScale.pt(25))
+                }
+            }
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(DashSkin.lineStrong(dark))
+                    Capsule().fill(DashSkin.accent(dark)).frame(width: proxy.size.width * progress)
+                }
+            }
+            .frame(height: UIScale.pt(5))
+        }
+        .padding(.horizontal, UIScale.pt(15))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
     private func usagePreview(phase: Double) -> some View {

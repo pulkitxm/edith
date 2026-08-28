@@ -149,6 +149,14 @@ public enum AppStorageKeys {
         public static let shuffling = "musicShuffling"
     }
 
+    public enum MediaToolkit {
+        public static let imageFormat = "mediaToolkitImageFormat"
+        public static let imageMaxDimension = "mediaToolkitImageMaxDimension"
+        public static let imageQuality = "mediaToolkitImageQuality"
+        public static let videoKeepAudio = "mediaToolkitVideoKeepAudio"
+        public static let videoTargetMegabytes = "mediaToolkitVideoTargetMegabytes"
+    }
+
     public enum Notch {
         public static let alertAudio = "notchAlertAudio"
         public static let alertBattery = "notchAlertBattery"
@@ -216,6 +224,7 @@ public enum AppStorageKeys {
         public static let companionEnabled = "tabCompanionEnabled"
         public static let herdrEnabled = "tabHerdrEnabled"
         public static let machinesEnabled = "tabMachinesEnabled"
+        public static let mediaToolkitEnabled = "tabMediaToolkitEnabled"
         public static let musicEnabled = "tabMusicEnabled"
         public static let order = "tabOrder"
         public static let quinjetEnabled = "tabQuinjetEnabled"

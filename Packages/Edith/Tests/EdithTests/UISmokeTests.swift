@@ -63,6 +63,10 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(renders(HomePage()))
     }
 
+    @Test func mediaToolkitPageRenders() {
+        #expect(renders(MediaToolkitPage()))
+    }
+
     @Test func mainWindowRendersEveryDestination() {
         let saved = SharedDefaults.store.string(forKey: "mainWindowSection")
         let savedSettingsTab = SharedDefaults.store.string(forKey: "settingsTab")

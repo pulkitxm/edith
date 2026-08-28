@@ -327,6 +327,9 @@ public enum Guide {
         ed system stats                 one sample of this Mac
         ed system stats --follow        keep sampling
         ed system disks
+        ed media status                 local media defaults and supported formats
+        ed media convert-images <images> --to <folder> --format jpeg
+        ed media compress-video <video> --to <folder> --target-mb 20
         ed music status                 whatever is playing, on whichever player
         ed music play|pause|stop|toggle|next|previous
         ed music volume 0.4

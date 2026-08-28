@@ -14,7 +14,8 @@ extension EnvironmentValues {
 }
 
 enum MainDestination: String, CaseIterable, Identifiable {
-    case home, attention, dashboard, herdr, quinjet, music, calendar, system, machines, companion
+    case home, attention, dashboard, herdr, quinjet, music, mediaToolkit, calendar, system, machines
+    case companion
     case extensions, settings, about
 
     var id: String { rawValue }
@@ -27,6 +28,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
         case .herdr: return "Herdr"
         case .quinjet: return "Quinjet"
         case .music: return "Music"
+        case .mediaToolkit: return "Media Toolkit"
         case .calendar: return "Calendar"
         case .system: return "System"
         case .machines: return "Machines"
@@ -45,6 +47,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
         case .herdr: return "rectangle.split.3x1.fill"
         case .quinjet: return "arrow.triangle.branch"
         case .music: return "music.note"
+        case .mediaToolkit: return "photo.stack"
         case .calendar: return "calendar"
         case .system: return "cpu"
         case .machines: return "server.rack"
@@ -63,8 +66,8 @@ enum MainDestination: String, CaseIterable, Identifiable {
     }
 
     static let homeItems: [MainDestination] = [
-        .home, .attention, .dashboard, .herdr, .quinjet, .music, .calendar, .system, .machines,
-        .companion,
+        .home, .attention, .dashboard, .herdr, .quinjet, .music, .mediaToolkit, .calendar,
+        .system, .machines, .companion,
     ]
     static let appItems: [MainDestination] = [
         .extensions, .settings, .about,
@@ -408,6 +411,8 @@ struct MainWindowView: View {
         var systemEnabled = false
     @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
         var musicEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.mediaToolkitEnabled, store: SharedDefaults.store) private
+        var mediaToolkitEnabled = false
     @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
         var usageEnabled = false
     @AppStorage(AppStorageKeys.Tabs.herdrEnabled, store: SharedDefaults.store) private
@@ -498,6 +503,7 @@ struct MainWindowView: View {
         case .herdr: herdrEnabled ? requested : .home
         case .quinjet: quinjetEnabled ? requested : .home
         case .music: musicEnabled ? requested : .home
+        case .mediaToolkit: mediaToolkitEnabled ? requested : .home
         case .calendar: calendarEnabled ? requested : .home
         case .system: systemEnabled ? requested : .home
         case .machines: machinesEnabled ? requested : .home
@@ -921,6 +927,7 @@ struct MainWindowView: View {
             case .herdr: herdrEnabled
             case .quinjet: quinjetEnabled
             case .music: musicEnabled
+            case .mediaToolkit: mediaToolkitEnabled
             case .calendar: calendarEnabled
             case .system: systemEnabled
             case .machines: machinesEnabled
@@ -1346,6 +1353,7 @@ struct MainWindowView: View {
         case .herdr: HerdrPage()
         case .quinjet: QuinjetPage()
         case .music: MusicPage()
+        case .mediaToolkit: MediaToolkitPage()
         case .calendar: CalendarPage()
         case .system: SystemPage()
         case .machines: MachinesPage()

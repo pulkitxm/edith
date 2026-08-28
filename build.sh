@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")"
+source scripts/build-jobs.sh
 
 usage() {
   cat >&2 <<'USAGE'
@@ -118,11 +119,15 @@ fi
 CONFIG=Debug
 [ "$RELEASE" = 1 ] && CONFIG=Release
 
+BUILD_JOBS="${EDITH_BUILD_JOBS:-}"
+validate_build_jobs "$BUILD_JOBS"
+
 TEAM_ID=""
 [ "$SIGN_IDENTITY" = "-" ] || TEAM_ID="$(team_id_for "$SIGN_IDENTITY" || true)"
 
 DERIVED=build
-xcodebuild -project edth.xcodeproj -scheme EdithMain -configuration "$CONFIG" \
+xcodebuild_with_jobs "$BUILD_JOBS" \
+  -project edth.xcodeproj -scheme EdithMain -configuration "$CONFIG" \
   -derivedDataPath "$DERIVED" \
   -destination 'platform=macOS,arch=arm64' \
   -quiet \
@@ -142,10 +147,13 @@ test -d "$BUILT_HELPER" || { echo "build did not produce $BUILT_HELPER" >&2; exi
 SWIFT_BIN="$(DEVELOPER_DIR="$DEVELOPER_DIR" xcrun --find swift)"
 SWIFT_CONFIGURATION=debug
 [ "$CONFIG" = Release ] && SWIFT_CONFIGURATION=release
-"$SWIFT_BIN" build --package-path Packages/Edith --configuration "$SWIFT_CONFIGURATION" \
+swift_build_with_jobs "$BUILD_JOBS" "$SWIFT_BIN" \
+  --package-path Packages/Edith --configuration "$SWIFT_CONFIGURATION" \
   --product EdithLidAwakeHelper
-PRIVILEGED_HELPER_BUILD="$($SWIFT_BIN build --package-path Packages/Edith \
-  --configuration "$SWIFT_CONFIGURATION" --show-bin-path)/EdithLidAwakeHelper"
+PRIVILEGED_HELPER_BUILD="$(swift_build_with_jobs "$BUILD_JOBS" "$SWIFT_BIN" \
+  --package-path Packages/Edith \
+  --configuration "$SWIFT_CONFIGURATION" \
+  --show-bin-path)/EdithLidAwakeHelper"
 
 APP="dist/Edith.app"
 HELPER="$APP/Contents/Library/LoginItems/Edith.app"

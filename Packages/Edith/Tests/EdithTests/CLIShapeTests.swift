@@ -223,6 +223,7 @@ enum CommandCrawler {
             "ed machines control", "ed usage projects",
             "ed machines services", "ed apps",
             "ed tools", "ed download", "ed machines workspace", "ed usage machines",
+            "ed media",
             "ed companion", "ed companion reason", "ed companion core",
             "ed companion inquire", "ed companion eval", "ed companion machines",
             "ed companion hypotheses", "ed companion discrepancies", "ed companion standup",

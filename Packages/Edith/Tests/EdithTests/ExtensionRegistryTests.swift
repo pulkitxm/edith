@@ -18,6 +18,7 @@ import Testing
         "micMuteEnabled",
         "lidAwakeEnabled",
         "tabMusicEnabled",
+        "tabMediaToolkitEnabled",
         "tabCalendarEnabled",
         "notchShelfEnabled",
         "clipboardEnabled",
@@ -31,12 +32,12 @@ import Testing
         #expect(Set(identifiers).count == identifiers.count)
     }
 
-    @Test func registryMatchesPreUtilityBaseline() {
+    @Test func registryMatchesSupportedExtensions() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
-                "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
-                "clipboard", "focusDim", "presenter", "colorPicker",
+                "systemStats", "micMute", "lidAwake", "music", "mediaToolkit", "calendar",
+                "notchShelf", "clipboard", "focusDim", "presenter", "colorPicker",
             ])
     }
 
@@ -149,7 +150,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard",
+                "clipboard", "mediaToolkit",
             ])
     }
 
@@ -237,6 +238,7 @@ import Testing
             "micMute": [],
             "lidAwake": [],
             "music": [],
+            "mediaToolkit": [],
             "calendar": [.calendar],
             "notchShelf": [],
             "clipboard": [],
@@ -256,6 +258,7 @@ import Testing
             "micMute": [],
             "lidAwake": [],
             "music": [],
+            "mediaToolkit": [],
             "calendar": [],
             "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation],
             "clipboard": [.accessibility],
