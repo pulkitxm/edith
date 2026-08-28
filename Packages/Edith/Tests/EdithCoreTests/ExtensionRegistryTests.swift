@@ -14,7 +14,8 @@ import Testing
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
-                "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
+                "systemStats", "micMute", "lidAwake", "displayPower", "music", "calendar",
+                "notchShelf",
                 "clipboard", "focusDim", "presenter", "colorPicker",
             ])
     }
