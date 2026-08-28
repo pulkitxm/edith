@@ -188,13 +188,46 @@ struct TextPastePlainCommand: AsyncParsableCommand {
                     hint: "run `ed extensions enable textUtilities`")
             }
             try AppBridge.requireHelper("plain-text paste")
-            AppBridge.post(IPC.Name.requestPlainTextPaste)
+            let requestID = UUID().uuidString
+            guard
+                let reply = await AppBridge.awaitReply(
+                    IPC.Name.plainTextPasteResult, timeout: 3,
+                    matching: { $0[PlainTextPasteIPC.requestIDKey] as? String == requestID },
+                    trigger: {
+                        AppBridge.post(
+                            IPC.Name.requestPlainTextPaste,
+                            userInfo: [PlainTextPasteIPC.requestIDKey: requestID])
+                    }),
+                let state = PlainTextPasteIPC.state(from: reply)
+            else {
+                throw AppBridge.silence(
+                    "plain-text paste", extensionKey: AppStorageKeys.TextUtilities.enabled)
+            }
+            guard state == .pasted else { throw failure(for: state) }
             if json {
                 CLIOut.json(
-                    .object(["requested": .bool(true), "operation": .string("text.paste-plain")]))
+                    .object([
+                        "requested": .bool(true),
+                        "operation": .string("text.paste-plain"),
+                        "state": .string(state.rawValue),
+                    ]))
             } else {
-                CLIOut.out("requested plain-text paste")
+                CLIOut.out("pasted clipboard text without formatting")
             }
+        }
+    }
+
+    private func failure(for state: PlainTextPasteState) -> CLIFailure {
+        switch state {
+        case .clipboardEmpty:
+            CLIFailure.unavailable(
+                "the clipboard does not contain text", hint: "copy text, then retry")
+        case .unavailable:
+            CLIFailure.unavailable(
+                "the Text Utilities runtime is unavailable",
+                hint: "enable Text Utilities, then relaunch Edith")
+        case .pasted:
+            CLIFailure.unavailable("plain-text paste did not complete")
         }
     }
 }

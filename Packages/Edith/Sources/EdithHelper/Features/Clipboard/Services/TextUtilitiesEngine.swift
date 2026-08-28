@@ -5,15 +5,11 @@ import Foundation
 @MainActor
 final class TextUtilitiesEngine: FeatureModule {
     private var keyboardMonitor: Any?
-    private var pasteObserver: NSObjectProtocol?
     private var snippets: [TextSnippet] = []
     private var buffer = ""
     private var expanding = false
 
     required init() {
-        pasteObserver = IPC.observe(IPC.Name.requestPlainTextPaste) { [weak self] in
-            Task { @MainActor in self?.pastePlainText() }
-        }
         syncSettings()
     }
 
@@ -38,18 +34,19 @@ final class TextUtilitiesEngine: FeatureModule {
 
     func shutdown() {
         if let keyboardMonitor { NSEvent.removeMonitor(keyboardMonitor) }
-        if let pasteObserver { IPC.stopObserving(pasteObserver) }
         keyboardMonitor = nil
-        pasteObserver = nil
         snippets = []
         buffer = ""
         expanding = false
         TextUtilitiesHotKey.unregister()
     }
 
-    func pastePlainText() {
-        guard let text = NSPasteboard.general.string(forType: .string) else { return }
+    func pastePlainText() -> PlainTextPasteState {
+        guard let text = NSPasteboard.general.string(forType: .string) else {
+            return .clipboardEmpty
+        }
         ClipboardPasteSynth.pasteTemporarily(text)
+        return .pasted
     }
 
     private func handle(_ event: NSEvent) {

@@ -107,9 +107,24 @@ final class AppServices {
     func prepareForTermination() async {
         startup.cancel()
         terminating = true
+        shutdownClipboardRuntime()
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
+    }
+
+    private func shutdownClipboardRuntime() {
+        let hadRuntime = clipboard != nil || textUtilities != nil
+        textUtilities?.shutdown()
+        textUtilities = nil
+        clipboard?.shutdown()
+        clipboard = nil
+        TextUtilitiesHotKey.unregister()
+        ClipboardHotKey.unregister()
+        if hadRuntime {
+            ClipboardPanel.shared.store = nil
+            notchShelf?.attachClipboard(nil)
+        }
     }
 
     var lidAwakeRestorationInFlight: Bool {

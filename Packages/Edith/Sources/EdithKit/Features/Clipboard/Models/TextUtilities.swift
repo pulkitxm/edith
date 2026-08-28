@@ -56,6 +56,28 @@ public struct CleanURLResult: Equatable, Sendable {
     }
 }
 
+public enum PlainTextPasteState: String, Equatable, Sendable {
+    case pasted
+    case clipboardEmpty
+    case unavailable
+}
+
+public enum PlainTextPasteIPC {
+    public static let requestIDKey = "requestID"
+    public static let stateKey = "state"
+
+    public static func payload(
+        requestID: String, state: PlainTextPasteState
+    ) -> [String: Any] {
+        [requestIDKey: requestID, stateKey: state.rawValue]
+    }
+
+    public static func state(from payload: [AnyHashable: Any]) -> PlainTextPasteState? {
+        guard let raw = payload[stateKey] as? String else { return nil }
+        return PlainTextPasteState(rawValue: raw)
+    }
+}
+
 public enum TextUtilitiesSupport {
     public static let defaultAutoClearDelay = 30
     public static let bufferLimit = 128

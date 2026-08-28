@@ -90,10 +90,50 @@ import Testing
 
             world.shared.set(true, forKey: AppStorageKeys.TextUtilities.enabled)
             world.helperRunning(true)
+            world.answers { name in
+                guard name == IPC.Name.plainTextPasteResult,
+                    let requestID = world.postedPayloads(for: IPC.Name.requestPlainTextPaste)
+                        .last?[PlainTextPasteIPC.requestIDKey] as? String
+                else { return nil }
+                return PlainTextPasteIPC.payload(requestID: requestID, state: .pasted)
+            }
             let enabled = await CLIProbe.capture(["text", "paste-plain", "--json"])
             #expect(enabled.code == 0)
             #expect(enabled.object?["requested"] as? Bool == true)
+            #expect(enabled.object?["state"] as? String == PlainTextPasteState.pasted.rawValue)
             #expect(world.postedNames().contains(IPC.Name.requestPlainTextPaste.rawValue))
+        }
+    }
+
+    @Test func plainPasteReportsTheHelpersActualOutcome() async {
+        await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.TextUtilities.enabled)
+            world.helperRunning(true)
+            world.answers { name in
+                guard name == IPC.Name.plainTextPasteResult,
+                    let requestID = world.postedPayloads(for: IPC.Name.requestPlainTextPaste)
+                        .last?[PlainTextPasteIPC.requestIDKey] as? String
+                else { return nil }
+                return PlainTextPasteIPC.payload(requestID: requestID, state: .clipboardEmpty)
+            }
+
+            let result = await CLIProbe.capture(["text", "paste-plain", "--json"])
+
+            #expect(result.code == ExitCodes.unavailable)
+            #expect(result.stderr.contains("clipboard does not contain text"))
+        }
+    }
+
+    @Test func plainPasteDoesNotClaimSuccessWhenTheHelperDoesNotAnswer() async {
+        await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.TextUtilities.enabled)
+            world.helperRunning(true)
+            world.answers { _ in nil }
+
+            let result = await CLIProbe.capture(["text", "paste-plain", "--json"])
+
+            #expect(result.code == ExitCodes.unavailable)
+            #expect(result.stderr.contains("did not answer"))
         }
     }
 }

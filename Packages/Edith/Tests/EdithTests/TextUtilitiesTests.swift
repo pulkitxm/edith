@@ -17,6 +17,16 @@ import Testing
                 == "https://example.com/path?keep=1")
     }
 
+    @Test func plainTextPastePayloadRoundTripsEveryState() {
+        for state in [
+            PlainTextPasteState.pasted, .clipboardEmpty, .unavailable,
+        ] {
+            let payload = PlainTextPasteIPC.payload(requestID: "paste-1", state: state)
+            #expect(payload[PlainTextPasteIPC.requestIDKey] as? String == "paste-1")
+            #expect(PlainTextPasteIPC.state(from: payload) == state)
+        }
+    }
+
     @Test func snippetsMatchModesAndLongestTrigger() throws {
         let short = TextSnippet(name: "Mail", trigger: ";mail", replacement: "one")
         let long = TextSnippet(name: "Work mail", trigger: ";mailwork", replacement: "two")
