@@ -205,6 +205,11 @@ final class CLIWorld: @unchecked Sendable {
         CLIEnvironment.permissionUsages = { [] }
         CLIEnvironment.runningApps = { [] }
         CLIEnvironment.usageRefresh = .scripted(events: [])
+        CLIEnvironment.audioSnapshot = {
+            AudioDeviceSnapshot(devices: [], defaultInputUID: nil, defaultOutputUID: nil)
+        }
+        CLIEnvironment.setAudioInput = { _ in }
+        CLIEnvironment.setAudioOutput = { _ in }
         CLIEnvironment.installTool = { tool, _ in
             throw ToolInstallFailure.unverified(tool.displayName)
         }

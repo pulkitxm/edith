@@ -29,6 +29,7 @@ struct ExtensionPreview: View {
         case "system": systemPreview(phase: phase)
         case "machines": machinesPreview(phase: phase)
         case "systemStats": systemStatsPreview(phase: phase)
+        case "audioControls": audioControlsPreview(phase: phase)
         case "micMute": micMutePreview(phase: phase)
         case "lidAwake": lidAwakePreview(phase: phase)
         case "calendar": calendarPreview(phase: phase)
@@ -239,6 +240,48 @@ struct ExtensionPreview: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private func audioControlsPreview(phase: Double) -> some View {
+        let active = Int(phase * 1.4) % 2
+        return VStack(spacing: UIScale.pt(8)) {
+            HStack(spacing: UIScale.pt(8)) {
+                Image(systemName: "mic.fill")
+                Capsule()
+                    .fill(DashSkin.lineStrong(dark))
+                    .frame(height: UIScale.pt(5))
+                    .overlay(alignment: .leading) {
+                        Capsule().fill(DashSkin.accent(dark)).frame(width: UIScale.pt(42))
+                    }
+                Image(systemName: "pin.fill")
+                    .foregroundStyle(DashSkin.accent(dark))
+            }
+            HStack(spacing: UIScale.pt(9)) {
+                ForEach(0..<2) { index in
+                    HStack(spacing: UIScale.pt(5)) {
+                        Image(systemName: index == 0 ? "hifispeaker.fill" : "headphones")
+                        Text(index == 0 ? "DESK" : "HEADSET")
+                            .font(DashSkin.mono(6, weight: .semibold))
+                    }
+                    .foregroundStyle(
+                        index == active ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
+                    )
+                    .padding(.horizontal, UIScale.pt(7))
+                    .padding(.vertical, UIScale.pt(5))
+                    .background(
+                        DashSkin.paper2(dark),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: UIScale.pt(6))
+                            .strokeBorder(
+                                index == active
+                                    ? DashSkin.accent(dark) : DashSkin.lineStrong(dark))
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, UIScale.pt(14))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
     private func micMutePreview(phase: Double) -> some View {
         let progress = loopProgress(phase, duration: 3.2)
         let slashEntry = smoothed(clamped((progress - 0.25) / 0.14))

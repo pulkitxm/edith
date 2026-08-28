@@ -506,6 +506,48 @@ public enum ExtensionLifecycleCatalog {
                     "ed music players --json")
             ]),
         descriptor(
+            "audioControls",
+            "Keep audio devices predictable, protect speakers, and route applications independently.",
+            workflows: [
+                instruction(
+                    "devices", "Choose system devices",
+                    "Pin a preferred microphone and switch the current output."),
+                instruction(
+                    "routing", "Route applications",
+                    "Send each app to a saved output while keeping its independent volume."),
+                instruction(
+                    "safety", "Protect speakers",
+                    "Reduce volume when headphones disappear and stop media keys opening Music."),
+            ],
+            prerequisites: [
+                instruction(
+                    "hardware", "Connect audio hardware",
+                    "Make the desired input and output devices available to macOS."),
+                instruction(
+                    "permission", "Allow application audio",
+                    "macOS asks on first use when an app receives a custom volume or route."),
+            ],
+            examples: [
+                "ed extensions enable audioControls", "ed audio status --json",
+                "ed audio input system", "ed audio output BuiltInSpeakerDevice",
+            ],
+            docs: [documentation("guide", "Audio Controls guide", "docs/cli/audio/README.md")],
+            recovery: [
+                instruction(
+                    "status", "Refresh devices",
+                    "Inspect currently available devices and saved routes.",
+                    "ed audio status --json"),
+                instruction(
+                    "reset", "Return to system input",
+                    "Stop pinning a missing or unwanted microphone.", "ed audio input system"),
+            ],
+            verification: [
+                instruction(
+                    "devices", "Inspect live audio state",
+                    "Confirm the intended input, output, and routes are effective.",
+                    "ed audio status --json")
+            ]),
+        descriptor(
             "calendar", "See upcoming events beside the work they shape.",
             workflows: [
                 instruction(

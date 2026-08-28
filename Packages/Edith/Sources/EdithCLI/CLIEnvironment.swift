@@ -75,6 +75,19 @@ public enum CLIEnvironment {
 
     nonisolated(unsafe) public static var usageRefresh = UsageRefreshDriver.live
 
+    nonisolated(unsafe) public static var audioSnapshot:
+        @Sendable () throws -> AudioDeviceSnapshot = {
+            try AudioDeviceOperations.snapshot()
+        }
+
+    nonisolated(unsafe) public static var setAudioInput: @Sendable (String) throws -> Void = {
+        try AudioDeviceOperations.setDefaultInput(uid: $0)
+    }
+
+    nonisolated(unsafe) public static var setAudioOutput: @Sendable (String) throws -> Void = {
+        try AudioDeviceOperations.setDefaultOutput(uid: $0)
+    }
+
     nonisolated(unsafe) public static var installTool:
         @Sendable (CLIToolSpec, @escaping @Sendable (String) -> Void) async throws -> String = {
             try await ToolInstaller().install($0, log: $1)
@@ -215,6 +228,9 @@ public enum CLIEnvironment {
         runningApps = { RunningAppOperationCenter.liveSnapshots() }
         runAppleScript = { try AppleScriptHost.execute($0, timeout: $1) }
         usageRefresh = UsageRefreshDriver.live
+        audioSnapshot = { try AudioDeviceOperations.snapshot() }
+        setAudioInput = { try AudioDeviceOperations.setDefaultInput(uid: $0) }
+        setAudioOutput = { try AudioDeviceOperations.setDefaultOutput(uid: $0) }
         installTool = { try await ToolInstaller().install($0, log: $1) }
         executableNamed = { CLIToolEnvironment.executable(named: $0) }
         extensionToolReadiness = { id in

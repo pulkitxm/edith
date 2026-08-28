@@ -41,22 +41,66 @@ private struct AudioMixerView: View {
     }
 
     private func row(_ app: MixerApp) -> some View {
-        HStack(spacing: 10) {
-            if let icon = app.icon {
-                Image(nsImage: icon).resizable().frame(width: 22, height: 22)
+        VStack(spacing: 5) {
+            HStack(spacing: 10) {
+                if let icon = app.icon {
+                    Image(nsImage: icon).resizable().frame(width: 22, height: 22)
+                }
+                Text(app.name).font(.system(size: 12)).foregroundStyle(.white).lineLimit(1)
+                    .frame(width: 80, alignment: .leading)
+                Slider(
+                    value: Binding(
+                        get: { Double(app.volume) },
+                        set: { engine.setVolume(app, Float($0)) }), in: 0...1
+                )
+                .controlSize(.mini)
+                Text("\(Int(app.volume * 100))")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .frame(width: 28, alignment: .trailing)
             }
-            Text(app.name).font(.system(size: 12)).foregroundStyle(.white).lineLimit(1)
-                .frame(width: 80, alignment: .leading)
-            Slider(
-                value: Binding(
-                    get: { Double(app.volume) },
-                    set: { engine.setVolume(app, Float($0)) }), in: 0...1
-            )
-            .controlSize(.mini)
-            Text("\(Int(app.volume * 100))")
-                .font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
-                .frame(width: 28, alignment: .trailing)
+            HStack(spacing: 6) {
+                Image(systemName: "speaker.wave.2.fill")
+                Menu {
+                    Button {
+                        engine.setOutput(app, nil)
+                    } label: {
+                        if app.outputUID == nil {
+                            Label("System output", systemImage: "checkmark")
+                        } else {
+                            Text("System output")
+                        }
+                    }
+                    Divider()
+                    ForEach(engine.outputDevices) { device in
+                        Button {
+                            engine.setOutput(app, device.uid)
+                        } label: {
+                            if app.outputUID == device.uid {
+                                Label(device.name, systemImage: "checkmark")
+                            } else {
+                                Text(device.name)
+                            }
+                        }
+                    }
+                } label: {
+                    Text(engine.serviceEnabled ? outputName(app) : "Turn on Audio Controls")
+                        .lineLimit(1)
+                }
+                .menuStyle(.borderlessButton)
+                .disabled(!engine.serviceEnabled)
+                Spacer()
+            }
+            .font(.system(size: 10))
+            .foregroundStyle(.white.opacity(0.62))
+            .padding(.leading, 32)
         }
+    }
+
+    private func outputName(_ app: MixerApp) -> String {
+        guard let uid = app.outputUID else { return "System output" }
+        return engine.outputDevices.first(where: { $0.uid == uid })?.name
+            ?? "Unavailable output"
     }
 
     private func errorView(_ message: String) -> some View {

@@ -65,8 +65,8 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
-        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "colorPicker",
+        "lidAwake", "music", "audioControls", "calendar", "notchShelf", "clipboard", "focusDim",
+        "presenter", "colorPicker",
     ]
 
     public static func provider(
@@ -100,6 +100,7 @@ public enum ExtensionLiveAdapters {
         case "micMute": microphoneReadiness()
         case "lidAwake": lidAwakeReadiness()
         case "music": musicReadiness()
+        case "audioControls": audioControlsReadiness()
         case "calendar": calendarReadiness()
         case "notchShelf": shelfReadiness()
         case "clipboard": clipboardReadiness()
@@ -193,6 +194,20 @@ public enum ExtensionLiveAdapters {
         ).readiness
     }
 
+    static func audioControlsReadiness() -> ExtensionAdapterReadiness {
+        do {
+            let snapshot = try AudioDeviceOperations.snapshot()
+            guard !snapshot.inputs.isEmpty, !snapshot.outputs.isEmpty else {
+                return .needsSetup("Connect at least one input and one output device.")
+            }
+            let details =
+                "Found \(snapshot.inputs.count) inputs and \(snapshot.outputs.count) outputs."
+            if #available(macOS 14.4, *) { return .ready(details) }
+            return .degraded("\(details) Per-app routing requires macOS 14.4 or later.")
+        } catch {
+            return .failed(error.localizedDescription)
+        }
+    }
     static func machinesReadiness(file: URL = MachinePaths.machinesFile)
         -> ExtensionAdapterReadiness
     {

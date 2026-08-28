@@ -571,6 +571,7 @@ private struct ExtensionSettingsSheet: View {
     private var idealHeight: CGFloat {
         switch entry.id {
         case "micMute", "systemStats": 300
+        case "audioControls": 560
         case "attention": 440
         case "machines": 420
         case "lidAwake": 400
@@ -923,6 +924,7 @@ private struct ExtensionDetailRows: View {
             case .machines: MachinesRows()
             case .companion: CompanionRows()
             case .systemStats: SystemStatsRows()
+            case .audioControls: AudioControlsRows()
             case .micMute: MicMuteRows()
             case .lidAwake: LidAwakeRows()
             case .music: MusicRows()

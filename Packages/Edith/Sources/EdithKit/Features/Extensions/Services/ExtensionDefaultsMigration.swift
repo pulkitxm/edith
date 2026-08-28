@@ -49,6 +49,7 @@ public enum ExtensionDefaultsMigration {
         AppStorageKeys.MenuBar.systemStats: false,
         AppStorageKeys.Mic.muteEnabled: false,
         AppStorageKeys.Tabs.musicEnabled: true,
+        AppStorageKeys.Audio.enabled: false,
         AppStorageKeys.Tabs.calendarEnabled: true,
         AppStorageKeys.Notch.shelfEnabled: false,
         AppStorageKeys.Clipboard.enabled: false,

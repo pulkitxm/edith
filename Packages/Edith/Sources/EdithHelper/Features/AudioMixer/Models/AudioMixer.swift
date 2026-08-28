@@ -1,5 +1,6 @@
 import AppKit
 import CoreAudio
+import EdithKit
 import Observation
 
 struct MixerApp: Identifiable {
@@ -9,6 +10,7 @@ struct MixerApp: Identifiable {
     let name: String
     let icon: NSImage?
     var volume: Float
+    var outputUID: String? = nil
     var id: AudioObjectID { objectID }
 }
 
@@ -261,6 +263,7 @@ final class AppVolumeTap: AudioMixerTapControlling, @unchecked Sendable {
 struct AudioMixerSnapshot {
     let apps: [MixerApp]
     let outputUID: String
+    var outputs: [AudioDeviceDescriptor] = []
 }
 
 typealias AudioMixerSnapshotLoader = @MainActor () throws -> AudioMixerSnapshot
@@ -280,14 +283,18 @@ final class MixerEngine {
     private(set) var discoveryError: String?
     private(set) var visibleViewCount = 0
     private(set) var isMonitoring = false
+    private(set) var outputDevices: [AudioDeviceDescriptor] = []
+    private(set) var serviceEnabled = false
 
     var errorMessage: String? { actionError ?? discoveryError }
     var hasActiveTaps: Bool { !taps.isEmpty }
 
     private let snapshotLoader: AudioMixerSnapshotLoader
     private let tapFactory: AudioMixerTapFactory
+    private let defaults: UserDefaults
     private var outputUID: String?
     private var taps: [AudioObjectID: any AudioMixerTapControlling] = [:]
+    private var tapOutputUIDs: [AudioObjectID: String] = [:]
     private var gains: [AudioObjectID: Float] = [:]
     private var failedAdjustment: (app: MixerApp, value: Float)?
     private var actionErrorObjectID: AudioObjectID?
@@ -295,10 +302,35 @@ final class MixerEngine {
 
     init(
         snapshotLoader: @escaping AudioMixerSnapshotLoader = MixerEngine.liveSnapshot,
-        tapFactory: @escaping AudioMixerTapFactory = MixerEngine.liveTap
+        tapFactory: @escaping AudioMixerTapFactory = MixerEngine.liveTap,
+        defaults: UserDefaults = SharedDefaults.store
     ) {
         self.snapshotLoader = snapshotLoader
         self.tapFactory = tapFactory
+        self.defaults = defaults
+    }
+
+    func startService() {
+        serviceEnabled = true
+        refresh()
+        reconcileMonitoring()
+    }
+
+    func stopService() {
+        serviceEnabled = false
+        destroyAllTaps()
+        for index in apps.indices { apps[index].outputUID = nil }
+        for app in apps where app.volume < 1 {
+            setVolume(app, app.volume)
+        }
+        if visibleViewCount == 0, taps.isEmpty {
+            apps.removeAll()
+        }
+        reconcileMonitoring()
+    }
+
+    func syncRoutes() {
+        refresh()
     }
 
     func viewAppeared() {
@@ -331,8 +363,10 @@ final class MixerEngine {
             return
         }
         let value = max(0, min(1, requestedValue))
-        if value == 1 {
+        let routeUID = routeUID(for: app.bundleID)
+        if value == 1, routeUID == nil {
             taps.removeValue(forKey: app.objectID)?.destroy()
+            tapOutputUIDs.removeValue(forKey: app.objectID)
             gains.removeValue(forKey: app.objectID)
             publish(app.objectID, volume: 1)
             actionError = nil
@@ -341,7 +375,8 @@ final class MixerEngine {
             reconcileMonitoring()
             return
         }
-        if let tap = taps[app.objectID] {
+        let desiredOutputUID = routeUID ?? outputUID
+        if let tap = taps[app.objectID], tapOutputUIDs[app.objectID] == desiredOutputUID {
             tap.setGain(value)
             publish(app.objectID, volume: value)
             actionError = nil
@@ -349,15 +384,18 @@ final class MixerEngine {
             failedAdjustment = nil
             return
         }
-        guard let outputUID else {
+        guard let desiredOutputUID else {
             actionError = "The current audio output is unavailable."
             actionErrorObjectID = app.objectID
             failedAdjustment = (app, value)
             return
         }
-        switch tapFactory(app.objectID, outputUID, value) {
+        taps.removeValue(forKey: app.objectID)?.destroy()
+        tapOutputUIDs.removeValue(forKey: app.objectID)
+        switch tapFactory(app.objectID, desiredOutputUID, value) {
         case let .success(tap):
             taps[app.objectID] = tap
+            tapOutputUIDs[app.objectID] = desiredOutputUID
             publish(app.objectID, volume: value)
             actionError = nil
             actionErrorObjectID = nil
@@ -368,6 +406,32 @@ final class MixerEngine {
             actionErrorObjectID = app.objectID
             failedAdjustment = (app, value)
         }
+    }
+
+    func setOutput(_ app: MixerApp, _ requestedUID: String?) {
+        guard serviceEnabled else {
+            actionError = "Turn on Audio Controls to route applications."
+            actionErrorObjectID = app.objectID
+            return
+        }
+        guard apps.contains(where: { Self.sameProcess($0, app) }) else {
+            actionError = "\(app.name) is no longer producing audio."
+            actionErrorObjectID = app.objectID
+            return
+        }
+        let uid = requestedUID.flatMap { value in
+            outputDevices.contains(where: { $0.uid == value }) ? value : nil
+        }
+        var routes = routeMap()
+        if let uid {
+            routes[app.bundleID] = uid
+        } else {
+            routes.removeValue(forKey: app.bundleID)
+        }
+        defaults.set(routes, forKey: AppStorageKeys.Audio.appOutputRoutes)
+        defaults.synchronize()
+        publish(app.objectID, outputUID: uid)
+        setVolume(apps.first(where: { $0.objectID == app.objectID }) ?? app, app.volume)
     }
 
     func retry() {
@@ -388,9 +452,11 @@ final class MixerEngine {
         monitoringTask = nil
         isMonitoring = false
         visibleViewCount = 0
+        serviceEnabled = false
         destroyAllTaps()
         gains.removeAll()
         outputUID = nil
+        outputDevices.removeAll()
         apps.removeAll()
         actionError = nil
         actionErrorObjectID = nil
@@ -401,12 +467,13 @@ final class MixerEngine {
     private func apply(_ snapshot: AudioMixerSnapshot) {
         if let outputUID, outputUID != snapshot.outputUID {
             destroyAllTaps()
-            gains.removeAll()
             actionError = nil
             actionErrorObjectID = nil
             failedAdjustment = nil
         }
         outputUID = snapshot.outputUID
+        outputDevices = snapshot.outputs
+        let routes = serviceEnabled ? routeMap() : [:]
 
         var previousApps: [AudioObjectID: MixerApp] = [:]
         for app in apps { previousApps[app.objectID] = app }
@@ -415,7 +482,9 @@ final class MixerEngine {
         var currentIDs: Set<AudioObjectID> = []
         var replacedIDs: Set<AudioObjectID> = []
         for app in snapshot.apps where seen.insert(app.objectID).inserted {
-            currentApps.append(app)
+            var current = app
+            current.outputUID = routes[app.bundleID]
+            currentApps.append(current)
             currentIDs.insert(app.objectID)
             if let previous = previousApps[app.objectID], !Self.sameProcess(previous, app) {
                 replacedIDs.insert(app.objectID)
@@ -428,6 +497,7 @@ final class MixerEngine {
         }
         for objectID in retiredIDs {
             taps.removeValue(forKey: objectID)?.destroy()
+            tapOutputUIDs.removeValue(forKey: objectID)
             gains.removeValue(forKey: objectID)
         }
         for objectID in Array(gains.keys)
@@ -449,6 +519,9 @@ final class MixerEngine {
             current.volume = gains[app.objectID] ?? 1
             apps[index] = current
         }
+        for app in apps where app.outputUID != nil || app.volume < 1 {
+            setVolume(app, app.volume)
+        }
         reconcileMonitoring()
     }
 
@@ -466,13 +539,32 @@ final class MixerEngine {
         apps[index].volume = volume
     }
 
+    private func publish(_ objectID: AudioObjectID, outputUID: String?) {
+        guard let index = apps.firstIndex(where: { $0.objectID == objectID }) else { return }
+        apps[index].outputUID = outputUID
+    }
+
+    private func routeUID(for bundleID: String) -> String? {
+        guard serviceEnabled else { return nil }
+        let uid = routeMap()[bundleID]
+        return uid.flatMap { value in
+            outputDevices.contains(where: { $0.uid == value }) ? value : nil
+        }
+    }
+
+    private func routeMap() -> [String: String] {
+        AudioControlPolicy.routeMap(
+            defaults.dictionary(forKey: AppStorageKeys.Audio.appOutputRoutes))
+    }
+
     private func destroyAllTaps() {
         for tap in taps.values { tap.destroy() }
         taps.removeAll()
+        tapOutputUIDs.removeAll()
     }
 
     private func reconcileMonitoring() {
-        let shouldMonitor = visibleViewCount > 0 || !taps.isEmpty
+        let shouldMonitor = serviceEnabled || visibleViewCount > 0 || !taps.isEmpty
         if shouldMonitor, monitoringTask == nil {
             isMonitoring = true
             monitoringTask = Task { @MainActor [weak self] in
@@ -500,8 +592,10 @@ final class MixerEngine {
                 objectID: process.objectID, pid: process.pid, bundleID: process.bundleID,
                 name: app?.localizedName ?? process.bundleID, icon: app?.icon, volume: 1)
         }
+        let devices = try AudioDeviceOperations.snapshot()
         return AudioMixerSnapshot(
-            apps: apps, outputUID: try AudioProcessRegistry.defaultOutputUID())
+            apps: apps, outputUID: try AudioProcessRegistry.defaultOutputUID(),
+            outputs: devices.outputs)
     }
 
     private static func liveTap(

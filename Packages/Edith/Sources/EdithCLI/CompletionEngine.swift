@@ -246,6 +246,16 @@ public enum CompletionEngine {
             }
         case .downloadKind: return DownloadKind.allCases.map(\.rawValue)
         case .musicPlayer: return MusicPlayer.allCases.map(\.rawValue)
+        case .audioInput:
+            return ["system"]
+                + ((try? AudioDeviceOperations.snapshot().inputs) ?? []).flatMap {
+                    [$0.uid, $0.name]
+                }
+        case .audioOutput:
+            return ["system"]
+                + ((try? AudioDeviceOperations.snapshot().outputs) ?? []).flatMap {
+                    [$0.uid, $0.name]
+                }
         case .quinjetAppearance: return QuinjetAppearance.allCases.map(\.rawValue)
         case .quinjetMachine: return ["local"] + machines
         case .quinjetPath: return []
