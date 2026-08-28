@@ -113,11 +113,13 @@ main window nor the menu bar helper. It writes
 `~/Library/Application Support/Edith`, which assembling the PATH creates when it
 is not already there, and `tool-versions.json` inside it, which is the version
 cache. The four tools are probed concurrently, one task each, and a tool with
-no cached version, or one whose cached stamp no longer matches the binary's size
-and modification time, is run once, with stdin on `/dev/null` and stderr
-discarded, and waited for, so a cold run is only as slow as the slowest
-`--version` on the machine. Each probe stops after five seconds, and only exit
-status 0 counts as installed.
+no cached version, or one whose cached stamp no longer matches the resolved
+executable's path, filesystem identity, size or modification time, is run once,
+with stdin on `/dev/null` and stderr discarded, and waited for, so a cold run is
+only as slow as the slowest `--version` on the machine. This follows symlinks,
+so replacing a package-managed target invalidates the cache even when its PATH
+entry does not change. Each probe stops after five seconds, and only exit status
+0 counts as installed.
 
 While it probes it says so. A single spinner line on stderr reads
 `probing 4 tools`, carries the seconds elapsed, is rewritten in place and is

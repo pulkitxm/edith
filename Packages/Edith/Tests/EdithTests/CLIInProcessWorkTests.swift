@@ -177,10 +177,130 @@ import Testing
         #expect(ToolVersionCache.cached(for: binary) == nil)
     }
 
+    @Test func toolVersionsFollowSymlinkTargets() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-toolcache-link-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let previous = ToolVersionCache.storeURL
+        ToolVersionCache.storeURL = dir.appendingPathComponent("versions.json")
+        defer { ToolVersionCache.storeURL = previous }
+
+        let target = dir.appendingPathComponent("versions/tool")
+        try FileManager.default.createDirectory(
+            at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "version one".write(to: target, atomically: true, encoding: .utf8)
+        let executable = dir.appendingPathComponent("tool")
+        try FileManager.default.createSymbolicLink(
+            atPath: executable.path, withDestinationPath: "versions/tool")
+
+        #expect(ToolVersionCache.stamp(for: executable)?.size == 11)
+        ToolVersionCache.remember("1.0.0", for: executable)
+        #expect(ToolVersionCache.cached(for: executable) == "1.0.0")
+
+        try "version two is longer".write(to: target, atomically: true, encoding: .utf8)
+        #expect(ToolVersionCache.cached(for: executable) == nil)
+    }
+
+    @Test func toolsListReprobesUpdatedSymlinkTargets() async throws {
+        try await CLIProbe.inWorld { world in
+            let previous = ToolVersionCache.storeURL
+            ToolVersionCache.storeURL = world.sandbox.appendingPathComponent("versions.json")
+            defer { ToolVersionCache.storeURL = previous }
+
+            let target = world.sandbox.appendingPathComponent("versions/codex")
+            try FileManager.default.createDirectory(
+                at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("#!/bin/sh\necho 'codex-cli 1.0.0'\n".utf8).write(to: target)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: target.path)
+            let executable = world.sandbox.appendingPathComponent("codex")
+            try FileManager.default.createSymbolicLink(
+                atPath: executable.path, withDestinationPath: "versions/codex")
+            CLIEnvironment.executableNamed = { $0 == "codex" ? executable : nil }
+
+            let first = await CLIProbe.capture(["tools", "ls", "--json"])
+            let firstCodex = (first.array as? [[String: Any]])?.first {
+                $0["id"] as? String == "codex"
+            }
+            #expect(firstCodex?["version"] as? String == "codex-cli 1.0.0")
+
+            try Data("#!/bin/sh\necho 'codex-cli 2.0.0 updated'\n".utf8).write(
+                to: target, options: .atomic)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: target.path)
+            let second = await CLIProbe.capture(["tools", "ls", "--json"])
+            let secondCodex = (second.array as? [[String: Any]])?.first {
+                $0["id"] as? String == "codex"
+            }
+            #expect(secondCodex?["version"] as? String == "codex-cli 2.0.0 updated")
+        }
+    }
+
+    @Test func toolVersionsDetectMetadataPreservingExecutableReplacement() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-toolcache-replacement-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let previous = ToolVersionCache.storeURL
+        ToolVersionCache.storeURL = dir.appendingPathComponent("versions.json")
+        defer { ToolVersionCache.storeURL = previous }
+
+        let executable = dir.appendingPathComponent("tool")
+        try "version one".write(to: executable, atomically: true, encoding: .utf8)
+        let modified = try #require(
+            FileManager.default.attributesOfItem(atPath: executable.path)[.modificationDate]
+                as? Date)
+        ToolVersionCache.remember("1.0.0", for: executable)
+
+        try "version two".write(to: executable, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.modificationDate: modified], ofItemAtPath: executable.path)
+        #expect(ToolVersionCache.cached(for: executable) == nil)
+    }
+
+    @Test func legacyToolVersionStampsAreInvalidated() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-toolcache-legacy-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let previous = ToolVersionCache.storeURL
+        ToolVersionCache.storeURL = dir.appendingPathComponent("versions.json")
+        defer { ToolVersionCache.storeURL = previous }
+
+        let executable = dir.appendingPathComponent("tool")
+        try "version one".write(to: executable, atomically: true, encoding: .utf8)
+        let stamp = try #require(ToolVersionCache.stamp(for: executable))
+        let legacy: [String: Any] = [
+            executable.path: [
+                "size": stamp.size,
+                "modified": stamp.modified,
+                "version": "1.0.0",
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: legacy)
+        try data.write(to: ToolVersionCache.storeURL)
+
+        #expect(ToolVersionCache.cached(for: executable) == nil)
+    }
+
     @Test func aToolThatIsNotThereHasNoRememberedVersion() {
         let missing = URL(fileURLWithPath: "/nope/not/a/tool")
         #expect(ToolVersionCache.stamp(for: missing) == nil)
         #expect(ToolVersionCache.cached(for: missing) == nil)
+    }
+
+    @Test func aBrokenToolSymlinkHasNoRememberedVersion() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-toolcache-broken-link-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let executable = dir.appendingPathComponent("tool")
+        try FileManager.default.createSymbolicLink(
+            atPath: executable.path, withDestinationPath: "missing")
+
+        #expect(ToolVersionCache.stamp(for: executable) == nil)
+        #expect(ToolVersionCache.cached(for: executable) == nil)
     }
 
     @Test func aBrokenExecutableIsNotReportedInstalled() async throws {
