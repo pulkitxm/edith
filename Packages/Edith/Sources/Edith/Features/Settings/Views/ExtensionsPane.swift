@@ -932,7 +932,6 @@ private struct ExtensionDetailRows: View {
             case .focusDim: FocusDimRows()
             case .presenter: PresenterRows()
             case .colorPicker: ColorPickerRows()
-            case .emoji: EmojiRows()
             }
         } else {
             Section("Controls") {

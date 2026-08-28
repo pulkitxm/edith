@@ -10,6 +10,15 @@ import Testing
         #expect(Set(entries.map(\.defaultsKey)).count == entries.count)
     }
 
+    @Test func identifiersMatchPreUtilityBaseline() {
+        #expect(
+            ExtensionRegistry.entries.map(\.id) == [
+                "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
+                "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
+                "clipboard", "focusDim", "presenter", "colorPicker",
+            ])
+    }
+
     @Test func toolRequirementsUsePortableIdentifiers() {
         let requiredByExtension = Dictionary(
             uniqueKeysWithValues: ExtensionRegistry.entries.map { ($0.id, $0.requiredToolIDs) })
