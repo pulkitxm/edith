@@ -1,7 +1,7 @@
 # `ed config`
 
 Every preference the Edith UI writes is a key in the same defaults the app
-reads, and `ed config` is that surface from the command line: 237 settings in 29
+reads, and `ed config` is that surface from the command line: 230 settings in 28
 groups, each with a type, a default, a scope and a one-line summary. Reach for
 it when you want to know what a switch in Settings is actually called, flip one
 without opening the window, or move a whole setup to another Mac.
@@ -363,18 +363,6 @@ not here cannot be set, and `import` skips it.
 | `colorPickerHotKeyCode` | int | none | shared | Virtual key code of the colour picker shortcut. |
 | `colorPickerHotKeyMods` | int | none | shared | Carbon modifier mask of the colour picker shortcut. |
 | `colorPickerHotKeyLabel` | string | none | shared | Printable label for the colour picker shortcut. |
-
-### `emoji`
-
-| Key | Type | Default | Scope | What it controls |
-| --- | --- | --- | --- | --- |
-| `emojiEnabled` | bool | `false` | shared | Emoji Picker extension: every macOS emoji on a hotkey. |
-| `emojiPopupAt` | string: `cursor`, `statusItem`, `window`, `center`, `lastPosition` | `cursor` | shared | Where the emoji picker opens. |
-| `emojiSkinTone` | int: 0 through 5 | `0` | shared | Default skin tone index applied to emoji that support one. |
-| `emojiFrequentCount` | int: 0 through 24 | `10` | shared | How many frequently used emoji pin to the top of the picker. |
-| `emojiHotKeyCode` | int | none | shared | Virtual key code of the emoji picker shortcut. |
-| `emojiHotKeyMods` | int | none | shared | Carbon modifier mask of the emoji picker shortcut. |
-| `emojiHotKeyLabel` | string | none | shared | Printable label for the emoji picker shortcut. |
 
 ### `capture`
 

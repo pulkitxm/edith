@@ -23,7 +23,8 @@ struct ShortcutsSettingsPane: View {
     private var extensionShortcuts: [ExtensionShortcut] {
         ExtensionShortcutVisibility.visible(
             clipboard: clipboardEnabled, micMute: micMuteEnabled, focusDim: focusDimEnabled,
-            colorPicker: colorPickerEnabled, captureTools: captureToolsEnabled)
+            presenter: presenterEnabled, colorPicker: colorPickerEnabled,
+            captureTools: captureToolsEnabled)
     }
 
     var body: some View {

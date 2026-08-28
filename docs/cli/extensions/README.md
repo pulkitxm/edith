@@ -33,10 +33,10 @@ enables immediately and reports missing grants in plain text or JSON.
 | `ed extensions enable <id>` | Turns one on, and names on stderr any required permission still missing |
 | `ed extensions disable <id>` | Turns one off |
 | `ed extensions info <id>` | Describes one: name, summary, key, group, state, permissions |
-| `ed extensions status [id]` | Summarises readiness for one extension or all nineteen |
+| `ed extensions status [id]` | Summarises readiness for one extension or all eighteen |
 | `ed extensions setup <id>` | Enables one and reports the setup that remains |
 | `ed extensions verify <id>` | Runs every readiness check for one extension |
-| `ed extensions doctor [id]` | Diagnoses one extension or all nineteen, with recovery commands |
+| `ed extensions doctor [id]` | Diagnoses one extension or all eighteen, with recovery commands |
 
 The Extensions pane and each extension settings modal use these same typed read
 operations. Marketplace browsing maps to `ls`, opening a modal maps to `info`,
@@ -52,7 +52,7 @@ operations as their command-line equivalents.
 ## The registry
 
 `ExtensionRegistry.entries` in EdithKit is the single list every command here
-walks, and its order is the order `ls` prints. Nineteen entries, in this order:
+walks, and its order is the order `ls` prints. Eighteen entries, in this order:
 
 | ID | Name | Group | What it does |
 | --- | --- | --- | --- |
@@ -72,11 +72,10 @@ walks, and its order is the order `ls` prints. Nineteen entries, in this order:
 | `clipboard` | Clipboard | Utilities | Clipboard history with instant paste |
 | `focusDim` | Focus Dim | Utilities | Dims everything behind your active app |
 | `presenter` | Presenter | Utilities | Blurs sensitive numbers while sharing your screen |
-| `emoji` | Emoji Picker | Utilities | Every macOS emoji on a hotkey, straight into the app you are typing in |
 | `colorPicker` | Color Picker | Utilities | System loupe on a hotkey, sampled color to your clipboard |
 | `captureTools` | Capture Tools | Utilities | Offline screen OCR, QR recognition, and quick screenshots |
 
-The same nineteen, with what each one is made of. `Key` is the preference the app
+The same eighteen, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the
 eight the welcome tour shows before you ask it for all of them.
 
@@ -98,7 +97,6 @@ eight the welcome tour shows before you ask it for all of them.
 | `clipboard` | `clipboardEnabled` | yes | none | `accessibility` | none | none |
 | `focusDim` | `focusDimEnabled` | no | `screenRecording` | none | none | none |
 | `presenter` | `presenterEnabled` | no | `screenRecording` | none | none | none |
-| `emoji` | `emojiEnabled` | no | none | `accessibility` | none | none |
 | `colorPicker` | `colorPickerEnabled` | no | `screenRecording` | none | none | none |
 | `captureTools` | `captureToolsEnabled` | no | `screenRecording` | none | none | none |
 
@@ -124,7 +122,6 @@ the current platform, and which missing implementations merely degrade it:
 | `clipboard` | `clipboardHistory` | `globalPaste`, `globalShortcuts` |
 | `focusDim` | `windowDimming` | none |
 | `presenter` | `screenShareDetection` | none |
-| `emoji` | `emojiInsertion` | `globalShortcuts` |
 | `colorPicker` | `screenColorSampling` | `globalShortcuts` |
 | `captureTools` | `screenContentRecognition` | `globalShortcuts` |
 

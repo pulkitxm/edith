@@ -79,7 +79,6 @@ import Testing
             GlobalHotKey.ID.colorPicker,
             GlobalHotKey.ID.micMute,
             GlobalHotKey.ID.presenterToggle,
-            GlobalHotKey.ID.emoji,
             GlobalHotKey.ID.captureRead,
             GlobalHotKey.ID.captureScreenshot,
         ]
