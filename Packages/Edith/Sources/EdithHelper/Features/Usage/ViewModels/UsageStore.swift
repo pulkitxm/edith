@@ -398,6 +398,10 @@ final class UsageStore: FeatureModule {
         !locked && !sleeping
     }
 
+    nonisolated static func acceptsExternalRefreshStart(updating: Bool) -> Bool {
+        !updating
+    }
+
     private func stopPolling() {
         guard timer != nil else { return }
         timer?.invalidate()
@@ -1320,10 +1324,7 @@ final class UsageStore: FeatureModule {
     }
 
     private func adoptExternalRefresh() {
-        guard !updating else {
-            pendingRefresh = true
-            return
-        }
+        guard Self.acceptsExternalRefreshStart(updating: updating) else { return }
         beginTranscript()
         refreshGeneration += 1
         let generation = refreshGeneration

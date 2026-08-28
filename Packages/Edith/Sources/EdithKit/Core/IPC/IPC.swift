@@ -80,6 +80,8 @@ public enum IPC {
             "com.pulkit.edith.requestMusicLevels")
         public static let requestKeyboardClean = Notification.Name(
             "com.pulkit.edith.requestKeyboardClean")
+        public static let keyboardCleanResult = Notification.Name(
+            "com.pulkit.edith.keyboardCleanResult")
         public static let openPanel = Notification.Name("com.pulkit.edith.openPanel")
         public static let permissionHintDue = Notification.Name(
             "com.pulkit.edith.permissionHintDue")

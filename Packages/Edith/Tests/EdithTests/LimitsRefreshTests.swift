@@ -149,6 +149,11 @@ private final class MutableHistoryURL: @unchecked Sendable {
         #expect(!UsageStore.pollingAllowed(locked: true, sleeping: true))
     }
 
+    @Test func aRefreshDoesNotQueueItselfFromItsOwnStartNotification() {
+        #expect(UsageStore.acceptsExternalRefreshStart(updating: false))
+        #expect(!UsageStore.acceptsExternalRefreshStart(updating: true))
+    }
+
     @MainActor
     @Test func credentialLookupFailuresStayActionableAndSecretSafe() {
         let missing = UsageStore.credentialLookupFailurePresentation(for: .missing)

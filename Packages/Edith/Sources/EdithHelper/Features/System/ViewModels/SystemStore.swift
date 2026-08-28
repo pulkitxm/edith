@@ -116,16 +116,19 @@ final class SystemStore: FeatureModule {
         }
     }
 
-    func beginCleaning() {
+    @discardableResult
+    func beginCleaning() -> KeyboardCleaningState {
         refreshPermissions()
-        guard phase == .idle else { return }
+        guard phase == .idle else {
+            return phase == .arming ? .arming : .cleaning
+        }
         guard hasInputMonitoring else {
             requestInputMonitoring()
-            return
+            return .inputMonitoringRequired
         }
         guard hasAccessibility else {
             requestAccessibility()
-            return
+            return .accessibilityRequired
         }
         dismissPanel()
         phase = .arming
@@ -141,6 +144,7 @@ final class SystemStore: FeatureModule {
                 }
             }
         }
+        return .arming
     }
 
     private func startCleaning() {
