@@ -99,6 +99,46 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(renders(ExtensionsPane()))
     }
 
+    @Test func displayPowerSettingsRenderHardwareAndFallbackRoutes() {
+        let store = SharedDefaults.store
+        let keys = [
+            AppStorageKeys.DisplayPower.enabled,
+            AppStorageKeys.DisplayPower.latestSnapshot,
+            AppStorageKeys.DisplayPower.brightnessLevels,
+            AppStorageKeys.DisplayPower.xdrBoostEnabled,
+            AppStorageKeys.DisplayPower.xdrBoostLevel,
+            AppStorageKeys.DisplayPower.bluetoothOffDuringSleep,
+            AppStorageKeys.DisplayPower.bluetoothRestorePending,
+        ]
+        let saved = keys.map { ($0, store.object(forKey: $0)) }
+        defer {
+            for (key, value) in saved {
+                if let value {
+                    store.set(value, forKey: key)
+                } else {
+                    store.removeObject(forKey: key)
+                }
+            }
+        }
+        store.set(true, forKey: AppStorageKeys.DisplayPower.enabled)
+        DisplayPowerOperationExecution.saveSnapshot(
+            DisplayPowerSnapshot(
+                displays: [
+                    DisplayPowerDisplay(
+                        id: 1, name: "Built-in Retina Display", builtIn: true, method: .system,
+                        brightness: 0.43),
+                    DisplayPowerDisplay(
+                        id: 2, name: "Desk Display", builtIn: false, method: .software,
+                        brightness: 0.65),
+                ],
+                xdrSupported: true, xdrBoosting: false, bluetoothSupported: true,
+                bluetoothOffDuringSleep: false, bluetoothRestorePending: false,
+                updatedAt: Date(timeIntervalSince1970: 1)),
+            defaults: store)
+
+        #expect(renders(DisplayPowerRows(), width: 560, height: 700))
+    }
+
     @Test func extensionSettingsHeaderRendersTrailingSwitch() throws {
         let host = NSHostingView(
             rootView: ExtensionSettingsHeader(title: "Lid Awake", enabled: .constant(false)))
