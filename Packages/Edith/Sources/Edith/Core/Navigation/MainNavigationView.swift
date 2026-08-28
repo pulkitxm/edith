@@ -226,7 +226,7 @@ private struct SidebarNavRow: View {
                             height: UIScale.pt(SidebarDisclosureGeometry.controlSlotWidth)
                         )
                         .background(
-                            Color.primary.opacity(rowHovered ? 0.055 : 0),
+                            Color.primary.opacity(rowHovered && !selected ? 0.055 : 0),
                             in: RoundedRectangle(cornerRadius: UIScale.pt(6))
                         )
                         .contentShape(Rectangle())
@@ -852,7 +852,13 @@ struct MainWindowView: View {
                     SidebarNavRow(
                         item: item, selected: destination == item, theme: theme,
                         shortcutHint: shortcutHint(for: item),
-                        action: { select(item) },
+                        action: {
+                            if item == .settings, destination == .settings {
+                                settingsCategoriesExpanded.toggle()
+                            } else {
+                                select(item)
+                            }
+                        },
                         detach: item == .about || item == .settings ? nil : { detach(item) },
                         disclosureExpanded: item == .settings
                             ? settingsCategoriesExpanded : nil,
