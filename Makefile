@@ -118,15 +118,12 @@ verify-bundle:
 	test -x dist/Edith.app/Contents/MacOS/ed
 	test -x dist/Edith.app/Contents/MacOS/edh
 	test 1 -eq "$$(find dist/Edith.app -name Sparkle.framework | wc -l | tr -d ' ')"
-	test -d "dist/Edith.app/Contents/Library/Applications/Edith Files.app/Contents/MacOS/../../../../../Frameworks/Sparkle.framework"
+	test ! -e "dist/Edith.app/Contents/Library/Applications/Edith Files.app"
 	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/claude.svg
 	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/codex.svg
 	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/ChromeExtension/manifest.json
 	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith
 	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/MenuBar.png
-	test -x "dist/Edith.app/Contents/Library/Applications/Edith Files.app/Contents/MacOS/EdithFiles"
-	test -f "dist/Edith.app/Contents/Library/Applications/Edith Files.app/Contents/Resources/Edith_Edith.bundle/Contents/Resources/appicon.png"
-	/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "dist/Edith.app/Contents/Library/Applications/Edith Files.app/Contents/Info.plist" | grep -qx com.pulkit.edith.files
 	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/AppIcon.icns
 	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/claude.svg
 	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/codex.svg
@@ -149,7 +146,6 @@ verify-bundle:
 	  done; \
 	done; exit 0
 	codesign --verify dist/Edith.app/Contents/Library/LoginItems/Edith.app
-	codesign --verify "dist/Edith.app/Contents/Library/Applications/Edith Files.app"
 	codesign --verify --deep --strict dist/Edith.app
 
 
