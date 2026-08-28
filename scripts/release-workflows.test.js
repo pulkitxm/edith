@@ -115,6 +115,11 @@ test("release builds and publishes the macOS assets", () => {
   expect(dmgJob).toContain("name: Cache libghostty");
   expect(dmgJob).toContain("name: Build libghostty");
   expect(dmgJob).toContain("make ghostty");
+  expect(dmgJob).toContain("name: Verify the release bundle");
+  expect(dmgJob).toContain("run: make verify-bundle");
+  expect(dmgJob.indexOf("run: make verify-bundle")).toBeLessThan(
+    dmgJob.indexOf("name: Package the DMG"),
+  );
   expect(releaseWorkflow).toContain("release-assets/Edith.dmg");
   expect(releaseWorkflow).toContain("release-assets/appcast.xml");
   expect(releaseWorkflow).toContain("gh release create");
@@ -151,10 +156,18 @@ test("superseded release builds yield the lane before packaging", () => {
   expect(
     dmgJob.match(/if: steps\.release_build\.outputs\.superseded != 'true'/g)
       ?.length,
-  ).toBe(9);
+  ).toBe(10);
   expect(releaseWorkflow).toContain(
     "needs: [version, ci, dmg]\n    if: needs.dmg.outputs.superseded != 'true'",
   );
+});
+
+test("bundle verification requires one executable under two names", () => {
+  expect(makefile).toContain("test ! -L dist/Edith.app/Contents/MacOS/Edith");
+  expect(makefile).toContain("test ! -L dist/Edith.app/Contents/MacOS/ed");
+  expect(makefile).toContain("test ! -e dist/Edith.app/Contents/MacOS/edh");
+  expect(makefile).toContain("-type f \\( -name ed -o -name edh \\)");
+  expect(makefile).toContain("for name in ed edith; do");
 });
 
 test("macOS notarization is conditional on its optional credentials", () => {

@@ -6,8 +6,8 @@ public enum Guide {
 
         `ed` is the command line for Edith, the macOS menu bar app. Everything the app
         can configure, `ed` can configure, and everything the Machines extension can
-        reach over SSH, `ed` can reach. `edh` and `edith` are the same binary under
-        different names, so use whichever reads better in your shell history.
+        reach over SSH, `ed` can reach. `edith` is the same binary under its full
+        name, so use whichever reads better in your shell history.
 
         There are two surfaces, and picking the right one is the only thing to learn:
 
@@ -47,7 +47,7 @@ public enum Guide {
         ed guide --json             the complete parser command catalog
         ```
 
-        `ed install` links `ed`, `edh` and `edith` into a directory on PATH, and
+        `ed install` links `ed` and `edith` into a directory on PATH, and
         `ed uninstall` removes those links again. Neither touches anything else.
 
         Add `--json` to any read command for machine-readable output on stdout with

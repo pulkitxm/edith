@@ -24,7 +24,6 @@ site-dev:
 
 cli:
 	$(XCODEBUILD) -scheme ed -configuration Release build
-	$(XCODEBUILD) -scheme edh -configuration Release build
 	build/Build/Products/Release/ed install --directory $(HOME)/.local/bin
 	build/Build/Products/Release/ed completions install
 
@@ -115,8 +114,31 @@ ci-swift: ci-swift-check
 
 verify-bundle:
 	test -f dist/Edith.app/Contents/MacOS/Edith
+	test ! -L dist/Edith.app/Contents/MacOS/Edith
+	test -x dist/Edith.app/Contents/MacOS/Edith
+	file -b dist/Edith.app/Contents/MacOS/Edith | grep -q '^Mach-O'
+	test -f dist/Edith.app/Contents/MacOS/ed
+	test ! -L dist/Edith.app/Contents/MacOS/ed
 	test -x dist/Edith.app/Contents/MacOS/ed
-	test -x dist/Edith.app/Contents/MacOS/edh
+	file -b dist/Edith.app/Contents/MacOS/ed | grep -q '^Mach-O'
+	test ! -e dist/Edith.app/Contents/MacOS/edh
+	test ! -L dist/Edith.app/Contents/MacOS/edh
+	test 1 -eq "$$(find dist/Edith.app/Contents/MacOS -maxdepth 1 -type f \( -name ed -o -name edh \) | wc -l | tr -d ' ')"
+	codesign --verify --strict dist/Edith.app/Contents/MacOS/ed
+	@install_dir="$$(mktemp -d /tmp/edith-install.XXXXXX)"; \
+	  trap 'rm -rf "$$install_dir"' EXIT; \
+	  dist/Edith.app/Contents/MacOS/ed install --directory "$$install_dir" >/dev/null; \
+	  target="$$(pwd)/dist/Edith.app/Contents/MacOS/ed"; \
+	  version="$$($$install_dir/ed --version)"; \
+	  for name in ed edith; do \
+	    test -L "$$install_dir/$$name"; \
+	    test "$$(readlink "$$install_dir/$$name")" = "$$target"; \
+	    test -x "$$install_dir/$$name"; \
+	    codesign --verify --strict "$$install_dir/$$name"; \
+	    test "$$version" = "$$($$install_dir/$$name --version)"; \
+	  done; \
+	  test ! -e "$$install_dir/edh"; \
+	  test ! -L "$$install_dir/edh"
 	test 1 -eq "$$(find dist/Edith.app -name Sparkle.framework | wc -l | tr -d ' ')"
 	test ! -e "dist/Edith.app/Contents/Library/Applications/Edith Files.app"
 	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/claude.svg

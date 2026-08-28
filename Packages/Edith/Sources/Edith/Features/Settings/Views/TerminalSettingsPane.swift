@@ -192,13 +192,13 @@ struct TerminalSettingsPane: View {
     }
 
     private var toolsHelp: String {
-        if !loaded { return "ed, edh and edith are the same tool under three names." }
+        if !loaded { return "ed and edith are the same tool under two names." }
         if !tools.bundled { return "This build does not carry the ed binary." }
         if !tools.onPath, !tools.directory.isEmpty {
             return
                 "\(abbreviate(tools.directory)) is not on your PATH, so the shell cannot find ed yet."
         }
-        return "ed, edh and edith are the same tool under three names."
+        return "ed and edith are the same tool under two names."
     }
 
     private var toolSummary: String {

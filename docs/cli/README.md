@@ -5,8 +5,8 @@ your `PATH` the first time the app runs, and reaches everything the UI reaches:
 settings, extensions, permissions, agent usage, this Mac's metrics, playback,
 your clipboard, your calendar, and the machines Edith can talk to over SSH.
 
-`edh` and `edith` are the same binary under different names. Every example in
-these pages works with any of the three.
+`edith` is the same binary under its full name. Every example in these pages
+works with either name.
 
 The built-in manual is `ed guide`, which is written for agents and humans alike
 and is the shortest path to being useful. These pages are the complete
