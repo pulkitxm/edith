@@ -49,7 +49,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
     public var reason: String {
         switch self {
         case .calendar: "Required to read and show your schedule in Calendar."
-        case .notifications: "Asked when you enable usage limit, pacing, or reset alerts."
+        case .notifications: "Asked when you enable usage, machine, or system pressure alerts."
         case .accessibility:
             "Asked when you first use Clean keys or clipboard instant paste."
         case .inputMonitoring:
@@ -134,7 +134,7 @@ public extension ExtensionRegistryEntry {
 
     var optionalPermissions: [ExtensionPermission] {
         switch id {
-        case "usage", "machines": [.notifications]
+        case "usage", "machines", "systemStats": [.notifications]
         case "system": [.accessibility, .inputMonitoring]
         case "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation]
         case "clipboard": [.accessibility]

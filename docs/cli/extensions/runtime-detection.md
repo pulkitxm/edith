@@ -28,7 +28,7 @@ system query failure produces `failed` with runtime phase `error`.
 | System | built-in running-application module | regular applications visible through AppKit | `ed apps ls --json`; `ed app relaunch` |
 | Machines | readable machine registry with valid names, hosts, and SSH ports | configured machine count | `ed machines ls --json`; `ed machines add --help` |
 | Companion | configured endpoint | backend health checks and optional dependency health | `ed companion doctor --json` |
-| CPU & Memory | built-in metrics module | CPU tick sample and physical memory availability | `ed system stats --json`; `ed app relaunch` |
+| System Monitor | built-in metrics module | CPU tick sample and physical memory availability | `ed system stats --json`; `ed app relaunch` |
 | Mic Mute | built-in Core Audio module | input device discovery and input stream count | `ed config ls --group micmute --json`; `ed app relaunch` |
 | Lid Awake | privileged helper registration and approval state | Service Management reports the helper enabled | `ed lid-awake status --json`; approve Login Items when requested |
 | Music | configured library path exists and is a directory | recursive supported-track count and optional yt-dlp version | `ed music rescan`; `ed tools install yt-dlp` |
