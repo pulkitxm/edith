@@ -137,7 +137,7 @@ public extension ExtensionRegistryEntry {
         case "usage", "machines": [.notifications]
         case "system": [.accessibility, .inputMonitoring]
         case "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation]
-        case "clipboard", "emoji": [.accessibility]
+        case "clipboard": [.accessibility]
         default: []
         }
     }

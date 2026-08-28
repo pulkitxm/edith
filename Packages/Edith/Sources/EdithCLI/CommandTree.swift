@@ -11,9 +11,6 @@ public enum ArgumentKind: Equatable, Sendable {
     case cleanerCategory
     case colorFormat
     case colorIndex
-    case emojiTone
-    case emojiGroup
-    case emojiCharacter
     case pruneTarget
     case composeProject
     case historyIndex
@@ -614,24 +611,6 @@ public enum CommandTree {
                     CommandNode(
                         "clear", "Forget every picked colour.",
                         options: ["--json", "--yes"], destructivePolicy: .previewThenYes),
-                ]),
-            CommandNode(
-                "emoji", "The emoji picker and the emoji it knows about.",
-                children: [
-                    CommandNode("pick", "Open Edith's emoji picker.", options: common),
-                    CommandNode(
-                        "ls", "List the emoji this Mac can render.", aliases: ["list"],
-                        options: [
-                            "--json", "--help", "--frequent", "--search", "--group", "--limit",
-                        ],
-                        optionValues: ["--group": .emojiGroup]),
-                    CommandNode(
-                        "insert", "Type an emoji into the frontmost app.",
-                        options: common, arguments: [.emojiCharacter]),
-                    CommandNode(
-                        "tone", "Set the default emoji skin tone.",
-                        options: common, arguments: [.emojiTone]),
-                    CommandNode("clear", "Forget the frequently used emoji.", options: common),
                 ]),
             CommandNode(
                 "shelf", "The files parked on the notch shelf.",

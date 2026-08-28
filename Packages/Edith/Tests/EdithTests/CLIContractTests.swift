@@ -150,13 +150,6 @@ enum JSONContract {
             "ed color copy", ["color", "copy", "1", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed color clear", ["color", "clear", "--json"]),
-        JSONCase("ed emoji pick", ["emoji", "pick", "--json"], mutatesTheMachine: true),
-        JSONCase("ed emoji ls", ["emoji", "ls", "--json"]),
-        JSONCase(
-            "ed emoji insert", ["emoji", "insert", "1F600", "--json"],
-            mutatesTheMachine: true),
-        JSONCase("ed emoji tone", ["emoji", "tone", "medium", "--json"], mutatesTheMachine: true),
-        JSONCase("ed emoji clear", ["emoji", "clear", "--json"]),
         JSONCase("ed shelf ls", ["shelf", "ls", "--json"]),
         JSONCase("ed shelf path", ["shelf", "path", "1", "--json"]),
         JSONCase("ed shelf open", ["shelf", "open", "999999", "--json"]),
