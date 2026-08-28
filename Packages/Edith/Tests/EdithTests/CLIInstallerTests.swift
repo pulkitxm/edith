@@ -22,18 +22,14 @@ import Testing
         let tools = try Self.temporaryDirectory()
         let bin = try Self.temporaryDirectory()
         try Self.makeTool("ed", in: tools)
-        try Self.makeTool("edh", in: tools)
 
         let result = CLIInstaller.install(toolsDirectory: tools, into: bin)
         #expect(result.linked == ["ed", "edh", "edith"])
         for name in CLIInstaller.toolNames {
             let destination = try FileManager.default.destinationOfSymbolicLink(
                 atPath: bin.appendingPathComponent(name).path)
-            #expect(destination.hasPrefix(tools.path))
+            #expect(destination == tools.appendingPathComponent("ed").path)
         }
-        let aliasTarget = try FileManager.default.destinationOfSymbolicLink(
-            atPath: bin.appendingPathComponent("edith").path)
-        #expect(aliasTarget.hasSuffix("/ed"))
         try? FileManager.default.removeItem(at: tools)
         try? FileManager.default.removeItem(at: bin)
     }
@@ -42,7 +38,6 @@ import Testing
         let tools = try Self.temporaryDirectory()
         let bin = try Self.temporaryDirectory()
         try Self.makeTool("ed", in: tools)
-        try Self.makeTool("edh", in: tools)
         _ = CLIInstaller.install(toolsDirectory: tools, into: bin)
         let second = CLIInstaller.install(toolsDirectory: tools, into: bin)
         #expect(second.linked.isEmpty)
@@ -55,7 +50,6 @@ import Testing
         let tools = try Self.temporaryDirectory()
         let bin = try Self.temporaryDirectory()
         try Self.makeTool("ed", in: tools)
-        try Self.makeTool("edh", in: tools)
         let squatter = bin.appendingPathComponent("ed")
         try Data("someone else".utf8).write(to: squatter)
 
@@ -74,7 +68,6 @@ import Testing
         let bin = try Self.temporaryDirectory()
         for directory in [oldTools, newTools] {
             try Self.makeTool("ed", in: directory)
-            try Self.makeTool("edh", in: directory)
         }
         _ = CLIInstaller.install(toolsDirectory: oldTools, into: bin)
         let result = CLIInstaller.install(toolsDirectory: newTools, into: bin)
@@ -91,7 +84,6 @@ import Testing
         let tools = try Self.temporaryDirectory()
         let bin = try Self.temporaryDirectory()
         try Self.makeTool("ed", in: tools)
-        try Self.makeTool("edh", in: tools)
         _ = CLIInstaller.install(toolsDirectory: tools, into: bin)
         let keep = bin.appendingPathComponent("keepme")
         try Data("x".utf8).write(to: keep)
@@ -163,7 +155,6 @@ import Testing
         let tools = try Self.temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: tools) }
         try Self.makeTool("ed", in: tools)
-        try Self.makeTool("edh", in: tools)
 
         let result = CLIInstaller.install(
             toolsDirectory: tools, into: URL(fileURLWithPath: "/dev/null/edith"))
