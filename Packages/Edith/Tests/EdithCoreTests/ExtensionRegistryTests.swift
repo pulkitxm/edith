@@ -10,12 +10,12 @@ import Testing
         #expect(Set(entries.map(\.defaultsKey)).count == entries.count)
     }
 
-    @Test func identifiersMatchPreUtilityBaseline() {
+    @Test func identifiersMatchSupportedExtensions() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
                 "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
-                "clipboard", "focusDim", "presenter", "colorPicker",
+                "clipboard", "focusDim", "presenter", "colorPicker", "radialLauncher",
             ])
     }
 
