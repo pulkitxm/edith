@@ -34,6 +34,12 @@ public enum CLIEnvironment {
         ).isEmpty
     }
 
+    nonisolated(unsafe) public static var isFilesAppRunning: @Sendable () -> Bool = {
+        !NSRunningApplication.runningApplications(
+            withBundleIdentifier: AppBridge.filesBundleID
+        ).isEmpty
+    }
+
     nonisolated(unsafe) public static var deliver:
         @Sendable (Notification.Name, [String: Any]?) -> Void = {
             IPC.post($0, userInfo: $1)
@@ -185,6 +191,11 @@ public enum CLIEnvironment {
         isMainAppRunning = {
             !NSRunningApplication.runningApplications(
                 withBundleIdentifier: AppBridge.mainBundleID
+            ).isEmpty
+        }
+        isFilesAppRunning = {
+            !NSRunningApplication.runningApplications(
+                withBundleIdentifier: AppBridge.filesBundleID
             ).isEmpty
         }
         deliver = { IPC.post($0, userInfo: $1) }

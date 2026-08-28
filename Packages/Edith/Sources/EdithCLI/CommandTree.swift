@@ -996,6 +996,9 @@ public enum CommandTree {
                                 "undo", "Undo the last change a Finder window made.",
                                 options: common, arguments: [.machine]),
                             CommandNode(
+                                "open", "Open the Files window on a directory.",
+                                options: common, arguments: [.machine, .remotePath]),
+                            CommandNode(
                                 "duplicate", "Copy a file beside itself.", options: common,
                                 arguments: [.machine, .remotePath]),
                             CommandNode(
