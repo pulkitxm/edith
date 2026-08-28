@@ -9,6 +9,7 @@ public enum AppStorageKeys {
 
     public enum General {
         public static let editMainWindowFullScreen = "EdithMainWindowFullScreen"
+        public static let extensionsExpand = "extensionsExpand"
         public static let appearance = "appearance"
         public static let mainSidebarOpen = "mainSidebarOpen"
         public static let mainSidebarWidth = "mainSidebarWidth"
@@ -69,6 +70,17 @@ public enum AppStorageKeys {
         public static let enabled = "colorPickerEnabled"
         public static let historySize = "colorPickerHistorySize"
         public static let profile = "colorPickerProfile"
+    }
+
+    public enum CommandBar {
+        public static let enabled = "commandBarEnabled"
+        public static let hotKeyCode = "commandBarHotKeyCode"
+        public static let hotKeyLabel = "commandBarHotKeyLabel"
+        public static let hotKeyMods = "commandBarHotKeyMods"
+        public static let learnRanking = "commandBarLearnRanking"
+        public static let registrationStatus = "commandBarHotKeyRegistrationStatus"
+        public static let showApplications = "commandBarShowApplications"
+        public static let usage = "commandBarUsage"
     }
 
     public enum Companion {

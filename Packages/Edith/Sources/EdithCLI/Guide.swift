@@ -38,6 +38,8 @@ public enum Guide {
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler
         ed color copy 1 --format hex
+        ed command-bar '2 + 3 * 4'  calculate with the Command Bar engine
+        ed command-bar convert 5 km mi
         ed usage sources            the agents that produced your usage history
         ed schema                   JSON Schema for the config document
         ed version                  the CLI version, and whether the app is up

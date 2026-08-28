@@ -51,6 +51,21 @@ import EdithCore
                 == .ready("Attention tracking is configured for the selected sources."))
     }
 
+    @Test func commandBarReportsShortcutConflicts() {
+        let suite = "test.extension-adapter.command-bar.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        #expect(
+            ExtensionLiveAdapters.commandBarReadiness(defaults: defaults)
+                == .ready("The Command Bar shortcut is registered and ready."))
+        defaults.set(-9878, forKey: AppStorageKeys.CommandBar.registrationStatus)
+        #expect(
+            ExtensionLiveAdapters.commandBarReadiness(defaults: defaults)
+                == .needsSetup(
+                    "The Command Bar shortcut is already in use. Record another shortcut."))
+    }
+
     @Test func usageDetectsMissingLoadingEmptyReadyAndCorruptData() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

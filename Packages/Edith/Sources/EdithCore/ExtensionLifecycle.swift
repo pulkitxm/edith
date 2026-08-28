@@ -590,6 +590,48 @@ public enum ExtensionLifecycleCatalog {
                     "ed clipboard ls --json")
             ]),
         descriptor(
+            "commandBar", "Reach Edith actions, installed apps, calculations and conversions.",
+            workflows: [
+                instruction(
+                    "open", "Open the palette",
+                    "Press Option-Space, or choose another shortcut in Command Bar settings."),
+                instruction(
+                    "search", "Find and run",
+                    "Type an Edith destination, enabled extension action, or application name."),
+                instruction(
+                    "answer", "Calculate and convert",
+                    "Enter arithmetic such as (24 + 6) * 3 or a conversion such as 5 km to mi."),
+            ],
+            prerequisites: [
+                instruction(
+                    "shortcut", "Choose an available shortcut",
+                    "The default Option-Space shortcut is distinct from Edith's global panel shortcut."
+                )
+            ],
+            examples: [
+                "ed extensions enable commandBar", "ed command-bar calculate '2 + 3 * 4'",
+                "ed command-bar convert 5 km mi",
+            ],
+            docs: [
+                documentation("guide", "Command Bar guide", "docs/cli/command-bar/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "shortcut", "Resolve a shortcut conflict",
+                    "Record another shortcut in Settings when macOS reports that it is already in use.",
+                    "ed config describe commandBarHotKeyLabel"),
+                instruction(
+                    "doctor", "Check Command Bar readiness",
+                    "Confirm the helper and shortcut capability are available.",
+                    "ed extensions doctor commandBar --json"),
+            ],
+            verification: [
+                instruction(
+                    "calculation", "Verify the evaluator",
+                    "Run a local calculation without opening the palette.",
+                    "ed command-bar calculate '2 + 3 * 4' --json")
+            ]),
+        descriptor(
             "focusDim", "Reduce visual noise by dimming everything behind the active app.",
             workflows: [
                 instruction(

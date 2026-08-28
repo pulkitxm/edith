@@ -4,6 +4,8 @@ import EdithKit
 import SwiftUI
 
 struct ShortcutsSettingsPane: View {
+    @AppStorage(AppStorageKeys.CommandBar.enabled, store: SharedDefaults.store) private
+        var commandBarEnabled = false
     @AppStorage(AppStorageKeys.Clipboard.enabled, store: SharedDefaults.store) private
         var clipboardEnabled =
         false
@@ -20,8 +22,9 @@ struct ShortcutsSettingsPane: View {
 
     private var extensionShortcuts: [ExtensionShortcut] {
         ExtensionShortcutVisibility.visible(
-            clipboard: clipboardEnabled, micMute: micMuteEnabled, focusDim: focusDimEnabled,
-            presenter: presenterEnabled, colorPicker: colorPickerEnabled)
+            commandBar: commandBarEnabled, clipboard: clipboardEnabled, micMute: micMuteEnabled,
+            focusDim: focusDimEnabled, presenter: presenterEnabled,
+            colorPicker: colorPickerEnabled)
     }
 
     var body: some View {
@@ -99,6 +102,10 @@ struct ShortcutsSettingsPane: View {
     @ViewBuilder
     private func extensionShortcutRow(_ shortcut: ExtensionShortcut) -> some View {
         switch shortcut {
+        case .commandBar:
+            shortcutRow(
+                "Command Bar", subtitle: "Searches Edith actions and installed applications",
+                keyPrefix: "commandBarHotKey", defaultLabel: "⌥Space")
         case .clipboard:
             shortcutRow(
                 "Clipboard history", subtitle: "Opens the clipboard history popup",

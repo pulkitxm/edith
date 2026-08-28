@@ -295,6 +295,7 @@ enum GlobalHotKey {
         static let colorPicker: UInt32 = 5
         static let micMute: UInt32 = 6
         static let presenterToggle: UInt32 = 7
+        static let commandBar: UInt32 = 9
     }
 
     fileprivate static var refs: [UInt32: EventHotKeyRef] = [:]
@@ -320,15 +321,20 @@ enum GlobalHotKey {
         handlerInstalled = true
     }
 
-    static func set(id: UInt32, keyCode: Int, modifiers: Int, action: @escaping () -> Void) {
+    @discardableResult
+    static func set(
+        id: UInt32, keyCode: Int, modifiers: Int, action: @escaping () -> Void
+    ) -> OSStatus {
         installHandlerOnce()
         clear(id: id)
-        actions[id] = action
         let hotKeyID = EventHotKeyID(signature: OSType(0x4544_4954), id: id)
         var ref: EventHotKeyRef?
-        RegisterEventHotKey(
+        let status = RegisterEventHotKey(
             UInt32(keyCode), UInt32(modifiers), hotKeyID, GetApplicationEventTarget(), 0, &ref)
+        guard status == noErr, let ref else { return status }
         refs[id] = ref
+        actions[id] = action
+        return status
     }
 
     static func clear(id: UInt32) {
@@ -336,6 +342,48 @@ enum GlobalHotKey {
             UnregisterEventHotKey(ref)
         }
         actions.removeValue(forKey: id)
+    }
+}
+
+enum CommandBarHotKey {
+    static var code: Int {
+        SharedDefaults.store.object(forKey: AppStorageKeys.CommandBar.hotKeyCode) as? Int
+            ?? kVK_Space
+    }
+
+    static var mods: Int {
+        SharedDefaults.store.object(forKey: AppStorageKeys.CommandBar.hotKeyMods) as? Int
+            ?? optionKey
+    }
+
+    static var label: String {
+        SharedDefaults.store.string(forKey: AppStorageKeys.CommandBar.hotKeyLabel) ?? "⌥Space"
+    }
+
+    static func register() {
+        guard
+            SharedDefaults.store.object(forKey: AppStorageKeys.CommandBar.enabled) as? Bool == true
+        else {
+            unregister()
+            return
+        }
+        let status: OSStatus
+        if code == HotKey.code, mods == HotKey.mods {
+            GlobalHotKey.clear(id: GlobalHotKey.ID.commandBar)
+            status = OSStatus(eventHotKeyExistsErr)
+        } else {
+            status = GlobalHotKey.set(
+                id: GlobalHotKey.ID.commandBar, keyCode: code, modifiers: mods
+            ) {
+                MainActor.assumeIsolated { AppState.services.commandBar?.toggle() }
+            }
+        }
+        SharedDefaults.store.set(Int(status), forKey: AppStorageKeys.CommandBar.registrationStatus)
+    }
+
+    static func unregister() {
+        GlobalHotKey.clear(id: GlobalHotKey.ID.commandBar)
+        SharedDefaults.store.set(0, forKey: AppStorageKeys.CommandBar.registrationStatus)
     }
 }
 

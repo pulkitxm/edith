@@ -36,6 +36,15 @@ import Testing
         }
     }
 
+    @Test func commandBarHotKeyIsDistinctFromThePanelDefault() {
+        withCleanKeys("commandBarHotKey") {
+            #expect(CommandBarHotKey.code == kVK_Space)
+            #expect(CommandBarHotKey.mods == optionKey)
+            #expect(CommandBarHotKey.label == "⌥Space")
+            #expect(CommandBarHotKey.code != HotKey.code || CommandBarHotKey.mods != HotKey.mods)
+        }
+    }
+
     @Test func focusDimHotKeyDefaults() {
         withCleanKeys("focusDimHotKey") {
             #expect(FocusDimHotKey.code == kVK_ANSI_F)
