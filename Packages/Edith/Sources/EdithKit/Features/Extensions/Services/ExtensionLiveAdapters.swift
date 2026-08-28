@@ -64,8 +64,8 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
-        "quickActions", "lidAwake", "music", "calendar", "notchShelf", "clipboard",
+        "attention", "usage", "quinjet", "system", "quickActions", "machines", "systemStats",
+        "micMute", "lidAwake", "music", "calendar", "notchShelf", "clipboard",
         "focusDim", "presenter", "colorPicker",
     ]
 
