@@ -336,6 +336,42 @@ public enum ExtensionLifecycleCatalog {
                     "ed apps ls --json")
             ]),
         descriptor(
+            "quickActions", "Run common macOS and Finder actions from one compact panel.",
+            workflows: [
+                instruction(
+                    "toggle", "Change system state",
+                    "Switch appearance, Finder visibility, or the keyboard light with one click."),
+                instruction(
+                    "secure", "Finish safely",
+                    "Eject external disks, empty the Trash with confirmation, or lock the screen."),
+            ],
+            prerequisites: [
+                instruction(
+                    "automation", "Allow action access",
+                    "macOS may request Automation access for appearance and Trash actions.",
+                    "ed quick-actions status --json")
+            ],
+            examples: [
+                "ed extensions enable quickActions", "ed quick-actions status --json",
+                "ed quick-actions hidden-files --json",
+            ],
+            docs: [
+                documentation(
+                    "guide", "Quick Actions guide", "docs/cli/quick-actions/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "status", "Inspect available actions",
+                    "Check hardware support and eligible external disks.",
+                    "ed quick-actions status --json")
+            ],
+            verification: [
+                instruction(
+                    "status", "Read current state",
+                    "Confirm Finder and hardware state can be inspected.",
+                    "ed quick-actions status --json")
+            ]),
+        descriptor(
             "machines", "Operate SSH computers, files, services and containers from Edith.",
             workflows: [
                 instruction(

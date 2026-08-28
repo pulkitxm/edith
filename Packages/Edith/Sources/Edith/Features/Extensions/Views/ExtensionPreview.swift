@@ -27,6 +27,7 @@ struct ExtensionPreview: View {
         case "herdr": herdrPreview(phase: phase)
         case "quinjet": quinjetPreview(phase: phase)
         case "system": systemPreview(phase: phase)
+        case "quickActions": quickActionsPreview(phase: phase)
         case "machines": machinesPreview(phase: phase)
         case "systemStats": systemStatsPreview(phase: phase)
         case "micMute": micMutePreview(phase: phase)
@@ -149,6 +150,37 @@ struct ExtensionPreview: View {
                     }
                     .shadow(color: .black.opacity(0.1), radius: UIScale.pt(0), y: 2 - press * 2)
                     .offset(y: press * 2)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func quickActionsPreview(phase: Double) -> some View {
+        let active = Int(phase * 1.4) % 4
+        let items = [
+            ("circle.lefthalf.filled", "DARK"), ("eye", "HIDDEN"),
+            ("eject.fill", "EJECT"), ("lock.fill", "LOCK"),
+        ]
+        return HStack(spacing: UIScale.pt(7)) {
+            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                VStack(spacing: UIScale.pt(4)) {
+                    Image(systemName: item.0)
+                        .font(.system(size: UIScale.pt(13), weight: .semibold))
+                    Text(item.1)
+                        .font(DashSkin.mono(5.5, weight: .semibold))
+                }
+                .foregroundStyle(index == active ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
+                .frame(width: UIScale.pt(43), height: UIScale.pt(43))
+                .background(
+                    index == active ? DashSkin.accent(dark).opacity(0.12) : DashSkin.paper2(dark),
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(7))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: UIScale.pt(7))
+                        .strokeBorder(
+                            index == active
+                                ? DashSkin.accent(dark).opacity(0.7) : DashSkin.lineStrong(dark))
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

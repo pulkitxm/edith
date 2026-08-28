@@ -133,6 +133,11 @@ public enum ExtensionRegistry {
             defaultsKey: "tabSystemEnabled", requiredCapabilities: [.runningApplications],
             optionalCapabilities: [.preventSleep, .inputSuppression]),
         ExtensionRegistryEntry(
+            id: "quickActions", title: "Quick Actions",
+            subtitle: "One-click controls for appearance, Finder, disks, Trash, and locking.",
+            symbolName: "bolt.fill", group: .system, featured: true,
+            defaultsKey: "tabQuickActionsEnabled", requiredCapabilities: [.systemActions]),
+        ExtensionRegistryEntry(
             id: "machines", title: "Machines",
             subtitle: "Your other computers over SSH: stats, files, Docker, and a terminal.",
             symbolName: "server.rack", group: .system, featured: true,

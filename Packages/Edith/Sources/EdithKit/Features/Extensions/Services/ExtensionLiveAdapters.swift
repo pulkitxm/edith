@@ -64,9 +64,9 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
-        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "colorPicker",
+        "attention", "usage", "quinjet", "system", "quickActions", "machines", "systemStats",
+        "micMute", "lidAwake", "music", "calendar", "notchShelf", "clipboard",
+        "focusDim", "presenter", "colorPicker",
     ]
 
     public static func provider(
@@ -95,6 +95,7 @@ public enum ExtensionLiveAdapters {
         case "quinjet":
             quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
         case "system": await systemReadiness()
+        case "quickActions": quickActionsReadiness()
         case "machines": machinesReadiness()
         case "systemStats": systemStatsReadiness()
         case "micMute": microphoneReadiness()
@@ -191,6 +192,17 @@ public enum ExtensionLiveAdapters {
             contentCount: count, readyDetail: "Running application control is available.",
             emptyDetail: "No regular applications are visible to the system runtime."
         ).readiness
+    }
+
+    static func quickActionsReadiness(
+        snapshot: QuickActionsSnapshot = QuickActionCenter.live.snapshot()
+    ) -> ExtensionAdapterReadiness {
+        let count = QuickAction.allCases.count - (snapshot.keyboardLightAvailable ? 0 : 1)
+        return .ready(
+            snapshot.keyboardLightAvailable
+                ? "All \(count) Quick Actions are available."
+                : "\(count) Quick Actions are available; this Mac has no controllable keyboard light."
+        )
     }
 
     static func machinesReadiness(file: URL = MachinePaths.machinesFile)

@@ -44,6 +44,7 @@ import Testing
         "ed machines rm",
         "ed music rm",
         "ed quinjet close",
+        "ed quick-actions empty-trash",
         "ed shelf clear",
         "ed shelf purge",
         "ed shelf rm",
@@ -123,6 +124,9 @@ import Testing
         let appClear = try #require(
             try EdRoot.parseAsRoot(["app", "clear-updates", "--yes"])
                 as? AppClearUpdateHistoryCommand)
+        let emptyTrash = try #require(
+            try EdRoot.parseAsRoot(["quick-actions", "empty-trash", "--yes"])
+                as? QuickActionsEmptyTrashCommand)
         #expect(
             docker.yes && image.yes && kill.yes && stack.yes && forget.yes && reindex.yes
                 && rebuild.yes)
@@ -130,6 +134,7 @@ import Testing
             shelfRemove.yes && shelfClear.yes && shelfPurge.yes && clipboard.yes
                 && clipboardRemove.yes && color.yes)
         #expect(appQuit.yes && appRelaunch.yes && appClear.yes)
+        #expect(emptyTrash.yes)
     }
 
     @Test func appRuntimePreviewsDoNotQuitLaunchOrClearHistory() async {

@@ -56,6 +56,10 @@ public enum CLIEnvironment {
         RunningAppOperationCenter.liveSnapshots()
     }
 
+    nonisolated(unsafe) public static var quickActionCenter: @Sendable () -> QuickActionCenter = {
+        .live
+    }
+
     nonisolated(unsafe) public static var homeDirectory: URL =
         FileManager.default.homeDirectoryForCurrentUser
 
@@ -202,6 +206,7 @@ public enum CLIEnvironment {
         }
         openURL = { NSWorkspace.shared.open($0) }
         runningApps = { RunningAppOperationCenter.liveSnapshots() }
+        quickActionCenter = { .live }
         runAppleScript = { try AppleScriptHost.execute($0, timeout: $1) }
         usageRefresh = UsageRefreshDriver.live
         installTool = { try await ToolInstaller().install($0, log: $1) }

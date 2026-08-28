@@ -12,6 +12,7 @@ import Testing
         "tabHerdrEnabled",
         "tabQuinjetEnabled",
         "tabSystemEnabled",
+        "tabQuickActionsEnabled",
         "tabMachinesEnabled",
         "tabCompanionEnabled",
         "menuBarSystemStats",
@@ -31,12 +32,12 @@ import Testing
         #expect(Set(identifiers).count == identifiers.count)
     }
 
-    @Test func registryMatchesPreUtilityBaseline() {
+    @Test func registryContainsOnlyQuickActionsBeyondTheBaseline() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
-                "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
-                "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
-                "clipboard", "focusDim", "presenter", "colorPicker",
+                "attention", "usage", "herdr", "quinjet", "system", "quickActions", "machines",
+                "companion", "systemStats", "micMute", "lidAwake", "music", "calendar",
+                "notchShelf", "clipboard", "focusDim", "presenter", "colorPicker",
             ])
     }
 
@@ -148,8 +149,8 @@ import Testing
             ExtensionRegistry.entries.filter(\.featured).map(\.id))
         #expect(
             featuredIdentifiers == [
-                "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard",
+                "attention", "usage", "herdr", "quinjet", "system", "quickActions", "machines",
+                "notchShelf", "clipboard",
             ])
     }
 
@@ -231,6 +232,7 @@ import Testing
             "herdr": [],
             "quinjet": [],
             "system": [],
+            "quickActions": [],
             "machines": [],
             "companion": [],
             "systemStats": [],
@@ -250,6 +252,7 @@ import Testing
             "herdr": [],
             "quinjet": [],
             "system": [.accessibility, .inputMonitoring],
+            "quickActions": [],
             "machines": [.notifications],
             "companion": [],
             "systemStats": [],
@@ -381,6 +384,7 @@ import Testing
             "tabHerdrEnabled": false,
             "tabQuinjetEnabled": false,
             "tabSystemEnabled": true,
+            "tabQuickActionsEnabled": false,
             "tabMachinesEnabled": false,
             "tabCompanionEnabled": false,
             "menuBarSystemStats": false,

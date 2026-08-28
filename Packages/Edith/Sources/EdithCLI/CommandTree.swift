@@ -1,4 +1,5 @@
 import Foundation
+import EdithKit
 
 public enum ArgumentKind: Equatable, Sendable {
     case machine
@@ -444,6 +445,29 @@ public enum CommandTree {
                     CommandNode(
                         "directions", "Open directions to an event.", aliases: ["route"],
                         options: common, arguments: [.calendarEvent]),
+                ]),
+            CommandNode(
+                "quick-actions", "One-click controls for common macOS states.",
+                children: [
+                    CommandNode("status", "Show every Quick Action state.", options: common),
+                    CommandNode(
+                        "appearance", QuickAction.appearance.descriptor.summary, options: common),
+                    CommandNode(
+                        "keyboard-light", QuickAction.keyboardLight.descriptor.summary,
+                        options: common),
+                    CommandNode(
+                        "empty-trash", QuickAction.emptyTrash.descriptor.summary,
+                        options: ["--json", "--help", "--yes"],
+                        destructivePolicy: .previewThenYes),
+                    CommandNode(
+                        "eject-disks", QuickAction.ejectDisks.descriptor.summary, options: common),
+                    CommandNode(
+                        "hidden-files", QuickAction.hiddenFiles.descriptor.summary, options: common),
+                    CommandNode(
+                        "desktop-icons", QuickAction.desktopIcons.descriptor.summary,
+                        options: common),
+                    CommandNode(
+                        "lock-screen", QuickAction.lockScreen.descriptor.summary, options: common),
                 ]),
             CommandNode(
                 "presenter", "Manual presenter mode at runtime.",

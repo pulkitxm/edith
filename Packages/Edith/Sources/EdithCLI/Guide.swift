@@ -38,6 +38,7 @@ public enum Guide {
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler
         ed color copy 1 --format hex
+        ed quick-actions status     common macOS states and available controls
         ed usage sources            the agents that produced your usage history
         ed schema                   JSON Schema for the config document
         ed version                  the CLI version, and whether the app is up
@@ -339,6 +340,12 @@ public enum Guide {
         ed calendar join <event-id>     open the event's meeting link
         ed calendar directions <event>  open its location in Maps
         ed calendar open                open the Calendar application
+        ed quick-actions status         current appearance, Finder and hardware states
+        ed quick-actions appearance     switch between light and dark appearance
+        ed quick-actions hidden-files   show or hide hidden files in Finder
+        ed quick-actions eject-disks    eject eligible external disks
+        ed quick-actions empty-trash    preview, then add --yes to empty permanently
+        ed quick-actions lock-screen    lock this Mac immediately
         ed presenter status | start | stop
         ed herdr ls                     live Herdr sessions here and over SSH
         ed herdr attach w3:p1N          attach this terminal to a live pane

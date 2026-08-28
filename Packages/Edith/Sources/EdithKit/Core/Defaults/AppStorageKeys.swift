@@ -121,6 +121,16 @@ public enum AppStorageKeys {
         public static let theme = "quinjetTheme"
     }
 
+    public enum QuickActions {
+        public static let appearance = "quickActionsAppearance"
+        public static let desktopIcons = "quickActionsDesktopIcons"
+        public static let ejectDisks = "quickActionsEjectDisks"
+        public static let emptyTrash = "quickActionsEmptyTrash"
+        public static let hiddenFiles = "quickActionsHiddenFiles"
+        public static let keyboardLight = "quickActionsKeyboardLight"
+        public static let lockScreen = "quickActionsLockScreen"
+    }
+
     public enum MenuBar {
         public static let claudeWindows = "menuBarClaudeWindows"
         public static let codexWindows = "menuBarCodexWindows"
@@ -217,6 +227,7 @@ public enum AppStorageKeys {
         public static let herdrEnabled = "tabHerdrEnabled"
         public static let machinesEnabled = "tabMachinesEnabled"
         public static let musicEnabled = "tabMusicEnabled"
+        public static let quickActionsEnabled = "tabQuickActionsEnabled"
         public static let order = "tabOrder"
         public static let quinjetEnabled = "tabQuinjetEnabled"
         public static let systemEnabled = "tabSystemEnabled"
