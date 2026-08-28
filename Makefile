@@ -24,7 +24,6 @@ site-dev:
 
 cli:
 	$(XCODEBUILD) -scheme ed -configuration Release build
-	$(XCODEBUILD) -scheme edh -configuration Release build
 	build/Build/Products/Release/ed install --directory $(HOME)/.local/bin
 	build/Build/Products/Release/ed completions install
 

@@ -57,11 +57,6 @@ let targets: [Target] = [
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .executableTarget(
-        name: "edh",
-        dependencies: ["EdithCLI"],
-        swiftSettings: [.swiftLanguageMode(.v5)]
-    ),
-    .executableTarget(
         name: "EdithLidAwakeHelper",
         dependencies: ["EdithKit"],
         path: "Sources/EdithLidAwakeHelper",

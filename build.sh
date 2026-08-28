@@ -155,6 +155,7 @@ STATUS_HELPER="$HELPER/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.l
 STATUS_LAUNCH_DAEMONS="$HELPER/Contents/Library/LaunchDaemons"
 rm -rf dist && mkdir -p dist
 ditto "$BUILT" "$APP"
+ln -sfn ed "$APP/Contents/MacOS/edh"
 
 rm -rf "$HELPER"
 ditto "$BUILT_HELPER" "$HELPER"
@@ -202,7 +203,6 @@ sign_tool() {
 }
 
 sign_tool "$APP/Contents/MacOS/ed"
-sign_tool "$APP/Contents/MacOS/edh"
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
   --identifier com.pulkit.edith.lidawake "$PRIVILEGED_HELPER"
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
