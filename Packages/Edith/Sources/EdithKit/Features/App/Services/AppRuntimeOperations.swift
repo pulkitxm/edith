@@ -8,6 +8,34 @@ public enum AppRuntimeOwner: String, Equatable, Sendable {
     case local
 }
 
+public enum KeyboardCleaningState: String, Equatable, Sendable {
+    case arming
+    case cleaning
+    case inputMonitoringRequired
+    case accessibilityRequired
+    case unavailable
+
+    public var accepted: Bool {
+        self == .arming || self == .cleaning
+    }
+}
+
+public enum KeyboardCleaningIPC {
+    public static let requestIDKey = "requestID"
+    public static let stateKey = "state"
+
+    public static func payload(
+        requestID: String, state: KeyboardCleaningState
+    ) -> [String: Any] {
+        [requestIDKey: requestID, stateKey: state.rawValue]
+    }
+
+    public static func state(from payload: [AnyHashable: Any]) -> KeyboardCleaningState? {
+        guard let raw = payload[stateKey] as? String else { return nil }
+        return KeyboardCleaningState(rawValue: raw)
+    }
+}
+
 public enum AppRuntimeOperation: String, CaseIterable, Sendable {
     case cleanKeys
     case testNotification

@@ -346,8 +346,55 @@ struct AppCleanKeysCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            try await AppActions.fire(
-                AppActions.named("clean-keys"), json: json)
+            let action = try AppActions.named("clean-keys")
+            try AppActions.require(action)
+            let requestID = UUID().uuidString
+            guard
+                let reply = await AppBridge.awaitReply(
+                    IPC.Name.keyboardCleanResult, timeout: 3,
+                    matching: { $0[KeyboardCleaningIPC.requestIDKey] as? String == requestID },
+                    trigger: {
+                        AppActions.runtime.request(
+                            action.operation,
+                            userInfo: [KeyboardCleaningIPC.requestIDKey: requestID])
+                    }),
+                let state = KeyboardCleaningIPC.state(from: reply)
+            else {
+                throw AppBridge.silence("keyboard cleaning", extensionKey: "tabSystemEnabled")
+            }
+            guard state.accepted else { throw failure(for: state) }
+            if json {
+                CLIOut.json(
+                    .object([
+                        "action": .string(action.name),
+                        "requested": .bool(true),
+                        "state": .string(state.rawValue),
+                    ]))
+            } else {
+                CLIOut.out(state == .arming ? "keyboard cleaning is arming" : "keyboard is locked")
+            }
+        }
+    }
+
+    private func failure(for state: KeyboardCleaningState) -> CLIFailure {
+        switch state {
+        case .inputMonitoringRequired:
+            CLIFailure.unavailable(
+                "keyboard cleaning needs Input Monitoring",
+                hint:
+                    "run `ed permissions request inputMonitoring`, enable Edith, then relaunch Edith"
+            )
+        case .accessibilityRequired:
+            CLIFailure.unavailable(
+                "keyboard cleaning needs Accessibility",
+                hint:
+                    "run `ed permissions request accessibility`, enable Edith, then relaunch Edith")
+        case .unavailable:
+            CLIFailure.unavailable(
+                "keyboard cleaning is not available",
+                hint: "run `ed extensions enable system`, then relaunch Edith")
+        case .arming, .cleaning:
+            CLIFailure.unavailable("keyboard cleaning did not start")
         }
     }
 }

@@ -193,11 +193,19 @@ struct EdithApp: App {
             services.notchShelf?.postAlert(UpdateNotifier.alert(for: version))
             UpdateNotifier.notify(version: version)
         }
-        _ = IPC.observe(IPC.Name.requestKeyboardClean) {
-            AppRuntimeCenter().perform(.cleanKeys) {
-                services.system?.beginCleaning()
-            }
-        }
+        _ = IPC.observe(
+            IPC.Name.requestKeyboardClean,
+            info: { info in
+                let state = AppRuntimeCenter().perform(.cleanKeys) {
+                    services.system?.beginCleaning() ?? .unavailable
+                }
+                guard let requestID = info[KeyboardCleaningIPC.requestIDKey] as? String else {
+                    return
+                }
+                IPC.post(
+                    IPC.Name.keyboardCleanResult,
+                    userInfo: KeyboardCleaningIPC.payload(requestID: requestID, state: state))
+            })
         _ = IPC.observe(IPC.Name.requestAppDiagnostics) {
             IPC.post(
                 IPC.Name.appDiagnostics,
