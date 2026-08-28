@@ -292,6 +292,20 @@ import Testing
         #expect(source.contains("Requires macOS 14.4 or later."))
     }
 
+    @Test func systemMonitorAlertsRequestNotificationPermission() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Edith/Features/Settings/Views/ExtensionsPane.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let rows = try Self.viewDeclaration("SystemStatsRows", in: source)
+
+        #expect(rows.contains("isOn: alertsBinding"))
+        #expect(rows.contains("MainPermissionOperations.center.request(.notifications)"))
+        #expect(rows.contains("AppStorageKeys.Permissions.notificationsGranted"))
+    }
+
     @Test func audioMixerViewAndAppServicesShareRuntimeOwnership() throws {
         let sourceRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

@@ -235,8 +235,24 @@ public enum ConfigCatalog {
             AppStorageKeys.MenuBar.statsColorHex, .string, group: "menubar",
             summary: "Hex colour of the CPU and memory menu bar readout."),
         SettingDefinition(
+            AppStorageKeys.MenuBar.statsAlerts, .bool, group: "menubar",
+            summary: "Notify when system pressure stays above a configured threshold.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.MenuBar.statsCPUThreshold, .number, group: "menubar",
+            summary: "Sustained CPU usage alert threshold.", fallback: .double(90)),
+        SettingDefinition(
+            AppStorageKeys.MenuBar.statsMemoryThreshold, .number, group: "menubar",
+            summary: "Sustained memory usage alert threshold.", fallback: .double(90)),
+        SettingDefinition(
+            AppStorageKeys.MenuBar.statsDiskThreshold, .number, group: "menubar",
+            summary: "Sustained startup disk usage alert threshold.", fallback: .double(90)),
+        SettingDefinition(
+            AppStorageKeys.MenuBar.statsBatteryThreshold, .number, group: "menubar",
+            summary: "Sustained low battery alert threshold.", fallback: .double(20)),
+        SettingDefinition(
             AppStorageKeys.MenuBar.systemStats, .bool, group: "menubar",
-            summary: "CPU and memory readout as a menu bar item.", fallback: .bool(false)),
+            summary: "System Monitor readout as a menu bar item.", fallback: .bool(false)),
     ]
 
     private static let alerts: [SettingDefinition] = [
