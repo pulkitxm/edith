@@ -1,3 +1,8 @@
 import Edith
+import Foundation
 
-EdithApp.main()
+if ProcessInfo.processInfo.environment["EDITH_APPLICATION_ROLE"] == "files" {
+    EdithFilesApp.main()
+} else {
+    EdithApp.main()
+}
