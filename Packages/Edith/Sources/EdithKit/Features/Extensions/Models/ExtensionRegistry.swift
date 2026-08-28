@@ -51,7 +51,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .calendar: "Required to read and show your schedule in Calendar."
         case .notifications: "Asked when you enable usage, machine, or system pressure alerts."
         case .accessibility:
-            "Required for global keyboard tools that act outside Edith."
+            "Asked when you first use window controls, Clean keys, or clipboard instant paste."
         case .inputMonitoring:
             "Asked when you first use Clean keys to block key presses during cleaning."
         case .fullDisk: "Asked when a feature needs local service credentials or usage data."
@@ -61,7 +61,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
             "Asked when you first use the Notch Shelf per-app volume mixer."
         case .camera: "Asked when you first open the Notch Shelf camera preview."
         case .bluetooth: "Asked when Notch Shelf first checks for device connections."
-        case .automation: "Asked when Edith first controls Finder or external playback."
+        case .automation: "Asked when Notch Shelf first controls external playback."
         }
     }
 
@@ -111,7 +111,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
         case .bluetooth:
             "macOS will ask for Bluetooth access when connection alerts first run."
         case .automation:
-            "macOS will ask for Automation access when Edith first controls Finder or playback."
+            "macOS will ask for Automation access when Notch Shelf first controls playback."
         case .applicationAudio:
             "macOS will ask for application audio access when the mixer first changes an app."
         default: nil
@@ -128,7 +128,7 @@ public extension ExtensionRegistryEntry {
         switch id {
         case "calendar": [.calendar]
         case "focusDim", "presenter", "colorPicker": [.screenRecording]
-        case "finderTools", "windowTools": [.accessibility]
+        case "windowTools": [.accessibility]
         default: []
         }
     }
@@ -139,7 +139,6 @@ public extension ExtensionRegistryEntry {
         case "system": [.accessibility, .inputMonitoring]
         case "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation]
         case "clipboard", "emoji": [.accessibility]
-        case "finderTools": [.automation]
         default: []
         }
     }

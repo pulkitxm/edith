@@ -59,9 +59,6 @@ import EdithCore
             id: "clipboard", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "finderTools", helper: true, machine: false, toolRule: .all, adapter: true,
-            requiredTools: [], optionalTools: []),
-        MatrixRow(
             id: "focusDim", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(

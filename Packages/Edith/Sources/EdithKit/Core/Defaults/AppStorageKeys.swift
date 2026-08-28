@@ -114,14 +114,6 @@ public enum AppStorageKeys {
         public static let rightHotKeyMods = "windowToolsRightHotKeyMods"
     }
 
-    public enum FinderTools {
-        public static let cutPaste = "finderToolsCutPaste"
-        public static let diskImageInstaller = "finderToolsDiskImageInstaller"
-        public static let enabled = "finderToolsEnabled"
-        public static let pasteImages = "finderToolsPasteImages"
-        public static let rename = "finderToolsRename"
-    }
-
     public enum Herdr {
         public static let agentViews = "herdrAgentViews"
         public static let ghosttyTerminal = "herdrGhosttyTerminal"
