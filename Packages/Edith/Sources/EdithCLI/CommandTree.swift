@@ -1,5 +1,4 @@
 import Foundation
-import EdithKit
 
 public enum ArgumentKind: Equatable, Sendable {
     case machine
@@ -241,15 +240,6 @@ public enum CommandTree {
                         "doctor", "Diagnose extension problems.", options: common,
                         arguments: [.extensionID]),
                 ]),
-            CommandNode(
-                "window", "Arrange the active window.",
-                children: [
-                    CommandNode(
-                        "status", "Show Window Tools settings and actions.", options: common)
-                ]
-                    + WindowLayoutAction.allCases.map {
-                        CommandNode($0.rawValue, $0.descriptor.summary, options: common)
-                    }),
             CommandNode(
                 "lid-awake", "Keep the Mac running with its lid closed.",
                 children: [

@@ -24,7 +24,6 @@ import Testing
         "focusDimEnabled",
         "presenterEnabled",
         "colorPickerEnabled",
-        "windowToolsEnabled",
         "emojiEnabled",
     ]
 
@@ -236,7 +235,6 @@ import Testing
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
             "colorPicker": [.screenRecording],
-            "windowTools": [.accessibility],
             "emoji": [],
         ]
         let optional: [String: [ExtensionPermission]] = [
@@ -257,7 +255,6 @@ import Testing
             "focusDim": [],
             "presenter": [],
             "colorPicker": [],
-            "windowTools": [],
             "emoji": [.accessibility],
         ]
 

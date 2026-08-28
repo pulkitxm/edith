@@ -19,7 +19,6 @@ final class AppServices {
     private(set) var lidAwake: LidAwakeEngine?
     private(set) var systemStats: SystemStatsStatusItem?
     private(set) var attention: AttentionTrackingService?
-    private(set) var windowTools: WindowToolsEngine?
     private let startup = StartupCoordinator()
     private let lidAwakeRestorationGate = LidAwakeRestorationGate()
     private let lidAwakeOrphanRestorer: @MainActor @Sendable () async -> LidAwakeOutcome
@@ -315,13 +314,6 @@ final class AppServices {
     }
 
     private func reconcilePresentationServices() {
-        let windowToolsOn = Self.extensionEnabled(AppStorageKeys.WindowTools.enabled)
-        if windowToolsOn, windowTools == nil { windowTools = WindowToolsEngine() }
-        if !windowToolsOn, let engine = windowTools {
-            engine.shutdown()
-            windowTools = nil
-        }
-
         let focusDimOn = FocusDimState.isEnabled()
         if focusDimOn, focusDim == nil { focusDim = FocusDimEngine() }
         if !focusDimOn, let engine = focusDim {
@@ -426,7 +418,6 @@ final class AppServices {
         lidAwake?.syncSettings()
         focusDim?.applySettings()
         presenter?.applySettings()
-        windowTools?.applySettings()
     }
 
     private static func reconcileAgentUsageSettings() -> AgentUsageSettingsState {

@@ -37,20 +37,6 @@ import EdithCore
             ])
     }
 
-    @Test func windowToolsValidatesStoredShortcuts() {
-        let suite = "test.extension-adapter.window-tools.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-
-        #expect(
-            ExtensionLiveAdapters.windowToolsReadiness(defaults: defaults)
-                == .ready("Window layouts and shortcuts are configured."))
-        defaults.set("left", forKey: AppStorageKeys.WindowTools.leftHotKeyCode)
-        #expect(
-            ExtensionLiveAdapters.windowToolsReadiness(defaults: defaults)
-                == .needsSetup("A stored Window Tools shortcut is invalid."))
-    }
-
     @Test func attentionRequiresAnEnabledTrackingSource() {
         #expect(
             ExtensionLiveAdapters.attentionReadiness(settings: AttentionSettings())

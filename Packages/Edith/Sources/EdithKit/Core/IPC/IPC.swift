@@ -107,8 +107,6 @@ public enum IPC {
         public static let revealResult = Notification.Name("com.pulkit.edith.revealResult")
         public static let requestWindowSnapshot = Notification.Name(
             "com.pulkit.edith.requestWindowSnapshot")
-        public static let requestWindowLayout = Notification.Name(
-            "com.pulkit.edith.requestWindowLayout")
         public static let windowSnapshotResult = Notification.Name(
             "com.pulkit.edith.windowSnapshotResult")
         public static let requestAppDiagnostics = Notification.Name(

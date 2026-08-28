@@ -207,11 +207,5 @@ public enum ExtensionRegistry {
             symbolName: "eyedropper", group: .utilities, featured: false,
             defaultsKey: "colorPickerEnabled", requiredCapabilities: [.screenColorSampling],
             optionalCapabilities: [.globalShortcuts]),
-        ExtensionRegistryEntry(
-            id: "windowTools", title: "Window Tools",
-            subtitle: "Snap, center, restore, and maximize windows without another Space.",
-            symbolName: "rectangle.3.group", group: .utilities, featured: false,
-            defaultsKey: "windowToolsEnabled", requiredCapabilities: [.windowManagement],
-            optionalCapabilities: [.globalShortcuts]),
     ]
 }
