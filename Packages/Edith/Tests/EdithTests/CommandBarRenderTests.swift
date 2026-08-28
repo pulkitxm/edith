@@ -6,6 +6,16 @@ import Testing
 @testable import EdithHelper
 
 @Suite @MainActor struct CommandBarRenderTests {
+    @Test func actionCatalogExcludesRemovedUtilityExtensions() {
+        #expect(
+            CommandBarActionID.allCases.map(\.rawValue) == [
+                "openHome", "openExtensions", "openGeneralSettings", "openShortcuts",
+                "openPermissions", "openAttention", "openUsage", "openHerdr", "openQuinjet",
+                "openMusic", "openCalendar", "openSystem", "openMachines", "openCompanion",
+                "openCommandBarSettings", "clipboard", "colorPicker", "micMute", "focusDim",
+            ])
+    }
+
     @Test func latestQueryPublishesRankedActions() async {
         let model = CommandBarModel(services: AppServices())
         model.query = "permissions"
