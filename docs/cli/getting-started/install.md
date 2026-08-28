@@ -1,6 +1,6 @@
 # `ed install`
 
-Links `ed`, `edh` and `edith` into a directory on your `PATH`.
+Links `ed` and `edith` into a directory on your `PATH`.
 
 ```
 ed install [--json] [--directory <directory>]
@@ -20,7 +20,6 @@ Options
   "directory": "/Users/pulkit/.local/bin",
   "linked": [
     "ed",
-    "edh",
     "edith"
   ],
   "message": null,

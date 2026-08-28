@@ -27,7 +27,7 @@ names that ship inside the bundle:
 
 ```
 ed      the full CLI, everything the UI can do
-edh     the same binary under its short name
+edith   the same binary under its full name
 ```
 
 Both land in Homebrew's `bin` directory, which sits ahead of `/usr/bin` on the

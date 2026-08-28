@@ -74,8 +74,8 @@ Lid Awake controls, clipboard history, and notch shelf actions.
 
 ### Command line
 
-`ed` exposes the command implementation and `edh` is its packaged alias. The
-command tree contains 390 paths including root and generated help, 340 leaves,
+`ed` exposes the command implementation and is installed under the `ed` and
+`edith` names. The command tree contains 390 paths including root and generated help, 340 leaves,
 337 reference pages, and 40 explicit destructive routes. Top-level groups cover
 guide and schema discovery,
 configuration, app operations, extensions, permissions, usage, system, music, calendar,

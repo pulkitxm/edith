@@ -26,8 +26,7 @@ is what assembles the app. `build.sh` drives `xcodebuild` for the `EdithMain`
 scheme, which builds and embeds `EdithHelper` (the always-on menu bar
 companion, nested at `Contents/Library/LoginItems` and shipped as
 `Edith.app`), `EdithFiles` (nested at `Contents/Library/Applications`), and
-the `ed` CLI executable (`Contents/MacOS`). Packaging adds `edh` as a relative
-alias of `ed`. Its final embed phase also builds
+the `ed` CLI executable (`Contents/MacOS`). Its final embed phase also builds
 `EdithLidAwakeHelper` with SwiftPM and places the signed executable and launchd
 property list inside the menu bar companion.
 

@@ -1,6 +1,6 @@
 # `ed uninstall`
 
-Removes the `ed`, `edh` and `edith` links, and leaves everything else in place.
+Removes the `ed` and `edith` links, and leaves everything else in place.
 
 ```
 ed uninstall [--json]
@@ -19,7 +19,6 @@ Options
   "directory": "/Users/pulkit/.local/bin",
   "removed": [
     "ed",
-    "edh",
     "edith"
   ]
 }

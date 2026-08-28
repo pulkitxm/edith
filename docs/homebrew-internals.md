@@ -574,7 +574,7 @@ cask "edith" do
 
   app "Edith.app"
   binary "#{appdir}/Edith.app/Contents/MacOS/ed"
-  binary "#{appdir}/Edith.app/Contents/MacOS/edh"
+  binary "#{appdir}/Edith.app/Contents/MacOS/ed", target: "edith"
 
   uninstall quit: [
     "com.pulkit.edith",
@@ -638,9 +638,9 @@ takes the bundle.
 
 **The two `binary` lines** point inside the installed bundle, using `appdir`, which
 is Homebrew's variable for the applications directory rather than a hard-coded
-`/Applications`. This is the mechanism that makes `ed` and `edh` work immediately
-after install, with no separate `ed install` step. The `edh` source path is a
-relative alias of the one signed `ed` executable. These are also the most
+`/Applications`. This is the mechanism that makes `ed` and `edith` work immediately
+after install, with no separate `ed install` step. Both paths are aliases of the
+one signed `ed` executable. These are also the most
 consequential lines in the file, for reasons in section 15.
 
 **`uninstall quit:`** lists all three bundle identifiers, as covered in section 8.
@@ -928,9 +928,9 @@ parse, and a bare token cannot resolve on a machine with no tap. The only free
 choice is the middle segment, which is the tap repository name. `pulkitxm/edith/edith`
 was the first attempt and reads badly, hence `homebrew-tap`.
 
-### Why both `ed` and `edh` are linked
+### Why both `ed` and `edith` are linked
 
-The alternative was linking `edh` only and leaving `ed` to the app's own
+The alternative was linking `edith` only and leaving `ed` to the app's own
 `ed install --directory ~/.local/bin` flow, which avoids shadowing the POSIX line
 editor.
 
@@ -1069,9 +1069,8 @@ about which claims are tested and which are structural.
   `Resources/HelperInfo.plist`, `MainApp.swift` and `AppBridge.swift`.
 - The zap paths match `EdithCore/AppDirectories.swift` and
   `EdithKit/Core/Defaults/SharedDefaults.swift`.
-- `ed` is the only regular CLI executable and `edh` is the relative alias `ed`,
-  asserted by `make verify-bundle` together with both names' signatures and
-  behavior.
+- `ed` is the only regular CLI executable, asserted by `make verify-bundle`
+  together with both installed names' targets, signatures, and behavior.
 - Homebrew's name resolution rules, quoted in sections 4 and 5, from
   `tap_constants.rb` and `cmd/install.rb`.
 - `scripts/homebrew-cask.test.js` guards the cask's shape, the release job's

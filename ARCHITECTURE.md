@@ -31,9 +31,9 @@ history, notifications, media controls, and machine monitoring. Both use shared
 defaults and narrow IPC messages from EdithKit rather than reaching into each
 other's UI state.
 
-The `ed` executable exposes domain operations for scripts and automation, with
-`edh` packaged as a relative alias. Read commands provide JSON, logs use standard
-error, and exit codes carry success or failure. Remote-machine operations execute
+The `ed` executable exposes domain operations for scripts and automation. The
+installer links it under the `ed` and `edith` names. Read commands provide JSON,
+logs use standard error, and exit codes carry success or failure. Remote-machine operations execute
 through SSH using the user's configured host and credentials.
 
 ### User operation parity
