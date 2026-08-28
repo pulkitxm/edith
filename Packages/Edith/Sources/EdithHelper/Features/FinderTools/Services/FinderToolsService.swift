@@ -217,7 +217,7 @@ private final class FinderShortcutService: @unchecked Sendable {
         else { return .pass }
         switch keyCode {
         case Key.f2:
-            return renameEnabled && FinderToolsSupport.focusedRoleAllowsRename(focusedElementRole())
+            return renameEnabled && focusedElementAllowsRename()
                 ? .rename : .pass
         case Key.x:
             guard cutPasteEnabled, !focusedElementIsEditable() else { return .pass }
@@ -399,6 +399,21 @@ private final class FinderShortcutService: @unchecked Sendable {
     }
 
     private func focusedElementRole() -> String? {
+        guard let element = focusedElement() else { return nil }
+        return stringAttribute(kAXRoleAttribute as CFString, of: element)
+    }
+
+    private func focusedElementAllowsRename() -> Bool {
+        guard let element = focusedElement() else { return false }
+        return FinderToolsSupport.focusedElementAllowsRename(
+            role: stringAttribute(kAXRoleAttribute as CFString, of: element),
+            selectedRowCount: arrayAttributeCount(
+                kAXSelectedRowsAttribute as CFString, of: element),
+            selectedChildCount: arrayAttributeCount(
+                kAXSelectedChildrenAttribute as CFString, of: element))
+    }
+
+    private func focusedElement() -> AXUIElement? {
         let system = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(system, 0.15)
         var focused: CFTypeRef?
@@ -407,13 +422,24 @@ private final class FinderShortcutService: @unchecked Sendable {
                 system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
             let focused, CFGetTypeID(focused) == AXUIElementGetTypeID()
         else { return nil }
-        let element = focused as! AXUIElement
-        var role: CFTypeRef?
+        return (focused as! AXUIElement)
+    }
+
+    private func stringAttribute(_ name: CFString, of element: AXUIElement) -> String? {
+        var value: CFTypeRef?
         guard
-            AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role) == .success,
-            let role = role as? String
+            AXUIElementCopyAttributeValue(element, name, &value) == .success,
+            let value = value as? String
         else { return nil }
-        return role
+        return value
+    }
+
+    private func arrayAttributeCount(_ name: CFString, of element: AXUIElement) -> Int? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, name, &value) == .success,
+            let value, CFGetTypeID(value) == CFArrayGetTypeID()
+        else { return nil }
+        return CFArrayGetCount((value as! CFArray))
     }
 }
 

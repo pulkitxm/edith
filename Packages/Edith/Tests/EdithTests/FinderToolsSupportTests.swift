@@ -29,6 +29,18 @@ import Testing
         }
         #expect(!FinderToolsSupport.focusedRoleAllowsRename("AXTextField"))
         #expect(!FinderToolsSupport.focusedRoleAllowsRename(nil))
+        #expect(
+            FinderToolsSupport.focusedElementAllowsRename(
+                role: "AXOutline", selectedRowCount: 1, selectedChildCount: nil))
+        #expect(
+            FinderToolsSupport.focusedElementAllowsRename(
+                role: "AXGrid", selectedRowCount: nil, selectedChildCount: 2))
+        #expect(
+            !FinderToolsSupport.focusedElementAllowsRename(
+                role: "AXOutline", selectedRowCount: 0, selectedChildCount: 0))
+        #expect(
+            !FinderToolsSupport.focusedElementAllowsRename(
+                role: "AXButton", selectedRowCount: 1, selectedChildCount: 1))
         #expect(FinderToolsSupport.focusedRoleIsEditable("AXTextField"))
         #expect(FinderToolsSupport.focusedRoleIsEditable("AXTextArea"))
         #expect(FinderToolsSupport.focusedRoleIsEditable("AXComboBox"))

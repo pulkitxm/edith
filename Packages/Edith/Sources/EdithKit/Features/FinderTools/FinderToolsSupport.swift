@@ -42,6 +42,13 @@ public enum FinderToolsSupport {
         return ["AXBrowser", "AXGrid", "AXList", "AXOutline", "AXTable"].contains(role)
     }
 
+    public static func focusedElementAllowsRename(
+        role: String?, selectedRowCount: Int?, selectedChildCount: Int?
+    ) -> Bool {
+        focusedRoleAllowsRename(role)
+            && max(selectedRowCount ?? 0, selectedChildCount ?? 0) > 0
+    }
+
     public static func focusedRoleIsEditable(_ role: String?) -> Bool {
         guard let role else { return false }
         return ["AXTextField", "AXTextArea", "AXComboBox", "AXSecureTextField"].contains(role)
