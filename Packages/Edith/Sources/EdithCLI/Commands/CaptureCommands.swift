@@ -5,7 +5,8 @@ struct CaptureCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "capture",
         abstract: "Offline screen recognition and quick screenshots.",
-        subcommands: [CaptureReadCommand.self, CaptureScreenshotCommand.self])
+        subcommands: [CaptureReadCommand.self, CaptureScreenshotCommand.self],
+        defaultSubcommand: CaptureReadCommand.self)
 }
 
 enum CaptureCommandBridge {

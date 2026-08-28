@@ -99,7 +99,7 @@ struct CaptureToolsRows: View {
                             history = []
                             IPC.post(IPC.Name.settingsChanged)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.edith(.borderless))
                     }
                 }
             }

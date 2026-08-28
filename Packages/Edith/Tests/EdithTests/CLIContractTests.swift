@@ -150,6 +150,10 @@ enum JSONContract {
             "ed color copy", ["color", "copy", "1", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed color clear", ["color", "clear", "--json"]),
+        JSONCase("ed capture read", ["capture", "read", "--json"], mutatesTheMachine: true),
+        JSONCase(
+            "ed capture screenshot", ["capture", "screenshot", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed shelf ls", ["shelf", "ls", "--json"]),
         JSONCase("ed shelf path", ["shelf", "path", "1", "--json"]),
         JSONCase("ed shelf open", ["shelf", "open", "999999", "--json"]),

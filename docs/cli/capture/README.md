@@ -20,6 +20,8 @@ reads can be copied again or cleared from Capture Tools settings.
 | `ed capture read` | Selects screen content, recognizes text and codes, and copies the configured result. |
 | `ed capture screenshot` | Selects screen content and opens the lightweight screenshot preview. |
 
+Bare `ed capture` runs `ed capture read`.
+
 - [`ed capture read`](./read.md)
 - [`ed capture screenshot`](./screenshot.md)
 

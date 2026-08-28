@@ -5,6 +5,7 @@ import Testing
 
 @Suite struct CLICaptureTests {
     @Test func parsesReadAndScreenshotLeaves() throws {
+        #expect(try EdRoot.parseAsRoot(["capture"]) is CaptureReadCommand)
         #expect(try EdRoot.parseAsRoot(["capture", "read"]) is CaptureReadCommand)
         #expect(
             try EdRoot.parseAsRoot(["capture", "screenshot", "--json"])
