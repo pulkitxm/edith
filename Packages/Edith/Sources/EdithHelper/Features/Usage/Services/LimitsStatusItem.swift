@@ -116,7 +116,9 @@ final class LimitsStatusItem {
         let logoColor = subColor ?? NSColor.labelColor
         let labelColor = subColor ?? NSColor.secondaryLabelColor
         let dimColor = subColor ?? NSColor.tertiaryLabelColor
-        let columns = group.segments.map { segment -> StackedLimitsView.Column in
+        var columns: [StackedLimitsView.Column] = []
+        columns.reserveCapacity(group.segments.count)
+        for segment in group.segments {
             let value: String
             let color: NSColor
             switch segment.value {
@@ -132,9 +134,10 @@ final class LimitsStatusItem {
                     segment.window.map { self.color(for: $0, kind: segment.slot.kind) }
                     ?? dimColor
             }
-            return StackedLimitsView.Column(
-                label: segment.slot.menuBarLabel, value: value, valueColor: color,
-                labelColor: labelColor)
+            columns.append(
+                StackedLimitsView.Column(
+                    label: segment.slot.menuBarLabel, value: value, valueColor: color,
+                    labelColor: labelColor))
         }
         return StackedLimitsView.Group(
             logo: multi ? ProviderLogo.tintedImage(group.provider, color: logoColor) : nil,
