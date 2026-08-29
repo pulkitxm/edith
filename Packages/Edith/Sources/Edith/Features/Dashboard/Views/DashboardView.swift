@@ -249,6 +249,8 @@ struct DashboardView: View {
                         .foregroundStyle(ink)
                 }
                 .frame(width: UIScale.pt(50), height: UIScale.pt(50))
+                .scaleEffect(hovering ? 1.07 : 1)
+                .animation(.easeOut(duration: 0.18), value: hovering)
             }
             .buttonStyle(.plain)
             .onAppear {
