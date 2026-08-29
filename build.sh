@@ -236,6 +236,7 @@ stop_installed_app() {
     wait_for_process_exit "$installed_main" || stop_process "$installed_main"
   fi
   stop_process "$installed_helper"
+  stop_process "com.pulkit.edith.helper"
 }
 
 if [ "$INSTALL" = 1 ]; then
