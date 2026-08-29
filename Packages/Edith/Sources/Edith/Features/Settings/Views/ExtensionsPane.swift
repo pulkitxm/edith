@@ -586,7 +586,7 @@ private struct ExtensionSettingsSheet: View {
 
 private struct AutomationSettingsRows: View {
     @AppStorage(AppStorageKeys.Tabs.automationsEnabled, store: SharedDefaults.store) private
-        var enabled = false
+        var automationsEnabled = false
     @State private var document = AutomationDocument()
     @State private var preview: AutomationPlan?
     @State private var errorMessage: String?
@@ -660,8 +660,8 @@ private struct AutomationSettingsRows: View {
                 Section { Text(errorMessage).foregroundStyle(.red) }
             }
         }
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.5)
+        .disabled(!automationsEnabled)
+        .opacity(automationsEnabled ? 1 : 0.5)
         .onAppear { load() }
         .onReceive(
             DistributedNotificationCenter.default().publisher(for: IPC.Name.automationsChanged)
