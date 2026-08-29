@@ -183,6 +183,8 @@ public struct ExtensionLifecycleProbe: Sendable {
     static let policies: [String: Policy] = [
         "attention": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
+        "automations": Policy(
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "usage": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .any, adapter: true),
         "herdr": Policy(

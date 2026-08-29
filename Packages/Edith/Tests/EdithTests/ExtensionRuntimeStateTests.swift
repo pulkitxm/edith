@@ -248,6 +248,7 @@ import Testing
             .appendingPathComponent("Sources/Edith/Features/Settings/Views")
         let routes: [(id: String, view: String, binding: String, file: String)] = [
             ("attention", "AttentionRows", "enabled", "ExtensionsPane.swift"),
+            ("automations", "AutomationSettingsRows", "enabled", "ExtensionsPane.swift"),
             ("usage", "UsageRows", "enabled", "ExtensionsPane.swift"),
             ("herdr", "HerdrRows", "enabled", "ExtensionsPane.swift"),
             ("quinjet", "QuinjetRows", "enabled", "ExtensionsPane.swift"),

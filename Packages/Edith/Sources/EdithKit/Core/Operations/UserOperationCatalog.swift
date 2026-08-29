@@ -300,8 +300,17 @@ private extension AutomationOperation {
                 UserInterfaceActionPlacement(
                     surface: "Global shortcut", action: "run a scene", exampleArguments: ["focus"]),
             ])
-        case .enable, .disable, .export, .import:
-            userInterface("Automations & Scenes", rawValue + " automation configuration")
+        case .enable, .disable:
+            userInterface(
+                "Automations & Scenes", rawValue + " automation configuration", ["focus"])
+        case .export:
+            userInterface(
+                "Automations & Scenes", "export automation configuration",
+                ["/tmp/edith-automations.json"])
+        case .import:
+            userInterface(
+                "Automations & Scenes", "import automation configuration",
+                ["/tmp/edith-automations.json", "--dry-run"])
         }
     }
 }

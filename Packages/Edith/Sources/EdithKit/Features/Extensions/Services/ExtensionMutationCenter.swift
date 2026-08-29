@@ -72,6 +72,7 @@ public enum ExtensionEnableOutcome: Equatable, Sendable {
 
 public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case attention
+    case automations
     case usage
     case herdr
     case quinjet

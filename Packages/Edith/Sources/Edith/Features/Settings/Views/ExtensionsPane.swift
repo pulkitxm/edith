@@ -429,9 +429,6 @@ private struct ExtensionSettingsSheet: View {
 
             Form {
                 ExtensionDetailRows(entry: entry)
-                if entry.id == "automations" {
-                    AutomationSettingsRows()
-                }
                 if enabled, !coordinator.missingRequiredTools.isEmpty {
                     Section {
                         Button("Set up required tools...") {
@@ -588,83 +585,87 @@ private struct ExtensionSettingsSheet: View {
 }
 
 private struct AutomationSettingsRows: View {
+    @AppStorage(AppStorageKeys.Tabs.automationsEnabled, store: SharedDefaults.store) private
+        var enabled = false
     @State private var document = AutomationDocument()
     @State private var preview: AutomationPlan?
     @State private var errorMessage: String?
     private let storage = AutomationStorage()
 
     var body: some View {
-        Section("Scenes") {
-            if document.scenes.isEmpty {
-                Text("Scenes are ordered Edith operations you can run anywhere.")
-                    .foregroundStyle(.secondary)
+        Group {
+            Section("Scenes") {
+                if document.scenes.isEmpty {
+                    Text("Scenes are ordered Edith operations you can run anywhere.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(document.scenes) { scene in
+                    HStack {
+                        Toggle(scene.name, isOn: sceneBinding(scene.id))
+                        Spacer()
+                        Button("Preview") {
+                            preview = AutomationPlanner.plan(
+                                scene: scene, grantedPermissions: grantedPermissions())
+                        }
+                        Button("Run") {
+                            IPC.post(
+                                IPC.Name.requestAutomationScene,
+                                userInfo: ["scene": scene.id.uuidString, "origin": "app"])
+                        }
+                        .disabled(!scene.isEnabled)
+                    }
+                }
+                Button("Create Starter Scene") { createStarterScene() }
             }
-            ForEach(document.scenes) { scene in
+            Section("Automations") {
+                if document.automations.isEmpty {
+                    Text("Import rules or add a starter scene to connect local triggers.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(document.automations) { automation in
+                    Toggle(
+                        "\(automation.name) · \(automation.trigger.kind.rawValue)",
+                        isOn: automationBinding(automation.id))
+                }
+            }
+            Section("Configuration") {
                 HStack {
-                    Toggle(scene.name, isOn: sceneBinding(scene.id))
+                    Button("Import…") { importDocument() }
+                    Button("Export…") { exportDocument() }
                     Spacer()
-                    Button("Preview") {
-                        preview = AutomationPlanner.plan(
-                            scene: scene, grantedPermissions: grantedPermissions())
+                    Button("Reload") { load() }
+                }
+                Text(
+                    "Actions come from `ed automations operations`. Edit exported JSON for advanced triggers, permissions, cooldowns, shortcuts, and error policies."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            if let preview {
+                Section("Dry-run preview") {
+                    LabeledContent("Scene", value: preview.sceneName)
+                    LabeledContent("Ready", value: preview.isRunnable ? "Yes" : "No")
+                    ForEach(preview.steps) { step in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(step.summary)
+                            Text(step.command.joined(separator: " "))
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    Button("Run") {
-                        IPC.post(
-                            IPC.Name.requestAutomationScene,
-                            userInfo: ["scene": scene.id.uuidString, "origin": "app"])
-                    }
-                    .disabled(!scene.isEnabled)
+                    ForEach(preview.errors, id: \.self) { Text($0).foregroundStyle(.red) }
                 }
             }
-            Button("Create Starter Scene") { createStarterScene() }
-        }
-        Section("Automations") {
-            if document.automations.isEmpty {
-                Text("Import rules or add a starter scene to connect local triggers.")
-                    .foregroundStyle(.secondary)
-            }
-            ForEach(document.automations) { automation in
-                Toggle(
-                    "\(automation.name) · \(automation.trigger.kind.rawValue)",
-                    isOn: automationBinding(automation.id))
+            if let errorMessage {
+                Section { Text(errorMessage).foregroundStyle(.red) }
             }
         }
-        Section("Configuration") {
-            HStack {
-                Button("Import…") { importDocument() }
-                Button("Export…") { exportDocument() }
-                Spacer()
-                Button("Reload") { load() }
-            }
-            Text(
-                "Actions come from `ed automations operations`. Edit exported JSON for advanced triggers, permissions, cooldowns, shortcuts, and error policies."
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-        if let preview {
-            Section("Dry-run preview") {
-                LabeledContent("Scene", value: preview.sceneName)
-                LabeledContent("Ready", value: preview.isRunnable ? "Yes" : "No")
-                ForEach(preview.steps) { step in
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(step.summary)
-                        Text(step.command.joined(separator: " "))
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                ForEach(preview.errors, id: \.self) { Text($0).foregroundStyle(.red) }
-            }
-        }
-        if let errorMessage {
-            Section { Text(errorMessage).foregroundStyle(.red) }
-        }
-        EmptyView()
-            .onAppear { load() }
-            .onReceive(
-                DistributedNotificationCenter.default().publisher(
-                    for: IPC.Name.automationsChanged)
-            ) { _ in load() }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+        .onAppear { load() }
+        .onReceive(
+            DistributedNotificationCenter.default().publisher(for: IPC.Name.automationsChanged)
+        ) { _ in load() }
     }
 
     private func sceneBinding(_ id: UUID) -> Binding<Bool> {
@@ -1100,6 +1101,7 @@ private struct ExtensionDetailRows: View {
         if let route = ExtensionDetailRoute(rawValue: entry.id) {
             switch route {
             case .attention: AttentionRows()
+            case .automations: AutomationSettingsRows()
             case .usage: UsageRows()
             case .herdr: HerdrRows()
             case .quinjet: QuinjetRows()

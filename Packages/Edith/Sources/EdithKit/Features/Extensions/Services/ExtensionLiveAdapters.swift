@@ -65,9 +65,9 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
-        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "emoji", "colorPicker",
+        "attention", "automations", "usage", "quinjet", "system", "machines", "systemStats",
+        "micMute", "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim",
+        "presenter", "emoji", "colorPicker",
     ]
 
     public static func provider(
@@ -92,6 +92,7 @@ public enum ExtensionLiveAdapters {
     ) async -> ExtensionAdapterReadiness? {
         switch id {
         case "attention": attentionReadiness()
+        case "automations": automationsReadiness()
         case "usage": usageReadiness()
         case "quinjet":
             quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
@@ -109,6 +110,22 @@ public enum ExtensionLiveAdapters {
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
         case "emoji": emojiReadiness(defaults: defaults)
         default: nil
+        }
+    }
+
+    static func automationsReadiness(
+        storage: AutomationStorage = AutomationStorage()
+    ) -> ExtensionAdapterReadiness {
+        do {
+            let document = try storage.load()
+            guard !document.scenes.isEmpty else {
+                return .empty("Create or import a scene to begin automating Edith operations.")
+            }
+            return .ready(
+                "\(document.scenes.count) scenes and \(document.automations.count) automations are readable."
+            )
+        } catch {
+            return .failed(error.localizedDescription)
         }
     }
 

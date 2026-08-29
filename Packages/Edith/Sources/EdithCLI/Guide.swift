@@ -88,6 +88,9 @@ public enum Guide {
         ed extensions setup quinjet --install-tools
         ed extensions verify quinjet --json
         ed extensions doctor --json
+        ed automations operations --json
+        ed automations plan focus --json
+        ed automations run focus --dry-run --json
         ```
 
         For automation, begin with `status --json` or `doctor --json`. An unhealthy

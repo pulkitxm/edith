@@ -113,7 +113,7 @@ public enum ExtensionRegistry {
             id: "automations", title: "Automations & Scenes",
             subtitle: "Run reusable Edith actions on schedules and local Mac events.",
             symbolName: "bolt.badge.clock.fill", group: .utilities, featured: false,
-            defaultsKey: "automationsEnabled", requiredCapabilities: [],
+            defaultsKey: "automationsEnabled", requiredCapabilities: [.runningApplications],
             optionalCapabilities: [.calendarEvents, .globalShortcuts, .notifications]),
         ExtensionRegistryEntry(
             id: "usage", title: "Agent Usage",

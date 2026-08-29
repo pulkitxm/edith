@@ -51,6 +51,29 @@ import EdithCore
                 == .ready("Attention tracking is configured for the selected sources."))
     }
 
+    @Test func automationsAdapterValidatesLocalConfiguration() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let storage = AutomationStorage(root: root)
+
+        #expect(
+            ExtensionLiveAdapters.automationsReadiness(storage: storage)
+                == .empty("Create or import a scene to begin automating Edith operations."))
+
+        let scene = AutomationScene(
+            name: "System check", actions: [AutomationAction(operationID: "app.info")])
+        try storage.save(AutomationDocument(scenes: [scene]))
+        #expect(
+            ExtensionLiveAdapters.automationsReadiness(storage: storage)
+                == .ready("1 scenes and 0 automations are readable."))
+
+        try Data("not json".utf8).write(to: storage.documentURL)
+        guard case .failed = ExtensionLiveAdapters.automationsReadiness(storage: storage) else {
+            Issue.record("corrupt automation configuration did not fail")
+            return
+        }
+    }
+
     @Test func usageDetectsMissingLoadingEmptyReadyAndCorruptData() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

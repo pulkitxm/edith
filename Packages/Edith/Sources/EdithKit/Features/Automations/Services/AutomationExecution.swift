@@ -247,8 +247,12 @@ public enum AutomationOperation: String, CaseIterable, Sendable {
             }
         return UserOperationDescriptor(
             id: UserOperationID(rawValue: "automations.\(rawValue)"),
-            summary: summary, cli: ["automations", rawValue], effect: effect,
+            summary: summary, cli: ["automations", command], effect: effect,
             requiresPreview: self == .run || self == .import)
+    }
+
+    private var command: String {
+        self == .list ? "ls" : rawValue
     }
 
     private var summary: String {
