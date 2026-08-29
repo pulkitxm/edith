@@ -47,6 +47,8 @@ import Testing
         "ed shelf clear",
         "ed shelf purge",
         "ed shelf rm",
+        "ed scratchpad clear",
+        "ed scratchpad rm",
     ]
 
     static func nodes(
@@ -113,6 +115,12 @@ import Testing
         let clipboardRemove = try #require(
             try EdRoot.parseAsRoot(["clipboard", "rm", "1", "--yes"])
                 as? ClipboardRemoveCommand)
+        let scratchpad = try #require(
+            try EdRoot.parseAsRoot(["scratchpad", "clear", "--yes"])
+                as? ScratchpadClearCommand)
+        let scratchpadRemove = try #require(
+            try EdRoot.parseAsRoot(["scratchpad", "rm", "Scratchpad 2", "--yes"])
+                as? ScratchpadRemoveCommand)
         let color = try #require(
             try EdRoot.parseAsRoot(["color", "clear", "--yes"])
                 as? ColorClearCommand)
@@ -128,7 +136,7 @@ import Testing
                 && rebuild.yes)
         #expect(
             shelfRemove.yes && shelfClear.yes && shelfPurge.yes && clipboard.yes
-                && clipboardRemove.yes && color.yes)
+                && clipboardRemove.yes && scratchpad.yes && scratchpadRemove.yes && color.yes)
         #expect(appQuit.yes && appRelaunch.yes && appClear.yes)
     }
 
