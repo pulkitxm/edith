@@ -8,6 +8,7 @@ import Testing
 @Suite struct ExtensionRegistryTests {
     private let knownDefaultsKeys: Set<String> = [
         "tabAttentionEnabled",
+        "automationsEnabled",
         "tabUsageEnabled",
         "tabHerdrEnabled",
         "tabQuinjetEnabled",
@@ -35,9 +36,9 @@ import Testing
     @Test func registryMatchesPreUtilityBaseline() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
-                "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
-                "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
-                "clipboard", "focusDim", "presenter", "emoji", "colorPicker",
+                "attention", "automations", "usage", "herdr", "quinjet", "system", "machines",
+                "companion", "systemStats", "micMute", "lidAwake", "music", "calendar",
+                "notchShelf", "clipboard", "focusDim", "presenter", "emoji", "colorPicker",
             ])
     }
 
@@ -194,7 +195,7 @@ import Testing
             entries: ExtensionRegistry.entries, query: "attention", category: .all)
 
         #expect(titleMatches.map(\.id) == ["usage"])
-        #expect(subtitleMatches.map(\.id) == ["calendar"])
+        #expect(subtitleMatches.map(\.id) == ["automations", "calendar"])
         #expect(categoryMatches.allSatisfy { $0.group == .utilities })
         #expect(combinedMatches.map(\.id) == ["presenter"])
         #expect(attentionMatches.map(\.id) == ["attention"])
@@ -228,6 +229,7 @@ import Testing
     @Test func permissionTiersMatchFeatureRequirements() {
         let required: [String: [ExtensionPermission]] = [
             "attention": [],
+            "automations": [],
             "usage": [],
             "herdr": [],
             "quinjet": [],
@@ -248,6 +250,7 @@ import Testing
         ]
         let optional: [String: [ExtensionPermission]] = [
             "attention": [],
+            "automations": [.calendar, .notifications],
             "usage": [.notifications],
             "herdr": [],
             "quinjet": [],

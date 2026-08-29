@@ -20,6 +20,9 @@ import EdithCore
             id: "attention", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
+            id: "automations", helper: true, machine: false, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "usage", helper: true, machine: false, toolRule: .any, adapter: true,
             requiredTools: ["claude", "codex"], optionalTools: []),
         MatrixRow(

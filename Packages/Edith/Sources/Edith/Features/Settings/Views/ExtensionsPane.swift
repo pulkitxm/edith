@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import EdithKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor enum ExtensionPermissionState {
     static func readGrantedPermissions() -> [ExtensionPermission: Bool] {
@@ -583,6 +584,182 @@ private struct ExtensionSettingsSheet: View {
     }
 }
 
+private struct AutomationSettingsRows: View {
+    @AppStorage(AppStorageKeys.Tabs.automationsEnabled, store: SharedDefaults.store) private
+        var automationsEnabled = false
+    @State private var document = AutomationDocument()
+    @State private var preview: AutomationPlan?
+    @State private var errorMessage: String?
+    private let storage = AutomationStorage()
+
+    var body: some View {
+        Group {
+            Section("Scenes") {
+                if document.scenes.isEmpty {
+                    Text("Scenes are ordered Edith operations you can run anywhere.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(document.scenes) { scene in
+                    HStack {
+                        Toggle(scene.name, isOn: sceneBinding(scene.id))
+                        Spacer()
+                        Button("Preview") {
+                            preview = AutomationPlanner.plan(
+                                scene: scene, grantedPermissions: grantedPermissions())
+                        }
+                        Button("Run") {
+                            IPC.post(
+                                IPC.Name.requestAutomationScene,
+                                userInfo: ["scene": scene.id.uuidString, "origin": "app"])
+                        }
+                        .disabled(!scene.isEnabled)
+                    }
+                }
+                Button("Create Starter Scene") { createStarterScene() }
+            }
+            Section("Automations") {
+                if document.automations.isEmpty {
+                    Text("Import rules or add a starter scene to connect local triggers.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(document.automations) { automation in
+                    Toggle(
+                        "\(automation.name) · \(automation.trigger.kind.rawValue)",
+                        isOn: automationBinding(automation.id))
+                }
+            }
+            Section("Configuration") {
+                HStack {
+                    Button("Import…") { importDocument() }
+                    Button("Export…") { exportDocument() }
+                    Spacer()
+                    Button("Reload") { load() }
+                }
+                Text(
+                    "Actions come from `ed automations operations`. Edit exported JSON for advanced triggers, permissions, cooldowns, shortcuts, and error policies."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            if let preview {
+                Section("Dry-run preview") {
+                    LabeledContent("Scene", value: preview.sceneName)
+                    LabeledContent("Ready", value: preview.isRunnable ? "Yes" : "No")
+                    ForEach(preview.steps) { step in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(step.summary)
+                            Text(step.command.joined(separator: " "))
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    ForEach(preview.errors, id: \.self) { Text($0).foregroundStyle(.red) }
+                }
+            }
+            if let errorMessage {
+                Section { Text(errorMessage).foregroundStyle(.red) }
+            }
+        }
+        .disabled(!automationsEnabled)
+        .opacity(automationsEnabled ? 1 : 0.5)
+        .onAppear { load() }
+        .onReceive(
+            DistributedNotificationCenter.default().publisher(for: IPC.Name.automationsChanged)
+        ) { _ in load() }
+    }
+
+    private func sceneBinding(_ id: UUID) -> Binding<Bool> {
+        Binding(
+            get: { document.scenes.first(where: { $0.id == id })?.isEnabled ?? false },
+            set: { value in
+                guard let index = document.scenes.firstIndex(where: { $0.id == id }) else { return }
+                document.scenes[index].isEnabled = value
+                save()
+            })
+    }
+
+    private func automationBinding(_ id: UUID) -> Binding<Bool> {
+        Binding(
+            get: { document.automations.first(where: { $0.id == id })?.isEnabled ?? false },
+            set: { value in
+                guard let index = document.automations.firstIndex(where: { $0.id == id }) else {
+                    return
+                }
+                document.automations[index].isEnabled = value
+                save()
+            })
+    }
+
+    private func createStarterScene() {
+        let scene = AutomationScene(
+            name: "Morning check",
+            actions: [AutomationAction(operationID: "app.info")],
+            notifiesOnCompletion: true)
+        document.scenes.append(scene)
+        document.automations.append(
+            AutomationRule(
+                name: "Weekday morning", isEnabled: false,
+                trigger: .schedule(
+                    hour: 9, minute: 0,
+                    weekdays: [.monday, .tuesday, .wednesday, .thursday, .friday]),
+                sceneID: scene.id))
+        save()
+    }
+
+    private func load() {
+        do {
+            document = try storage.load()
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func save() {
+        do {
+            try storage.save(document)
+            errorMessage = nil
+            IPC.post(IPC.Name.automationsChanged)
+            IPC.post(IPC.Name.settingsChanged)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func importDocument() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            document = try storage.importDocument(from: url)
+            save()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func exportDocument() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "edith-automations.json"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try storage.export(to: url)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func grantedPermissions() -> Set<AutomationPermission> {
+        let values = MainPermissionOperations.center.grantedPermissions()
+        return Set(
+            AutomationPermission.allCases.filter { permission in
+                values.first { $0.key.rawValue == permission.rawValue }?.value == true
+            })
+    }
+}
+
 private struct ExtensionLifecycleRows: View {
     let entry: ExtensionRegistryEntry
     let coordinator: ExtensionModalCoordinator
@@ -924,6 +1101,7 @@ private struct ExtensionDetailRows: View {
         if let route = ExtensionDetailRoute(rawValue: entry.id) {
             switch route {
             case .attention: AttentionRows()
+            case .automations: AutomationSettingsRows()
             case .usage: UsageRows()
             case .herdr: HerdrRows()
             case .quinjet: QuinjetRows()

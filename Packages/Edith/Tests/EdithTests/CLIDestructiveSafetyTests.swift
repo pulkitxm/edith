@@ -11,6 +11,8 @@ import Testing
         "ed app quit",
         "ed app relaunch",
         "ed apps quit",
+        "ed automations import",
+        "ed automations run",
         "ed cleaner clean",
         "ed clipboard clear",
         "ed clipboard rm",

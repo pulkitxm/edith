@@ -218,6 +218,40 @@ public enum ExtensionLifecycleCatalog {
                     "Confirm the Attention store is readable.", "ed attention summary --json")
             ]),
         descriptor(
+            "automations", "Compose Edith actions into reusable scenes that run locally.",
+            workflows: [
+                instruction(
+                    "scene", "Build a scene",
+                    "Choose ordered operations, time limits and an error policy."),
+                instruction(
+                    "trigger", "Add an automation",
+                    "Run a scene from a schedule or a local Mac event."),
+            ],
+            prerequisites: [
+                instruction(
+                    "operations", "Choose available operations",
+                    "Preview every action and grant only the permissions it needs.",
+                    "ed automations operations --json")
+            ],
+            examples: [
+                "ed extensions enable automations", "ed automations ls --json",
+                "ed automations plan focus --json",
+            ],
+            docs: [
+                documentation("guide", "Automations & Scenes guide", "docs/automations.md")
+            ],
+            recovery: [
+                instruction(
+                    "plan", "Validate a scene", "Preview its steps and missing permissions.",
+                    "ed automations plan focus --json")
+            ],
+            verification: [
+                instruction(
+                    "list", "Read local configuration",
+                    "Confirm scenes and enabled trigger subscriptions are available.",
+                    "ed automations ls --json")
+            ]),
+        descriptor(
             "usage", "See agent limits, cost and pacing before they interrupt your work.",
             workflows: [
                 instruction("limits", "Watch limits", "Compare session and weekly headroom."),

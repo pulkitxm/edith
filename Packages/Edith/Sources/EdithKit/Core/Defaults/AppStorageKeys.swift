@@ -1,6 +1,10 @@
 import Foundation
 
 public enum AppStorageKeys {
+    public enum Automations {
+        public static let documentBackup = "automationsDocumentBackup"
+    }
+
     public enum Update {
         public static let automaticChecks = "SUEnableAutomaticChecks"
         public static let checkInterval = "SUScheduledCheckInterval"
@@ -223,6 +227,7 @@ public enum AppStorageKeys {
     }
 
     public enum Tabs {
+        public static let automationsEnabled = "automationsEnabled"
         public static let attentionEnabled = "tabAttentionEnabled"
         public static let calendarEnabled = "tabCalendarEnabled"
         public static let companionEnabled = "tabCompanionEnabled"

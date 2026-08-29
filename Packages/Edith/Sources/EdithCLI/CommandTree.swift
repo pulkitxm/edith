@@ -241,6 +241,37 @@ public enum CommandTree {
                         arguments: [.extensionID]),
                 ]),
             CommandNode(
+                "automations", "Run local automations and reusable scenes.",
+                children: [
+                    CommandNode(
+                        "operations", "List operations available to scene steps.", options: common),
+                    CommandNode(
+                        "ls", "List automations and scenes.", aliases: ["list"], options: common),
+                    CommandNode(
+                        "plan", "Preview a scene execution plan.", options: common,
+                        arguments: [.free]),
+                    CommandNode(
+                        "run", "Run a reusable scene.",
+                        options: ["--json", "--help", "--dry-run", "--yes"], arguments: [.free],
+                        destructivePolicy: .previewThenYes),
+                    CommandNode(
+                        "enable", "Enable an automation or scene.", options: common,
+                        arguments: [.free]),
+                    CommandNode(
+                        "disable", "Disable an automation or scene.", options: common,
+                        arguments: [.free]),
+                    CommandNode(
+                        "history", "Show recent automation results.",
+                        options: ["--json", "--help", "--limit"]),
+                    CommandNode(
+                        "export", "Export automations and scenes.", options: common,
+                        arguments: [.localPath]),
+                    CommandNode(
+                        "import", "Import automations and scenes.",
+                        options: ["--json", "--help", "--dry-run", "--yes"],
+                        arguments: [.localPath], destructivePolicy: .previewThenYes),
+                ]),
+            CommandNode(
                 "lid-awake", "Keep the Mac running with its lid closed.",
                 children: [
                     CommandNode("status", "Show the live state.", options: common),

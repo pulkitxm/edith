@@ -45,7 +45,8 @@ public struct SettingDefinition: Equatable, Sendable {
 
 public enum ConfigCatalog {
     public static let groups = [
-        "appearance", "panel", "attention", "usage", "limits", "menubar", "alerts", "budget",
+        "appearance", "panel", "attention", "automations", "usage", "limits", "menubar", "alerts",
+        "budget",
         "dashboard",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
         "calendar",
@@ -55,7 +56,7 @@ public enum ConfigCatalog {
     ]
 
     public static let settings: [SettingDefinition] =
-        appearance + panel + attention + usageAndLimits
+        appearance + panel + attention + automations + usageAndLimits
         + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
         + system + cleaner
         + music + calendar + clipboard + notch + focusDim + presenter + colorPicker
@@ -80,6 +81,12 @@ public enum ConfigCatalog {
 
     public static let extensionKeys: [String: String] = Dictionary(
         uniqueKeysWithValues: ExtensionRegistry.entries.map { ($0.id, $0.defaultsKey) })
+
+    private static let automations: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Tabs.automationsEnabled, .bool, group: "automations",
+            summary: "Run local automations and reusable scenes.", fallback: .bool(false))
+    ]
 
     private static let appearance: [SettingDefinition] = [
         SettingDefinition(

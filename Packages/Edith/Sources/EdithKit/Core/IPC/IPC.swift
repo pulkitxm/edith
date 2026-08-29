@@ -121,6 +121,12 @@ public enum IPC {
             "com.pulkit.edith.requestQuinjetSessionOperation")
         public static let quinjetSessionOperationResult = Notification.Name(
             "com.pulkit.edith.quinjetSessionOperationResult")
+        public static let requestAutomationScene = Notification.Name(
+            "com.pulkit.edith.requestAutomationScene")
+        public static let automationSceneResult = Notification.Name(
+            "com.pulkit.edith.automationSceneResult")
+        public static let automationsChanged = Notification.Name(
+            "com.pulkit.edith.automationsChanged")
     }
 
     public static func post(_ name: Notification.Name, userInfo: [String: Any]? = nil) {
