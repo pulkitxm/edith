@@ -15,6 +15,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
 
     override init() {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        item.autosaveName = "systemStats"
         super.init()
         StatusItemMenu.attach(to: item, target: self, action: #selector(clicked))
         previous = SystemStatsReader.readCPUTicks()

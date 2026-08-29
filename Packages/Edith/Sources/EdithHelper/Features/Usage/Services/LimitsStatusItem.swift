@@ -10,7 +10,7 @@ final class LimitsStatusItem {
 
     init() {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.autosaveName = "limits"
+        item.autosaveName = "agentUsage"
         item.isVisible = true
         StatusItemMenu.attach(to: item, target: self, action: #selector(clicked))
         Self.button = item.button

@@ -21,6 +21,10 @@ enum Logo {
         ?? NSImage(systemSymbolName: "eyeglasses", accessibilityDescription: nil)!
 }
 
+enum AppState {
+    @MainActor static let services = migratedServices()
+}
+
 @MainActor
 func migratedServices() -> AppServices {
     let launchTrace = PerformanceTrace.begin(.startup, "helper.services")
@@ -34,6 +38,7 @@ func migratedServices() -> AppServices {
         }
         d.set(true, forKey: "migratedFromControlCenter")
     }
+    removeRetiredStatusItemDefaults()
     SharedDefaults.migrate()
     ExtensionDefaultsMigration.migrate()
     Repo.prepareStoredPaths()
@@ -107,7 +112,6 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let launchTrace = PerformanceTrace.begin(.startup, "helper.panel")
         defer { PerformanceTrace.end(launchTrace) }
-        PanelController.shared = PanelController(services: AppState.services)
         AppState.services.start()
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -147,12 +151,6 @@ struct EdithApp: App {
 
     init() {
         _ = AppProcessUptime.launchedAt
-
-        NotificationCenter.default.addObserver(
-            forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
-        ) { _ in
-            dismissPanel()
-        }
         HotKey.register()
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             SettingsBackup.shared.start()
@@ -259,16 +257,6 @@ struct EdithApp: App {
         }
         PermissionsModel.shared.startIPCBridge()
         PermissionsModel.shared.refresh()
-
-        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            if event.keyCode == 53, !NSColorPanel.shared.isVisible,
-                PanelController.shared?.isOpen == true
-            {
-                dismissPanel()
-                return nil
-            }
-            return event
-        }
     }
 
     var body: some Scene {
@@ -354,7 +342,7 @@ enum HotKey {
 
     static func register() {
         GlobalHotKey.set(id: GlobalHotKey.ID.panel, keyCode: code, modifiers: mods) {
-            togglePanel()
+            showPanel()
         }
     }
 
@@ -500,10 +488,6 @@ enum PresenterHotKey {
     }
 }
 
-func togglePanel() {
-    MainActor.assumeIsolated { PanelController.shared?.toggle() }
-}
-
 func showPanel() {
     MainActor.assumeIsolated { MainApp.openDashboard() }
 }
@@ -511,7 +495,14 @@ func showPanel() {
 func dismissPanel() {
     MainActor.assumeIsolated {
         if NSColorPanel.shared.isVisible { NSColorPanel.shared.close() }
-        PanelController.shared?.close()
+    }
+}
+
+func removeRetiredStatusItemDefaults(_ defaults: UserDefaults = .standard) {
+    let retiredNames = ["edithGlasses", "limits"]
+    for key in defaults.dictionaryRepresentation().keys
+    where key.hasPrefix("NSStatusItem") && retiredNames.contains(where: key.hasSuffix) {
+        defaults.removeObject(forKey: key)
     }
 }
 
