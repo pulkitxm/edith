@@ -45,18 +45,18 @@ final class UpdaterModel: NSObject,
     private var updater: SPUUpdater? { updaterController?.updater }
     private var pendingUpdateVersion: String?
     private var updateCheckObserver: NSObjectProtocol?
-    private var historyLoadJob: Task<Void, Never>?
+    private var historyLoadTask: Task<Void, Never>?
     private let logURL: URL
 
     init(startingUpdater: Bool = false, logURL: URL = UpdateCheckLog.url) {
         self.logURL = logURL
         super.init()
-        historyLoadJob = Task { [weak self, logURL] in
-            let checkHistory = await Task.detached(priority: .utility) {
-                AppRuntimeCenter().updateHistory(url: logURL)
-            }.value
-            guard !Task.isCancelled else { return }
-            self?.checkHistory = checkHistory
+        historyLoadTask = Task.detached(priority: .utility) { [weak self, logURL] in
+            let checkHistory = AppRuntimeCenter().updateHistory(url: logURL)
+            await MainActor.run {
+                guard !Task.isCancelled else { return }
+                self?.checkHistory = checkHistory
+            }
         }
         guard startingUpdater else { return }
         let updaterController = SPUStandardUpdaterController(
@@ -70,7 +70,7 @@ final class UpdaterModel: NSObject,
     var automaticCheckCount: Int { UpdateCheckLog.count(of: .automatic, in: checkHistory) }
 
     func clearCheckHistory() {
-        historyLoadJob?.cancel()
+        historyLoadTask?.cancel()
         _ = AppRuntimeCenter().clearUpdateHistory(url: logURL)
         checkHistory = []
     }
@@ -79,7 +79,7 @@ final class UpdaterModel: NSObject,
         kind: UpdateCheckRecord.Kind, outcome: UpdateCheckRecord.Outcome,
         version: String? = nil, detail: String? = nil, date: Date = Date()
     ) {
-        historyLoadJob?.cancel()
+        historyLoadTask?.cancel()
         let entry = UpdateCheckRecord(
             date: date, kind: kind, outcome: outcome, version: version, detail: detail)
         checkHistory = UpdateCheckLog.append(entry, to: logURL)
