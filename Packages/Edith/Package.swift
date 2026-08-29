@@ -29,8 +29,12 @@ let targets: [Target] = [
     ),
     .target(
         name: "EdithKit",
-        dependencies: ["EdithCore"],
+        dependencies: ["EdithCore", "EdithLidAwakeSupport"],
         resources: [.process("Resources"), .copy("ChromeExtension")],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .target(
+        name: "EdithLidAwakeSupport",
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .target(
@@ -47,6 +51,7 @@ let targets: [Target] = [
         dependencies: [
             "EdithCore",
             "EdithKit",
+            "EdithLidAwakeSupport",
             .product(name: "ArgumentParser", package: "swift-argument-parser"),
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
@@ -58,7 +63,7 @@ let targets: [Target] = [
     ),
     .executableTarget(
         name: "EdithLidAwakeHelper",
-        dependencies: ["EdithKit"],
+        dependencies: ["EdithLidAwakeSupport"],
         path: "Sources/EdithLidAwakeHelper",
         exclude: ["Info.plist"],
         swiftSettings: [.swiftLanguageMode(.v5)],
@@ -88,6 +93,7 @@ let targets: [Target] = [
         name: "Edith",
         dependencies: [
             "EdithKit",
+            "EdithLidAwakeSupport",
             "GhosttyTerminal",
             .product(name: "Sparkle", package: "Sparkle"),
             .product(name: "SwiftTerm", package: "SwiftTerm"),
@@ -119,15 +125,15 @@ let targets: [Target] = [
     ),
     .executableTarget(
         name: "EdithHelper",
-        dependencies: ["EdithKit"],
+        dependencies: ["EdithKit", "EdithLidAwakeSupport"],
         resources: [.copy("MenuBar.png")],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
         name: "EdithTests",
         dependencies: [
-            "EdithCore", "Edith", "EdithKit", "EdithHelper", "EdithCLI", "Highlighter", "ed",
-            "UsageSnapshotCrashDriver",
+            "EdithCore", "Edith", "EdithKit", "EdithLidAwakeSupport", "EdithHelper",
+            "EdithCLI", "Highlighter", "ed", "UsageSnapshotCrashDriver",
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),

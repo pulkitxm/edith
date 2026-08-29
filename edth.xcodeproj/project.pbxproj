@@ -378,21 +378,16 @@
 			);
 			inputPaths = (
 				"${BUILT_PRODUCTS_DIR}/EdithHelper.app",
-				"${SRCROOT}/Packages/Edith/Package.swift",
-				"${SRCROOT}/Packages/Edith/Sources/EdithLidAwakeHelper/main.swift",
-				"${SRCROOT}/Resources/com.pulkit.edith.lidawake.plist",
 			);
 			name = "Embed Login Item Helper";
 			outputFileListPaths = (
 			);
 			outputPaths = (
 				"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Library/LoginItems/Edith.app",
-				"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Library/LoginItems/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake",
-				"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Library/LoginItems/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.plist",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -euo pipefail\nDEST=\"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Library/LoginItems/Edith.app\"\nrm -rf \"$DEST\"\nmkdir -p \"$(dirname \"$DEST\")\"\nditto \"${BUILT_PRODUCTS_DIR}/EdithHelper.app\" \"$DEST\"\nmv \"$DEST/Contents/MacOS/EdithHelper\" \"$DEST/Contents/MacOS/Edith\"\n/usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable Edith' \"$DEST/Contents/Info.plist\"\nSWIFT_BIN=\"$(xcrun --find swift)\"\nSWIFT_CONFIGURATION=debug\n[ \"${CONFIGURATION}\" = Release ] && SWIFT_CONFIGURATION=release\n\"$SWIFT_BIN\" build --package-path \"${SRCROOT}/Packages/Edith\" --configuration \"$SWIFT_CONFIGURATION\" --product EdithLidAwakeHelper\nPRIVILEGED_HELPER_BUILD=\"$(\"$SWIFT_BIN\" build --package-path \"${SRCROOT}/Packages/Edith\" --configuration \"$SWIFT_CONFIGURATION\" --show-bin-path)/EdithLidAwakeHelper\"\nPRIVILEGED_HELPER=\"$DEST/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake\"\nLAUNCH_DAEMONS=\"$DEST/Contents/Library/LaunchDaemons\"\nmkdir -p \"$(dirname \"$PRIVILEGED_HELPER\")\" \"$LAUNCH_DAEMONS\"\ncp \"$PRIVILEGED_HELPER_BUILD\" \"$PRIVILEGED_HELPER\"\ncp \"${SRCROOT}/Resources/com.pulkit.edith.lidawake.plist\" \"$LAUNCH_DAEMONS/\"\ncodesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY:--}\" --timestamp=none --identifier com.pulkit.edith.lidawake \"$PRIVILEGED_HELPER\"\ncodesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY:--}\" --timestamp=none \"$DEST\"\n";
+			shellScript = "set -euo pipefail\nDEST=\"${TARGET_BUILD_DIR}/${WRAPPER_NAME}/Contents/Library/LoginItems/Edith.app\"\nrm -rf \"$DEST\"\nmkdir -p \"$(dirname \"$DEST\")\"\nditto \"${BUILT_PRODUCTS_DIR}/EdithHelper.app\" \"$DEST\"\nmv \"$DEST/Contents/MacOS/EdithHelper\" \"$DEST/Contents/MacOS/Edith\"\n/usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable Edith' \"$DEST/Contents/Info.plist\"\ncodesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY:--}\" --timestamp=none \"$DEST\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -708,6 +703,7 @@
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-Osize";
 			};
 			name = Release;
 		};
