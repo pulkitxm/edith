@@ -9,6 +9,46 @@ typealias HerdrLiveWatcher =
         @escaping @Sendable ([HerdrHostSnapshot]) -> Void
     ) async -> Void
 
+typealias HerdrAgentCloser = @Sendable (HerdrAgent) async throws -> Void
+
+struct HerdrAgentSpace: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let agents: [HerdrAgent]
+
+    static func group(_ agents: [HerdrAgent]) -> [HerdrAgentSpace] {
+        Dictionary(grouping: agents, by: spaceID)
+            .map { HerdrAgentSpace(id: $0.key, title: $0.key, agents: $0.value) }
+            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+
+    static func counts(_ spaces: [HerdrAgentSpace]) -> [String: Int] {
+        Dictionary(uniqueKeysWithValues: spaces.map { ($0.id, $0.agents.count) })
+    }
+
+    static func spaceID(_ agent: HerdrAgent) -> String {
+        let title = agent.workspace.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? "Unassigned" : title
+    }
+}
+
+enum HerdrPaneSizing {
+    static let railDefault = 252.0
+    static let railMinimum = 180.0
+    static let railMaximum = 420.0
+    static let detailDefault = 260.0
+    static let detailMinimum = 220.0
+    static let detailMaximum = 520.0
+
+    static func rail(_ width: Double) -> Double {
+        min(railMaximum, max(railMinimum, width))
+    }
+
+    static func detail(_ width: Double) -> Double {
+        min(detailMaximum, max(detailMinimum, width))
+    }
+}
+
 @MainActor
 @Observable
 final class HerdrStore {
@@ -16,9 +56,28 @@ final class HerdrStore {
     static let boardID = "board"
 
     var hosts: [HerdrHostSnapshot] = []
-    var machineFilter = "all"
-    var kindFilter: Set<String> = []
-    var selectedTab = boardID
+    var machineFilter = "all" {
+        didSet {
+            guard machineFilter != oldValue else { return }
+            reconcileCollapseCountsIfReady()
+        }
+    }
+    var kindFilter: Set<String> = [] {
+        didSet {
+            guard kindFilter != oldValue else { return }
+            reconcileCollapseCountsIfReady()
+        }
+    }
+    var selectedTab = boardID {
+        didSet {
+            guard selectedTab != oldValue else { return }
+            guard
+                let agent = tabs.first(where: { $0.id == selectedTab })?.agent
+                    ?? detachedTabs[selectedTab]?.agent
+            else { return }
+            revealSpace(containing: agent)
+        }
+    }
     var tabs: [HerdrOpenTab] = []
     var refreshing = false
     var copiedID: String?
@@ -29,21 +88,72 @@ final class HerdrStore {
         }
     }
     var railOpen = true
+    var railWidth = HerdrPaneSizing.railDefault {
+        didSet {
+            guard railWidth != oldValue else { return }
+            defaults.set(railWidth, forKey: AppStorageKeys.Herdr.railWidth)
+        }
+    }
+    var detailWidth = HerdrPaneSizing.detailDefault {
+        didSet {
+            guard detailWidth != oldValue else { return }
+            defaults.set(detailWidth, forKey: AppStorageKeys.Herdr.detailWidth)
+        }
+    }
     var agentsCollapsed = false {
         didSet {
             guard agentsCollapsed != oldValue else { return }
+            guard !restoringDefaults else { return }
             defaults.set(agentsCollapsed, forKey: AppStorageKeys.Herdr.agentsCollapsed)
+            if agentsCollapsed {
+                let count = listedAgents.count
+                agentsCollapsedCount = count
+                defaults.set(count, forKey: AppStorageKeys.Herdr.agentsCollapsedCount)
+            } else {
+                agentsCollapsedCount = nil
+                defaults.removeObject(forKey: AppStorageKeys.Herdr.agentsCollapsedCount)
+            }
         }
     }
     var terminalsCollapsed = false {
         didSet {
             guard terminalsCollapsed != oldValue else { return }
+            guard !restoringDefaults else { return }
             defaults.set(terminalsCollapsed, forKey: AppStorageKeys.Herdr.terminalsCollapsed)
+            if terminalsCollapsed {
+                let count = machineTerminals.count
+                terminalsCollapsedCount = count
+                defaults.set(count, forKey: AppStorageKeys.Herdr.terminalsCollapsedCount)
+            } else {
+                terminalsCollapsedCount = nil
+                defaults.removeObject(forKey: AppStorageKeys.Herdr.terminalsCollapsedCount)
+            }
+        }
+    }
+    var spaceGroupingEnabled = false {
+        didSet {
+            guard spaceGroupingEnabled != oldValue else { return }
+            defaults.set(
+                spaceGroupingEnabled, forKey: AppStorageKeys.Herdr.spaceGroupingEnabled)
+        }
+    }
+    private(set) var collapsedSpaces: Set<String> = [] {
+        didSet {
+            guard collapsedSpaces != oldValue else { return }
+            defaults.set(
+                Array(collapsedSpaces), forKey: AppStorageKeys.Herdr.collapsedSpaces)
         }
     }
 
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
+    private let agentCloser: HerdrAgentCloser
+    private let expectedHostCount: Int
+    private var restoringDefaults = true
+    private var collapseCountsReady = false
+    private var agentsCollapsedCount: Int?
+    private var terminalsCollapsedCount: Int?
+    private var collapsedSpaceCounts: [String: Int] = [:]
     private var connections: [UUID: SSHConnection] = [:]
     private var watchTask: Task<Void, Never>?
     private var settleTask: Task<Void, Never>?
@@ -53,22 +163,88 @@ final class HerdrStore {
 
     init(
         defaults: UserDefaults = SharedDefaults.store,
-        liveWatcher: @escaping HerdrLiveWatcher = { yield in await HerdrLive.watch(yield) }
+        liveWatcher: @escaping HerdrLiveWatcher = { yield in await HerdrLive.watch(yield) },
+        expectedHostCount: Int = MachineRegistry.machines().count + 1,
+        agentCloser: @escaping HerdrAgentCloser = { try await HerdrAgentCloseExecution.close($0) }
     ) {
         self.defaults = defaults
         self.liveWatcher = liveWatcher
+        self.expectedHostCount = expectedHostCount
+        self.agentCloser = agentCloser
         railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
+        railWidth = HerdrPaneSizing.rail(
+            defaults.object(forKey: AppStorageKeys.Herdr.railWidth) as? Double
+                ?? HerdrPaneSizing.railDefault)
         detailOpen = defaults.object(forKey: AppStorageKeys.Herdr.detailOpen) as? Bool ?? true
+        detailWidth = HerdrPaneSizing.detail(
+            defaults.object(forKey: AppStorageKeys.Herdr.detailWidth) as? Double
+                ?? HerdrPaneSizing.detailDefault)
         agentsCollapsed =
             defaults.object(forKey: AppStorageKeys.Herdr.agentsCollapsed) as? Bool ?? false
         terminalsCollapsed =
             defaults.object(forKey: AppStorageKeys.Herdr.terminalsCollapsed) as? Bool ?? false
+        agentsCollapsedCount = Self.optionalInt(
+            defaults, key: AppStorageKeys.Herdr.agentsCollapsedCount)
+        terminalsCollapsedCount = Self.optionalInt(
+            defaults, key: AppStorageKeys.Herdr.terminalsCollapsedCount)
+        spaceGroupingEnabled =
+            defaults.object(forKey: AppStorageKeys.Herdr.spaceGroupingEnabled) as? Bool ?? false
+        collapsedSpaces = Set(
+            defaults.stringArray(forKey: AppStorageKeys.Herdr.collapsedSpaces) ?? [])
+        collapsedSpaceCounts = Self.spaceCounts(
+            defaults.dictionary(forKey: AppStorageKeys.Herdr.collapsedSpaceCounts) ?? [:])
+        restoringDefaults = false
     }
 
     var agents: [HerdrAgent] { hosts.flatMap(\.agents) }
 
     var listedAgents: [HerdrAgent] {
         filteredAgents.isEmpty && kindFilter.isEmpty ? agents : filteredAgents
+    }
+
+    var agentSpaces: [HerdrAgentSpace] {
+        HerdrAgentSpace.group(listedAgents)
+    }
+
+    func spaceIsCollapsed(_ id: String) -> Bool {
+        collapsedSpaces.contains(id)
+    }
+
+    func toggleSpace(_ id: String) {
+        if collapsedSpaces.contains(id) {
+            collapsedSpaces.remove(id)
+            collapsedSpaceCounts.removeValue(forKey: id)
+        } else {
+            collapsedSpaces.insert(id)
+            collapsedSpaceCounts[id] = agentSpaces.first { $0.id == id }?.agents.count ?? 0
+        }
+        persistCollapsedSpaceCounts()
+    }
+
+    var allAgentSpacesCollapsed: Bool {
+        let spaceIDs = Set(agentSpaces.map(\.id))
+        return !spaceIDs.isEmpty && spaceIDs.isSubset(of: collapsedSpaces)
+    }
+
+    func setAllAgentSpacesCollapsed(_ collapsed: Bool) {
+        for space in agentSpaces {
+            if collapsed {
+                collapsedSpaces.insert(space.id)
+                collapsedSpaceCounts[space.id] = space.agents.count
+            } else {
+                collapsedSpaces.remove(space.id)
+                collapsedSpaceCounts.removeValue(forKey: space.id)
+            }
+        }
+        persistCollapsedSpaceCounts()
+    }
+
+    func revealSpace(containing agent: HerdrAgent) {
+        guard !agent.isTerminal else { return }
+        let spaceID = HerdrAgentSpace.spaceID(agent)
+        guard collapsedSpaces.remove(spaceID) != nil else { return }
+        collapsedSpaceCounts.removeValue(forKey: spaceID)
+        persistCollapsedSpaceCounts()
     }
 
     var machineTerminals: [HerdrAgent] {
@@ -213,21 +389,68 @@ final class HerdrStore {
     private func flush() {
         guard let latest = pendingHosts else { return }
         pendingHosts = nil
-        apply(latest)
+        apply(latest, collapseSnapshotComplete: latest.count >= expectedHostCount)
     }
 
     func apply(_ snapshots: [HerdrHostSnapshot]) {
+        apply(snapshots, collapseSnapshotComplete: true)
+    }
+
+    private func apply(_ snapshots: [HerdrHostSnapshot], collapseSnapshotComplete: Bool) {
         hosts = snapshots
         for index in tabs.indices {
             if let updated = agents.first(where: { $0.id == tabs[index].id }) {
                 tabs[index].agent = updated
             }
         }
+        if collapseSnapshotComplete {
+            collapseCountsReady = true
+            reconcileCollapseCounts()
+        }
+    }
+
+    private func reconcileCollapseCountsIfReady() {
+        guard collapseCountsReady else { return }
+        reconcileCollapseCounts()
+    }
+
+    private func reconcileCollapseCounts() {
+        if agentsCollapsed, agentsCollapsedCount != listedAgents.count {
+            agentsCollapsed = false
+        }
+        if terminalsCollapsed, terminalsCollapsedCount != machineTerminals.count {
+            terminalsCollapsed = false
+        }
+        let currentSpaceCounts = HerdrAgentSpace.counts(agentSpaces)
+        let changedSpaces = collapsedSpaces.filter {
+            collapsedSpaceCounts[$0] != currentSpaceCounts[$0, default: 0]
+        }
+        guard !changedSpaces.isEmpty else { return }
+        for id in changedSpaces {
+            collapsedSpaces.remove(id)
+            collapsedSpaceCounts.removeValue(forKey: id)
+        }
+        persistCollapsedSpaceCounts()
+    }
+
+    private func persistCollapsedSpaceCounts() {
+        defaults.set(collapsedSpaceCounts, forKey: AppStorageKeys.Herdr.collapsedSpaceCounts)
+    }
+
+    private static func spaceCounts(_ values: [String: Any]) -> [String: Int] {
+        values.reduce(into: [:]) { result, entry in
+            if let number = entry.value as? NSNumber { result[entry.key] = number.intValue }
+        }
+    }
+
+    private static func optionalInt(_ defaults: UserDefaults, key: String) -> Int? {
+        defaults.object(forKey: key) == nil ? nil : defaults.integer(forKey: key)
     }
 
     var detachedIDs: Set<String> { Set(detachedTabs.keys) }
 
     func detachedTab(for agent: HerdrAgent) -> HerdrOpenTab {
+        revealSpace(containing: agent)
         if let existing = detachedTabs[agent.id] { return existing }
         var resolved = HerdrAgentViews.view(for: agent.id, defaults)
         if agent.isTerminal { resolved = .agent }
@@ -259,6 +482,7 @@ final class HerdrStore {
     }
 
     func open(_ agent: HerdrAgent, showing view: HerdrAgentView?) {
+        revealSpace(containing: agent)
         if let index = tabs.firstIndex(where: { $0.id == agent.id }) {
             if let view { apply(view, at: index) }
             selectedTab = agent.id
@@ -283,6 +507,7 @@ final class HerdrStore {
 
     func setView(_ view: HerdrAgentView, for id: String) {
         if var tab = detachedTabs[id] {
+            revealSpace(containing: tab.agent)
             guard tab.view != view else { return }
             tab.view = view
             detachedTabs[id] = tab
@@ -294,6 +519,7 @@ final class HerdrStore {
             HerdrAgentViews.set(view, for: id, defaults)
             return
         }
+        revealSpace(containing: tabs[index].agent)
         apply(view, at: index)
     }
 
@@ -306,6 +532,11 @@ final class HerdrStore {
 
     func close(_ id: String) {
         closeWhere { _, tab in tab.id == id }
+    }
+
+    func closeAgent(_ agent: HerdrAgent) async throws {
+        try await agentCloser(agent)
+        close(agent.id)
     }
 
     func closeOthers(besides id: String) {

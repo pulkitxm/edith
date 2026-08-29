@@ -289,7 +289,26 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(
             renders(
                 HerdrTitlebarViewPicker(store: HerdrStore(), agentID: "agent"),
-                width: 240, height: 40))
+                width: 280, height: 40))
+    }
+
+    @Test func herdrTitlebarViewPickerReflectsDetailVisibility() throws {
+        let name = "UISmokeTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = HerdrStore(defaults: defaults, liveWatcher: { _ in })
+        let visible = try #require(
+            renderedBitmap(
+                HerdrTitlebarViewPicker(store: store, agentID: "agent"),
+                width: 280, height: 40)
+        ).representation(using: .png, properties: [:])
+        store.detailOpen = false
+        let hidden = try #require(
+            renderedBitmap(
+                HerdrTitlebarViewPicker(store: store, agentID: "agent"),
+                width: 280, height: 40)
+        ).representation(using: .png, properties: [:])
+        #expect(visible != hidden)
     }
 
     @Test func herdrTitlebarViewPickerRendersEveryThemeDistinctly() throws {
@@ -308,7 +327,7 @@ private func descendantViews(of view: NSView) -> [NSView] {
             let bitmap = try #require(
                 renderedBitmap(
                     HerdrTitlebarViewPicker(store: HerdrStore(), agentID: "agent"),
-                    width: 240, height: 40))
+                    width: 280, height: 40))
             appearances.insert(try #require(bitmap.representation(using: .png, properties: [:])))
         }
         #expect(appearances.count == AppTheme.allCases.count)
@@ -327,9 +346,10 @@ private func descendantViews(of view: NSView) -> [NSView] {
         let accessory = try #require(window.titlebarAccessoryViewControllers.first)
         #expect(window.titlebarAccessoryViewControllers.count == 1)
         #expect(accessory.layoutAttribute == .right)
-        #expect(accessory.view.frame.width == 236)
+        #expect(
+            abs(accessory.view.frame.width - HerdrAgentWindow.viewControlsWidth) < 0.5)
         #expect(accessory.view.frame.height >= 28)
-        #expect(accessory.view.fittingSize.width >= 228)
+        #expect(accessory.view.fittingSize.width >= HerdrAgentWindow.viewControlsContentWidth)
         #expect(accessory.view.fittingSize.height <= 36)
     }
 
