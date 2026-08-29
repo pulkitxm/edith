@@ -171,9 +171,12 @@ final class GitHubBrowserModel {
         if inNewTab {
             mutate {
                 $0.openTab(
-                    entry: GitHubBrowserHistoryEntry(route: route), title: title ?? route.tabTitle)
+                    entry: GitHubBrowserHistoryEntry(route: route), title: title ?? route.tabTitle,
+                    select: false)
             }
-        } else if let id = session.selectedTabID {
+            return
+        }
+        if let id = session.selectedTabID {
             mutate { $0.navigate(tabID: id, to: GitHubBrowserHistoryEntry(route: route)) }
         }
         loadAfterNavigation(from: previousRoute)

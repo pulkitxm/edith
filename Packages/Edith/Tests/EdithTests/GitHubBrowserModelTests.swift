@@ -190,6 +190,27 @@ import Testing
         #expect(await fixture.wasCancelled())
     }
 
+    @Test func newTabNavigationStaysInTheBackgroundWithoutReloading() async throws {
+        let fixture = GitHubResourceFixture()
+        let context = try await modelContext(route: repositoryRoute("first"), fixture: fixture)
+        defer { try? FileManager.default.removeItem(at: context.root) }
+
+        await context.model.start()
+        await fixture.waitUntilStarted(1)
+        await fixture.release(0, resource: repositoryResource("first"))
+        await context.model.waitForResourceLoad()
+        let selectedTabID = context.model.session.selectedTabID
+
+        let destination = repositoryRoute("second")
+        context.model.navigate(to: destination, inNewTab: true)
+        await Task.yield()
+
+        #expect(context.model.session.selectedTabID == selectedTabID)
+        #expect(context.model.session.tabs.count == 2)
+        #expect(context.model.session.tabs.last?.currentEntry.route == destination)
+        #expect(await fixture.requestCount() == 1)
+    }
+
     private func modelContext(
         route: GitHubRoute, fixture: GitHubResourceFixture,
         cached: GitHubRepositoryResource? = nil
