@@ -1094,6 +1094,8 @@ private extension RunningAppOperation {
         switch self {
         case .list:
             userInterface("System page", "inspect running applications")
+        case .open:
+            userInterface("Focus Profiles", "launch an application", ["com.apple.Safari"])
         case .quit:
             .userInterface([
                 UserInterfaceActionPlacement(

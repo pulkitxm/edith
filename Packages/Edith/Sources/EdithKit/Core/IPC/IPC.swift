@@ -127,6 +127,12 @@ public enum IPC {
             "com.pulkit.edith.automationSceneResult")
         public static let automationsChanged = Notification.Name(
             "com.pulkit.edith.automationsChanged")
+        public static let focusProfilesChanged = Notification.Name(
+            "com.pulkit.edith.focusProfilesChanged")
+        public static let requestFocusAction = Notification.Name(
+            "com.pulkit.edith.requestFocusAction")
+        public static let focusActionResult = Notification.Name(
+            "com.pulkit.edith.focusActionResult")
     }
 
     public static func post(_ name: Notification.Name, userInfo: [String: Any]? = nil) {
