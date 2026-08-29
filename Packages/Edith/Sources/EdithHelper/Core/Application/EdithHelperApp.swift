@@ -299,6 +299,8 @@ enum GlobalHotKey {
         static let windowRight: UInt32 = 21
         static let windowMaximize: UInt32 = 22
         static let windowRestore: UInt32 = 23
+        static let workspaceCapture: UInt32 = 24
+        static let workspaceRestore: UInt32 = 25
     }
 
     fileprivate static var refs: [UInt32: EventHotKeyRef] = [:]

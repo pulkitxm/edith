@@ -107,6 +107,12 @@ public enum IPC {
             "com.pulkit.edith.requestWindowSnapshot")
         public static let requestWindowLayout = Notification.Name(
             "com.pulkit.edith.requestWindowLayout")
+        public static let requestWorkspaceRestorer = Notification.Name(
+            "com.pulkit.edith.requestWorkspaceRestorer")
+        public static let workspaceRestorerResult = Notification.Name(
+            "com.pulkit.edith.workspaceRestorerResult")
+        public static let workspaceRestorerChanged = Notification.Name(
+            "com.pulkit.edith.workspaceRestorerChanged")
         public static let windowSnapshotResult = Notification.Name(
             "com.pulkit.edith.windowSnapshotResult")
         public static let requestAppDiagnostics = Notification.Name(

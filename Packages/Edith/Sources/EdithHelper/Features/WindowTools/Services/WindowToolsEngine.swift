@@ -25,13 +25,21 @@ final class WindowToolsEngine: FeatureModule {
         let windowNumber: Int
     }
 
+    private struct RuntimeWindow {
+        let application: NSRunningApplication
+        let element: AXUIElement
+        let candidate: WorkspaceCandidateWindow
+    }
+
     private var activationObserver: NSObjectProtocol?
     private var requestObserver: NSObjectProtocol?
+    private var workspaceRequestObserver: NSObjectProtocol?
     private var lastExternalApplication: NSRunningApplication?
     private var history = WindowFrameHistory<WindowIdentity>()
     private var eventTap: CFMachPort?
     private var eventSource: CFRunLoopSource?
     private var greenTarget: GreenTarget?
+    private var restoreTask: Task<Void, Never>?
 
     init() {
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -54,7 +62,19 @@ final class WindowToolsEngine: FeatureModule {
                         let raw = info[WindowLayoutRequest.actionKey] as? String,
                         let action = WindowLayoutAction(rawValue: raw)
                     else { return }
+                    guard Self.windowToolsEnabled else { return }
                     self?.perform(action)
+                }
+            })
+        workspaceRequestObserver = IPC.observe(
+            IPC.Name.requestWorkspaceRestorer,
+            info: { [weak self] info in
+                MainActor.assumeIsolated {
+                    guard Self.workspaceRestorerEnabled,
+                        let request = WorkspaceRestorerIPC.decode(
+                            WorkspaceRestorerRequest.self, from: info)
+                    else { return }
+                    self?.handle(request)
                 }
             })
         if let frontmost = NSWorkspace.shared.frontmostApplication, !Self.isEdith(frontmost) {
@@ -68,7 +88,7 @@ final class WindowToolsEngine: FeatureModule {
         let greenButtonOn =
             SharedDefaults.store.object(
                 forKey: AppStorageKeys.WindowTools.greenButtonMaximizes) as? Bool ?? true
-        if greenButtonOn, AXIsProcessTrusted() {
+        if Self.windowToolsEnabled, greenButtonOn, AXIsProcessTrusted() {
             startEventTap()
         } else {
             stopEventTap()
@@ -76,14 +96,20 @@ final class WindowToolsEngine: FeatureModule {
     }
 
     func shutdown() {
-        hotKeys.forEach { GlobalHotKey.clear(id: $0.id) }
+        layoutHotKeys.forEach { GlobalHotKey.clear(id: $0.id) }
+        GlobalHotKey.clear(id: GlobalHotKey.ID.workspaceCapture)
+        GlobalHotKey.clear(id: GlobalHotKey.ID.workspaceRestore)
+        restoreTask?.cancel()
+        restoreTask = nil
         stopEventTap()
         if let activationObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(activationObserver)
         }
         if let requestObserver { IPC.stopObserving(requestObserver) }
+        if let workspaceRequestObserver { IPC.stopObserving(workspaceRequestObserver) }
         activationObserver = nil
         requestObserver = nil
+        workspaceRequestObserver = nil
         history.removeAll()
     }
 
@@ -92,7 +118,355 @@ final class WindowToolsEngine: FeatureModule {
         apply(action, to: window)
     }
 
-    private var hotKeys: [HotKeySpec] {
+    private func handle(_ request: WorkspaceRestorerRequest) {
+        if request.operation == .cancel {
+            restoreTask?.cancel()
+            respond(WorkspaceRestorerResponse(requestID: request.id, ok: true))
+            return
+        }
+        guard AXIsProcessTrusted() else {
+            respond(
+                WorkspaceRestorerResponse(
+                    requestID: request.id, ok: false,
+                    error: "Accessibility permission is required to manage workspace windows."))
+            return
+        }
+        if request.operation == .restore || request.operation == .recover {
+            restoreTask?.cancel()
+        }
+        restoreTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                switch request.operation {
+                case .capture:
+                    let name =
+                        request.profile?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    guard !name.isEmpty else { throw WorkspaceRestorerError.invalidName }
+                    let profile = captureProfile(name: name)
+                    var library = WorkspaceRestorerStore.load()
+                    library.upsert(profile)
+                    try WorkspaceRestorerStore.save(library)
+                    IPC.post(IPC.Name.workspaceRestorerChanged)
+                    respond(
+                        WorkspaceRestorerResponse(
+                            requestID: request.id, ok: true, profile: profile))
+                case .preview:
+                    let profile = try WorkspaceRestorerStore.load().resolve(request.profile ?? "")
+                    let plan = makePlan(profile, launchPolicy: request.options.launchPolicy)
+                    let run = previewRun(plan)
+                    var library = WorkspaceRestorerStore.load()
+                    library.record(run)
+                    try WorkspaceRestorerStore.save(library)
+                    respond(
+                        WorkspaceRestorerResponse(
+                            requestID: request.id, ok: true, profile: profile, plan: plan,
+                            run: run))
+                case .restore:
+                    let profile = try WorkspaceRestorerStore.load().resolve(request.profile ?? "")
+                    let response = await restore(
+                        profile, requestID: request.id, options: request.options,
+                        preserveRecovery: false)
+                    respond(response)
+                case .recover:
+                    guard let profile = WorkspaceRestorerStore.load().recoveryProfile else {
+                        throw WorkspaceRestorerError.notFound("recovery")
+                    }
+                    let response = await restore(
+                        profile, requestID: request.id, options: request.options,
+                        preserveRecovery: true)
+                    respond(response)
+                case .cancel:
+                    break
+                }
+            } catch is CancellationError {
+                respond(
+                    WorkspaceRestorerResponse(
+                        requestID: request.id, ok: false, error: "Workspace restore cancelled."))
+            } catch {
+                respond(
+                    WorkspaceRestorerResponse(
+                        requestID: request.id, ok: false, error: error.localizedDescription))
+            }
+            restoreTask = nil
+        }
+    }
+
+    private func captureProfile(name: String) -> WorkspaceProfile {
+        let displays = displaySnapshots()
+        let excluded = excludedBundleIdentifiers
+        let activeBundleIdentifier = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let applications = NSWorkspace.shared.runningApplications.filter {
+            $0.activationPolicy == .regular && !Self.isEdith($0)
+                && !excluded.contains($0.bundleIdentifier ?? "")
+        }.sorted {
+            if $0.bundleIdentifier == activeBundleIdentifier { return true }
+            if $1.bundleIdentifier == activeBundleIdentifier { return false }
+            return ($0.localizedName ?? "") < ($1.localizedName ?? "")
+        }
+        var snapshots: [WorkspaceWindowSnapshot] = []
+        var order = 0
+        for application in applications {
+            guard let bundleIdentifier = application.bundleIdentifier else { continue }
+            let appElement = AXUIElementCreateApplication(application.processIdentifier)
+            AXUIElementSetMessagingTimeout(appElement, 0.5)
+            for window in elementArrayAttribute(appElement, kAXWindowsAttribute as String) {
+                guard let currentAX = frame(of: window) else { continue }
+                let current = appKitFrame(from: currentAX)
+                guard current.width >= 80, current.height >= 40,
+                    let screen = bestScreen(for: current), let displayID = displayID(screen)
+                else { continue }
+                snapshots.append(
+                    WorkspaceWindowSnapshot(
+                        bundleIdentifier: bundleIdentifier,
+                        applicationName: application.localizedName ?? bundleIdentifier,
+                        applicationURL: application.bundleURL?.path,
+                        title: stringAttribute(window, kAXTitleAttribute as String) ?? "",
+                        role: stringAttribute(window, kAXRoleAttribute as String) ?? "",
+                        subrole: stringAttribute(window, kAXSubroleAttribute as String) ?? "",
+                        frame: current,
+                        minimized: boolAttribute(
+                            window, kAXMinimizedAttribute as String, default: false),
+                        fullScreen: boolAttribute(window, "AXFullScreen", default: false),
+                        displayID: displayID, order: order))
+                order += 1
+            }
+        }
+        return WorkspaceProfile(
+            name: name, displays: displays, windows: snapshots,
+            activeBundleIdentifier: activeBundleIdentifier)
+    }
+
+    private func makePlan(
+        _ profile: WorkspaceProfile, launchPolicy: WorkspaceLaunchPolicy
+    ) -> WorkspaceRestorePlan {
+        let runtime = currentRuntimeWindows()
+        return WorkspaceRestorerPlanner.plan(
+            profile: profile, candidates: runtime.map(\.candidate), displays: displaySnapshots(),
+            launchPolicy: launchPolicy)
+    }
+
+    private func previewRun(_ plan: WorkspaceRestorePlan) -> WorkspaceRestoreRun {
+        let items = plan.items.map {
+            WorkspaceRestoreItemResult(
+                windowID: $0.windowID, applicationName: $0.applicationName, title: $0.title,
+                confidence: $0.confidence, state: .skipped,
+                detail: previewDetail($0))
+        }
+        return WorkspaceRestoreRun(
+            profileID: plan.profileID, profileName: plan.profileName, startedAt: plan.createdAt,
+            dryRun: true, cancelled: false, items: items)
+    }
+
+    private func previewDetail(_ item: WorkspaceRestorePlanItem) -> String {
+        switch item.disposition {
+        case .move:
+            "Move from display \(item.sourceDisplayID) to \(item.targetDisplayID)."
+        case .launch:
+            "Launch the missing application, then match and move its window."
+        case .skip:
+            "No matching window is available and launching is disabled."
+        }
+    }
+
+    private func restore(
+        _ profile: WorkspaceProfile, requestID: UUID, options: WorkspaceRestoreOptions,
+        preserveRecovery: Bool
+    ) async -> WorkspaceRestorerResponse {
+        let startedAt = Date()
+        var library = WorkspaceRestorerStore.load()
+        if !preserveRecovery {
+            library.recoveryProfile = captureProfile(name: "Before \(profile.name)")
+            try? WorkspaceRestorerStore.save(library)
+        }
+        var plan = makePlan(profile, launchPolicy: options.launchPolicy)
+        let launchItems = plan.items.filter { $0.disposition == .launch }
+        if !launchItems.isEmpty {
+            let bundleIdentifiers = Set(
+                profile.windows.filter { saved in
+                    launchItems.contains { $0.windowID == saved.id }
+                }.map(\.bundleIdentifier))
+            for bundleIdentifier in bundleIdentifiers.sorted() {
+                guard !Task.isCancelled, Date().timeIntervalSince(startedAt) < options.timeout,
+                    let saved = profile.windows.first(where: {
+                        $0.bundleIdentifier == bundleIdentifier
+                    }), let path = saved.applicationURL
+                else { break }
+                let url = URL(fileURLWithPath: path)
+                let configuration = NSWorkspace.OpenConfiguration()
+                configuration.activates = false
+                _ = try? await NSWorkspace.shared.openApplication(
+                    at: url, configuration: configuration)
+            }
+            while !Task.isCancelled, Date().timeIntervalSince(startedAt) < options.timeout {
+                try? await Task.sleep(for: .milliseconds(250))
+                plan = makePlan(profile, launchPolicy: .never)
+                if plan.items.allSatisfy({ $0.confidence != .missing }) { break }
+            }
+        }
+        let runtime = Dictionary(
+            uniqueKeysWithValues: currentRuntimeWindows().map { ($0.candidate.token, $0) })
+        var results: [WorkspaceRestoreItemResult] = []
+        for item in plan.items {
+            if Task.isCancelled {
+                results.append(
+                    result(item, .cancelled, "Restore was cancelled before this window."))
+                continue
+            }
+            if Date().timeIntervalSince(startedAt) >= options.timeout {
+                results.append(result(item, .failed, "Restore timed out before this window."))
+                continue
+            }
+            guard let token = item.candidateToken, let target = runtime[token] else {
+                let launched = launchItems.contains { $0.windowID == item.windowID }
+                results.append(
+                    result(
+                        item, launched ? .launched : .skipped,
+                        launched
+                            ? "The application launched without a matching window."
+                            : "No matching window was found."))
+                continue
+            }
+            let restored = applyWorkspaceState(item, to: target.element)
+            if restored {
+                AXUIElementPerformAction(target.element, kAXRaiseAction as CFString)
+                results.append(result(item, .restored, "Window state and frame restored."))
+            } else {
+                results.append(result(item, .failed, "The window refused its restored frame."))
+            }
+        }
+        if !Task.isCancelled, let active = profile.activeBundleIdentifier,
+            let application = NSRunningApplication.runningApplications(
+                withBundleIdentifier: active
+            ).first
+        {
+            application.activate()
+        }
+        let run = WorkspaceRestoreRun(
+            profileID: profile.id, profileName: profile.name, startedAt: startedAt,
+            dryRun: false, cancelled: Task.isCancelled, items: results)
+        library = WorkspaceRestorerStore.load()
+        library.record(run)
+        try? WorkspaceRestorerStore.save(library)
+        IPC.post(IPC.Name.workspaceRestorerChanged)
+        return WorkspaceRestorerResponse(
+            requestID: requestID,
+            ok: !run.cancelled && !results.contains(where: { $0.state == .failed }),
+            profile: profile, plan: plan, run: run,
+            error: results.contains(where: { $0.state == .failed })
+                ? "Some workspace windows could not be restored." : nil)
+    }
+
+    private func applyWorkspaceState(
+        _ item: WorkspaceRestorePlanItem, to window: AXUIElement
+    ) -> Bool {
+        if boolAttribute(window, "AXFullScreen", default: false), !item.fullScreen {
+            _ = setBoolAttribute(false, "AXFullScreen", on: window)
+        }
+        let moved = setFrame(axFrame(from: item.targetFrame), on: window)
+        if item.fullScreen {
+            _ = setBoolAttribute(true, "AXFullScreen", on: window)
+        }
+        _ = setBoolAttribute(item.minimized, kAXMinimizedAttribute as String, on: window)
+        return moved
+    }
+
+    private func result(
+        _ item: WorkspaceRestorePlanItem, _ state: WorkspaceRestoreItemState, _ detail: String
+    ) -> WorkspaceRestoreItemResult {
+        WorkspaceRestoreItemResult(
+            windowID: item.windowID, applicationName: item.applicationName, title: item.title,
+            confidence: item.confidence, state: state, detail: detail)
+    }
+
+    private func respond(_ response: WorkspaceRestorerResponse) {
+        guard let payload = WorkspaceRestorerIPC.payload(response) else { return }
+        IPC.post(IPC.Name.workspaceRestorerResult, userInfo: payload)
+    }
+
+    private func currentRuntimeWindows() -> [RuntimeWindow] {
+        let activeBundleIdentifier = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let excluded = excludedBundleIdentifiers
+        let applications = NSWorkspace.shared.runningApplications.filter {
+            $0.activationPolicy == .regular && !Self.isEdith($0)
+                && !excluded.contains($0.bundleIdentifier ?? "")
+        }.sorted {
+            if $0.bundleIdentifier == activeBundleIdentifier { return true }
+            if $1.bundleIdentifier == activeBundleIdentifier { return false }
+            return ($0.localizedName ?? "") < ($1.localizedName ?? "")
+        }
+        var runtime: [RuntimeWindow] = []
+        var order = 0
+        for application in applications {
+            guard let bundleIdentifier = application.bundleIdentifier else { continue }
+            let appElement = AXUIElementCreateApplication(application.processIdentifier)
+            AXUIElementSetMessagingTimeout(appElement, 0.5)
+            for window in elementArrayAttribute(appElement, kAXWindowsAttribute as String) {
+                guard let currentAX = frame(of: window) else { continue }
+                let current = appKitFrame(from: currentAX)
+                guard current.width >= 80, current.height >= 40,
+                    let screen = bestScreen(for: current), let displayID = displayID(screen)
+                else { continue }
+                let identity = windowIdentity(window)
+                let candidate = WorkspaceCandidateWindow(
+                    token: "\(identity.processIdentifier):\(identity.windowNumber)",
+                    bundleIdentifier: bundleIdentifier,
+                    title: stringAttribute(window, kAXTitleAttribute as String) ?? "",
+                    role: stringAttribute(window, kAXRoleAttribute as String) ?? "",
+                    subrole: stringAttribute(window, kAXSubroleAttribute as String) ?? "",
+                    frame: current, displayID: displayID, order: order)
+                runtime.append(
+                    RuntimeWindow(application: application, element: window, candidate: candidate))
+                order += 1
+            }
+        }
+        return runtime
+    }
+
+    private func displaySnapshots() -> [WorkspaceDisplaySnapshot] {
+        NSScreen.screens.enumerated().compactMap { index, screen in
+            guard let id = displayID(screen) else { return nil }
+            return WorkspaceDisplaySnapshot(
+                id: id, name: screen.localizedName, frame: screen.frame,
+                visibleFrame: screen.visibleFrame, order: index)
+        }
+    }
+
+    private func displayID(_ screen: NSScreen) -> UInt32? {
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?
+            .uint32Value
+    }
+
+    private var excludedBundleIdentifiers: Set<String> {
+        let raw =
+            SharedDefaults.store.string(forKey: AppStorageKeys.WorkspaceRestorer.excludedApps)
+            ?? ""
+        return Set(
+            raw.components(separatedBy: CharacterSet(charactersIn: ",\n"))
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty })
+    }
+
+    private static var windowToolsEnabled: Bool {
+        SharedDefaults.store.bool(forKey: AppStorageKeys.WindowTools.enabled)
+    }
+
+    private static var workspaceRestorerEnabled: Bool {
+        SharedDefaults.store.bool(forKey: AppStorageKeys.WorkspaceRestorer.enabled)
+    }
+
+    private static var restoreOptions: WorkspaceRestoreOptions {
+        let defaults = SharedDefaults.store
+        return WorkspaceRestoreOptions(
+            launchPolicy: WorkspaceLaunchPolicy(
+                rawValue: defaults.string(
+                    forKey: AppStorageKeys.WorkspaceRestorer.launchPolicy) ?? "") ?? .never,
+            timeout: defaults.object(forKey: AppStorageKeys.WorkspaceRestorer.timeout) as? Double
+                ?? 12,
+            concurrency: defaults.object(
+                forKey: AppStorageKeys.WorkspaceRestorer.concurrency) as? Int ?? 1)
+    }
+
+    private var layoutHotKeys: [HotKeySpec] {
         [
             HotKeySpec(
                 id: GlobalHotKey.ID.windowLeft, action: .leftHalf,
@@ -114,7 +488,11 @@ final class WindowToolsEngine: FeatureModule {
     }
 
     private func registerHotKeys() {
-        for spec in hotKeys {
+        for spec in layoutHotKeys {
+            guard Self.windowToolsEnabled else {
+                GlobalHotKey.clear(id: spec.id)
+                continue
+            }
             let code =
                 SharedDefaults.store.object(forKey: spec.codeKey) as? Int ?? spec.defaultCode
             let modifiers =
@@ -122,6 +500,57 @@ final class WindowToolsEngine: FeatureModule {
                 ?? (controlKey | optionKey)
             GlobalHotKey.set(id: spec.id, keyCode: code, modifiers: modifiers) { [weak self] in
                 MainActor.assumeIsolated { self?.perform(spec.action) }
+            }
+        }
+        registerWorkspaceHotKeys()
+    }
+
+    private func registerWorkspaceHotKeys() {
+        guard Self.workspaceRestorerEnabled else {
+            GlobalHotKey.clear(id: GlobalHotKey.ID.workspaceCapture)
+            GlobalHotKey.clear(id: GlobalHotKey.ID.workspaceRestore)
+            return
+        }
+        let captureCode =
+            SharedDefaults.store.object(
+                forKey: AppStorageKeys.WorkspaceRestorer.captureHotKeyCode) as? Int
+            ?? kVK_ANSI_S
+        let captureMods =
+            SharedDefaults.store.object(
+                forKey: AppStorageKeys.WorkspaceRestorer.captureHotKeyMods) as? Int
+            ?? (controlKey | optionKey | shiftKey)
+        GlobalHotKey.set(
+            id: GlobalHotKey.ID.workspaceCapture, keyCode: captureCode, modifiers: captureMods
+        ) { [weak self] in
+            MainActor.assumeIsolated {
+                let formatter = DateFormatter()
+                formatter.dateFormat = "MMM d, HH:mm"
+                self?.handle(
+                    WorkspaceRestorerRequest(
+                        operation: .capture, profile: formatter.string(from: Date())))
+            }
+        }
+        let restoreCode =
+            SharedDefaults.store.object(
+                forKey: AppStorageKeys.WorkspaceRestorer.restoreHotKeyCode) as? Int
+            ?? kVK_ANSI_W
+        let restoreMods =
+            SharedDefaults.store.object(
+                forKey: AppStorageKeys.WorkspaceRestorer.restoreHotKeyMods) as? Int
+            ?? (controlKey | optionKey | shiftKey)
+        GlobalHotKey.set(
+            id: GlobalHotKey.ID.workspaceRestore, keyCode: restoreCode, modifiers: restoreMods
+        ) { [weak self] in
+            MainActor.assumeIsolated {
+                guard
+                    let latest = WorkspaceRestorerStore.load().profiles.max(by: {
+                        $0.capturedAt < $1.capturedAt
+                    })
+                else { return }
+                self?.handle(
+                    WorkspaceRestorerRequest(
+                        operation: .restore, profile: latest.id.uuidString,
+                        options: Self.restoreOptions))
             }
         }
     }
@@ -358,6 +787,25 @@ final class WindowToolsEngine: FeatureModule {
             let value, CFGetTypeID(value) == AXUIElementGetTypeID()
         else { return nil }
         return (value as! AXUIElement)
+    }
+
+    private func elementArrayAttribute(_ element: AXUIElement, _ name: String) -> [AXUIElement] {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success,
+            let elements = value as? [AXUIElement]
+        else { return [] }
+        return elements
+    }
+
+    private func setBoolAttribute(
+        _ value: Bool, _ name: String, on element: AXUIElement
+    ) -> Bool {
+        var settable = DarwinBoolean(false)
+        guard AXUIElementIsAttributeSettable(element, name as CFString, &settable) == .success,
+            settable.boolValue
+        else { return false }
+        return AXUIElementSetAttributeValue(element, name as CFString, value as CFBoolean)
+            == .success
     }
 
     private func windowIdentity(_ window: AXUIElement) -> WindowIdentity {

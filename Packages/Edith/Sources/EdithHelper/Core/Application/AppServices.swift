@@ -303,8 +303,11 @@ final class AppServices {
 
     private func reconcilePresentationServices() {
         let windowToolsOn = Self.extensionEnabled(AppStorageKeys.WindowTools.enabled)
-        if windowToolsOn, windowTools == nil { windowTools = WindowToolsEngine() }
-        if !windowToolsOn, let engine = windowTools {
+        let workspaceRestorerOn = Self.extensionEnabled(AppStorageKeys.WorkspaceRestorer.enabled)
+        if windowToolsOn || workspaceRestorerOn, windowTools == nil {
+            windowTools = WindowToolsEngine()
+        }
+        if !windowToolsOn && !workspaceRestorerOn, let engine = windowTools {
             engine.shutdown()
             windowTools = nil
         }
