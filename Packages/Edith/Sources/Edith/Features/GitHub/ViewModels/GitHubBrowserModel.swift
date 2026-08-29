@@ -246,7 +246,9 @@ final class GitHubBrowserModel {
     private func publishCachedResource(
         _ cached: GitHubRepositoryResource, route: GitHubRoute, generation: Int
     ) -> Bool {
-        guard generation == resourceGeneration, currentRoute == route else { return false }
+        guard generation == resourceGeneration, canPublishResource(requestedBy: route) else {
+            return false
+        }
         resource = cached
         resourceState = .refreshing
         return true
@@ -255,9 +257,11 @@ final class GitHubBrowserModel {
     private func publishLoadedResource(
         _ loaded: GitHubRepositoryResource, route: GitHubRoute, generation: Int
     ) {
-        guard generation == resourceGeneration, currentRoute == route else { return }
+        guard generation == resourceGeneration, canPublishResource(requestedBy: route) else {
+            return
+        }
         resource = loaded
-        loadedRoute = route
+        loadedRoute = currentRoute
         resourceError = nil
         resourceState = .content
     }
@@ -265,24 +269,31 @@ final class GitHubBrowserModel {
     private func publishResourceError(
         _ error: GitHubRepositoryLoadError, route: GitHubRoute, generation: Int
     ) {
-        guard generation == resourceGeneration, currentRoute == route else { return }
+        guard generation == resourceGeneration, canPublishResource(requestedBy: route) else {
+            return
+        }
         resourceError = error
         resourceState = resource == nil ? error.loadingState : .content
     }
 
     private func loadAfterNavigation(from previousRoute: GitHubRoute?) {
-        guard let route = currentRoute, previousRoute?.sharesFilePayload(with: route) == true,
-            resource != nil
+        guard let route = currentRoute, previousRoute?.sharesFilePayload(with: route) == true
         else {
             loadCurrentRoute()
             return
         }
-        resourceGeneration &+= 1
-        resourceTask?.cancel()
         loadedRoute = route
-        resourceError = nil
-        resourceState = .content
+        if resource != nil {
+            resourceError = nil
+            if resourceState != .refreshing { resourceState = .content }
+        }
     }
+
+    private func canPublishResource(requestedBy route: GitHubRoute) -> Bool {
+        guard let currentRoute else { return false }
+        return currentRoute == route || currentRoute.sharesFilePayload(with: route)
+    }
+
     private func mutateSelected(_ body: (inout GitHubBrowserSession, UUID) -> Void) {
         guard let id = session.selectedTabID else { return }
         mutate { body(&$0, id) }

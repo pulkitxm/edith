@@ -139,6 +139,31 @@ import Testing
         #expect(context.model.currentRoute?.url.fragment == "L4-L9")
     }
 
+    @Test func lineSelectionNavigationPreservesPendingFileRefresh() async throws {
+        let fixture = GitHubResourceFixture()
+        let cached = fileResource(sha: "cached", text: "let cached = true\n")
+        let context = try await modelContext(
+            route: fileRoute(lines: nil), fixture: fixture, cached: cached)
+        defer { try? FileManager.default.removeItem(at: context.root) }
+
+        await context.model.start()
+        await fixture.waitUntilStarted(1)
+        #expect(context.model.resource == cached)
+        #expect(context.model.resourceState == .refreshing)
+
+        context.model.navigate(to: fileRoute(lines: .range(40...44)))
+        #expect(await fixture.requestCount() == 1)
+        #expect(context.model.resourceState == .refreshing)
+
+        let fresh = fileResource(sha: "fresh", text: "let fresh = true\n")
+        await fixture.release(0, resource: fresh)
+        await context.model.waitForResourceLoad()
+
+        #expect(context.model.resource == fresh)
+        #expect(context.model.resourceState == .content)
+        #expect(context.model.loadedRoute?.url.fragment == "L40-L44")
+    }
+
     private func modelContext(
         route: GitHubRoute, fixture: GitHubResourceFixture,
         cached: GitHubRepositoryResource? = nil
@@ -181,12 +206,14 @@ import Testing
                 lines: lines))
     }
 
-    private func fileResource() -> GitHubRepositoryResource {
+    private func fileResource(
+        sha: String = "abc123", text: String = "let orbit = true\n"
+    ) -> GitHubRepositoryResource {
         .file(
             GitHubFileSnapshot(
-                repository: GitHubRepositoryPath(owner: "acme", name: "orbit")!,
-                revision: "main", path: "Sources/Orbit.swift", sha: "abc123", size: 21,
-                text: "let orbit = true\n", downloadURL: nil, presentation: .text))
+                repository: GitHubRepositoryPath(owner: "acme", name: "orbit")!, revision: "main",
+                path: "Sources/Orbit.swift", sha: sha, size: text.utf8.count, text: text,
+                downloadURL: nil, presentation: .text))
     }
 }
 

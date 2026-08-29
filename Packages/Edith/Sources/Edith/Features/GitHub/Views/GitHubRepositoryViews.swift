@@ -24,7 +24,9 @@ struct GitHubRepositoryResourceView: View {
             case let .file(file):
                 GitHubFileView(
                     file: file, route: route, compact: proxy.size.width < UIScale.pt(700),
-                    navigate: navigate)
+                    navigate: navigate
+                )
+                .id("\(file.path)-\(file.sha)")
             }
         }
         .background(DashSkin.paper(scheme == .dark))
@@ -461,6 +463,9 @@ private struct GitHubFileView: View {
             content
         }
         .task(id: "\(file.sha)-\(dark)") { await highlight() }
+        .onChange(of: route.url.absoluteString) { _, _ in
+            selectedLines = route.selectedLines
+        }
     }
 
     private var fileToolbar: some View {
@@ -556,7 +561,7 @@ private struct GitHubFileView: View {
             GitHubCodeLinesView(
                 lines: file.lines, highlightedLines: highlightedLines, wraps: wraps,
                 matchingLines: Set(matchingLines), selectedLines: selectedLines,
-                scrollTarget: currentMatch, select: selectLine)
+                scrollTarget: currentMatch ?? selectedLines?.firstLine, select: selectLine)
         case .image:
             unavailable(
                 "Image file", "Open this image through its authenticated raw route.", "photo")
@@ -701,9 +706,10 @@ private struct GitHubCodeLinesView: View {
                     }
                 }
             }
-            .onChange(of: scrollTarget) { _, line in
-                guard let line else { return }
-                withAnimation(.easeOut(duration: 0.16)) { proxy.scrollTo(line, anchor: .center) }
+            .task(id: scrollTarget) {
+                await Task.yield()
+                guard !Task.isCancelled, let line = scrollTarget else { return }
+                proxy.scrollTo(line, anchor: .center)
             }
         }
         .background(DashSkin.paper2(dark))

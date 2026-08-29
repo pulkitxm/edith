@@ -74,7 +74,7 @@ struct GitHubPage: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             if !tab.isPinned || selected {
                 Button {
                     model.close(tab.id)
@@ -84,7 +84,7 @@ struct GitHubPage: View {
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .frame(width: UIScale.pt(17), height: UIScale.pt(17))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.toolbar))
                 .help("Close tab")
             }
         }
