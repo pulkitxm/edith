@@ -312,40 +312,42 @@ struct HerdrSessionView: View {
     private var sidebar: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-                Text(hideAgents ? "Hidden" : agent.title)
+                Text(agent.title)
                     .font(DashSkin.serif(20))
-                    .foregroundStyle(hideAgents ? DashSkin.inkFaint(dark) : DashSkin.ink(dark))
+                    .foregroundStyle(DashSkin.ink(dark))
                     .padding(.trailing, UIScale.pt(36))
+                    .presenterTextBlur(hideAgents, fontSize: 20)
                 if !agent.isTerminal { viewSection }
                 kindRow
                 if !agent.isTerminal { metaRow("Status", agent.status.title) }
                 metaRow("Machine", agent.machineName)
-                if !hideAgents {
-                    if !agent.session.isEmpty { metaRow("Session", agent.session) }
-                    if !agent.pane.isEmpty { metaRow("Pane", agent.pane) }
-                    if !agent.workspace.isEmpty { metaRow("Workspace", agent.workspace) }
-                    if !agent.cwd.isEmpty { metaRow("Directory", agent.cwd) }
-                    VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                        Text("Attach")
-                            .font(.system(size: UIScale.pt(11), weight: .semibold))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                        Text(command)
-                            .font(DashSkin.mono(10))
-                            .foregroundStyle(DashSkin.inkSoft(dark))
-                            .textSelection(.enabled)
-                        Button {
-                            store.copyAttachCommand(for: agent)
-                        } label: {
-                            Label(
-                                store.copiedID == agent.id
-                                    ? "Copied"
-                                    : (agent.machineIsLocal || agent.isTerminal
-                                        ? "Copy command" : "Copy SSH"),
-                                systemImage: store.copiedID == agent.id
-                                    ? "checkmark" : "doc.on.doc")
-                        }
-                        .buttonStyle(.edith(.toolbar))
+                if !agent.session.isEmpty { metaRow("Session", agent.session, blur: hideAgents) }
+                if !agent.pane.isEmpty { metaRow("Pane", agent.pane, blur: hideAgents) }
+                if !agent.workspace.isEmpty {
+                    metaRow("Workspace", agent.workspace, blur: hideAgents)
+                }
+                if !agent.cwd.isEmpty { metaRow("Directory", agent.cwd, blur: hideAgents) }
+                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                    Text("Attach")
+                        .font(.system(size: UIScale.pt(11), weight: .semibold))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                    Text(command)
+                        .font(DashSkin.mono(10))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                        .textSelection(.enabled)
+                        .presenterTextBlur(hideAgents, fontSize: 10)
+                    Button {
+                        store.copyAttachCommand(for: agent)
+                    } label: {
+                        Label(
+                            store.copiedID == agent.id
+                                ? "Copied"
+                                : (agent.machineIsLocal || agent.isTerminal
+                                    ? "Copy command" : "Copy SSH"),
+                            systemImage: store.copiedID == agent.id
+                                ? "checkmark" : "doc.on.doc")
                     }
+                    .buttonStyle(.edith(.toolbar))
                 }
             }
             .padding(UIScale.pt(16))
@@ -387,7 +389,7 @@ struct HerdrSessionView: View {
         }
     }
 
-    private func metaRow(_ label: String, _ value: String) -> some View {
+    private func metaRow(_ label: String, _ value: String, blur: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
             Text(label)
                 .font(.system(size: UIScale.pt(10.5), weight: .semibold))
@@ -396,6 +398,7 @@ struct HerdrSessionView: View {
                 .font(.system(size: UIScale.pt(12.5)))
                 .foregroundStyle(DashSkin.ink(dark))
                 .textSelection(.enabled)
+                .presenterTextBlur(blur, fontSize: 12.5)
         }
     }
 

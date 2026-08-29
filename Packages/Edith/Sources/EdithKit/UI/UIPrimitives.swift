@@ -228,6 +228,11 @@ extension View {
         }
     }
 
+    public func presenterTextBlur(_ on: Bool, fontSize: CGFloat) -> some View {
+        presenterBlur(on, radius: max(4, fontSize * 0.4))
+            .privacySensitive(on)
+    }
+
     @ViewBuilder
     public func presenterCover(_ on: Bool, dark: Bool = true) -> some View {
         if on {
