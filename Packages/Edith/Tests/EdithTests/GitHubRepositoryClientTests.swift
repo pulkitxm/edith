@@ -357,7 +357,7 @@ import Testing
 
     @Test func unresolvedSingleSegmentReferenceFallsBackForCommitSHAs() async throws {
         let fixture = GitHubRequestFixture(responses: [
-            response("[]"),
+            response(referenceNames(100)),
             response("[]"),
             response(
                 #"""
@@ -527,6 +527,10 @@ import Testing
             request(endpoint: "repos/acme/orbit/branches", query: [("per_page", "100")]),
             request(endpoint: "repos/acme/orbit/tags", query: [("per_page", "100")]),
         ]
+    }
+
+    private func referenceNames(_ count: Int) -> String {
+        "[" + (0..<count).map { #"{"name":"branch-\#($0)"}"# }.joined(separator: ",") + "]"
     }
 
     private func fileRoute(_ path: String) -> GitHubRoute {

@@ -175,21 +175,13 @@ public actor GitHubRepositoryClient {
     private func referenceNames(
         host: GitHubHost, repository: GitHubRepositoryPath, collection: String
     ) async throws -> [String] {
-        var names: [String] = []
-        var page = 1
-        while true {
-            var query = [("per_page", "100")]
-            if page > 1 { query.append(("page", String(page))) }
-            let references: [ReferenceNameDTO] = try await json(
-                GitHubAPIRequest(
-                    host: host,
-                    endpoint: GitHubCLITransport.endpoint(
-                        repository: repository, suffix: [collection]),
-                    query: query))
-            names += references.map(\.name)
-            guard references.count == 100 else { return names }
-            page += 1
-        }
+        let references: [ReferenceNameDTO] = try await json(
+            GitHubAPIRequest(
+                host: host,
+                endpoint: GitHubCLITransport.endpoint(
+                    repository: repository, suffix: [collection]),
+                query: [("per_page", "100")]))
+        return references.map(\.name)
     }
 
     private func directory(
