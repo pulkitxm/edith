@@ -409,15 +409,17 @@ declares the processes to stop:
 ```ruby
 uninstall quit: [
   "com.pulkit.edith",
+  "com.pulkit.edith.helper",
   "com.pulkit.edith.statusbar",
   "com.pulkit.edith.files",
 ]
 ```
 
-Three bundle identifiers, because Edith is three bundles: the main application, the
-menu bar login item, and the Files helper. Quitting them before removing the app
-avoids the classic failure where a running process holds files open and a partially
-deleted app keeps its menu bar icon until logout.
+The first three identifiers cover Edith's current bundles: the main application,
+the menu bar login item, and the Files helper. The retired status-bar identifier
+keeps uninstall reliable for users upgrading from an older release. Quitting them
+before removing the app avoids the classic failure where a running process holds
+files open and a partially deleted app keeps its menu bar icon until logout.
 
 The `zap` stanza is the opt-in deep clean, listing the paths the application creates
 outside its bundle. Edith's covers the support directory, both caches, the network
@@ -578,6 +580,7 @@ cask "edith" do
 
   uninstall quit: [
     "com.pulkit.edith",
+    "com.pulkit.edith.helper",
     "com.pulkit.edith.statusbar",
     "com.pulkit.edith.files",
   ]
@@ -589,6 +592,7 @@ cask "edith" do
     "~/Library/HTTPStorages/com.pulkit.edith",
     "~/Library/Preferences/com.pulkit.edith.plist",
     "~/Library/Preferences/com.pulkit.edith.shared.plist",
+    "~/Library/Preferences/com.pulkit.edith.helper.plist",
     "~/Library/Preferences/com.pulkit.edith.statusbar.plist",
     "~/Library/Saved Application State/com.pulkit.edith.savedState",
   ]
@@ -643,9 +647,9 @@ after install, with no separate `ed install` step. Both paths are aliases of the
 one signed `ed` executable. These are also the most
 consequential lines in the file, for reasons in section 15.
 
-**`uninstall quit:`** lists all three bundle identifiers, as covered in section 8.
-They are not guesses: `com.pulkit.edith` is `Resources/Info.plist`,
-`com.pulkit.edith.statusbar` is `Resources/HelperInfo.plist`, and
+**`uninstall quit:`** lists the current and retired bundle identifiers, as covered
+in section 8. They are not guesses: `com.pulkit.edith` is `Resources/Info.plist`,
+`com.pulkit.edith.helper` is `Resources/HelperInfo.plist`, and
 `com.pulkit.edith.files` is the Files helper, named in
 `Packages/Edith/Sources/EdithKit/Core/AppIdentity/MainApp.swift` and used by
 `Packages/Edith/Sources/EdithCLI/AppBridge.swift`.

@@ -769,6 +769,36 @@ private func lidAwakeProcessIDs(at url: URL) throws -> [pid_t] {
                 == LidAwakePrivilegedService.bundleIdentifier)
     }
 
+    @Test func statusHelperIdentityMatchesDaemonClient() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let infoData = try Data(
+            contentsOf: root.appendingPathComponent("Resources/HelperInfo.plist"))
+        let info = try #require(
+            PropertyListSerialization.propertyList(from: infoData, format: nil)
+                as? [String: Any])
+        #expect(
+            info["CFBundleIdentifier"] as? String
+                == MainApp.statusBarBundleIdentifier)
+        let daemonData = try Data(
+            contentsOf: root.appendingPathComponent(
+                "Resources/com.pulkit.edith.lidawake.plist"))
+        let daemon = try #require(
+            PropertyListSerialization.propertyList(from: daemonData, format: nil)
+                as? [String: Any])
+        let associated = daemon["AssociatedBundleIdentifiers"] as? [String]
+        #expect(
+            associated
+                == [MainApp.statusBarBundleIdentifier, MainApp.bundleIdentifier])
+        #expect(
+            LidAwakePrivilegedService.clientBundleIdentifier
+                == MainApp.statusBarBundleIdentifier)
+    }
+
     @Test func powerSettingsReportSleepDisabled() {
         let on = """
             System-wide power settings:
