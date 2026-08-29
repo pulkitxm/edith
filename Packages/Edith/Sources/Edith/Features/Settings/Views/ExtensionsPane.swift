@@ -1102,6 +1102,7 @@ private struct ExtensionDetailRows: View {
             switch route {
             case .attention: AttentionRows()
             case .automations: AutomationSettingsRows()
+            case .focusProfiles: FocusProfileSettingsRows()
             case .usage: UsageRows()
             case .herdr: HerdrRows()
             case .quinjet: QuinjetRows()

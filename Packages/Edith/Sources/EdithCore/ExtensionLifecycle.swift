@@ -252,6 +252,39 @@ public enum ExtensionLifecycleCatalog {
                     "ed automations ls --json")
             ]),
         descriptor(
+            "focusProfiles", "Compose scenes into reversible focus and meeting sessions.",
+            workflows: [
+                instruction(
+                    "profile", "Build a focus profile",
+                    "Choose start, layout, app and rollback behavior."),
+                instruction(
+                    "meeting", "Enable Meeting Mode",
+                    "Select a profile and optional meeting start and end scenes."),
+            ],
+            prerequisites: [
+                instruction(
+                    "scenes", "Create reusable scenes",
+                    "Profiles call the Automations executor instead of duplicating actions.",
+                    "ed automations ls --json")
+            ],
+            examples: [
+                "ed extensions enable focusProfiles", "ed focus ls --json",
+                "ed focus start deep-work --for 50m --json",
+            ],
+            docs: [
+                documentation("guide", "Focus Profiles guide", "docs/focus-profiles.md")
+            ],
+            recovery: [
+                instruction(
+                    "stop", "Restore the active session",
+                    "Run rollback scenes and restore captured state.", "ed focus stop --json")
+            ],
+            verification: [
+                instruction(
+                    "status", "Read live focus state",
+                    "Confirm the helper and persisted session agree.", "ed focus status --json")
+            ]),
+        descriptor(
             "usage", "See agent limits, cost and pacing before they interrupt your work.",
             workflows: [
                 instruction("limits", "Watch limits", "Compare session and weekly headroom."),

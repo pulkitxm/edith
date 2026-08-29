@@ -91,6 +91,10 @@ public enum Guide {
         ed automations operations --json
         ed automations plan focus --json
         ed automations run focus --dry-run --json
+        ed focus ls --json
+        ed focus start "Deep work" --for 50m
+        ed focus status --json
+        ed focus stop
         ```
 
         For automation, begin with `status --json` or `doctor --json`. An unhealthy

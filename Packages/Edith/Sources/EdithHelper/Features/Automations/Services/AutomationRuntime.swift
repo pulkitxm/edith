@@ -80,18 +80,8 @@ final class AutomationRuntime {
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let runID = try await executor.start(
-                    scene: scene, automationID: automationID, origin: origin,
-                    grantedPermissions: grantedPermissions())
-                activeRunIDs[scene.id] = runID
-                activeSceneIDs.insert(scene.id)
-                guard let record = await executor.wait(for: runID) else {
-                    throw AutomationExecutionError.alreadyRunning
-                }
-                activeRunIDs[scene.id] = nil
-                activeSceneIDs.remove(scene.id)
-                history = (try? storage.history()) ?? history
-                if scene.notifiesOnCompletion { notify(record) }
+                let record = try await executeScene(
+                    scene, origin: origin, automationID: automationID)
                 postResult(record, requestID: requestID)
                 runTasks[scene.id] = nil
             } catch {
@@ -103,6 +93,34 @@ final class AutomationRuntime {
             }
         }
         runTasks[scene.id] = task
+    }
+
+    func scene(id: UUID) -> AutomationScene? {
+        document.scenes.first { $0.id == id }
+    }
+
+    func executeScene(
+        _ scene: AutomationScene, origin: AutomationRunOrigin,
+        automationID: UUID? = nil
+    ) async throws -> AutomationRunRecord {
+        guard !activeSceneIDs.contains(scene.id) else {
+            throw AutomationExecutionError.alreadyRunning
+        }
+        let runID = try await executor.start(
+            scene: scene, automationID: automationID, origin: origin,
+            grantedPermissions: grantedPermissions())
+        activeRunIDs[scene.id] = runID
+        activeSceneIDs.insert(scene.id)
+        defer {
+            activeRunIDs[scene.id] = nil
+            activeSceneIDs.remove(scene.id)
+        }
+        guard let record = await executor.wait(for: runID) else {
+            throw AutomationExecutionError.alreadyRunning
+        }
+        history = (try? storage.history()) ?? history
+        if scene.notifiesOnCompletion { notify(record) }
+        return record
     }
 
     func runScene(

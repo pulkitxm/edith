@@ -36,6 +36,8 @@ final class MicMuteEngine: NSObject, FeatureModule {
     func toggle() { setMuted(!muted) }
 
     func syncSettings() {
+        let wanted = SharedDefaults.store.bool(forKey: "micMuted")
+        if wanted != muted { setMuted(wanted) }
         MicHotKey.register()
         updateStatusItemPresence()
     }

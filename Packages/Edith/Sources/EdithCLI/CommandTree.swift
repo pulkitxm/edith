@@ -272,6 +272,22 @@ public enum CommandTree {
                         arguments: [.localPath], destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
+                "focus", "Run focus profiles and Meeting Mode.",
+                children: [
+                    CommandNode(
+                        "ls", "List configured focus profiles.", aliases: ["list"], options: common),
+                    CommandNode("status", "Show the active focus session.", options: common),
+                    CommandNode(
+                        "start", "Start a focus profile.",
+                        options: ["--json", "--help", "--for", "--until"], arguments: [.free]),
+                    CommandNode(
+                        "stop", "End focus and restore the prior state.", aliases: ["end"],
+                        options: common),
+                    CommandNode(
+                        "history", "Show recent focus sessions.",
+                        options: ["--json", "--help", "--limit"]),
+                ]),
+            CommandNode(
                 "lid-awake", "Keep the Mac running with its lid closed.",
                 children: [
                     CommandNode("status", "Show the live state.", options: common),
@@ -517,6 +533,9 @@ public enum CommandTree {
                     CommandNode(
                         "ls", "List apps with a window open.", aliases: ["list"],
                         options: common),
+                    CommandNode(
+                        "open", "Open an installed app by bundle identifier.", options: common,
+                        arguments: [.free]),
                     CommandNode(
                         "quit", "Quit one app, or everything else.",
                         options: ["--json", "--help", "--all", "--force", "--yes"],

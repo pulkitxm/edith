@@ -1,3 +1,4 @@
+import AppKit
 import ArgumentParser
 import EdithKit
 import Foundation
@@ -10,8 +11,38 @@ struct AppsCommand: AsyncParsableCommand {
             Listing samples the process table and needs nothing. Quitting asks the Edith
             app to do it, waits for its result, and exits 4 when Edith is closed or silent.
             """,
-        subcommands: [AppsListCommand.self, AppsQuitCommand.self],
+        subcommands: [AppsListCommand.self, AppsOpenCommand.self, AppsQuitCommand.self],
         defaultSubcommand: AppsListCommand.self)
+}
+
+struct AppsOpenCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "open", abstract: "Open an installed app by bundle identifier.")
+
+    @Argument(help: "Application bundle identifier.") var bundleIdentifier: String
+    @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
+
+    func run() async throws {
+        try await execute {
+            guard
+                let url = NSWorkspace.shared.urlForApplication(
+                    withBundleIdentifier: bundleIdentifier)
+            else {
+                throw CLIFailure.notFound("no installed app has bundle id \(bundleIdentifier)")
+            }
+            let application = try await NSWorkspace.shared.openApplication(
+                at: url, configuration: NSWorkspace.OpenConfiguration())
+            if json {
+                CLIOut.json(
+                    .object([
+                        "bundleID": .string(bundleIdentifier), "opened": .bool(true),
+                        "pid": .int(Int(application.processIdentifier)),
+                    ]))
+            } else {
+                CLIOut.out("opened \(bundleIdentifier)")
+            }
+        }
+    }
 }
 
 enum AppsCLI {

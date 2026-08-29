@@ -5,19 +5,21 @@ import Testing
     @Test func appendsTabsMissingFromSavedOrder() {
         #expect(
             orderedTabIDs("usage,music,system")
-                == ["usage", "music", "system", "automations", "calendar"])
+                == ["usage", "music", "system", "focus", "automations", "calendar"])
     }
 
     @Test func preservesACustomOrder() {
         let order = "calendar,system,music,usage"
         #expect(
-            orderedTabIDs(order) == ["calendar", "system", "music", "usage", "automations"])
+            orderedTabIDs(order) == [
+                "calendar", "system", "music", "usage", "focus", "automations",
+            ])
     }
 
     @Test func dropsUnknownIDs() {
         #expect(
             orderedTabIDs("usage,bogus,music")
-                == ["usage", "music", "automations", "system", "calendar"])
+                == ["usage", "music", "focus", "automations", "system", "calendar"])
     }
 
     @Test func emptyStringYieldsAllTabsInDefaultOrder() {

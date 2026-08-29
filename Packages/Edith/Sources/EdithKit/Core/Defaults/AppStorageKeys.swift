@@ -5,6 +5,11 @@ public enum AppStorageKeys {
         public static let documentBackup = "automationsDocumentBackup"
     }
 
+    public enum Focus {
+        public static let documentBackup = "focusProfilesDocumentBackup"
+        public static let enabled = "focusProfilesEnabled"
+    }
+
     public enum Update {
         public static let automaticChecks = "SUEnableAutomaticChecks"
         public static let checkInterval = "SUScheduledCheckInterval"
