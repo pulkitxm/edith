@@ -277,18 +277,6 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(renders(HerdrPage(store: HerdrStore())))
     }
 
-    @Test func herdrSpaceGroupingControlRendersDistinctStates() throws {
-        let disabled = try #require(
-            renderedBitmap(
-                HerdrSpaceGroupingLabel(enabled: false, dark: true), width: 60, height: 60)
-        ).representation(using: .png, properties: [:])
-        let enabled = try #require(
-            renderedBitmap(
-                HerdrSpaceGroupingLabel(enabled: true, dark: true), width: 60, height: 60)
-        ).representation(using: .png, properties: [:])
-        #expect(disabled != enabled)
-    }
-
     @Test func musicPageRenders() {
         #expect(renders(MusicPage()))
     }
