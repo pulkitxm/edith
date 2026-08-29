@@ -870,22 +870,26 @@ private enum GitHubRepositoryRoutes {
     static func directory(
         host: GitHubHost, repository: GitHubRepositoryPath, revision: String, path: String
     ) -> GitHubRoute {
-        GitHubRoute(
+        let path = segments(path)
+        return GitHubRoute(
             host: host,
             resource: .content(
                 repository: repository, kind: .tree,
-                revisionPath: [revision] + segments(path), view: .automatic, lines: nil))
+                revisionPath: segments(revision) + path, view: .automatic, lines: nil),
+            resolvedContentPath: GitHubResolvedContentPath(revision: revision, path: path))
     }
 
     static func file(
         host: GitHubHost, repository: GitHubRepositoryPath, revision: String, path: String,
         kind: GitHubContentKind = .blob, lines: GitHubLineSelection? = nil
     ) -> GitHubRoute {
-        GitHubRoute(
+        let path = segments(path)
+        return GitHubRoute(
             host: host,
             resource: .content(
                 repository: repository, kind: kind,
-                revisionPath: [revision] + segments(path), view: .automatic, lines: lines))
+                revisionPath: segments(revision) + path, view: .automatic, lines: lines),
+            resolvedContentPath: GitHubResolvedContentPath(revision: revision, path: path))
     }
 
     static func entry(

@@ -377,10 +377,21 @@ private extension GitHubRoute {
 
     func sharesFilePayload(with other: GitHubRoute) -> Bool {
         guard host == other.host,
-            case let .content(repository, kind, revisionPath, _, _) = resource,
-            case let .content(otherRepository, otherKind, otherRevisionPath, _, _) = other.resource,
+            case let .content(repository, kind, _, _, _) = resource,
+            case let .content(otherRepository, otherKind, _, _, _) = other.resource,
             kind != .tree, otherKind != .tree
         else { return false }
-        return repository == otherRepository && revisionPath == otherRevisionPath
+        return repository == otherRepository && flattenedContentPath == other.flattenedContentPath
+    }
+
+    private var flattenedContentPath: [String] {
+        if let resolvedContentPath {
+            return resolvedContentPath.revision.split(separator: "/").map(String.init)
+                + resolvedContentPath.path
+        }
+        guard case let .content(_, _, revisionPath, _, _) = resource else { return [] }
+        return
+            revisionPath
+            .flatMap { $0.split(separator: "/", omittingEmptySubsequences: true).map(String.init) }
     }
 }

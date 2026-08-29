@@ -164,6 +164,45 @@ import Testing
         #expect(context.model.loadedRoute?.url.fragment == "L40-L44")
     }
 
+    @Test func resolvedSlashReferenceLineSelectionDoesNotRefetch() async throws {
+        let fixture = GitHubResourceFixture()
+        let unresolved = try #require(
+            GitHubRoute(
+                url: URL(
+                    string:
+                        "https://github.com/acme/orbit/blob/feature/navigation/Sources/Orbit.swift")!
+            ))
+        let context = try await modelContext(route: unresolved, fixture: fixture)
+        defer { try? FileManager.default.removeItem(at: context.root) }
+
+        await context.model.start()
+        await fixture.waitUntilStarted(1)
+        let snapshot = GitHubRepositoryResource.file(
+            GitHubFileSnapshot(
+                repository: GitHubRepositoryPath(owner: "acme", name: "orbit")!,
+                revision: "feature/navigation", path: "Sources/Orbit.swift", sha: "abc123",
+                size: 19, text: "let orbit = true\n", downloadURL: nil, presentation: .text))
+        await fixture.release(0, resource: snapshot)
+        await context.model.waitForResourceLoad()
+
+        let location = try #require(
+            GitHubResolvedContentPath(
+                revision: "feature/navigation", path: ["Sources", "Orbit.swift"]))
+        let selected = GitHubRoute(
+            host: .github,
+            resource: .content(
+                repository: GitHubRepositoryPath(owner: "acme", name: "orbit")!, kind: .blob,
+                revisionPath: ["feature", "navigation", "Sources", "Orbit.swift"],
+                view: .automatic, lines: .range(4...9)),
+            resolvedContentPath: location)
+        context.model.navigate(to: selected)
+        await Task.yield()
+
+        #expect(await fixture.requestCount() == 1)
+        #expect(context.model.resource == snapshot)
+        #expect(context.model.currentRoute?.url.fragment == "L4-L9")
+    }
+
     @Test func deinitializationCancelsAnActiveResourceLoad() async throws {
         let fixture = GitHubCancellationFixture()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
