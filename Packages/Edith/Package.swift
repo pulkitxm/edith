@@ -16,6 +16,7 @@ let dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.5"),
     .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.18.0"),
     .package(url: "https://github.com/apple/swift-argument-parser", from: "1.8.2"),
+    .package(url: "https://github.com/groue/GRDB.swift", from: "7.11.1"),
 ]
 
 let targets: [Target] = [
@@ -30,6 +31,7 @@ let targets: [Target] = [
     ),
     .target(
         name: "EdithDatabase",
+        dependencies: [.product(name: "GRDB", package: "GRDB.swift")],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
