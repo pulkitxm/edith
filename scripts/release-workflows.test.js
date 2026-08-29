@@ -198,7 +198,9 @@ test("macOS releases require notarization credentials", () => {
 });
 
 test("macOS releases require a Developer ID certificate", () => {
-  expect(releaseWorkflow).toContain("Developer ID Application certificate is required");
+  expect(releaseWorkflow).toContain(
+    "Developer ID Application certificate is required",
+  );
   expect(releaseWorkflow).toContain("EDITH_SIGN_IDENTITY=$SIGN_IDENTITY");
   expect(releaseWorkflow).not.toContain("EDITH_RELEASE_ALLOW_DEV_SIGNING");
 });
