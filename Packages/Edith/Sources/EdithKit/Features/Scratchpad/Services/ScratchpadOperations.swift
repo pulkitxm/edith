@@ -36,7 +36,9 @@ public enum ScratchpadOperation: String, CaseIterable, Sendable {
             ])
         case .rename:
             .userInterface([
-                UserInterfaceActionPlacement(surface: "Scratchpad panel", action: "Rename pad")
+                UserInterfaceActionPlacement(
+                    surface: "Scratchpad panel", action: "Rename pad",
+                    exampleArguments: ["Scratchpad 1", "Notes"])
             ])
         case .duplicate:
             .userInterface([
@@ -56,7 +58,9 @@ public enum ScratchpadOperation: String, CaseIterable, Sendable {
             ])
         case .export:
             .userInterface([
-                UserInterfaceActionPlacement(surface: "Scratchpad panel", action: "Export pad")
+                UserInterfaceActionPlacement(
+                    surface: "Scratchpad panel", action: "Export pad",
+                    exampleArguments: ["Scratchpad 1", "/tmp/scratchpad.md"])
             ])
         case .open:
             .userInterface([
