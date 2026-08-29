@@ -6,6 +6,7 @@ struct WorkspaceRestorerPanelView: View {
     @State private var name = ""
     @State private var status = ""
     @State private var running = false
+    @State private var preview: WorkspaceRestorePlan?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -17,7 +18,8 @@ struct WorkspaceRestorerPanelView: View {
             if library.profiles.isEmpty {
                 ContentUnavailableView(
                     "No workspace profiles", systemImage: "rectangle.3.group",
-                    description: Text("Capture this desktop to restore it later."))
+                    description: Text("Capture this desktop to restore it later.")
+                )
                 .frame(maxWidth: .infinity, minHeight: 180)
             } else {
                 ScrollView {
@@ -43,11 +45,34 @@ struct WorkspaceRestorerPanelView: View {
                                 .buttonStyle(.borderedProminent)
                             }
                             .padding(8)
-                            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+                            .background(
+                                .quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
                         }
                     }
                 }
                 .frame(maxHeight: 250)
+            }
+            if let preview {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Dry-run preview").font(.system(size: 11, weight: .semibold))
+                    ForEach(Array(preview.items.prefix(4))) { item in
+                        HStack(spacing: 6) {
+                            Text(item.applicationName).lineLimit(1)
+                            Spacer()
+                            Text(item.confidence.rawValue).foregroundStyle(.secondary)
+                            Text(item.disposition.rawValue)
+                            Text("\(item.sourceDisplayID) → \(item.targetDisplayID)")
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.system(size: 10))
+                    }
+                    if preview.items.count > 4 {
+                        Text("\(preview.items.count - 4) more windows")
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(8)
+                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
             }
             HStack {
                 if running {
@@ -79,10 +104,12 @@ struct WorkspaceRestorerPanelView: View {
                     WorkspaceRestorerResponse.self, from: notification.userInfo ?? [:])
             else { return }
             running = false
+            preview = response.plan
             if let profile = response.profile, response.run == nil {
                 status = "Captured \(profile.windows.count) windows"
             } else if let run = response.run {
-                status = run.dryRun
+                status =
+                    run.dryRun
                     ? "\(run.items.count) windows planned"
                     : "\(run.items.filter { $0.state == .restored }.count) restored"
             } else {
@@ -108,6 +135,7 @@ struct WorkspaceRestorerPanelView: View {
                     operation: operation, profile: profile, options: options))
         else { return }
         running = operation != .cancel
+        if operation != .preview { preview = nil }
         status = ""
         IPC.post(IPC.Name.requestWorkspaceRestorer, userInfo: payload)
     }

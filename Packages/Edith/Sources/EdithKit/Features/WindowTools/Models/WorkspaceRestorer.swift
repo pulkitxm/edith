@@ -380,7 +380,7 @@ public enum WorkspaceRestorerPlanner {
         let candidateTitle = candidate.title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !savedTitle.isEmpty, savedTitle == candidateTitle {
             score += 0.45
-        } else if !savedTitle.isEmpty,
+        } else if !savedTitle.isEmpty, !candidateTitle.isEmpty,
             candidateTitle.localizedCaseInsensitiveContains(savedTitle)
                 || savedTitle.localizedCaseInsensitiveContains(candidateTitle)
         {

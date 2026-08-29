@@ -93,6 +93,22 @@ struct WorkspaceRestorerTests {
         #expect(plan.items.filter { $0.confidence == .missing }.count == 1)
     }
 
+    @Test("untitled candidates do not inherit title confidence")
+    func emptyTitlesRemainLowConfidence() {
+        let profile = profile(
+            windows: [window(title: "Quarterly plan", order: 0, displayID: 10)])
+        let candidate = WorkspaceCandidateWindow(
+            token: "501:8", bundleIdentifier: "com.example.Editor", title: "",
+            role: "AXWindow", subrole: "AXStandardWindow",
+            frame: CGRect(x: 20, y: 20, width: 800, height: 600), displayID: 20, order: 3)
+
+        let plan = WorkspaceRestorerPlanner.plan(
+            profile: profile, candidates: [candidate], displays: profile.displays,
+            launchPolicy: .never)
+
+        #expect(plan.items[0].confidence == .low)
+    }
+
     @Test("missing applications follow launch policy")
     func launchMissingAppsPolicy() {
         let profile = profile(windows: [window(title: "Notes", order: 0, displayID: 10)])

@@ -26,7 +26,6 @@ final class WindowToolsEngine: FeatureModule {
     }
 
     private struct RuntimeWindow {
-        let application: NSRunningApplication
         let element: AXUIElement
         let candidate: WorkspaceCandidateWindow
     }
@@ -124,15 +123,19 @@ final class WindowToolsEngine: FeatureModule {
             respond(WorkspaceRestorerResponse(requestID: request.id, ok: true))
             return
         }
+        guard restoreTask == nil else {
+            respond(
+                WorkspaceRestorerResponse(
+                    requestID: request.id, ok: false,
+                    error: "Another workspace operation is still running."))
+            return
+        }
         guard AXIsProcessTrusted() else {
             respond(
                 WorkspaceRestorerResponse(
                     requestID: request.id, ok: false,
                     error: "Accessibility permission is required to manage workspace windows."))
             return
-        }
-        if request.operation == .restore || request.operation == .recover {
-            restoreTask?.cancel()
         }
         restoreTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -310,8 +313,10 @@ final class WindowToolsEngine: FeatureModule {
                 if plan.items.allSatisfy({ $0.confidence != .missing }) { break }
             }
         }
-        let runtime = Dictionary(
-            uniqueKeysWithValues: currentRuntimeWindows().map { ($0.candidate.token, $0) })
+        var runtime: [String: RuntimeWindow] = [:]
+        for window in currentRuntimeWindows() where runtime[window.candidate.token] == nil {
+            runtime[window.candidate.token] = window
+        }
         var results: [WorkspaceRestoreItemResult] = []
         for item in plan.items {
             if Task.isCancelled {
@@ -421,8 +426,7 @@ final class WindowToolsEngine: FeatureModule {
                     role: stringAttribute(window, kAXRoleAttribute as String) ?? "",
                     subrole: stringAttribute(window, kAXSubroleAttribute as String) ?? "",
                     frame: current, displayID: displayID, order: order)
-                runtime.append(
-                    RuntimeWindow(application: application, element: window, candidate: candidate))
+                runtime.append(RuntimeWindow(element: window, candidate: candidate))
                 order += 1
             }
         }

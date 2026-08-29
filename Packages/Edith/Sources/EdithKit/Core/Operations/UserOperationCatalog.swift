@@ -1115,11 +1115,18 @@ private extension WindowLayoutAction {
 
 private extension WorkspaceRestorerOperation {
     var interfaceExposure: UserOperationExposure {
-        .userInterface([
+        let exampleArguments: [String] =
+            switch self {
+            case .capture, .preview, .restore: ["Workspace"]
+            case .cancel, .recover: []
+            }
+        return .userInterface([
             UserInterfaceActionPlacement(
-                surface: "Workspace Restorer settings", action: title.lowercased()),
+                surface: "Workspace Restorer settings", action: title.lowercased(),
+                exampleArguments: exampleArguments),
             UserInterfaceActionPlacement(
-                surface: "Command Bar", action: title.lowercased()),
+                surface: "Command Bar", action: title.lowercased(),
+                exampleArguments: exampleArguments),
         ])
     }
 }
