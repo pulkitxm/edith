@@ -117,8 +117,8 @@ fi
 
 CONFIG=Debug
 [ "$RELEASE" = 1 ] && CONFIG=Release
-XCODE_BUILD_SETTINGS=()
-[ "$RELEASE" = 1 ] && XCODE_BUILD_SETTINGS+=(SWIFT_OPTIMIZATION_LEVEL=-Osize)
+XCODE_BUILD_SETTING=""
+[ "$RELEASE" = 1 ] && XCODE_BUILD_SETTING=SWIFT_OPTIMIZATION_LEVEL=-Osize
 
 TEAM_ID=""
 [ "$SIGN_IDENTITY" = "-" ] || TEAM_ID="$(team_id_for "$SIGN_IDENTITY" || true)"
@@ -134,7 +134,7 @@ xcodebuild -project edth.xcodeproj -scheme EdithMain -configuration "$CONFIG" \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="$SIGN_IDENTITY" \
   DEVELOPMENT_TEAM="$TEAM_ID" \
-  "${XCODE_BUILD_SETTINGS[@]}" \
+  ${XCODE_BUILD_SETTING:+"$XCODE_BUILD_SETTING"} \
   build
 
 BUILT="$DERIVED/Build/Products/$CONFIG/Edith.app"

@@ -127,7 +127,7 @@ test("release builds and publishes the macOS assets", () => {
   expect(dmgJob).toContain("name: Enforce the release size budget");
   expect(dmgJob).toContain('test "$DMG_BYTES" -le 21000000');
   expect(buildScript).toContain(
-    '[ "$RELEASE" = 1 ] && XCODE_BUILD_SETTINGS+=(SWIFT_OPTIMIZATION_LEVEL=-Osize)',
+    '[ "$RELEASE" = 1 ] && XCODE_BUILD_SETTING=SWIFT_OPTIMIZATION_LEVEL=-Osize',
   );
   expect(makefile).toContain(
     "Release SWIFT_OPTIMIZATION_LEVEL must be -Osize",
