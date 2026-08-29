@@ -3,10 +3,28 @@ import Foundation
 public struct EmojiCatalog: Sendable {
     public let groups: [EmojiGroup]
     public let emoji: [Emoji]
+    private let emojiByGroup: [[Emoji]]
+    private let emojiByCharacter: [String: Emoji]
 
     public init(groups: [EmojiGroup], emoji: [Emoji]) {
         self.groups = groups
         self.emoji = emoji
+        var grouped = Array(repeating: [Emoji](), count: groups.count)
+        var byCharacter: [String: Emoji] = [:]
+        byCharacter.reserveCapacity(emoji.count)
+        for entry in emoji {
+            if grouped.indices.contains(entry.groupIndex) {
+                grouped[entry.groupIndex].append(entry)
+            }
+            if byCharacter[entry.character] == nil {
+                byCharacter[entry.character] = entry
+            }
+            for variant in entry.toneVariants where byCharacter[variant] == nil {
+                byCharacter[variant] = entry
+            }
+        }
+        emojiByGroup = grouped
+        emojiByCharacter = byCharacter
     }
 
     public static let resourceName = "emoji-catalog"
@@ -24,11 +42,11 @@ public struct EmojiCatalog: Sendable {
     }
 
     public func emoji(inGroup index: Int) -> [Emoji] {
-        emoji.filter { $0.groupIndex == index }
+        emojiByGroup.indices.contains(index) ? emojiByGroup[index] : []
     }
 
     public func emoji(matching character: String) -> Emoji? {
-        emoji.first { $0.character == character || $0.toneVariants.contains(character) }
+        emojiByCharacter[character]
     }
 
     public func filtered(by isRenderable: (String) -> Bool) -> EmojiCatalog {

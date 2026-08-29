@@ -6,18 +6,22 @@ public struct EmojiSearchIndex: Sendable {
         let name: String
         let words: [Substring]
         let terms: [String]
-        let catalogIndex: Int
     }
 
     private let entries: [Entry]
 
+    fileprivate struct Match: Sendable {
+        let catalogOrderIndices: [Int]
+        let rankedEmoji: [Emoji]
+    }
+
     public init(_ emoji: [Emoji]) {
-        entries = emoji.enumerated().map { index, emoji in
+        entries = emoji.map { emoji in
             let name = EmojiSearch.normalize(emoji.name)
             return Entry(
                 emoji: emoji, name: name,
                 words: name.split(whereSeparator: { !$0.isLetter && !$0.isNumber }),
-                terms: emoji.terms.map(EmojiSearch.normalize), catalogIndex: index)
+                terms: emoji.terms.map(EmojiSearch.normalize))
         }
     }
 
@@ -26,15 +30,39 @@ public struct EmojiSearchIndex: Sendable {
         guard !normalized.isEmpty else {
             return Array(entries.lazy.map(\.emoji).prefix(limit))
         }
-        return
-            entries
-            .compactMap { entry -> (Emoji, Int, Int)? in
-                guard let rank = score(entry, query: normalized) else { return nil }
-                return (entry.emoji, rank, entry.catalogIndex)
+        guard let match = match(query: normalized) else { return [] }
+        return Array(match.rankedEmoji.prefix(limit))
+    }
+
+    fileprivate func match(query: String, candidates: [Int]? = nil) -> Match? {
+        var catalogOrderIndices: [Int] = []
+        var rankedIndices = Array(repeating: [Int](), count: 7)
+        catalogOrderIndices.reserveCapacity(candidates?.count ?? entries.count)
+
+        func include(_ index: Int) {
+            guard let rank = score(entries[index], query: query) else { return }
+            catalogOrderIndices.append(index)
+            rankedIndices[rank].append(index)
+        }
+
+        if let candidates {
+            for (offset, index) in candidates.enumerated() {
+                if offset.isMultiple(of: 64), Task.isCancelled { return nil }
+                include(index)
             }
-            .sorted { ($0.1, $0.2) < ($1.1, $1.2) }
-            .prefix(limit)
-            .map(\.0)
+        } else {
+            for index in entries.indices {
+                if index.isMultiple(of: 64), Task.isCancelled { return nil }
+                include(index)
+            }
+        }
+
+        var rankedEmoji: [Emoji] = []
+        rankedEmoji.reserveCapacity(catalogOrderIndices.count)
+        for bucket in rankedIndices {
+            for index in bucket { rankedEmoji.append(entries[index].emoji) }
+        }
+        return Match(catalogOrderIndices: catalogOrderIndices, rankedEmoji: rankedEmoji)
     }
 
     private func score(_ entry: Entry, query: String) -> Int? {
@@ -46,6 +74,43 @@ public struct EmojiSearchIndex: Sendable {
         if entry.name.contains(query) { return 5 }
         if entry.terms.contains(where: { $0.contains(query) }) { return 6 }
         return nil
+    }
+}
+
+public actor EmojiSearchService {
+    private let indexTask: Task<EmojiSearchIndex, Never>
+    private var cachedQuery = ""
+    private var cachedCatalogOrderIndices: [Int] = []
+    private var cachedResults: [Emoji] = []
+
+    public init(_ emoji: [Emoji]) {
+        indexTask = Task.detached(priority: .userInitiated) { EmojiSearchIndex(emoji) }
+    }
+
+    deinit {
+        indexTask.cancel()
+    }
+
+    public func results(query: String, limit: Int = .max) async -> [Emoji] {
+        let normalized = EmojiSearch.normalize(query)
+        let index = await indexTask.value
+        guard !normalized.isEmpty else {
+            cachedQuery = ""
+            cachedCatalogOrderIndices = []
+            cachedResults = []
+            return index.results(query: normalized, limit: limit)
+        }
+        if normalized == cachedQuery {
+            return Array(cachedResults.prefix(limit))
+        }
+        let candidates =
+            !cachedQuery.isEmpty && normalized.hasPrefix(cachedQuery)
+            ? cachedCatalogOrderIndices : nil
+        guard let match = index.match(query: normalized, candidates: candidates) else { return [] }
+        cachedQuery = normalized
+        cachedCatalogOrderIndices = match.catalogOrderIndices
+        cachedResults = match.rankedEmoji
+        return Array(cachedResults.prefix(limit))
     }
 }
 

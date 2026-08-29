@@ -2,8 +2,8 @@ import EdithKit
 import Foundation
 import Observation
 
-struct EmojiPanelCell: Identifiable, Hashable {
-    struct ID: Hashable {
+struct EmojiPanelCell: Identifiable, Hashable, Sendable {
+    struct ID: Hashable, Sendable {
         let sectionID: String
         let emojiID: String
     }
@@ -12,8 +12,8 @@ struct EmojiPanelCell: Identifiable, Hashable {
     let emoji: Emoji
 }
 
-struct EmojiPanelRow: Identifiable, Hashable {
-    struct ID: Hashable {
+struct EmojiPanelRow: Identifiable, Hashable, Sendable {
+    struct ID: Hashable, Sendable {
         let sectionID: String
         let rowIndex: Int
     }
@@ -29,7 +29,7 @@ struct EmojiPanelRow: Identifiable, Hashable {
 final class EmojiPanelModel {
     typealias Search = @Sendable (String) async -> [Emoji]
 
-    static let rowsPerPage = 8
+    static let rowsPerPage = 16
     static let pageSize = rowsPerPage * EmojiPanelView.columns
 
     private(set) var query = ""
@@ -41,6 +41,7 @@ final class EmojiPanelModel {
     private let catalog: EmojiCatalog
     private let search: Search
     @ObservationIgnored private var baseSections: [EmojiSection] = []
+    @ObservationIgnored private var baseProjection = Projection()
     @ObservationIgnored private var cells: [EmojiPanelCell] = []
     @ObservationIgnored private var cellIndexByID: [EmojiPanelCell.ID: Int] = [:]
     @ObservationIgnored private var cellPositionByID: [EmojiPanelCell.ID: CellPosition] = [:]
@@ -52,15 +53,14 @@ final class EmojiPanelModel {
 
     init(catalog: EmojiCatalog, frequent: [Emoji], search: Search? = nil) {
         self.catalog = catalog
-        let index = EmojiSearchIndex(catalog.emoji)
+        let searchService = EmojiSearchService(catalog.emoji)
         self.search =
             search ?? { query in
-                await Task.detached(priority: .userInitiated) {
-                    index.results(query: query)
-                }.value
+                await searchService.results(query: query)
             }
         baseSections = Self.baseSections(catalog: catalog, frequent: frequent)
-        publish(baseSections, resetSelection: true)
+        baseProjection = Self.projection(for: baseSections)
+        apply(baseProjection, resetSelection: true)
     }
 
     var selected: Emoji? {
@@ -81,7 +81,7 @@ final class EmojiPanelModel {
         guard !normalized.isEmpty else {
             isSearching = false
             searchTask = nil
-            publish(baseSections, resetSelection: true)
+            apply(baseProjection, resetSelection: true)
             return
         }
         isSearching = true
@@ -95,17 +95,24 @@ final class EmojiPanelModel {
     }
 
     func updateFrequent(_ frequent: [Emoji]) {
-        baseSections = Self.baseSections(catalog: catalog, frequent: frequent)
+        let updated = Self.baseSections(catalog: catalog, frequent: frequent)
+        guard updated != baseSections else { return }
+        baseSections = updated
+        baseProjection = Self.projection(for: updated)
         if EmojiSearch.normalize(query).isEmpty {
-            publish(baseSections, resetSelection: false)
+            apply(baseProjection, resetSelection: false)
         }
     }
 
     func reset(frequent: [Emoji]) {
         cancelSearch()
         query = ""
-        baseSections = Self.baseSections(catalog: catalog, frequent: frequent)
-        publish(baseSections, resetSelection: true)
+        let updated = Self.baseSections(catalog: catalog, frequent: frequent)
+        if updated != baseSections {
+            baseSections = updated
+            baseProjection = Self.projection(for: updated)
+        }
+        apply(baseProjection, resetSelection: true)
     }
 
     func cancelSearch() {
@@ -204,31 +211,19 @@ final class EmojiPanelModel {
             ]
         isSearching = false
         searchTask = nil
-        publish(resultSections, resetSelection: true)
+        apply(Self.projection(for: resultSections), resetSelection: true)
     }
 
-    private func publish(_ newSections: [EmojiSection], resetSelection: Bool) {
+    private func apply(_ projection: Projection, resetSelection: Bool) {
         let previousSelection = selectedID
-        sections = newSections
-        cells = []
-        cellIndexByID = [:]
-        cellPositionByID = [:]
-        sectionIndexByID = [:]
-        sectionOffsetByID = [:]
-        for (sectionIndex, section) in newSections.enumerated() {
-            sectionIndexByID[section.id] = sectionIndex
-            sectionOffsetByID[section.id] = cells.count
-            for (itemIndex, emoji) in section.emoji.enumerated() {
-                let id = EmojiPanelCell.ID(sectionID: section.id, emojiID: emoji.id)
-                let globalIndex = cells.count
-                cells.append(EmojiPanelCell(id: id, emoji: emoji))
-                cellIndexByID[id] = globalIndex
-                cellPositionByID[id] = CellPosition(
-                    sectionIndex: sectionIndex, itemIndex: itemIndex)
-            }
-        }
+        sections = projection.sections
+        cells = projection.cells
+        cellIndexByID = projection.cellIndexByID
+        cellPositionByID = projection.cellPositionByID
+        sectionIndexByID = projection.sectionIndexByID
+        sectionOffsetByID = projection.sectionOffsetByID
         renderedCounts = Dictionary(
-            uniqueKeysWithValues: newSections.enumerated().map { index, section in
+            uniqueKeysWithValues: sections.enumerated().map { index, section in
                 let initial = index == 0 ? Self.pageSize : EmojiPanelView.columns
                 return (section.id, min(section.emoji.count, initial))
             })
@@ -239,6 +234,29 @@ final class EmojiPanelModel {
             selectedID = previousSelection
         }
         if let selectedID { ensureRendered(selectedID) } else { syncRenderedSections() }
+    }
+
+    private static func projection(for sections: [EmojiSection]) -> Projection {
+        var projection = Projection(sections: sections)
+        let cellCount = sections.reduce(0) { $0 + $1.emoji.count }
+        projection.cells.reserveCapacity(cellCount)
+        projection.cellIndexByID.reserveCapacity(cellCount)
+        projection.cellPositionByID.reserveCapacity(cellCount)
+        projection.sectionIndexByID.reserveCapacity(sections.count)
+        projection.sectionOffsetByID.reserveCapacity(sections.count)
+        for (sectionIndex, section) in sections.enumerated() {
+            projection.sectionIndexByID[section.id] = sectionIndex
+            projection.sectionOffsetByID[section.id] = projection.cells.count
+            for (itemIndex, emoji) in section.emoji.enumerated() {
+                let id = EmojiPanelCell.ID(sectionID: section.id, emojiID: emoji.id)
+                let globalIndex = projection.cells.count
+                projection.cells.append(EmojiPanelCell(id: id, emoji: emoji))
+                projection.cellIndexByID[id] = globalIndex
+                projection.cellPositionByID[id] = CellPosition(
+                    sectionIndex: sectionIndex, itemIndex: itemIndex)
+            }
+        }
+        return projection
     }
 
     private func ensureRendered(_ cellID: EmojiPanelCell.ID) {
@@ -266,7 +284,16 @@ final class EmojiPanelModel {
         }
     }
 
-    private struct CellPosition {
+    private struct Projection {
+        var sections: [EmojiSection] = []
+        var cells: [EmojiPanelCell] = []
+        var cellIndexByID: [EmojiPanelCell.ID: Int] = [:]
+        var cellPositionByID: [EmojiPanelCell.ID: CellPosition] = [:]
+        var sectionIndexByID: [String: Int] = [:]
+        var sectionOffsetByID: [String: Int] = [:]
+    }
+
+    private struct CellPosition: Sendable {
         let sectionIndex: Int
         let itemIndex: Int
     }
