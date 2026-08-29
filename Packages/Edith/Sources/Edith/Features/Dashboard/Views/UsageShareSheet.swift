@@ -12,6 +12,7 @@ struct UsageShareSheet: View {
     @State private var index = 0
     @State private var direction = 1
     @State private var previews: [UsageShareCard: NSImage] = [:]
+    @State private var copied = false
     @State private var status: UsageShareActionStatus?
     @State private var statusID = UUID()
 
@@ -113,7 +114,8 @@ struct UsageShareSheet: View {
             Button(action: copyImage) {
                 HStack(spacing: 8) {
                     Text("Copy image")
-                    Image(systemName: "doc.on.doc")
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .contentTransition(.symbolEffect(.replace))
                 }
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(actionForeground)
@@ -177,6 +179,7 @@ struct UsageShareSheet: View {
         direction = wantedDirection ?? (destination > index ? 1 : -1)
         withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
             index = destination
+            copied = false
             status = nil
         }
     }
@@ -195,6 +198,9 @@ struct UsageShareSheet: View {
         do {
             let data = try UsageShareRenderer.pngData(snapshot: snapshot, card: card, scale: 2)
             try UsageShareDelivery.copy(data)
+            withAnimation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion)) {
+                copied = true
+            }
             showStatus("Image copied", systemImage: "checkmark.circle.fill")
         } catch {
             showStatus(error.localizedDescription, systemImage: "exclamationmark.triangle.fill", error: true)
@@ -236,6 +242,7 @@ struct UsageShareSheet: View {
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             guard statusID == identifier else { return }
             withAnimation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion)) {
+                copied = false
                 status = nil
             }
         }
@@ -268,7 +275,6 @@ private struct ShareCarouselArrow: View {
 private struct SharePressedButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
             .opacity(configuration.isPressed ? 0.78 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }

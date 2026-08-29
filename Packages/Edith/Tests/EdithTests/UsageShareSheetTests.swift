@@ -40,6 +40,8 @@ import Testing
         #expect(source.contains(".onKeyPress(.rightArrow)"))
         #expect(source.contains(".keyboardShortcut(\"c\", modifiers: .command)"))
         #expect(source.contains(".keyboardShortcut(\"s\", modifiers: .command)"))
+        #expect(source.contains("copied ? \"checkmark\" : \"doc.on.doc\""))
+        #expect(!source.contains(".scaleEffect(configuration.isPressed"))
         #expect(!source.contains("Twitter"))
         #expect(!source.contains("LinkedIn"))
     }
