@@ -50,7 +50,8 @@ public enum ConfigCatalog {
         "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
         "calendar",
         "clipboard",
-        "notch", "focusdim", "windowtools", "presenter", "colorpicker", "micmute",
+        "notch", "focusdim", "windowtools", "workspacerestorer", "presenter", "colorpicker",
+        "micmute",
         "backup", "permissions", "terminal",
     ]
 
