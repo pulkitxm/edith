@@ -36,6 +36,7 @@ public enum Guide {
         ed extensions ls            every extension and whether it is on
         ed lid-awake status          closed-lid state, session, battery and helper
         ed permissions ls           every macOS permission Edith uses
+        ed network diagnose --json  a redacted, read-only connectivity snapshot
         ed color pick               open Edith's system colour sampler
         ed color copy 1 --format hex
         ed emoji pick               open Edith's emoji picker

@@ -133,6 +133,13 @@ public enum ExtensionRegistry {
             defaultsKey: "tabSystemEnabled", requiredCapabilities: [.runningApplications],
             optionalCapabilities: [.preventSleep, .inputSuppression]),
         ExtensionRegistryEntry(
+            id: "networkDiagnostics", title: "Network Diagnostics",
+            subtitle: "Explain local connectivity, latency, DNS, routes, proxies, and services.",
+            symbolName: "network", group: .system, featured: true,
+            defaultsKey: "tabNetworkDiagnosticsEnabled",
+            requiredCapabilities: [.networkDiagnostics],
+            optionalCapabilities: [.notifications]),
+        ExtensionRegistryEntry(
             id: "machines", title: "Machines",
             subtitle: "Your other computers over SSH: stats, files, Docker, and a terminal.",
             symbolName: "server.rack", group: .system, featured: true,

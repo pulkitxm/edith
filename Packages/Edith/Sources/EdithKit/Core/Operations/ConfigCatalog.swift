@@ -47,8 +47,8 @@ public enum ConfigCatalog {
     public static let groups = [
         "appearance", "panel", "attention", "usage", "limits", "menubar", "alerts", "budget",
         "dashboard",
-        "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
-        "calendar",
+        "machines", "herdr", "quinjet", "companion", "finder", "system", "network", "cleaner",
+        "music", "calendar",
         "clipboard",
         "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
         "backup", "permissions", "terminal",
@@ -467,6 +467,10 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Tabs.systemEnabled, .bool, group: "system",
             summary: "System extension: running apps, prevent sleep and the cleaning lock.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Tabs.networkDiagnosticsEnabled, .bool, group: "network",
+            summary: "Network Diagnostics extension: read-only connectivity checks.",
             fallback: .bool(false)),
         SettingDefinition(
             AppStorageKeys.General.preventSleep, .bool, group: "system",

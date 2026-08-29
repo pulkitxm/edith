@@ -594,6 +594,9 @@ let allTabs: [TabInfo] = [
         id: "system", title: "System",
         subtitle: "prevent sleep, keyboard cleaning", enabledKey: AppStorageKeys.Tabs.systemEnabled),
     TabInfo(
+        id: "network", title: "Network",
+        subtitle: "diagnostic snapshots", enabledKey: AppStorageKeys.Tabs.networkDiagnosticsEnabled),
+    TabInfo(
         id: "calendar", title: "Calendar",
         subtitle: "today's schedule", enabledKey: AppStorageKeys.Tabs.calendarEnabled),
 ]
@@ -624,6 +627,8 @@ struct RootView: View {
         var musicEnabled = false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
         var systemEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.networkDiagnosticsEnabled, store: SharedDefaults.store) private
+        var networkDiagnosticsEnabled = false
     @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
         var calendarEnabled =
         false
@@ -649,6 +654,7 @@ struct RootView: View {
                 case "usage": usageEnabled
                 case "music": musicEnabled
                 case "system": systemEnabled
+                case "network": networkDiagnosticsEnabled
                 case "calendar": calendarEnabled
                 default: false
                 }
@@ -795,6 +801,7 @@ struct RootView: View {
         .onChange(of: usageEnabled) { pinTab() }
         .onChange(of: musicEnabled) { pinTab() }
         .onChange(of: systemEnabled) { pinTab() }
+        .onChange(of: networkDiagnosticsEnabled) { pinTab() }
         .onChange(of: calendarEnabled) { pinTab() }
         .padding(14)
         .frame(width: 480)
@@ -810,6 +817,12 @@ struct RootView: View {
             MusicView(player: player)
         } else if tab == "system", let system = services.system {
             SystemView().environment(system)
+        } else if tab == "network" {
+            NetworkDiagnosticsPanel {
+                mainWindowSection = "network"
+                MainApp.openDashboard()
+                dismissPanel()
+            }
         } else if tab == "calendar", let calendar = services.calendar {
             CalendarView().environment(calendar)
         } else if enabledTabs.isEmpty {

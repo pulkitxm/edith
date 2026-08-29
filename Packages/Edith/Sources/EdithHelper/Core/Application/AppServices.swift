@@ -19,6 +19,7 @@ final class AppServices {
     private(set) var lidAwake: LidAwakeEngine?
     private(set) var systemStats: SystemStatsStatusItem?
     private(set) var attention: AttentionTrackingService?
+    private(set) var networkDiagnostics: NetworkDiagnosticsBackgroundSampler?
     private let startup = StartupCoordinator()
     private let lidAwakeRestorationGate = LidAwakeRestorationGate()
     private let lidAwakeOrphanRestorer: @MainActor @Sendable () async -> LidAwakeOutcome
@@ -102,6 +103,8 @@ final class AppServices {
         startup.cancel()
         terminating = true
         shutDownEmojiRuntime()
+        networkDiagnostics?.shutdown()
+        networkDiagnostics = nil
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
@@ -249,6 +252,16 @@ final class AppServices {
         if !calendarOn, let store = calendar {
             store.shutdown()
             calendar = nil
+        }
+
+        let networkOn = Self.extensionEnabled(AppStorageKeys.Tabs.networkDiagnosticsEnabled)
+        if networkOn, networkDiagnostics == nil {
+            networkDiagnostics = NetworkDiagnosticsBackgroundSampler()
+        }
+        if networkOn { networkDiagnostics?.sync() }
+        if !networkOn, let sampler = networkDiagnostics {
+            sampler.shutdown()
+            networkDiagnostics = nil
         }
     }
 
