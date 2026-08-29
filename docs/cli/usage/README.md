@@ -34,6 +34,7 @@ closed.
 | `ed usage projects copy-link` | Copy a repository link from the drilldown |
 | `ed usage projects copy-chat` | Copy a chat identifier from the drilldown |
 | `ed usage sources` | The agents that produced the history, with their ids |
+| `ed usage export` | Branded activity and milestone cards as PNG images |
 | `ed usage machines` | Runs `ed usage machines ls`, the default subcommand |
 | `ed usage machines ls` | Every configured machine, whether it is counted, and what it adds up to |
 | `ed usage machines collect` | Runs the collector on a machine over SSH and brings its numbers back |
@@ -55,6 +56,7 @@ closed.
 - [`ed usage projects copy-link`](./projects-copy-link.md)
 - [`ed usage projects copy-chat`](./projects-copy-chat.md)
 - [`ed usage sources`](./sources.md)
+- [`ed usage export`](./export.md)
 - [`ed usage machines`](./machines.md)
 - [`ed usage refresh`](./refresh.md)
 

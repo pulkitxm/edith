@@ -232,6 +232,7 @@ public enum CompletionEngine {
         case .shell: return ["zsh", "bash", "fish"]
         case .group: return ConfigCatalog.groups
         case .usageRange: return UsageRange.allCases.map(\.rawValue)
+        case .usageShareCard: return UsageShareCard.allCases.map(\.rawValue) + ["all"]
         case .attentionRange:
             return ["today", "yesterday", "24h", "7d", "30d", "week", "month", "all"]
         case .attentionCategory: return AttentionSettings.defaultCategories.map(\.id)

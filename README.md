@@ -38,6 +38,7 @@ Edith requires macOS 14 or later on Apple Silicon.
 - **Alerts** - threshold, ahead-of-pace, burning-hot, back-to-green and pre-reset notifications, all optional.
 - **Dashboard** - KPIs with per-day, model, source, project and hourly charts, plus a sortable model table.
 - **Activity heatmap** - GitHub-style daily spend calendar across your full history.
+- **Share cards** - export polished activity, token, and milestone images from the dashboard or CLI, branded with the Edith repository link.
 - **Project drilldown** - spend by project, worktree and chat, across every collected agent.
 - **Fleet usage** - the same collector runs on your SSH machines and folds their agents in as their own sources, so the totals cover every box you code on.
 
@@ -86,6 +87,7 @@ does. `edith` is the same binary under its full name.
 ed config set preventSleep true     every setting the UI exposes, applied live
 ed lid-awake on --for 30m           keep running with the lid shut for 30 minutes
 ed usage limits --json              the same numbers the rings show
+ed usage export --card activity     export a branded usage card as a PNG
 ed machines ls                      the computers Edith can reach over SSH
 ed tuf docker ps                    run anything on one of them
 ```

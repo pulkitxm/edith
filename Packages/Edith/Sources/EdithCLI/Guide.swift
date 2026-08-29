@@ -40,6 +40,7 @@ public enum Guide {
         ed color copy 1 --format hex
         ed emoji pick               open Edith's emoji picker
         ed usage sources            the agents that produced your usage history
+        ed usage export             branded PNG cards for sharing your activity
         ed schema                   JSON Schema for the config document
         ed version                  the CLI version, and whether the app is up
         ed status                   command-line links and shell completions
@@ -296,6 +297,7 @@ public enum Guide {
         ed usage projects copy-link edith
         ed usage projects copy-chat <chat-id>
         ed usage sources
+        ed usage export --card activity --output ./shares
         ed usage machines               machines counted with this Mac
         ed usage machines collect tuf   run the collector there, bring it back
         ed usage refresh                re-collect from every agent, live progress

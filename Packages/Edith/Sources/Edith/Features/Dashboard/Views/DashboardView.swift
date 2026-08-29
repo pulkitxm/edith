@@ -23,6 +23,7 @@ struct DashboardView: View {
     @State private var sourcePickerOpen = false
     @State private var modelPickerOpen = false
     @State private var machinePickerOpen = false
+    @State private var showShare = false
     @State private var customFrom = Date()
     @State private var customTo = Date()
 
@@ -34,46 +35,53 @@ struct DashboardView: View {
     private var blurUsage: Bool { presenterState.active && presenterBlurUsage }
 
     var body: some View {
-        GeometryReader { geo in
-            let compact = geo.size.width < UIScale.pt(640)
-            VStack(spacing: UIScale.pt(0)) {
-                masthead
-                if model.loaded {
-                    controlsBar
-                }
-                ScrollView {
-                    VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                        if showLog {
-                            logView.pageGutter(compact)
-                        }
-                        if model.loaded {
-                            kpiGrid.pageGutter(compact)
-                            LazyVStack(spacing: UIScale.pt(16)) {
-                                activityRow(compact: compact)
-                                LimitsCardView(theme: acc, dark: dark)
-                                BudgetCardView(theme: acc, dark: dark)
-                                charts(compact: compact)
-                            }
-                            .pageContent(compact)
-                        } else if !model.loadAttempted {
-                            ProgressView("Loading usage data…")
-                                .controlSize(.small)
-                                .frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
-                        } else {
-                            ContentUnavailableView(
-                                "No usage data yet", systemImage: "chart.bar",
-                                description: Text("Hit reload to run the bundled collector.")
-                            )
-                            .frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
-                        }
+        ZStack {
+            GeometryReader { geo in
+                let compact = geo.size.width < UIScale.pt(640)
+                VStack(spacing: UIScale.pt(0)) {
+                    masthead
+                    if model.loaded {
+                        controlsBar
                     }
-                    .padding(.top, UIScale.pt(16))
-                    .frame(maxWidth: .infinity)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                            if showLog {
+                                logView.pageGutter(compact)
+                            }
+                            if model.loaded {
+                                kpiGrid.pageGutter(compact)
+                                LazyVStack(spacing: UIScale.pt(16)) {
+                                    activityRow(compact: compact)
+                                    LimitsCardView(theme: acc, dark: dark)
+                                    BudgetCardView(theme: acc, dark: dark)
+                                    charts(compact: compact)
+                                }
+                                .pageContent(compact)
+                            } else if !model.loadAttempted {
+                                ProgressView("Loading usage data…")
+                                    .controlSize(.small)
+                                    .frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
+                            } else {
+                                ContentUnavailableView(
+                                    "No usage data yet", systemImage: "chart.bar",
+                                    description: Text("Hit reload to run the bundled collector.")
+                                )
+                                .frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
+                            }
+                        }
+                        .padding(.top, UIScale.pt(16))
+                        .frame(maxWidth: .infinity)
+                    }
                 }
+                .background(background)
+                .environment(\.compactLayout, compact)
             }
-            .background(background)
-            .environment(\.compactLayout, compact)
+            if showShare {
+                shareOverlay
+                    .zIndex(10)
+            }
         }
+        .animation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: showShare)
         .navigationTitle("Agent Usage")
         .task(id: refresh.updating) {
             guard automaticActionsEnabled else { return }
@@ -94,6 +102,30 @@ struct DashboardView: View {
         }
         .onChange(of: showLog) { _, shown in
             refresh.setLogVisible(shown)
+        }
+    }
+
+    private var shareOverlay: some View {
+        ZStack {
+            Button(action: closeShare) {
+                Color.black.opacity(dark ? 0.66 : 0.3)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.edith(.borderless))
+            .transition(.opacity)
+            UsageShareSheet(snapshot: shareSnapshot, onDismiss: closeShare)
+                .shadow(color: .black.opacity(0.34), radius: 40, y: 18)
+                .transition(
+                    Motion.transition(
+                        .move(edge: .top).combined(with: .opacity), reduceMotion: reduceMotion,
+                        preferCrossFade: false))
+        }
+    }
+
+    private func closeShare() {
+        withAnimation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion)) {
+            showShare = false
         }
     }
 
@@ -147,7 +179,31 @@ struct DashboardView: View {
                 helperText: "Show collector log",
                 tint: showLog ? appTheme : DashSkin.inkFaint(dark)
             )
+            if model.loaded {
+                OrbitingShareButton(
+                    action: {
+                        withAnimation(
+                            Motion.animation(Motion.feedback, reduceMotion: reduceMotion)
+                        ) {
+                            showShare = true
+                        }
+                    },
+                    dark: dark)
+            }
         }
+    }
+
+    private var shareSnapshot: UsageShareSnapshot {
+        let details = model.heatDetail.sorted { $0.key < $1.key }
+        let agents = Set(details.flatMap { $0.value.sources.map(\.id) })
+        let repositories = Set(
+            details.flatMap { $0.value.projects.map(\.id) }.filter { $0 != "unattributed" })
+        return UsageShareSnapshot(
+            days: details.map { period, detail in
+                UsageShareDay(period: period, tokens: detail.tokens, cost: detail.cost)
+            },
+            agentCount: agents.count, repositoryCount: repositories.count,
+            generatedAt: model.meta.updated)
     }
 
     private struct MastheadButton: View {
@@ -173,6 +229,62 @@ struct DashboardView: View {
             .buttonStyle(.edith(.toolbar))
             .disabled(isLoading)
             .help(helperText)
+        }
+    }
+
+    private struct OrbitingShareButton: View {
+        let action: () -> Void
+        let dark: Bool
+
+        @State private var hovering = false
+        @State private var rotation = 0.0
+
+        private var ink: Color { DashSkin.ink(dark) }
+
+        var body: some View {
+            Button(action: action) {
+                ZStack {
+                    Circle()
+                        .fill(ink.opacity(hovering ? 0.11 : 0.065))
+                    Circle()
+                        .strokeBorder(ink.opacity(0.14), lineWidth: 1)
+                    CircularShareText(color: ink.opacity(0.72))
+                        .rotationEffect(.degrees(rotation))
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: UIScale.pt(13), weight: .semibold))
+                        .foregroundStyle(ink)
+                }
+                .frame(width: UIScale.pt(50), height: UIScale.pt(50))
+                .scaleEffect(hovering ? 1.07 : 1)
+                .animation(.easeOut(duration: 0.18), value: hovering)
+            }
+            .buttonStyle(.edith(.borderless))
+            .onAppear {
+                rotation = 0
+                withAnimation(.linear(duration: 14).repeatForever(autoreverses: false)) {
+                    rotation = 360
+                }
+            }
+            .onHover { hovering = $0 }
+            .help("Share usage cards")
+            .accessibilityLabel("Share usage cards")
+        }
+    }
+
+    private struct CircularShareText: View {
+        let color: Color
+        private let letters = Array("SHARE • SHARE • ")
+
+        var body: some View {
+            ZStack {
+                ForEach(Array(letters.enumerated()), id: \.offset) { index, letter in
+                    Text(String(letter))
+                        .font(.system(size: UIScale.pt(5.4), weight: .bold, design: .rounded))
+                        .foregroundStyle(color)
+                        .offset(y: UIScale.pt(-19))
+                        .rotationEffect(.degrees(Double(index) * 360 / Double(letters.count)))
+                }
+            }
         }
     }
 
