@@ -585,6 +585,9 @@ struct TabInfo {
 
 let allTabs: [TabInfo] = [
     TabInfo(
+        id: "automations", title: "Scenes",
+        subtitle: "local automations", enabledKey: AppStorageKeys.Tabs.automationsEnabled),
+    TabInfo(
         id: "usage", title: "Agent Usage",
         subtitle: "limit polling, usage stats", enabledKey: AppStorageKeys.Tabs.usageEnabled),
     TabInfo(
@@ -627,6 +630,8 @@ struct RootView: View {
     @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
         var calendarEnabled =
         false
+    @AppStorage(AppStorageKeys.Tabs.automationsEnabled, store: SharedDefaults.store) private
+        var automationsEnabled = false
     @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var focusDimEnabled =
         false
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
@@ -646,6 +651,7 @@ struct RootView: View {
             guard let info = allTabs.first(where: { $0.id == id }) else { return nil }
             let on =
                 switch id {
+                case "automations": automationsEnabled
                 case "usage": usageEnabled
                 case "music": musicEnabled
                 case "system": systemEnabled
@@ -796,6 +802,7 @@ struct RootView: View {
         .onChange(of: musicEnabled) { pinTab() }
         .onChange(of: systemEnabled) { pinTab() }
         .onChange(of: calendarEnabled) { pinTab() }
+        .onChange(of: automationsEnabled) { pinTab() }
         .padding(14)
         .frame(width: 480)
         .background(PanelBackground())
@@ -806,6 +813,8 @@ struct RootView: View {
     private var tabBody: some View {
         if tab == "usage", let store = services.usage {
             UsageView(store: store)
+        } else if tab == "automations", let runtime = services.automations {
+            AutomationView(runtime: runtime)
         } else if tab == "music", let player = services.music {
             MusicView(player: player)
         } else if tab == "system", let system = services.system {
