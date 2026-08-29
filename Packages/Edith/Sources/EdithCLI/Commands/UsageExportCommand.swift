@@ -33,8 +33,10 @@ struct UsageExportCommand: AsyncParsableCommand {
                     hint: "choose a wider range or run `ed usage refresh`")
             }
             let plan = try UsageShareExport.plan(
-                cards: selected, output: output, workingDirectory: URL(fileURLWithPath: FileManager
-                    .default.currentDirectoryPath, isDirectory: true))
+                cards: selected, output: output,
+                workingDirectory: URL(
+                    fileURLWithPath: FileManager
+                        .default.currentDirectoryPath, isDirectory: true))
             let files = try await UsageShareExport.write(snapshot: snapshot, plan: plan)
             guard !json else {
                 CLIOut.json(
@@ -99,9 +101,10 @@ enum UsageShareExport {
         now: Date = Date()
     ) throws -> UsageShareExportPlan {
         let resolved = output.map { NSString(string: $0).expandingTildeInPath }
-        let target = resolved.map { path in
-            URL(fileURLWithPath: path, relativeTo: workingDirectory).standardizedFileURL
-        } ?? workingDirectory
+        let target =
+            resolved.map { path in
+                URL(fileURLWithPath: path, relativeTo: workingDirectory).standardizedFileURL
+            } ?? workingDirectory
         let explicitFile = target.pathExtension.lowercased() == "png" ? target : nil
         if explicitFile != nil, cards.count != 1 {
             throw CLIFailure.usage(
@@ -121,13 +124,15 @@ enum UsageShareExport {
             try FileManager.default.createDirectory(
                 at: plan.directory, withIntermediateDirectories: true)
         } catch {
-            throw CLIFailure("could not create \(plan.directory.path): \(error.localizedDescription)")
+            throw CLIFailure(
+                "could not create \(plan.directory.path): \(error.localizedDescription)")
         }
         var files: [URL] = []
         for card in plan.cards {
             let data = try await UsageShareRenderer.pngData(
                 snapshot: snapshot, card: card, scale: 2)
-            let file = plan.explicitFile
+            let file =
+                plan.explicitFile
                 ?? plan.directory.appendingPathComponent(
                     "\(card.filenameStem)-\(plan.stamp).png")
             do {

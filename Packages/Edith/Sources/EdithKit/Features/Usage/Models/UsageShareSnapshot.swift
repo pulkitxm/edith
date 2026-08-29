@@ -46,7 +46,8 @@ public struct UsageShareSnapshot: Equatable, Sendable {
         var current = 1
         for index in activeDates.indices.dropFirst() {
             let previous = activeDates[activeDates.index(before: index)]
-            let distance = calendar.dateComponents([.day], from: previous, to: activeDates[index]).day
+            let distance = calendar.dateComponents([.day], from: previous, to: activeDates[index])
+                .day
             if distance == 1 {
                 current += 1
                 longest = max(longest, current)
