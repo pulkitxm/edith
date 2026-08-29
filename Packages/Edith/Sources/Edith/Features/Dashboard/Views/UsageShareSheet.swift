@@ -41,6 +41,7 @@ struct UsageShareSheet: View {
         .padding(.vertical, 42)
         .frame(width: 820, height: 610)
         .background(sheetBackground)
+        .background(escapeShortcut)
         .overlay(alignment: .bottomTrailing) { statusToast }
         .task { await loadPreviews() }
         .onExitCommand { onDismiss() }
@@ -142,7 +143,14 @@ struct UsageShareSheet: View {
 
     private var sheetBackground: some View {
         modalBackground
-            .ignoresSafeArea()
+    }
+
+    private var escapeShortcut: some View {
+        Button("Close", action: onDismiss)
+            .keyboardShortcut(.escape, modifiers: [])
+            .frame(width: 0, height: 0)
+            .opacity(0)
+            .accessibilityHidden(true)
     }
 
     @ViewBuilder private var statusToast: some View {

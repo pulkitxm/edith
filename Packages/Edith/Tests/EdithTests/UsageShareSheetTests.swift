@@ -23,6 +23,7 @@ import Testing
         #expect(source.contains(".scaleEffect(hovering ? 1.07 : 1)"))
         #expect(source.contains("shareOverlay"))
         #expect(source.contains(".onTapGesture { closeShare() }"))
+        #expect(source.contains(".move(edge: .top).combined(with: .opacity)"))
         #expect(source.contains("UsageShareSheet(snapshot: shareSnapshot, onDismiss: closeShare)"))
         #expect(source.contains("model.heatDetail.sorted"))
     }
@@ -38,8 +39,13 @@ import Testing
         #expect(source.contains("ShareCarouselArrow"))
         #expect(source.contains("let onDismiss: () -> Void"))
         #expect(source.contains(".onExitCommand { onDismiss() }"))
+        #expect(source.contains(".keyboardShortcut(.escape, modifiers: [])"))
         #expect(source.contains("@Environment(\\.colorScheme)"))
         #expect(source.contains("private var modalBackground: Color"))
+        let sheetBackground =
+            "private var sheetBackground: some View {\n"
+            + "        modalBackground\n    }"
+        #expect(source.contains(sheetBackground))
         #expect(source.contains("UsageShareDelivery.copy(data)"))
         #expect(source.contains("NSSavePanel()"))
         #expect(source.contains("DragGesture"))

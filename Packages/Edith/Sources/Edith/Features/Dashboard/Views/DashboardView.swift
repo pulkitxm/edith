@@ -78,11 +78,10 @@ struct DashboardView: View {
             }
             if showShare {
                 shareOverlay
-                    .transition(.opacity)
                     .zIndex(10)
             }
         }
-        .animation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: showShare)
+        .animation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: showShare)
         .navigationTitle("Agent Usage")
         .task(id: refresh.updating) {
             guard automaticActionsEnabled else { return }
@@ -112,8 +111,13 @@ struct DashboardView: View {
                 .ignoresSafeArea()
                 .contentShape(Rectangle())
                 .onTapGesture { closeShare() }
+                .transition(.opacity)
             UsageShareSheet(snapshot: shareSnapshot, onDismiss: closeShare)
                 .shadow(color: .black.opacity(0.34), radius: 40, y: 18)
+                .transition(
+                    Motion.transition(
+                        .move(edge: .top).combined(with: .opacity), reduceMotion: reduceMotion,
+                        preferCrossFade: false))
         }
     }
 
