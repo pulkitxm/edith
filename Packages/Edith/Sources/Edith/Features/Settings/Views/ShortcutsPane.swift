@@ -10,6 +10,8 @@ struct ShortcutsSettingsPane: View {
     @AppStorage(AppStorageKeys.ColorPicker.enabled, store: SharedDefaults.store) private
         var colorPickerEnabled =
         false
+    @AppStorage(AppStorageKeys.Scratchpad.enabled, store: SharedDefaults.store) private
+        var scratchpadEnabled = false
     @AppStorage(AppStorageKeys.Emoji.enabled, store: SharedDefaults.store) private
         var emojiEnabled =
         false
@@ -23,7 +25,8 @@ struct ShortcutsSettingsPane: View {
 
     private var extensionShortcuts: [ExtensionShortcut] {
         ExtensionShortcutVisibility.visible(
-            clipboard: clipboardEnabled, emoji: emojiEnabled, micMute: micMuteEnabled,
+            clipboard: clipboardEnabled, scratchpad: scratchpadEnabled,
+            emoji: emojiEnabled, micMute: micMuteEnabled,
             focusDim: focusDimEnabled, presenter: presenterEnabled,
             colorPicker: colorPickerEnabled)
     }
@@ -107,6 +110,10 @@ struct ShortcutsSettingsPane: View {
             shortcutRow(
                 "Clipboard history", subtitle: "Opens the clipboard history popup",
                 keyPrefix: "clipboardHotKey", defaultLabel: "⌃⇧C")
+        case .scratchpad:
+            shortcutRow(
+                "Scratchpad", subtitle: "Opens the floating text pads",
+                keyPrefix: "scratchpadHotKey", defaultLabel: "⌃⌥N")
         case .emoji:
             shortcutRow(
                 "Emoji picker", subtitle: "Opens the emoji picker over whatever you are typing in",

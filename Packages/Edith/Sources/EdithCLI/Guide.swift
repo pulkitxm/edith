@@ -416,6 +416,9 @@ public enum Guide {
         ed clipboard copy 3             put it back on the pasteboard
         ed clipboard pin 3 | unpin 3
         ed clipboard rm 3 --yes | clear --yes
+        ed scratchpad ls                named autosaving text pads
+        ed scratchpad create --name Notes --text "# Draft"
+        ed scratchpad remember Notes    promote a pad when Companion is enabled
         ed color ls --format hex        the colours you picked
         ed color copy 1                 copy the newest using your configured format
         ed emoji ls --search rocket     the emoji this Mac can render

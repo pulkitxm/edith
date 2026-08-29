@@ -590,6 +590,39 @@ public enum ExtensionLifecycleCatalog {
                     "ed clipboard ls --json")
             ]),
         descriptor(
+            "scratchpad", "Keep temporary text close, organized and ready to move elsewhere.",
+            workflows: [
+                instruction(
+                    "capture", "Capture temporary text",
+                    "Write in named pads that save every edit automatically."),
+                instruction(
+                    "promote", "Keep what matters",
+                    "Export a pad or deliberately promote it into Companion memory."),
+            ],
+            prerequisites: [
+                instruction(
+                    "storage", "Use local storage",
+                    "Scratchpad stores plain text in Edith's application support folder.")
+            ],
+            examples: [
+                "ed extensions enable scratchpad", "ed scratchpad ls --json",
+                "ed scratchpad open --json",
+            ],
+            docs: [
+                documentation("guide", "Scratchpad guide", "docs/cli/scratchpad/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "doctor", "Inspect Scratchpad storage",
+                    "Check the extension lifecycle and repository.",
+                    "ed extensions doctor scratchpad --json")
+            ],
+            verification: [
+                instruction(
+                    "list", "List pads", "Confirm the Scratchpad document can be read.",
+                    "ed scratchpad ls --json")
+            ]),
+        descriptor(
             "focusDim", "Reduce visual noise by dimming everything behind the active app.",
             workflows: [
                 instruction(

@@ -21,6 +21,7 @@ import Testing
         "tabCalendarEnabled",
         "notchShelfEnabled",
         "clipboardEnabled",
+        "scratchpadEnabled",
         "focusDimEnabled",
         "presenterEnabled",
         "colorPickerEnabled",
@@ -37,7 +38,7 @@ import Testing
             ExtensionRegistry.entries.map(\.id) == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
                 "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
-                "clipboard", "focusDim", "presenter", "emoji", "colorPicker",
+                "clipboard", "scratchpad", "focusDim", "presenter", "emoji", "colorPicker",
             ])
     }
 
@@ -150,7 +151,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard",
+                "clipboard", "scratchpad",
             ])
     }
 
@@ -241,6 +242,7 @@ import Testing
             "calendar": [.calendar],
             "notchShelf": [],
             "clipboard": [],
+            "scratchpad": [],
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
             "colorPicker": [.screenRecording],
@@ -261,6 +263,7 @@ import Testing
             "calendar": [],
             "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation],
             "clipboard": [.accessibility],
+            "scratchpad": [],
             "focusDim": [],
             "presenter": [],
             "colorPicker": [],

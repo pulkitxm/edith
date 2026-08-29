@@ -185,6 +185,12 @@ public enum ExtensionRegistry {
             defaultsKey: "clipboardEnabled", requiredCapabilities: [.clipboardHistory],
             optionalCapabilities: [.globalPaste, .globalShortcuts]),
         ExtensionRegistryEntry(
+            id: "scratchpad", title: "Scratchpad",
+            subtitle: "Named, autosaving text pads that stay close while you work.",
+            symbolName: "note.text", group: .utilities, featured: true,
+            defaultsKey: "scratchpadEnabled", requiredCapabilities: [.scratchpadStorage],
+            optionalCapabilities: [.globalShortcuts, .companionService]),
+        ExtensionRegistryEntry(
             id: "focusDim", title: "Focus Dim",
             subtitle: "Dims everything behind your active app.",
             symbolName: "circle.lefthalf.filled", group: .utilities, featured: false,

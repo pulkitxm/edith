@@ -49,7 +49,7 @@ public enum ConfigCatalog {
         "dashboard",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
         "calendar",
-        "clipboard",
+        "clipboard", "scratchpad",
         "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
         "backup", "permissions", "terminal",
     ]
@@ -58,7 +58,7 @@ public enum ConfigCatalog {
         appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
         + system + cleaner
-        + music + calendar + clipboard + notch + focusDim + presenter + colorPicker
+        + music + calendar + clipboard + scratchpad + notch + focusDim + presenter + colorPicker
         + emoji
         + micMute
         + backup + permissions + terminal
@@ -804,6 +804,32 @@ public enum ConfigCatalog {
         SettingDefinition(
             "colorPickerHotKeyLabel", .string, group: "colorpicker",
             summary: "Printable label for the colour picker shortcut."),
+    ]
+
+    private static let scratchpad: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Scratchpad.enabled, .bool, group: "scratchpad",
+            summary: "Scratchpad extension: named autosaving text pads.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Scratchpad.alwaysOnTop, .bool, group: "scratchpad",
+            summary: "Keep the Scratchpad panel above other windows.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.Scratchpad.dismissOnDeactivate, .bool, group: "scratchpad",
+            summary: "Hide Scratchpad when another app becomes active.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.Scratchpad.retention, .string, group: "scratchpad",
+            summary: "Clear pad text after this much time without an edit.",
+            allowed: ScratchpadRetention.allCases.map(\.rawValue), fallback: .string("never")),
+        SettingDefinition(
+            AppStorageKeys.Scratchpad.hotKeyCode, .int, group: "scratchpad",
+            summary: "Virtual key code of the Scratchpad shortcut."),
+        SettingDefinition(
+            AppStorageKeys.Scratchpad.hotKeyMods, .int, group: "scratchpad",
+            summary: "Carbon modifier mask of the Scratchpad shortcut."),
+        SettingDefinition(
+            AppStorageKeys.Scratchpad.hotKeyLabel, .string, group: "scratchpad",
+            summary: "Printable label for the Scratchpad shortcut."),
     ]
 
     private static let emoji: [SettingDefinition] = [

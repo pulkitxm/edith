@@ -66,8 +66,8 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
-        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "emoji", "colorPicker",
+        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "scratchpad", "focusDim",
+        "presenter", "emoji", "colorPicker",
     ]
 
     public static func provider(
@@ -104,6 +104,7 @@ public enum ExtensionLiveAdapters {
         case "calendar": calendarReadiness()
         case "notchShelf": shelfReadiness()
         case "clipboard": clipboardReadiness()
+        case "scratchpad": scratchpadReadiness()
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
@@ -391,6 +392,27 @@ public enum ExtensionLiveAdapters {
         } catch {
             return .failed(
                 "Clipboard storage could not be read: \(error.localizedDescription)")
+        }
+    }
+
+    static func scratchpadReadiness(
+        file: URL = ScratchpadPaths.documentFile
+    ) -> ExtensionAdapterReadiness {
+        guard FileManager.default.fileExists(atPath: file.path) else {
+            return .ready("Scratchpad storage is ready for its first pad.")
+        }
+        do {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let document = try decoder.decode(
+                ScratchpadDocument.self, from: Data(contentsOf: file))
+            return ExtensionAdapterFacts(
+                contentCount: document.pads.count,
+                readyDetail: "Scratchpad document is readable with \(document.pads.count) pad(s).",
+                emptyDetail: "Scratchpad storage is ready and empty."
+            ).readiness
+        } catch {
+            return .failed("Scratchpad storage could not be read: \(error.localizedDescription)")
         }
     }
 

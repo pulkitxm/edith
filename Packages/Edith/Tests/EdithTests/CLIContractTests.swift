@@ -75,6 +75,40 @@ enum JSONContract {
         JSONCase("ed clipboard unpin", ["clipboard", "unpin", "1", "--json"]),
         JSONCase("ed clipboard rm", ["clipboard", "rm", "1", "--json"]),
         JSONCase("ed clipboard clear", ["clipboard", "clear", "--json"]),
+        JSONCase("ed scratchpad ls", ["scratchpad", "ls", "--json"]),
+        JSONCase("ed scratchpad show", ["scratchpad", "show", "--json"]),
+        JSONCase(
+            "ed scratchpad create",
+            ["scratchpad", "create", "--name", "Notes", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed scratchpad set", ["scratchpad", "set", "--text", "value", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed scratchpad rename", ["scratchpad", "rename", "Scratchpad 1", "Notes", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed scratchpad duplicate", ["scratchpad", "duplicate", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed scratchpad rm", ["scratchpad", "rm", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed scratchpad clear", ["scratchpad", "clear", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed scratchpad copy-all", ["scratchpad", "copy-all", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed scratchpad export",
+            ["scratchpad", "export", "Scratchpad 1", "/tmp/scratchpad.txt", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed scratchpad open", ["scratchpad", "open", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed scratchpad remember", ["scratchpad", "remember", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed calendar open", ["calendar", "open", "--json"], mutatesTheMachine: true),
         JSONCase("ed calendar join", ["calendar", "join", "nothing-at-all", "--json"]),
         JSONCase(

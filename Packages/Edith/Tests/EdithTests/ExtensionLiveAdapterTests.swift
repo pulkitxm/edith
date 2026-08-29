@@ -308,6 +308,30 @@ import EdithCore
         }
     }
 
+    @Test func scratchpadAdapterReadsStorageWithoutCreatingIt() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("pads.json")
+
+        #expect(
+            ExtensionLiveAdapters.scratchpadReadiness(file: file)
+                == .ready("Scratchpad storage is ready for its first pad."))
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(ScratchpadDocument.initial()).write(to: file)
+        #expect(
+            ExtensionLiveAdapters.scratchpadReadiness(file: file)
+                == .ready("Scratchpad document is readable with 1 pad(s)."))
+
+        try Data("broken".utf8).write(to: file)
+        guard case .failed = ExtensionLiveAdapters.scratchpadReadiness(file: file) else {
+            Issue.record("corrupt scratchpad storage did not fail")
+            return
+        }
+    }
+
     @Test func preferenceAdaptersValidateStoredConfiguration() async {
         let suite = "test.extension-adapter.preferences.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

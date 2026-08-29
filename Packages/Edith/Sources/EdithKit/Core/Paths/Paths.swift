@@ -181,3 +181,19 @@ public enum ClipboardPaths {
         blobsDir.appendingPathComponent("\(sha256).\(ext)")
     }
 }
+
+public enum ScratchpadPaths {
+    nonisolated(unsafe) public static var root: URL = AppData.supportDir
+
+    public static var dir: URL {
+        root.appendingPathComponent("scratchpad")
+    }
+
+    public static var documentFile: URL {
+        dir.appendingPathComponent("pads.json")
+    }
+
+    public static var lockFile: URL {
+        dir.appendingPathComponent(".lock")
+    }
+}
