@@ -6,19 +6,49 @@ import Observation
 @MainActor
 @Observable
 final class GitHubBrowserModel {
+    typealias CheckReadiness = @Sendable () async -> ExtensionAdapterReadiness
+    typealias ReadCachedResource =
+        @Sendable (GitHubRoute) async -> GitHubRepositoryResource?
+    typealias LoadResource =
+        @Sendable (GitHubRoute) async throws -> GitHubRepositoryResource
+
     private(set) var session = GitHubSessionStore.homeSession()
     private(set) var readiness: ExtensionAdapterReadiness = .loading(
         "Checking GitHub CLI authentication.")
     private(set) var refreshingReadiness = false
+    private(set) var resourceState: ContentLoadingState = .loading
+    private(set) var resource: GitHubRepositoryResource?
+    private(set) var resourceError: GitHubRepositoryLoadError?
+    private(set) var loadedRoute: GitHubRoute?
     var addressError: String?
 
     @ObservationIgnored private let store: GitHubSessionStore
+    @ObservationIgnored private let checkReadiness: CheckReadiness
+    @ObservationIgnored private let readCachedResource: ReadCachedResource
+    @ObservationIgnored private let loadResource: LoadResource
     @ObservationIgnored private var changedBeforeRestore = false
     @ObservationIgnored private var restored = false
     @ObservationIgnored private var saveTask: Task<Void, Never>?
+    @ObservationIgnored private var resourceTask: Task<Void, Never>?
+    @ObservationIgnored private var resourceGeneration = 0
 
-    init(store: GitHubSessionStore = .shared) {
+    init(
+        store: GitHubSessionStore = .shared,
+        checkReadiness: @escaping CheckReadiness = {
+            await ExtensionLiveAdapters.readiness(for: "github")
+                ?? .unsupported("GitHub does not have a live readiness adapter.")
+        },
+        readCachedResource: @escaping ReadCachedResource = {
+            GitHubRepositoryClient.shared.cachedResource(for: $0)
+        },
+        loadResource: @escaping LoadResource = {
+            try await GitHubRepositoryClient.shared.load($0)
+        }
+    ) {
         self.store = store
+        self.checkReadiness = checkReadiness
+        self.readCachedResource = readCachedResource
+        self.loadResource = loadResource
     }
 
     var selectedTab: GitHubBrowserTab? { session.selectedTab }
@@ -44,11 +74,10 @@ final class GitHubBrowserModel {
         guard !refreshingReadiness else { return }
         refreshingReadiness = true
         defer { refreshingReadiness = false }
-        let value =
-            await ExtensionLiveAdapters.readiness(for: "github")
-            ?? .unsupported("GitHub does not have a live readiness adapter.")
+        let value = await checkReadiness()
         guard !Task.isCancelled else { return }
         readiness = value
+        if value.canLoadGitHubContent { loadCurrentRoute() }
     }
 
     func updateAddressDraft(_ text: String) {
@@ -64,9 +93,13 @@ final class GitHubBrowserModel {
         }
         addressError = nil
         mutate { $0.navigate(tabID: id, to: GitHubBrowserHistoryEntry(route: route)) }
+        loadCurrentRoute()
     }
 
-    func select(_ id: UUID) { mutate { $0.selectTab(id) } }
+    func select(_ id: UUID) {
+        mutate { $0.selectTab(id) }
+        loadCurrentRoute()
+    }
 
     func newTab() {
         mutate {
@@ -75,6 +108,7 @@ final class GitHubBrowserModel {
                     route: GitHubRoute(host: .github, resource: .home)),
                 title: "GitHub")
         }
+        loadCurrentRoute()
     }
 
     func close(_ id: UUID) {
@@ -87,9 +121,13 @@ final class GitHubBrowserModel {
                     title: "GitHub")
             }
         }
+        loadCurrentRoute()
     }
 
-    func duplicate(_ id: UUID) { mutate { $0.duplicateTab(id) } }
+    func duplicate(_ id: UUID) {
+        mutate { $0.duplicateTab(id) }
+        loadCurrentRoute()
+    }
 
     func togglePinned(_ id: UUID) {
         guard let tab = session.tab(id: id) else { return }
@@ -101,13 +139,95 @@ final class GitHubBrowserModel {
         mutate { $0.reorderTab(id, to: index + offset) }
     }
 
-    func reopenLastClosed() { mutate { $0.reopenLastClosedTab() } }
+    func reopenLastClosed() {
+        mutate { $0.reopenLastClosedTab() }
+        loadCurrentRoute()
+    }
 
-    func goBack() { mutateSelected { $0.goBack(tabID: $1) } }
-    func goForward() { mutateSelected { $0.goForward(tabID: $1) } }
+    func goBack() {
+        mutateSelected { $0.goBack(tabID: $1) }
+        loadCurrentRoute()
+    }
+
+    func goForward() {
+        mutateSelected { $0.goForward(tabID: $1) }
+        loadCurrentRoute()
+    }
+
     func reload() {
         mutateSelected { $0.reload(tabID: $1) }
-        Task { await refreshReadiness() }
+        loadCurrentRoute(ignoreCache: true)
+    }
+
+    func navigate(to route: GitHubRoute, title: String? = nil, inNewTab: Bool = false) {
+        if inNewTab {
+            mutate {
+                $0.openTab(
+                    entry: GitHubBrowserHistoryEntry(route: route), title: title ?? route.tabTitle)
+            }
+        } else if let id = session.selectedTabID {
+            mutate { $0.navigate(tabID: id, to: GitHubBrowserHistoryEntry(route: route)) }
+        }
+        loadCurrentRoute()
+    }
+
+    func retryResourceLoad() {
+        loadCurrentRoute(ignoreCache: true)
+    }
+
+    func waitForResourceLoad() async {
+        await resourceTask?.value
+    }
+
+    func loadCurrentRoute(ignoreCache: Bool = false) {
+        resourceGeneration &+= 1
+        let generation = resourceGeneration
+        resourceTask?.cancel()
+        guard readiness.canLoadGitHubContent, let route = currentRoute else { return }
+        guard route.loadsRepositoryContent else {
+            resource = nil
+            loadedRoute = route
+            resourceError = .unsupportedRoute(
+                route.support == .opensOnGitHub
+                    ? "This screen uses GitHub because it contains sensitive settings."
+                    : "This screen is classified, but it is not part of repository browsing yet.")
+            resourceState = .empty
+            return
+        }
+        let retainsCurrentResource = loadedRoute == route && resource != nil
+        if !retainsCurrentResource {
+            resource = nil
+            loadedRoute = route
+        }
+        resourceError = nil
+        resourceState = retainsCurrentResource ? .refreshing : .loading
+        resourceTask = Task { [readCachedResource, loadResource] in
+            if !ignoreCache, !retainsCurrentResource,
+                let cached = await readCachedResource(route), !Task.isCancelled
+            {
+                guard generation == resourceGeneration, currentRoute == route else { return }
+                resource = cached
+                resourceState = .refreshing
+            }
+            do {
+                let loaded = try await loadResource(route)
+                try Task.checkCancellation()
+                guard generation == resourceGeneration, currentRoute == route else { return }
+                resource = loaded
+                loadedRoute = route
+                resourceError = nil
+                resourceState = .content
+            } catch is CancellationError {
+            } catch let error as GitHubRepositoryLoadError {
+                guard generation == resourceGeneration, currentRoute == route else { return }
+                resourceError = error
+                resourceState = resource == nil ? error.loadingState : .content
+            } catch {
+                guard generation == resourceGeneration, currentRoute == route else { return }
+                resourceError = .commandFailed(error.localizedDescription)
+                resourceState = resource == nil ? .error : .content
+            }
+        }
     }
 
     func waitForPendingSave() async {
@@ -148,5 +268,47 @@ final class GitHubBrowserModel {
                 + value.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         }
         return URL(string: address).flatMap(GitHubRoute.init(url:))
+    }
+}
+
+private extension ExtensionAdapterReadiness {
+    var canLoadGitHubContent: Bool {
+        switch self {
+        case .ready, .degraded: true
+        default: false
+        }
+    }
+}
+
+private extension GitHubRepositoryLoadError {
+    var loadingState: ContentLoadingState {
+        switch self {
+        case .offline: .offline
+        default: .error
+        }
+    }
+}
+
+private extension GitHubRoute {
+    var loadsRepositoryContent: Bool {
+        switch resource {
+        case .repository:
+            true
+        case let .content(_, kind, revisionPath, _, _):
+            !revisionPath.isEmpty && [.tree, .blob, .raw, .blame].contains(kind)
+        default:
+            false
+        }
+    }
+
+    var tabTitle: String {
+        switch resource {
+        case let .repository(repository):
+            repository.name
+        case let .content(repository, _, revisionPath, _, _):
+            revisionPath.last ?? repository.name
+        default:
+            "GitHub"
+        }
     }
 }
