@@ -267,6 +267,52 @@ import Testing
         #expect(!restored.spaceIsCollapsed("quinjet"))
     }
 
+    @Test func openingAnAgentRevealsOnlyItsSpace() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        let second = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "default", pane: "w2:p2", kind: "Codex", status: .idle,
+            title: "Second agent", workspace: "quinjet", cwd: "/repo")
+        store.apply([.local(herdrPresent: true, agents: [agent, second])])
+        store.setAllAgentSpacesCollapsed(true)
+
+        store.open(second, showing: .diff)
+
+        #expect(store.spaceIsCollapsed("edith"))
+        #expect(!store.spaceIsCollapsed("quinjet"))
+
+        store.setAllAgentSpacesCollapsed(true)
+        store.open(agent)
+        #expect(!store.spaceIsCollapsed("edith"))
+        #expect(store.spaceIsCollapsed("quinjet"))
+
+        store.setAllAgentSpacesCollapsed(true)
+        store.setView(.split, for: agent.id)
+        #expect(!store.spaceIsCollapsed("edith"))
+        #expect(store.spaceIsCollapsed("quinjet"))
+    }
+
+    @Test func selectingOrDetachingAnAgentRevealsItsSpace() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        let second = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "default", pane: "w2:p2", kind: "Codex", status: .idle,
+            title: "Second agent", workspace: "quinjet", cwd: "/repo")
+        store.apply([.local(herdrPresent: true, agents: [agent, second])])
+        store.open(agent)
+        store.open(second)
+        store.setAllAgentSpacesCollapsed(true)
+
+        store.selectedTab = agent.id
+        #expect(!store.spaceIsCollapsed("edith"))
+        #expect(store.spaceIsCollapsed("quinjet"))
+
+        store.setAllAgentSpacesCollapsed(true)
+        _ = store.detachedTab(for: second)
+        #expect(store.spaceIsCollapsed("edith"))
+        #expect(!store.spaceIsCollapsed("quinjet"))
+    }
+
     @Test func collapsedSpaceReopensOnlyWhenItsAgentCountChanges() {
         let suite = defaults()
         let first = HerdrStore(defaults: suite, liveWatcher: { _ in })

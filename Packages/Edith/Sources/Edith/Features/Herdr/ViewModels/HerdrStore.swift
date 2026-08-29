@@ -17,7 +17,7 @@ struct HerdrAgentSpace: Identifiable, Equatable {
     let agents: [HerdrAgent]
 
     static func group(_ agents: [HerdrAgent]) -> [HerdrAgentSpace] {
-        Dictionary(grouping: agents, by: title)
+        Dictionary(grouping: agents, by: spaceID)
             .map { HerdrAgentSpace(id: $0.key, title: $0.key, agents: $0.value) }
             .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
     }
@@ -26,7 +26,7 @@ struct HerdrAgentSpace: Identifiable, Equatable {
         Dictionary(uniqueKeysWithValues: spaces.map { ($0.id, $0.agents.count) })
     }
 
-    private static func title(_ agent: HerdrAgent) -> String {
+    static func spaceID(_ agent: HerdrAgent) -> String {
         let title = agent.workspace.trimmingCharacters(in: .whitespacesAndNewlines)
         return title.isEmpty ? "Unassigned" : title
     }
@@ -68,7 +68,16 @@ final class HerdrStore {
             reconcileCollapseCountsIfReady()
         }
     }
-    var selectedTab = boardID
+    var selectedTab = boardID {
+        didSet {
+            guard selectedTab != oldValue else { return }
+            guard
+                let agent = tabs.first(where: { $0.id == selectedTab })?.agent
+                    ?? detachedTabs[selectedTab]?.agent
+            else { return }
+            revealSpace(containing: agent)
+        }
+    }
     var tabs: [HerdrOpenTab] = []
     var refreshing = false
     var copiedID: String?
@@ -227,6 +236,14 @@ final class HerdrStore {
                 collapsedSpaceCounts.removeValue(forKey: space.id)
             }
         }
+        persistCollapsedSpaceCounts()
+    }
+
+    func revealSpace(containing agent: HerdrAgent) {
+        guard !agent.isTerminal else { return }
+        let spaceID = HerdrAgentSpace.spaceID(agent)
+        guard collapsedSpaces.remove(spaceID) != nil else { return }
+        collapsedSpaceCounts.removeValue(forKey: spaceID)
         persistCollapsedSpaceCounts()
     }
 
@@ -433,6 +450,7 @@ final class HerdrStore {
     var detachedIDs: Set<String> { Set(detachedTabs.keys) }
 
     func detachedTab(for agent: HerdrAgent) -> HerdrOpenTab {
+        revealSpace(containing: agent)
         if let existing = detachedTabs[agent.id] { return existing }
         var resolved = HerdrAgentViews.view(for: agent.id, defaults)
         if agent.isTerminal { resolved = .agent }
@@ -464,6 +482,7 @@ final class HerdrStore {
     }
 
     func open(_ agent: HerdrAgent, showing view: HerdrAgentView?) {
+        revealSpace(containing: agent)
         if let index = tabs.firstIndex(where: { $0.id == agent.id }) {
             if let view { apply(view, at: index) }
             selectedTab = agent.id
@@ -488,6 +507,7 @@ final class HerdrStore {
 
     func setView(_ view: HerdrAgentView, for id: String) {
         if var tab = detachedTabs[id] {
+            revealSpace(containing: tab.agent)
             guard tab.view != view else { return }
             tab.view = view
             detachedTabs[id] = tab
@@ -499,6 +519,7 @@ final class HerdrStore {
             HerdrAgentViews.set(view, for: id, defaults)
             return
         }
+        revealSpace(containing: tabs[index].agent)
         apply(view, at: index)
     }
 
