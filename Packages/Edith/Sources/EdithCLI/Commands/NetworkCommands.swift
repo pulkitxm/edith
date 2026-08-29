@@ -104,7 +104,14 @@ struct NetworkDiagnoseCommand: AsyncParsableCommand {
                 _ = try? await NetworkDiagnosticsTimelineStore.shared.append(
                     snapshot, limit: configuration.timelineLimit)
             }
-            if saveBaseline { NetworkDiagnosticsPreferences.saveBaseline(snapshot) }
+            if saveBaseline {
+                guard snapshot.state == .healthy else {
+                    throw CLIFailure(
+                        "only a healthy network snapshot can be saved as the baseline")
+                }
+                NetworkDiagnosticsPreferences.saveBaseline(snapshot)
+                AppBridge.post(IPC.Name.settingsChanged)
+            }
             if json {
                 let encoder = JSONEncoder()
                 encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]

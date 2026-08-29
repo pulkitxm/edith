@@ -40,6 +40,7 @@ struct DetachedSectionView: View {
         case .music: MusicPage()
         case .calendar: CalendarPage()
         case .system: SystemPage()
+        case .network: NetworkDiagnosticsPage()
         case .machines: MachinesPage()
         case .companion: CompanionPage()
         case .extensions: ExtensionsPane()

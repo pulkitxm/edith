@@ -419,8 +419,13 @@ public struct NetworkDiagnosticsEngine: Sendable {
     }
 
     private func vpnHint(_ text: String) -> String? {
-        let configured = text.split(separator: "\n").filter { $0.contains("VPN") }.count
-        let connected = text.split(separator: "\n").filter { $0.contains("(Connected)") }.count
+        let lines = text.split(separator: "\n")
+        let configured = lines.filter { line in
+            ["(Connected)", "(Disconnected)", "(Connecting)", "(Disconnecting)"].contains {
+                state in line.contains(state)
+            }
+        }.count
+        let connected = lines.filter { $0.contains("(Connected)") }.count
         guard configured > 0 || connected > 0 else { return nil }
         return connected > 0 ? "\(connected) connected" : "\(configured) configured"
     }
