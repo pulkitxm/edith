@@ -103,20 +103,18 @@ struct HerdrPage: View {
 
     private var header: some View {
         PageHeader(
-            title: {
-                HStack(spacing: UIScale.pt(12)) {
-                    Text("Herdr")
-                    spaceGroupingToggle
-                }
-            },
+            title: { Text("Herdr") },
             trailing: {
-                Button {
-                    Task { await store.refresh() }
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
+                HStack(spacing: UIScale.pt(10)) {
+                    spaceGroupingToggle
+                    Button {
+                        Task { await store.refresh() }
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.edith(.toolbar))
+                    .disabled(store.refreshing)
                 }
-                .buttonStyle(.edith(.toolbar))
-                .disabled(store.refreshing)
             },
             accessory: { filters })
     }
