@@ -148,6 +148,17 @@ public struct GitHubBrowserSession: Codable, Equatable, Sendable {
         return true
     }
 
+    @discardableResult public mutating func openTab(
+        entry: GitHubBrowserHistoryEntry, title: String? = nil, isPinned: Bool = false,
+        id: UUID = UUID(), select: Bool = true
+    ) -> UUID? {
+        guard !tabs.contains(where: { $0.id == id }) else { return nil }
+        let tab = GitHubBrowserTab(id: id, entry: entry, title: title, isPinned: isPinned)
+        tabs.insert(tab, at: isPinned ? pinnedCount : tabs.count)
+        if select { selectedTabID = id }
+        return id
+    }
+
     @discardableResult public mutating func duplicateTab(
         _ id: UUID, as duplicateID: UUID = UUID()
     ) -> UUID? {

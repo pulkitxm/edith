@@ -35,6 +35,7 @@ import Testing
         let regularB = tab(3, "acme/b")
         let pinnedB = tab(4, "acme/pinned-b", pinned: true)
         let duplicateID = id(5)
+        let openedID = id(6)
         var session = GitHubBrowserSession(
             tabs: [regularA, pinnedA, regularB, pinnedB], selectedTabID: regularA.id)
 
@@ -46,18 +47,22 @@ import Testing
                 == [pinnedA.id, pinnedB.id, regularA.id, duplicateID, regularB.id])
         #expect(session.selectedTabID == duplicateID)
         #expect(session.tab(id: duplicateID)?.historyEntries == regularA.historyEntries)
+        #expect(
+            session.openTab(entry: entry("acme/new"), id: openedID, select: false) == openedID)
+        #expect(session.tabs.last?.id == openedID)
+        #expect(session.selectedTabID == duplicateID)
 
         session.reorderTab(regularB.id, to: 0)
         session.reorderTab(pinnedB.id, to: 0)
         #expect(
             session.tabs.map(\.id)
-                == [pinnedB.id, pinnedA.id, regularB.id, regularA.id, duplicateID])
+                == [pinnedB.id, pinnedA.id, regularB.id, regularA.id, duplicateID, openedID])
         session.setPinned(true, tabID: regularA.id)
         session.setPinned(false, tabID: pinnedA.id)
-        #expect(session.tabs.map(\.isPinned) == [true, true, false, false, false])
+        #expect(session.tabs.map(\.isPinned) == [true, true, false, false, false, false])
         #expect(
             session.tabs.map(\.id) == [
-                pinnedB.id, regularA.id, pinnedA.id, regularB.id, duplicateID,
+                pinnedB.id, regularA.id, pinnedA.id, regularB.id, duplicateID, openedID,
             ])
     }
 
