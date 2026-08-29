@@ -251,17 +251,13 @@ struct DashboardView: View {
                 .frame(width: UIScale.pt(50), height: UIScale.pt(50))
             }
             .buttonStyle(.plain)
-            .onHover { inside in
-                hovering = inside
-                if inside {
-                    rotation = 0
-                    withAnimation(.linear(duration: 3.2).repeatForever(autoreverses: false)) {
-                        rotation = 360
-                    }
-                } else {
-                    withAnimation(.easeOut(duration: 0.24)) { rotation = 0 }
+            .onAppear {
+                rotation = 0
+                withAnimation(.linear(duration: 14).repeatForever(autoreverses: false)) {
+                    rotation = 360
                 }
             }
+            .onHover { hovering = $0 }
             .help("Share usage cards")
             .accessibilityLabel("Share usage cards")
         }

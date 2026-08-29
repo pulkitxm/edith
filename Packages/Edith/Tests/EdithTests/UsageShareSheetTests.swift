@@ -19,6 +19,7 @@ import Testing
         #expect(source.contains("Image(systemName: \"square.and.arrow.up\")"))
         #expect(source.contains("OrbitingShareButton"))
         #expect(source.contains("CircularShareText"))
+        #expect(source.contains(".linear(duration: 14).repeatForever(autoreverses: false)"))
         #expect(source.contains("shareOverlay"))
         #expect(source.contains(".onTapGesture { closeShare() }"))
         #expect(source.contains("UsageShareSheet(snapshot: shareSnapshot, onDismiss: closeShare)"))
