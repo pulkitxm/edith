@@ -243,6 +243,30 @@ import Testing
         #expect(!third.spaceIsCollapsed("edith"))
     }
 
+    @Test func allSpacesCanBeCollapsedAndExpandedTogether() {
+        let suite = defaults()
+        let store = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        let second = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "default", pane: "w2:p2", kind: "Codex", status: .idle,
+            title: "Second agent", workspace: "quinjet", cwd: "/repo")
+        store.apply([.local(herdrPresent: true, agents: [agent, second])])
+
+        #expect(!store.allAgentSpacesCollapsed)
+        store.setAllAgentSpacesCollapsed(true)
+        #expect(store.allAgentSpacesCollapsed)
+        #expect(store.spaceIsCollapsed("edith"))
+        #expect(store.spaceIsCollapsed("quinjet"))
+
+        let restored = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        restored.apply([.local(herdrPresent: true, agents: [agent, second])])
+        #expect(restored.allAgentSpacesCollapsed)
+        restored.setAllAgentSpacesCollapsed(false)
+        #expect(!restored.allAgentSpacesCollapsed)
+        #expect(!restored.spaceIsCollapsed("edith"))
+        #expect(!restored.spaceIsCollapsed("quinjet"))
+    }
+
     @Test func collapsedSpaceReopensOnlyWhenItsAgentCountChanges() {
         let suite = defaults()
         let first = HerdrStore(defaults: suite, liveWatcher: { _ in })

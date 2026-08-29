@@ -212,6 +212,24 @@ final class HerdrStore {
         persistCollapsedSpaceCounts()
     }
 
+    var allAgentSpacesCollapsed: Bool {
+        let spaceIDs = Set(agentSpaces.map(\.id))
+        return !spaceIDs.isEmpty && spaceIDs.isSubset(of: collapsedSpaces)
+    }
+
+    func setAllAgentSpacesCollapsed(_ collapsed: Bool) {
+        for space in agentSpaces {
+            if collapsed {
+                collapsedSpaces.insert(space.id)
+                collapsedSpaceCounts[space.id] = space.agents.count
+            } else {
+                collapsedSpaces.remove(space.id)
+                collapsedSpaceCounts.removeValue(forKey: space.id)
+            }
+        }
+        persistCollapsedSpaceCounts()
+    }
+
     var machineTerminals: [HerdrAgent] {
         var terminals: [HerdrAgent] = []
         for host in hosts where host.herdrPresent {

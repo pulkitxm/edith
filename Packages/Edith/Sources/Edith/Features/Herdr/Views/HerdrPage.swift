@@ -603,12 +603,7 @@ struct HerdrPage: View {
                         }
                     }
                     if !onBoard {
-                        railHeader(
-                            "Agents", count: listedAgents.count,
-                            collapsed: store.agentsCollapsed
-                        ) {
-                            store.agentsCollapsed.toggle()
-                        }
+                        agentsRailHeader
                         if !store.agentsCollapsed, store.settling {
                             HerdrSkeleton(dark: dark, rows: 4, card: false)
                         }
@@ -636,6 +631,37 @@ struct HerdrPage: View {
         }
         .frame(maxHeight: .infinity)
         .background(DashSkin.paper(dark))
+    }
+
+    private var agentsRailHeader: some View {
+        HStack(spacing: UIScale.pt(4)) {
+            railHeader(
+                "Agents", count: listedAgents.count,
+                collapsed: store.agentsCollapsed
+            ) {
+                store.agentsCollapsed.toggle()
+            }
+            .frame(maxWidth: .infinity)
+            if store.spaceGroupingEnabled, !store.agentsCollapsed, !store.agentSpaces.isEmpty {
+                let allCollapsed = store.allAgentSpacesCollapsed
+                Button {
+                    withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
+                        store.setAllAgentSpacesCollapsed(!allCollapsed)
+                    }
+                } label: {
+                    Text(allCollapsed ? "Expand all" : "Collapse all")
+                        .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.edith(.borderless))
+                .padding(.top, UIScale.pt(10))
+                .padding(.bottom, UIScale.pt(4))
+                .padding(.trailing, UIScale.pt(8))
+                .help(allCollapsed ? "Expand every space" : "Collapse every space")
+                .accessibilityLabel(allCollapsed ? "Expand all spaces" : "Collapse all spaces")
+            }
+        }
     }
 
     private func spaceHeader(_ space: HerdrAgentSpace) -> some View {
