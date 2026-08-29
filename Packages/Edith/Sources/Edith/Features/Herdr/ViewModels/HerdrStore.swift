@@ -13,6 +13,17 @@ struct HerdrAgentSpace: Identifiable, Equatable {
     let id: String
     let title: String
     let agents: [HerdrAgent]
+
+    static func group(_ agents: [HerdrAgent]) -> [HerdrAgentSpace] {
+        Dictionary(grouping: agents, by: title)
+            .map { HerdrAgentSpace(id: $0.key, title: $0.key, agents: $0.value) }
+            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+
+    private static func title(_ agent: HerdrAgent) -> String {
+        let title = agent.workspace.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? "Unassigned" : title
+    }
 }
 
 @MainActor
@@ -58,7 +69,7 @@ final class HerdrStore {
         didSet {
             guard collapsedSpaces != oldValue else { return }
             defaults.set(
-                collapsedSpaces.sorted(), forKey: AppStorageKeys.Herdr.collapsedSpaces)
+                Array(collapsedSpaces), forKey: AppStorageKeys.Herdr.collapsedSpaces)
         }
     }
 
@@ -85,7 +96,8 @@ final class HerdrStore {
             defaults.object(forKey: AppStorageKeys.Herdr.terminalsCollapsed) as? Bool ?? false
         spaceGroupingEnabled =
             defaults.object(forKey: AppStorageKeys.Herdr.spaceGroupingEnabled) as? Bool ?? false
-        collapsedSpaces = Set(defaults.stringArray(forKey: AppStorageKeys.Herdr.collapsedSpaces) ?? [])
+        collapsedSpaces = Set(
+            defaults.stringArray(forKey: AppStorageKeys.Herdr.collapsedSpaces) ?? [])
     }
 
     var agents: [HerdrAgent] { hosts.flatMap(\.agents) }
@@ -95,9 +107,7 @@ final class HerdrStore {
     }
 
     var agentSpaces: [HerdrAgentSpace] {
-        Dictionary(grouping: listedAgents, by: spaceTitle)
-            .map { HerdrAgentSpace(id: $0.key, title: $0.key, agents: $0.value) }
-            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        HerdrAgentSpace.group(listedAgents)
     }
 
     func spaceIsCollapsed(_ id: String) -> Bool {
@@ -110,11 +120,6 @@ final class HerdrStore {
         } else {
             collapsedSpaces.insert(id)
         }
-    }
-
-    private func spaceTitle(_ agent: HerdrAgent) -> String {
-        let title = agent.workspace.trimmingCharacters(in: .whitespacesAndNewlines)
-        return title.isEmpty ? "Unassigned" : title
     }
 
     var machineTerminals: [HerdrAgent] {
