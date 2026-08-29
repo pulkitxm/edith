@@ -7,7 +7,6 @@ struct UsageShareSheet: View {
     let snapshot: UsageShareSnapshot
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
     @State private var index = 0
     @State private var direction = 1
@@ -15,20 +14,21 @@ struct UsageShareSheet: View {
     @State private var status: UsageShareActionStatus?
     @State private var statusID = UUID()
 
-    private var dark: Bool { scheme == .dark }
     private var cards: [UsageShareCard] { UsageShareCard.allCases }
     private var card: UsageShareCard { cards[index] }
+    private let modalInk = Color(red: 0.075, green: 0.07, blue: 0.065)
 
     var body: some View {
-        VStack(spacing: UIScale.pt(20)) {
-            header
+        VStack(spacing: 22) {
             carousel
             pagination
             actionBar
         }
-        .padding(UIScale.pt(28))
-        .frame(minWidth: UIScale.pt(780), minHeight: UIScale.pt(690))
+        .padding(.horizontal, 40)
+        .padding(.vertical, 42)
+        .frame(width: 820, height: 610)
         .background(sheetBackground)
+        .overlay(alignment: .bottomTrailing) { statusToast }
         .task { await loadPreviews() }
         .onKeyPress(.leftArrow) {
             move(-1)
@@ -38,120 +38,110 @@ struct UsageShareSheet: View {
             move(1)
             return .handled
         }
-    }
-
-    private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-                Text("Share your agent story")
-                    .font(DashSkin.serif(28))
-                    .foregroundStyle(DashSkin.ink(dark))
-                Text("A polished snapshot made from your local usage data.")
-                    .font(.system(size: UIScale.pt(13)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-            }
-            Spacer()
-            Button { dismiss() } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
-                    .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-            }
-            .buttonStyle(.edith(.secondary))
-            .accessibilityLabel("Close share cards")
-            .keyboardShortcut(.cancelAction)
-        }
+        .onExitCommand { dismiss() }
     }
 
     private var carousel: some View {
-        HStack(spacing: UIScale.pt(16)) {
-            carouselButton(systemImage: "chevron.left", movement: -1)
+        HStack(spacing: 18) {
+            ShareCarouselArrow(systemImage: "chevron.left") { move(-1) }
             ZStack {
-                RoundedRectangle(cornerRadius: UIScale.pt(24), style: .continuous)
-                    .fill(DashSkin.paper2(dark))
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.black.opacity(0.06))
                 if let image = previews[card] {
                     Image(nsImage: image)
                         .resizable()
                         .aspectRatio(3 / 2, contentMode: .fit)
-                        .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(22)))
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                         .id(card)
                         .transition(cardTransition)
                 } else {
                     ProgressView("Preparing your cards…")
                         .controlSize(.small)
-                        .foregroundStyle(DashSkin.inkSoft(dark))
+                        .foregroundStyle(modalInk.opacity(0.58))
                 }
             }
-            .frame(width: UIScale.pt(640), height: UIScale.pt(427))
-            .shadow(color: .black.opacity(dark ? 0.42 : 0.18), radius: 22, y: 12)
+            .frame(width: 600, height: 400)
+            .shadow(color: .black.opacity(0.17), radius: 24, y: 14)
             .gesture(
-                DragGesture(minimumDistance: UIScale.pt(18))
+                DragGesture(minimumDistance: 18)
                     .onEnded { gesture in
-                        guard abs(gesture.translation.width) > UIScale.pt(50) else { return }
+                        guard abs(gesture.translation.width) > 50 else { return }
                         move(gesture.translation.width < 0 ? 1 : -1)
                     })
-            carouselButton(systemImage: "chevron.right", movement: 1)
+            ShareCarouselArrow(systemImage: "chevron.right") { move(1) }
         }
         .frame(maxWidth: .infinity)
     }
 
     private var pagination: some View {
-        HStack(spacing: UIScale.pt(12)) {
+        HStack(spacing: 8) {
             ForEach(Array(cards.enumerated()), id: \.element.id) { item in
                 Button { select(item.offset) } label: {
                     Circle()
                         .fill(
                             item.offset == index
-                                ? DashSkin.accent(dark) : DashSkin.inkFaint(dark).opacity(0.32)
+                                ? modalInk : modalInk.opacity(0.11)
                         )
                         .frame(
-                            width: UIScale.pt(item.offset == index ? 8 : 6),
-                            height: UIScale.pt(item.offset == index ? 8 : 6))
-                        .frame(width: UIScale.pt(16), height: UIScale.pt(16))
+                            width: item.offset == index ? 7 : 6,
+                            height: item.offset == index ? 7 : 6)
+                        .frame(width: 11, height: 11)
                 }
                 .buttonStyle(.plain)
                 .help(item.element.title)
                 .accessibilityLabel(item.element.title)
                 .accessibilityAddTraits(item.offset == index ? .isSelected : [])
             }
-            Text(card.title)
-                .font(.system(size: UIScale.pt(12), weight: .medium))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-                .contentTransition(.interpolate)
         }
         .animation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: index)
     }
 
     private var actionBar: some View {
-        HStack(spacing: UIScale.pt(10)) {
-            if let status {
-                Label(status.message, systemImage: status.systemImage)
-                    .font(.system(size: UIScale.pt(12), weight: .medium))
-                    .foregroundStyle(status.error ? Color.red : DashSkin.sage)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
-            Spacer()
+        HStack(spacing: 12) {
             Button(action: copyImage) {
-                Label("Copy image", systemImage: "doc.on.doc")
+                HStack(spacing: 8) {
+                    Text("Copy image")
+                    Image(systemName: "doc.on.doc")
+                }
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 16)
+                .frame(height: 42)
+                .background(modalInk, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
-            .buttonStyle(.edith(.primary, tint: DashSkin.accent(dark)))
+            .buttonStyle(SharePressedButtonStyle())
             .keyboardShortcut("c", modifiers: [.command, .shift])
             Button(action: downloadImage) {
-                Label("Download PNG", systemImage: "arrow.down.to.line")
+                Image(systemName: "arrow.down.to.line")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .frame(width: 42, height: 42)
+                    .background(modalInk, in: Circle())
             }
-            .buttonStyle(.edith(.secondary, tint: DashSkin.accent(dark)))
+            .buttonStyle(SharePressedButtonStyle())
+            .help("Download PNG")
+            .accessibilityLabel("Download PNG")
         }
-        .frame(height: UIScale.pt(36))
-        .animation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: status)
     }
 
     private var sheetBackground: some View {
-        DashSkin.paper(dark)
-            .overlay(alignment: .topTrailing) {
-                RadialGradient(
-                    colors: [DashSkin.accent(dark).opacity(0.12), .clear],
-                    center: .topTrailing, startRadius: 0, endRadius: UIScale.pt(420))
-            }
+        Color(red: 0.992, green: 0.985, blue: 0.91)
             .ignoresSafeArea()
+    }
+
+    @ViewBuilder private var statusToast: some View {
+        if let status {
+            Label(status.message, systemImage: status.systemImage)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 14)
+                .frame(height: 36)
+                .background(
+                    status.error ? Color.red.opacity(0.92) : modalInk,
+                    in: RoundedRectangle(cornerRadius: 7))
+                .padding(16)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
     }
 
     private var cardTransition: AnyTransition {
@@ -160,16 +150,6 @@ struct UsageShareSheet: View {
                 insertion: .move(edge: direction > 0 ? .trailing : .leading).combined(with: .opacity),
                 removal: .move(edge: direction > 0 ? .leading : .trailing).combined(with: .opacity)),
             reduceMotion: reduceMotion, preferCrossFade: false)
-    }
-
-    private func carouselButton(systemImage: String, movement: Int) -> some View {
-        Button { move(movement) } label: {
-            Image(systemName: systemImage)
-                .font(.system(size: UIScale.pt(15), weight: .semibold))
-                .frame(width: UIScale.pt(34), height: UIScale.pt(44))
-        }
-        .buttonStyle(.edith(.secondary))
-        .accessibilityLabel(movement < 0 ? "Previous card" : "Next card")
     }
 
     private func move(_ movement: Int) {
@@ -245,6 +225,37 @@ struct UsageShareSheet: View {
                 status = nil
             }
         }
+    }
+}
+
+private struct ShareCarouselArrow: View {
+    let systemImage: String
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(Color.black.opacity(0.88))
+                .frame(width: 48, height: 52)
+                .background(
+                    Color.black.opacity(hovering ? 0.065 : 0),
+                    in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .buttonStyle(SharePressedButtonStyle())
+        .onHover { hovering = $0 }
+        .accessibilityLabel(systemImage == "chevron.left" ? "Previous card" : "Next card")
+    }
+}
+
+private struct SharePressedButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .opacity(configuration.isPressed ? 0.78 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 

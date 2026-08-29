@@ -27,8 +27,10 @@ import Testing
             contentsOf: Self.root.appendingPathComponent(
                 "Sources/Edith/Features/Dashboard/Views/UsageShareSheet.swift"),
             encoding: .utf8)
-        #expect(source.contains("Label(\"Copy image\""))
-        #expect(source.contains("Label(\"Download PNG\""))
+        #expect(source.contains("Text(\"Copy image\")"))
+        #expect(source.contains(".accessibilityLabel(\"Download PNG\")"))
+        #expect(source.contains(".frame(width: 600, height: 400)"))
+        #expect(source.contains("ShareCarouselArrow"))
         #expect(source.contains("UsageShareDelivery.copy(data)"))
         #expect(source.contains("NSSavePanel()"))
         #expect(source.contains("DragGesture"))
