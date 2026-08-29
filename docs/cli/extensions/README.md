@@ -70,6 +70,7 @@ walks, and its order is the order `ls` prints. Seventeen entries, in this order:
 | `calendar` | Calendar | Media | Shows your schedule in the panel and the app |
 | `notchShelf` | Notch Shelf | Media | File shelf, now playing, camera, and alerts around the notch |
 | `clipboard` | Clipboard | Utilities | Clipboard history with instant paste |
+| `scratchpad` | Scratchpad | Utilities | Named, autosaving text pads that stay close while you work |
 | `focusDim` | Focus Dim | Utilities | Dims everything behind your active app |
 | `presenter` | Presenter | Utilities | Blurs sensitive numbers while sharing your screen |
 | `colorPicker` | Color Picker | Utilities | System loupe on a hotkey, sampled color to your clipboard |
@@ -94,6 +95,7 @@ eight the welcome tour shows before you ask it for all of them.
 | `calendar` | `tabCalendarEnabled` | no | `calendar` | none | none | none |
 | `notchShelf` | `notchShelfEnabled` | yes | none | `applicationAudio`, `bluetooth`, `camera`, `automation` | none | none |
 | `clipboard` | `clipboardEnabled` | yes | none | `accessibility` | none | none |
+| `scratchpad` | `scratchpadEnabled` | yes | none | none | none | none |
 | `focusDim` | `focusDimEnabled` | no | `screenRecording` | none | none | none |
 | `presenter` | `presenterEnabled` | no | `screenRecording` | none | none | none |
 | `colorPicker` | `colorPickerEnabled` | no | `screenRecording` | none | none | none |
@@ -118,6 +120,7 @@ the current platform, and which missing implementations merely degrade it:
 | `calendar` | `calendarEvents` | none |
 | `notchShelf` | `fileShelf` | `applicationAudio`, `bluetoothMonitoring`, `cameraPreview`, `externalMediaControl` |
 | `clipboard` | `clipboardHistory` | `globalPaste`, `globalShortcuts` |
+| `scratchpad` | `scratchpadStorage` | `globalShortcuts`, `companionService` |
 | `focusDim` | `windowDimming` | none |
 | `presenter` | `screenShareDetection` | none |
 | `colorPicker` | `screenColorSampling` | `globalShortcuts` |

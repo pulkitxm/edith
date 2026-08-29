@@ -168,6 +168,7 @@ final class CLIWorld: @unchecked Sendable {
         ClipboardPaths.root = sandbox
         AttentionPaths.root = sandbox
         MachinePaths.root = sandbox
+        ScratchpadPaths.root = sandbox
         ShelfIndex.root = sandbox.appendingPathComponent("Shelf")
         let historyURL = sandbox.appendingPathComponent("update-checks.json")
         CLIEnvironment.updateHistoryURL = { historyURL }
@@ -325,6 +326,7 @@ final class CLIWorld: @unchecked Sendable {
         pasteboard.clearContents()
         CLIEnvironment.reset()
         AttentionPaths.root = AppData.supportDir
+        ScratchpadPaths.root = AppData.supportDir
     }
 }
 

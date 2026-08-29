@@ -557,6 +557,41 @@ public enum CommandTree {
                         destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
+                "scratchpad", "Named autosaving pads for temporary plain text.",
+                children: [
+                    CommandNode(
+                        "ls", "List pads in tab order.", aliases: ["list"],
+                        options: ["--json", "--help", "--search"]),
+                    CommandNode(
+                        "show", "Print one pad's text.", options: common, arguments: [.free]),
+                    CommandNode(
+                        "create", "Create and select a new pad.",
+                        options: ["--json", "--help", "--name", "--text", "--file"]),
+                    CommandNode(
+                        "set", "Replace one pad's text.",
+                        options: ["--json", "--help", "--text", "--file"], arguments: [.free]),
+                    CommandNode("rename", "Rename one pad.", options: common, arguments: [.free]),
+                    CommandNode(
+                        "duplicate", "Duplicate and select one pad.", options: common,
+                        arguments: [.free]),
+                    CommandNode(
+                        "rm", "Remove one pad.", options: ["--json", "--help", "--yes"],
+                        arguments: [.free], destructivePolicy: .previewThenYes),
+                    CommandNode(
+                        "clear", "Clear one pad's text.", options: ["--json", "--help", "--yes"],
+                        arguments: [.free], destructivePolicy: .previewThenYes),
+                    CommandNode(
+                        "copy-all", "Copy all text from one pad.", options: common,
+                        arguments: [.free]),
+                    CommandNode(
+                        "export", "Export one pad as UTF-8 text.", options: common,
+                        arguments: [.free]),
+                    CommandNode("open", "Open or close the Scratchpad panel.", options: common),
+                    CommandNode(
+                        "remember", "Promote one pad into Companion memory.", options: common,
+                        arguments: [.free]),
+                ]),
+            CommandNode(
                 "attention", "Local attention, application, website, music and focus data.",
                 children: [
                     CommandNode("status", "Show tracking, data and focus state.", options: common),
