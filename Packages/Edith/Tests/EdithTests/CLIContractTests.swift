@@ -40,6 +40,26 @@ enum JSONContract {
             "ed attention focus stop", ["attention", "focus", "stop", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed attention doctor", ["attention", "doctor", "--json"]),
+        JSONCase("ed automations operations", ["automations", "operations", "--json"]),
+        JSONCase("ed automations ls", ["automations", "ls", "--json"]),
+        JSONCase("ed automations plan", ["automations", "plan", "missing", "--json"]),
+        JSONCase(
+            "ed automations run", ["automations", "run", "missing", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed automations enable", ["automations", "enable", "missing", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed automations disable", ["automations", "disable", "missing", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed automations history", ["automations", "history", "--json"]),
+        JSONCase(
+            "ed automations export", ["automations", "export", "/tmp/edith.json", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed automations import",
+            ["automations", "import", "/tmp/edith.json", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed install", ["install", "--json"], mutatesTheMachine: true),
         JSONCase("ed uninstall", ["uninstall", "--json"], mutatesTheMachine: true),
         JSONCase(

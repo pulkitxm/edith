@@ -252,7 +252,8 @@ public enum CommandTree {
                         arguments: [.free]),
                     CommandNode(
                         "run", "Run a reusable scene.",
-                        options: ["--json", "--help", "--dry-run", "--yes"], arguments: [.free]),
+                        options: ["--json", "--help", "--dry-run", "--yes"], arguments: [.free],
+                        destructivePolicy: .previewThenYes),
                     CommandNode(
                         "enable", "Enable an automation or scene.", options: common,
                         arguments: [.free]),
@@ -267,8 +268,8 @@ public enum CommandTree {
                         arguments: [.localPath]),
                     CommandNode(
                         "import", "Import automations and scenes.",
-                        options: ["--json", "--help", "--dry-run", "--yes"], arguments: [.localPath]
-                    ),
+                        options: ["--json", "--help", "--dry-run", "--yes"],
+                        arguments: [.localPath], destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
                 "lid-awake", "Keep the Mac running with its lid closed.",
