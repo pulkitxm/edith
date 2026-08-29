@@ -38,6 +38,8 @@ public enum Guide {
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler
         ed color copy 1 --format hex
+        ed windows ls               open and minimized windows Edith can focus
+        ed windows show             open the searchable Window Switcher
         ed usage sources            the agents that produced your usage history
         ed schema                   JSON Schema for the config document
         ed version                  the CLI version, and whether the app is up
@@ -339,6 +341,10 @@ public enum Guide {
         ed calendar join <event-id>     open the event's meeting link
         ed calendar directions <event>  open its location in Maps
         ed calendar open                open the Calendar application
+        ed windows ls                   open and minimized windows
+        ed windows show                 open the searchable switcher
+        ed windows activate <id>        restore and focus one listed window
+        ed windows cycle                next window of the front application
         ed presenter status | start | stop
         ed herdr ls                     live Herdr sessions here and over SSH
         ed herdr attach w3:p1N          attach this terminal to a live pane

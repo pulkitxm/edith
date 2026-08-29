@@ -65,8 +65,8 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
-        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "colorPicker",
+        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "windowSwitcher", "focusDim",
+        "presenter", "colorPicker",
     ]
 
     public static func provider(
@@ -103,11 +103,21 @@ public enum ExtensionLiveAdapters {
         case "calendar": calendarReadiness()
         case "notchShelf": shelfReadiness()
         case "clipboard": clipboardReadiness()
+        case "windowSwitcher": windowSwitcherReadiness(defaults: defaults)
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
         default: nil
         }
+    }
+
+    static func windowSwitcherReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
+        let granted = defaults.bool(forKey: AppStorageKeys.Permissions.accessibilityGranted)
+        return ExtensionAdapterFacts(
+            configured: granted,
+            readyDetail: "Window enumeration and activation are available.",
+            setupDetail: "Grant Accessibility access to inspect and activate windows."
+        ).readiness
     }
 
     static func attentionReadiness(

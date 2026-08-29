@@ -51,6 +51,20 @@ import EdithCore
                 == .ready("Attention tracking is configured for the selected sources."))
     }
 
+    @Test func windowSwitcherRequiresAccessibility() {
+        let suite = "test.extension-adapter.window-switcher.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        #expect(
+            ExtensionLiveAdapters.windowSwitcherReadiness(defaults: defaults)
+                == .needsSetup("Grant Accessibility access to inspect and activate windows."))
+        defaults.set(true, forKey: AppStorageKeys.Permissions.accessibilityGranted)
+        #expect(
+            ExtensionLiveAdapters.windowSwitcherReadiness(defaults: defaults)
+                == .ready("Window enumeration and activation are available."))
+    }
+
     @Test func usageDetectsMissingLoadingEmptyReadyAndCorruptData() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

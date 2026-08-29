@@ -47,6 +47,7 @@ private actor AppServicesCallProbe {
         #expect(services.lidAwake == nil)
         #expect(services.systemStats == nil)
         #expect(services.attention == nil)
+        #expect(services.windowSwitcher == nil)
     }
 
     @Test func extensionDefaultsToDisabledWhenUnset() {

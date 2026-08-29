@@ -18,6 +18,7 @@ final class AppServices {
     private(set) var lidAwake: LidAwakeEngine?
     private(set) var systemStats: SystemStatsStatusItem?
     private(set) var attention: AttentionTrackingService?
+    private(set) var windowSwitcher: WindowSwitcherService?
     private let startup = StartupCoordinator()
     private let lidAwakeRestorationGate = LidAwakeRestorationGate()
     private let lidAwakeOrphanRestorer: @MainActor @Sendable () async -> LidAwakeOutcome
@@ -101,6 +102,7 @@ final class AppServices {
         startup.cancel()
         terminating = true
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
+        windowSwitcher?.shutdown()
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
     }
@@ -298,6 +300,14 @@ final class AppServices {
         notchShelf?.attachUsage(usage)
         notchShelf?.attachCalendar(calendar)
         notchShelf?.attachColorPicker(colorPicker)
+
+        let windowSwitcherOn = Self.extensionEnabled(AppStorageKeys.WindowSwitcher.enabled)
+        if windowSwitcherOn, windowSwitcher == nil { windowSwitcher = WindowSwitcherService() }
+        if !windowSwitcherOn, let service = windowSwitcher {
+            service.shutdown()
+            windowSwitcher = nil
+        }
+        windowSwitcher?.syncSettings()
     }
 
     private func reconcilePresentationServices() {
@@ -405,6 +415,21 @@ final class AppServices {
         lidAwake?.syncSettings()
         focusDim?.applySettings()
         presenter?.applySettings()
+    }
+
+    func performWindowSwitcherOperation(_ info: [AnyHashable: Any]) {
+        guard let windowSwitcher else {
+            IPC.post(
+                IPC.Name.windowSwitcherOperationResult,
+                userInfo: [
+                    WindowSwitcherIPC.requestIDKey: info[WindowSwitcherIPC.requestIDKey]
+                        as? String ?? "",
+                    WindowSwitcherIPC.statusKey: "extensionOff",
+                    WindowSwitcherIPC.payloadKey: "",
+                ])
+            return
+        }
+        windowSwitcher.perform(info)
     }
 
     private static func reconcileAgentUsageSettings() -> AgentUsageSettingsState {

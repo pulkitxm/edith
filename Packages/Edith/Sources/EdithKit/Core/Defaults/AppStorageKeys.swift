@@ -7,6 +7,19 @@ public enum AppStorageKeys {
         public static let automaticDownloads = "SUAutomaticallyUpdate"
     }
 
+    public enum WindowSwitcher {
+        public static let cycleHotKeyCode = "windowSwitcherCycleHotKeyCode"
+        public static let cycleHotKeyLabel = "windowSwitcherCycleHotKeyLabel"
+        public static let cycleHotKeyMods = "windowSwitcherCycleHotKeyMods"
+        public static let enabled = "windowSwitcherEnabled"
+        public static let grouped = "windowSwitcherGrouped"
+        public static let hiddenApps = "windowSwitcherHiddenApps"
+        public static let includedApps = "windowSwitcherIncludedApps"
+        public static let showHotKeyCode = "windowSwitcherShowHotKeyCode"
+        public static let showHotKeyLabel = "windowSwitcherShowHotKeyLabel"
+        public static let showHotKeyMods = "windowSwitcherShowHotKeyMods"
+    }
+
     public enum General {
         public static let editMainWindowFullScreen = "EdithMainWindowFullScreen"
         public static let appearance = "appearance"

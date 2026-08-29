@@ -21,6 +21,7 @@ import Testing
         "tabCalendarEnabled",
         "notchShelfEnabled",
         "clipboardEnabled",
+        "windowSwitcherEnabled",
         "focusDimEnabled",
         "presenterEnabled",
         "colorPickerEnabled",
@@ -31,12 +32,12 @@ import Testing
         #expect(Set(identifiers).count == identifiers.count)
     }
 
-    @Test func registryMatchesPreUtilityBaseline() {
+    @Test func registryMatchesCurrentExtensions() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
                 "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
-                "clipboard", "focusDim", "presenter", "colorPicker",
+                "clipboard", "windowSwitcher", "focusDim", "presenter", "colorPicker",
             ])
     }
 
@@ -149,7 +150,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard",
+                "clipboard", "windowSwitcher",
             ])
     }
 
@@ -240,6 +241,7 @@ import Testing
             "calendar": [.calendar],
             "notchShelf": [],
             "clipboard": [],
+            "windowSwitcher": [.accessibility],
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
             "colorPicker": [.screenRecording],
@@ -259,6 +261,7 @@ import Testing
             "calendar": [],
             "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation],
             "clipboard": [.accessibility],
+            "windowSwitcher": [],
             "focusDim": [],
             "presenter": [],
             "colorPicker": [],
@@ -390,6 +393,7 @@ import Testing
             "tabCalendarEnabled": true,
             "notchShelfEnabled": false,
             "clipboardEnabled": true,
+            "windowSwitcherEnabled": false,
             "focusDimEnabled": false,
             "presenterEnabled": true,
             "colorPickerEnabled": false,

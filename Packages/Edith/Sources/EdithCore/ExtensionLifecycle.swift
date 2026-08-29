@@ -590,6 +590,40 @@ public enum ExtensionLifecycleCatalog {
                     "ed clipboard ls --json")
             ]),
         descriptor(
+            "windowSwitcher", "Find and focus any open window without capturing the screen.",
+            workflows: [
+                instruction(
+                    "search", "Search windows",
+                    "Filter open and minimized windows by application or title."),
+                instruction(
+                    "cycle", "Cycle one app",
+                    "Move through every window owned by the front application."),
+            ],
+            prerequisites: [
+                instruction(
+                    "permission", "Grant Accessibility",
+                    "Accessibility lets Edith read window titles and focus your selection.",
+                    "ed permissions request accessibility")
+            ],
+            examples: [
+                "ed extensions enable windowSwitcher", "ed windows ls --json",
+                "ed windows show",
+            ],
+            docs: [
+                documentation("guide", "Window Switcher guide", "docs/cli/windows/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "permission", "Refresh Accessibility",
+                    "Refresh the mirrored grant after changing System Settings.",
+                    "ed permissions refresh")
+            ],
+            verification: [
+                instruction(
+                    "list", "List windows", "Confirm Edith can enumerate open windows.",
+                    "ed windows ls --json")
+            ]),
+        descriptor(
             "focusDim", "Reduce visual noise by dimming everything behind the active app.",
             workflows: [
                 instruction(

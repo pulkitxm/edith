@@ -185,6 +185,12 @@ public enum ExtensionRegistry {
             defaultsKey: "clipboardEnabled", requiredCapabilities: [.clipboardHistory],
             optionalCapabilities: [.globalPaste, .globalShortcuts]),
         ExtensionRegistryEntry(
+            id: "windowSwitcher", title: "Window Switcher",
+            subtitle: "Search every window or cycle through the front app.",
+            symbolName: "rectangle.stack.fill", group: .utilities, featured: true,
+            defaultsKey: "windowSwitcherEnabled", requiredCapabilities: [.windowManagement],
+            optionalCapabilities: [.globalShortcuts]),
+        ExtensionRegistryEntry(
             id: "focusDim", title: "Focus Dim",
             subtitle: "Dims everything behind your active app.",
             symbolName: "circle.lefthalf.filled", group: .utilities, featured: false,

@@ -9,6 +9,10 @@ import Testing
         }
     }
 
+    @Test func windowManagementRequiresPermission() {
+        #expect(PlatformCapabilities.macOS.state(for: .windowManagement) == .permissionRequired)
+    }
+
     @Test func missingOptionalCapabilitiesDegradeAnExtension() {
         let capabilities = PlatformCapabilities(
             states: [

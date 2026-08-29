@@ -100,6 +100,9 @@ public enum UserOperationCatalog {
         + LidAwakeOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + WindowSwitcherOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
 
     private static let featureRegistrations: [RegisteredUserOperation] =
         UsageProjectOperation.allCases.map {
@@ -921,6 +924,21 @@ private extension LidAwakeOperation {
         case .restoreOnQuit:
             userInterface(
                 "Lid Awake settings", "leave sleep disabled after quitting", ["false", "--yes"])
+        }
+    }
+}
+
+private extension WindowSwitcherOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .list:
+            commandLineOnly("The switcher surface already presents the current window list.")
+        case .show:
+            userInterface("Window Switcher", "open the switcher")
+        case .activate:
+            userInterface("Window Switcher", "activate the selected window", ["window-id"])
+        case .cycle:
+            userInterface("Window Switcher", "cycle windows of the front app")
         }
     }
 }

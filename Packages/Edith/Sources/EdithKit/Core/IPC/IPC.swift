@@ -111,6 +111,10 @@ public enum IPC {
             "com.pulkit.edith.requestAppDiagnostics")
         public static let appDiagnostics = Notification.Name(
             "com.pulkit.edith.appDiagnostics")
+        public static let requestWindowSwitcherOperation = Notification.Name(
+            "com.pulkit.edith.requestWindowSwitcherOperation")
+        public static let windowSwitcherOperationResult = Notification.Name(
+            "com.pulkit.edith.windowSwitcherOperationResult")
         public static let requestQuinjetSessionOperation = Notification.Name(
             "com.pulkit.edith.requestQuinjetSessionOperation")
         public static let quinjetSessionOperationResult = Notification.Name(
