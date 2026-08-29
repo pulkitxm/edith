@@ -200,6 +200,26 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(!holder.started)
     }
 
+    @Test func spaceTerminalWindowRendersWithoutStartingSessions() {
+        let defaults = UserDefaults(
+            suiteName: "space-terminal-smoke-\(UUID().uuidString)")!
+        let store = HerdrStore(defaults: defaults, liveWatcher: { _ in })
+        let agent = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true,
+            sshTarget: nil, session: "main", pane: "p1", kind: "Codex", status: .working,
+            title: "Build checkout", workspace: "edith", cwd: "/tmp")
+        let model = HerdrSpaceWindowModel(
+            space: HerdrAgentSpace(id: "edith", title: "edith", agents: [agent]),
+            store: store)
+
+        #expect(
+            renders(
+                HerdrSpaceView(model: model, store: store, launchEnabled: false),
+                width: 1180, height: 760))
+        #expect(model.tabs.flatMap(\.holders).allSatisfy { !$0.started })
+        model.stopAll()
+    }
+
     @Test func finderSmokeRenderDoesNotStartConnection() async throws {
         let session = MachineSession(
             machine: Machine(name: "Remote", host: "203.0.113.1"), local: false,
@@ -275,6 +295,22 @@ private func descendantViews(of view: NSView) -> [NSView] {
 
     @Test func herdrPageRenders() {
         #expect(renders(HerdrPage(store: HerdrStore())))
+    }
+
+    @Test func herdrBoardWithAgentSpacesRenders() {
+        let name = "herdr-board-smoke-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = HerdrStore(defaults: defaults, liveWatcher: { _ in })
+        let agent = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true,
+            sshTarget: nil, session: "main", pane: "p1", kind: "Codex",
+            status: .working, title: "Build checkout", workspace: "edith", cwd: "/tmp")
+        store.apply([.local(herdrPresent: true, agents: [agent])])
+        store.spaceGroupingEnabled = true
+        store.selectBoard()
+
+        #expect(renders(HerdrPage(store: store), width: 1180, height: 760))
     }
 
     @Test func musicPageRenders() {

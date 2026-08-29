@@ -459,13 +459,14 @@ private struct WorkspaceDivider: View {
                 }
             }
             .gesture(
-                DragGesture(minimumDistance: 1)
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { value in
                         let travelled =
                             axis == .horizontal
                             ? value.translation.width : value.translation.height
-                        onDrag(travelled - lastTranslation)
+                        let delta = travelled - lastTranslation
                         lastTranslation = travelled
+                        onDrag(delta)
                     }
                     .onEnded { _ in
                         lastTranslation = 0

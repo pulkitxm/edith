@@ -82,6 +82,8 @@ struct HerdrSessionView: View {
     let launchEnabled: Bool
     var hideAgents = false
     var presented = true
+    var wantsFocus = true
+    var onSetView: ((HerdrAgentView) -> Void)?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(AppStorageKeys.Quinjet.theme, store: SharedDefaults.store)
@@ -249,6 +251,7 @@ struct HerdrSessionView: View {
             TerminalPane(
                 holder: tab.holder, palette: .edith(dark: dark),
                 active: presented && tab.view.showsAgent,
+                wantsFocus: wantsFocus,
                 onDropFiles: agent.machineIsLocal ? nil : handleRemoteDrop
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -306,7 +309,8 @@ struct HerdrSessionView: View {
             Color(nsColor: palette.background)
             TerminalPane(
                 holder: tab.quinjet.holder, palette: palette,
-                active: presented && tab.view.showsDiff && tab.quinjet.live
+                active: presented && tab.view.showsDiff && tab.quinjet.live,
+                wantsFocus: wantsFocus
             )
             .id(tab.quinjet.holder.generation)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -503,7 +507,11 @@ struct HerdrSessionView: View {
                 .font(.system(size: UIScale.pt(10.5), weight: .semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             HerdrAgentViewToggle(selection: tab.view) { option in
-                store.setView(option, for: tab.id)
+                if let onSetView {
+                    onSetView(option)
+                } else {
+                    store.setView(option, for: tab.id)
+                }
             }
             if tab.view.showsDiff, let branch = tab.quinjet.branch {
                 Text(branch)

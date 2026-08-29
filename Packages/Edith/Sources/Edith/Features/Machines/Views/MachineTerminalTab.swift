@@ -374,15 +374,21 @@ struct MachineTerminalTab: View {
     var wantsFocus = true
     @State private var ownHolder = TerminalSessionHolder()
     private let injectedHolder: TerminalSessionHolder?
+    private let context: MachineTerminalContext?
+    private let showsStatusBar: Bool
 
     init(
         session: MachineSession, active: Bool = true, wantsFocus: Bool = true,
+        context: MachineTerminalContext? = nil,
+        showsStatusBar: Bool = true,
         holder: TerminalSessionHolder? = nil
     ) {
         self.session = session
         self.active = active
         self.wantsFocus = wantsFocus
         injectedHolder = holder
+        self.context = context
+        self.showsStatusBar = showsStatusBar
     }
 
     private var holder: TerminalSessionHolder { injectedHolder ?? ownHolder }
@@ -398,7 +404,7 @@ struct MachineTerminalTab: View {
             started: holder.started, exitMessage: holder.exitMessage,
             launchEnabled: launchEnabled)
         VStack(spacing: 0) {
-            statusBar(presentation)
+            if showsStatusBar { statusBar(presentation) }
             if presentation.showsTerminal {
                 TerminalPane(
                     holder: holder, palette: .edith(dark: dark), active: active,
@@ -475,6 +481,23 @@ struct MachineTerminalTab: View {
                 active: active, launchEnabled: launchEnabled, started: holder.started,
                 isLocal: session.isLocal, connected: session.state.isConnected)
         else { return }
+        guard let context else {
+            startStandardShell()
+            return
+        }
+        let connection = session.isLocal ? nil : session.connectionRef
+        guard
+            let launch = MachineTerminalLaunchPlan.make(
+                isLocal: session.isLocal, connection: connection,
+                environment: Terminal.getEnvironmentVariables(termName: "xterm-256color"),
+                context: context)
+        else { return }
+        holder.start(
+            executable: launch.executable, arguments: launch.arguments,
+            environment: launch.environment, currentDirectory: launch.currentDirectory)
+    }
+
+    private func startStandardShell() {
         if session.isLocal {
             holder.start(
                 executable: "/bin/zsh", arguments: ["-l"],
@@ -501,6 +524,47 @@ struct MachineTerminalTab: View {
         case .connect: session.start()
         case .retry: session.retry()
         }
+    }
+}
+
+struct MachineTerminalContext: Equatable, Sendable {
+    let startingDirectory: String?
+
+    init(startingDirectory: String? = nil) {
+        let trimmed = startingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.startingDirectory = trimmed?.isEmpty == false ? trimmed : nil
+    }
+}
+
+struct MachineTerminalLaunch: Equatable, Sendable {
+    let executable: String
+    let arguments: [String]
+    let environment: [String]
+    let currentDirectory: String?
+}
+
+enum MachineTerminalLaunchPlan {
+    static let remoteLoginShell = "exec \"${SHELL:-/bin/sh}\" -l"
+
+    static func make(
+        isLocal: Bool, connection: SSHConnection?, environment: [String],
+        context: MachineTerminalContext = MachineTerminalContext()
+    ) -> MachineTerminalLaunch? {
+        if isLocal {
+            return MachineTerminalLaunch(
+                executable: "/bin/zsh", arguments: ["-l"],
+                environment: HerdrMachineTerminal.unnested(environment),
+                currentDirectory: context.startingDirectory)
+        }
+        guard let connection else { return nil }
+        let command = MachineWorkingDirectory.prefixed(
+            remoteLoginShell, directory: context.startingDirectory)
+        return MachineTerminalLaunch(
+            executable: SSHConnection.executable.path,
+            arguments: connection.terminalArguments(remoteCommand: command),
+            environment: HerdrMachineTerminal.unnested(
+                environment + connection.terminalEnvironment()),
+            currentDirectory: nil)
     }
 }
 
