@@ -13,7 +13,7 @@
 	</dict>
 	<key>AssociatedBundleIdentifiers</key>
 	<array>
-		<string>com.pulkit.edith.statusbar</string>
+		<string>com.pulkit.edith.helper</string>
 		<string>com.pulkit.edith</string>
 	</array>
 </dict>

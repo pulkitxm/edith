@@ -39,11 +39,11 @@ import Testing
 
     @Test func zshScriptWorksAutoloadedAndSourced() {
         let script = CompletionScripts.zsh
-        #expect(script.hasPrefix("#compdef ed edh edith"))
+        #expect(script.hasPrefix("#compdef ed edith"))
         #expect(script.contains("_ed_complete() {"))
         #expect(script.contains("if [[ $zsh_eval_context[-1] == loadautofunc ]]; then"))
         #expect(script.contains("_ed_complete \"$@\""))
-        #expect(script.contains("compdef _ed_complete ed edh edith"))
+        #expect(script.contains("compdef _ed_complete ed edith"))
         #expect(script.contains("compadd -- \"${matches[@]}\""))
     }
 

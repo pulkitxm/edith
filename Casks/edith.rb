@@ -1,6 +1,6 @@
 cask "edith" do
-  version "0.0.186"
-  sha256 "c6f36e728d398d0bd42638a3d11a94d500b3738c3c5a64bb73f3402dbc8f3434"
+  version "0.0.193"
+  sha256 "df1e78f1b1bf11319c800eb848bb6a795007fcf5d00099ebe50ac07328887bb4"
 
   url "https://github.com/pulkitxm/edith/releases/download/v#{version}/Edith.dmg",
       verified: "github.com/pulkitxm/edith/"
@@ -19,21 +19,23 @@ cask "edith" do
 
   app "Edith.app"
   binary "#{appdir}/Edith.app/Contents/MacOS/ed"
-  binary "#{appdir}/Edith.app/Contents/MacOS/edh"
+  binary "#{appdir}/Edith.app/Contents/MacOS/ed", target: "edith"
 
   uninstall quit: [
     "com.pulkit.edith",
-    "com.pulkit.edith.statusbar",
     "com.pulkit.edith.files",
+    "com.pulkit.edith.helper",
+    "com.pulkit.edith.statusbar",
   ]
 
   zap trash: [
     "~/Library/Application Support/Edith",
-    "~/Library/Caches/Edith",
     "~/Library/Caches/com.pulkit.edith",
+    "~/Library/Caches/Edith",
     "~/Library/HTTPStorages/com.pulkit.edith",
     "~/Library/Preferences/com.pulkit.edith.plist",
     "~/Library/Preferences/com.pulkit.edith.shared.plist",
+    "~/Library/Preferences/com.pulkit.edith.helper.plist",
     "~/Library/Preferences/com.pulkit.edith.statusbar.plist",
     "~/Library/Saved Application State/com.pulkit.edith.savedState",
   ]

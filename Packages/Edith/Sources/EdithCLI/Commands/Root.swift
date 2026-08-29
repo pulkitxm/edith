@@ -361,7 +361,7 @@ struct CompletionsInstallCommand: AsyncParsableCommand {
 struct InstallCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "install",
-        abstract: "Link ed, edh and edith into a directory on PATH.")
+        abstract: "Link ed and edith into a directory on PATH.")
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
@@ -403,7 +403,7 @@ struct InstallCommand: AsyncParsableCommand {
 
 struct UninstallCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "uninstall", abstract: "Remove the ed, edh and edith links.")
+        commandName: "uninstall", abstract: "Remove the ed and edith links.")
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

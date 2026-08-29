@@ -854,7 +854,6 @@ import Testing
         for shell in CompletionScripts.Shell.allCases {
             let script = CompletionScripts.script(for: shell, tool: CLIProcessProbe.binary.path)
             #expect(script.contains(CLIProcessProbe.binary.path))
-            #expect(script.contains("edh"))
             #expect(script.contains("edith"))
             #expect(script.contains("__complete"))
         }

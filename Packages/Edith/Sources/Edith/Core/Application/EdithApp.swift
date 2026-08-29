@@ -235,7 +235,8 @@ private final class LidAwakeDaemonRegistrar {
 }
 
 private let retiredHelperBundleIdentifiers = [
-    "com.pulkit.edith.panel", "com.pulkit.edith.bar", "com.pulkit.edith.menubar",
+    "com.pulkit.edith.statusbar", "com.pulkit.edith.panel", "com.pulkit.edith.bar",
+    "com.pulkit.edith.menubar",
 ]
 
 private func launchHelperIfNeeded() async {

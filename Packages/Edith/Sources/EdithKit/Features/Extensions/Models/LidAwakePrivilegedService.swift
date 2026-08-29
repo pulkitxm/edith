@@ -5,6 +5,6 @@ public enum LidAwakePrivilegedService {
     public static let legacyPlistName = "com.pulkit.edith.lidawake.plist"
     public static let machServiceName = "com.pulkit.edith.lidawake.v2"
     public static let bundleIdentifier = "com.pulkit.edith.lidawake"
-    public static let clientBundleIdentifier = "com.pulkit.edith.statusbar"
+    public static let clientBundleIdentifier = MainApp.statusBarBundleIdentifier
     public static let stateKey = "lidAwakePrivilegedHelperState"
 }

@@ -217,7 +217,7 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.MenuBar.colorMode, .string, group: "menubar",
             summary: "How the menu bar readout is tinted.",
-            allowed: ["auto", "white", "custom"], fallback: .string("auto")),
+            allowed: ["auto", "custom"], fallback: .string("auto")),
         SettingDefinition(
             AppStorageKeys.General.smartColor, .bool, group: "menubar",
             summary: "Tint the menu bar readout by a time-aware risk model."),
@@ -236,6 +236,10 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.MenuBar.statsColorHex, .string, group: "menubar",
             summary: "Hex colour of the CPU and memory menu bar readout."),
+        SettingDefinition(
+            AppStorageKeys.MenuBar.statsColorMode, .string, group: "menubar",
+            summary: "How the CPU and memory menu bar readout is tinted.",
+            allowed: ["auto", "custom"], fallback: .string("auto")),
         SettingDefinition(
             AppStorageKeys.MenuBar.systemStats, .bool, group: "menubar",
             summary: "CPU and memory readout as a menu bar item.", fallback: .bool(false)),

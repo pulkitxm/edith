@@ -15,7 +15,7 @@ or install it with Homebrew:
 brew install --cask pulkitxm/tap/edith
 ```
 
-That taps, installs the app and puts `ed` and `edh` on your `PATH`. Edith updates itself
+That taps, installs the app and puts `ed` and `edith` on your `PATH`. Edith updates itself
 through Sparkle, so `brew upgrade --cask --greedy edith` is the way to force
 Homebrew to fetch a newer release. Full command list:
 [docs/homebrew.md](docs/homebrew.md), and
@@ -80,7 +80,7 @@ and platform details.
 ## Command line
 
 Installing Edith installs `ed`, a first-class CLI that reaches everything the UI
-does. `edh` and `edith` are the same binary.
+does. `edith` is the same binary under its full name.
 
 ```
 ed config set preventSleep true     every setting the UI exposes, applied live

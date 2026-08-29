@@ -13,7 +13,7 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: ghostty build install reset reinstall release loc ci ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture
+.PHONY: ghostty build install reset reinstall release loc ci ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-release-build-settings verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture
 
 ci:
 	bun install --frozen-lockfile
@@ -24,7 +24,6 @@ site-dev:
 
 cli:
 	$(XCODEBUILD) -scheme ed -configuration Release build
-	$(XCODEBUILD) -scheme edh -configuration Release build
 	build/Build/Products/Release/ed install --directory $(HOME)/.local/bin
 	build/Build/Products/Release/ed completions install
 
@@ -113,29 +112,54 @@ ci-swift: ci-swift-check
 	./build.sh --no-open
 	$(MAKE) verify-bundle
 
-verify-bundle:
+verify-release-build-settings:
+	@test "$$(xcodebuild -project edth.xcodeproj -target EdithMain -configuration Release -showBuildSettings | awk '$$1 == "DEAD_CODE_STRIPPING" { print $$3; exit }')" = YES \
+	  || { echo "Release DEAD_CODE_STRIPPING must be YES" >&2; exit 1; }
+
+verify-bundle: verify-release-build-settings
 	test -f dist/Edith.app/Contents/MacOS/Edith
+	test ! -L dist/Edith.app/Contents/MacOS/Edith
+	test -x dist/Edith.app/Contents/MacOS/Edith
+	file -b dist/Edith.app/Contents/MacOS/Edith | grep -q '^Mach-O'
+	test -f dist/Edith.app/Contents/MacOS/ed
+	test ! -L dist/Edith.app/Contents/MacOS/ed
 	test -x dist/Edith.app/Contents/MacOS/ed
-	test -x dist/Edith.app/Contents/MacOS/edh
+	file -b dist/Edith.app/Contents/MacOS/ed | grep -q '^Mach-O'
+	test ! -e dist/Edith.app/Contents/MacOS/edh
+	test ! -L dist/Edith.app/Contents/MacOS/edh
+	test 1 -eq "$$(find dist/Edith.app/Contents/MacOS -maxdepth 1 -type f \( -name ed -o -name edh \) | wc -l | tr -d ' ')"
+	codesign --verify --strict dist/Edith.app/Contents/MacOS/ed
+	@install_dir="$$(mktemp -d /tmp/edith-install.XXXXXX)"; \
+	  trap 'rm -rf "$$install_dir"' EXIT; \
+	  dist/Edith.app/Contents/MacOS/ed install --directory "$$install_dir" >/dev/null; \
+	  target="$$(pwd)/dist/Edith.app/Contents/MacOS/ed"; \
+	  version="$$($$install_dir/ed --version)"; \
+	  for name in ed edith; do \
+	    test -L "$$install_dir/$$name"; \
+	    test "$$(readlink "$$install_dir/$$name")" = "$$target"; \
+	    test -x "$$install_dir/$$name"; \
+	    codesign --verify --strict "$$install_dir/$$name"; \
+	    test "$$version" = "$$($$install_dir/$$name --version)"; \
+	  done; \
+	  test ! -e "$$install_dir/edh"; \
+	  test ! -L "$$install_dir/edh"
 	test 1 -eq "$$(find dist/Edith.app -name Sparkle.framework | wc -l | tr -d ' ')"
-	test -d "dist/Edith.app/Contents/Library/Applications/Edith Files.app/Contents/MacOS/../../../../../Frameworks/Sparkle.framework"
+	test ! -e "dist/Edith.app/Contents/Library/Applications/Edith Files.app"
 	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/claude.svg
 	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/codex.svg
 	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/ChromeExtension/manifest.json
 	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith
 	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/MenuBar.png
-	test -x "dist/Edith.app/Contents/Library/Applications/Edith Files.app/Contents/MacOS/EdithFiles"
-	test -f "dist/Edith.app/Contents/Library/Applications/Edith Files.app/Contents/Resources/Edith_Edith.bundle/Contents/Resources/appicon.png"
-	/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "dist/Edith.app/Contents/Library/Applications/Edith Files.app/Contents/Info.plist" | grep -qx com.pulkit.edith.files
 	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/AppIcon.icns
 	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/claude.svg
 	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/codex.svg
+	/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Info.plist | grep -qx com.pulkit.edith.helper
 	test -x dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake
 	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.plist
 	test -x dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake
 	test -f dist/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.v2.plist
 	/usr/libexec/PlistBuddy -c 'Print :BundleProgram' dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.plist | grep -qx Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake
-	/usr/libexec/PlistBuddy -c 'Print :AssociatedBundleIdentifiers:0' dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.plist | grep -qx com.pulkit.edith.statusbar
+	/usr/libexec/PlistBuddy -c 'Print :AssociatedBundleIdentifiers:0' dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.plist | grep -qx com.pulkit.edith.helper
 	/usr/libexec/PlistBuddy -c 'Print :AssociatedBundleIdentifiers:1' dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.plist | grep -qx com.pulkit.edith
 	/usr/libexec/PlistBuddy -c 'Print :BundleProgram' dist/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.v2.plist | grep -qx Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake
 	/usr/libexec/PlistBuddy -c 'Print :AssociatedBundleIdentifiers:0' dist/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.v2.plist | grep -qx com.pulkit.edith
@@ -149,7 +173,6 @@ verify-bundle:
 	  done; \
 	done; exit 0
 	codesign --verify dist/Edith.app/Contents/Library/LoginItems/Edith.app
-	codesign --verify "dist/Edith.app/Contents/Library/Applications/Edith Files.app"
 	codesign --verify --deep --strict dist/Edith.app
 
 

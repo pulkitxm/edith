@@ -137,10 +137,10 @@ public enum CommandTree {
                     CommandNode("fish", "Print the fish completion script."),
                 ]),
             CommandNode(
-                "install", "Link ed, edh and edith into a directory on PATH.",
+                "install", "Link ed and edith into a directory on PATH.",
                 options: ["--json", "--directory"]),
             CommandNode(
-                "uninstall", "Remove the ed, edh and edith links.", options: ["--json"]),
+                "uninstall", "Remove the ed and edith links.", options: ["--json"]),
             CommandNode(
                 "config", "Read and write every setting the UI exposes.",
                 children: [
@@ -1016,9 +1016,6 @@ public enum CommandTree {
                             CommandNode(
                                 "undo", "Undo the last change a Finder window made.",
                                 options: common, arguments: [.machine]),
-                            CommandNode(
-                                "open", "Open the Files window on a directory.",
-                                options: common, arguments: [.machine, .remotePath]),
                             CommandNode(
                                 "duplicate", "Copy a file beside itself.", options: common,
                                 arguments: [.machine, .remotePath]),
