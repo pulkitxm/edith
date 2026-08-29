@@ -375,10 +375,12 @@ struct MachineTerminalTab: View {
     @State private var ownHolder = TerminalSessionHolder()
     private let injectedHolder: TerminalSessionHolder?
     private let context: MachineTerminalContext?
+    private let showsRestartAction: Bool
 
     init(
         session: MachineSession, active: Bool = true, wantsFocus: Bool = true,
         context: MachineTerminalContext? = nil,
+        showsRestartAction: Bool = true,
         holder: TerminalSessionHolder? = nil
     ) {
         self.session = session
@@ -386,6 +388,7 @@ struct MachineTerminalTab: View {
         self.wantsFocus = wantsFocus
         injectedHolder = holder
         self.context = context
+        self.showsRestartAction = showsRestartAction
     }
 
     private var holder: TerminalSessionHolder { injectedHolder ?? ownHolder }
@@ -434,7 +437,10 @@ struct MachineTerminalTab: View {
                     .foregroundStyle(DashSkin.warn)
             }
             Spacer(minLength: 0)
-            if let action = presentation.action {
+            if let action = presentation.action,
+                MachineTerminalActionVisibility.shouldShow(
+                    action, showsRestartAction: showsRestartAction)
+            {
                 Button(action.title) { perform(action) }
                     .font(.system(size: UIScale.pt(11)))
             }
@@ -578,6 +584,14 @@ enum MachineTerminalAction: Equatable {
         case .connect: return "Connect"
         case .retry: return "Retry"
         }
+    }
+}
+
+enum MachineTerminalActionVisibility {
+    static func shouldShow(
+        _ action: MachineTerminalAction, showsRestartAction: Bool
+    ) -> Bool {
+        action != .restart || showsRestartAction
     }
 }
 
