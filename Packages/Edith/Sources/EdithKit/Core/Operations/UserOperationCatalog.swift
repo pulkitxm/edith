@@ -1221,6 +1221,12 @@ private extension AppMaintenanceOperation {
             userInterface(
                 "App Maintenance", "verify and install one app from a disk image",
                 ["~/Downloads/Example.dmg", "--yes"])
+        case .updates:
+            userInterface("App Update Center", "discover available updates")
+        case .update:
+            userInterface("App Update Center", "review and run selected updates", ["--yes"])
+        case .history:
+            userInterface("App Update Center", "review update history")
         }
     }
 }

@@ -13,6 +13,8 @@ struct MaintenanceCommand: AsyncParsableCommand {
         subcommands: [
             MaintenanceInventoryCommand.self, MaintenanceScanCommand.self,
             MaintenanceRemoveCommand.self, MaintenanceInstallCommand.self,
+            MaintenanceUpdatesCommand.self, MaintenanceUpdateCommand.self,
+            MaintenanceUpdateHistoryCommand.self,
         ],
         defaultSubcommand: MaintenanceInventoryCommand.self)
 }
@@ -115,6 +117,178 @@ enum MaintenanceCLI {
             CLIOut.out("replacement: \(existing.name) \(existing.version) moves to the Trash")
         } else {
             CLIOut.out("replacement: none")
+        }
+    }
+
+    static func updateJSON(_ item: AppUpdateItem) -> JSONValue {
+        .object([
+            "action": .string(item.action.rawValue),
+            "availableVersion": .string(item.availableVersion),
+            "bundleID": .optional(item.bundleID),
+            "checkedAt": .date(item.checkedAt),
+            "command": .string(item.command),
+            "confidence": .string(item.confidence.rawValue),
+            "currentVersion": .string(item.currentVersion),
+            "id": .string(item.id),
+            "name": .string(item.name),
+            "path": .optional(item.applicationPath),
+            "releaseNotes": .optional(item.releaseNotes),
+            "releaseTitle": .optional(item.releaseTitle),
+            "releaseURL": .optional(item.releaseURL?.absoluteString),
+            "source": .string(item.source.rawValue),
+        ])
+    }
+
+    static func resultJSON(_ result: AppUpdateResult) -> JSONValue {
+        .object([
+            "attempts": .int(result.attempts),
+            "detail": .string(result.detail),
+            "finishedAt": .date(result.finishedAt),
+            "id": .string(result.itemID),
+            "name": .string(result.name),
+            "source": .string(result.source.rawValue),
+            "status": .string(result.status.rawValue),
+            "version": .string(result.version),
+        ])
+    }
+
+    static func availableUpdates() async throws -> ([AppUpdateItem], AppUpdateCenterState) {
+        let persistence = AppUpdatePersistence()
+        var state = persistence.load()
+        let applications = AppMaintenanceInventory.applications(updateData: Data())
+        let discovered = await AppUpdateDiscovery.discover(applications: applications)
+        let now = Date()
+        state.lastRefresh = now
+        try persistence.save(state)
+        return (persistence.visible(discovered, state: state, now: now), state)
+    }
+
+    static func printUpdates(_ items: [AppUpdateItem]) {
+        CLIOut.out(
+            TextTable.render(
+                headers: ["ID", "NAME", "CURRENT", "AVAILABLE", "SOURCE", "CONFIDENCE"],
+                rows: items.map {
+                    [
+                        $0.id, $0.name, $0.currentVersion, $0.availableVersion,
+                        $0.source.title, $0.confidence.title,
+                    ]
+                }))
+    }
+}
+
+struct MaintenanceUpdatesCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "updates", abstract: "Discover updates from every available source.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let (items, state) = try await MaintenanceCLI.availableUpdates()
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "items": .array(items.map(MaintenanceCLI.updateJSON)),
+                        "lastRefresh": .date(state.lastRefresh),
+                    ]))
+                return
+            }
+            MaintenanceCLI.printUpdates(items)
+            CLIOut.out("")
+            CLIOut.out("\(items.count) updates available")
+        }
+    }
+}
+
+struct MaintenanceUpdateCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "update", abstract: "Review and run selected updates.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Flag(help: "Apply the reviewed update plan.")
+    var yes = false
+
+    @Option(help: "Maximum updates running together, from 1 through 4.")
+    var concurrency = 2
+
+    @Option(help: "Retries after a failed update, from 0 through 3.")
+    var retries = 1
+
+    @Argument(help: "Update IDs. Omit to select every available update.")
+    var ids: [String] = []
+
+    func run() async throws {
+        try await execute {
+            let (available, _) = try await MaintenanceCLI.availableUpdates()
+            let selected = ids.isEmpty ? available : available.filter { ids.contains($0.id) }
+            let plan = AppUpdatePlan(
+                items: selected, concurrency: concurrency, retries: retries)
+            guard !selected.isEmpty else { throw CLIFailure("no matching updates are available") }
+            guard yes else {
+                if json {
+                    CLIOut.json(
+                        .object([
+                            "applied": .bool(false),
+                            "concurrency": .int(plan.concurrency),
+                            "items": .array(selected.map(MaintenanceCLI.updateJSON)),
+                            "retries": .int(plan.retries),
+                        ]))
+                } else {
+                    MaintenanceCLI.printUpdates(selected)
+                    CLIOut.note("pass --yes to run this reviewed update plan")
+                }
+                return
+            }
+            let results = try await AppUpdateExecutor().execute(plan, confirmed: true)
+            let persistence = AppUpdatePersistence()
+            try persistence.save(persistence.recording(results, in: persistence.load()))
+            if json {
+                CLIOut.json(
+                    .object([
+                        "applied": .bool(true),
+                        "results": .array(results.map(MaintenanceCLI.resultJSON)),
+                    ]))
+            } else {
+                CLIOut.out(
+                    TextTable.render(
+                        headers: ["NAME", "VERSION", "SOURCE", "STATUS", "DETAIL"],
+                        rows: results.map {
+                            [
+                                $0.name, $0.version, $0.source.title, $0.status.rawValue,
+                                $0.detail,
+                            ]
+                        }))
+            }
+        }
+    }
+}
+
+struct MaintenanceUpdateHistoryCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "history", abstract: "Show recent update results.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let history = AppUpdatePersistence().load().history
+            guard !json else {
+                CLIOut.json(.array(history.map(MaintenanceCLI.resultJSON)))
+                return
+            }
+            CLIOut.out(
+                TextTable.render(
+                    headers: ["WHEN", "NAME", "VERSION", "SOURCE", "STATUS"],
+                    rows: history.map {
+                        [
+                            JSONSerializer.iso.string(from: $0.finishedAt), $0.name, $0.version,
+                            $0.source.title, $0.status.rawValue,
+                        ]
+                    }))
         }
     }
 }
