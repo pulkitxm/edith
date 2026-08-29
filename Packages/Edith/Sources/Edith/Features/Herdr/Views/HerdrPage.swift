@@ -71,7 +71,12 @@ struct HerdrPage: View {
 
     private var header: some View {
         PageHeader(
-            "Herdr",
+            title: {
+                HStack(spacing: UIScale.pt(12)) {
+                    Text("Herdr")
+                    spaceGroupingToggle
+                }
+            },
             trailing: {
                 Button {
                     Task { await store.refresh() }
@@ -82,6 +87,33 @@ struct HerdrPage: View {
                 .disabled(store.refreshing)
             },
             accessory: { filters })
+    }
+
+    private var spaceGroupingToggle: some View {
+        let enabled = store.spaceGroupingEnabled
+        return Button {
+            withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
+                store.spaceGroupingEnabled.toggle()
+            }
+        } label: {
+            Text("Space")
+                .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                .foregroundStyle(enabled ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
+                .padding(.horizontal, UIScale.pt(10))
+                .padding(.vertical, UIScale.pt(5))
+                .widgetBar(
+                    cornerRadius: 8,
+                    fill: enabled ? DashSkin.paper2(dark) : .clear,
+                    stroke: enabled ? DashSkin.accent(dark).opacity(0.65) : .clear,
+                    strokeWidth: enabled ? 1.4 : 0
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.borderless))
+        .accessibilityLabel("Group agents by space")
+        .accessibilityValue(enabled ? "Enabled" : "Disabled")
+        .accessibilityAddTraits(enabled ? .isSelected : [])
+        .help(enabled ? "Show one agent list" : "Group agents by space")
     }
 
     private var detailToggle: some View {
@@ -551,19 +583,18 @@ struct HerdrPage: View {
                             HerdrSkeleton(dark: dark, rows: 4, card: false)
                         }
                         if !store.agentsCollapsed, !store.settling {
-                            ForEach(listedAgents) { agent in
-                                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                                    agentRow(agent)
-                                    if store.selectedTab == agent.id {
-                                        HerdrAgentViewToggle(
-                                            selection: store.view(for: agent.id),
-                                            compactStyle: true
-                                        ) { option in
-                                            store.open(agent, showing: option)
+                            if store.spaceGroupingEnabled {
+                                ForEach(store.agentSpaces) { space in
+                                    spaceHeader(space)
+                                    if !store.spaceIsCollapsed(space.id) {
+                                        ForEach(space.agents) { agent in
+                                            agentRailEntry(agent)
                                         }
-                                        .padding(.horizontal, UIScale.pt(8))
-                                        .padding(.bottom, UIScale.pt(4))
                                     }
+                                }
+                            } else {
+                                ForEach(listedAgents) { agent in
+                                    agentRailEntry(agent)
                                 }
                             }
                         }
@@ -576,6 +607,54 @@ struct HerdrPage: View {
         .frame(width: UIScale.pt(compact ? 200 : 252))
         .frame(maxHeight: .infinity)
         .background(DashSkin.paper(dark))
+    }
+
+    private func spaceHeader(_ space: HerdrAgentSpace) -> some View {
+        let collapsed = store.spaceIsCollapsed(space.id)
+        let title = hideAgents ? "Space" : space.title
+        return Button {
+            withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
+                store.toggleSpace(space.id)
+            }
+        } label: {
+            HStack(spacing: UIScale.pt(6)) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: UIScale.pt(8), weight: .bold))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .rotationEffect(.degrees(collapsed ? 0 : 90))
+                Text(title)
+                    .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .lineLimit(1)
+                Text("\(space.agents.count)")
+                    .font(DashSkin.mono(9.5, weight: .medium))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                Spacer(minLength: 0)
+            }
+            .padding(.leading, UIScale.pt(14))
+            .padding(.trailing, UIScale.pt(8))
+            .padding(.top, UIScale.pt(7))
+            .padding(.bottom, UIScale.pt(3))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.borderless))
+        .help(collapsed ? "Show \(title)" : "Hide \(title)")
+        .accessibilityLabel("\(title), \(collapsed ? "collapsed" : "expanded")")
+    }
+
+    private func agentRailEntry(_ agent: HerdrAgent) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+            agentRow(agent)
+            if store.selectedTab == agent.id {
+                HerdrAgentViewToggle(
+                    selection: store.view(for: agent.id), compactStyle: true
+                ) { option in
+                    store.open(agent, showing: option)
+                }
+                .padding(.horizontal, UIScale.pt(8))
+                .padding(.bottom, UIScale.pt(4))
+            }
+        }
     }
 
     private func railHeader(
