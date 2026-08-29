@@ -68,6 +68,10 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(renders(HomePage()))
     }
 
+    @Test func githubPageRendersItsInitialSkeleton() {
+        #expect(renders(GitHubPage()))
+    }
+
     @Test func mainWindowRendersEveryDestination() {
         let saved = SharedDefaults.store.string(forKey: "mainWindowSection")
         let savedSettingsTab = SharedDefaults.store.string(forKey: "settingsTab")
