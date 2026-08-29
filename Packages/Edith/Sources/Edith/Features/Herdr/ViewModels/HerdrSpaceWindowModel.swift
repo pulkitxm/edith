@@ -97,11 +97,17 @@ final class HerdrSpaceTabModel: Identifiable {
     var paneCount: Int { layout.paneCount }
 
     var agentID: String? {
-        contents.values.compactMap { $0.agent?.id }.first
+        for content in contents.values {
+            if let id = content.agent?.id { return id }
+        }
+        return nil
     }
 
     var agentTab: HerdrOpenTab? {
-        contents.values.compactMap(\.agent).first
+        for content in contents.values {
+            if let agent = content.agent { return agent }
+        }
+        return nil
     }
 
     var focusedPane: PaneNode? {
@@ -189,12 +195,17 @@ final class HerdrSpaceTabModel: Identifiable {
     }
 
     var holders: [TerminalSessionHolder] {
-        contents.values.map(\.holder)
+        var result: [TerminalSessionHolder] = []
+        result.reserveCapacity(contents.count)
+        for content in contents.values { result.append(content.holder) }
+        return result
     }
 
     private func refreshTitle() {
-        if let agent = contents.values.compactMap({ $0.agent }).first {
+        for content in contents.values {
+            guard let agent = content.agent else { continue }
             title = agent.agent.title
+            return
         }
     }
 }
