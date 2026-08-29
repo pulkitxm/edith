@@ -101,6 +101,8 @@ final class AppServices {
     func prepareForTermination() async {
         startup.cancel()
         terminating = true
+        ScratchpadHotKey.unregister()
+        ScratchpadPanel.shared.uninstall()
         shutDownEmojiRuntime()
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
         await lidAwake?.shutdownForTermination()
@@ -295,6 +297,15 @@ final class AppServices {
             }
         }
         ClipboardPanel.shared.store = clipboard
+
+        let scratchpadOn = Self.extensionEnabled(AppStorageKeys.Scratchpad.enabled)
+        if scratchpadOn {
+            ScratchpadPanel.shared.install()
+            ScratchpadHotKey.register()
+        } else {
+            ScratchpadHotKey.unregister()
+            ScratchpadPanel.shared.uninstall()
+        }
 
         let emojiOn = Self.extensionEnabled(AppStorageKeys.Emoji.enabled)
         if emojiOn {

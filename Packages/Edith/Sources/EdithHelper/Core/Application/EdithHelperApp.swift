@@ -168,6 +168,14 @@ struct EdithApp: App {
                 SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
             services.sync()
         }
+        _ = IPC.observe(IPC.Name.requestScratchpadPanel) {
+            MainActor.assumeIsolated { ScratchpadPanel.shared.toggle() }
+        }
+        _ = IPC.observe(IPC.Name.scratchpadChanged) {
+            MainActor.assumeIsolated {
+                if ScratchpadPanel.shared.isVisible { ScratchpadPanel.shared.show() }
+            }
+        }
         _ = IPC.observe(IPC.Name.requestEmojiPanel) {
             MainActor.assumeIsolated { EmojiPanel.shared.toggle() }
         }
@@ -317,6 +325,7 @@ enum GlobalHotKey {
         static let micMute: UInt32 = 6
         static let presenterToggle: UInt32 = 7
         static let emoji: UInt32 = 8
+        static let scratchpad: UInt32 = 9
     }
 
     fileprivate static var refs: [UInt32: EventHotKeyRef] = [:]
@@ -423,6 +432,36 @@ enum ClipboardHotKey {
         SharedDefaults.store.set(code, forKey: "clipboardHotKeyCode")
         SharedDefaults.store.set(mods, forKey: "clipboardHotKeyMods")
         SharedDefaults.store.set(label, forKey: "clipboardHotKeyLabel")
+    }
+}
+
+enum ScratchpadHotKey {
+    static var code: Int {
+        SharedDefaults.store.object(forKey: AppStorageKeys.Scratchpad.hotKeyCode) as? Int
+            ?? kVK_ANSI_N
+    }
+
+    static var mods: Int {
+        SharedDefaults.store.object(forKey: AppStorageKeys.Scratchpad.hotKeyMods) as? Int
+            ?? (controlKey | optionKey)
+    }
+
+    static var label: String {
+        SharedDefaults.store.string(forKey: AppStorageKeys.Scratchpad.hotKeyLabel) ?? "⌃⌥N"
+    }
+
+    static func register() {
+        guard SharedDefaults.store.bool(forKey: AppStorageKeys.Scratchpad.enabled) else {
+            unregister()
+            return
+        }
+        GlobalHotKey.set(id: GlobalHotKey.ID.scratchpad, keyCode: code, modifiers: mods) {
+            MainActor.assumeIsolated { ScratchpadPanel.shared.toggle() }
+        }
+    }
+
+    static func unregister() {
+        GlobalHotKey.clear(id: GlobalHotKey.ID.scratchpad)
     }
 }
 
