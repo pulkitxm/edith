@@ -142,7 +142,15 @@ import Testing
 
     @Test func captureOperationsComplete() {
         let result = Self.plan(["ed", "capture", ""], 2)
-        #expect(result.candidates == ["read", "area", "window", "screen", "library"])
+        #expect(result.candidates == ["read", "area", "window", "screen", "library", "record"])
+
+        let recorder = Self.plan(["ed", "capture", "record", ""], 3)
+        #expect(
+            recorder.candidates
+                == [
+                    "area", "window", "display", "pause", "resume", "stop", "cancel", "status",
+                    "library",
+                ])
     }
 
     @Test func lidAwakeCommandsAndFlagsComplete() {
