@@ -9,12 +9,7 @@ private struct DockToolsRuntimeWindow {
     let value: DockToolsWindow
     let element: AXUIElement
     let windowID: CGWindowID?
-}
-
-private struct DockToolsWindowSurface {
-    let id: CGWindowID
-    let title: String
-    let frame: CGRect
+    let frame: CGRect?
 }
 
 private struct DockToolsHit {
@@ -324,7 +319,6 @@ final class DockToolsEngine {
         let appElement = AXUIElementCreateApplication(application.processIdentifier)
         AXUIElementSetMessagingTimeout(appElement, 0.35)
         let elements: [AXUIElement] = attribute(appElement, kAXWindowsAttribute as CFString) ?? []
-        var surfaces = windowSurfaces(for: application.processIdentifier)
         let bundleIdentifier = application.bundleIdentifier ?? ""
         let appName = application.localizedName ?? bundleIdentifier
         return elements.enumerated().compactMap { index, element in
@@ -338,11 +332,6 @@ final class DockToolsEngine {
             let windowID: CGWindowID?
             if let directWindowNumber {
                 windowID = CGWindowID(directWindowNumber.uint32Value)
-                surfaces.removeAll { $0.id == windowID }
-            } else if let surfaceIndex = bestSurfaceIndex(
-                title: title, frame: elementFrame, surfaces: surfaces)
-            {
-                windowID = surfaces.remove(at: surfaceIndex).id
             } else {
                 windowID = nil
             }
@@ -353,46 +342,8 @@ final class DockToolsEngine {
                     title: title, appName: appName,
                     bundleIdentifier: bundleIdentifier, pid: application.processIdentifier,
                     minimized: minimized),
-                element: element, windowID: windowID)
+                element: element, windowID: windowID, frame: elementFrame)
         }
-    }
-
-    private func windowSurfaces(for pid: pid_t) -> [DockToolsWindowSurface] {
-        let values =
-            CGWindowListCopyWindowInfo([.optionAll, .excludeDesktopElements], kCGNullWindowID)
-            as? [[String: Any]] ?? []
-        return values.compactMap { value in
-            guard (value[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == pid,
-                (value[kCGWindowLayer as String] as? NSNumber)?.intValue == 0,
-                let id = (value[kCGWindowNumber as String] as? NSNumber)?.uint32Value,
-                let bounds = value[kCGWindowBounds as String] as? [String: Any],
-                let frame = CGRect(dictionaryRepresentation: bounds as CFDictionary)
-            else { return nil }
-            return DockToolsWindowSurface(
-                id: id, title: value[kCGWindowName as String] as? String ?? "", frame: frame)
-        }
-    }
-
-    private func bestSurfaceIndex(
-        title: String, frame: CGRect?, surfaces: [DockToolsWindowSurface]
-    ) -> Int? {
-        guard !surfaces.isEmpty else { return nil }
-        return surfaces.indices.min { first, second in
-            surfaceScore(surfaces[first], title: title, frame: frame)
-                < surfaceScore(surfaces[second], title: title, frame: frame)
-        }
-    }
-
-    private func surfaceScore(
-        _ surface: DockToolsWindowSurface, title: String, frame: CGRect?
-    ) -> CGFloat {
-        let titlePenalty =
-            title.isEmpty || surface.title.isEmpty || surface.title == title ? 0 : 100_000
-        guard let frame else { return CGFloat(titlePenalty) }
-        let frameDelta =
-            abs(surface.frame.minX - frame.minX) + abs(surface.frame.minY - frame.minY)
-            + abs(surface.frame.width - frame.width) + abs(surface.frame.height - frame.height)
-        return CGFloat(titlePenalty) + frameDelta
     }
 
     private func activate(
@@ -739,11 +690,19 @@ private final class DockToolsPreviewController {
             let content = try? await SCShareableContent.excludingDesktopWindows(
                 false, onScreenWindowsOnly: false)
         else { return [:] }
-        let available = Dictionary(uniqueKeysWithValues: content.windows.map { ($0.windowID, $0) })
+        var available = content.windows.filter { sharedWindow in
+            windows.contains { $0.value.pid == sharedWindow.owningApplication?.processID }
+        }
         var result: [String: NSImage] = [:]
         for window in windows.prefix(8) {
-            guard let windowID = window.windowID, let sharedWindow = available[windowID]
-            else { continue }
+            let sharedIndex: Int?
+            if let windowID = window.windowID {
+                sharedIndex = available.firstIndex { $0.windowID == windowID }
+            } else {
+                sharedIndex = bestSharedWindowIndex(for: window, available: available)
+            }
+            guard let sharedIndex else { continue }
+            let sharedWindow = available.remove(at: sharedIndex)
             let configuration = SCStreamConfiguration()
             let width = max(sharedWindow.frame.width, 1)
             let height = max(sharedWindow.frame.height, 1)
@@ -759,6 +718,31 @@ private final class DockToolsPreviewController {
             result[window.value.id] = NSImage(cgImage: image, size: .zero)
         }
         return result
+    }
+
+    private func bestSharedWindowIndex(
+        for window: DockToolsRuntimeWindow, available: [SCWindow]
+    ) -> Int? {
+        guard !available.isEmpty else { return nil }
+        return available.indices.min { first, second in
+            sharedWindowScore(available[first], for: window)
+                < sharedWindowScore(available[second], for: window)
+        }
+    }
+
+    private func sharedWindowScore(_ sharedWindow: SCWindow, for window: DockToolsRuntimeWindow)
+        -> CGFloat
+    {
+        let sharedTitle = sharedWindow.title ?? ""
+        let title = window.value.title
+        let titlePenalty =
+            title.isEmpty || sharedTitle.isEmpty || sharedTitle == title ? 0 : 100_000
+        guard let frame = window.frame else { return CGFloat(titlePenalty) }
+        let sharedFrame = sharedWindow.frame
+        let frameDelta =
+            abs(sharedFrame.minX - frame.minX) + abs(sharedFrame.minY - frame.minY)
+            + abs(sharedFrame.width - frame.width) + abs(sharedFrame.height - frame.height)
+        return CGFloat(titlePenalty) + frameDelta
     }
 }
 
