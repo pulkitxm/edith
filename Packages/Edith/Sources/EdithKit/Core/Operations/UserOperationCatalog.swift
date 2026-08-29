@@ -141,6 +141,9 @@ public enum UserOperationCatalog {
         + WorkspaceOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + AutomationOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
 
     private static let remoteFileRegistrations: [RegisteredUserOperation] =
         UsageCollectionOperation.allCases.map {
@@ -276,6 +279,31 @@ private func userInterface(
 
 private func commandLineOnly(_ reason: String) -> UserOperationExposure {
     .commandLineOnly(reason: reason)
+}
+
+private extension AutomationOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .operations, .list, .history:
+            userInterface("Automations & Scenes", "inspect local automation state")
+        case .plan:
+            userInterface("Automations & Scenes", "preview a scene", ["focus"])
+        case .run:
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: "Automations & Scenes", action: "run a scene",
+                    exampleArguments: ["focus"]),
+                UserInterfaceActionPlacement(
+                    surface: "Menu panel", action: "run a scene", exampleArguments: ["focus"]),
+                UserInterfaceActionPlacement(
+                    surface: "Command Bar", action: "run a scene", exampleArguments: ["focus"]),
+                UserInterfaceActionPlacement(
+                    surface: "Global shortcut", action: "run a scene", exampleArguments: ["focus"]),
+            ])
+        case .enable, .disable, .export, .import:
+            userInterface("Automations & Scenes", rawValue + " automation configuration")
+        }
+    }
 }
 
 private extension MachineControlOperation {

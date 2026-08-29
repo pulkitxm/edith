@@ -110,6 +110,12 @@ public enum ExtensionRegistry {
             symbolName: "hourglass", group: .utilities, featured: true,
             defaultsKey: "tabAttentionEnabled", requiredCapabilities: [.runningApplications]),
         ExtensionRegistryEntry(
+            id: "automations", title: "Automations & Scenes",
+            subtitle: "Run reusable Edith actions on schedules and local Mac events.",
+            symbolName: "bolt.badge.clock.fill", group: .utilities, featured: false,
+            defaultsKey: "automationsEnabled", requiredCapabilities: [],
+            optionalCapabilities: [.calendarEvents, .globalShortcuts, .notifications]),
+        ExtensionRegistryEntry(
             id: "usage", title: "Agent Usage",
             subtitle: "Claude and Codex limits, usage stats, and alerts.",
             symbolName: "chart.bar.fill", group: .agent, featured: true,
