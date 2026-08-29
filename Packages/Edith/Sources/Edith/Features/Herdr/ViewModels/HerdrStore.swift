@@ -449,14 +449,18 @@ final class HerdrStore {
 
     var detachedIDs: Set<String> { Set(detachedTabs.keys) }
 
+    func makeTab(for agent: HerdrAgent) -> HerdrOpenTab {
+        var resolved = HerdrAgentViews.view(for: agent.id, defaults)
+        if agent.isTerminal { resolved = .agent }
+        return HerdrOpenTab(
+            agent: agent, machine: machine(for: agent), view: resolved,
+            holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession())
+    }
+
     func detachedTab(for agent: HerdrAgent) -> HerdrOpenTab {
         revealSpace(containing: agent)
         if let existing = detachedTabs[agent.id] { return existing }
-        var resolved = HerdrAgentViews.view(for: agent.id, defaults)
-        if agent.isTerminal { resolved = .agent }
-        let tab = HerdrOpenTab(
-            agent: agent, machine: machine(for: agent), view: resolved,
-            holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession())
+        let tab = makeTab(for: agent)
         detachedTabs[agent.id] = tab
         return tab
     }
@@ -488,13 +492,10 @@ final class HerdrStore {
             selectedTab = agent.id
             return
         }
-        let machine: Machine? = machine(for: agent)
-        var resolved = view ?? HerdrAgentViews.view(for: agent.id, defaults)
-        if agent.isTerminal { resolved = .agent }
-        tabs.append(
-            HerdrOpenTab(
-                agent: agent, machine: machine, view: resolved,
-                holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession()))
+        var tab = makeTab(for: agent)
+        if let view, !agent.isTerminal { tab.view = view }
+        let resolved = tab.view
+        tabs.append(tab)
         if view != nil { HerdrAgentViews.set(resolved, for: agent.id, defaults) }
         if resolved == .split { detailOpen = false }
         selectedTab = agent.id
