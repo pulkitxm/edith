@@ -700,6 +700,11 @@ final class SettingsBackup {
         AppStorageKeys.General.mainSidebarOpen, AppStorageKeys.General.mainSidebarWidth,
         AppStorageKeys.General.settingsCategoriesExpanded, AppStorageKeys.AppMaintenance.enabled,
         AppStorageKeys.AppMaintenance.installDestination,
+        AppStorageKeys.AppMaintenance.updateAutoRefresh,
+        AppStorageKeys.AppMaintenance.updateRefreshInterval,
+        AppStorageKeys.AppMaintenance.updateNotifications,
+        AppStorageKeys.AppMaintenance.updateConcurrency,
+        AppStorageKeys.AppMaintenance.updateRetries,
     ]
 
     nonisolated static let sharedKeys: Set<String> = [
@@ -799,6 +804,11 @@ final class SettingsBackup {
         AppStorageKeys.Music.gridView, "musicFavourites",
         AppStorageKeys.General.mainWindowSection, AppStorageKeys.General.settingsTab,
         AppStorageKeys.AppMaintenance.enabled, AppStorageKeys.AppMaintenance.installDestination,
+        AppStorageKeys.AppMaintenance.updateAutoRefresh,
+        AppStorageKeys.AppMaintenance.updateRefreshInterval,
+        AppStorageKeys.AppMaintenance.updateNotifications,
+        AppStorageKeys.AppMaintenance.updateConcurrency,
+        AppStorageKeys.AppMaintenance.updateRetries,
         AppStorageKeys.General.mainSidebarOpen, AppStorageKeys.General.mainSidebarWidth,
         AppStorageKeys.General.settingsCategoriesExpanded,
     ]
