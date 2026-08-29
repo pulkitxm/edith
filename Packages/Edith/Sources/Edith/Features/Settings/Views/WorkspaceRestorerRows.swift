@@ -71,8 +71,11 @@ struct WorkspaceRestorerRows: View {
                     ForEach(1...4, id: \.self) { Text("\($0)").tag($0) }
                 }
                 TextField("Excluded bundle identifiers", text: $excludedApps)
-                Text("Separate exclusions with commas. Window mutation remains sequential for safety.")
-                    .settingsCaption()
+                Text(
+                    "Separate exclusions with commas. "
+                        + "Window mutation remains sequential for safety."
+                )
+                .settingsCaption()
             }
 
             Section("Shortcuts") {
@@ -180,6 +183,8 @@ struct WorkspaceRestorerRows: View {
         if run.dryRun {
             return "Dry run ready for \(run.items.count) windows."
         }
-        return "Restored \(run.items.filter { $0.state == .restored }.count) of \(run.items.count) windows."
+        var restored = 0
+        for item in run.items where item.state == .restored { restored += 1 }
+        return "Restored \(restored) of \(run.items.count) windows."
     }
 }
