@@ -9,7 +9,11 @@ private final class CaptureLibraryModel {
     var items: [CaptureLibraryItem] = []
 
     func reload() {
-        items = CaptureLibraryStore.load()
+        Task {
+            items = await Task.detached(priority: .utility) {
+                CaptureLibraryStore.load()
+            }.value
+        }
     }
 }
 
@@ -59,48 +63,80 @@ final class CaptureLibraryController: NSObject, NSWindowDelegate {
         panel.contentView = nil
     }
 
-    private func data(for item: CaptureLibraryItem) -> Data? {
-        try? Data(contentsOf: CaptureLibraryStore.imageURL(for: item))
+    private func withData(
+        for item: CaptureLibraryItem, perform action: @escaping @MainActor (Data) -> Void
+    ) {
+        let url = CaptureLibraryStore.imageURL(for: item)
+        Task {
+            let data = await Task.detached(priority: .userInitiated) {
+                try? Data(contentsOf: url)
+            }.value
+            guard let data else {
+                NSSound.beep()
+                return
+            }
+            action(data)
+        }
     }
 
     private func copy(_ item: CaptureLibraryItem) {
-        guard let data = data(for: item) else {
-            NSSound.beep()
-            return
+        withData(for: item) { data in
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setData(data, forType: .png)
+            IPC.post(IPC.Name.clipboardChanged)
         }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setData(data, forType: .png)
-        IPC.post(IPC.Name.clipboardChanged)
     }
 
     private func save(_ item: CaptureLibraryItem) {
-        guard let data = data(for: item),
-            let url = try? CaptureSaveLocation.save(data, mode: item.mode)
-        else {
-            NSSound.beep()
-            return
+        let sourceURL = CaptureLibraryStore.imageURL(for: item)
+        Task {
+            let savedURL: URL? = await Task.detached(priority: .userInitiated) {
+                guard let data = try? Data(contentsOf: sourceURL) else { return nil }
+                return try? CaptureSaveLocation.save(data, mode: item.mode)
+            }.value
+            guard let savedURL else {
+                NSSound.beep()
+                return
+            }
+            NSWorkspace.shared.activateFileViewerSelecting([savedURL])
         }
-        NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
     private func pin(_ item: CaptureLibraryItem) {
-        guard let data = data(for: item) else {
-            NSSound.beep()
-            return
+        withData(for: item) { [pin] data in
+            pin(data)
         }
-        pin(data)
     }
 
     private func delete(_ item: CaptureLibraryItem) {
-        try? CaptureLibraryStore.remove(item)
-        model.reload()
-        IPC.post(IPC.Name.settingsChanged)
+        performLibraryChange {
+            try CaptureLibraryStore.remove(item)
+        }
     }
 
     private func clear() {
-        try? CaptureLibraryStore.clear()
-        model.reload()
-        IPC.post(IPC.Name.settingsChanged)
+        performLibraryChange {
+            try CaptureLibraryStore.clear()
+        }
+    }
+
+    private func performLibraryChange(_ action: @escaping @Sendable () throws -> Void) {
+        Task {
+            let succeeded = await Task.detached(priority: .userInitiated) {
+                do {
+                    try action()
+                    return true
+                } catch {
+                    return false
+                }
+            }.value
+            guard succeeded else {
+                NSSound.beep()
+                return
+            }
+            model.reload()
+            IPC.post(IPC.Name.settingsChanged)
+        }
     }
 }
 
