@@ -119,6 +119,26 @@ import Testing
         #expect(await fixture.wasCancelled())
     }
 
+    @Test func lineSelectionNavigationKeepsTheLoadedFileWithoutRefetching() async throws {
+        let fixture = GitHubResourceFixture()
+        let route = fileRoute(lines: nil)
+        let context = try await modelContext(route: route, fixture: fixture)
+        defer { try? FileManager.default.removeItem(at: context.root) }
+
+        await context.model.start()
+        await fixture.waitUntilStarted(1)
+        await fixture.release(0, resource: fileResource())
+        await context.model.waitForResourceLoad()
+
+        context.model.navigate(to: fileRoute(lines: .range(4...9)))
+        await Task.yield()
+
+        #expect(await fixture.requestCount() == 1)
+        #expect(context.model.resource == fileResource())
+        #expect(context.model.resourceState == .content)
+        #expect(context.model.currentRoute?.url.fragment == "L4-L9")
+    }
+
     private func modelContext(
         route: GitHubRoute, fixture: GitHubResourceFixture,
         cached: GitHubRepositoryResource? = nil
@@ -150,6 +170,23 @@ import Testing
                 language: "Swift", license: "MIT", topics: [], updatedAt: nil,
                 url: URL(string: "https://github.com/acme/\(name)")!, branches: [],
                 latestCommit: nil, entries: []))
+    }
+
+    private func fileRoute(lines: GitHubLineSelection?) -> GitHubRoute {
+        GitHubRoute(
+            host: .github,
+            resource: .content(
+                repository: GitHubRepositoryPath(owner: "acme", name: "orbit")!, kind: .blob,
+                revisionPath: ["main", "Sources", "Orbit.swift"], view: .automatic,
+                lines: lines))
+    }
+
+    private func fileResource() -> GitHubRepositoryResource {
+        .file(
+            GitHubFileSnapshot(
+                repository: GitHubRepositoryPath(owner: "acme", name: "orbit")!,
+                revision: "main", path: "Sources/Orbit.swift", sha: "abc123", size: 21,
+                text: "let orbit = true\n", downloadURL: nil, presentation: .text))
     }
 }
 

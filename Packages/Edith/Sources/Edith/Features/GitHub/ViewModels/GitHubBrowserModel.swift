@@ -95,9 +95,10 @@ final class GitHubBrowserModel {
             addressError = "Enter a valid GitHub or GitHub Enterprise URL."
             return
         }
+        let previousRoute = currentRoute
         addressError = nil
         mutate { $0.navigate(tabID: id, to: GitHubBrowserHistoryEntry(route: route)) }
-        loadCurrentRoute()
+        loadAfterNavigation(from: previousRoute)
     }
 
     func select(_ id: UUID) {
@@ -149,13 +150,15 @@ final class GitHubBrowserModel {
     }
 
     func goBack() {
+        let previousRoute = currentRoute
         mutateSelected { $0.goBack(tabID: $1) }
-        loadCurrentRoute()
+        loadAfterNavigation(from: previousRoute)
     }
 
     func goForward() {
+        let previousRoute = currentRoute
         mutateSelected { $0.goForward(tabID: $1) }
-        loadCurrentRoute()
+        loadAfterNavigation(from: previousRoute)
     }
 
     func reload() {
@@ -164,6 +167,7 @@ final class GitHubBrowserModel {
     }
 
     func navigate(to route: GitHubRoute, title: String? = nil, inNewTab: Bool = false) {
+        let previousRoute = currentRoute
         if inNewTab {
             mutate {
                 $0.openTab(
@@ -172,7 +176,7 @@ final class GitHubBrowserModel {
         } else if let id = session.selectedTabID {
             mutate { $0.navigate(tabID: id, to: GitHubBrowserHistoryEntry(route: route)) }
         }
-        loadCurrentRoute()
+        loadAfterNavigation(from: previousRoute)
     }
 
     func retryResourceLoad() {
@@ -181,6 +185,10 @@ final class GitHubBrowserModel {
 
     func waitForResourceLoad() async {
         await resourceTask?.value
+    }
+
+    func waitForPendingSave() async {
+        await saveTask?.value
     }
 
     func loadCurrentRoute(ignoreCache: Bool = false) {
@@ -262,6 +270,19 @@ final class GitHubBrowserModel {
         resourceState = resource == nil ? error.loadingState : .content
     }
 
+    private func loadAfterNavigation(from previousRoute: GitHubRoute?) {
+        guard let route = currentRoute, previousRoute?.sharesFilePayload(with: route) == true,
+            resource != nil
+        else {
+            loadCurrentRoute()
+            return
+        }
+        resourceGeneration &+= 1
+        resourceTask?.cancel()
+        loadedRoute = route
+        resourceError = nil
+        resourceState = .content
+    }
     private func mutateSelected(_ body: (inout GitHubBrowserSession, UUID) -> Void) {
         guard let id = session.selectedTabID else { return }
         mutate { body(&$0, id) }
@@ -338,5 +359,14 @@ private extension GitHubRoute {
         default:
             "GitHub"
         }
+    }
+
+    func sharesFilePayload(with other: GitHubRoute) -> Bool {
+        guard host == other.host,
+            case let .content(repository, kind, revisionPath, _, _) = resource,
+            case let .content(otherRepository, otherKind, otherRevisionPath, _, _) = other.resource,
+            kind != .tree, otherKind != .tree
+        else { return false }
+        return repository == otherRepository && revisionPath == otherRevisionPath
     }
 }
