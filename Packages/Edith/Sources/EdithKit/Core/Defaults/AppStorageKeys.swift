@@ -106,9 +106,12 @@ public enum AppStorageKeys {
         public static let detailOpen = "herdrDetailOpen"
         public static let detailWidth = "herdrDetailWidth"
         public static let agentsCollapsed = "herdrAgentsCollapsed"
+        public static let agentsCollapsedCount = "herdrAgentsCollapsedCount"
         public static let terminalsCollapsed = "herdrTerminalsCollapsed"
+        public static let terminalsCollapsedCount = "herdrTerminalsCollapsedCount"
         public static let spaceGroupingEnabled = "herdrSpaceGroupingEnabled"
         public static let collapsedSpaces = "herdrCollapsedSpaces"
+        public static let collapsedSpaceCounts = "herdrCollapsedSpaceCounts"
     }
 
     public enum Limits {

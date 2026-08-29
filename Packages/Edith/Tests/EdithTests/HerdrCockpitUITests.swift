@@ -163,6 +163,34 @@ import Testing
         #expect(!third.terminalsCollapsed)
     }
 
+    @Test func collapsedSectionsReopenOnlyWhenTheirCountsChange() {
+        let suite = defaults()
+        let first = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        first.apply([host])
+        first.terminalsCollapsed = true
+        first.agentsCollapsed = true
+        #expect(suite.integer(forKey: AppStorageKeys.Herdr.terminalsCollapsedCount) == 1)
+        #expect(suite.integer(forKey: AppStorageKeys.Herdr.agentsCollapsedCount) == 1)
+
+        let same = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        same.apply([host])
+        #expect(same.terminalsCollapsed)
+        #expect(same.agentsCollapsed)
+
+        let added = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "default", pane: "w2:p2", kind: "Codex", status: .idle,
+            title: "Second agent", workspace: "edith", cwd: "/repo")
+        let changedAgents = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        changedAgents.apply([.local(herdrPresent: true, agents: [agent, added])])
+        #expect(changedAgents.terminalsCollapsed)
+        #expect(!changedAgents.agentsCollapsed)
+
+        let changedTerminals = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        changedTerminals.apply([host, remote])
+        #expect(!changedTerminals.terminalsCollapsed)
+    }
+
     @Test func agentsCanBeGroupedIntoNamedSpaces() {
         let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
         let second = HerdrAgent.make(
@@ -196,6 +224,25 @@ import Testing
 
         let third = HerdrStore(defaults: suite, liveWatcher: { _ in })
         #expect(!third.spaceIsCollapsed("edith"))
+    }
+
+    @Test func collapsedSpaceReopensOnlyWhenItsAgentCountChanges() {
+        let suite = defaults()
+        let first = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        first.apply([host])
+        first.toggleSpace("edith")
+
+        let same = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        same.apply([host])
+        #expect(same.spaceIsCollapsed("edith"))
+
+        let added = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "default", pane: "w2:p2", kind: "Codex", status: .idle,
+            title: "Second agent", workspace: "edith", cwd: "/repo")
+        let changed = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        changed.apply([.local(herdrPresent: true, agents: [agent, added])])
+        #expect(!changed.spaceIsCollapsed("edith"))
     }
 
     @Test func aBurstOfUpdatesLandsOnceAsTheLatestState() async throws {

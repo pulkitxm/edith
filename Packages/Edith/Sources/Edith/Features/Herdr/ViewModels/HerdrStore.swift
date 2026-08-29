@@ -50,8 +50,18 @@ final class HerdrStore {
     static let boardID = "board"
 
     var hosts: [HerdrHostSnapshot] = []
-    var machineFilter = "all"
-    var kindFilter: Set<String> = []
+    var machineFilter = "all" {
+        didSet {
+            guard machineFilter != oldValue else { return }
+            reconcileCollapseCountsIfReady()
+        }
+    }
+    var kindFilter: Set<String> = [] {
+        didSet {
+            guard kindFilter != oldValue else { return }
+            reconcileCollapseCountsIfReady()
+        }
+    }
     var selectedTab = boardID
     var tabs: [HerdrOpenTab] = []
     var refreshing = false
@@ -78,13 +88,31 @@ final class HerdrStore {
     var agentsCollapsed = false {
         didSet {
             guard agentsCollapsed != oldValue else { return }
+            guard !restoringDefaults else { return }
             defaults.set(agentsCollapsed, forKey: AppStorageKeys.Herdr.agentsCollapsed)
+            if agentsCollapsed {
+                let count = listedAgents.count
+                agentsCollapsedCount = count
+                defaults.set(count, forKey: AppStorageKeys.Herdr.agentsCollapsedCount)
+            } else {
+                agentsCollapsedCount = nil
+                defaults.removeObject(forKey: AppStorageKeys.Herdr.agentsCollapsedCount)
+            }
         }
     }
     var terminalsCollapsed = false {
         didSet {
             guard terminalsCollapsed != oldValue else { return }
+            guard !restoringDefaults else { return }
             defaults.set(terminalsCollapsed, forKey: AppStorageKeys.Herdr.terminalsCollapsed)
+            if terminalsCollapsed {
+                let count = machineTerminals.count
+                terminalsCollapsedCount = count
+                defaults.set(count, forKey: AppStorageKeys.Herdr.terminalsCollapsedCount)
+            } else {
+                terminalsCollapsedCount = nil
+                defaults.removeObject(forKey: AppStorageKeys.Herdr.terminalsCollapsedCount)
+            }
         }
     }
     var spaceGroupingEnabled = false {
@@ -104,6 +132,12 @@ final class HerdrStore {
 
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
+    private let expectedHostCount: Int
+    private var restoringDefaults = true
+    private var collapseCountsReady = false
+    private var agentsCollapsedCount: Int?
+    private var terminalsCollapsedCount: Int?
+    private var collapsedSpaceCounts: [String: Int] = [:]
     private var connections: [UUID: SSHConnection] = [:]
     private var watchTask: Task<Void, Never>?
     private var settleTask: Task<Void, Never>?
@@ -113,10 +147,12 @@ final class HerdrStore {
 
     init(
         defaults: UserDefaults = SharedDefaults.store,
-        liveWatcher: @escaping HerdrLiveWatcher = { yield in await HerdrLive.watch(yield) }
+        liveWatcher: @escaping HerdrLiveWatcher = { yield in await HerdrLive.watch(yield) },
+        expectedHostCount: Int = MachineRegistry.machines().count + 1
     ) {
         self.defaults = defaults
         self.liveWatcher = liveWatcher
+        self.expectedHostCount = expectedHostCount
         railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
         railWidth = HerdrPaneSizing.rail(
             defaults.object(forKey: AppStorageKeys.Herdr.railWidth) as? Double
@@ -129,10 +165,17 @@ final class HerdrStore {
             defaults.object(forKey: AppStorageKeys.Herdr.agentsCollapsed) as? Bool ?? false
         terminalsCollapsed =
             defaults.object(forKey: AppStorageKeys.Herdr.terminalsCollapsed) as? Bool ?? false
+        agentsCollapsedCount = Self.optionalInt(
+            defaults, key: AppStorageKeys.Herdr.agentsCollapsedCount)
+        terminalsCollapsedCount = Self.optionalInt(
+            defaults, key: AppStorageKeys.Herdr.terminalsCollapsedCount)
         spaceGroupingEnabled =
             defaults.object(forKey: AppStorageKeys.Herdr.spaceGroupingEnabled) as? Bool ?? false
         collapsedSpaces = Set(
             defaults.stringArray(forKey: AppStorageKeys.Herdr.collapsedSpaces) ?? [])
+        collapsedSpaceCounts = Self.spaceCounts(
+            defaults.dictionary(forKey: AppStorageKeys.Herdr.collapsedSpaceCounts) ?? [:])
+        restoringDefaults = false
     }
 
     var agents: [HerdrAgent] { hosts.flatMap(\.agents) }
@@ -152,9 +195,12 @@ final class HerdrStore {
     func toggleSpace(_ id: String) {
         if collapsedSpaces.contains(id) {
             collapsedSpaces.remove(id)
+            collapsedSpaceCounts.removeValue(forKey: id)
         } else {
             collapsedSpaces.insert(id)
+            collapsedSpaceCounts[id] = agentSpaces.first { $0.id == id }?.agents.count ?? 0
         }
+        persistCollapsedSpaceCounts()
     }
 
     var machineTerminals: [HerdrAgent] {
@@ -299,16 +345,63 @@ final class HerdrStore {
     private func flush() {
         guard let latest = pendingHosts else { return }
         pendingHosts = nil
-        apply(latest)
+        apply(latest, collapseSnapshotComplete: latest.count >= expectedHostCount)
     }
 
     func apply(_ snapshots: [HerdrHostSnapshot]) {
+        apply(snapshots, collapseSnapshotComplete: true)
+    }
+
+    private func apply(_ snapshots: [HerdrHostSnapshot], collapseSnapshotComplete: Bool) {
         hosts = snapshots
         for index in tabs.indices {
             if let updated = agents.first(where: { $0.id == tabs[index].id }) {
                 tabs[index].agent = updated
             }
         }
+        if collapseSnapshotComplete {
+            collapseCountsReady = true
+            reconcileCollapseCounts()
+        }
+    }
+
+    private func reconcileCollapseCountsIfReady() {
+        guard collapseCountsReady else { return }
+        reconcileCollapseCounts()
+    }
+
+    private func reconcileCollapseCounts() {
+        if agentsCollapsed, agentsCollapsedCount != listedAgents.count {
+            agentsCollapsed = false
+        }
+        if terminalsCollapsed, terminalsCollapsedCount != machineTerminals.count {
+            terminalsCollapsed = false
+        }
+        let currentSpaceCounts = Dictionary(
+            uniqueKeysWithValues: agentSpaces.map { ($0.id, $0.agents.count) })
+        let changedSpaces = collapsedSpaces.filter {
+            collapsedSpaceCounts[$0] != currentSpaceCounts[$0, default: 0]
+        }
+        guard !changedSpaces.isEmpty else { return }
+        for id in changedSpaces {
+            collapsedSpaces.remove(id)
+            collapsedSpaceCounts.removeValue(forKey: id)
+        }
+        persistCollapsedSpaceCounts()
+    }
+
+    private func persistCollapsedSpaceCounts() {
+        defaults.set(collapsedSpaceCounts, forKey: AppStorageKeys.Herdr.collapsedSpaceCounts)
+    }
+
+    private static func spaceCounts(_ values: [String: Any]) -> [String: Int] {
+        values.reduce(into: [:]) { result, entry in
+            if let number = entry.value as? NSNumber { result[entry.key] = number.intValue }
+        }
+    }
+
+    private static func optionalInt(_ defaults: UserDefaults, key: String) -> Int? {
+        defaults.object(forKey: key) == nil ? nil : defaults.integer(forKey: key)
     }
 
     var detachedIDs: Set<String> { Set(detachedTabs.keys) }
