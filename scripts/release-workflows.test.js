@@ -120,6 +120,11 @@ test("release builds and publishes the macOS assets", () => {
   expect(dmgJob.indexOf("run: make verify-bundle")).toBeLessThan(
     dmgJob.indexOf("name: Package the DMG"),
   );
+  expect(dmgJob).toContain("ditto dist/Edith.app dmg-root/Edith.app");
+  expect(dmgJob).toContain("-format ULMO Edith.dmg");
+  expect(dmgJob).toContain("hdiutil verify Edith.dmg");
+  expect(dmgJob).toContain("name: Enforce the release size budget");
+  expect(dmgJob).toContain('test "$DMG_BYTES" -le 21000000');
   expect(releaseWorkflow).toContain("release-assets/Edith.dmg");
   expect(releaseWorkflow).toContain("release-assets/appcast.xml");
   expect(releaseWorkflow).toContain("gh release create");
@@ -156,7 +161,7 @@ test("superseded release builds yield the lane before packaging", () => {
   expect(
     dmgJob.match(/if: steps\.release_build\.outputs\.superseded != 'true'/g)
       ?.length,
-  ).toBe(10);
+  ).toBe(11);
   expect(releaseWorkflow).toContain(
     "needs: [version, ci, dmg]\n    if: needs.dmg.outputs.superseded != 'true'",
   );
