@@ -48,6 +48,19 @@ private final class CommandLineRecorder: @unchecked Sendable {
         #expect(standardError.snapshot == ["diagnostic"])
     }
 
+    @Test func capturedResultPreservesRawStreamsWithoutConcatenatingThem() async throws {
+        let result = try await CLICommandRunner.runCaptured(
+            CLICommandRequest(
+                executableURL: URL(fileURLWithPath: "/bin/sh"),
+                arguments: ["-c", "printf '\\001payload'; printf 'failure' >&2; exit 7"],
+                environment: ["PATH": "/usr/bin:/bin"], timeout: 2,
+                maximumOutputBytes: 1_024, terminatesProcessGroup: true))
+
+        #expect(result.terminationStatus == 7)
+        #expect(result.standardOutputData == Data([1]) + Data("payload".utf8))
+        #expect(result.standardError == "failure")
+    }
+
     @Test func separatedRunnerDoesNotReturnWhileACompletedCommandCallbackIsBlocked() async throws {
         let callbackStarted = DispatchSemaphore(value: 0)
         let releaseCallback = DispatchSemaphore(value: 0)

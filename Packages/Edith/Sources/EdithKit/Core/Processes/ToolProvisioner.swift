@@ -66,6 +66,34 @@ public struct CLICommandResult: Equatable, Sendable {
     }
 }
 
+public struct CLICommandCapturedResult: Equatable, Sendable {
+    public let terminationStatus: Int32
+    public let standardOutputData: Data
+    public let standardErrorData: Data
+
+    public init(
+        terminationStatus: Int32, standardOutputData: Data, standardErrorData: Data
+    ) {
+        self.terminationStatus = terminationStatus
+        self.standardOutputData = standardOutputData
+        self.standardErrorData = standardErrorData
+    }
+
+    public var standardOutput: String {
+        String(decoding: standardOutputData, as: UTF8.self)
+    }
+
+    public var standardError: String {
+        String(decoding: standardErrorData, as: UTF8.self)
+    }
+
+    fileprivate var combined: CLICommandResult {
+        CLICommandResult(
+            terminationStatus: terminationStatus,
+            outputData: standardOutputData + standardErrorData)
+    }
+}
+
 public enum CLICommandRunnerError: Error, Equatable, Sendable {
     case launchFailed
     case timedOut
@@ -184,7 +212,24 @@ public enum CLICommandRunner {
         onStandardErrorLine: @escaping @Sendable (String) -> Void
     ) async throws -> CLICommandResult {
         let worker = Task.detached(priority: .utility) {
-            try runBlockingSeparated(
+            try runBlockingCaptured(
+                request, onStandardOutputLine: onStandardOutputLine,
+                onStandardErrorLine: onStandardErrorLine).combined
+        }
+        return try await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+    }
+
+    public static func runCaptured(
+        _ request: CLICommandRequest,
+        onStandardOutputLine: @escaping @Sendable (String) -> Void = { _ in },
+        onStandardErrorLine: @escaping @Sendable (String) -> Void = { _ in }
+    ) async throws -> CLICommandCapturedResult {
+        let worker = Task.detached(priority: .utility) {
+            try runBlockingCaptured(
                 request, onStandardOutputLine: onStandardOutputLine,
                 onStandardErrorLine: onStandardErrorLine)
         }
@@ -199,14 +244,15 @@ public enum CLICommandRunner {
         _ request: CLICommandRequest,
         onLine: @escaping @Sendable (String) -> Void
     ) throws -> CLICommandResult {
-        try runBlockingSeparated(
-            request, onStandardOutputLine: onLine, onStandardErrorLine: onLine)
+        try runBlockingCaptured(
+            request, onStandardOutputLine: onLine, onStandardErrorLine: onLine
+        ).combined
     }
-    private static func runBlockingSeparated(
+    private static func runBlockingCaptured(
         _ request: CLICommandRequest,
         onStandardOutputLine: @escaping @Sendable (String) -> Void,
         onStandardErrorLine: @escaping @Sendable (String) -> Void
-    ) throws -> CLICommandResult {
+    ) throws -> CLICommandCapturedResult {
         let process = Process()
         let deadline = request.timeout.map {
             ProcessInfo.processInfo.systemUptime + max(0, $0)
@@ -339,9 +385,10 @@ public enum CLICommandRunner {
         }
         for line in finishedOutput.lines { onStandardOutputLine(line) }
         for line in finishedError.lines { onStandardErrorLine(line) }
-        return CLICommandResult(
+        return CLICommandCapturedResult(
             terminationStatus: process.terminationStatus,
-            outputData: finishedOutput.output + finishedError.output)
+            standardOutputData: finishedOutput.output,
+            standardErrorData: finishedError.output)
     }
 
     private enum StopReason {
