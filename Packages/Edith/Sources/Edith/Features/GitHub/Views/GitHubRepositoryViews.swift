@@ -463,8 +463,8 @@ private struct GitHubFileView: View {
             content
         }
         .task(id: "\(file.sha)-\(dark)") { await highlight() }
-        .onChange(of: route.url.absoluteString) { _, _ in
-            selectedLines = route.selectedLines
+        .onChange(of: route.selectedLines) { _, selection in
+            selectedLines = selection
         }
     }
 
@@ -706,7 +706,7 @@ private struct GitHubCodeLinesView: View {
                     }
                 }
             }
-            .task(id: scrollTarget) {
+            .task(id: "\(wraps)-\(scrollTarget ?? 0)") {
                 await Task.yield()
                 guard !Task.isCancelled, let line = scrollTarget else { return }
                 proxy.scrollTo(line, anchor: .center)
