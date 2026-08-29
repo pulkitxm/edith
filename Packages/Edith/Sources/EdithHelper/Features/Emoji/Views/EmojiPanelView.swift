@@ -35,7 +35,8 @@ struct EmojiPanelView: View {
         self.onDismiss = onDismiss
         self.onCellAppear = onCellAppear
         _model = State(
-            initialValue: EmojiPanelModel(catalog: store.catalog, frequent: store.frequent))
+            initialValue: EmojiPanelModel(
+                catalog: store.catalog, frequent: store.frequent, search: store.search))
     }
 
     static func sections(catalog: EmojiCatalog, frequent: [Emoji], query: String) -> [EmojiSection]

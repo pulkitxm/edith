@@ -53,12 +53,10 @@ final class EmojiPanelModel {
 
     init(catalog: EmojiCatalog, frequent: [Emoji], search: Search? = nil) {
         self.catalog = catalog
-        let index = EmojiSearchIndex(catalog.emoji)
+        let searchService = EmojiSearchService(catalog.emoji)
         self.search =
             search ?? { query in
-                await Task.detached(priority: .userInitiated) {
-                    index.results(query: query)
-                }.value
+                await searchService.results(query: query)
             }
         baseSections = Self.baseSections(catalog: catalog, frequent: frequent)
         baseProjection = Self.projection(for: baseSections)
