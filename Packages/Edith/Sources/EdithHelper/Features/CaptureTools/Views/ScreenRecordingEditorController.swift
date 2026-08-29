@@ -18,21 +18,38 @@ private final class ScreenRecordingEditorModel {
     var finishedURL: URL?
     var overlayText = ""
     private var exporter: ScreenRecordingExporter?
+    private var pointerTrack = ScreenRecordingPointerTrack()
 
     init(take: ScreenRecordingTake) {
         self.take = take
         player = AVPlayer(url: ScreenRecordingLibrary.masterURL(for: take.id))
-        let editURL = ScreenRecordingLibrary.editURL(for: take.id)
-        if let data = try? Data(contentsOf: editURL),
-            let saved = try? JSONDecoder().decode(ScreenRecordingEditDocument.self, from: data)
-        {
-            document = saved.normalized(duration: take.duration)
-        } else {
-            document = ScreenRecordingEditDocument(trimEnd: take.duration)
-        }
+        document = ScreenRecordingEditDocument(trimEnd: take.duration)
         presets = ScreenRecordingPresetStore.load()
-        if !presets.contains(document.preset) { presets.insert(document.preset, at: 0) }
-        generateZoomsIfNeeded()
+    }
+
+    func load() {
+        let editURL = ScreenRecordingLibrary.editURL(for: take.id)
+        let pointerURL = ScreenRecordingLibrary.pointerURL(for: take.id)
+        Task { [weak self] in
+            let loaded = await Task.detached(priority: .utility) {
+                let document = (try? Data(contentsOf: editURL)).flatMap {
+                    try? JSONDecoder().decode(ScreenRecordingEditDocument.self, from: $0)
+                }
+                let pointerTrack = (try? Data(contentsOf: pointerURL)).flatMap {
+                    try? JSONDecoder().decode(ScreenRecordingPointerTrack.self, from: $0)
+                }
+                return (document, pointerTrack)
+            }.value
+            guard let self else { return }
+            if let document = loaded.0 {
+                self.document = document.normalized(duration: self.take.duration)
+            }
+            self.pointerTrack = loaded.1 ?? ScreenRecordingPointerTrack()
+            if !self.presets.contains(self.document.preset) {
+                self.presets.insert(self.document.preset, at: 0)
+            }
+            self.generateZoomsIfNeeded()
+        }
     }
 
     func persist() {
@@ -142,12 +159,9 @@ private final class ScreenRecordingEditorModel {
     }
 
     private func generateZoomsIfNeeded() {
-        guard document.automaticZooms, document.zooms.isEmpty,
-            let data = try? Data(contentsOf: ScreenRecordingLibrary.pointerURL(for: take.id)),
-            let track = try? JSONDecoder().decode(ScreenRecordingPointerTrack.self, from: data)
-        else { return }
+        guard document.automaticZooms, document.zooms.isEmpty else { return }
         document.zooms = ScreenRecordingTimeline.automaticZooms(
-            clicks: track.clicks, duration: take.duration)
+            clicks: pointerTrack.clicks, duration: take.duration)
     }
 }
 
@@ -175,6 +189,7 @@ final class ScreenRecordingEditorController: NSObject, NSWindowDelegate {
     var isVisible: Bool { panel.isVisible }
 
     func show() {
+        model.load()
         panel.center()
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

@@ -59,14 +59,16 @@ final class ScreenRecordingSourceSelector {
         let content = try await SCShareableContent.excludingDesktopWindows(
             true, onScreenWindowsOnly: true)
         let ownProcess = NSRunningApplication.current.processIdentifier
-        let windows = content.windows.filter {
-            $0.owningApplication?.processID != ownProcess && $0.frame.width >= 32
-                && $0.frame.height >= 32
-        }.sorted {
-            let lhs = $0.owningApplication?.applicationName ?? ""
-            let rhs = $1.owningApplication?.applicationName ?? ""
-            return lhs == rhs ? ($0.title ?? "") < ($1.title ?? "") : lhs < rhs
-        }
+        let windows = await Task.detached(priority: .userInitiated) {
+            content.windows.filter {
+                $0.owningApplication?.processID != ownProcess && $0.frame.width >= 32
+                    && $0.frame.height >= 32
+            }.sorted {
+                let lhs = $0.owningApplication?.applicationName ?? ""
+                let rhs = $1.owningApplication?.applicationName ?? ""
+                return lhs == rhs ? ($0.title ?? "") < ($1.title ?? "") : lhs < rhs
+            }
+        }.value
         guard !windows.isEmpty else { throw ScreenRecordingError.sourceUnavailable }
         let labels = windows.map {
             let app = $0.owningApplication?.applicationName ?? "Application"
@@ -97,7 +99,9 @@ final class ScreenRecordingSourceSelector {
     private func selectDisplay() async throws -> ScreenRecordingRegion {
         let content = try await SCShareableContent.excludingDesktopWindows(
             false, onScreenWindowsOnly: true)
-        let displays = content.displays.sorted { $0.displayID < $1.displayID }
+        let displays = await Task.detached(priority: .userInitiated) {
+            content.displays.sorted { $0.displayID < $1.displayID }
+        }.value
         guard !displays.isEmpty else { throw ScreenRecordingError.sourceUnavailable }
         let labels = displays.enumerated().map { index, display in
             let screen = NSScreen.screens.first { Self.displayID($0) == display.displayID }
