@@ -116,12 +116,19 @@ public enum ExtensionLiveAdapters {
     static func dockToolsReadiness(
         defaults: UserDefaults = SharedDefaults.store
     ) -> ExtensionAdapterReadiness {
-        let preferences = DockToolsPreferences(defaults: defaults)
-        let validDelay = DockToolsPreferences.hoverDelayRange.contains(preferences.hoverDelay)
+        let delay =
+            defaults.object(forKey: AppStorageKeys.DockTools.hoverDelay) as? Double
+            ?? DockToolsPreferences.defaultHoverDelay
+        let previewMode = defaults.string(forKey: AppStorageKeys.DockTools.previewMode)
+        let clickAction = defaults.string(forKey: AppStorageKeys.DockTools.clickAction)
+        let configured =
+            delay.isFinite && DockToolsPreferences.hoverDelayRange.contains(delay)
+            && (previewMode == nil || DockPreviewMode(rawValue: previewMode ?? "") != nil)
+            && (clickAction == nil || DockClickAction(rawValue: clickAction ?? "") != nil)
         return ExtensionAdapterFacts(
-            configured: validDelay,
+            configured: configured,
             readyDetail: "Dock window controls are configured.",
-            setupDetail: "The stored hover delay is outside the supported range."
+            setupDetail: "A stored Dock Tools preference is invalid."
         ).readiness
     }
 

@@ -43,6 +43,14 @@ enum DockCLI {
         case "notFound":
             throw CLIFailure.notFound(
                 "no running application matches that bundle identifier")
+        case "excluded":
+            throw CLIFailure.unavailable(
+                "that application is excluded from Dock Tools",
+                hint: "remove it from Dock Tools exclusions in Settings")
+        case "extensionOff":
+            throw CLIFailure.unavailable(
+                "the Dock Tools extension is off",
+                hint: "run `ed extensions enable dockTools`")
         default:
             throw CLIFailure("Dock Tools rejected the request")
         }

@@ -238,7 +238,11 @@ struct EdithApp: App {
         _ = IPC.observe(
             IPC.Name.requestDockToolsOperation,
             info: { info in
-                services.dockTools?.perform(info)
+                if let dockTools = services.dockTools {
+                    dockTools.perform(info)
+                } else {
+                    DockToolsEngine.performWhileDisabled(info)
+                }
             })
         _ = IPC.observe(
             IPC.Name.requestQuitApps,

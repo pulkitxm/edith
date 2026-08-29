@@ -33,10 +33,10 @@ enables immediately and reports missing grants in plain text or JSON.
 | `ed extensions enable <id>` | Turns one on, and names on stderr any required permission still missing |
 | `ed extensions disable <id>` | Turns one off |
 | `ed extensions info <id>` | Describes one: name, summary, key, group, state, permissions |
-| `ed extensions status [id]` | Summarises readiness for one extension or all seventeen |
+| `ed extensions status [id]` | Summarises readiness for one extension or all nineteen |
 | `ed extensions setup <id>` | Enables one and reports the setup that remains |
 | `ed extensions verify <id>` | Runs every readiness check for one extension |
-| `ed extensions doctor [id]` | Diagnoses one extension or all seventeen, with recovery commands |
+| `ed extensions doctor [id]` | Diagnoses one extension or all nineteen, with recovery commands |
 
 The Extensions pane and each extension settings modal use these same typed read
 operations. Marketplace browsing maps to `ls`, opening a modal maps to `info`,
@@ -52,7 +52,7 @@ operations as their command-line equivalents.
 ## The registry
 
 `ExtensionRegistry.entries` in EdithKit is the single list every command here
-walks, and its order is the order `ls` prints. Seventeen entries, in this order:
+walks, and its order is the order `ls` prints. Nineteen entries, in this order:
 
 | ID | Name | Group | What it does |
 | --- | --- | --- | --- |
@@ -71,10 +71,12 @@ walks, and its order is the order `ls` prints. Seventeen entries, in this order:
 | `notchShelf` | Notch Shelf | Media | File shelf, now playing, camera, and alerts around the notch |
 | `clipboard` | Clipboard | Utilities | Clipboard history with instant paste |
 | `focusDim` | Focus Dim | Utilities | Dims everything behind your active app |
+| `dockTools` | Dock Tools | Utilities | Window previews, faster switching, and smarter Dock behavior |
 | `presenter` | Presenter | Utilities | Blurs sensitive numbers while sharing your screen |
+| `emoji` | Emoji Picker | Utilities | Every macOS emoji on a hotkey, straight into the active app |
 | `colorPicker` | Color Picker | Utilities | System loupe on a hotkey, sampled color to your clipboard |
 
-The same seventeen, with what each one is made of. `Key` is the preference the app
+The same nineteen, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the
 eight the welcome tour shows before you ask it for all of them.
 
@@ -95,7 +97,9 @@ eight the welcome tour shows before you ask it for all of them.
 | `notchShelf` | `notchShelfEnabled` | yes | none | `applicationAudio`, `bluetooth`, `camera`, `automation` | none | none |
 | `clipboard` | `clipboardEnabled` | yes | none | `accessibility` | none | none |
 | `focusDim` | `focusDimEnabled` | no | `screenRecording` | none | none | none |
+| `dockTools` | `dockToolsEnabled` | no | `accessibility` | `screenRecording` | none | none |
 | `presenter` | `presenterEnabled` | no | `screenRecording` | none | none | none |
+| `emoji` | `emojiEnabled` | no | none | `accessibility` | none | none |
 | `colorPicker` | `colorPickerEnabled` | no | `screenRecording` | none | none | none |
 
 The JSON form also exposes the platform capability registry. Capabilities are
@@ -119,7 +123,9 @@ the current platform, and which missing implementations merely degrade it:
 | `notchShelf` | `fileShelf` | `applicationAudio`, `bluetoothMonitoring`, `cameraPreview`, `externalMediaControl` |
 | `clipboard` | `clipboardHistory` | `globalPaste`, `globalShortcuts` |
 | `focusDim` | `windowDimming` | none |
+| `dockTools` | `dockControl` | `windowPreviews` |
 | `presenter` | `screenShareDetection` | none |
+| `emoji` | `emojiInsertion` | `globalShortcuts` |
 | `colorPicker` | `screenColorSampling` | `globalShortcuts` |
 
 An id is matched exactly and case-insensitively against the `ID` column first,

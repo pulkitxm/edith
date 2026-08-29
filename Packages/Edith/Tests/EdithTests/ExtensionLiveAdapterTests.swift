@@ -51,6 +51,27 @@ import EdithCore
                 == .ready("Attention tracking is configured for the selected sources."))
     }
 
+    @Test func dockToolsRejectsInvalidStoredBehavior() {
+        let suite = "test.extension-adapter.dock-tools.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        #expect(
+            ExtensionLiveAdapters.dockToolsReadiness(defaults: defaults)
+                == .ready("Dock window controls are configured."))
+
+        defaults.set("unknown", forKey: AppStorageKeys.DockTools.clickAction)
+        #expect(
+            ExtensionLiveAdapters.dockToolsReadiness(defaults: defaults)
+                == .needsSetup("A stored Dock Tools preference is invalid."))
+
+        defaults.removeObject(forKey: AppStorageKeys.DockTools.clickAction)
+        defaults.set(4.0, forKey: AppStorageKeys.DockTools.hoverDelay)
+        #expect(
+            ExtensionLiveAdapters.dockToolsReadiness(defaults: defaults)
+                == .needsSetup("A stored Dock Tools preference is invalid."))
+    }
+
     @Test func usageDetectsMissingLoadingEmptyReadyAndCorruptData() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

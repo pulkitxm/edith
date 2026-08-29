@@ -110,6 +110,7 @@ enum JSONContract {
             "ed calendar join", ["calendar", "join", "nothing-at-all", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed presenter status", ["presenter", "status", "--json"]),
+        JSONCase("ed dock status", ["dock", "status", "--json"]),
         JSONCase(
             "ed presenter start", ["presenter", "start", "--json"],
             mutatesTheMachine: true),

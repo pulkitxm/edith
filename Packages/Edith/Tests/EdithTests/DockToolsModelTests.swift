@@ -65,4 +65,26 @@ import Testing
         #expect(DockToolsPolicy.adjacentIndex(current: nil, count: 3, offset: 1) == 0)
         #expect(DockToolsPolicy.adjacentIndex(current: nil, count: 0, offset: 1) == nil)
     }
+
+    @Test func statusAndWindowPayloadsRoundTrip() throws {
+        let preferences = DockToolsPreferences(
+            enabled: true, previewMode: .optionClick, hoverDelay: 0.3,
+            clickAction: .cycleWindows, greenButtonMaximizes: true,
+            quitOnLastWindow: true, excludedBundleIdentifiers: ["com.example.app"])
+        let status = DockToolsStatus(
+            preferences: preferences, helperRunning: true,
+            accessibilityGranted: true, screenRecordingGranted: false)
+        let window = DockToolsWindow(
+            id: "10:20", title: "", appName: "Example",
+            bundleIdentifier: "com.example.app", pid: 10, minimized: true)
+
+        #expect(
+            DockToolsIPC.decode(DockToolsStatus.self, from: DockToolsIPC.encode(status)) == status)
+        #expect(
+            DockToolsIPC.decode([DockToolsWindow].self, from: DockToolsIPC.encode([window]))
+                == [window])
+        #expect(window.displayTitle == "Example")
+        #expect(status.ready)
+        #expect(!status.previewsAvailable)
+    }
 }

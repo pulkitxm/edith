@@ -2,11 +2,19 @@ import AppKit
 import ApplicationServices
 import CoreGraphics
 import EdithKit
+import ScreenCaptureKit
 import SwiftUI
 
 private struct DockToolsRuntimeWindow {
     let value: DockToolsWindow
     let element: AXUIElement
+    let windowID: CGWindowID?
+}
+
+private struct DockToolsWindowSurface {
+    let id: CGWindowID
+    let title: String
+    let frame: CGRect
 }
 
 private struct DockToolsHit {
@@ -32,13 +40,13 @@ private func dockToolsEventCallback(
 }
 
 private func dockToolsAXCallback(
-    _: AXObserver, element: AXUIElement, notification: CFString,
+    observer: AXObserver, element: AXUIElement, notification: CFString,
     userInfo: UnsafeMutableRawPointer?
 ) {
     guard let userInfo else { return }
     let monitor = Unmanaged<DockToolsAutoQuitMonitor>.fromOpaque(userInfo).takeUnretainedValue()
     MainActor.assumeIsolated {
-        monitor.handle(element: element, notification: notification as String)
+        monitor.handle(observer: observer, element: element, notification: notification as String)
     }
 }
 
@@ -53,7 +61,6 @@ final class DockToolsEngine {
     private var pendingHide: DispatchWorkItem?
     private var pendingApplicationPID: pid_t?
     private var swallowedMouseUp = false
-    private var greenTarget: DockToolsGreenTarget?
     private var restoredFrames: [String: CGRect] = [:]
     private var dockPID: pid_t?
     private var lastMoveAt = CFAbsoluteTime(0)
@@ -105,10 +112,12 @@ final class DockToolsEngine {
                 status = "notAuthorized"
                 break
             }
-            guard let application = application(bundleIdentifier: bundleIdentifier),
-                !preferences.excludes(application.bundleIdentifier)
-            else {
+            guard let application = application(bundleIdentifier: bundleIdentifier) else {
                 status = "notFound"
+                break
+            }
+            guard !preferences.excludes(application.bundleIdentifier) else {
+                status = "excluded"
                 break
             }
             showPreview(for: application, iconFrame: nil)
@@ -131,6 +140,32 @@ final class DockToolsEngine {
             screenRecordingGranted: CGPreflightScreenCaptureAccess())
     }
 
+    static func performWhileDisabled(_ info: [AnyHashable: Any]) {
+        let requestID = info[DockToolsIPC.requestIDKey] as? String ?? ""
+        let operation = info[DockToolsIPC.operationKey] as? String ?? ""
+        let preferences = DockToolsPreferences()
+        let status: String
+        let payload: String
+        if operation == "status" {
+            status = "ok"
+            payload = DockToolsIPC.encode(
+                DockToolsStatus(
+                    preferences: preferences, helperRunning: true,
+                    accessibilityGranted: AXIsProcessTrusted(),
+                    screenRecordingGranted: CGPreflightScreenCaptureAccess()))
+        } else {
+            status = "extensionOff"
+            payload = ""
+        }
+        IPC.post(
+            IPC.Name.dockToolsOperationResult,
+            userInfo: [
+                DockToolsIPC.requestIDKey: requestID,
+                DockToolsIPC.statusKey: status,
+                DockToolsIPC.payloadKey: payload,
+            ])
+    }
+
     fileprivate func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
@@ -144,7 +179,6 @@ final class DockToolsEngine {
         case .leftMouseUp:
             if swallowedMouseUp {
                 swallowedMouseUp = false
-                greenTarget = nil
                 return nil
             }
         default:
@@ -187,9 +221,12 @@ final class DockToolsEngine {
         let now = CFAbsoluteTimeGetCurrent()
         guard now - lastMoveAt >= 1.0 / 45 else { return }
         lastMoveAt = now
-        guard preferences.previewMode == .hover else { return }
         if preview.contains(axPoint: point) {
             cancelHide()
+            return
+        }
+        guard preferences.previewMode == .hover else {
+            scheduleHide()
             return
         }
         guard let hit = dockHit(at: point), !preferences.excludes(hit.application.bundleIdentifier)
@@ -220,7 +257,6 @@ final class DockToolsEngine {
         let point = event.location
         if preferences.greenButtonMaximizes, let target = greenTarget(at: point) {
             toggleMaximize(target)
-            greenTarget = target
             swallowedMouseUp = true
             return true
         }
@@ -288,6 +324,7 @@ final class DockToolsEngine {
         let appElement = AXUIElementCreateApplication(application.processIdentifier)
         AXUIElementSetMessagingTimeout(appElement, 0.35)
         let elements: [AXUIElement] = attribute(appElement, kAXWindowsAttribute as CFString) ?? []
+        var surfaces = windowSurfaces(for: application.processIdentifier)
         let bundleIdentifier = application.bundleIdentifier ?? ""
         let appName = application.localizedName ?? bundleIdentifier
         return elements.enumerated().compactMap { index, element in
@@ -296,13 +333,66 @@ final class DockToolsEngine {
             let title: String = attribute(element, kAXTitleAttribute as CFString) ?? ""
             let minimized: Bool = attribute(element, kAXMinimizedAttribute as CFString) ?? false
             let identifier = "\(application.processIdentifier):\(CFHash(element)):\(index)"
+            let directWindowNumber: NSNumber? = attribute(element, "AXWindowNumber" as CFString)
+            let elementFrame = frame(of: element)
+            let windowID: CGWindowID?
+            if let directWindowNumber {
+                windowID = CGWindowID(directWindowNumber.uint32Value)
+                surfaces.removeAll { $0.id == windowID }
+            } else if let surfaceIndex = bestSurfaceIndex(
+                title: title, frame: elementFrame, surfaces: surfaces)
+            {
+                windowID = surfaces.remove(at: surfaceIndex).id
+            } else {
+                windowID = nil
+            }
             return DockToolsRuntimeWindow(
                 value: DockToolsWindow(
-                    id: identifier, title: title, appName: appName,
+                    id: windowID.map { "\(application.processIdentifier):\($0)" }
+                        ?? identifier,
+                    title: title, appName: appName,
                     bundleIdentifier: bundleIdentifier, pid: application.processIdentifier,
                     minimized: minimized),
-                element: element)
+                element: element, windowID: windowID)
         }
+    }
+
+    private func windowSurfaces(for pid: pid_t) -> [DockToolsWindowSurface] {
+        let values =
+            CGWindowListCopyWindowInfo([.optionAll, .excludeDesktopElements], kCGNullWindowID)
+            as? [[String: Any]] ?? []
+        return values.compactMap { value in
+            guard (value[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == pid,
+                (value[kCGWindowLayer as String] as? NSNumber)?.intValue == 0,
+                let id = (value[kCGWindowNumber as String] as? NSNumber)?.uint32Value,
+                let bounds = value[kCGWindowBounds as String] as? [String: Any],
+                let frame = CGRect(dictionaryRepresentation: bounds as CFDictionary)
+            else { return nil }
+            return DockToolsWindowSurface(
+                id: id, title: value[kCGWindowName as String] as? String ?? "", frame: frame)
+        }
+    }
+
+    private func bestSurfaceIndex(
+        title: String, frame: CGRect?, surfaces: [DockToolsWindowSurface]
+    ) -> Int? {
+        guard !surfaces.isEmpty else { return nil }
+        return surfaces.indices.min { first, second in
+            surfaceScore(surfaces[first], title: title, frame: frame)
+                < surfaceScore(surfaces[second], title: title, frame: frame)
+        }
+    }
+
+    private func surfaceScore(
+        _ surface: DockToolsWindowSurface, title: String, frame: CGRect?
+    ) -> CGFloat {
+        let titlePenalty =
+            title.isEmpty || surface.title.isEmpty || surface.title == title ? 0 : 100_000
+        guard let frame else { return CGFloat(titlePenalty) }
+        let frameDelta =
+            abs(surface.frame.minX - frame.minX) + abs(surface.frame.minY - frame.minY)
+            + abs(surface.frame.width - frame.width) + abs(surface.frame.height - frame.height)
+        return CGFloat(titlePenalty) + frameDelta
     }
 
     private func activate(
@@ -474,9 +564,8 @@ final class DockToolsEngine {
     }
 
     private func frame(of element: AXUIElement) -> CGRect? {
-        guard
-            let point: CGPoint = axValue(element, kAXPositionAttribute as CFString, type: .cgPoint),
-            let size: CGSize = axValue(element, kAXSizeAttribute as CFString, type: .cgSize),
+        guard let point = pointAttribute(element, kAXPositionAttribute as CFString),
+            let size = sizeAttribute(element, kAXSizeAttribute as CFString),
             size.width > 0, size.height > 0
         else { return nil }
         return CGRect(origin: point, size: size)
@@ -488,18 +577,22 @@ final class DockToolsEngine {
         return value as? T
     }
 
-    private func axValue<T>(
-        _ element: AXUIElement, _ name: CFString, type: AXValueType
-    ) -> T? {
+    private func pointAttribute(_ element: AXUIElement, _ name: CFString) -> CGPoint? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, name, &value) == .success,
             let value, CFGetTypeID(value) == AXValueGetTypeID()
         else { return nil }
-        var result: T?
-        withUnsafeMutablePointer(to: &result) { pointer in
-            _ = AXValueGetValue(value as! AXValue, type, pointer)
-        }
-        return result
+        var point = CGPoint.zero
+        return AXValueGetValue(value as! AXValue, .cgPoint, &point) ? point : nil
+    }
+
+    private func sizeAttribute(_ element: AXUIElement, _ name: CFString) -> CGSize? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, name, &value) == .success,
+            let value, CFGetTypeID(value) == AXValueGetTypeID()
+        else { return nil }
+        var size = CGSize.zero
+        return AXValueGetValue(value as! AXValue, .cgSize, &size) ? size : nil
     }
 
     private var screenTop: CGFloat {
@@ -550,7 +643,7 @@ private final class DockToolsPreviewController {
     ) {
         store.application = application
         store.windows = windows
-        store.images = captureImages(for: windows)
+        store.images = [:]
         store.selectedIndex = 0
         store.activate = activate
         let panel = panel ?? makePanel(move: move)
@@ -561,6 +654,7 @@ private final class DockToolsPreviewController {
         panel.contentViewController?.view.frame = NSRect(origin: .zero, size: size)
         panel.setFrameOrigin(origin(for: size, iconFrame: iconFrame))
         panel.orderFrontRegardless()
+        loadImages(for: windows, applicationPID: application.processIdentifier)
     }
 
     func close() {
@@ -568,6 +662,7 @@ private final class DockToolsPreviewController {
         store.windows = []
         store.images = [:]
         store.application = nil
+        store.activate = nil
     }
 
     func shutdown() {
@@ -629,21 +724,37 @@ private final class DockToolsPreviewController {
         return CGPoint(x: x, y: y)
     }
 
-    private func captureImages(for windows: [DockToolsRuntimeWindow]) -> [String: NSImage] {
-        guard CGPreflightScreenCaptureAccess() else { return [:] }
-        let info =
-            CGWindowListCopyWindowInfo([.optionAll, .excludeDesktopElements], kCGNullWindowID)
-            as? [[String: Any]] ?? []
+    private func loadImages(for windows: [DockToolsRuntimeWindow], applicationPID: pid_t) {
+        guard CGPreflightScreenCaptureAccess() else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            let images = await captureImages(for: windows)
+            guard store.application?.processIdentifier == applicationPID else { return }
+            store.images = images
+        }
+    }
+
+    private func captureImages(for windows: [DockToolsRuntimeWindow]) async -> [String: NSImage] {
+        guard
+            let content = try? await SCShareableContent.excludingDesktopWindows(
+                false, onScreenWindowsOnly: false)
+        else { return [:] }
+        let available = Dictionary(uniqueKeysWithValues: content.windows.map { ($0.windowID, $0) })
         var result: [String: NSImage] = [:]
-        for window in windows {
+        for window in windows.prefix(8) {
+            guard let windowID = window.windowID, let sharedWindow = available[windowID]
+            else { continue }
+            let configuration = SCStreamConfiguration()
+            let width = max(sharedWindow.frame.width, 1)
+            let height = max(sharedWindow.frame.height, 1)
+            let scale = min(2, 720 / width, 420 / height)
+            configuration.width = max(Int(width * scale), 1)
+            configuration.height = max(Int(height * scale), 1)
+            configuration.showsCursor = false
             guard
-                let match = info.first(where: {
-                    $0[kCGWindowOwnerPID as String] as? pid_t == window.value.pid
-                        && ($0[kCGWindowName as String] as? String ?? "") == window.value.title
-                }), let windowID = match[kCGWindowNumber as String] as? CGWindowID,
-                let image = CGWindowListCreateImage(
-                    .null, .optionIncludingWindow, windowID,
-                    [.boundsIgnoreFraming, .bestResolution])
+                let image = try? await SCScreenshotManager.captureImage(
+                    contentFilter: SCContentFilter(desktopIndependentWindow: sharedWindow),
+                    configuration: configuration)
             else { continue }
             result[window.value.id] = NSImage(cgImage: image, size: .zero)
         }
@@ -779,11 +890,15 @@ private final class DockToolsAutoQuitMonitor {
     private var hadWindows: [pid_t: Bool] = [:]
     private var launchToken: NSObjectProtocol?
     private var terminateToken: NSObjectProtocol?
+    private var activateToken: NSObjectProtocol?
 
     func sync(enabled: Bool) {
-        guard self.enabled != enabled else { return }
-        self.enabled = enabled
-        enabled ? start() : shutdown()
+        guard enabled, AXIsProcessTrusted() else {
+            shutdown()
+            return
+        }
+        self.enabled = true
+        start()
     }
 
     func shutdown() {
@@ -792,14 +907,19 @@ private final class DockToolsAutoQuitMonitor {
         if let terminateToken {
             NSWorkspace.shared.notificationCenter.removeObserver(terminateToken)
         }
+        if let activateToken { NSWorkspace.shared.notificationCenter.removeObserver(activateToken) }
         launchToken = nil
         terminateToken = nil
+        activateToken = nil
         for pid in Array(observers.keys) { detach(pid) }
     }
 
-    func handle(element: AXUIElement, notification: String) {
+    func handle(observer: AXObserver, element: AXUIElement, notification: String) {
         var pid = pid_t()
-        guard AXUIElementGetPid(element, &pid) == .success else { return }
+        if AXUIElementGetPid(element, &pid) != .success || pid == 0 {
+            pid = observers.first { CFEqual($0.value, observer) }?.key ?? 0
+        }
+        guard pid != 0 else { return }
         if notification == kAXWindowCreatedNotification as String {
             refresh(pid)
         }
@@ -809,7 +929,7 @@ private final class DockToolsAutoQuitMonitor {
     }
 
     private func start() {
-        guard AXIsProcessTrusted() else { return }
+        guard launchToken == nil, AXIsProcessTrusted() else { return }
         for application in NSWorkspace.shared.runningApplications { attach(application) }
         launchToken = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main
@@ -828,6 +948,15 @@ private final class DockToolsAutoQuitMonitor {
                     as? NSRunningApplication
             else { return }
             MainActor.assumeIsolated { self?.detach(application.processIdentifier) }
+        }
+        activateToken = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard
+                let application = note.userInfo?[NSWorkspace.applicationUserInfoKey]
+                    as? NSRunningApplication
+            else { return }
+            MainActor.assumeIsolated { self?.attach(application) }
         }
     }
 
@@ -900,7 +1029,8 @@ private final class DockToolsAutoQuitMonitor {
             DockToolsPolicy.shouldQuit(
                 enabled: preferences.enabled && preferences.quitOnLastWindow,
                 hadWindows: hadWindows[pid] == true, hasWindows: hasWindows,
-                excluded: preferences.excludes(application.bundleIdentifier),
+                excluded: preferences.excludes(application.bundleIdentifier)
+                    || application.bundleIdentifier?.hasPrefix("com.pulkit.edith") == true,
                 terminated: application.isTerminated,
                 regularApplication: application.activationPolicy == .regular)
         else { return }

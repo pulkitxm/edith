@@ -36,6 +36,7 @@ system query failure produces `failed` with runtime phase `error`.
 | Notch Shelf | decodable shelf index and, when Audio Mixer is enabled, macOS 14.4 or later | parked item count and missing backing files; Audio Mixer is omitted on unsupported systems | `ed shelf ls --json`; `ed permissions settings applicationAudio` |
 | Clipboard | decodable JSONL index | entry count and missing blob payloads | `ed clipboard stats --json`; `ed clipboard ls --json` |
 | Focus Dim | finite intensity and animation values plus a valid display mode | active display count | `ed config ls --group focusdim --json`; `ed permissions refresh` |
+| Dock Tools | valid preview and Dock click preferences | Dock access plus optional window preview capture | `ed dock status --json`; `ed permissions refresh` |
 | Presenter | at least one protected data category and coherent detector settings | manual protection or automatic detectors can operate | `ed presenter status --json`; `ed config ls --group presenter --json` |
 | Color Picker | valid copy format, color profile, history limit, and decodable history | active display and saved sample count | `ed color ls --json`; `ed permissions refresh` |
 
