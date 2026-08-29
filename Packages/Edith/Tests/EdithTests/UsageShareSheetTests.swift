@@ -37,6 +37,9 @@ import Testing
         #expect(source.contains("NSSavePanel()"))
         #expect(source.contains("DragGesture"))
         #expect(source.contains(".onKeyPress(.leftArrow)"))
+        #expect(source.contains(".onKeyPress(.rightArrow)"))
+        #expect(source.contains(".keyboardShortcut(\"c\", modifiers: .command)"))
+        #expect(source.contains(".keyboardShortcut(\"s\", modifiers: .command)"))
         #expect(!source.contains("Twitter"))
         #expect(!source.contains("LinkedIn"))
     }

@@ -122,7 +122,8 @@ struct UsageShareSheet: View {
                 .background(modalInk, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
             .buttonStyle(SharePressedButtonStyle())
-            .keyboardShortcut("c", modifiers: [.command, .shift])
+            .keyboardShortcut("c", modifiers: .command)
+            .help("Copy image (⌘C)")
             Button(action: downloadImage) {
                 Image(systemName: "arrow.down.to.line")
                     .font(.system(size: 16, weight: .semibold))
@@ -131,7 +132,8 @@ struct UsageShareSheet: View {
                     .background(modalInk, in: Circle())
             }
             .buttonStyle(SharePressedButtonStyle())
-            .help("Download PNG")
+            .keyboardShortcut("s", modifiers: .command)
+            .help("Save PNG (⌘S)")
             .accessibilityLabel("Download PNG")
         }
     }
