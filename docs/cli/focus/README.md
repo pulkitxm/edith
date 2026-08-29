@@ -42,7 +42,7 @@ Calendar permission are enabled.
 
 ## Where to go next
 
-- [Focus Profiles and Meeting Mode](https://github.com/pulkitxm/edith/blob/main/docs/focus-profiles.md)
-  for profile design, scheduling, recovery, and privacy behavior.
+- The Focus Profiles and Meeting Mode guide at `docs/focus-profiles.md` for
+  profile design, scheduling, recovery, and privacy behavior.
 - [`ed automations`](../automations/README.md) for scenes and scheduled triggers.
 - [The `ed` command line](../README.md) for the rest of the reference.
