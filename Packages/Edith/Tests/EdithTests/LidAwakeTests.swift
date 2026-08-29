@@ -3,6 +3,7 @@ import Foundation
 import Testing
 
 @testable import EdithKit
+@testable import EdithLidAwakeSupport
 @testable import EdithHelper
 
 private actor LidAwakeRestorationLatch {
@@ -745,10 +746,7 @@ private func lidAwakeProcessIDs(at url: URL) throws -> [pid_t] {
         #expect(
             build.contains(
                 "LAUNCH_DAEMONS=\"$APP/Contents/Library/LaunchDaemons\""))
-        #expect(
-            build.contains(
-                "STATUS_HELPER=\"$HELPER/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake\""
-            ))
+        #expect(!build.contains("STATUS_HELPER="))
         let mainApp = try String(
             contentsOf: root.appendingPathComponent(
                 "Packages/Edith/Sources/Edith/Core/Application/EdithApp.swift"),
@@ -769,7 +767,7 @@ private func lidAwakeProcessIDs(at url: URL) throws -> [pid_t] {
                 == LidAwakePrivilegedService.bundleIdentifier)
     }
 
-    @Test func statusHelperIdentityMatchesDaemonClient() throws {
+    @Test func helperIdentityMatchesDaemonClient() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -786,14 +784,12 @@ private func lidAwakeProcessIDs(at url: URL) throws -> [pid_t] {
                 == MainApp.statusBarBundleIdentifier)
         let daemonData = try Data(
             contentsOf: root.appendingPathComponent(
-                "Resources/com.pulkit.edith.lidawake.plist"))
+                "Resources/com.pulkit.edith.lidawake.v2.plist"))
         let daemon = try #require(
             PropertyListSerialization.propertyList(from: daemonData, format: nil)
                 as? [String: Any])
         let associated = daemon["AssociatedBundleIdentifiers"] as? [String]
-        #expect(
-            associated
-                == [MainApp.statusBarBundleIdentifier, MainApp.bundleIdentifier])
+        #expect(associated == [MainApp.bundleIdentifier])
         #expect(
             LidAwakePrivilegedService.clientBundleIdentifier
                 == MainApp.statusBarBundleIdentifier)

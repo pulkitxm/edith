@@ -1,4 +1,5 @@
 import EdithKit
+import EdithLidAwakeSupport
 import Security
 import ServiceManagement
 import SwiftUI

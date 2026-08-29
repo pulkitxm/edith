@@ -1,6 +1,7 @@
 import AppKit
 import CoreAudio
 import EdithCore
+import EdithLidAwakeSupport
 import EventKit
 import Foundation
 import ServiceManagement
