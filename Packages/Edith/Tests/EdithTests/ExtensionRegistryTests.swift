@@ -24,6 +24,7 @@ import Testing
         "focusDimEnabled",
         "presenterEnabled",
         "colorPickerEnabled",
+        "emojiEnabled",
     ]
 
     @Test func registryIdentifiersAreUnique() {
@@ -36,7 +37,7 @@ import Testing
             ExtensionRegistry.entries.map(\.id) == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
                 "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
-                "clipboard", "focusDim", "presenter", "colorPicker",
+                "clipboard", "focusDim", "presenter", "emoji", "colorPicker",
             ])
     }
 
@@ -243,6 +244,7 @@ import Testing
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
             "colorPicker": [.screenRecording],
+            "emoji": [],
         ]
         let optional: [String: [ExtensionPermission]] = [
             "attention": [],
@@ -262,6 +264,7 @@ import Testing
             "focusDim": [],
             "presenter": [],
             "colorPicker": [],
+            "emoji": [.accessibility],
         ]
 
         let identifiers = Set(ExtensionRegistry.entries.map(\.id))

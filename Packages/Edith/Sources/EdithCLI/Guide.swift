@@ -38,6 +38,7 @@ public enum Guide {
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler
         ed color copy 1 --format hex
+        ed emoji pick               open Edith's emoji picker
         ed usage sources            the agents that produced your usage history
         ed schema                   JSON Schema for the config document
         ed version                  the CLI version, and whether the app is up
@@ -417,6 +418,9 @@ public enum Guide {
         ed clipboard rm 3 --yes | clear --yes
         ed color ls --format hex        the colours you picked
         ed color copy 1                 copy the newest using your configured format
+        ed emoji ls --search rocket     the emoji this Mac can render
+        ed emoji insert 1F600           type one into the app in front of you
+        ed emoji tone medium            the default skin tone
         ed shelf ls                     what is parked on the notch shelf
         ed shelf add ./report.pdf
         ed shelf open 1 | reveal 1 | share 1
