@@ -239,6 +239,7 @@ final class CaptureToolsStore: FeatureModule {
             NSSound.beep()
             return
         }
+        editors.removeAll { !$0.isVisible }
         editors.append(editor)
         editor.show()
     }
@@ -248,6 +249,7 @@ final class CaptureToolsStore: FeatureModule {
             NSSound.beep()
             return
         }
+        pins.removeAll { !$0.isVisible }
         pins.append(controller)
         controller.show()
     }

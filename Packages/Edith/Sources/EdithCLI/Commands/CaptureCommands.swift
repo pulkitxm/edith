@@ -23,7 +23,8 @@ enum CaptureCommandBridge {
                     "the Capture Tools extension is off",
                     hint: "run `ed extensions enable captureTools`, then retry")
             }
-            try AppBridge.requireHelper("capturing the screen")
+            try AppBridge.requireHelper(
+                operation == .library ? "opening recent captures" : "capturing the screen")
             let descriptor = CaptureToolOperationExecution.request(operation) {
                 AppBridge.post($0)
             }

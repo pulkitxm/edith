@@ -257,6 +257,9 @@ public enum CaptureSaveLocation {
         if let path = defaults.string(forKey: AppStorageKeys.Capture.saveFolder)?
             .trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty
         {
+            guard (path as NSString).isAbsolutePath else {
+                throw CaptureScreenshotError.saveFailed
+            }
             return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
         }
         guard

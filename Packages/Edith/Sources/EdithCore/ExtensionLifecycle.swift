@@ -686,16 +686,28 @@ public enum ExtensionLifecycleCatalog {
                     "Confirm the color history repository responds.", "ed color ls --json")
             ]),
         descriptor(
-            "captureTools", "Read text and codes from the screen without sending pixels anywhere.",
+            "captureTools", "Capture, recognize, edit, and keep screenshots locally.",
             workflows: [
                 instruction(
                     "read", "Read the screen",
                     "Select a region, recognize its text and codes, and copy the result.",
                     "ed capture read"),
                 instruction(
-                    "screenshot", "Take a quick screenshot",
-                    "Select a region and open a lightweight copy and save preview.",
-                    "ed capture screenshot"),
+                    "area", "Capture an area",
+                    "Select a region and open the Capture Studio quick preview.",
+                    "ed capture area"),
+                instruction(
+                    "window", "Capture a window",
+                    "Select a window and keep it in the recent captures library.",
+                    "ed capture window"),
+                instruction(
+                    "screen", "Capture the full screen",
+                    "Capture the main display and open the quick preview.",
+                    "ed capture screen"),
+                instruction(
+                    "library", "Open recent captures",
+                    "Copy, save, drag, edit, pin, or delete recent PNGs.",
+                    "ed capture library"),
             ],
             prerequisites: [
                 instruction(
@@ -705,7 +717,7 @@ public enum ExtensionLifecycleCatalog {
             ],
             examples: [
                 "ed extensions enable captureTools", "ed capture read --json",
-                "ed capture screenshot --json",
+                "ed capture area --json", "ed capture library --json",
             ],
             docs: [documentation("guide", "Capture Tools guide", "docs/cli/capture/README.md")],
             recovery: [

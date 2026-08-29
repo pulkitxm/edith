@@ -805,7 +805,7 @@ public enum ConfigCatalog {
     private static let capture: [SettingDefinition] = [
         SettingDefinition(
             AppStorageKeys.Capture.enabled, .bool, group: "capture",
-            summary: "Enable offline screen recognition and quick screenshots.",
+            summary: "Enable local screen recognition and Capture Studio screenshots.",
             fallback: .bool(false)),
         SettingDefinition(
             AppStorageKeys.Capture.copyMode, .string, group: "capture",
@@ -842,13 +842,13 @@ public enum ConfigCatalog {
             summary: "Printable screen reading shortcut.", fallback: .string("⌃⌥⌘R")),
         SettingDefinition(
             AppStorageKeys.Capture.screenshotHotKeyCode, .int, group: "capture",
-            summary: "Virtual key code for quick screenshots.", fallback: .int(1)),
+            summary: "Virtual key code for area capture.", fallback: .int(1)),
         SettingDefinition(
             AppStorageKeys.Capture.screenshotHotKeyMods, .int, group: "capture",
-            summary: "Carbon modifier mask for quick screenshots.", fallback: .int(6400)),
+            summary: "Carbon modifier mask for area capture.", fallback: .int(6400)),
         SettingDefinition(
             AppStorageKeys.Capture.screenshotHotKeyLabel, .string, group: "capture",
-            summary: "Printable screenshot shortcut.", fallback: .string("⌃⌥⌘S")),
+            summary: "Printable area capture shortcut.", fallback: .string("⌃⌥⌘S")),
     ]
 
     private static let micMute: [SettingDefinition] = [

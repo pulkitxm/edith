@@ -13,7 +13,7 @@ ed capture read [--json]
 | --- | --- |
 | `--json` | Emits the request acknowledgement as JSON. |
 
-Plain output is `screen read requested`. JSON output is:
+Plain output is `read requested`. JSON output is:
 
 ```json
 {"operation":"capture.read","requested":true}
@@ -30,6 +30,7 @@ explicit alternatives.
 ## Where to go next
 
 - [`ed capture`](./README.md)
-- [`ed capture screenshot`](./screenshot.md)
+- [`ed capture area`](./area.md)
+- [`ed capture library`](./library.md)
 - [`ed extensions enable`](../extensions/enable.md)
 - [All `ed` commands](../README.md)

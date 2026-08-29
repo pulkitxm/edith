@@ -202,7 +202,7 @@ public enum ExtensionRegistry {
             optionalCapabilities: [.globalShortcuts]),
         ExtensionRegistryEntry(
             id: "captureTools", title: "Capture Tools",
-            subtitle: "Offline screen OCR, QR recognition, and quick screenshots.",
+            subtitle: "Local screenshots, recognition, editing, pinning, and recent captures.",
             symbolName: "viewfinder", group: .utilities, featured: false,
             defaultsKey: "captureToolsEnabled",
             requiredCapabilities: [.screenContentRecognition],

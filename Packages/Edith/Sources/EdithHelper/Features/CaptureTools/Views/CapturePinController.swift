@@ -40,4 +40,10 @@ final class CapturePinController: NSObject, NSWindowDelegate {
         panel.close()
         panel.contentView = nil
     }
+
+    var isVisible: Bool { panel.isVisible }
+
+    func windowWillClose(_ notification: Notification) {
+        panel.contentView = nil
+    }
 }

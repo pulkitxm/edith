@@ -30,9 +30,11 @@ public enum CaptureLibraryStore {
     public static let maximumBytes: Int64 = 256 * 1024 * 1024
 
     public static func defaultDirectory() throws -> URL {
-        guard let support = FileManager.default.urls(
-            for: .applicationSupportDirectory, in: .userDomainMask
-        ).first else { throw CaptureScreenshotError.saveFailed }
+        guard
+            let support = FileManager.default.urls(
+                for: .applicationSupportDirectory, in: .userDomainMask
+            ).first
+        else { throw CaptureScreenshotError.saveFailed }
         return support.appendingPathComponent("Edith/Capture Studio", isDirectory: true)
     }
 
@@ -61,7 +63,8 @@ public enum CaptureLibraryStore {
         let id = UUID()
         let fileName = "\(id.uuidString).png"
         try data.write(
-            to: directory.appendingPathComponent(fileName), options: [.atomic, .completeFileProtection])
+            to: directory.appendingPathComponent(fileName),
+            options: [.atomic, .completeFileProtection])
         let item = CaptureLibraryItem(
             id: id, capturedAt: capturedAt, mode: mode, fileName: fileName,
             pixelWidth: cgImage.width, pixelHeight: cgImage.height,

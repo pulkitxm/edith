@@ -60,7 +60,7 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed clipboard`](./clipboard/README.md) | Clipboard history: read, copy, pin and prune |
 | [`ed attention`](./attention/README.md) | Application, website, music, focus and distraction insight |
 | [`ed color`](./color/README.md) | Launching the colour picker and reading its swatch history |
-| [`ed capture`](./capture/README.md) | Offline screen OCR, QR recognition, and quick screenshots |
+| [`ed capture`](./capture/README.md) | Capture Studio screenshots, offline recognition, editing, and recent captures |
 | [`ed download`](./download/README.md) | The download queue and the tools that back it |
 | [`ed apps`](./apps/README.md) | Running applications, and quitting them |
 | [`ed tools`](./tools/README.md) | The command line tools Edith can install for you |

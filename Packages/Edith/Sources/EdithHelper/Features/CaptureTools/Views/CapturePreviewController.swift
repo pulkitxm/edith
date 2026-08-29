@@ -16,7 +16,7 @@ final class CapturePreviewController: NSObject, NSWindowDelegate {
         delete: @escaping (CaptureLibraryItem) -> Void
     ) {
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 390, height: 360),
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 380),
             styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered,
             defer: false)
         super.init()
@@ -35,7 +35,10 @@ final class CapturePreviewController: NSObject, NSWindowDelegate {
                 saveImage: { Self.saveImage(pngData, mode: item?.mode ?? .area) },
                 copyResult: { Self.copyResult(recognition.output(for: copyMode)) },
                 openResult: { Self.openResult(recognition) },
-                edit: { if let item { edit(item) } },
+                edit: { [weak self] in
+                    if let item { edit(item) }
+                    self?.close()
+                },
                 pin: { pin(pngData) },
                 delete: { [weak self] in
                     if let item { delete(item) }
@@ -139,7 +142,8 @@ private struct CapturePreviewView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Label(
-                    operation == .read ? "Screen read" : "Screenshot",
+                    operation == .read
+                        ? "Screen read" : "\(operation.captureMode?.displayName ?? "Area") capture",
                     systemImage: operation == .read ? "text.viewfinder" : "camera.viewfinder"
                 )
                 .font(.headline)

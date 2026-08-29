@@ -61,7 +61,10 @@ final class CaptureEditorModel {
                 document.annotations.append(
                     CaptureAnnotation(
                         tool: .text,
-                        points: [draft.points[0], CGPoint(x: draft.points[0].x + 320, y: draft.points[0].y + 80)],
+                        points: [
+                            draft.points[0],
+                            CGPoint(x: draft.points[0].x + 320, y: draft.points[0].y + 80),
+                        ],
                         text: value, colorHex: colorHex, strokeWidth: strokeWidth))
             }
         } else if tool == .pen || draft.rect.width >= 3 || draft.rect.height >= 3 {

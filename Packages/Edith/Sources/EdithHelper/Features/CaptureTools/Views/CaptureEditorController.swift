@@ -50,6 +50,12 @@ final class CaptureEditorController: NSObject, NSWindowDelegate {
         panel.contentView = nil
     }
 
+    var isVisible: Bool { panel.isVisible }
+
+    func windowWillClose(_ notification: Notification) {
+        panel.contentView = nil
+    }
+
     private func copy() {
         guard let data = try? model.exportData() else {
             NSSound.beep()
@@ -207,7 +213,8 @@ private struct CaptureEditorCanvas: View {
 
     private func fittedRect(in size: CGSize) -> CGRect {
         let scale = min(size.width / model.sourceSize.width, size.height / model.sourceSize.height)
-        let fitted = CGSize(width: model.sourceSize.width * scale, height: model.sourceSize.height * scale)
+        let fitted = CGSize(
+            width: model.sourceSize.width * scale, height: model.sourceSize.height * scale)
         return CGRect(
             x: (size.width - fitted.width) / 2, y: (size.height - fitted.height) / 2,
             width: fitted.width, height: fitted.height)
@@ -261,13 +268,15 @@ private struct CaptureEditorCanvas: View {
             let angle = atan2(end.y - first.y, end.x - first.x)
             let head = max(10, width * 4)
             path.move(to: end)
-            path.addLine(to: CGPoint(
-                x: end.x - head * cos(angle - .pi / 6),
-                y: end.y - head * sin(angle - .pi / 6)))
+            path.addLine(
+                to: CGPoint(
+                    x: end.x - head * cos(angle - .pi / 6),
+                    y: end.y - head * sin(angle - .pi / 6)))
             path.move(to: end)
-            path.addLine(to: CGPoint(
-                x: end.x - head * cos(angle + .pi / 6),
-                y: end.y - head * sin(angle + .pi / 6)))
+            path.addLine(
+                to: CGPoint(
+                    x: end.x - head * cos(angle + .pi / 6),
+                    y: end.y - head * sin(angle + .pi / 6)))
             context.stroke(
                 path, with: .color(color),
                 style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round))
@@ -279,7 +288,8 @@ private struct CaptureEditorCanvas: View {
             context.stroke(Path(ellipseIn: rect), with: .color(color), lineWidth: width)
         case .text:
             context.draw(
-                Text(annotation.text).font(.system(size: max(12, width * 5), weight: .semibold)).foregroundStyle(color),
+                Text(annotation.text).font(.system(size: max(12, width * 5), weight: .semibold))
+                    .foregroundStyle(color),
                 at: first, anchor: .topLeading)
         case .redact:
             context.fill(Path(rect), with: .color(.black))

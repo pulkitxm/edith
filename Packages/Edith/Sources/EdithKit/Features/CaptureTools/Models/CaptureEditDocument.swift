@@ -97,7 +97,8 @@ public enum CaptureRenderer {
         let bounds = CGRect(x: 0, y: 0, width: baseImage.width, height: baseImage.height)
         let requested = document.cropRect?.standardized.intersection(bounds) ?? bounds
         let crop = requested.width >= 2 && requested.height >= 2 ? requested.integral : bounds
-        let padding = document.backdrop == .none
+        let padding =
+            document.backdrop == .none
             ? 0 : min(120, max(36, min(crop.width, crop.height) * 0.08))
         let outputSize = CGSize(width: crop.width + padding * 2, height: crop.height + padding * 2)
         let image = NSImage(size: outputSize, flipped: true) { destination in
@@ -109,7 +110,9 @@ public enum CaptureRenderer {
                     color: NSColor.black.withAlphaComponent(0.3).cgColor)
             }
             NSGraphicsContext.current?.cgContext.saveGState()
-            NSBezierPath(roundedRect: imageRect, xRadius: padding > 0 ? 14 : 0, yRadius: padding > 0 ? 14 : 0).addClip()
+            NSBezierPath(
+                roundedRect: imageRect, xRadius: padding > 0 ? 14 : 0, yRadius: padding > 0 ? 14 : 0
+            ).addClip()
             NSImage(cgImage: baseImage, size: bounds.size).draw(
                 in: imageRect, from: crop, operation: .copy, fraction: 1)
             NSGraphicsContext.current?.cgContext.restoreGState()
@@ -154,7 +157,8 @@ public enum CaptureRenderer {
         let points = annotation.points.map { CGPoint(x: $0.x + offset.x, y: $0.y + offset.y) }
         let rect = CaptureAnnotation(
             tool: annotation.tool, points: points, text: annotation.text,
-            colorHex: annotation.colorHex, strokeWidth: annotation.strokeWidth).rect
+            colorHex: annotation.colorHex, strokeWidth: annotation.strokeWidth
+        ).rect
         NSGraphicsContext.current?.cgContext.saveGState()
         NSBezierPath(rect: clip).addClip()
         color.setStroke()
@@ -180,13 +184,15 @@ public enum CaptureRenderer {
             let angle = atan2(end.y - start.y, end.x - start.x)
             let head = max(14, annotation.strokeWidth * 4)
             path.move(to: end)
-            path.line(to: CGPoint(
-                x: end.x - head * cos(angle - .pi / 6),
-                y: end.y - head * sin(angle - .pi / 6)))
+            path.line(
+                to: CGPoint(
+                    x: end.x - head * cos(angle - .pi / 6),
+                    y: end.y - head * sin(angle - .pi / 6)))
             path.move(to: end)
-            path.line(to: CGPoint(
-                x: end.x - head * cos(angle + .pi / 6),
-                y: end.y - head * sin(angle + .pi / 6)))
+            path.line(
+                to: CGPoint(
+                    x: end.x - head * cos(angle + .pi / 6),
+                    y: end.y - head * sin(angle + .pi / 6)))
             path.stroke()
         case .rectangle:
             let path = NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5)
@@ -201,7 +207,8 @@ public enum CaptureRenderer {
                 in: rect.width < 20 || rect.height < 20
                     ? CGRect(x: points[0].x, y: points[0].y, width: 320, height: 80) : rect,
                 withAttributes: [
-                    .font: NSFont.systemFont(ofSize: max(18, annotation.strokeWidth * 5), weight: .semibold),
+                    .font: NSFont.systemFont(
+                        ofSize: max(18, annotation.strokeWidth * 5), weight: .semibold),
                     .foregroundColor: color,
                 ])
         case .redact:

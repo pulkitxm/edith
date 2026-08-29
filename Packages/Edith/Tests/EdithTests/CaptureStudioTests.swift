@@ -33,8 +33,9 @@ import Testing
         let removed = try #require(items.first)
         try CaptureLibraryStore.remove(removed, from: directory)
         #expect(CaptureLibraryStore.load(from: directory).count == 11)
-        #expect(!FileManager.default.fileExists(
-            atPath: CaptureLibraryStore.imageURL(for: removed, in: directory).path))
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: CaptureLibraryStore.imageURL(for: removed, in: directory).path))
     }
 
     @Test func rendererCropsAnnotatesAndFrames() throws {
@@ -50,6 +51,24 @@ import Testing
         #expect(rendered.width > 60)
         #expect(rendered.height > 40)
         #expect(try CaptureRenderer.pngData(baseImage: source, document: document).isEmpty == false)
+    }
+
+    @Test func everyCaptureModeHasAnExplicitScreenshotRoute() {
+        #expect(CaptureMode.area.screenshotArguments.contains("-s"))
+        #expect(CaptureMode.window.screenshotArguments.contains("-w"))
+        #expect(CaptureMode.screen.screenshotArguments.contains("-m"))
+        #expect(CaptureMode.allCases.map(\.displayName) == ["Area", "Window", "Full screen"])
+    }
+
+    @Test func configuredSaveFolderMustBeAbsolute() throws {
+        let suite = "CaptureStudioTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("relative/captures", forKey: AppStorageKeys.Capture.saveFolder)
+
+        #expect(throws: CaptureScreenshotError.saveFailed) {
+            try CaptureSaveLocation.configuredDirectory(defaults: defaults)
+        }
     }
 
     private func png(width: Int, height: Int) throws -> Data {
