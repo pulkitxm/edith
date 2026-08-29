@@ -247,18 +247,28 @@ private struct ActivityHeatGrid: View {
     private var maximum: Double { max(1, snapshot.days.map(\.tokens).max() ?? 0) }
 
     var body: some View {
+        let renderedWeeks = weeks
         HStack(alignment: .top, spacing: 9) {
             VStack(spacing: 7) {
-                ForEach(["S", "M", "T", "W", "T", "F", "S"], id: \.self) { label in
+                ForEach(
+                    Array(["S", "M", "T", "W", "T", "F", "S"].enumerated()),
+                    id: \.offset
+                ) { _, label in
                     Text(label)
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
                         .foregroundStyle(ShareColors.espresso.opacity(0.45))
                         .frame(width: 14, height: 14)
                 }
             }
+            .padding(.top, 20)
             HStack(alignment: .top, spacing: 5) {
-                ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
+                ForEach(Array(renderedWeeks.enumerated()), id: \.offset) { index, week in
                     VStack(spacing: 5) {
+                        Text(monthLabel(at: index, in: renderedWeeks))
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(ShareColors.espresso.opacity(0.48))
+                            .frame(width: 14, height: 15, alignment: .leading)
+                            .fixedSize(horizontal: true, vertical: false)
                         ForEach(week) { day in
                             RoundedRectangle(cornerRadius: 3.5)
                                 .fill(color(for: day.tokens))
@@ -269,6 +279,20 @@ private struct ActivityHeatGrid: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private func monthLabel(at index: Int, in weeks: [[UsageShareGridDay]]) -> String {
+        guard let period = weeks[index].first?.id,
+            let date = UsageShareSnapshot.date(from: period)
+        else { return "" }
+        if index > 0, let previousPeriod = weeks[index - 1].first?.id,
+            let previous = UsageShareSnapshot.date(from: previousPeriod),
+            Calendar(identifier: .gregorian).component(.month, from: previous)
+                == Calendar(identifier: .gregorian).component(.month, from: date)
+        {
+            return ""
+        }
+        return date.formatted(.dateTime.month(.abbreviated))
     }
 
     private func color(for tokens: Double) -> Color {
