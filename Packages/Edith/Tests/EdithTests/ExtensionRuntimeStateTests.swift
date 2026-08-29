@@ -252,6 +252,10 @@ import Testing
                 "automations", "AutomationSettingsRows", "automationsEnabled",
                 "ExtensionsPane.swift"
             ),
+            (
+                "focusProfiles", "FocusProfileSettingsRows", "enabled",
+                "FocusProfileSettingsRows.swift"
+            ),
             ("usage", "UsageRows", "enabled", "ExtensionsPane.swift"),
             ("herdr", "HerdrRows", "enabled", "ExtensionsPane.swift"),
             ("quinjet", "QuinjetRows", "enabled", "ExtensionsPane.swift"),

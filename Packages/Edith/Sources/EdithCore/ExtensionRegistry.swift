@@ -116,6 +116,12 @@ public enum ExtensionRegistry {
             defaultsKey: "automationsEnabled", requiredCapabilities: [.runningApplications],
             optionalCapabilities: [.calendarEvents, .globalShortcuts, .notifications]),
         ExtensionRegistryEntry(
+            id: "focusProfiles", title: "Focus Profiles & Meeting Mode",
+            subtitle: "Compose scenes into restorable work and meeting sessions.",
+            symbolName: "moon.stars.fill", group: .utilities, featured: false,
+            defaultsKey: "focusProfilesEnabled", requiredCapabilities: [.runningApplications],
+            optionalCapabilities: [.calendarEvents, .globalShortcuts, .notifications]),
+        ExtensionRegistryEntry(
             id: "usage", title: "Agent Usage",
             subtitle: "Claude and Codex limits, usage stats, and alerts.",
             symbolName: "chart.bar.fill", group: .agent, featured: true,

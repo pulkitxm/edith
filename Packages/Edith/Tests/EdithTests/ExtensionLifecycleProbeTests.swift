@@ -23,6 +23,9 @@ import EdithCore
             id: "automations", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
+            id: "focusProfiles", helper: true, machine: false, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "usage", helper: true, machine: false, toolRule: .any, adapter: true,
             requiredTools: ["claude", "codex"], optionalTools: []),
         MatrixRow(

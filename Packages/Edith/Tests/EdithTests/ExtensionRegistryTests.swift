@@ -9,6 +9,7 @@ import Testing
     private let knownDefaultsKeys: Set<String> = [
         "tabAttentionEnabled",
         "automationsEnabled",
+        "focusProfilesEnabled",
         "tabUsageEnabled",
         "tabHerdrEnabled",
         "tabQuinjetEnabled",
@@ -36,7 +37,8 @@ import Testing
     @Test func registryMatchesPreUtilityBaseline() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
-                "attention", "automations", "usage", "herdr", "quinjet", "system", "machines",
+                "attention", "automations", "focusProfiles", "usage", "herdr", "quinjet", "system",
+                "machines",
                 "companion", "systemStats", "micMute", "lidAwake", "music", "calendar",
                 "notchShelf", "clipboard", "focusDim", "presenter", "emoji", "colorPicker",
             ])
@@ -230,6 +232,7 @@ import Testing
         let required: [String: [ExtensionPermission]] = [
             "attention": [],
             "automations": [],
+            "focusProfiles": [],
             "usage": [],
             "herdr": [],
             "quinjet": [],
@@ -251,6 +254,7 @@ import Testing
         let optional: [String: [ExtensionPermission]] = [
             "attention": [],
             "automations": [.calendar, .notifications],
+            "focusProfiles": [.calendar, .notifications],
             "usage": [.notifications],
             "herdr": [],
             "quinjet": [],

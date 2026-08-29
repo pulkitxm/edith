@@ -65,7 +65,8 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "attention", "automations", "usage", "quinjet", "system", "machines", "systemStats",
+        "attention", "automations", "focusProfiles", "usage", "quinjet", "system", "machines",
+        "systemStats",
         "micMute", "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim",
         "presenter", "emoji", "colorPicker",
     ]
@@ -93,6 +94,7 @@ public enum ExtensionLiveAdapters {
         switch id {
         case "attention": attentionReadiness()
         case "automations": automationsReadiness()
+        case "focusProfiles": focusProfilesReadiness()
         case "usage": usageReadiness()
         case "quinjet":
             quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
@@ -123,6 +125,22 @@ public enum ExtensionLiveAdapters {
             }
             return .ready(
                 "\(document.scenes.count) scenes and \(document.automations.count) automations are readable."
+            )
+        } catch {
+            return .failed(error.localizedDescription)
+        }
+    }
+
+    static func focusProfilesReadiness(
+        storage: FocusStorage = FocusStorage()
+    ) -> ExtensionAdapterReadiness {
+        do {
+            let document = try storage.load()
+            guard !document.profiles.isEmpty else {
+                return .empty("Create a profile and connect it to reusable scenes.")
+            }
+            return .ready(
+                "\(document.profiles.count) focus profiles are readable; Meeting Mode is \(document.meeting.isEnabled ? "enabled" : "off")."
             )
         } catch {
             return .failed(error.localizedDescription)

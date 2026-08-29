@@ -45,7 +45,8 @@ public struct SettingDefinition: Equatable, Sendable {
 
 public enum ConfigCatalog {
     public static let groups = [
-        "appearance", "panel", "attention", "automations", "usage", "limits", "menubar", "alerts",
+        "appearance", "panel", "attention", "automations", "focus", "usage", "limits", "menubar",
+        "alerts",
         "budget",
         "dashboard",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
@@ -56,7 +57,7 @@ public enum ConfigCatalog {
     ]
 
     public static let settings: [SettingDefinition] =
-        appearance + panel + attention + automations + usageAndLimits
+        appearance + panel + attention + automations + focus + usageAndLimits
         + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
         + system + cleaner
         + music + calendar + clipboard + notch + focusDim + presenter + colorPicker
@@ -86,6 +87,12 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Tabs.automationsEnabled, .bool, group: "automations",
             summary: "Run local automations and reusable scenes.", fallback: .bool(false))
+    ]
+
+    private static let focus: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Focus.enabled, .bool, group: "focus",
+            summary: "Run restorable focus profiles and Meeting Mode.", fallback: .bool(false))
     ]
 
     private static let appearance: [SettingDefinition] = [

@@ -53,6 +53,9 @@ enum JSONContract {
             "ed automations disable", ["automations", "disable", "missing", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed automations history", ["automations", "history", "--json"]),
+        JSONCase("ed focus ls", ["focus", "ls", "--json"]),
+        JSONCase("ed focus status", ["focus", "status", "--json"]),
+        JSONCase("ed focus history", ["focus", "history", "--json"]),
         JSONCase(
             "ed automations export", ["automations", "export", "/tmp/edith.json", "--json"],
             mutatesTheMachine: true),
