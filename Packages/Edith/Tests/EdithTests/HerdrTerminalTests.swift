@@ -88,6 +88,70 @@ import Testing
                 == "herdr --session default agent attach w2:p1 --takeover")
     }
 
+    @Test func agentControllerUsesTheRawTerminalSessionProtocol() throws {
+        let agent = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "work session", pane: "w2:p1", kind: "OpenCode", status: .working,
+            title: "Work", workspace: "edith", cwd: "/repo")
+        let controller = HerdrOperationExecution.localControlRequest(
+            for: agent, environment: ["TERM=xterm-256color"],
+            executable: URL(fileURLWithPath: "/usr/local/bin/herdr"))
+
+        #expect(controller.executable == "/usr/local/bin/herdr")
+        #expect(
+            controller.arguments == [
+                "--session", "work session", "terminal", "session", "control", "w2:p1",
+                "--takeover", "--cols", "{columns}", "--rows", "{rows}",
+            ])
+
+        let specification = HerdrTerminalBridgeSpecification(controller: controller)
+        let decoded = try HerdrTerminalBridgeSpecification(encoded: specification.encoded())
+        #expect(decoded == specification)
+        #expect(
+            decoded.request(columns: 144, rows: 52).arguments.suffix(4) == [
+                "--cols", "144", "--rows", "52",
+            ])
+    }
+
+    @Test func embeddedBridgeLaunchesTheBundledCommand() throws {
+        let controller = TerminalLaunchRequest(
+            executable: "/usr/local/bin/herdr",
+            arguments: ["terminal", "session", "control", "w2:p1"],
+            environment: ["TERM=xterm-256color"])
+        let request = try HerdrTerminalBridge.launchRequest(
+            bridgeExecutable: URL(fileURLWithPath: "/Applications/Edith.app/Contents/MacOS/ed"),
+            controller: controller)
+
+        #expect(request.executable == "/Applications/Edith.app/Contents/MacOS/ed")
+        #expect(request.arguments.prefix(2) == ["herdr", "bridge"])
+        #expect(request.environment == controller.environment)
+        let decoded = try HerdrTerminalBridgeSpecification(encoded: request.arguments[2])
+        #expect(decoded == HerdrTerminalBridgeSpecification(controller: controller))
+    }
+
+    @Test func bridgeProtocolForwardsFramesAndInputBytes() throws {
+        let bytes = Data([0x1B, 0x5B, 0x3C, 0x30, 0x3B, 0x31, 0x3B, 0x31, 0x4D])
+        let frame = try JSONSerialization.data(withJSONObject: [
+            "type": "terminal.frame", "bytes": bytes.base64EncodedString(),
+        ])
+        #expect(try HerdrTerminalBridge.decodeRecord(frame) == .frame(bytes))
+
+        let input = try HerdrTerminalBridge.inputCommand(bytes)
+        let object = try #require(
+            JSONSerialization.jsonObject(with: input) as? [String: String])
+        #expect(object["type"] == "terminal.input")
+        #expect(object["bytes"] == bytes.base64EncodedString())
+    }
+
+    @Test func bridgeEnablesHoverAndButtonMouseReporting() {
+        let start = String(decoding: HerdrTerminalBridge.startSequence, as: UTF8.self)
+        let stop = String(decoding: HerdrTerminalBridge.stopSequence, as: UTF8.self)
+        for mode in ["1000", "1002", "1003", "1006"] {
+            #expect(start.contains("\u{1B}[?\(mode)h"))
+            #expect(stop.contains("\u{1B}[?\(mode)l"))
+        }
+    }
+
     @Test func aPlainPaneIsNotListedAsAnAgent() {
         let json = """
             {"id":"s","result":{"type":"session_snapshot","snapshot":{"panes":[{"pane_id":"w2:p1","agent":"claude","agent_status":"working","terminal_title_stripped":"Work","workspace_id":"w2"},{"pane_id":"w1:pA","agent_status":"unknown","workspace_id":"w1"}],"agents":[],"workspaces":[]}}}

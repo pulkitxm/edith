@@ -22,3 +22,20 @@ public enum HerdrAttachCommand {
         ["--session", session, "agent", "attach", pane, "--takeover"]
     }
 }
+
+public enum HerdrTerminalControlCommand {
+    public static func arguments(session: String, pane: String) -> [String] {
+        [
+            "--session", session, "terminal", "session", "control", pane, "--takeover",
+            "--cols", HerdrTerminalBridgeSpecification.columnsToken,
+            "--rows", HerdrTerminalBridgeSpecification.rowsToken,
+        ]
+    }
+
+    public static func remoteShellLine(session: String, pane: String) -> String {
+        let command = (["herdr"] + arguments(session: session, pane: pane))
+            .map(ShellQuote.quote)
+            .joined(separator: " ")
+        return "export PATH=\"\(HerdrCollector.pathPrefix)\"; \(command)"
+    }
+}
