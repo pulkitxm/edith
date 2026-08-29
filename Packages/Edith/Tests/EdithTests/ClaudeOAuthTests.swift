@@ -695,6 +695,9 @@ private final class ClaudeCredentialDataCapture: @unchecked Sendable {
         #expect(capturedQuery[kSecClass] as? String == kSecClassGenericPassword as String)
         #expect(capturedQuery[kSecAttrService] as? String == "Claude Code-credentials")
         #expect(capturedQuery[kSecReturnData] as? Bool == true)
+        #expect(
+            capturedQuery[kSecUseAuthenticationUI] as? String
+                == kSecUseAuthenticationUISkip as String)
         let context = try #require(
             capturedQuery[kSecUseAuthenticationContext] as? LAContext)
         #expect(context.interactionNotAllowed)
