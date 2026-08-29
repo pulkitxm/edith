@@ -164,6 +164,32 @@ import Testing
         #expect(context.model.loadedRoute?.url.fragment == "L40-L44")
     }
 
+    @Test func deinitializationCancelsAnActiveResourceLoad() async throws {
+        let fixture = GitHubCancellationFixture()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = GitHubSessionStore(file: root.appendingPathComponent("session.json"))
+        let route = repositoryRoute("first")
+        let tab = GitHubBrowserTab(
+            entry: GitHubBrowserHistoryEntry(route: route), title: route.url.lastPathComponent)
+        try await store.save(GitHubBrowserSession(tabs: [tab], selectedTabID: tab.id))
+        var model: GitHubBrowserModel? = GitHubBrowserModel(
+            store: store, checkReadiness: { .ready("Signed in") },
+            readCachedResource: { _ in nil },
+            loadResource: { try await fixture.load($0) })
+        weak let releasedModel = model
+
+        await model?.start()
+        await fixture.waitUntilStarted()
+        model = nil
+
+        for _ in 0..<100 where !(await fixture.wasCancelled()) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(releasedModel == nil)
+        #expect(await fixture.wasCancelled())
+    }
+
     private func modelContext(
         route: GitHubRoute, fixture: GitHubResourceFixture,
         cached: GitHubRepositoryResource? = nil
