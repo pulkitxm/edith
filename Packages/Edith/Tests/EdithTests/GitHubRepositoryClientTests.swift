@@ -45,7 +45,7 @@ import Testing
         #expect(
             command.arguments
                 == [
-                    "api", "--include", "--hostname", "github.example.com", "--method", "GET",
+                    "api", "--include", "--hostname", "github.example.com:8443", "--method", "GET",
                     "-H", "Accept: application/vnd.github+json", "-H",
                     "If-None-Match: \"abc\"", "repos/acme/orbit/contents/Sources", "--raw-field",
                     "ref=feature/navigation",
