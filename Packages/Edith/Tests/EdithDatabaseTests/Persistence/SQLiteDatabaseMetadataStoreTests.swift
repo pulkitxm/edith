@@ -193,6 +193,12 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let firstStore = try SQLiteDatabaseMetadataStore(path: path)
         let secondStore = try SQLiteDatabaseMetadataStore(path: path)
+        let connection = try DatabasePersistenceFixtures.connection(
+            id: DatabaseConnectionFixtures.connectionID.rawValue,
+            name: "Confirmation",
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 200))
+        try await firstStore.saveConnection(connection)
         let identifier = UUID(uuidString: "006EA1D4-742C-459A-BC6A-67F579B63CE8")!
         try await firstStore.registerConfirmation(
             DatabaseConfirmationReceipt(
@@ -202,10 +208,12 @@ import Testing
         async let first = firstStore.consumeConfirmation(
             identifier: identifier,
             effectDigest: "effect-a",
+            connection: connection,
             consumedAt: Date(timeIntervalSince1970: 400))
         async let second = secondStore.consumeConfirmation(
             identifier: identifier,
             effectDigest: "effect-a",
+            connection: connection,
             consumedAt: Date(timeIntervalSince1970: 400))
         let results = try await [first, second]
         #expect(results.filter { $0 }.count == 1)
@@ -213,6 +221,7 @@ import Testing
             try await firstStore.consumeConfirmation(
                 identifier: identifier,
                 effectDigest: "effect-a",
+                connection: connection,
                 consumedAt: Date(timeIntervalSince1970: 410)) == false)
 
         let expiredID = UUID(uuidString: "29C07BC9-7472-4EDB-8F58-1974E9F3BD02")!
@@ -225,6 +234,7 @@ import Testing
             try await secondStore.consumeConfirmation(
                 identifier: expiredID,
                 effectDigest: "effect-b",
+                connection: connection,
                 consumedAt: Date(timeIntervalSince1970: 400)) == false)
         #expect(
             try await secondStore.removeExpiredConfirmations(

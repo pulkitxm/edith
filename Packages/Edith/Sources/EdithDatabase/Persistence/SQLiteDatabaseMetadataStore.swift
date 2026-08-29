@@ -424,9 +424,11 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
     public func consumeConfirmation(
         identifier: UUID,
         effectDigest: String,
+        connection: DatabaseConnectionDefinition,
         consumedAt: Date
     ) throws -> Bool {
-        try pool.write { database in
+        let definition = try Self.encoder().encode(connection)
+        return try pool.write { database in
             try database.execute(
                 sql: """
                     UPDATE database_confirmation_receipts
@@ -434,12 +436,18 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
                     WHERE id = :id
                         AND effect_digest = :effect_digest
                         AND consumed_at IS NULL
-                        AND expires_at >= :consumed_at
+                        AND expires_at > :consumed_at
+                        AND EXISTS (
+                            SELECT 1 FROM database_connections
+                            WHERE id = :connection_id AND definition = :connection_definition
+                        )
                     """,
                 arguments: [
                     "consumed_at": consumedAt.timeIntervalSince1970,
                     "id": identifier.uuidString,
                     "effect_digest": effectDigest,
+                    "connection_id": connection.id.rawValue.uuidString,
+                    "connection_definition": definition,
                 ])
             return database.changesCount == 1
         }
@@ -448,7 +456,7 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
     public func removeExpiredConfirmations(before date: Date) throws -> Int {
         try pool.write { database in
             try database.execute(
-                sql: "DELETE FROM database_confirmation_receipts WHERE expires_at < ?",
+                sql: "DELETE FROM database_confirmation_receipts WHERE expires_at <= ?",
                 arguments: [date.timeIntervalSince1970])
             return database.changesCount
         }
