@@ -340,6 +340,9 @@ public enum ExtensionLifecycleCatalog {
             "Review installed applications, available Homebrew updates and exact support files.",
             workflows: [
                 instruction(
+                    "updates", "Review updates",
+                    "Compare managed, store, and app-native updates before running a batch."),
+                instruction(
                     "inventory", "Review installed apps",
                     "See versions and Homebrew update status for regular Applications folders."),
                 instruction(
@@ -358,6 +361,7 @@ public enum ExtensionLifecycleCatalog {
             ],
             examples: [
                 "ed extensions enable appMaintenance", "ed maintenance inventory --json",
+                "ed maintenance updates --json", "ed maintenance update",
                 "ed maintenance scan /Applications/Example.app --json",
                 "ed maintenance install ~/Downloads/Example.dmg --json",
             ],

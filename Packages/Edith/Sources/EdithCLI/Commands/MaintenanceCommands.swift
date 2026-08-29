@@ -15,6 +15,7 @@ struct MaintenanceCommand: AsyncParsableCommand {
             MaintenanceRemoveCommand.self, MaintenanceInstallCommand.self,
             MaintenanceUpdatesCommand.self, MaintenanceUpdateCommand.self,
             MaintenanceUpdateHistoryCommand.self,
+            MaintenanceUpdateBackupCommand.self,
         ],
         defaultSubcommand: MaintenanceInventoryCommand.self)
 }
@@ -289,6 +290,33 @@ struct MaintenanceUpdateHistoryCommand: AsyncParsableCommand {
                             $0.source.title, $0.status.rawValue,
                         ]
                     }))
+        }
+    }
+}
+
+struct MaintenanceUpdateBackupCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "backup-updates", abstract: "Back up update policy and history.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "New backup file path.")
+    var destination: String
+
+    func run() async throws {
+        try await execute {
+            let url = URL(fileURLWithPath: destination.expandingTilde()).standardizedFileURL
+            do {
+                try AppUpdatePersistence().backup(to: url)
+            } catch let error as AppUpdateCenterError {
+                throw CLIFailure(error.localizedDescription)
+            }
+            if json {
+                CLIOut.json(.object(["path": .string(url.path)]))
+            } else {
+                CLIOut.out("backed up update policy and history to \(url.path)")
+            }
         }
     }
 }

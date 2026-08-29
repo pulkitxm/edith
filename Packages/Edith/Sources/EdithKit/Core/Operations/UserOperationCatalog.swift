@@ -1227,6 +1227,8 @@ private extension AppMaintenanceOperation {
             userInterface("App Update Center", "review and run selected updates", ["--yes"])
         case .history:
             userInterface("App Update Center", "review update history")
+        case .backupUpdates:
+            .commandLineOnly(reason: "Backups require an explicit destination path.")
         }
     }
 }

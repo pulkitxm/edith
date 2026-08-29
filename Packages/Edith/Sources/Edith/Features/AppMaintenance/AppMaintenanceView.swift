@@ -147,6 +147,18 @@ final class AppMaintenanceModel {
         persistPolicy(removing: item)
     }
 
+    func resetUpdatePolicies() {
+        updateState.ignoredVersions = [:]
+        updateState.snoozedUntil = [:]
+        updateState.excludedBundleIDs = []
+        do {
+            try updatePersistence.save(updateState)
+            refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func persistPolicy(removing item: AppUpdateItem) {
         do {
             try updatePersistence.save(updateState)
@@ -777,7 +789,10 @@ struct AppMaintenanceView: View {
                         }
                     }
                     Spacer()
-                    Button("Run \(model.selectedUpdateIDs.count) Updates") {
+                    Button(
+                        item.action == .openUpdater && model.selectedUpdateIDs.count == 1
+                            ? "Open App Updater" : "Run \(model.selectedUpdateIDs.count) Updates"
+                    ) {
                         confirmingUpdates = true
                     }
                     .buttonStyle(.borderedProminent)
@@ -819,6 +834,9 @@ struct AppMaintenanceView: View {
             Toggle("Notifications", isOn: $updateNotifications)
             Stepper("Concurrency: \(updateConcurrency)", value: $updateConcurrency, in: 1...4)
             Stepper("Retries: \(updateRetries)", value: $updateRetries, in: 0...3)
+            Button("Reset Ignored, Snoozed, and Excluded Apps") {
+                model.resetUpdatePolicies()
+            }
             if AppUpdateAutomationHook.isAvailable() {
                 LabeledContent("Automation command", value: AppUpdateAutomationHook.refreshCommand)
             }

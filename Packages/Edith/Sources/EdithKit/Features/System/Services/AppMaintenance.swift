@@ -10,6 +10,7 @@ public enum AppMaintenanceOperation: String, CaseIterable, Sendable {
     case updates
     case update
     case history
+    case backupUpdates
 
     public var descriptor: UserOperationDescriptor {
         switch self {
@@ -51,6 +52,11 @@ public enum AppMaintenanceOperation: String, CaseIterable, Sendable {
                 id: UserOperationID(rawValue: "maintenance.history"),
                 summary: "Show application update results.",
                 cli: ["maintenance", "history"], effect: .read)
+        case .backupUpdates:
+            UserOperationDescriptor(
+                id: UserOperationID(rawValue: "maintenance.backup-updates"),
+                summary: "Back up update policy and history.",
+                cli: ["maintenance", "backup-updates"], effect: .write)
         }
     }
 }

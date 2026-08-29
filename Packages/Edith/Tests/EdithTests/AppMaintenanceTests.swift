@@ -174,7 +174,10 @@ private final class AppMaintenanceRequestCapture: @unchecked Sendable {
         let node = try #require(CommandTree.root.child("maintenance"))
         #expect(
             node.children.map(\.name)
-                == ["inventory", "scan", "remove", "install", "updates", "update", "history"])
+                == [
+                    "inventory", "scan", "remove", "install", "updates", "update", "history",
+                    "backup-updates",
+                ])
         #expect(
             try EdRoot.parseAsRoot(["maintenance", "inventory", "--no-updates"])
                 is MaintenanceInventoryCommand)
@@ -190,6 +193,9 @@ private final class AppMaintenanceRequestCapture: @unchecked Sendable {
         #expect(
             try EdRoot.parseAsRoot(["maintenance", "update", "brew:sample"])
                 is MaintenanceUpdateCommand)
+        #expect(
+            try EdRoot.parseAsRoot(["maintenance", "backup-updates", "/tmp/updates.json"])
+                is MaintenanceUpdateBackupCommand)
     }
 
     private func temporaryDirectory() throws -> URL {

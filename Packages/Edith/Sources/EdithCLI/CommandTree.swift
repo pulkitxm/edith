@@ -694,6 +694,9 @@ public enum CommandTree {
                         options: ["--json", "--help", "--yes", "--concurrency", "--retries"],
                         repeatingArgument: .free, destructivePolicy: .previewThenYes),
                     CommandNode("history", "Show recent update results.", options: common),
+                    CommandNode(
+                        "backup-updates", "Back up update policy and history.", options: common,
+                        arguments: [.localPath]),
                 ]),
             CommandNode(
                 "quinjet", "Discover and open Quinjet review workspaces.",
