@@ -43,20 +43,14 @@ struct UsageShareSheet: View {
         .background(sheetBackground)
         .overlay(alignment: .bottomTrailing) { statusToast }
         .task { await loadPreviews() }
-        .onKeyPress(.leftArrow) {
-            move(-1)
-            return .handled
-        }
-        .onKeyPress(.rightArrow) {
-            move(1)
-            return .handled
-        }
         .onExitCommand { dismiss() }
     }
 
     private var carousel: some View {
         HStack(spacing: 18) {
-            ShareCarouselArrow(systemImage: "chevron.left", color: modalInk) { move(-1) }
+            ShareCarouselArrow(
+                systemImage: "chevron.left", shortcut: .leftArrow, color: modalInk
+            ) { move(-1) }
             ZStack {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(modalInk.opacity(0.06))
@@ -74,6 +68,7 @@ struct UsageShareSheet: View {
                 }
             }
             .frame(width: 600, height: 400)
+            .clipped()
             .shadow(color: .black.opacity(0.17), radius: 24, y: 14)
             .gesture(
                 DragGesture(minimumDistance: 18)
@@ -81,7 +76,9 @@ struct UsageShareSheet: View {
                         guard abs(gesture.translation.width) > 50 else { return }
                         move(gesture.translation.width < 0 ? 1 : -1)
                     })
-            ShareCarouselArrow(systemImage: "chevron.right", color: modalInk) { move(1) }
+            ShareCarouselArrow(
+                systemImage: "chevron.right", shortcut: .rightArrow, color: modalInk
+            ) { move(1) }
         }
         .frame(maxWidth: .infinity)
     }
@@ -89,7 +86,9 @@ struct UsageShareSheet: View {
     private var pagination: some View {
         HStack(spacing: 8) {
             ForEach(Array(cards.enumerated()), id: \.element.id) { item in
-                Button { select(item.offset) } label: {
+                Button {
+                    select(item.offset)
+                } label: {
                     Circle()
                         .fill(
                             item.offset == index
@@ -97,7 +96,8 @@ struct UsageShareSheet: View {
                         )
                         .frame(
                             width: item.offset == index ? 7 : 6,
-                            height: item.offset == index ? 7 : 6)
+                            height: item.offset == index ? 7 : 6
+                        )
                         .frame(width: 11, height: 11)
                 }
                 .buttonStyle(.plain)
@@ -154,7 +154,8 @@ struct UsageShareSheet: View {
                 .frame(height: 36)
                 .background(
                     status.error ? Color.red.opacity(0.92) : modalInk,
-                    in: RoundedRectangle(cornerRadius: 7))
+                    in: RoundedRectangle(cornerRadius: 7)
+                )
                 .padding(16)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
         }
@@ -163,8 +164,8 @@ struct UsageShareSheet: View {
     private var cardTransition: AnyTransition {
         Motion.transition(
             .asymmetric(
-                insertion: .move(edge: direction > 0 ? .trailing : .leading).combined(with: .opacity),
-                removal: .move(edge: direction > 0 ? .leading : .trailing).combined(with: .opacity)),
+                insertion: .move(edge: direction > 0 ? .trailing : .leading),
+                removal: .move(edge: direction > 0 ? .leading : .trailing)),
             reduceMotion: reduceMotion, preferCrossFade: false)
     }
 
@@ -203,7 +204,9 @@ struct UsageShareSheet: View {
             }
             showStatus("Image copied", systemImage: "checkmark.circle.fill")
         } catch {
-            showStatus(error.localizedDescription, systemImage: "exclamationmark.triangle.fill", error: true)
+            showStatus(
+                error.localizedDescription, systemImage: "exclamationmark.triangle.fill",
+                error: true)
         }
     }
 
@@ -221,7 +224,8 @@ struct UsageShareSheet: View {
                     let data = try UsageShareRenderer.pngData(
                         snapshot: snapshot, card: selectedCard, scale: 2)
                     try UsageShareDelivery.write(data, to: url)
-                    showStatus("Saved to \(url.lastPathComponent)", systemImage: "checkmark.circle.fill")
+                    showStatus(
+                        "Saved to \(url.lastPathComponent)", systemImage: "checkmark.circle.fill")
                 } catch {
                     showStatus(
                         error.localizedDescription, systemImage: "exclamationmark.triangle.fill",
@@ -251,6 +255,7 @@ struct UsageShareSheet: View {
 
 private struct ShareCarouselArrow: View {
     let systemImage: String
+    let shortcut: KeyEquivalent
     let color: Color
     let action: () -> Void
 
@@ -267,6 +272,7 @@ private struct ShareCarouselArrow: View {
                     in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .buttonStyle(SharePressedButtonStyle())
+        .keyboardShortcut(shortcut, modifiers: [])
         .onHover { hovering = $0 }
         .accessibilityLabel(systemImage == "chevron.left" ? "Previous card" : "Next card")
     }
