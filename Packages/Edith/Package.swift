@@ -3,6 +3,7 @@ import PackageDescription
 
 let products: [Product] = [
     .library(name: "EdithCore", targets: ["EdithCore"]),
+    .library(name: "EdithDatabase", targets: ["EdithDatabase"]),
     .library(name: "Edith", targets: ["Edith"]),
     .library(name: "EdithKit", targets: ["EdithKit"]),
     .library(name: "EdithCLI", targets: ["EdithCLI"]),
@@ -25,6 +26,15 @@ let targets: [Target] = [
     .testTarget(
         name: "EdithCoreTests",
         dependencies: ["EdithCore"],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .target(
+        name: "EdithDatabase",
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .testTarget(
+        name: "EdithDatabaseTests",
+        dependencies: ["EdithDatabase"],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .target(
