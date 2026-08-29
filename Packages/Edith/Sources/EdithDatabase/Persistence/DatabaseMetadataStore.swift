@@ -203,6 +203,7 @@ public protocol DatabaseMetadataStore: Sendable {
     func consumeConfirmation(
         identifier: UUID,
         effectDigest: String,
+        connection: DatabaseConnectionDefinition,
         consumedAt: Date
     ) async throws -> Bool
     func removeExpiredConfirmations(before date: Date) async throws -> Int
