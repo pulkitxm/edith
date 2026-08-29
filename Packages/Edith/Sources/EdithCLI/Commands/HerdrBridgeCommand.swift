@@ -111,13 +111,13 @@ private final class HerdrTerminalBridgeRuntime {
 
         let dimensions = HerdrTerminalDimensions.current()
         let request = specification.request(columns: dimensions.columns, rows: dimensions.rows)
-        let controller = Process()
         let controllerInput = Pipe()
         let controllerOutput = Pipe()
-        controller.executableURL = URL(fileURLWithPath: request.executable)
-        controller.arguments = request.arguments
-        controller.environment = ForegroundProcess.environment(
-            assignments: request.environment, inheriting: true)
+        let controller = ForegroundProcess.configured(
+            executable: URL(fileURLWithPath: request.executable),
+            arguments: request.arguments,
+            environment: ForegroundProcess.environment(
+                assignments: request.environment, inheriting: true))
         controller.standardInput = controllerInput
         controller.standardOutput = controllerOutput
         controller.standardError = FileHandle.standardError

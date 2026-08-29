@@ -107,10 +107,8 @@ public enum ForegroundProcess {
         executable: URL, arguments: [String], environment: [String: String],
         failureNote: String
     ) -> Int32 {
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = arguments
-        process.environment = environment
+        let process = configured(
+            executable: executable, arguments: arguments, environment: environment)
         process.standardInput = FileHandle.standardInput
         process.standardOutput = FileHandle.standardOutput
         process.standardError = FileHandle.standardError
@@ -120,5 +118,15 @@ public enum ForegroundProcess {
         }
         process.waitUntilExit()
         return process.terminationStatus
+    }
+
+    public static func configured(
+        executable: URL, arguments: [String], environment: [String: String]
+    ) -> Process {
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = arguments
+        process.environment = environment
+        return process
     }
 }
