@@ -74,11 +74,15 @@ public enum AppStorageKeys {
 
     public enum CommandBar {
         public static let enabled = "commandBarEnabled"
+        public static let fileScopes = "commandBarFileScopes"
+        public static let hiddenResults = "commandBarHiddenResults"
         public static let hotKeyCode = "commandBarHotKeyCode"
         public static let hotKeyLabel = "commandBarHotKeyLabel"
         public static let hotKeyMods = "commandBarHotKeyMods"
         public static let learnRanking = "commandBarLearnRanking"
+        public static let pinnedResults = "commandBarPinnedResults"
         public static let registrationStatus = "commandBarHotKeyRegistrationStatus"
+        public static let resultShortcuts = "commandBarResultShortcuts"
         public static let showApplications = "commandBarShowApplications"
         public static let usage = "commandBarUsage"
     }

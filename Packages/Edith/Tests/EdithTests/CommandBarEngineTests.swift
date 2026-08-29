@@ -49,6 +49,17 @@ import Testing
             ).first?.id == "b")
     }
 
+    @Test func providerAndPinBiasBreakEquivalentMatches() {
+        let candidates = [
+            CommandBarCandidate(id: "file", title: "Editor", subtitle: "File", bias: -40),
+            CommandBarCandidate(id: "action", title: "Editor", subtitle: "Action", bias: 60),
+        ]
+        #expect(
+            CommandBarSearch.rank(
+                candidates, query: "editor", usage: CommandBarUsage()
+            ).first?.id == "action")
+    }
+
     @Test func usageHistoryIsBounded() {
         var usage = CommandBarUsage()
         for index in 0..<140 {
@@ -92,5 +103,49 @@ import Testing
     @Test func rejectsConversionsAcrossDimensions() {
         #expect(CommandBarEvaluator.conversion("5 km to kg", locale: locale) == nil)
         #expect(CommandBarEvaluator.conversion("5 unknown to m", locale: locale) == nil)
+    }
+
+    @Test func fileSearchEscapesMetadataSyntaxAndFiltersPrivatePaths() {
+        #expect(
+            CommandBarFileSearchSupport.expression(for: "annual *report")
+                == "kMDItemFSName == \"*annual*\"cd && kMDItemFSName == \"*\\*report*\"cd")
+        #expect(CommandBarFileSearchSupport.expression(for: "a") == nil)
+        #expect(
+            CommandBarFileSearchSupport.offerable(
+                paths: [
+                    "/Users/me/Documents/report.pdf", "/Users/me/.private/secret.txt",
+                    "/Users/me/project/node_modules/file.js", "/Users/me/Documents/report.pdf",
+                ],
+                isPackage: { $0.hasSuffix(".app") }
+            ) == ["/Users/me/Documents/report.pdf"])
+    }
+
+    @Test func resultPreferencesAreStableAndBounded() throws {
+        var pins: [String] = []
+        for index in 0..<40 {
+            pins = CommandBarPreferences.togglingPin("item.\(index)", in: pins)
+        }
+        #expect(pins.count == CommandBarPreferences.maximumPins)
+        #expect(pins.first == "item.10")
+
+        let shortcut = CommandBarResultShortcut(keyCode: 18, modifiers: 6_144, label: "⌃⌥1")
+        let assigned = CommandBarPreferences.assigning(shortcut, to: "item.1", in: [:])
+        let encoded = try #require(CommandBarPreferences.encodeShortcuts(assigned))
+        #expect(CommandBarPreferences.decodeShortcuts(encoded) == assigned)
+        #expect(!encoded.contains("private query"))
+    }
+
+    @Test func textUtilitiesTransformLocally() {
+        #expect(CommandBarTextUtility.uppercase.transform("Hello") == "HELLO")
+        #expect(CommandBarTextUtility.lowercase.transform("Hello") == "hello")
+        #expect(CommandBarTextUtility.trimWhitespace.transform("  one  \n two ") == "one\ntwo")
+        #expect(CommandBarTextUtility.sortLines.transform("z\na") == "a\nz")
+        #expect(CommandBarTextUtility.countWords.transform("one two\nthree") == "3")
+    }
+
+    @Test func emojiCatalogHasStableUniqueCharacters() {
+        #expect(!CommandBarEmoji.common.isEmpty)
+        #expect(Set(CommandBarEmoji.common.map(\.character)).count == CommandBarEmoji.common.count)
+        #expect(CommandBarEmoji.common.allSatisfy { !$0.keywords.isEmpty })
     }
 }

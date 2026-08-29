@@ -659,6 +659,18 @@ public enum ConfigCatalog {
             AppStorageKeys.CommandBar.learnRanking, .bool, group: "commandbar",
             summary: "Rank frequently used results higher without saving query text.",
             fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.CommandBar.fileScopes, .string, group: "commandbar",
+            summary: "Folders searched through the macOS metadata index."),
+        SettingDefinition(
+            AppStorageKeys.CommandBar.pinnedResults, .string, group: "commandbar",
+            summary: "Stable identifiers of pinned Command Bar results."),
+        SettingDefinition(
+            AppStorageKeys.CommandBar.hiddenResults, .string, group: "commandbar",
+            summary: "Stable identifiers of hidden Command Bar results."),
+        SettingDefinition(
+            AppStorageKeys.CommandBar.resultShortcuts, .string, group: "commandbar",
+            summary: "Global shortcuts assigned to stable Command Bar result identifiers."),
     ]
 
     private static let notch: [SettingDefinition] = [

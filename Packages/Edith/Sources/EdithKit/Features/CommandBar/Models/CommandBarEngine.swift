@@ -5,12 +5,16 @@ public struct CommandBarCandidate: Equatable, Sendable {
     public let title: String
     public let subtitle: String
     public let keywords: [String]
+    public let bias: Int
 
-    public init(id: String, title: String, subtitle: String, keywords: [String] = []) {
+    public init(
+        id: String, title: String, subtitle: String, keywords: [String] = [], bias: Int = 0
+    ) {
         self.id = id
         self.title = title
         self.subtitle = subtitle
         self.keywords = keywords
+        self.bias = bias
     }
 }
 
@@ -61,7 +65,7 @@ public enum CommandBarSearch {
         return candidates.compactMap { candidate -> (CommandBarCandidate, Int)? in
             let match = matchScore(candidate, query: query)
             guard query.isEmpty || match > 0 else { return nil }
-            return (candidate, match + usage.score(for: candidate.id, now: now))
+            return (candidate, match + candidate.bias + usage.score(for: candidate.id, now: now))
         }
         .sorted {
             if $0.1 != $1.1 { return $0.1 > $1.1 }
