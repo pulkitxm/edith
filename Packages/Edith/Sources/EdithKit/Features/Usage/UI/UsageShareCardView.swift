@@ -585,7 +585,7 @@ private struct BusiestShareContent: View {
     private var stats: [(String, String)] {
         [
             (String(format: "%.1fx", multiplier), "vs active-day average"),
-            (ShareFormat.cost(busiest.cost), "cost that day"),
+            (ShareFormat.tokens(snapshot.totalTokens), "tokens in story"),
             (String(format: "%.1f%%", shareOfTotal * 100), "of all tokens"),
             ("\(snapshot.repositoryCount)", "repositories moved"),
         ]
@@ -749,12 +749,6 @@ private enum ShareFormat {
         if value >= 1_000_000 { return String(format: "%.1fM", value / 1_000_000) }
         if value >= 1_000 { return String(format: "%.1fK", value / 1_000) }
         return String(Int(value.rounded()))
-    }
-
-    static func cost(_ value: Double) -> String {
-        if value >= 1_000 { return String(format: "$%.1fK", value / 1_000) }
-        if value >= 100 { return String(format: "$%.0f", value) }
-        return String(format: "$%.2f", value)
     }
 
     static func day(_ period: String) -> String {

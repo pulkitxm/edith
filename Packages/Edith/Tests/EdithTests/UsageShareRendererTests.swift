@@ -3,6 +3,11 @@ import EdithKit
 import Testing
 
 @Suite struct UsageShareRendererTests {
+    private static let root = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+
     private let snapshot = UsageShareSnapshot(
         days: [
             UsageShareDay(period: "2026-08-20", tokens: 1_000, cost: 1),
@@ -45,5 +50,14 @@ import Testing
     @Test func filenamesCarryTheEdithBrand() {
         #expect(UsageShareCard.activity.filenameStem == "edith-usage-activity")
         #expect(UsageShareCard.allCases.map(\.id).count == 4)
+    }
+
+    @Test func rendererDoesNotExposeCosts() throws {
+        let source = try String(
+            contentsOf: Self.root.appendingPathComponent(
+                "Sources/EdithKit/Features/Usage/UI/UsageShareCardView.swift"),
+            encoding: .utf8)
+        #expect(!source.contains("ShareFormat.cost"))
+        #expect(!source.contains("\"$"))
     }
 }
