@@ -62,6 +62,18 @@ import Testing
         #expect(!source.contains("availableEntries"))
     }
 
+    @Test func finderToolsResynchronizesAfterPermissionChanges() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/EdithHelper/Core/Application/EdithHelperApp.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        #expect(source.contains("IPC.observe(IPC.Name.permissionsRefreshed)"))
+        #expect(source.contains("services.finderTools?.syncSettings()"))
+    }
+
     @Test func quinjetMarketplaceBindingAndSettingsAreReachable() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -261,6 +273,7 @@ import Testing
             ("calendar", "CalendarRows", "enabled", "ExtensionsPane.swift"),
             ("notchShelf", "NotchShelfRows", "enabled", "NotchShelfRows.swift"),
             ("clipboard", "ClipboardRows", "enabled", "ClipboardRows.swift"),
+            ("finderTools", "FinderToolsRows", "enabled", "FinderToolsRows.swift"),
             ("focusDim", "FocusDimRows", "enabled", "FocusDimRows.swift"),
             ("presenter", "PresenterRows", "presenterEnabled", "PresenterRows.swift"),
             ("colorPicker", "ColorPickerRows", "colorPickerEnabled", "ColorPickerRows.swift"),

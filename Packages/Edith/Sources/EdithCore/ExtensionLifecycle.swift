@@ -590,6 +590,43 @@ public enum ExtensionLifecycleCatalog {
                     "ed clipboard ls --json")
             ]),
         descriptor(
+            "finderTools", "Make Finder file operations faster without replacing Finder.",
+            workflows: [
+                instruction(
+                    "shortcuts", "Use Finder shortcuts",
+                    "Move files with Command-X and Command-V, rename with F2, and paste images as PNG files."
+                ),
+                instruction(
+                    "install", "Install from disk images",
+                    "Install the single verified app on a mounted DMG, then eject and trash the download."
+                ),
+            ],
+            prerequisites: [
+                instruction(
+                    "access", "Grant Accessibility",
+                    "Accessibility lets Edith handle Finder-only keyboard shortcuts.",
+                    "ed permissions request accessibility")
+            ],
+            examples: [
+                "ed extensions enable finderTools",
+                "ed config ls --group findertools --json",
+            ],
+            docs: [
+                documentation("guide", "Finder Tools guide", "docs/cli/finder-tools/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "doctor", "Check Finder Tools readiness",
+                    "Inspect the helper, permissions, and enabled Finder features.",
+                    "ed extensions doctor finderTools --json")
+            ],
+            verification: [
+                instruction(
+                    "status", "Inspect Finder Tools",
+                    "Confirm the helper and selected features are ready.",
+                    "ed extensions status finderTools --json")
+            ]),
+        descriptor(
             "focusDim", "Reduce visual noise by dimming everything behind the active app.",
             workflows: [
                 instruction(

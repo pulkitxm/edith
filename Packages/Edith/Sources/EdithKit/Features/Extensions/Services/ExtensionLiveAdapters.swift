@@ -65,8 +65,8 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
-        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "colorPicker",
+        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "finderTools", "focusDim",
+        "presenter", "colorPicker",
     ]
 
     public static func provider(
@@ -103,11 +103,34 @@ public enum ExtensionLiveAdapters {
         case "calendar": calendarReadiness()
         case "notchShelf": shelfReadiness()
         case "clipboard": clipboardReadiness()
+        case "finderTools": finderToolsReadiness(defaults: defaults)
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
         default: nil
         }
+    }
+
+    static func finderToolsReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
+        let shortcutKeys = [
+            AppStorageKeys.FinderTools.cutPaste, AppStorageKeys.FinderTools.rename,
+            AppStorageKeys.FinderTools.pasteImages,
+        ]
+        let keys = shortcutKeys + [AppStorageKeys.FinderTools.diskImageInstaller]
+        let enabled = keys.filter { defaults.object(forKey: $0) as? Bool ?? true }
+        let shortcutsEnabled = shortcutKeys.contains {
+            defaults.object(forKey: $0) as? Bool ?? true
+        }
+        if shortcutsEnabled,
+            !defaults.bool(forKey: AppStorageKeys.Permissions.accessibilityGranted)
+        {
+            return .needsSetup("Grant Accessibility to use Finder keyboard shortcuts.")
+        }
+        return ExtensionAdapterFacts(
+            configured: !enabled.isEmpty,
+            readyDetail: "Finder Tools features enabled: \(enabled.count).",
+            setupDetail: "Turn on at least one Finder Tools feature."
+        ).readiness
     }
 
     static func attentionReadiness(

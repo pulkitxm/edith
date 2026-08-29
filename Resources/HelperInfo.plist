@@ -23,7 +23,7 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Edith controls playback in Spotify and Apple Music from the notch.</string>
+	<string>Edith reads Finder selections and destinations for Finder Tools and controls playback in Spotify and Apple Music from the notch.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Edith taps an app's audio only to adjust its volume in the per-app mixer.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
