@@ -121,11 +121,6 @@ struct EmojiPanelView: View {
                     return .handled
                 }
                 .onKeyPress { press in handle(press) }
-                ProgressView()
-                    .controlSize(.small)
-                    .scaleEffect(0.6)
-                    .frame(width: 12, height: 12)
-                    .opacity(model.isSearching ? 1 : 0)
                 if !model.query.isEmpty {
                     Button {
                         model.setQuery("")
@@ -186,9 +181,7 @@ struct EmojiPanelView: View {
             .scrollIndicators(.never)
             .onChange(of: scrollTick) { _, _ in
                 guard let selectedID = model.selectedID else { return }
-                withAnimation(.easeOut(duration: 0.1)) {
-                    proxy.scrollTo(selectedID, anchor: .center)
-                }
+                proxy.scrollTo(selectedID, anchor: .center)
             }
             .onChange(of: pendingSectionScroll) { _, target in
                 guard let target else { return }

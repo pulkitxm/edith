@@ -29,7 +29,7 @@ struct EmojiPanelRow: Identifiable, Hashable, Sendable {
 final class EmojiPanelModel {
     typealias Search = @Sendable (String) async -> [Emoji]
 
-    static let rowsPerPage = 8
+    static let rowsPerPage = 16
     static let pageSize = rowsPerPage * EmojiPanelView.columns
 
     private(set) var query = ""
