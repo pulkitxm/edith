@@ -35,6 +35,7 @@ public enum Guide {
         ed config describe <key>    one setting: type, scope, allowed values
         ed extensions ls            every extension and whether it is on
         ed lid-awake status          closed-lid state, session, battery and helper
+        ed dock status               Dock Tools readiness and behavior
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler
         ed color copy 1 --format hex
@@ -107,6 +108,11 @@ public enum Guide {
         ed lid-awake battery 20
         ed lid-awake status --json
         ed lid-awake off
+
+        DOCK TOOLS
+        ed dock status --json
+        ed dock windows [bundle-id] --json
+        ed dock show [bundle-id]
         ```
 
         ## Machines

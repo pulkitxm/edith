@@ -117,6 +117,10 @@ public enum IPC {
             "com.pulkit.edith.requestAppDiagnostics")
         public static let appDiagnostics = Notification.Name(
             "com.pulkit.edith.appDiagnostics")
+        public static let requestDockToolsOperation = Notification.Name(
+            "com.pulkit.edith.requestDockToolsOperation")
+        public static let dockToolsOperationResult = Notification.Name(
+            "com.pulkit.edith.dockToolsOperationResult")
         public static let requestQuinjetSessionOperation = Notification.Name(
             "com.pulkit.edith.requestQuinjetSessionOperation")
         public static let quinjetSessionOperationResult = Notification.Name(

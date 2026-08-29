@@ -622,6 +622,43 @@ public enum ExtensionLifecycleCatalog {
                     "ed config ls --group focusdim --json")
             ]),
         descriptor(
+            "dockTools", "Preview and move through an app's windows from the Dock.",
+            workflows: [
+                instruction(
+                    "preview", "Preview windows",
+                    "Hover or Option-click a running app in the Dock."),
+                instruction(
+                    "control", "Tune Dock behavior",
+                    "Cycle or minimize the active app and opt into window-close policies."),
+            ],
+            prerequisites: [
+                instruction(
+                    "accessibility", "Grant Accessibility",
+                    "Accessibility identifies Dock items and controls app windows.",
+                    "ed permissions request accessibility"),
+                instruction(
+                    "screen", "Grant Screen Recording",
+                    "Screen Recording adds live thumbnails to preview cards.",
+                    "ed permissions request screenRecording"),
+            ],
+            examples: [
+                "ed extensions enable dockTools", "ed dock status --json",
+                "ed config ls --group docktools --json",
+            ],
+            docs: [documentation("guide", "Dock Tools guide", "docs/cli/dock/README.md")],
+            recovery: [
+                instruction(
+                    "permissions", "Refresh permissions",
+                    "Refresh Edith after changing macOS Privacy & Security settings.",
+                    "ed permissions refresh")
+            ],
+            verification: [
+                instruction(
+                    "status", "Inspect Dock Tools",
+                    "Confirm the helper and required permission are ready.",
+                    "ed dock status --json")
+            ]),
+        descriptor(
             "presenter",
             "Hide sensitive numbers automatically while sharing or recording your screen.",
             workflows: [

@@ -50,7 +50,7 @@ public enum ConfigCatalog {
         "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
         "calendar",
         "clipboard",
-        "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
+        "notch", "focusdim", "docktools", "presenter", "colorpicker", "emoji", "micmute",
         "backup", "permissions", "terminal",
     ]
 
@@ -58,7 +58,7 @@ public enum ConfigCatalog {
         appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
         + system + cleaner
-        + music + calendar + clipboard + notch + focusDim + presenter + colorPicker
+        + music + calendar + clipboard + notch + focusDim + dockTools + presenter + colorPicker
         + emoji
         + micMute
         + backup + permissions + terminal
@@ -718,6 +718,35 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.FocusDim.hotKeyLabel, .string, group: "focusdim",
             summary: "Printable label for the focus dim shortcut."),
+    ]
+
+    private static let dockTools: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.DockTools.enabled, .bool, group: "docktools",
+            summary: "Dock Tools extension: previews and Dock window controls.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.DockTools.previewMode, .string, group: "docktools",
+            summary: "How Dock window previews open.",
+            allowed: DockPreviewMode.allCases.map(\.rawValue), fallback: .string("hover")),
+        SettingDefinition(
+            AppStorageKeys.DockTools.hoverDelay, .number, group: "docktools",
+            summary: "Seconds before a Dock hover preview opens.",
+            fallback: .double(DockToolsPreferences.defaultHoverDelay)),
+        SettingDefinition(
+            AppStorageKeys.DockTools.clickAction, .string, group: "docktools",
+            summary: "Action for clicking the active app in the Dock.",
+            allowed: DockClickAction.allCases.map(\.rawValue), fallback: .string("standard")),
+        SettingDefinition(
+            AppStorageKeys.DockTools.greenButtonMaximizes, .bool, group: "docktools",
+            summary: "Use the green window button to maximize without entering full screen.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.DockTools.quitOnLastWindow, .bool, group: "docktools",
+            summary: "Quit regular apps when their last window closes.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.DockTools.excludedApps, .csv, group: "docktools",
+            summary: "Bundle identifiers excluded from Dock Tools."),
     ]
 
     private static let presenter: [SettingDefinition] = [

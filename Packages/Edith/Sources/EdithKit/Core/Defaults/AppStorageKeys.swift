@@ -88,6 +88,16 @@ public enum AppStorageKeys {
         public static let usage = "emojiUsage"
     }
 
+    public enum DockTools {
+        public static let enabled = "dockToolsEnabled"
+        public static let previewMode = "dockToolsPreviewMode"
+        public static let hoverDelay = "dockToolsHoverDelay"
+        public static let clickAction = "dockToolsClickAction"
+        public static let greenButtonMaximizes = "dockToolsGreenButtonMaximizes"
+        public static let quitOnLastWindow = "dockToolsQuitOnLastWindow"
+        public static let excludedApps = "dockToolsExcludedApps"
+    }
+
     public enum FocusDim {
         public static let animationDuration = "focusDimAnimationDuration"
         public static let hotKeyCode = "focusDimHotKeyCode"

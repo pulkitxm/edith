@@ -86,6 +86,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case notchShelf
     case clipboard
     case focusDim
+    case dockTools
     case presenter
     case colorPicker
     case emoji

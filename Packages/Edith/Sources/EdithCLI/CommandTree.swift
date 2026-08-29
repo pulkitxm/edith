@@ -260,6 +260,17 @@ public enum CommandTree {
                         destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
+                "dock", "Inspect and open Dock Tools previews.",
+                children: [
+                    CommandNode("status", "Show Dock Tools readiness.", options: common),
+                    CommandNode(
+                        "windows", "List windows for a running Dock app.", options: common,
+                        arguments: [.free]),
+                    CommandNode(
+                        "show", "Open a Dock Tools preview.", options: common,
+                        arguments: [.free]),
+                ]),
+            CommandNode(
                 "permissions", "Inspect and request Edith's macOS permissions.",
                 children: [
                     CommandNode(
