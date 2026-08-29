@@ -44,6 +44,23 @@ import Testing
         #expect(store.view(for: terminal.id) == .agent)
     }
 
+    @Test func closingAnAgentRunsItsControlAndClosesOnlyTheEdithTab() async throws {
+        let capture = HerdrCloseCapture()
+        let store = HerdrStore(
+            defaults: defaults(), liveWatcher: { _ in },
+            agentCloser: { agent in await capture.append(agent.id) })
+        store.apply([host])
+        store.open(agent)
+        #expect(store.selectedTab == agent.id)
+
+        try await store.closeAgent(agent)
+
+        #expect(await capture.ids() == [agent.id])
+        #expect(store.tabs.isEmpty)
+        #expect(store.selectedTab == HerdrStore.boardID)
+        #expect(store.hosts.first?.agents == [agent])
+    }
+
     @Test func tabsReorderTheWayTheyAreDragged() {
         let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
         store.apply([host, remote])
@@ -352,5 +369,17 @@ import Testing
         HerdrHostSnapshot(
             id: "11111111-1111-1111-1111-111111111111", name: "mini-pc", isLocal: false,
             sshTarget: "mini-pc", herdrPresent: false, reachable: true)
+    }
+}
+
+private actor HerdrCloseCapture {
+    private var values: [String] = []
+
+    func append(_ id: String) {
+        values.append(id)
+    }
+
+    func ids() -> [String] {
+        values
     }
 }

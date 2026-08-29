@@ -9,6 +9,8 @@ typealias HerdrLiveWatcher =
         @escaping @Sendable ([HerdrHostSnapshot]) -> Void
     ) async -> Void
 
+typealias HerdrAgentCloser = @Sendable (HerdrAgent) async throws -> Void
+
 struct HerdrAgentSpace: Identifiable, Equatable {
     let id: String
     let title: String
@@ -132,6 +134,7 @@ final class HerdrStore {
 
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
+    private let agentCloser: HerdrAgentCloser
     private let expectedHostCount: Int
     private var restoringDefaults = true
     private var collapseCountsReady = false
@@ -148,11 +151,13 @@ final class HerdrStore {
     init(
         defaults: UserDefaults = SharedDefaults.store,
         liveWatcher: @escaping HerdrLiveWatcher = { yield in await HerdrLive.watch(yield) },
-        expectedHostCount: Int = MachineRegistry.machines().count + 1
+        expectedHostCount: Int = MachineRegistry.machines().count + 1,
+        agentCloser: @escaping HerdrAgentCloser = { try await HerdrAgentCloseExecution.close($0) }
     ) {
         self.defaults = defaults
         self.liveWatcher = liveWatcher
         self.expectedHostCount = expectedHostCount
+        self.agentCloser = agentCloser
         railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
         railWidth = HerdrPaneSizing.rail(
             defaults.object(forKey: AppStorageKeys.Herdr.railWidth) as? Double
@@ -485,6 +490,11 @@ final class HerdrStore {
 
     func close(_ id: String) {
         closeWhere { _, tab in tab.id == id }
+    }
+
+    func closeAgent(_ agent: HerdrAgent) async throws {
+        try await agentCloser(agent)
+        close(agent.id)
     }
 
     func closeOthers(besides id: String) {
