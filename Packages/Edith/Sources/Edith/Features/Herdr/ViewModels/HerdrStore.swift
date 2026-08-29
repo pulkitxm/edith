@@ -22,6 +22,10 @@ struct HerdrAgentSpace: Identifiable, Equatable {
             .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
     }
 
+    static func counts(_ spaces: [HerdrAgentSpace]) -> [String: Int] {
+        Dictionary(uniqueKeysWithValues: spaces.map { ($0.id, $0.agents.count) })
+    }
+
     private static func title(_ agent: HerdrAgent) -> String {
         let title = agent.workspace.trimmingCharacters(in: .whitespacesAndNewlines)
         return title.isEmpty ? "Unassigned" : title
@@ -382,8 +386,7 @@ final class HerdrStore {
         if terminalsCollapsed, terminalsCollapsedCount != machineTerminals.count {
             terminalsCollapsed = false
         }
-        let currentSpaceCounts = Dictionary(
-            uniqueKeysWithValues: agentSpaces.map { ($0.id, $0.agents.count) })
+        let currentSpaceCounts = HerdrAgentSpace.counts(agentSpaces)
         let changedSpaces = collapsedSpaces.filter {
             collapsedSpaceCounts[$0] != currentSpaceCounts[$0, default: 0]
         }
