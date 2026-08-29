@@ -214,7 +214,8 @@ public enum CLICommandRunner {
         let worker = Task.detached(priority: .utility) {
             try runBlockingCaptured(
                 request, onStandardOutputLine: onStandardOutputLine,
-                onStandardErrorLine: onStandardErrorLine).combined
+                onStandardErrorLine: onStandardErrorLine
+            ).combined
         }
         return try await withTaskCancellationHandler {
             try await worker.value
