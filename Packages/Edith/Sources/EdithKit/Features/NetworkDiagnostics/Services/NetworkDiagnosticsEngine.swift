@@ -13,82 +13,25 @@ public struct NetworkCommandResult: Equatable, Sendable {
     }
 }
 
-private final class NetworkProcessHandle: @unchecked Sendable {
-    private let lock = NSLock()
-    private var process: Process?
-    private var cancelled = false
-
-    func attach(_ process: Process) {
-        lock.lock()
-        self.process = process
-        let shouldCancel = cancelled
-        lock.unlock()
-        if shouldCancel, process.isRunning { process.terminate() }
-    }
-
-    func finish() {
-        lock.lock()
-        process = nil
-        lock.unlock()
-    }
-
-    func cancel() {
-        lock.lock()
-        cancelled = true
-        let active = process
-        lock.unlock()
-        if active?.isRunning == true { active?.terminate() }
-    }
-}
-
 public enum NetworkProcessRunner {
     public static func run(
         executable: URL, arguments: [String], timeout: Double
     ) async -> NetworkCommandResult {
-        let handle = NetworkProcessHandle()
-        let operation = Task.detached(priority: .utility) {
-            let process = Process()
-            let pipe = Pipe()
-            process.executableURL = executable
-            process.arguments = arguments
-            process.standardOutput = pipe
-            process.standardError = pipe
-            process.qualityOfService = .utility
-            handle.attach(process)
-            defer { handle.finish() }
-            do {
-                try process.run()
-            } catch {
-                return NetworkCommandResult(status: 127, output: error.localizedDescription)
-            }
-            let reader = Task.detached(priority: .utility) {
-                pipe.fileHandleForReading.readDataToEndOfFile()
-            }
-            process.waitUntilExit()
-            let data = await reader.value
-            let bounded = data.prefix(128 * 1024)
+        do {
+            let result = try await CLICommandRunner.run(
+                CLICommandRequest(
+                    executableURL: executable, arguments: arguments,
+                    environment: ProcessInfo.processInfo.environment, timeout: timeout,
+                    maximumOutputBytes: 128 * 1024, terminatesProcessGroup: true),
+                onLine: { _ in })
             return NetworkCommandResult(
-                status: process.terminationStatus,
-                output: String(decoding: bounded, as: UTF8.self))
-        }
-        return await withTaskCancellationHandler {
-            await withTaskGroup(of: NetworkCommandResult?.self) { group in
-                group.addTask { await operation.value }
-                group.addTask {
-                    try? await Task.sleep(for: .seconds(max(0.1, timeout)))
-                    return nil
-                }
-                let first = await group.next() ?? nil
-                group.cancelAll()
-                guard let first else {
-                    handle.cancel()
-                    _ = await operation.value
-                    return NetworkCommandResult(status: 124, output: "Timed out", timedOut: true)
-                }
-                return first
-            }
-        } onCancel: {
-            handle.cancel()
+                status: result.terminationStatus, output: result.output)
+        } catch CLICommandRunnerError.timedOut {
+            return NetworkCommandResult(status: 124, output: "Timed out", timedOut: true)
+        } catch is CancellationError {
+            return NetworkCommandResult(status: 130, output: "Cancelled")
+        } catch {
+            return NetworkCommandResult(status: 127, output: error.localizedDescription)
         }
     }
 }

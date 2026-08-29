@@ -15,7 +15,7 @@ final class NetworkDiagnosticsModel {
     var settingsPresented = false
     var serviceText = ""
     var exclusionText = ""
-    private var runTask: Task<Void, Never>?
+    private var activeRun: Task<Void, Never>?
 
     init() {
         serviceText = configuration.serviceTargets.map { "\($0.host):\($0.port)" }
@@ -31,45 +31,43 @@ final class NetworkDiagnosticsModel {
     }
 
     func deactivate() {
-        runTask?.cancel()
-        runTask = nil
+        activeRun?.cancel()
+        activeRun = nil
         running = false
     }
 
     func run() {
-        guard runTask == nil else { return }
+        guard activeRun == nil else { return }
         running = true
         errorMessage = nil
         let config = configuration.normalized
         let baseline = NetworkDiagnosticsPreferences.baseline()
-        runTask = Task {
+        activeRun = Task {
             let snapshot = await NetworkDiagnosticsEngine().diagnose(
                 configuration: config, baseline: baseline)
             guard !Task.isCancelled else {
                 running = false
-                runTask = nil
+                activeRun = nil
                 return
             }
             await accept(snapshot, configuration: config)
+            guard !Task.isCancelled else {
+                running = false
+                activeRun = nil
+                return
+            }
             running = false
-            runTask = nil
+            activeRun = nil
         }
     }
 
     func cancel() {
-        runTask?.cancel()
+        activeRun?.cancel()
     }
 
     func saveSettings() {
-        configuration.serviceTargets = serviceText.split(separator: ",").compactMap { value in
-            let parts = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let separator = parts.lastIndex(of: ":"),
-                let port = Int(parts[parts.index(after: separator)...]),
-                (1...65535).contains(port)
-            else { return nil }
-            return NetworkServiceTarget(host: String(parts[..<separator]), port: port)
-        }
-        configuration.exclusions = exclusionText.split(separator: ",").map(String.init)
+        configuration.serviceTargets = Self.parseServices(serviceText)
+        configuration.exclusions = Self.parseExclusions(exclusionText)
         configuration = configuration.normalized
         NetworkDiagnosticsPreferences.save(configuration)
         IPC.post(IPC.Name.settingsChanged)
@@ -80,6 +78,28 @@ final class NetworkDiagnosticsModel {
             }
         }
         settingsPresented = false
+    }
+
+    private nonisolated static func parseServices(_ text: String) -> [NetworkServiceTarget] {
+        var targets: [NetworkServiceTarget] = []
+        for value in text.split(separator: ",") {
+            let parts = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let separator = parts.lastIndex(of: ":"),
+                let port = Int(parts[parts.index(after: separator)...]),
+                (1...65535).contains(port)
+            else { continue }
+            targets.append(
+                NetworkServiceTarget(host: String(parts[..<separator]), port: port))
+        }
+        return targets
+    }
+
+    private nonisolated static func parseExclusions(_ text: String) -> [String] {
+        var exclusions: [String] = []
+        for value in text.split(separator: ",") {
+            exclusions.append(String(value))
+        }
+        return exclusions
     }
 
     func saveBaseline() {
