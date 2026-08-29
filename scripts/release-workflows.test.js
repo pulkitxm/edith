@@ -172,14 +172,19 @@ test("superseded release builds yield the lane before packaging", () => {
   );
 });
 
-test("bundle verification requires one executable under two names", () => {
+test("bundle verification requires one executable and its CLI launcher", () => {
   expect(makefile).toContain("test ! -L dist/Edith.app/Contents/MacOS/Edith");
   expect(makefile).toContain("test -L dist/Edith.app/Contents/MacOS/ed");
   expect(makefile).toContain(
-    'readlink dist/Edith.app/Contents/MacOS/ed)" = Edith',
+    'readlink dist/Edith.app/Contents/MacOS/ed)" = ../Resources/ed-launcher',
   );
+  expect(makefile).toContain(
+    "test -f dist/Edith.app/Contents/Resources/ed-launcher",
+  );
+  expect(makefile).toContain("grep -qx '#!/bin/sh'");
   expect(makefile).toContain("test ! -e dist/Edith.app/Contents/MacOS/edh");
   expect(makefile).toContain("-type l -name ed");
+  expect(makefile).toContain("@set -e; install_dir=");
   expect(makefile).toContain("for name in ed edith; do");
 });
 
