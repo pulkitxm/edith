@@ -158,7 +158,8 @@ rm -rf dist && mkdir -p dist
 ditto "$BUILT" "$APP"
 rm -f "$APP/Contents/MacOS/edh"
 rm -f "$APP/Contents/MacOS/ed"
-ln -s Edith "$APP/Contents/MacOS/ed"
+install -m 755 Resources/ed-launcher "$APP/Contents/Resources/ed-launcher"
+ln -s ../Resources/ed-launcher "$APP/Contents/MacOS/ed"
 
 rm -rf "$HELPER"
 ditto "$BUILT_HELPER" "$HELPER"

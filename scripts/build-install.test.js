@@ -3,14 +3,23 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const script = readFileSync(resolve("build.sh"), "utf8");
+const launcher = readFileSync(resolve("Resources/ed-launcher"), "utf8");
 
 describe("build install lifecycle", () => {
   test("routes CLI names through the application executable", () => {
     const removal = script.indexOf('rm -f "$APP/Contents/MacOS/edh"');
-    const link = script.indexOf('ln -s Edith "$APP/Contents/MacOS/ed"');
+    const install = script.indexOf(
+      'install -m 755 Resources/ed-launcher "$APP/Contents/Resources/ed-launcher"',
+    );
 
     expect(removal).toBeGreaterThan(-1);
-    expect(link).toBeGreaterThan(removal);
+    expect(install).toBeGreaterThan(removal);
+    expect(script).toContain(
+      'ln -s ../Resources/ed-launcher "$APP/Contents/MacOS/ed"',
+    );
+    expect(launcher).toContain(
+      'EDITH_CLI=1 exec "$edith_launcher_directory/../MacOS/Edith" "$@"',
+    );
     expect(script).not.toContain('ln -sfn ed "$APP/Contents/MacOS/edith"');
     expect(script).not.toContain('sign_tool "$APP/Contents/MacOS/ed"');
   });
