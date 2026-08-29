@@ -4,6 +4,49 @@ import GhosttyKit
 import Testing
 
 @Suite struct GhosttyInputTests {
+    @Test @MainActor func mouseMotionReachesAChildThatEnablesAnyEventReporting() async throws {
+        let output = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-ghostty-mouse-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: output) }
+        let command =
+            "stty raw -echo; printf '\\033[?1003h\\033[?1006h'; dd bs=1 count=1 of='\(output.path)' 2>/dev/null"
+        let launch = GhosttyLaunch(
+            executable: "/bin/sh", arguments: ["-c", command],
+            environment: ProcessInfo.processInfo.environment.map { "\($0.key)=\($0.value)" })
+        let view = GhosttyTerminalView(launch: launch)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+        let window = NSWindow(
+            contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = view
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(view)
+        defer {
+            view.shutdown()
+            window.close()
+        }
+
+        for _ in 0..<100 {
+            if let surface = view.surface, ghostty_surface_mouse_captured(surface) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let surface = try #require(view.surface)
+        #expect(ghostty_surface_mouse_captured(surface))
+        let event = try #require(
+            NSEvent.mouseEvent(
+                with: .mouseMoved, location: NSPoint(x: 40, y: 500), modifierFlags: [],
+                timestamp: 1, windowNumber: window.windowNumber, context: nil, eventNumber: 1,
+                clickCount: 0, pressure: 0))
+
+        view.mouseMoved(with: event)
+
+        for _ in 0..<100 {
+            if let data = try? Data(contentsOf: output), data.count == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let bytes = try Data(contentsOf: output)
+        #expect(bytes == Data([0x1B]))
+    }
+
     @Test func appKitFunctionKeyTextIsNotSentToTheTerminal() throws {
         let event = try #require(
             NSEvent.keyEvent(
