@@ -52,6 +52,7 @@ jobs:
       CI_RUN_ID: ${{ inputs.ci_run_id }}
       WORKFLOW_REF: ${{ github.ref }}
       HAS_SIGNING: ${{ secrets.MACOS_CERT_P12 != '' }}
+      HAS_NOTARY: ${{ secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != '' && secrets.NOTARY_KEY != '' }}
       HAS_SPARKLE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY != '' }}
       HAS_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN != '' }}
       HAS_TAP_TOKEN: ${{ secrets.TAP_PUSH_TOKEN != '' }}
@@ -84,6 +85,8 @@ jobs:
           fi
           test "$HAS_SIGNING" = true \
             || { echo "release blocked: MACOS_CERT_P12 is required" >&2; exit 1; }
+          test "$HAS_NOTARY" = true \
+            || { echo "release blocked: notarization credentials are required" >&2; exit 1; }
           test "$HAS_SPARKLE_KEY" = true \
             || { echo "release blocked: SPARKLE_PRIVATE_KEY is required" >&2; exit 1; }
           test "$HAS_PUSH_TOKEN" = true \
@@ -104,7 +107,6 @@ jobs:
     outputs:
       superseded: ${{ steps.release_build.outputs.superseded }}
     env:
-      HAS_NOTARY: ${{ secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != '' && secrets.NOTARY_KEY != '' }}
       REBUILD: ${{ inputs.rebuild }}
       RELEASE_TAG: ${{ needs.version.outputs.tag }}
       RELEASE_VERSION: ${{ needs.version.outputs.version }}
@@ -150,6 +152,11 @@ jobs:
           security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" \
             -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_CERT_PASSWORD" "$KEYCHAIN"
+          SIGN_IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" \
+            | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -n 1)"
+          test -n "$SIGN_IDENTITY" \
+            || { echo "release blocked: Developer ID Application certificate is required" >&2; exit 1; }
+          echo "EDITH_SIGN_IDENTITY=$SIGN_IDENTITY" >> "$GITHUB_ENV"
           KEYCHAINS=("$KEYCHAIN")
           while IFS= read -r keychain; do
             KEYCHAINS+=("${keychain//\"/}")
@@ -159,8 +166,6 @@ jobs:
 
       - name: Build the app
         id: release_build
-        env:
-          EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"
         run: |
           BUILD_STATUS=0
           SUPERSEDED_FILE="$RUNNER_TEMP/release-build-superseded"
@@ -203,7 +208,7 @@ jobs:
             || { echo "release blocked: Edith.dmg is $DMG_BYTES bytes" >&2; exit 1; }
 
       - name: Notarize and staple
-        if: steps.release_build.outputs.superseded != 'true' && env.HAS_NOTARY == 'true'
+        if: steps.release_build.outputs.superseded != 'true'
         env:
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
@@ -244,7 +249,7 @@ jobs:
         run: codesign --verify --deep --strict dist/Edith.app
 
       - name: Verify notarized disk image
-        if: steps.release_build.outputs.superseded != 'true' && env.HAS_NOTARY == 'true'
+        if: steps.release_build.outputs.superseded != 'true'
         run: spctl -a -t open --context context:primary-signature Edith.dmg
 
       - name: Stage macOS release assets
