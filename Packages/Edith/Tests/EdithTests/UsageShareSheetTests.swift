@@ -16,9 +16,12 @@ import Testing
             contentsOf: Self.root.appendingPathComponent(
                 "Sources/Edith/Features/Dashboard/Views/DashboardView.swift"),
             encoding: .utf8)
-        #expect(source.contains("systemImage: \"square.and.arrow.up\""))
-        #expect(source.contains(".sheet(isPresented: $showShare)"))
-        #expect(source.contains("UsageShareSheet(snapshot: shareSnapshot)"))
+        #expect(source.contains("Image(systemName: \"square.and.arrow.up\")"))
+        #expect(source.contains("OrbitingShareButton"))
+        #expect(source.contains("CircularShareText"))
+        #expect(source.contains("shareOverlay"))
+        #expect(source.contains(".onTapGesture { closeShare() }"))
+        #expect(source.contains("UsageShareSheet(snapshot: shareSnapshot, onDismiss: closeShare)"))
         #expect(source.contains("model.heatDetail.sorted"))
     }
 
@@ -31,6 +34,8 @@ import Testing
         #expect(source.contains(".accessibilityLabel(\"Download PNG\")"))
         #expect(source.contains(".frame(width: 600, height: 400)"))
         #expect(source.contains("ShareCarouselArrow"))
+        #expect(source.contains("let onDismiss: () -> Void"))
+        #expect(source.contains(".onExitCommand { onDismiss() }"))
         #expect(source.contains("@Environment(\\.colorScheme)"))
         #expect(source.contains("private var modalBackground: Color"))
         #expect(source.contains("UsageShareDelivery.copy(data)"))

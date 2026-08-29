@@ -5,10 +5,10 @@ import UniformTypeIdentifiers
 
 struct UsageShareSheet: View {
     let snapshot: UsageShareSnapshot
+    let onDismiss: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.dismiss) private var dismiss
     @State private var index = 0
     @State private var direction = 1
     @State private var previews: [UsageShareCard: NSImage] = [:]
@@ -43,7 +43,7 @@ struct UsageShareSheet: View {
         .background(sheetBackground)
         .overlay(alignment: .bottomTrailing) { statusToast }
         .task { await loadPreviews() }
-        .onExitCommand { dismiss() }
+        .onExitCommand { onDismiss() }
     }
 
     private var carousel: some View {
