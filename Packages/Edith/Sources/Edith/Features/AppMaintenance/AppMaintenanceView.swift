@@ -3,6 +3,7 @@ import EdithKit
 import Observation
 import SwiftUI
 import UniformTypeIdentifiers
+import UserNotifications
 
 @MainActor
 @Observable
@@ -14,6 +15,7 @@ final class AppMaintenanceModel {
         case removing
         case mounting
         case installing
+        case updating
     }
 
     var applications: [InstalledApplication] = []
@@ -24,6 +26,13 @@ final class AppMaintenanceModel {
     var errorMessage: String?
     var resultMessage: String?
     var installPlan: AppMaintenanceDiskImagePlan?
+    var updates: [AppUpdateItem] = []
+    var updateHistory: [AppUpdateResult] = []
+    var selectedUpdateIDs = Set<String>()
+    var lastUpdateRefresh: Date?
+    private var updateState = AppUpdateCenterState()
+    private let updatePersistence = AppUpdatePersistence()
+    private let updateExecutor = AppUpdateExecutor()
     private var task: Task<Void, Never>?
     private var securityScopedURL: URL?
     private var hasSecurityScopedAccess = false
@@ -44,26 +53,124 @@ final class AppMaintenanceModel {
 
     var selectedBytes: Int64 { selectedItems.reduce(0) { $0 + $1.sizeBytes } }
 
-    func refresh() {
+    func refresh(automatic: Bool = false) {
         task?.cancel()
         phase = .loading
         errorMessage = nil
         resultMessage = nil
         task = Task {
             let loaded = await Task.detached(priority: .userInitiated) {
-                await AppMaintenanceInventory.applicationsWithUpdates()
+                let applications = AppMaintenanceInventory.applications(updateData: Data())
+                let updates = await AppUpdateDiscovery.discover(applications: applications)
+                return (applications, updates)
             }.value
             guard !Task.isCancelled else { return }
-            applications = loaded
+            let previousIDs = Set(updates.map(\.id))
+            updateState = updatePersistence.load()
+            updateState.lastRefresh = Date()
+            do {
+                try updatePersistence.save(updateState)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            applications = loaded.0
+            updates = updatePersistence.visible(
+                loaded.1, state: updateState, now: updateState.lastRefresh ?? Date())
+            updateHistory = updateState.history
+            lastUpdateRefresh = updateState.lastRefresh
+            selectedUpdateIDs.formIntersection(updates.map(\.id))
+            if selectedUpdateIDs.isEmpty { selectedUpdateIDs = Set(updates.map(\.id)) }
             phase = .ready
             if let selectedApplicationID,
-                !loaded.contains(where: { $0.id == selectedApplicationID })
+                !loaded.0.contains(where: { $0.id == selectedApplicationID })
             {
                 self.selectedApplicationID = nil
                 plan = nil
                 selectedItemIDs = []
             }
+            if automatic {
+                let fresh = updates.filter { !previousIDs.contains($0.id) }
+                if !fresh.isEmpty { await notify(updateCount: fresh.count) }
+            }
         }
+    }
+
+    func setUpdateSelected(_ selected: Bool, item: AppUpdateItem) {
+        if selected {
+            selectedUpdateIDs.insert(item.id)
+        } else {
+            selectedUpdateIDs.remove(item.id)
+        }
+    }
+
+    func runSelectedUpdates(concurrency: Int, retries: Int) {
+        let selected = updates.filter { selectedUpdateIDs.contains($0.id) }
+        guard !selected.isEmpty else { return }
+        task?.cancel()
+        phase = .updating
+        errorMessage = nil
+        resultMessage = nil
+        task = Task {
+            do {
+                let results = try await updateExecutor.execute(
+                    AppUpdatePlan(items: selected, concurrency: concurrency, retries: retries),
+                    confirmed: true)
+                guard !Task.isCancelled else { return }
+                updateState = updatePersistence.recording(results, in: updateState)
+                try updatePersistence.save(updateState)
+                updateHistory = updateState.history
+                let succeeded = results.filter { $0.status == .succeeded }.count
+                resultMessage = "Finished \(succeeded) of \(results.count) updates."
+                phase = .ready
+                refresh()
+            } catch {
+                guard !Task.isCancelled else { return }
+                errorMessage = error.localizedDescription
+                phase = .ready
+            }
+        }
+    }
+
+    func ignore(_ item: AppUpdateItem) {
+        updateState.ignoredVersions[item.id] = item.availableVersion
+        persistPolicy(removing: item)
+    }
+
+    func snooze(_ item: AppUpdateItem, until: Date) {
+        updateState.snoozedUntil[item.id] = until
+        persistPolicy(removing: item)
+    }
+
+    func exclude(_ item: AppUpdateItem) {
+        guard let bundleID = item.bundleID else { return }
+        updateState.excludedBundleIDs.insert(bundleID)
+        persistPolicy(removing: item)
+    }
+
+    private func persistPolicy(removing item: AppUpdateItem) {
+        do {
+            try updatePersistence.save(updateState)
+            updates.removeAll { $0.id == item.id }
+            selectedUpdateIDs.remove(item.id)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func notify(updateCount: Int) async {
+        guard
+            SharedDefaults.store.bool(
+                forKey: AppStorageKeys.AppMaintenance.updateNotifications)
+        else { return }
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "App Update Center"
+        content.body = "\(updateCount) new updates are available."
+        try? await center.add(
+            UNNotificationRequest(
+                identifier: "app-update-center", content: content, trigger: nil))
     }
 
     func select(_ application: InstalledApplication) {
@@ -216,6 +323,7 @@ final class AppMaintenanceModel {
     func cancel() {
         task?.cancel()
         task = nil
+        Task { await updateExecutor.cancel() }
         if phase != .installing { cancelInstallPlan() }
     }
 
@@ -226,14 +334,35 @@ final class AppMaintenanceModel {
     }
 }
 
+private enum AppMaintenanceSection: String, CaseIterable, Identifiable {
+    case updates = "Updates"
+    case removal = "Remove"
+    case history = "History"
+
+    var id: Self { self }
+}
+
 struct AppMaintenanceView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var model = AppMaintenanceModel()
     @State private var query = ""
     @State private var confirmingRemoval = false
+    @State private var confirmingUpdates = false
     @State private var showingDiskImagePicker = false
+    @State private var showingUpdateSettings = false
+    @State private var section = AppMaintenanceSection.updates
     @AppStorage(AppStorageKeys.AppMaintenance.installDestination, store: SharedDefaults.store)
     private var installDestinationRaw = AppMaintenanceInstallDestination.user.rawValue
+    @AppStorage(AppStorageKeys.AppMaintenance.updateAutoRefresh, store: SharedDefaults.store)
+    private var updateAutoRefresh = false
+    @AppStorage(AppStorageKeys.AppMaintenance.updateNotifications, store: SharedDefaults.store)
+    private var updateNotifications = true
+    @AppStorage(AppStorageKeys.AppMaintenance.updateRefreshInterval, store: SharedDefaults.store)
+    private var updateRefreshInterval = 86_400.0
+    @AppStorage(AppStorageKeys.AppMaintenance.updateConcurrency, store: SharedDefaults.store)
+    private var updateConcurrency = 2
+    @AppStorage(AppStorageKeys.AppMaintenance.updateRetries, store: SharedDefaults.store)
+    private var updateRetries = 1
 
     private var filteredApplications: [InstalledApplication] {
         let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -244,12 +373,22 @@ struct AppMaintenanceView: View {
         }
     }
 
+    private var filteredUpdates: [AppUpdateItem] {
+        let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return model.updates }
+        return model.updates.filter {
+            $0.name.localizedCaseInsensitiveContains(value)
+                || $0.source.title.localizedCaseInsensitiveContains(value)
+                || $0.bundleID?.localizedCaseInsensitiveContains(value) == true
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
             HSplitView {
-                inventory
+                sectionInventory
                     .frame(minWidth: 280, idealWidth: 320, maxWidth: 380)
                 detail
                     .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
@@ -257,6 +396,15 @@ struct AppMaintenanceView: View {
         }
         .frame(width: UIScale.pt(900), height: UIScale.pt(640))
         .task { model.refresh() }
+        .task(id: updateAutoRefresh) {
+            guard updateAutoRefresh else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(
+                    for: .seconds(max(updateRefreshInterval, 900)))
+                guard !Task.isCancelled else { return }
+                model.refresh(automatic: true)
+            }
+        }
         .onDisappear { model.cancel() }
         .fileImporter(
             isPresented: $showingDiskImagePicker,
@@ -283,6 +431,17 @@ struct AppMaintenanceView: View {
                 "\(model.selectedItems.count) reviewed items use \(JunkScanner.format(model.selectedBytes)). You can restore them from the Trash until it is emptied."
             )
         }
+        .alert("Run selected updates?", isPresented: $confirmingUpdates) {
+            Button("Cancel", role: .cancel) {}
+            Button("Run Updates") {
+                model.runSelectedUpdates(
+                    concurrency: updateConcurrency, retries: updateRetries)
+            }
+        } message: {
+            Text(
+                "\(model.selectedUpdateIDs.count) reviewed updates will run with up to \(updateConcurrency) at once. App-native updaters will open for you to finish."
+            )
+        }
     }
 
     private var header: some View {
@@ -297,6 +456,21 @@ struct AppMaintenanceView: View {
                     .settingsCaption()
             }
             Spacer()
+            Picker("Section", selection: $section) {
+                ForEach(AppMaintenanceSection.allCases) { section in
+                    Text(section.rawValue).tag(section)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(width: UIScale.pt(240))
+            Button {
+                showingUpdateSettings.toggle()
+            } label: {
+                Image(systemName: "gearshape")
+            }
+            .help("Update settings")
+            .popover(isPresented: $showingUpdateSettings) { updateSettings }
             Menu {
                 Picker("Destination", selection: $installDestinationRaw) {
                     ForEach(AppMaintenanceInstallDestination.allCases, id: \.rawValue) {
@@ -326,7 +500,16 @@ struct AppMaintenanceView: View {
         .frame(height: UIScale.pt(68))
     }
 
-    private var inventory: some View {
+    @ViewBuilder
+    private var sectionInventory: some View {
+        switch section {
+        case .updates: updateInventory
+        case .removal: removalInventory
+        case .history: historyInventory
+        }
+    }
+
+    private var removalInventory: some View {
         VStack(spacing: 0) {
             TextField("Search applications", text: $query)
                 .textFieldStyle(.roundedBorder)
@@ -359,6 +542,90 @@ struct AppMaintenanceView: View {
         }
     }
 
+    private var updateInventory: some View {
+        VStack(spacing: 0) {
+            TextField("Search updates", text: $query)
+                .textFieldStyle(.roundedBorder)
+                .padding(UIScale.pt(12))
+            Divider()
+            if model.phase == .loading, model.updates.isEmpty {
+                ProgressView("Checking Update Sources")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if filteredUpdates.isEmpty {
+                ContentUnavailableView(
+                    "No updates", systemImage: "checkmark.circle",
+                    description: Text("Everything visible is current, ignored, or snoozed."))
+            } else {
+                List(filteredUpdates) { item in
+                    HStack(spacing: UIScale.pt(9)) {
+                        Toggle(
+                            "",
+                            isOn: Binding(
+                                get: { model.selectedUpdateIDs.contains(item.id) },
+                                set: { model.setUpdateSelected($0, item: item) })
+                        )
+                        .labelsHidden()
+                        .toggleStyle(.checkbox)
+                        if let path = item.applicationPath {
+                            Image(nsImage: NSWorkspace.shared.icon(forFile: path))
+                                .resizable()
+                                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+                        } else {
+                            Image(systemName: "shippingbox")
+                                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+                        }
+                        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                            Text(item.name).lineLimit(1)
+                            Text("\(item.currentVersion) → \(item.availableVersion)")
+                                .settingsCaption()
+                        }
+                        Spacer(minLength: 0)
+                        Text(item.source.title).settingsCaption().lineLimit(1)
+                    }
+                    .padding(.vertical, UIScale.pt(3))
+                }
+                .listStyle(.sidebar)
+            }
+            Divider()
+            HStack {
+                Text("\(model.updates.count) available")
+                Spacer()
+                Text("\(model.selectedUpdateIDs.count) selected")
+            }
+            .settingsCaption()
+            .padding(.horizontal, UIScale.pt(12))
+            .frame(height: UIScale.pt(34))
+        }
+    }
+
+    private var historyInventory: some View {
+        Group {
+            if model.updateHistory.isEmpty {
+                ContentUnavailableView(
+                    "No update history", systemImage: "clock",
+                    description: Text("Completed update attempts will appear here."))
+            } else {
+                List(model.updateHistory, id: \.finishedAt) { result in
+                    VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                        HStack {
+                            Text(result.name).lineLimit(1)
+                            Spacer()
+                            Image(
+                                systemName: result.status == .succeeded
+                                    ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
+                            )
+                            .foregroundStyle(result.status == .succeeded ? .green : .orange)
+                        }
+                        Text("\(result.version) · \(result.source.title)").settingsCaption()
+                        Text(result.finishedAt, style: .relative).settingsCaption()
+                    }
+                    .padding(.vertical, UIScale.pt(4))
+                }
+                .listStyle(.sidebar)
+            }
+        }
+    }
+
     private var selectionBinding: Binding<String?> {
         Binding(
             get: { model.selectedApplicationID },
@@ -386,12 +653,22 @@ struct AppMaintenanceView: View {
         switch model.phase {
         case .removing: "Moving selected items"
         case .mounting: "Mounting and verifying disk image"
+        case .updating: "Running reviewed updates"
         default: "Finding exact support files"
         }
     }
 
     @ViewBuilder
     private var detail: some View {
+        switch section {
+        case .updates: updateDetail
+        case .removal: removalDetail
+        case .history: historyDetail
+        }
+    }
+
+    @ViewBuilder
+    private var removalDetail: some View {
         if model.phase == .scanning || model.phase == .removing || model.phase == .mounting {
             VStack(spacing: UIScale.pt(12)) {
                 ProgressView()
@@ -420,6 +697,141 @@ struct AppMaintenanceView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(UIScale.pt(28))
         }
+    }
+
+    @ViewBuilder
+    private var updateDetail: some View {
+        if model.phase == .updating {
+            VStack(spacing: UIScale.pt(14)) {
+                ProgressView().controlSize(.large)
+                Text("Running reviewed updates").font(.headline)
+                Text("Results are saved separately for every item.").foregroundStyle(.secondary)
+                Button("Cancel") { model.cancel() }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let item = model.updates.first(where: { model.selectedUpdateIDs.contains($0.id) })
+        {
+            VStack(alignment: .leading, spacing: UIScale.pt(18)) {
+                HStack(spacing: UIScale.pt(14)) {
+                    if let path = item.applicationPath {
+                        Image(nsImage: NSWorkspace.shared.icon(forFile: path))
+                            .resizable()
+                            .frame(width: UIScale.pt(54), height: UIScale.pt(54))
+                    }
+                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                        Text(item.name).font(.title3.weight(.semibold))
+                        Text("\(item.currentVersion) → \(item.availableVersion)")
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: UIScale.pt(4)) {
+                        Text(item.source.title).fontWeight(.medium)
+                        Text("\(item.confidence.title) confidence").settingsCaption()
+                    }
+                }
+                GroupBox("Release") {
+                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                        if let title = item.releaseTitle { Text(title).fontWeight(.medium) }
+                        Text(
+                            item.releaseNotes ?? "Release notes are not available from this source."
+                        )
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        if let releaseURL = item.releaseURL {
+                            Link("Open release information", destination: releaseURL)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(UIScale.pt(6))
+                }
+                GroupBox("Reviewed action") {
+                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                        Text(item.command).font(.system(.callout, design: .monospaced))
+                            .textSelection(.enabled)
+                        Text(
+                            "Checked \(item.checkedAt.formatted(date: .abbreviated, time: .shortened))"
+                        )
+                        .settingsCaption()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(UIScale.pt(6))
+                }
+                statusMessage
+                Spacer()
+                HStack {
+                    Menu("More") {
+                        Button("Copy Command") { copy(item.command) }
+                        if let path = item.applicationPath {
+                            Button("Reveal in Finder") {
+                                NSWorkspace.shared.activateFileViewerSelecting([
+                                    URL(fileURLWithPath: path)
+                                ])
+                            }
+                        }
+                        Button("Ignore \(item.availableVersion)") { model.ignore(item) }
+                        Button("Snooze for One Day") {
+                            model.snooze(item, until: Date().addingTimeInterval(86_400))
+                        }
+                        if item.bundleID != nil {
+                            Button("Exclude This App") { model.exclude(item) }
+                        }
+                    }
+                    Spacer()
+                    Button("Run \(model.selectedUpdateIDs.count) Updates") {
+                        confirmingUpdates = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.selectedUpdateIDs.isEmpty)
+                }
+            }
+            .padding(UIScale.pt(22))
+        } else {
+            ContentUnavailableView(
+                "Select an update", systemImage: "arrow.down.app",
+                description: Text(
+                    "Choose updates to review their source, command, and release information."))
+        }
+    }
+
+    private var historyDetail: some View {
+        VStack(spacing: UIScale.pt(14)) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: UIScale.pt(44), weight: .light))
+                .foregroundStyle(.secondary)
+            Text("Update history").font(.headline)
+            Text("Each attempt records its source, version, retries, result, and finish time.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: UIScale.pt(380))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var updateSettings: some View {
+        Form {
+            Toggle("Automatic refresh", isOn: $updateAutoRefresh)
+            Picker("Refresh", selection: $updateRefreshInterval) {
+                Text("Hourly").tag(3_600.0)
+                Text("Daily").tag(86_400.0)
+                Text("Weekly").tag(604_800.0)
+            }
+            .disabled(!updateAutoRefresh)
+            Toggle("Notifications", isOn: $updateNotifications)
+            Stepper("Concurrency: \(updateConcurrency)", value: $updateConcurrency, in: 1...4)
+            Stepper("Retries: \(updateRetries)", value: $updateRetries, in: 0...3)
+            if AppUpdateAutomationHook.isAvailable() {
+                LabeledContent("Automation command", value: AppUpdateAutomationHook.refreshCommand)
+            }
+            Text("Automatic refresh only checks. Updates always require an explicit action.")
+                .settingsCaption()
+        }
+        .formStyle(.grouped)
+        .frame(width: UIScale.pt(360), height: UIScale.pt(300))
+    }
+
+    private func copy(_ value: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(value, forType: .string)
     }
 
     private func removalPlan(

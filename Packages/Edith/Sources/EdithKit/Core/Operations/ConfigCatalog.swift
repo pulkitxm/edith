@@ -472,6 +472,22 @@ public enum ConfigCatalog {
             allowed: AppMaintenanceInstallDestination.allCases.map(\.rawValue),
             fallback: .string(AppMaintenanceInstallDestination.user.rawValue)),
         SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateAutoRefresh, .bool, group: "system",
+            summary: "Refresh App Update Center automatically.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateRefreshInterval, .number, group: "system",
+            summary: "Seconds between enabled App Update Center refreshes.",
+            fallback: .double(86_400)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateNotifications, .bool, group: "system",
+            summary: "Notify after automatic refreshes find new updates.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateConcurrency, .int, group: "system",
+            summary: "Maximum updates running together.", fallback: .int(2)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateRetries, .int, group: "system",
+            summary: "Retries after an update fails.", fallback: .int(1)),
+        SettingDefinition(
             AppStorageKeys.General.preventSleep, .bool, group: "system",
             summary: "Keep the Mac awake (Keep Awake).", fallback: .bool(false)),
         SettingDefinition(
