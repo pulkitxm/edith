@@ -139,6 +139,7 @@ final class WindowToolsEngine: FeatureModule {
         }
         restoreTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            defer { restoreTask = nil }
             do {
                 switch request.operation {
                 case .capture:
@@ -190,22 +191,13 @@ final class WindowToolsEngine: FeatureModule {
                     WorkspaceRestorerResponse(
                         requestID: request.id, ok: false, error: error.localizedDescription))
             }
-            restoreTask = nil
         }
     }
 
     private func captureProfile(name: String) -> WorkspaceProfile {
         let displays = displaySnapshots()
-        let excluded = excludedBundleIdentifiers
         let activeBundleIdentifier = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        let applications = NSWorkspace.shared.runningApplications.filter {
-            $0.activationPolicy == .regular && !Self.isEdith($0)
-                && !excluded.contains($0.bundleIdentifier ?? "")
-        }.sorted {
-            if $0.bundleIdentifier == activeBundleIdentifier { return true }
-            if $1.bundleIdentifier == activeBundleIdentifier { return false }
-            return ($0.localizedName ?? "") < ($1.localizedName ?? "")
-        }
+        let applications = workspaceApplications(activeBundleIdentifier: activeBundleIdentifier)
         var snapshots: [WorkspaceWindowSnapshot] = []
         var order = 0
         for application in applications {
@@ -243,8 +235,11 @@ final class WindowToolsEngine: FeatureModule {
         _ profile: WorkspaceProfile, launchPolicy: WorkspaceLaunchPolicy
     ) -> WorkspaceRestorePlan {
         let runtime = currentRuntimeWindows()
+        var candidates: [WorkspaceCandidateWindow] = []
+        candidates.reserveCapacity(runtime.count)
+        for window in runtime { candidates.append(window.candidate) }
         return WorkspaceRestorerPlanner.plan(
-            profile: profile, candidates: runtime.map(\.candidate), displays: displaySnapshots(),
+            profile: profile, candidates: candidates, displays: displaySnapshots(),
             launchPolicy: launchPolicy)
     }
 
@@ -282,15 +277,23 @@ final class WindowToolsEngine: FeatureModule {
             try? WorkspaceRestorerStore.save(library)
         }
         var plan = makePlan(profile, launchPolicy: options.launchPolicy)
-        let launchItems = plan.items.filter { $0.disposition == .launch }
+        var launchItems: [WorkspaceRestorePlanItem] = []
+        for item in plan.items where item.disposition == .launch { launchItems.append(item) }
         if !launchItems.isEmpty {
-            let bundleIdentifiers = Set(
-                profile.windows.filter { saved in
-                    launchItems.contains { $0.windowID == saved.id }
-                }.map(\.bundleIdentifier))
-            let paths = bundleIdentifiers.sorted().compactMap { bundleIdentifier in
-                profile.windows.first(where: { $0.bundleIdentifier == bundleIdentifier })?
-                    .applicationURL
+            var bundleIdentifiers: Set<String> = []
+            for saved in profile.windows
+            where launchItems.contains(where: { $0.windowID == saved.id }) {
+                bundleIdentifiers.insert(saved.bundleIdentifier)
+            }
+            var orderedBundleIdentifiers = Array(bundleIdentifiers)
+            orderedBundleIdentifiers.sort()
+            var paths: [String] = []
+            for bundleIdentifier in orderedBundleIdentifiers {
+                if let path = profile.windows.first(where: {
+                    $0.bundleIdentifier == bundleIdentifier
+                })?.applicationURL {
+                    paths.append(path)
+                }
             }
             for start in stride(from: 0, to: paths.count, by: options.concurrency) {
                 guard !Task.isCancelled,
@@ -397,15 +400,7 @@ final class WindowToolsEngine: FeatureModule {
 
     private func currentRuntimeWindows() -> [RuntimeWindow] {
         let activeBundleIdentifier = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        let excluded = excludedBundleIdentifiers
-        let applications = NSWorkspace.shared.runningApplications.filter {
-            $0.activationPolicy == .regular && !Self.isEdith($0)
-                && !excluded.contains($0.bundleIdentifier ?? "")
-        }.sorted {
-            if $0.bundleIdentifier == activeBundleIdentifier { return true }
-            if $1.bundleIdentifier == activeBundleIdentifier { return false }
-            return ($0.localizedName ?? "") < ($1.localizedName ?? "")
-        }
+        let applications = workspaceApplications(activeBundleIdentifier: activeBundleIdentifier)
         var runtime: [RuntimeWindow] = []
         var order = 0
         for application in applications {
@@ -433,6 +428,25 @@ final class WindowToolsEngine: FeatureModule {
         return runtime
     }
 
+    private func workspaceApplications(
+        activeBundleIdentifier: String?
+    ) -> [NSRunningApplication] {
+        let excluded = excludedBundleIdentifiers
+        var applications: [NSRunningApplication] = []
+        for application in NSWorkspace.shared.runningApplications
+        where application.activationPolicy == .regular && !Self.isEdith(application)
+            && !excluded.contains(application.bundleIdentifier ?? "")
+        {
+            applications.append(application)
+        }
+        applications.sort {
+            if $0.bundleIdentifier == activeBundleIdentifier { return true }
+            if $1.bundleIdentifier == activeBundleIdentifier { return false }
+            return ($0.localizedName ?? "") < ($1.localizedName ?? "")
+        }
+        return applications
+    }
+
     private func displaySnapshots() -> [WorkspaceDisplaySnapshot] {
         NSScreen.screens.enumerated().compactMap { index, screen in
             guard let id = displayID(screen) else { return nil }
@@ -451,10 +465,12 @@ final class WindowToolsEngine: FeatureModule {
         let raw =
             SharedDefaults.store.string(forKey: AppStorageKeys.WorkspaceRestorer.excludedApps)
             ?? ""
-        return Set(
-            raw.components(separatedBy: CharacterSet(charactersIn: ",\n"))
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty })
+        var identifiers: Set<String> = []
+        for value in raw.components(separatedBy: CharacterSet(charactersIn: ",\n")) {
+            let identifier = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !identifier.isEmpty { identifiers.insert(identifier) }
+        }
+        return identifiers
     }
 
     private static var windowToolsEnabled: Bool {
