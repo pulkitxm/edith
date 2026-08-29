@@ -106,6 +106,7 @@ struct HerdrPage: View {
             title: { Text("Herdr") },
             trailing: {
                 HStack(spacing: UIScale.pt(10)) {
+                    spacesWindowMenu
                     spaceGroupingToggle
                     Button {
                         Task { await store.refresh() }
@@ -117,6 +118,27 @@ struct HerdrPage: View {
                 }
             },
             accessory: { filters })
+    }
+
+    private var spacesWindowMenu: some View {
+        Menu {
+            if store.agentSpaces.isEmpty {
+                Text("No spaces available")
+            } else {
+                ForEach(store.agentSpaces) { space in
+                    Button {
+                        openSpace(space)
+                    } label: {
+                        Label(space.title, systemImage: "macwindow")
+                    }
+                }
+            }
+        } label: {
+            Label("Spaces", systemImage: "macwindow")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Open a Space in its own window")
     }
 
     private var spaceGroupingToggle: some View {
@@ -667,35 +689,49 @@ struct HerdrPage: View {
     private func spaceHeader(_ space: HerdrAgentSpace) -> some View {
         let collapsed = store.spaceIsCollapsed(space.id)
         let accessibleTitle = hideAgents ? "Space" : space.title
-        return Button {
-            withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
-                store.toggleSpace(space.id)
+        return HStack(spacing: UIScale.pt(2)) {
+            Button {
+                withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
+                    store.toggleSpace(space.id)
+                }
+            } label: {
+                HStack(spacing: UIScale.pt(6)) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: UIScale.pt(8), weight: .bold))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .rotationEffect(.degrees(collapsed ? 0 : 90))
+                    Text(space.title)
+                        .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                        .lineLimit(1)
+                        .presenterTextBlur(hideAgents, fontSize: 10.5)
+                    Text("\(space.agents.count)")
+                        .font(DashSkin.mono(9.5, weight: .medium))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
             }
-        } label: {
-            HStack(spacing: UIScale.pt(6)) {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: UIScale.pt(8), weight: .bold))
+            .buttonStyle(.edith(.borderless))
+            .help(collapsed ? "Show \(accessibleTitle)" : "Hide \(accessibleTitle)")
+            .accessibilityLabel("\(accessibleTitle), \(collapsed ? "collapsed" : "expanded")")
+
+            Button {
+                openSpace(space)
+            } label: {
+                Image(systemName: "macwindow")
+                    .font(.system(size: UIScale.pt(10), weight: .semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
-                    .rotationEffect(.degrees(collapsed ? 0 : 90))
-                Text(space.title)
-                    .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .lineLimit(1)
-                    .presenterTextBlur(hideAgents, fontSize: 10.5)
-                Text("\(space.agents.count)")
-                    .font(DashSkin.mono(9.5, weight: .medium))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                Spacer(minLength: 0)
+                    .frame(width: UIScale.pt(22), height: UIScale.pt(22))
             }
-            .padding(.leading, UIScale.pt(14))
-            .padding(.trailing, UIScale.pt(8))
-            .padding(.top, UIScale.pt(7))
-            .padding(.bottom, UIScale.pt(3))
-            .contentShape(Rectangle())
+            .buttonStyle(.edith(.borderless))
+            .help("Open \(accessibleTitle) in a new window")
+            .accessibilityLabel("Open \(accessibleTitle) in a new window")
         }
-        .buttonStyle(.edith(.borderless))
-        .help(collapsed ? "Show \(accessibleTitle)" : "Hide \(accessibleTitle)")
-        .accessibilityLabel("\(accessibleTitle), \(collapsed ? "collapsed" : "expanded")")
+        .padding(.leading, UIScale.pt(14))
+        .padding(.trailing, UIScale.pt(6))
+        .padding(.top, UIScale.pt(7))
+        .padding(.bottom, UIScale.pt(3))
     }
 
     private func agentRailEntry(_ agent: HerdrAgent) -> some View {
@@ -791,6 +827,7 @@ struct HerdrPage: View {
     }
 
     private func openAgent(_ agent: HerdrAgent) {
+        if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
         let detaching = NSEvent.modifierFlags.contains(.command)
         if detaching {
             store.close(agent.id)
@@ -799,6 +836,10 @@ struct HerdrPage: View {
         }
         if HerdrAgentWindow.raise(agent.id) { return }
         store.open(agent)
+    }
+
+    private func openSpace(_ space: HerdrAgentSpace) {
+        HerdrSpaceWindow.open(space: space, store: store, launchEnabled: launchEnabled)
     }
 
     private func emptyState(title: String, detail: String) -> some View {

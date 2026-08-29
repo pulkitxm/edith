@@ -938,6 +938,9 @@ struct MainWindowView: View {
             let code = event.keyCode
             let mods = event.modifierFlags
             let handled = MainActor.assumeIsolated {
+                guard NSApp.keyWindow?.identifier?.rawValue == MainWindowIdentifier.value else {
+                    return false
+                }
                 guard !WindowTabs.isTabbed(NSApp.keyWindow) else { return false }
                 guard
                     let command = WindowKeyCommand.resolve(

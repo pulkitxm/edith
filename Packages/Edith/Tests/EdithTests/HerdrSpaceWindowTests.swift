@@ -6,6 +6,16 @@ import Testing
 
 @MainActor
 @Suite struct HerdrSpaceWindowModelTests {
+    @Test func anEmptySpaceStartsWithOneLocalTerminal() {
+        let model = HerdrSpaceWindowModel(
+            space: HerdrAgentSpace(id: "empty", title: "empty", agents: []),
+            store: makeStore())
+
+        #expect(model.tabs.count == 1)
+        #expect(model.selectedTab?.agentID == nil)
+        #expect(model.selectedTab?.focusedTarget == HerdrSpaceTerminalContext.local.target)
+    }
+
     @Test func openingASpaceMovesItsAgentsIntoIndependentTabs() {
         let store = makeStore()
         let agents = [localAgent, remoteAgent]
@@ -144,6 +154,15 @@ import Testing
         #expect(tab.layout.focused != right)
         #expect(model.cyclePane(backwards: true))
         #expect(tab.layout.focused == right)
+    }
+
+    @Test func selectingAnAgentRaisesItsOwningTopLevelTab() {
+        let model = makeModel()
+
+        #expect(model.selectAgent(remoteAgent.id))
+        #expect(model.selectedAgentID == remoteAgent.id)
+        #expect(!model.selectAgent("missing"))
+        #expect(model.selectedAgentID == remoteAgent.id)
     }
 
     @Test func agentViewChangesStayWindowLocalAndPersistThePreference() throws {

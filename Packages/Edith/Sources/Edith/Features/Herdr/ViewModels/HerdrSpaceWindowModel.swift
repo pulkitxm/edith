@@ -100,6 +100,10 @@ final class HerdrSpaceTabModel: Identifiable {
         contents.values.compactMap { $0.agent?.id }.first
     }
 
+    var agentTab: HerdrOpenTab? {
+        contents.values.compactMap(\.agent).first
+    }
+
     var focusedPane: PaneNode? {
         layout.root.pane(layout.focused) ?? layout.root.panes.first
     }
@@ -290,6 +294,13 @@ final class HerdrSpaceWindowModel {
     func selectTab(number: Int) -> Bool {
         guard number >= 1, number <= 9, !tabs.isEmpty else { return false }
         selected = tabs[min(number - 1, tabs.count - 1)].id
+        return true
+    }
+
+    @discardableResult
+    func selectAgent(_ id: String) -> Bool {
+        guard let tab = tabs.first(where: { $0.agentID == id }) else { return false }
+        selected = tab.id
         return true
     }
 
