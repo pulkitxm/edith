@@ -190,6 +190,12 @@ public enum ExtensionRegistry {
             symbolName: "circle.lefthalf.filled", group: .utilities, featured: false,
             defaultsKey: "focusDimEnabled", requiredCapabilities: [.windowDimming]),
         ExtensionRegistryEntry(
+            id: "dockTools", title: "Dock Tools",
+            subtitle: "Window previews, faster switching, and smarter Dock behavior.",
+            symbolName: "dock.rectangle", group: .utilities, featured: false,
+            defaultsKey: "dockToolsEnabled", requiredCapabilities: [.dockControl],
+            optionalCapabilities: [.windowPreviews]),
+        ExtensionRegistryEntry(
             id: "presenter", title: "Presenter",
             subtitle: "Blurs sensitive numbers while sharing your screen.",
             symbolName: "theatermasks.fill", group: .utilities, featured: false,

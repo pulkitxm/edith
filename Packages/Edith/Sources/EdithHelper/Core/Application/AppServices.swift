@@ -14,6 +14,7 @@ final class AppServices {
     private(set) var clipboard: ClipboardStore?
     private(set) var emoji: EmojiStore?
     private(set) var focusDim: FocusDimEngine?
+    private(set) var dockTools: DockToolsEngine?
     private(set) var presenter: PresenterDetector?
     private(set) var micMute: MicMuteEngine?
     private(set) var lidAwake: LidAwakeEngine?
@@ -102,6 +103,7 @@ final class AppServices {
         startup.cancel()
         terminating = true
         shutDownEmojiRuntime()
+        dockTools?.shutdown()
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
@@ -224,6 +226,14 @@ final class AppServices {
     }
 
     private func reconcileSystemServices() {
+        let dockToolsOn = Self.extensionEnabled(AppStorageKeys.DockTools.enabled)
+        if dockToolsOn, dockTools == nil { dockTools = DockToolsEngine() }
+        if !dockToolsOn, let engine = dockTools {
+            engine.shutdown()
+            dockTools = nil
+        }
+        dockTools?.syncSettings()
+
         let systemOn = Self.extensionEnabled(AppStorageKeys.Tabs.systemEnabled)
         if systemOn, system == nil { system = SystemStore() }
         if !systemOn, let store = system {

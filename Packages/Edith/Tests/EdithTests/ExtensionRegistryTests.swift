@@ -22,6 +22,7 @@ import Testing
         "notchShelfEnabled",
         "clipboardEnabled",
         "focusDimEnabled",
+        "dockToolsEnabled",
         "presenterEnabled",
         "colorPickerEnabled",
         "emojiEnabled",
@@ -37,7 +38,7 @@ import Testing
             ExtensionRegistry.entries.map(\.id) == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
                 "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
-                "clipboard", "focusDim", "presenter", "emoji", "colorPicker",
+                "clipboard", "focusDim", "dockTools", "presenter", "emoji", "colorPicker",
             ])
     }
 
@@ -242,6 +243,7 @@ import Testing
             "notchShelf": [],
             "clipboard": [],
             "focusDim": [.screenRecording],
+            "dockTools": [.accessibility],
             "presenter": [.screenRecording],
             "colorPicker": [.screenRecording],
             "emoji": [],
@@ -262,6 +264,7 @@ import Testing
             "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation],
             "clipboard": [.accessibility],
             "focusDim": [],
+            "dockTools": [.screenRecording],
             "presenter": [],
             "colorPicker": [],
             "emoji": [.accessibility],

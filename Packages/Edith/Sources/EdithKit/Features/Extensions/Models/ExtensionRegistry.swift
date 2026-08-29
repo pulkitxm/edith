@@ -56,7 +56,7 @@ public enum ExtensionPermission: String, CaseIterable, Hashable, Sendable {
             "Asked when you first use Clean keys to block key presses during cleaning."
         case .fullDisk: "Asked when a feature needs local service credentials or usage data."
         case .screenRecording:
-            "Required to detect shared content or sample colors from the screen."
+            "Required to detect shared content, sample colors, or show Dock window thumbnails."
         case .applicationAudio:
             "Asked when you first use the Notch Shelf per-app volume mixer."
         case .camera: "Asked when you first open the Notch Shelf camera preview."
@@ -127,6 +127,7 @@ public extension ExtensionRegistryEntry {
     var requiredPermissions: [ExtensionPermission] {
         switch id {
         case "calendar": [.calendar]
+        case "dockTools": [.accessibility]
         case "focusDim", "presenter", "colorPicker": [.screenRecording]
         default: []
         }
@@ -138,6 +139,7 @@ public extension ExtensionRegistryEntry {
         case "system": [.accessibility, .inputMonitoring]
         case "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation]
         case "clipboard", "emoji": [.accessibility]
+        case "dockTools": [.screenRecording]
         default: []
         }
     }

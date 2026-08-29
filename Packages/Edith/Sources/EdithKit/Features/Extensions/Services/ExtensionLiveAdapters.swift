@@ -66,8 +66,8 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
-        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "emoji", "colorPicker",
+        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "dockTools",
+        "presenter", "emoji", "colorPicker",
     ]
 
     public static func provider(
@@ -105,11 +105,31 @@ public enum ExtensionLiveAdapters {
         case "notchShelf": shelfReadiness()
         case "clipboard": clipboardReadiness()
         case "focusDim": await focusDimReadiness(defaults: defaults)
+        case "dockTools": dockToolsReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
         case "emoji": emojiReadiness(defaults: defaults)
         default: nil
         }
+    }
+
+    static func dockToolsReadiness(
+        defaults: UserDefaults = SharedDefaults.store
+    ) -> ExtensionAdapterReadiness {
+        let delay =
+            defaults.object(forKey: AppStorageKeys.DockTools.hoverDelay) as? Double
+            ?? DockToolsPreferences.defaultHoverDelay
+        let previewMode = defaults.string(forKey: AppStorageKeys.DockTools.previewMode)
+        let clickAction = defaults.string(forKey: AppStorageKeys.DockTools.clickAction)
+        let configured =
+            delay.isFinite && DockToolsPreferences.hoverDelayRange.contains(delay)
+            && (previewMode == nil || DockPreviewMode(rawValue: previewMode ?? "") != nil)
+            && (clickAction == nil || DockClickAction(rawValue: clickAction ?? "") != nil)
+        return ExtensionAdapterFacts(
+            configured: configured,
+            readyDetail: "Dock window controls are configured.",
+            setupDetail: "A stored Dock Tools preference is invalid."
+        ).readiness
     }
 
     static func attentionReadiness(

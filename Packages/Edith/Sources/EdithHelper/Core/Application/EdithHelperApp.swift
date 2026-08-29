@@ -236,6 +236,15 @@ struct EdithApp: App {
                 userInfo: AppDiagnosticsPayload.encode(AppInspectionCenter().diagnostics()))
         }
         _ = IPC.observe(
+            IPC.Name.requestDockToolsOperation,
+            info: { info in
+                if let dockTools = services.dockTools {
+                    dockTools.perform(info)
+                } else {
+                    DockToolsEngine.performWhileDisabled(info)
+                }
+            })
+        _ = IPC.observe(
             IPC.Name.requestQuitApps,
             info: { info in
                 guard let requestID = info[RunningAppIPC.requestIDKey] as? String else { return }

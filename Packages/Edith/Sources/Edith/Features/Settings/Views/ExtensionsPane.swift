@@ -938,6 +938,7 @@ private struct ExtensionDetailRows: View {
             case .notchShelf: NotchShelfRows()
             case .clipboard: ClipboardRows()
             case .focusDim: FocusDimRows()
+            case .dockTools: DockToolsRows()
             case .presenter: PresenterRows()
             case .colorPicker: ColorPickerRows()
             case .emoji: EmojiRows()
