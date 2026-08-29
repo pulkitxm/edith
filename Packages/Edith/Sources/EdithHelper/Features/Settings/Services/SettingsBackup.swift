@@ -1648,7 +1648,10 @@ final class SettingsBackup {
     private func snapshot() -> Data? {
         var dict: [String: Any] = [:]
         for key in Self.backedKeys {
-            if let value = store(for: key).object(forKey: key) { dict[key] = value }
+            guard let value = store(for: key).object(forKey: key),
+                let encoded = settingsBackupEncodeJSONValue(value)
+            else { continue }
+            dict[key] = encoded
         }
         return try? JSONSerialization.data(
             withJSONObject: dict, options: [.prettyPrinted, .sortedKeys])
@@ -1957,7 +1960,8 @@ final class SettingsBackup {
             awaitSettingsDownload()
             return
         }
-        for (key, value) in dict where Self.backedKeys.contains(key) {
+        for (key, encodedValue) in dict where Self.backedKeys.contains(key) {
+            guard let value = settingsBackupDecodeJSONValue(encodedValue) else { continue }
             switch key {
             case Repo.pathKey:
                 guard let path = value as? String else { continue }
