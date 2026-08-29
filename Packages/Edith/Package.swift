@@ -30,7 +30,11 @@ let targets: [Target] = [
     .target(
         name: "EdithKit",
         dependencies: ["EdithCore", "EdithLidAwakeSupport"],
-        resources: [.process("Resources"), .copy("ChromeExtension")],
+        resources: [
+            .process("Resources"),
+            .copy("ChromeExtension"),
+            .copy("../Edith/Resources/appicon.png"),
+        ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .target(

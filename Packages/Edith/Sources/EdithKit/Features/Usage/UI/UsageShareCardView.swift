@@ -153,8 +153,11 @@ private struct ShareCardFooter: View {
     var body: some View {
         HStack {
             HStack(spacing: 13) {
-                Image(systemName: "eyeglasses")
-                    .font(.system(size: 24, weight: .medium))
+                Image(nsImage: ShareBrand.icon)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .frame(width: 42, height: 42)
                 Text("edith")
                     .font(.custom("Iowan Old Style", size: 31).weight(.bold))
             }
@@ -166,6 +169,16 @@ private struct ShareCardFooter: View {
         .foregroundStyle(ShareColors.cream)
         .padding(.top, 26)
     }
+}
+
+@MainActor
+private enum ShareBrand {
+    static let icon: NSImage = {
+        guard let url = Bundle.module.url(forResource: "appicon", withExtension: "png"),
+            let icon = NSImage(contentsOf: url)
+        else { preconditionFailure("Edith app icon is missing") }
+        return icon
+    }()
 }
 
 private struct HighlightsShareContent: View {
