@@ -242,7 +242,45 @@ public enum CommandTree {
                 "window", "Arrange the active window.",
                 children: [
                     CommandNode(
-                        "status", "Show Window Tools settings and actions.", options: common)
+                        "status", "Show Window Tools settings and actions.", options: common),
+                    CommandNode(
+                        "workspace", "Capture and restore named workspace profiles.",
+                        children: [
+                            CommandNode("ls", "List profiles.", options: common),
+                            CommandNode(
+                                "capture", "Capture the current workspace.", options: common,
+                                arguments: [.free]),
+                            CommandNode(
+                                "preview", "Preview window matching and display remapping.",
+                                options: ["--json", "--help", "--launch-missing"],
+                                arguments: [.free]),
+                            CommandNode(
+                                "restore", "Restore a workspace profile.",
+                                options: [
+                                    "--json", "--help", "--launch-missing", "--timeout",
+                                    "--concurrency",
+                                ], arguments: [.free]),
+                            CommandNode("cancel", "Cancel the active restore.", options: common),
+                            CommandNode(
+                                "recover", "Restore the automatic pre-restore snapshot.",
+                                options: common),
+                            CommandNode(
+                                "rename", "Rename a profile.", options: common,
+                                arguments: [.free, .free]),
+                            CommandNode(
+                                "duplicate", "Duplicate a profile.", options: common,
+                                arguments: [.free, .free]),
+                            CommandNode(
+                                "delete", "Delete a profile.", options: common,
+                                arguments: [.free]),
+                            CommandNode(
+                                "export", "Export a profile as JSON.", options: common,
+                                arguments: [.free, .localPath]),
+                            CommandNode(
+                                "import", "Import a profile from JSON.", options: common,
+                                arguments: [.localPath]),
+                            CommandNode("history", "Show restore history.", options: common),
+                        ]),
                 ]
                     + WindowLayoutAction.allCases.map {
                         CommandNode($0.rawValue, $0.descriptor.summary, options: common)

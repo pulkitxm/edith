@@ -285,17 +285,24 @@ final class WindowToolsEngine: FeatureModule {
                 profile.windows.filter { saved in
                     launchItems.contains { $0.windowID == saved.id }
                 }.map(\.bundleIdentifier))
-            for bundleIdentifier in bundleIdentifiers.sorted() {
-                guard !Task.isCancelled, Date().timeIntervalSince(startedAt) < options.timeout,
-                    let saved = profile.windows.first(where: {
-                        $0.bundleIdentifier == bundleIdentifier
-                    }), let path = saved.applicationURL
+            let paths = bundleIdentifiers.sorted().compactMap { bundleIdentifier in
+                profile.windows.first(where: { $0.bundleIdentifier == bundleIdentifier })?
+                    .applicationURL
+            }
+            for start in stride(from: 0, to: paths.count, by: options.concurrency) {
+                guard !Task.isCancelled,
+                    Date().timeIntervalSince(startedAt) < options.timeout
                 else { break }
-                let url = URL(fileURLWithPath: path)
-                let configuration = NSWorkspace.OpenConfiguration()
-                configuration.activates = false
-                _ = try? await NSWorkspace.shared.openApplication(
-                    at: url, configuration: configuration)
+                let end = min(paths.count, start + options.concurrency)
+                let launches: [Task<Void, Never>] = paths[start..<end].map { path in
+                    Task { @MainActor in
+                        let configuration = NSWorkspace.OpenConfiguration()
+                        configuration.activates = false
+                        _ = try? await NSWorkspace.shared.openApplication(
+                            at: URL(fileURLWithPath: path), configuration: configuration)
+                    }
+                }
+                for launch in launches { await launch.value }
             }
             while !Task.isCancelled, Date().timeIntervalSince(startedAt) < options.timeout {
                 try? await Task.sleep(for: .milliseconds(250))

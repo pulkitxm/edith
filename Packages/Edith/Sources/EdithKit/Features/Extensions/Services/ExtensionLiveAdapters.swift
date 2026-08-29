@@ -66,7 +66,7 @@ public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
         "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
         "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "colorPicker", "windowTools",
+        "colorPicker", "windowTools", "workspaceRestorer",
     ]
 
     public static func provider(
@@ -107,6 +107,7 @@ public enum ExtensionLiveAdapters {
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
         case "windowTools": windowToolsReadiness(defaults: defaults)
+        case "workspaceRestorer": workspaceRestorerReadiness(defaults: defaults)
         default: nil
         }
     }
@@ -493,6 +494,24 @@ public enum ExtensionLiveAdapters {
             configured: configured,
             readyDetail: "Window layouts and shortcuts are configured.",
             setupDetail: "A stored Window Tools shortcut is invalid."
+        ).readiness
+    }
+
+    static func workspaceRestorerReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
+        let launchPolicy = defaults.string(forKey: AppStorageKeys.WorkspaceRestorer.launchPolicy)
+        let timeout = defaults.object(forKey: AppStorageKeys.WorkspaceRestorer.timeout) as? Double
+        let concurrency =
+            defaults.object(forKey: AppStorageKeys.WorkspaceRestorer.concurrency) as? Int
+        let configured =
+            (launchPolicy == nil || WorkspaceLaunchPolicy(rawValue: launchPolicy!) != nil)
+            && (timeout == nil || (1...120).contains(timeout!))
+            && (concurrency == nil || (1...4).contains(concurrency!))
+        let count = WorkspaceRestorerStore.load(defaults: defaults).profiles.count
+        return ExtensionAdapterFacts(
+            configured: configured, contentCount: count,
+            readyDetail: "Saved workspace profiles: \(count).",
+            setupDetail: "The launch policy, timeout, or concurrency setting is invalid.",
+            emptyDetail: "Workspace Restorer is ready for its first capture."
         ).readiness
     }
     private static func inputDeviceCount() -> Result<Int, ExtensionAdapterError> {

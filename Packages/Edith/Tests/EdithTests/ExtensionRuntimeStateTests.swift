@@ -265,6 +265,10 @@ import Testing
             ("presenter", "PresenterRows", "presenterEnabled", "PresenterRows.swift"),
             ("colorPicker", "ColorPickerRows", "colorPickerEnabled", "ColorPickerRows.swift"),
             ("windowTools", "WindowToolsRows", "enabled", "WindowToolsRows.swift"),
+            (
+                "workspaceRestorer", "WorkspaceRestorerRows", "enabled",
+                "WorkspaceRestorerRows.swift"
+            ),
         ]
 
         #expect(Set(routes.map(\.id)) == Set(ExtensionDetailRoute.allCases.map(\.rawValue)))

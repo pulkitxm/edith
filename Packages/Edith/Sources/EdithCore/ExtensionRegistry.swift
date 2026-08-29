@@ -206,5 +206,12 @@ public enum ExtensionRegistry {
             symbolName: "rectangle.3.group", group: .utilities, featured: false,
             defaultsKey: "windowToolsEnabled", requiredCapabilities: [.windowManagement],
             optionalCapabilities: [.globalShortcuts]),
+        ExtensionRegistryEntry(
+            id: "workspaceRestorer", title: "Workspace Restorer",
+            subtitle:
+                "Capture named app and window layouts, then restore them on any display setup.",
+            symbolName: "rectangle.3.group.bubble.left", group: .utilities, featured: false,
+            defaultsKey: "workspaceRestorerEnabled",
+            requiredCapabilities: [.windowManagement], optionalCapabilities: [.globalShortcuts]),
     ]
 }

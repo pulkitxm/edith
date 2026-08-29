@@ -1,4 +1,5 @@
 import CoreGraphics
+import EdithCore
 import Foundation
 
 public struct WorkspaceDisplaySnapshot: Codable, Equatable, Identifiable, Sendable {
@@ -530,6 +531,12 @@ public enum WorkspaceRestorerOperation: String, CaseIterable, Codable, Sendable 
         case .cancel: "Cancel workspace restore"
         case .recover: "Recover previous workspace"
         }
+    }
+
+    public var descriptor: UserOperationDescriptor {
+        UserOperationDescriptor(
+            id: UserOperationID(rawValue: "window.workspace.\(rawValue)"),
+            summary: "\(title).", cli: ["window", "workspace", rawValue], effect: .write)
     }
 }
 

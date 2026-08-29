@@ -577,7 +577,7 @@ private struct ExtensionSettingsSheet: View {
         case "music": 460
         case "focusDim", "colorPicker": 430
         case "system": 500
-        case "notchShelf", "presenter", "windowTools": 580
+        case "notchShelf", "presenter", "windowTools", "workspaceRestorer": 580
         default: 620
         }
     }
@@ -941,6 +941,7 @@ private struct ExtensionDetailRows: View {
             case .presenter: PresenterRows()
             case .colorPicker: ColorPickerRows()
             case .windowTools: WindowToolsRows()
+            case .workspaceRestorer: WorkspaceRestorerRows()
             }
         } else {
             Section("Controls") {
