@@ -510,6 +510,7 @@ public enum WorkspaceRestorerStore {
         do {
             defaults.set(
                 try JSONEncoder().encode(library), forKey: AppStorageKeys.WorkspaceRestorer.library)
+            IPC.post(IPC.Name.workspaceRestorerChanged)
         } catch {
             throw WorkspaceRestorerError.storage(error.localizedDescription)
         }

@@ -70,7 +70,7 @@ private enum WorkspaceCLI {
 
     static func printJSON<T: Encodable>(_ value: T) throws {
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.outputFormatting = [.sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         CLIOut.out(String(decoding: try encoder.encode(value), as: UTF8.self))
     }
@@ -241,7 +241,6 @@ struct WorkspaceProfileRenameCommand: AsyncParsableCommand {
             var library = WorkspaceRestorerStore.load(defaults: CLIEnvironment.sharedDefaults)
             let renamed = try library.rename(profile, to: name)
             try WorkspaceRestorerStore.save(library, defaults: CLIEnvironment.sharedDefaults)
-            AppBridge.post(IPC.Name.workspaceRestorerChanged)
             if json {
                 try WorkspaceCLI.printJSON(renamed)
             } else {
@@ -262,7 +261,6 @@ struct WorkspaceProfileDuplicateCommand: AsyncParsableCommand {
             var library = WorkspaceRestorerStore.load(defaults: CLIEnvironment.sharedDefaults)
             let copy = try library.duplicate(profile, as: name)
             try WorkspaceRestorerStore.save(library, defaults: CLIEnvironment.sharedDefaults)
-            AppBridge.post(IPC.Name.workspaceRestorerChanged)
             if json {
                 try WorkspaceCLI.printJSON(copy)
             } else {
@@ -282,7 +280,6 @@ struct WorkspaceProfileDeleteCommand: AsyncParsableCommand {
             var library = WorkspaceRestorerStore.load(defaults: CLIEnvironment.sharedDefaults)
             try library.remove(profile)
             try WorkspaceRestorerStore.save(library, defaults: CLIEnvironment.sharedDefaults)
-            AppBridge.post(IPC.Name.workspaceRestorerChanged)
             if json {
                 CLIOut.json(.object(["deleted": .bool(true)]))
             } else {
@@ -326,7 +323,6 @@ struct WorkspaceProfileImportCommand: AsyncParsableCommand {
             var library = WorkspaceRestorerStore.load(defaults: CLIEnvironment.sharedDefaults)
             library.upsert(profile)
             try WorkspaceRestorerStore.save(library, defaults: CLIEnvironment.sharedDefaults)
-            AppBridge.post(IPC.Name.workspaceRestorerChanged)
             if json {
                 try WorkspaceCLI.printJSON(profile)
             } else {

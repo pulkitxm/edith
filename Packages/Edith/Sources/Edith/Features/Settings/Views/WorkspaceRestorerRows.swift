@@ -147,7 +147,6 @@ struct WorkspaceRestorerRows: View {
             selectedProfile = profile.id.uuidString
             status = "Renamed to \(profile.name)."
             refresh()
-            IPC.post(IPC.Name.workspaceRestorerChanged)
         } catch { status = error.localizedDescription }
     }
 
@@ -159,7 +158,6 @@ struct WorkspaceRestorerRows: View {
             selectedProfile = profile.id.uuidString
             status = "Duplicated as \(profile.name)."
             refresh()
-            IPC.post(IPC.Name.workspaceRestorerChanged)
         } catch { status = error.localizedDescription }
     }
 
@@ -171,7 +169,6 @@ struct WorkspaceRestorerRows: View {
             selectedProfile = ""
             status = "Profile deleted."
             refresh()
-            IPC.post(IPC.Name.workspaceRestorerChanged)
         } catch { status = error.localizedDescription }
     }
 

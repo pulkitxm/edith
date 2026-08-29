@@ -112,6 +112,47 @@ enum JSONContract {
         JSONCase(
             "ed window restore", ["window", "restore", "--json"],
             mutatesTheMachine: true),
+        JSONCase("ed window workspace ls", ["window", "workspace", "ls", "--json"]),
+        JSONCase(
+            "ed window workspace capture",
+            ["window", "workspace", "capture", "Contract", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window workspace preview",
+            ["window", "workspace", "preview", "Contract", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window workspace restore",
+            ["window", "workspace", "restore", "Contract", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window workspace cancel", ["window", "workspace", "cancel", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window workspace recover", ["window", "workspace", "recover", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window workspace rename",
+            ["window", "workspace", "rename", "Contract", "Renamed", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window workspace duplicate",
+            ["window", "workspace", "duplicate", "Contract", "Copy", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window workspace delete",
+            ["window", "workspace", "delete", "Contract", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window workspace export",
+            ["window", "workspace", "export", "Contract", "/tmp/contract.json", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window workspace import",
+            ["window", "workspace", "import", "/tmp/contract.json", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed window workspace history", ["window", "workspace", "history", "--json"]),
         JSONCase("ed calendar join", ["calendar", "join", "nothing-at-all", "--json"]),
         JSONCase(
             "ed calendar directions", ["calendar", "directions", "nothing-at-all", "--json"]),

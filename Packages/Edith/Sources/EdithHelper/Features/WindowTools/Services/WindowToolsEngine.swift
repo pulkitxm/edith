@@ -150,7 +150,6 @@ final class WindowToolsEngine: FeatureModule {
                     var library = WorkspaceRestorerStore.load()
                     library.upsert(profile)
                     try WorkspaceRestorerStore.save(library)
-                    IPC.post(IPC.Name.workspaceRestorerChanged)
                     respond(
                         WorkspaceRestorerResponse(
                             requestID: request.id, ok: true, profile: profile))
@@ -362,7 +361,6 @@ final class WindowToolsEngine: FeatureModule {
         library = WorkspaceRestorerStore.load()
         library.record(run)
         try? WorkspaceRestorerStore.save(library)
-        IPC.post(IPC.Name.workspaceRestorerChanged)
         return WorkspaceRestorerResponse(
             requestID: requestID,
             ok: !run.cancelled && !results.contains(where: { $0.state == .failed }),
