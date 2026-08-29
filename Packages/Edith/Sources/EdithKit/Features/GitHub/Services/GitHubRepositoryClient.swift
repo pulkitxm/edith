@@ -32,7 +32,7 @@ public actor GitHubRepositoryClient {
 
     public func cachedResource(for route: GitHubRoute) -> GitHubRepositoryResource? {
         loadCacheIfNeeded()
-        let key = route.url.absoluteString
+        let key = cacheKey(for: route)
         guard var record = cache?[key],
             Date().timeIntervalSince(record.storedAt) <= cacheLifetime
         else {
@@ -152,7 +152,7 @@ public actor GitHubRepositoryClient {
             return ContentLocation(
                 revision: first, path: revisionPath.dropFirst().joined(separator: "/"))
         }
-        let match = try await references(host: host, repository: repository)
+        let match = try await references(host: host, repository: repository, prefix: first)
             .compactMap { name -> (name: String, components: [String])? in
                 let components = name.split(separator: "/").map(String.init)
                 guard components.count <= revisionPath.count,
@@ -171,9 +171,9 @@ public actor GitHubRepositoryClient {
     }
 
     private func references(
-        host: GitHubHost, repository: GitHubRepositoryPath
+        host: GitHubHost, repository: GitHubRepositoryPath, prefix: String
     ) async throws -> [String] {
-        let key = RepositoryReferenceKey(host: host, repository: repository)
+        let key = RepositoryReferenceKey(host: host, repository: repository, prefix: prefix)
         let now = Date()
         if var record = repositoryReferences[key],
             now.timeIntervalSince(record.storedAt) <= referenceCacheLifetime
@@ -183,10 +183,10 @@ public actor GitHubRepositoryClient {
             return record.names
         }
         repositoryReferences[key] = nil
-        let branches = try await referenceNames(
-            host: host, repository: repository, collection: "branches")
-        let tags = try await referenceNames(
-            host: host, repository: repository, collection: "tags")
+        let branches = try await matchingReferenceNames(
+            host: host, repository: repository, namespace: "heads", prefix: prefix)
+        let tags = try await matchingReferenceNames(
+            host: host, repository: repository, namespace: "tags", prefix: prefix)
         let names = branches + tags
         repositoryReferences[key] = ReferenceCacheRecord(
             names: names, storedAt: now, accessedAt: now)
@@ -198,16 +198,20 @@ public actor GitHubRepositoryClient {
         return names
     }
 
-    private func referenceNames(
-        host: GitHubHost, repository: GitHubRepositoryPath, collection: String
+    private func matchingReferenceNames(
+        host: GitHubHost, repository: GitHubRepositoryPath, namespace: String, prefix: String
     ) async throws -> [String] {
-        let references: [ReferenceNameDTO] = try await json(
+        let references: [GitReferenceDTO] = try await json(
             GitHubAPIRequest(
                 host: host,
                 endpoint: GitHubCLITransport.endpoint(
-                    repository: repository, suffix: [collection]),
-                query: [("per_page", "100")]))
-        return references.map(\.name)
+                    repository: repository,
+                    suffix: ["git", "matching-refs", "\(namespace)/\(prefix)"])))
+        let marker = "refs/\(namespace)/"
+        return references.compactMap { reference in
+            guard reference.ref.hasPrefix(marker) else { return nil }
+            return String(reference.ref.dropFirst(marker.count))
+        }
     }
 
     private func directory(
@@ -351,7 +355,7 @@ public actor GitHubRepositoryClient {
     private func store(_ resource: GitHubRepositoryResource, for route: GitHubRoute) {
         loadCacheIfNeeded()
         let now = Date()
-        let key = route.url.absoluteString
+        let key = cacheKey(for: route)
         cache?[key] = CacheRecord(key: key, storedAt: now, accessedAt: now, resource: resource)
         guard let cacheFile, shouldPersist(resource) else { return }
         let records = Array(cache?.values ?? Dictionary<String, CacheRecord>().values).sorted {
@@ -364,6 +368,12 @@ public actor GitHubRepositoryClient {
             let archive = CacheArchive(version: 1, records: Array(records.prefix(cacheLimit)))
             try JSONEncoder().encode(archive).write(to: cacheFile, options: .atomic)
         } catch {}
+    }
+
+    private func cacheKey(for route: GitHubRoute) -> String {
+        guard let resolved = route.resolvedContentPath else { return route.url.absoluteString }
+        return ([route.url.absoluteString, resolved.revision] + resolved.path)
+            .joined(separator: "\u{0}")
     }
 
     private func shouldPersist(_ resource: GitHubRepositoryResource) -> Bool {
@@ -426,8 +436,8 @@ private struct BranchDTO: Decodable {
     let commit: Commit
 }
 
-private struct ReferenceNameDTO: Decodable {
-    let name: String
+private struct GitReferenceDTO: Decodable {
+    let ref: String
 }
 
 private struct ContentLocation {
@@ -438,6 +448,7 @@ private struct ContentLocation {
 private struct RepositoryReferenceKey: Hashable {
     let host: GitHubHost
     let repository: GitHubRepositoryPath
+    let prefix: String
 }
 
 private struct ReferenceCacheRecord {

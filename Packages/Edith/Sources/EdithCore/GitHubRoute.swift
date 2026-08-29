@@ -24,6 +24,32 @@ public struct GitHubHost: Codable, Hashable, Sendable {
         self.init(scheme: scheme, name: name, port: url.port)
     }
 
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let scheme = try values.decode(String.self, forKey: .scheme)
+        let name = try values.decode(String.self, forKey: .name)
+        let port = try values.decodeIfPresent(Int.self, forKey: .port)
+        guard let validated = Self(scheme: scheme, name: name, port: port) else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .name, in: values,
+                debugDescription: "The stored GitHub host is not supported by the CLI transport.")
+        }
+        self = validated
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(scheme, forKey: .scheme)
+        try values.encode(name, forKey: .name)
+        try values.encodeIfPresent(port, forKey: .port)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case scheme
+        case name
+        case port
+    }
+
     public static let github = GitHubHost(name: "github.com")!
 }
 

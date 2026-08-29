@@ -271,7 +271,7 @@ import Testing
         #expect(directory.entries[2].kind.rawValue == "future-kind")
         #expect(
             await fixture.requests()
-                == referenceRequests + [
+                == referenceRequests() + [
                     request(
                         endpoint: "repos/acme/orbit/contents/Sources/Deep",
                         query: [("ref", "main")],
@@ -281,8 +281,14 @@ import Testing
 
     @Test func slashBranchUsesTheLongestMatchingReference() async throws {
         let fixture = GitHubRequestFixture(responses: [
-            response(#"[{"name":"feature"},{"name":"feature/navigation"}]"#),
-            response(#"[{"name":"feature/navigation/archive"}]"#),
+            response(
+                matchingReferences(
+                    namespace: "heads",
+                    names: (0..<100).map { "feature-\($0)" }
+                        + ["feature", "feature/navigation"])),
+            response(
+                matchingReferences(
+                    namespace: "tags", names: ["feature/navigation/archive"])),
             response(
                 #"""
                 [
@@ -306,7 +312,7 @@ import Testing
         #expect(directory.path == "Sources")
         #expect(
             await fixture.requests()
-                == referenceRequests + [
+                == referenceRequests("feature") + [
                     request(
                         endpoint: "repos/acme/orbit/contents/Sources",
                         query: [("ref", "feature/navigation")],
@@ -316,8 +322,8 @@ import Testing
 
     @Test func slashTagResolvesBeforeLoadingAFile() async throws {
         let fixture = GitHubRequestFixture(responses: [
-            response(#"[{"name":"release"}]"#),
-            response(#"[{"name":"release/v2"}]"#),
+            response(matchingReferences(namespace: "heads", names: ["release"])),
+            response(matchingReferences(namespace: "tags", names: ["release/v2"])),
             response(
                 #"""
                 {
@@ -347,7 +353,7 @@ import Testing
         #expect(file.text == "hello\n")
         #expect(
             await fixture.requests()
-                == referenceRequests + [
+                == referenceRequests("release") + [
                     request(
                         endpoint: "repos/acme/orbit/contents/README.md",
                         query: [("ref", "release/v2")],
@@ -393,9 +399,11 @@ import Testing
                 ])
     }
 
-    @Test func referenceDiscoveryStopsAfterTheLimitedInitialPage() async throws {
+    @Test func matchingReferenceLookupUsesTwoBoundedPrefixRequests() async throws {
         let fixture = GitHubRequestFixture(responses: [
-            response(referenceNames(100)),
+            response(
+                matchingReferences(
+                    namespace: "heads", names: (0..<100).map { "missing-\($0)" })),
             response("[]"),
             response(
                 #"{"name":"README.md","path":"README.md","sha":"readme","size":6,"type":"file","encoding":"base64","content":"aGVsbG8K"}"#
@@ -415,7 +423,7 @@ import Testing
         #expect(file.revision == "missing")
         #expect(
             await fixture.requests()
-                == referenceRequests + [
+                == referenceRequests("missing") + [
                     request(
                         endpoint: "repos/acme/orbit/contents/README.md",
                         query: [("ref", "missing")], accept: "application/vnd.github.object+json",
@@ -453,6 +461,30 @@ import Testing
                         query: [("ref", "release")], accept: "application/vnd.github.object+json",
                         maximumOutputBytes: 6_000_000)
                 ])
+    }
+
+    @Test func cacheSeparatesResolvedBoundariesWithTheSameURL() async throws {
+        let fixture = GitHubRequestFixture(responses: [
+            response(
+                #"{"name":"Guide.md","path":"v2/Guide.md","sha":"one","size":4,"type":"file","encoding":"base64","content":"b25lCg=="}"#
+            ),
+            response(
+                #"{"name":"Guide.md","path":"Guide.md","sha":"two","size":4,"type":"file","encoding":"base64","content":"dHdvCg=="}"#
+            ),
+        ])
+        let client = GitHubRepositoryClient(
+            cacheFile: nil, sendRequest: { request in try await fixture.send(request) })
+        let first = resolvedFileRoute(revision: "release", path: ["v2", "Guide.md"])
+        let second = resolvedFileRoute(revision: "release/v2", path: ["Guide.md"])
+
+        let firstResource = try await client.load(first)
+        let secondResource = try await client.load(second)
+
+        #expect(first.url == second.url)
+        #expect(await client.cachedResource(for: first) == firstResource)
+        #expect(await client.cachedResource(for: second) == secondResource)
+        #expect(firstResource.file?.text == "one\n")
+        #expect(secondResource.file?.text == "two\n")
     }
 
     @Test func filesDecodeBase64TextAndExposeLargeFileState() async throws {
@@ -579,18 +611,20 @@ import Testing
     }
 
     private var mainReferenceResponses: [GitHubAPIResponse] {
-        [response(#"[{"name":"main"}]"#), response("[]")]
+        [response(matchingReferences(namespace: "heads", names: ["main"])), response("[]")]
     }
 
-    private var referenceRequests: [GitHubAPIRequest] {
+    private func referenceRequests(_ prefix: String = "main") -> [GitHubAPIRequest] {
         [
-            request(endpoint: "repos/acme/orbit/branches", query: [("per_page", "100")]),
-            request(endpoint: "repos/acme/orbit/tags", query: [("per_page", "100")]),
+            request(endpoint: "repos/acme/orbit/git/matching-refs/heads%2F\(prefix)"),
+            request(endpoint: "repos/acme/orbit/git/matching-refs/tags%2F\(prefix)"),
         ]
     }
 
-    private func referenceNames(_ count: Int) -> String {
-        "[" + (0..<count).map { #"{"name":"branch-\#($0)"}"# }.joined(separator: ",") + "]"
+    private func matchingReferences(namespace: String, names: [String]) -> String {
+        "["
+            + names.map { #"{"ref":"refs/\#(namespace)/\#($0)"}"# }.joined(separator: ",")
+            + "]"
     }
 
     private func fileRoute(_ path: String) -> GitHubRoute {
@@ -600,6 +634,16 @@ import Testing
                 repository: repository, kind: .blob,
                 revisionPath: ["main"] + path.split(separator: "/").map(String.init),
                 view: .automatic, lines: nil))
+    }
+
+    private func resolvedFileRoute(revision: String, path: [String]) -> GitHubRoute {
+        GitHubRoute(
+            host: .github,
+            resource: .content(
+                repository: repository, kind: .blob,
+                revisionPath: revision.split(separator: "/").map(String.init) + path,
+                view: .automatic, lines: nil),
+            resolvedContentPath: GitHubResolvedContentPath(revision: revision, path: path))
     }
 
     private func request(

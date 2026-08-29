@@ -123,6 +123,25 @@ import Testing
         #expect(defaultPort.url.absoluteString == "https://git.acme.test/acme/orbit")
     }
 
+    @Test func decodingRevalidatesAndCanonicalizesStoredHosts() throws {
+        let decoder = JSONDecoder()
+        #expect(throws: DecodingError.self) {
+            try decoder.decode(
+                GitHubHost.self,
+                from: Data(#"{"scheme":"http","name":"git.acme.test","port":null}"#.utf8))
+        }
+        #expect(throws: DecodingError.self) {
+            try decoder.decode(
+                GitHubHost.self,
+                from: Data(#"{"scheme":"https","name":"git.acme.test","port":8443}"#.utf8))
+        }
+
+        let canonical = try decoder.decode(
+            GitHubHost.self,
+            from: Data(#"{"scheme":"https","name":"git.acme.test","port":443}"#.utf8))
+        #expect(canonical.port == nil)
+    }
+
     @Test func lineFragmentsRejectInvalidRanges() {
         #expect(GitHubLineSelection(fragment: "L1") == .single(1))
         #expect(GitHubLineSelection(fragment: "L2-L5") == .range(2...5))
