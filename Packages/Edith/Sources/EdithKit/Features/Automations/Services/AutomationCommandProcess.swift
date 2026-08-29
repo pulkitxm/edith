@@ -13,37 +13,14 @@ public enum AutomationCommandProcessError: LocalizedError {
 
 public enum AutomationCommandProcess {
     public static func run(executable: URL, arguments: [String]) async throws -> String {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("edith-automation-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let outputURL = directory.appendingPathComponent("output")
-        try Data().write(to: outputURL)
-        let output = try FileHandle(forWritingTo: outputURL)
-        defer { try? output.close() }
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = arguments
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = output
-        process.standardError = output
-        let status = try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                process.terminationHandler = {
-                    continuation.resume(returning: $0.terminationStatus)
-                }
-                do {
-                    try process.run()
-                } catch {
-                    continuation.resume(throwing: error)
-                }
-            }
-        } onCancel: {
-            if process.isRunning { process.terminate() }
-        }
-        try output.synchronize()
-        let text = String(decoding: try Data(contentsOf: outputURL), as: UTF8.self)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let result = try await CLICommandRunner.run(
+            CLICommandRequest(
+                executableURL: executable, arguments: arguments,
+                environment: ProcessInfo.processInfo.environment,
+                maximumOutputBytes: 1_048_576, terminatesProcessGroup: true)
+        ) { _ in }
+        let text = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        let status = result.terminationStatus
         guard status == 0 else { throw AutomationCommandProcessError.failed(status, text) }
         return text
     }

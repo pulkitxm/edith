@@ -45,7 +45,10 @@ final class AutomationRuntime {
     static func requiredSubscriptions(
         for document: AutomationDocument, calendarEnabled: Bool
     ) -> Set<AutomationTriggerKind> {
-        var kinds = Set(document.automations.filter(\.isEnabled).map { $0.trigger.kind })
+        var kinds: Set<AutomationTriggerKind> = []
+        for automation in document.automations where automation.isEnabled {
+            kinds.insert(automation.trigger.kind)
+        }
         if !calendarEnabled { kinds.remove(.calendar) }
         return kinds
     }
@@ -408,10 +411,12 @@ final class AutomationRuntime {
                     return false
                 }
                 let timeMatches = abs(boundary.timeIntervalSince(date)) <= window
-                let titleMatches =
-                    contains.map {
-                        event.title.localizedCaseInsensitiveContains($0)
-                    } ?? true
+                let titleMatches: Bool
+                if let contains {
+                    titleMatches = event.title.localizedCaseInsensitiveContains(contains)
+                } else {
+                    titleMatches = true
+                }
                 return timeMatches && titleMatches
             }
         }

@@ -159,16 +159,7 @@ public actor AutomationExecutor {
             }
             let stepStart = clock.now
             do {
-                let output = try await withThrowingTaskGroup(of: String.self) { group in
-                    group.addTask { try await runner(step.command) }
-                    group.addTask {
-                        try await Task.sleep(for: .seconds(step.timeoutSeconds))
-                        throw AutomationExecutionError.timedOut
-                    }
-                    let value = try await group.next() ?? ""
-                    group.cancelAll()
-                    return value
-                }
+                let output = try await runStep(step, runner: runner)
                 results.append(
                     result(
                         step, state: .succeeded, output: output,
@@ -197,6 +188,21 @@ public actor AutomationExecutor {
             id: runID, sceneID: scene.id, sceneName: scene.name, automationID: automationID,
             origin: origin, startedAt: now, duration: duration(from: runStart, to: clock.now),
             steps: results)
+    }
+
+    private static func runStep(
+        _ step: AutomationPlanStep, runner: @escaping AutomationCommandRunner
+    ) async throws -> String {
+        try await withThrowingTaskGroup(of: String.self) { group in
+            group.addTask { try await runner(step.command) }
+            group.addTask {
+                try await Task.sleep(for: .seconds(step.timeoutSeconds))
+                throw AutomationExecutionError.timedOut
+            }
+            let value = try await group.next() ?? ""
+            group.cancelAll()
+            return value
+        }
     }
 
     private static func result(
