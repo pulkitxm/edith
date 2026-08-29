@@ -243,7 +243,7 @@ if [ "$INSTALL" = 1 ]; then
   stop_installed_app
   rm -rf "/Applications/Edith.app"
   cp -R "$APP" /Applications/
-  [ "$NO_OPEN" = 1 ] || open "/Applications/Edith.app"
+  [ "$NO_OPEN" = 1 ] || open -n "/Applications/Edith.app"
 else
   [ "$NO_OPEN" = 1 ] || open "$APP"
 fi

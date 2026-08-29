@@ -34,4 +34,8 @@ describe("build install lifecycle", () => {
     expect(script).toContain('stop_process "com.pulkit.edith.helper"');
     expect(script).not.toContain("killall Edith");
   });
+
+  test("launches the installed bundle as a new application instance", () => {
+    expect(script).toContain('open -n "/Applications/Edith.app"');
+  });
 });
