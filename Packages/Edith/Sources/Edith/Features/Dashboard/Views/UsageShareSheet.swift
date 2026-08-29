@@ -7,6 +7,7 @@ struct UsageShareSheet: View {
     let snapshot: UsageShareSnapshot
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
     @State private var index = 0
     @State private var direction = 1
@@ -16,7 +17,18 @@ struct UsageShareSheet: View {
 
     private var cards: [UsageShareCard] { UsageShareCard.allCases }
     private var card: UsageShareCard { cards[index] }
-    private let modalInk = Color(red: 0.075, green: 0.07, blue: 0.065)
+    private var dark: Bool { scheme == .dark }
+    private var modalBackground: Color {
+        dark
+            ? Color(red: 0.075, green: 0.07, blue: 0.065)
+            : Color(red: 0.992, green: 0.985, blue: 0.91)
+    }
+    private var modalInk: Color {
+        dark
+            ? Color(red: 0.965, green: 0.94, blue: 0.88)
+            : Color(red: 0.075, green: 0.07, blue: 0.065)
+    }
+    private var actionForeground: Color { dark ? Color.black.opacity(0.9) : Color.white }
 
     var body: some View {
         VStack(spacing: 22) {
@@ -43,10 +55,10 @@ struct UsageShareSheet: View {
 
     private var carousel: some View {
         HStack(spacing: 18) {
-            ShareCarouselArrow(systemImage: "chevron.left") { move(-1) }
+            ShareCarouselArrow(systemImage: "chevron.left", color: modalInk) { move(-1) }
             ZStack {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color.black.opacity(0.06))
+                    .fill(modalInk.opacity(0.06))
                 if let image = previews[card] {
                     Image(nsImage: image)
                         .resizable()
@@ -68,7 +80,7 @@ struct UsageShareSheet: View {
                         guard abs(gesture.translation.width) > 50 else { return }
                         move(gesture.translation.width < 0 ? 1 : -1)
                     })
-            ShareCarouselArrow(systemImage: "chevron.right") { move(1) }
+            ShareCarouselArrow(systemImage: "chevron.right", color: modalInk) { move(1) }
         }
         .frame(maxWidth: .infinity)
     }
@@ -104,7 +116,7 @@ struct UsageShareSheet: View {
                     Image(systemName: "doc.on.doc")
                 }
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(actionForeground)
                 .padding(.horizontal, 16)
                 .frame(height: 42)
                 .background(modalInk, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
@@ -114,7 +126,7 @@ struct UsageShareSheet: View {
             Button(action: downloadImage) {
                 Image(systemName: "arrow.down.to.line")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(actionForeground)
                     .frame(width: 42, height: 42)
                     .background(modalInk, in: Circle())
             }
@@ -125,7 +137,7 @@ struct UsageShareSheet: View {
     }
 
     private var sheetBackground: some View {
-        Color(red: 0.992, green: 0.985, blue: 0.91)
+        modalBackground
             .ignoresSafeArea()
     }
 
@@ -133,7 +145,7 @@ struct UsageShareSheet: View {
         if let status {
             Label(status.message, systemImage: status.systemImage)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(status.error ? Color.white : actionForeground)
                 .padding(.horizontal, 14)
                 .frame(height: 36)
                 .background(
@@ -230,6 +242,7 @@ struct UsageShareSheet: View {
 
 private struct ShareCarouselArrow: View {
     let systemImage: String
+    let color: Color
     let action: () -> Void
 
     @State private var hovering = false
@@ -238,10 +251,10 @@ private struct ShareCarouselArrow: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 20, weight: .medium))
-                .foregroundStyle(Color.black.opacity(0.88))
+                .foregroundStyle(color.opacity(0.88))
                 .frame(width: 48, height: 52)
                 .background(
-                    Color.black.opacity(hovering ? 0.065 : 0),
+                    color.opacity(hovering ? 0.065 : 0),
                     in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .buttonStyle(SharePressedButtonStyle())

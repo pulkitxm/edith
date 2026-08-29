@@ -31,6 +31,8 @@ import Testing
         #expect(source.contains(".accessibilityLabel(\"Download PNG\")"))
         #expect(source.contains(".frame(width: 600, height: 400)"))
         #expect(source.contains("ShareCarouselArrow"))
+        #expect(source.contains("@Environment(\\.colorScheme)"))
+        #expect(source.contains("private var modalBackground: Color"))
         #expect(source.contains("UsageShareDelivery.copy(data)"))
         #expect(source.contains("NSSavePanel()"))
         #expect(source.contains("DragGesture"))
