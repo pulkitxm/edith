@@ -216,9 +216,18 @@ private struct ShareCardFooter: View {
                     .font(.custom("Iowan Old Style", size: 31).weight(.bold))
             }
             Spacer()
-            Text("github.com/pulkitxm/edith")
-                .font(.system(size: 17, weight: .medium, design: .monospaced))
-                .tracking(0.3)
+            HStack(spacing: 9) {
+                if let github = ProviderLogo.image(named: "github") {
+                    Image(nsImage: github)
+                        .resizable()
+                        .renderingMode(.template)
+                        .scaledToFit()
+                        .frame(width: 21, height: 21)
+                }
+                Text("github.com/pulkitxm/edith")
+                    .font(.system(size: 17, weight: .medium, design: .monospaced))
+                    .tracking(0.3)
+            }
         }
         .foregroundStyle(ShareColors.cream)
         .padding(.top, 26)
