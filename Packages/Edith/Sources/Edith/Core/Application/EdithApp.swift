@@ -150,9 +150,15 @@ private final class LidAwakeDaemonRegistrar {
         let fingerprint = helperFingerprint()
         switch service.status {
         case .enabled, .requiresApproval:
-            guard let fingerprint else { return }
+            guard let fingerprint else {
+                publishStatus()
+                return
+            }
             guard UserDefaults.standard.string(forKey: Self.fingerprintKey) != fingerprint
-            else { return }
+            else {
+                publishStatus()
+                return
+            }
             registrationInFlight = true
             service.unregister { [weak self] error in
                 guard let self else { return }

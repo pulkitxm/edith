@@ -24,13 +24,14 @@ describe("build install lifecycle", () => {
     expect(replace).toBeGreaterThan(stop);
   });
 
-  test("targets the app and helper by exact executable path", () => {
+  test("targets the app and helper by exact runtime identities", () => {
     expect(script).toContain('pgrep -f -x "$1"');
     expect(script).toContain('pkill -TERM -f -x "$executable"');
     expect(script).toContain("/Applications/Edith.app/Contents/MacOS/Edith");
     expect(script).toContain(
       "/Applications/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith",
     );
+    expect(script).toContain('stop_process "com.pulkit.edith.helper"');
     expect(script).not.toContain("killall Edith");
   });
 });
