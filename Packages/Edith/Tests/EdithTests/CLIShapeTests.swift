@@ -230,7 +230,7 @@ enum CommandCrawler {
             "ed machines terminal",
             "ed lid-awake",
             "ed attention", "ed attention categories", "ed attention focus",
-            "ed quinjet",
+            "ed quinjet", "ed window",
         ]
         for walk in Self.commands where !exempt.contains(walk.label) {
             #expect(

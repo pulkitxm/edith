@@ -283,6 +283,10 @@ enum GlobalHotKey {
         static let colorPicker: UInt32 = 5
         static let micMute: UInt32 = 6
         static let presenterToggle: UInt32 = 7
+        static let windowLeft: UInt32 = 20
+        static let windowRight: UInt32 = 21
+        static let windowMaximize: UInt32 = 22
+        static let windowRestore: UInt32 = 23
     }
 
     fileprivate static var refs: [UInt32: EventHotKeyRef] = [:]

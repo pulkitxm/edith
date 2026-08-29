@@ -15,7 +15,7 @@ import Testing
             ExtensionRegistry.entries.map(\.id) == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
                 "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
-                "clipboard", "focusDim", "presenter", "colorPicker",
+                "clipboard", "focusDim", "presenter", "colorPicker", "windowTools",
             ])
     }
 
@@ -29,5 +29,6 @@ import Testing
         #expect(requiredByExtension["music"]?.isEmpty == true)
         #expect(optionalByExtension["music"] == ["yt-dlp"])
         #expect(requiredByExtension["quinjet"] == ["quinjet"])
+        #expect(requiredByExtension["windowTools"]?.isEmpty == true)
     }
 }
