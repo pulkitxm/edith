@@ -39,7 +39,7 @@ import Testing
         #expect(source.contains("ShareCarouselArrow"))
         #expect(source.contains("let onDismiss: () -> Void"))
         #expect(source.contains(".onExitCommand { onDismiss() }"))
-        #expect(source.contains(".keyboardShortcut(.escape, modifiers: [])"))
+        #expect(source.contains(".keyboardShortcut(.cancelAction)"))
         #expect(source.contains("@Environment(\\.colorScheme)"))
         #expect(source.contains("private var modalBackground: Color"))
         let sheetBackground =
