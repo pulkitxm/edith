@@ -126,6 +126,25 @@ import Testing
         #expect(!third.railOpen)
     }
 
+    @Test func paneWidthsAreClampedAndSurviveARestart() {
+        let suite = defaults()
+        let first = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(first.railWidth == HerdrPaneSizing.railDefault)
+        #expect(first.detailWidth == HerdrPaneSizing.detailDefault)
+
+        first.railWidth = 340
+        first.detailWidth = 410
+        let second = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(second.railWidth == 340)
+        #expect(second.detailWidth == 410)
+
+        suite.set(10, forKey: AppStorageKeys.Herdr.railWidth)
+        suite.set(900, forKey: AppStorageKeys.Herdr.detailWidth)
+        let third = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(third.railWidth == HerdrPaneSizing.railMinimum)
+        #expect(third.detailWidth == HerdrPaneSizing.detailMaximum)
+    }
+
     @Test func eachRailSectionCollapsesAndSurvivesARestart() {
         let suite = defaults()
         let first = HerdrStore(defaults: suite, liveWatcher: { _ in })

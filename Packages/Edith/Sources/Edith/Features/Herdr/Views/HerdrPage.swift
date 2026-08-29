@@ -15,6 +15,8 @@ struct HerdrPage: View {
     @State private var dragTranslation: CGFloat = 0
     @State private var tabFrames: [String: CGRect] = [:]
     @State private var hoveredCard: String?
+    @State private var railDragBaseWidth: Double?
+    @State private var liveRailWidth: Double?
 
     @MainActor init(store: HerdrStore? = nil) {
         _store = State(initialValue: store ?? .shared)
@@ -30,27 +32,34 @@ struct HerdrPage: View {
         VStack(spacing: 0) {
             header
             tabBar
-            HStack(spacing: 0) {
-                if store.railOpen {
-                    agentList
-                    Divider().opacity(0.35)
-                }
-                ZStack(alignment: .topLeading) {
-                    board.opacity(onBoard ? 1 : 0)
-                        .allowsHitTesting(onBoard)
-                    ForEach(store.tabs) { tab in
-                        HerdrSessionView(
-                            store: store, tab: tab, launchEnabled: launchEnabled,
-                            hideAgents: hideAgents,
-                            presented: tab.id == store.selectedTab
-                        )
-                        .opacity(tab.id == store.selectedTab ? 1 : 0)
-                        .allowsHitTesting(tab.id == store.selectedTab)
+            GeometryReader { proxy in
+                HStack(spacing: 0) {
+                    if store.railOpen {
+                        agentList
+                            .frame(width: railDisplayWidth)
+                        HerdrHorizontalResizeHandle(
+                            label: "Resize the agent list",
+                            onChanged: resizeRail,
+                            onEnded: finishRailResize,
+                            onReset: resetRailWidth)
                     }
+                    ZStack(alignment: .topLeading) {
+                        board.opacity(onBoard ? 1 : 0)
+                            .allowsHitTesting(onBoard)
+                        ForEach(store.tabs) { tab in
+                            HerdrSessionView(
+                                store: store, tab: tab, launchEnabled: launchEnabled,
+                                hideAgents: hideAgents,
+                                presented: tab.id == store.selectedTab
+                            )
+                            .opacity(tab.id == store.selectedTab ? 1 : 0)
+                            .allowsHitTesting(tab.id == store.selectedTab)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
         .background(tabShortcuts)
@@ -67,6 +76,29 @@ struct HerdrPage: View {
                 store.stopWatching()
             }
         }
+    }
+
+    private var railDisplayWidth: Double {
+        UIScale.pt(HerdrPaneSizing.rail(liveRailWidth ?? store.railWidth))
+    }
+
+    private func resizeRail(_ translation: CGFloat) {
+        let base = railDragBaseWidth ?? railDisplayWidth
+        railDragBaseWidth = base
+        liveRailWidth = HerdrPaneSizing.rail(
+            (base + translation) / UIScale.current)
+    }
+
+    private func finishRailResize() {
+        if let liveRailWidth { store.railWidth = liveRailWidth }
+        liveRailWidth = nil
+        railDragBaseWidth = nil
+    }
+
+    private func resetRailWidth() {
+        liveRailWidth = nil
+        railDragBaseWidth = nil
+        store.railWidth = HerdrPaneSizing.railDefault
     }
 
     private var header: some View {
@@ -604,7 +636,6 @@ struct HerdrPage: View {
                 .padding(.vertical, UIScale.pt(6))
             }
         }
-        .frame(width: UIScale.pt(compact ? 200 : 252))
         .frame(maxHeight: .infinity)
         .background(DashSkin.paper(dark))
     }

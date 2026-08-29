@@ -3,7 +3,7 @@ import GhosttyTerminal
 import SwiftTerm
 import SwiftUI
 
-private struct SplitResizeCursor: NSViewRepresentable {
+private struct HerdrResizeCursor: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView { CursorView() }
 
     func updateNSView(_ nsView: NSView, context: Context) {}
@@ -35,6 +35,47 @@ private struct SplitResizeCursor: NSViewRepresentable {
     }
 }
 
+struct HerdrHorizontalResizeHandle: View {
+    let label: String
+    let onChanged: (CGFloat) -> Void
+    let onEnded: () -> Void
+    let onReset: () -> Void
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovered = false
+    @State private var dragging = false
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        let active = hovered || dragging
+        ZStack {
+            Rectangle()
+                .fill(active ? DashSkin.accent(dark) : DashSkin.lineStrong(dark).opacity(0.35))
+                .frame(width: active ? UIScale.pt(3) : 1)
+        }
+        .frame(width: UIScale.pt(9))
+        .frame(maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .background(HerdrResizeCursor())
+        .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: active)
+        .gesture(
+            DragGesture(coordinateSpace: .global)
+                .onChanged { value in
+                    dragging = true
+                    onChanged(value.translation.width)
+                }
+                .onEnded { _ in
+                    dragging = false
+                    onEnded()
+                }
+        )
+        .onTapGesture(count: 2) { onReset() }
+        .onHover { hovered = $0 }
+        .accessibilityLabel(label)
+    }
+}
+
 struct HerdrSessionView: View {
     var store: HerdrStore
     let tab: HerdrOpenTab
@@ -42,7 +83,6 @@ struct HerdrSessionView: View {
     var hideAgents = false
     var presented = true
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(AppStorageKeys.Quinjet.theme, store: SharedDefaults.store)
     private var quinjetThemeName = QuinjetThemePreference.app
@@ -54,6 +94,8 @@ struct HerdrSessionView: View {
     @State private var handleHovered = false
     @State private var transferringDrop = false
     @State private var dropError: String?
+    @State private var detailDragBaseWidth: Double?
+    @State private var liveDetailWidth: Double?
 
     private var dark: Bool { scheme == .dark }
     private var agent: HerdrAgent { tab.agent }
@@ -64,13 +106,40 @@ struct HerdrSessionView: View {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             if store.detailOpen {
-                Divider().opacity(0.35)
+                HerdrHorizontalResizeHandle(
+                    label: "Resize the agent details",
+                    onChanged: resizeDetail,
+                    onEnded: finishDetailResize,
+                    onReset: resetDetailWidth)
                 sidebar
-                    .frame(width: UIScale.pt(compact ? 220 : 260))
+                    .frame(width: detailDisplayWidth)
             }
         }
         .task(id: tab.id) { await startIfNeeded() }
         .task(id: diffRequest) { await prepareDiffIfNeeded() }
+    }
+
+    private var detailDisplayWidth: Double {
+        UIScale.pt(HerdrPaneSizing.detail(liveDetailWidth ?? store.detailWidth))
+    }
+
+    private func resizeDetail(_ translation: CGFloat) {
+        let base = detailDragBaseWidth ?? detailDisplayWidth
+        detailDragBaseWidth = base
+        liveDetailWidth = HerdrPaneSizing.detail(
+            (base - translation) / UIScale.current)
+    }
+
+    private func finishDetailResize() {
+        if let liveDetailWidth { store.detailWidth = liveDetailWidth }
+        liveDetailWidth = nil
+        detailDragBaseWidth = nil
+    }
+
+    private func resetDetailWidth() {
+        liveDetailWidth = nil
+        detailDragBaseWidth = nil
+        store.detailWidth = HerdrPaneSizing.detailDefault
     }
 
     @ViewBuilder
@@ -144,7 +213,7 @@ struct HerdrSessionView: View {
         .frame(width: handleWidth)
         .frame(maxHeight: .infinity)
         .contentShape(Rectangle())
-        .background(SplitResizeCursor())
+        .background(HerdrResizeCursor())
         .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: active)
         .gesture(
             DragGesture(minimumDistance: 0)

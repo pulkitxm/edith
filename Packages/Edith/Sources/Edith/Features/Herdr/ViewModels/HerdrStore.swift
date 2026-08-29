@@ -26,6 +26,23 @@ struct HerdrAgentSpace: Identifiable, Equatable {
     }
 }
 
+enum HerdrPaneSizing {
+    static let railDefault = 252.0
+    static let railMinimum = 180.0
+    static let railMaximum = 420.0
+    static let detailDefault = 260.0
+    static let detailMinimum = 220.0
+    static let detailMaximum = 520.0
+
+    static func rail(_ width: Double) -> Double {
+        min(railMaximum, max(railMinimum, width))
+    }
+
+    static func detail(_ width: Double) -> Double {
+        min(detailMaximum, max(detailMinimum, width))
+    }
+}
+
 @MainActor
 @Observable
 final class HerdrStore {
@@ -46,6 +63,18 @@ final class HerdrStore {
         }
     }
     var railOpen = true
+    var railWidth = HerdrPaneSizing.railDefault {
+        didSet {
+            guard railWidth != oldValue else { return }
+            defaults.set(railWidth, forKey: AppStorageKeys.Herdr.railWidth)
+        }
+    }
+    var detailWidth = HerdrPaneSizing.detailDefault {
+        didSet {
+            guard detailWidth != oldValue else { return }
+            defaults.set(detailWidth, forKey: AppStorageKeys.Herdr.detailWidth)
+        }
+    }
     var agentsCollapsed = false {
         didSet {
             guard agentsCollapsed != oldValue else { return }
@@ -89,7 +118,13 @@ final class HerdrStore {
         self.defaults = defaults
         self.liveWatcher = liveWatcher
         railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
+        railWidth = HerdrPaneSizing.rail(
+            defaults.object(forKey: AppStorageKeys.Herdr.railWidth) as? Double
+                ?? HerdrPaneSizing.railDefault)
         detailOpen = defaults.object(forKey: AppStorageKeys.Herdr.detailOpen) as? Bool ?? true
+        detailWidth = HerdrPaneSizing.detail(
+            defaults.object(forKey: AppStorageKeys.Herdr.detailWidth) as? Double
+                ?? HerdrPaneSizing.detailDefault)
         agentsCollapsed =
             defaults.object(forKey: AppStorageKeys.Herdr.agentsCollapsed) as? Bool ?? false
         terminalsCollapsed =
