@@ -173,7 +173,14 @@ if [ "$RELEASE" = 1 ]; then
   find "$APP" -type f -perm -u+x -print0 \
     | while IFS= read -r -d '' binary; do
         case "$(file -b "$binary")" in
-          *Mach-O*) strip -rSTx "$binary" 2>/dev/null || true ;;
+          *"universal binary"*)
+            lipo "$binary" -thin arm64 -output "$binary.arm64"
+            mv "$binary.arm64" "$binary"
+            strip -rSTx "$binary" 2>/dev/null || true
+            ;;
+          *Mach-O*)
+            strip -rSTx "$binary" 2>/dev/null || true
+            ;;
         esac
       done
 fi

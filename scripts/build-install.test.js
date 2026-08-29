@@ -15,6 +15,11 @@ describe("build install lifecycle", () => {
     expect(script).not.toContain('sign_tool "$APP/Contents/MacOS/ed"');
   });
 
+  test("removes unused executable architectures from release bundles", () => {
+    expect(script).toContain('lipo "$binary" -thin arm64');
+    expect(script).toContain('mv "$binary.arm64" "$binary"');
+  });
+
   test("requests a normal application quit before replacing the bundle", () => {
     const stop = script.indexOf("stop_installed_app");
     const replace = script.indexOf('rm -rf "/Applications/Edith.app"');
