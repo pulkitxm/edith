@@ -25,7 +25,10 @@ final class CaptureToolsStore: FeatureModule {
     @ObservationIgnored private var library: CaptureLibraryController?
     @ObservationIgnored private var editors: [CaptureEditorController] = []
     @ObservationIgnored private var pins: [CapturePinController] = []
+    @ObservationIgnored private let recorder = ScreenRecordingCoordinator()
     @ObservationIgnored private var generation = 0
+
+    var recordingStatus: ScreenRecordingStatus { recorder.status }
 
     init() {
         session = CaptureScreenshotSession()
@@ -54,6 +57,14 @@ final class CaptureToolsStore: FeatureModule {
             IPC.observe(IPC.Name.requestCaptureWindow) { [weak self] in self?.start(.window) },
             IPC.observe(IPC.Name.requestCaptureScreen) { [weak self] in self?.start(.screen) },
             IPC.observe(IPC.Name.requestCaptureLibrary) { [weak self] in self?.showLibrary() },
+            IPC.observe(IPC.Name.requestRecordingArea) { [weak self] in self?.recorder.start(.area) },
+            IPC.observe(IPC.Name.requestRecordingWindow) { [weak self] in self?.recorder.start(.window) },
+            IPC.observe(IPC.Name.requestRecordingDisplay) { [weak self] in self?.recorder.start(.display) },
+            IPC.observe(IPC.Name.requestRecordingPause) { [weak self] in self?.recorder.pause() },
+            IPC.observe(IPC.Name.requestRecordingResume) { [weak self] in self?.recorder.resume() },
+            IPC.observe(IPC.Name.requestRecordingStop) { [weak self] in self?.recorder.stop() },
+            IPC.observe(IPC.Name.requestRecordingCancel) { [weak self] in self?.recorder.cancel() },
+            IPC.observe(IPC.Name.requestRecordingLibrary) { [weak self] in self?.recorder.showLibrary() },
         ]
     }
 
@@ -66,6 +77,16 @@ final class CaptureToolsStore: FeatureModule {
             id: GlobalHotKey.ID.captureScreenshot, keyCode: CaptureToolsHotKeys.screenshotCode,
             modifiers: CaptureToolsHotKeys.screenshotMods
         ) { [weak self] in self?.start(.area) }
+        GlobalHotKey.set(
+            id: GlobalHotKey.ID.captureRecording, keyCode: CaptureToolsHotKeys.recordingCode,
+            modifiers: CaptureToolsHotKeys.recordingMods
+        ) { [weak self] in
+            if self?.recorder.status.state == .recording || self?.recorder.status.state == .paused {
+                self?.recorder.stop()
+            } else {
+                self?.recorder.start(.area)
+            }
+        }
     }
 
     func start(_ operation: CaptureToolOperation) {
@@ -101,6 +122,16 @@ final class CaptureToolsStore: FeatureModule {
         errorMessage = nil
     }
 
+    func startRecording(_ source: ScreenRecordingSource) { recorder.start(source) }
+
+    func stopRecording() { recorder.stop() }
+
+    func cancelRecording() { recorder.cancel() }
+
+    func pauseOrResumeRecording() { recorder.pauseOrResume() }
+
+    func showRecordingLibrary() { recorder.showLibrary() }
+
     func shutdown() {
         generation &+= 1
         task?.cancel()
@@ -114,8 +145,10 @@ final class CaptureToolsStore: FeatureModule {
         editors = []
         pins.forEach { $0.close() }
         pins = []
+        recorder.shutdown()
         GlobalHotKey.clear(id: GlobalHotKey.ID.captureRead)
         GlobalHotKey.clear(id: GlobalHotKey.ID.captureScreenshot)
+        GlobalHotKey.clear(id: GlobalHotKey.ID.captureRecording)
         observers.forEach(IPC.stopObserving)
         observers = []
         inProgress = false
@@ -292,5 +325,17 @@ enum CaptureToolsHotKeys {
     static var screenshotLabel: String {
         SharedDefaults.store.string(forKey: AppStorageKeys.Capture.screenshotHotKeyLabel)
             ?? "⌃⌥⌘S"
+    }
+    static var recordingCode: Int {
+        SharedDefaults.store.object(forKey: AppStorageKeys.Capture.recordingHotKeyCode) as? Int
+            ?? kVK_ANSI_V
+    }
+    static var recordingMods: Int {
+        SharedDefaults.store.object(forKey: AppStorageKeys.Capture.recordingHotKeyMods) as? Int
+            ?? (controlKey | optionKey | cmdKey)
+    }
+    static var recordingLabel: String {
+        SharedDefaults.store.string(forKey: AppStorageKeys.Capture.recordingHotKeyLabel)
+            ?? "⌃⌥⌘V"
     }
 }

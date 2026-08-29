@@ -107,6 +107,18 @@ public struct ScreenRecordingClick: Codable, Equatable, Sendable {
     }
 }
 
+public struct ScreenRecordingPointerTrack: Codable, Equatable, Sendable {
+    public var points: [ScreenRecordingPoint]
+    public var clicks: [ScreenRecordingClick]
+
+    public init(
+        points: [ScreenRecordingPoint] = [], clicks: [ScreenRecordingClick] = []
+    ) {
+        self.points = points
+        self.clicks = clicks
+    }
+}
+
 public struct ScreenRecordingZoom: Codable, Equatable, Sendable {
     public var start: Double
     public var end: Double
@@ -149,7 +161,7 @@ public struct ScreenRecordingTextOverlay: Codable, Equatable, Identifiable, Send
     }
 }
 
-public struct ScreenRecordingExportPreset: Codable, Equatable, Identifiable, Sendable {
+public struct ScreenRecordingExportPreset: Codable, Equatable, Hashable, Identifiable, Sendable {
     public var id: UUID
     public var name: String
     public var format: ScreenRecordingFormat
@@ -174,6 +186,22 @@ public struct ScreenRecordingExportPreset: Codable, Equatable, Identifiable, Sen
         name: "Compact", width: 1280, frameRate: 24, quality: 0.68)
     public static let gif = ScreenRecordingExportPreset(
         name: "GIF", format: .gif, width: 960, frameRate: 12, quality: 0.7)
+}
+
+public enum ScreenRecordingPresetStore {
+    public static func load(defaults: UserDefaults = SharedDefaults.store) -> [ScreenRecordingExportPreset] {
+        guard let data = defaults.data(forKey: AppStorageKeys.Capture.recordingPresets),
+            let presets = try? JSONDecoder().decode([ScreenRecordingExportPreset].self, from: data)
+        else { return [.balanced, .compact, .gif] }
+        return presets.isEmpty ? [.balanced, .compact, .gif] : presets
+    }
+
+    public static func save(
+        _ presets: [ScreenRecordingExportPreset], defaults: UserDefaults = SharedDefaults.store
+    ) {
+        guard let data = try? JSONEncoder().encode(presets) else { return }
+        defaults.set(data, forKey: AppStorageKeys.Capture.recordingPresets)
+    }
 }
 
 public struct ScreenRecordingEditDocument: Codable, Equatable, Sendable {

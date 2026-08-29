@@ -45,6 +45,24 @@ public enum IPC {
             "com.pulkit.edith.requestCaptureScreen")
         public static let requestCaptureLibrary = Notification.Name(
             "com.pulkit.edith.requestCaptureLibrary")
+        public static let requestRecordingArea = Notification.Name(
+            "com.pulkit.edith.requestRecordingArea")
+        public static let requestRecordingWindow = Notification.Name(
+            "com.pulkit.edith.requestRecordingWindow")
+        public static let requestRecordingDisplay = Notification.Name(
+            "com.pulkit.edith.requestRecordingDisplay")
+        public static let requestRecordingPause = Notification.Name(
+            "com.pulkit.edith.requestRecordingPause")
+        public static let requestRecordingResume = Notification.Name(
+            "com.pulkit.edith.requestRecordingResume")
+        public static let requestRecordingStop = Notification.Name(
+            "com.pulkit.edith.requestRecordingStop")
+        public static let requestRecordingCancel = Notification.Name(
+            "com.pulkit.edith.requestRecordingCancel")
+        public static let requestRecordingLibrary = Notification.Name(
+            "com.pulkit.edith.requestRecordingLibrary")
+        public static let recordingStatusChanged = Notification.Name(
+            "com.pulkit.edith.recordingStatusChanged")
         public static let shelfChanged = Notification.Name("com.pulkit.edith.shelfChanged")
         public static let shelfOperation = Notification.Name("com.pulkit.edith.shelfOperation")
         public static let shelfOperationResult = Notification.Name(

@@ -153,11 +153,11 @@ public final class ScreenRecordingSession: NSObject, @unchecked Sendable {
         if let stream = resources.0 { try? await stream.stopCapture() }
         streamQueue.sync {}
         writerQueue.sync {}
-        let points = pointer?.stop() ?? []
+        let pointerTrack = pointer?.stop() ?? ScreenRecordingPointerTrack()
         pointer = nil
         let duration = elapsedSeconds
         let written = await resources.1?.finish(at: duration) == true
-        if !points.isEmpty, let data = try? JSONEncoder().encode(points) {
+        if !pointerTrack.points.isEmpty, let data = try? JSONEncoder().encode(pointerTrack) {
             try? data.write(
                 to: ScreenRecordingLibrary.pointerURL(for: take.id, in: directory),
                 options: .atomic)
@@ -499,6 +499,7 @@ private final class ScreenRecordingPointerSampler: @unchecked Sendable {
     private var timer: DispatchSourceTimer?
     private var clickMonitor: Any?
     private var points: [ScreenRecordingPoint] = []
+    private var clicks: [ScreenRecordingClick] = []
 
     init(
         region: ScreenRecordingRegion, startedAt: Double,
@@ -522,12 +523,12 @@ private final class ScreenRecordingPointerSampler: @unchecked Sendable {
         }
     }
 
-    func stop() -> [ScreenRecordingPoint] {
+    func stop() -> ScreenRecordingPointerTrack {
         timer?.cancel()
         timer = nil
         if let clickMonitor { DispatchQueue.main.async { NSEvent.removeMonitor(clickMonitor) } }
         clickMonitor = nil
-        return queue.sync { points }
+        return queue.sync { ScreenRecordingPointerTrack(points: points, clicks: clicks) }
     }
 
     private func sample(click: Bool) {
@@ -539,6 +540,6 @@ private final class ScreenRecordingPointerSampler: @unchecked Sendable {
         let y = min(max((mouse.y - rect.minY) / rect.height, 0), 1)
         let time = pauseClock.elapsed(since: startedAt, at: CACurrentMediaTime())
         points.append(ScreenRecordingPoint(time: time, x: x, y: y))
-        if click { points.append(ScreenRecordingPoint(time: -time, x: x, y: y)) }
+        if click { clicks.append(ScreenRecordingClick(time: time, x: x, y: y)) }
     }
 }
