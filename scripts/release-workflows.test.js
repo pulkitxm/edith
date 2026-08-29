@@ -129,9 +129,7 @@ test("release builds and publishes the macOS assets", () => {
   expect(buildScript).toContain(
     '[ "$RELEASE" = 1 ] && XCODE_BUILD_SETTING=SWIFT_OPTIMIZATION_LEVEL=-Osize',
   );
-  expect(makefile).toContain(
-    "Release SWIFT_OPTIMIZATION_LEVEL must be -Osize",
-  );
+  expect(makefile).toContain("Release SWIFT_OPTIMIZATION_LEVEL must be -Osize");
   expect(releaseWorkflow).toContain("release-assets/Edith.dmg");
   expect(releaseWorkflow).toContain("release-assets/appcast.xml");
   expect(releaseWorkflow).toContain("gh release create");
