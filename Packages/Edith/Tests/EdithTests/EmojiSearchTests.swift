@@ -86,6 +86,30 @@ private let corpus = [
         }
         #expect(started.duration(to: clock.now) < .seconds(1))
     }
+
+    @Test func incrementalSearchMatchesIndependentIndexedSearches() async {
+        let catalog = EmojiCatalog.shared
+        let service = EmojiSearchService(catalog.emoji)
+        let index = EmojiSearchIndex(catalog.emoji)
+        for query in ["f", "fa", "fac", "face", "face w", "face wi"] {
+            let expected = index.results(query: query)
+            let actual = await service.results(query: query)
+            #expect(actual == expected)
+        }
+    }
+
+    @Test func repeatedAndIncrementalSearchStaysWithinAnInteractiveBudget() async {
+        let service = EmojiSearchService(EmojiCatalog.shared.emoji)
+        _ = await service.results(query: "f")
+        let clock = ContinuousClock()
+        let started = clock.now
+        for _ in 0..<10 {
+            for query in ["f", "fa", "fac", "face"] {
+                _ = await service.results(query: query)
+            }
+        }
+        #expect(started.duration(to: clock.now) < .milliseconds(300))
+    }
 }
 
 @Suite struct EmojiOperationResolveTests {

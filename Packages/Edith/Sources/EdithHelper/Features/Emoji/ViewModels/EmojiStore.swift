@@ -9,6 +9,7 @@ final class EmojiStore: FeatureModule {
     private(set) var frequent: [Emoji] = []
     private(set) var frequentIDs: Set<String> = []
     private(set) var revision = 0
+    let search: @Sendable (String) async -> [Emoji]
 
     var skinTone: EmojiSkinTone {
         didSet {
@@ -35,6 +36,8 @@ final class EmojiStore: FeatureModule {
         typeCharacter: @escaping @MainActor (String) -> Bool
     ) {
         self.catalog = catalog
+        let searchService = EmojiSearchService(catalog.emoji)
+        search = { await searchService.results(query: $0) }
         self.insertionDelay = insertionDelay
         self.typeCharacter = typeCharacter
         ledger = EmojiUsageLedger.load(from: SharedDefaults.store, key: AppStorageKeys.Emoji.usage)
