@@ -112,6 +112,11 @@ enum JSONContract {
         JSONCase("ed presenter status", ["presenter", "status", "--json"]),
         JSONCase("ed dock status", ["dock", "status", "--json"]),
         JSONCase(
+            "ed dock windows", ["dock", "windows", "com.example.missing", "--json"]),
+        JSONCase(
+            "ed dock show", ["dock", "show", "com.example.missing", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
             "ed presenter start", ["presenter", "start", "--json"],
             mutatesTheMachine: true),
         JSONCase(

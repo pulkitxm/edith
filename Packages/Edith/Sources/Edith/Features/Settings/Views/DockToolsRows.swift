@@ -102,7 +102,7 @@ struct DockToolsRows: View {
                         } label: {
                             Image(systemName: "minus.circle.fill")
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.edith(.iconOnly))
                         .foregroundStyle(.secondary)
                         .accessibilityLabel("Remove \(appName(identifier)) from exclusions")
                     }

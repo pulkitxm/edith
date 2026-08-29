@@ -769,14 +769,14 @@ private struct DockToolsPreviewView: View {
                 } label: {
                     Image(systemName: "chevron.left")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.toolbar))
                 .accessibilityLabel("Previous window")
                 Button {
                     move(1)
                 } label: {
                     Image(systemName: "chevron.right")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.toolbar))
                 .accessibilityLabel("Next window")
             }
             .padding(.horizontal, 14)
@@ -793,7 +793,7 @@ private struct DockToolsPreviewView: View {
                                 icon: store.application?.icon,
                                 selected: store.selectedID == window.value.id)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.edith(.borderless))
                         .accessibilityLabel("Open \(window.value.displayTitle)")
                     }
                 }
