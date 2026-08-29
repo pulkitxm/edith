@@ -7,6 +7,8 @@ import Observation
 @MainActor
 @Observable
 final class CommandBarModel {
+    private static let maximumProviderCount = 6
+
     var query = "" {
         didSet {
             selectedIndex = 0
@@ -155,7 +157,8 @@ final class CommandBarModel {
         let next = CommandBarPreferences.togglingHidden(item.id, in: hidden)
         guard
             persist(
-                CommandBarPreferences.encodeList(next.sorted()),
+                CommandBarPreferences.encodeList(
+                    Array(next).prefix(CommandBarPreferences.maximumHiddenResults).sorted()),
                 forKey: AppStorageKeys.CommandBar.hiddenResults)
         else { return }
         refresh()
@@ -246,26 +249,16 @@ final class CommandBarModel {
         let pins = pins
         let hidden = hidden
         let shortcuts = shortcuts
-        searchingFiles =
-            !fileScopes.isEmpty
-            && CommandBarFileSearchSupport.expression(for: query) != nil
-        var immediate = actions.filter { !hidden.contains($0.id) }
-        for index in immediate.indices {
-            immediate[index].pinned = pins.contains(immediate[index].id)
-            immediate[index].shortcutLabel = shortcuts[immediate[index].id]?.label
-        }
-        let immediateByID = Dictionary(
-            immediate.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        var immediateRanked = CommandBarSearch.rank(
-            immediate.map(\.candidate), query: query, usage: usage, limit: 16
-        ).compactMap { immediateByID[$0.id] }
-        if let answer { immediateRanked.insert(answer, at: 0) }
-        items = immediateRanked
+        let fileExpression = Self.fileExpression(query)
+        searchingFiles = !fileScopes.isEmpty && fileExpression != nil
+        items = Self.rank(
+            actions: actions, provided: [], answer: answer, query: query, usage: usage,
+            pins: pins, hidden: hidden, shortcuts: shortcuts, limit: 16)
         selectedIndex = 0
         searchWork = Task { [weak self] in
             var provided: [CommandBarItem] = []
             await withTaskGroup(of: [CommandBarItem].self) { group in
-                for provider in providers {
+                for provider in providers.prefix(Self.maximumProviderCount) {
                     group.addTask { await provider.results(for: context) }
                 }
                 for await result in group where !Task.isCancelled {
@@ -273,30 +266,12 @@ final class CommandBarModel {
                 }
             }
             guard !Task.isCancelled else { return }
-            var all = actions + provided
-            if let answer { all.append(answer) }
-            all = all.filter { !hidden.contains($0.id) }
-            for index in all.indices {
-                all[index].pinned = pins.contains(all[index].id)
-                all[index].shortcutLabel = shortcuts[all[index].id]?.label
-            }
-            let byID = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-            let candidates = all.map(\.candidate)
-            let rankedIDs = await Task.detached(priority: .userInitiated) {
-                CommandBarSearch.rank(candidates, query: query, usage: usage, limit: 20).map(\.id)
+            let ranked = await Task.detached(priority: .userInitiated) {
+                Self.rank(
+                    actions: actions, provided: provided, answer: answer, query: query,
+                    usage: usage, pins: pins, hidden: hidden, shortcuts: shortcuts, limit: 16)
             }.value
             guard let self, generation == self.searchGeneration, !Task.isCancelled else { return }
-            var ranked = rankedIDs.compactMap { byID[$0] }
-            if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                let leading = pins.compactMap { byID[$0] }
-                let leadingIDs = Set(leading.map(\.id))
-                ranked = leading + ranked.filter { !leadingIDs.contains($0.id) }
-            }
-            if let answer {
-                ranked.removeAll { $0.id == answer.id }
-                ranked.insert(answer, at: 0)
-            }
-            if ranked.count > 16 { ranked.removeSubrange(16...) }
             self.items = ranked
             self.selectedIndex = min(self.selectedIndex, max(0, ranked.count - 1))
             self.searchingFiles = false
@@ -546,6 +521,40 @@ final class CommandBarModel {
 
     private func enabled(_ key: String) -> Bool {
         SharedDefaults.store.bool(forKey: key)
+    }
+
+    nonisolated private static func rank(
+        actions: [CommandBarItem], provided: [CommandBarItem], answer: CommandBarItem?,
+        query: String, usage: CommandBarUsage, pins: [String], hidden: Set<String>,
+        shortcuts: [String: CommandBarResultShortcut], limit: Int
+    ) -> [CommandBarItem] {
+        var all = actions + provided
+        if let answer { all.append(answer) }
+        all = all.filter { !hidden.contains($0.id) }
+        for index in all.indices {
+            all[index].pinned = pins.contains(all[index].id)
+            all[index].shortcutLabel = shortcuts[all[index].id]?.label
+        }
+        let byID = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let candidates = all.map(\.candidate)
+        let rankedIDs = CommandBarSearch.rank(
+            candidates, query: query, usage: usage, limit: max(limit, 20)
+        ).map(\.id)
+        var ranked = rankedIDs.compactMap { byID[$0] }
+        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let leading = pins.compactMap { byID[$0] }
+            let leadingIDs = Set(leading.map(\.id))
+            ranked = leading + ranked.filter { !leadingIDs.contains($0.id) }
+        }
+        if let answer {
+            ranked.removeAll { $0.id == answer.id }
+            ranked.insert(answer, at: 0)
+        }
+        return Array(ranked.prefix(limit))
+    }
+
+    nonisolated private static func fileExpression(_ query: String) -> String? {
+        CommandBarFileSearchSupport.expression(for: query)
     }
 
     private var showsApplications: Bool {

@@ -29,7 +29,7 @@ enum CommandBarResultHotKeys {
         clear()
         let shortcuts = CommandBarPreferences.decodeShortcuts(
             SharedDefaults.store.string(forKey: AppStorageKeys.CommandBar.resultShortcuts))
-        for (index, entry) in shortcuts.sorted(by: { $0.key < $1.key }).enumerated() {
+        for (index, entry) in shortcuts.prefix(9).sorted(by: { $0.key < $1.key }).enumerated() {
             let id = baseID + UInt32(index)
             let resultID = entry.key
             let shortcut = entry.value

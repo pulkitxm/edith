@@ -13,6 +13,7 @@ public struct CommandBarResultShortcut: Codable, Equatable, Sendable {
 }
 
 public enum CommandBarPreferences {
+    public static let maximumHiddenResults = 200
     public static let maximumPins = 30
     public static let maximumShortcuts = 9
 
