@@ -104,7 +104,7 @@ let targets: [Target] = [
     ),
     .executableTarget(
         name: "EdithMain",
-        dependencies: ["Edith"],
+        dependencies: ["Edith", "EdithCLI"],
         swiftSettings: [.swiftLanguageMode(.v5)],
         linkerSettings: [
             .unsafeFlags([

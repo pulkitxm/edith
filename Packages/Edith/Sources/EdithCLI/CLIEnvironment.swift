@@ -144,14 +144,23 @@ public enum CLIEnvironment {
         }
 
     private static func detectedInstalledAppURL() -> URL? {
-        let bundled = Bundle.main.bundleURL
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        if bundled.pathExtension == "app",
-            FileManager.default.fileExists(atPath: bundled.path)
-        {
-            return bundled
+        let starts = [
+            Bundle.main.bundleURL,
+            Bundle.main.executableURL,
+            CommandLine.arguments.first.map { URL(fileURLWithPath: $0) },
+        ].compactMap { $0 }
+        for start in starts {
+            var candidate: URL? = start.resolvingSymlinksInPath()
+            for _ in 0..<6 {
+                guard let current = candidate else { break }
+                if current.pathExtension == "app",
+                    FileManager.default.fileExists(atPath: current.path)
+                {
+                    return current
+                }
+                candidate =
+                    current.pathComponents.count > 1 ? current.deletingLastPathComponent() : nil
+            }
         }
         let standard = URL(fileURLWithPath: "/Applications/Edith.app")
         return FileManager.default.fileExists(atPath: standard.path) ? standard : nil

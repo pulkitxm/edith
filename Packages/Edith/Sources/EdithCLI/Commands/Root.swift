@@ -2,7 +2,9 @@ import ArgumentParser
 import EdithKit
 import Foundation
 
-public let edithCLIVersion = EdithCLIVersion.resolve(Bundle.main.infoDictionary)
+public let edithCLIVersion = EdithCLIVersion.resolve(
+    CLIEnvironment.installedAppURL().flatMap { Bundle(url: $0)?.infoDictionary }
+        ?? Bundle.main.infoDictionary)
 
 enum EdithCLIVersion {
     static func resolve(_ infoDictionary: [String: Any]?) -> String {

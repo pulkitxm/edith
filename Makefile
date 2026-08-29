@@ -123,19 +123,19 @@ verify-bundle: verify-release-build-settings
 	test ! -L dist/Edith.app/Contents/MacOS/Edith
 	test -x dist/Edith.app/Contents/MacOS/Edith
 	file -b dist/Edith.app/Contents/MacOS/Edith | grep -q '^Mach-O'
-	test -f dist/Edith.app/Contents/MacOS/ed
-	test ! -L dist/Edith.app/Contents/MacOS/ed
+	test -L dist/Edith.app/Contents/MacOS/ed
 	test -x dist/Edith.app/Contents/MacOS/ed
-	file -b dist/Edith.app/Contents/MacOS/ed | grep -q '^Mach-O'
+	test "$$(readlink dist/Edith.app/Contents/MacOS/ed)" = Edith
 	test ! -e dist/Edith.app/Contents/MacOS/edh
 	test ! -L dist/Edith.app/Contents/MacOS/edh
-	test 1 -eq "$$(find dist/Edith.app/Contents/MacOS -maxdepth 1 -type f \( -name ed -o -name edh \) | wc -l | tr -d ' ')"
-	codesign --verify --strict dist/Edith.app/Contents/MacOS/ed
+	test 1 -eq "$$(find dist/Edith.app/Contents/MacOS -maxdepth 1 -type l -name ed | wc -l | tr -d ' ')"
+	codesign --verify --strict dist/Edith.app/Contents/MacOS/Edith
 	@install_dir="$$(mktemp -d /tmp/edith-install.XXXXXX)"; \
 	  trap 'rm -rf "$$install_dir"' EXIT; \
 	  dist/Edith.app/Contents/MacOS/ed install --directory "$$install_dir" >/dev/null; \
 	  target="$$(pwd)/dist/Edith.app/Contents/MacOS/ed"; \
 	  version="$$($$install_dir/ed --version)"; \
+	  test "$$version" != development; \
 	  for name in ed edith; do \
 	    test -L "$$install_dir/$$name"; \
 	    test "$$(readlink "$$install_dir/$$name")" = "$$target"; \

@@ -5,14 +5,14 @@ import { resolve } from "node:path";
 const script = readFileSync(resolve("build.sh"), "utf8");
 
 describe("build install lifecycle", () => {
-  test("packages one signed CLI executable", () => {
+  test("routes CLI names through the application executable", () => {
     const removal = script.indexOf('rm -f "$APP/Contents/MacOS/edh"');
-    const sign = script.indexOf('sign_tool "$APP/Contents/MacOS/ed"');
+    const link = script.indexOf('ln -s Edith "$APP/Contents/MacOS/ed"');
 
     expect(removal).toBeGreaterThan(-1);
-    expect(sign).toBeGreaterThan(removal);
+    expect(link).toBeGreaterThan(removal);
     expect(script).not.toContain('ln -sfn ed "$APP/Contents/MacOS/edith"');
-    expect(script).not.toContain('sign_tool "$APP/Contents/MacOS/edith"');
+    expect(script).not.toContain('sign_tool "$APP/Contents/MacOS/ed"');
   });
 
   test("requests a normal application quit before replacing the bundle", () => {

@@ -157,6 +157,8 @@ LAUNCH_DAEMONS="$APP/Contents/Library/LaunchDaemons"
 rm -rf dist && mkdir -p dist
 ditto "$BUILT" "$APP"
 rm -f "$APP/Contents/MacOS/edh"
+rm -f "$APP/Contents/MacOS/ed"
+ln -s Edith "$APP/Contents/MacOS/ed"
 
 rm -rf "$HELPER"
 ditto "$BUILT_HELPER" "$HELPER"
@@ -200,7 +202,6 @@ sign_tool() {
   codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS "$1"
 }
 
-sign_tool "$APP/Contents/MacOS/ed"
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
   --identifier com.pulkit.edith.lidawake "$PRIVILEGED_HELPER"
 sign_tool "$APP/Contents/Frameworks/Sparkle.framework"
