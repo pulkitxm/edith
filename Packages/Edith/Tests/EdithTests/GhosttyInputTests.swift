@@ -18,11 +18,9 @@ import Testing
         let window = NSWindow(
             contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = view
-        window.makeKeyAndOrderFront(nil)
-        window.makeFirstResponder(view)
         defer {
+            window.contentView = nil
             view.shutdown()
-            window.close()
         }
 
         for _ in 0..<100 {
