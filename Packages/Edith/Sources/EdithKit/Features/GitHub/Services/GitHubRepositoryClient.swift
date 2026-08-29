@@ -11,6 +11,7 @@ public actor GitHubRepositoryClient {
     private let sendRequest: SendRequest
     private let cacheFile: URL?
     private var cache: [String: CacheRecord]?
+    private var repositoryReferences: [RepositoryReferenceKey: [String]] = [:]
     private let cacheLimit = 24
     private let cacheLifetime: TimeInterval = 60 * 60 * 24 * 7
 
@@ -49,23 +50,22 @@ public actor GitHubRepositoryClient {
             resource = .repository(
                 try await repositoryOverview(host: route.host, repository: repository))
         case let .content(repository, kind, revisionPath, _, _):
-            guard let revision = revisionPath.first else {
-                throw GitHubRepositoryLoadError.invalidResponse(
-                    "The GitHub URL does not include a branch, tag, or commit.")
-            }
-            let path = revisionPath.dropFirst().joined(separator: "/")
+            let location = try await contentLocation(
+                host: route.host, repository: repository, revisionPath: revisionPath)
             if kind == .tree {
                 resource = .directory(
                     try await directory(
-                        host: route.host, repository: repository, revision: revision, path: path))
+                        host: route.host, repository: repository, revision: location.revision,
+                        path: location.path))
             } else if kind == .blob || kind == .raw || kind == .blame {
-                guard !path.isEmpty else {
+                guard !location.path.isEmpty else {
                     throw GitHubRepositoryLoadError.invalidResponse(
                         "The GitHub URL does not include a file path.")
                 }
                 resource = .file(
                     try await file(
-                        host: route.host, repository: repository, revision: revision, path: path))
+                        host: route.host, repository: repository, revision: location.revision,
+                        path: location.path))
             } else {
                 throw GitHubRepositoryLoadError.unsupportedRoute(
                     "This GitHub content type is not available natively yet.")
@@ -92,6 +92,20 @@ public actor GitHubRepositoryClient {
                 endpoint: GitHubCLITransport.endpoint(repository: repository, suffix: ["branches"]),
                 query: [("per_page", "40")]))
         try Task.checkCancellation()
+        guard !branches.isEmpty else {
+            guard let url = URL(string: metadata.htmlURL) else {
+                throw GitHubRepositoryLoadError.invalidResponse(
+                    "GitHub returned an invalid repository URL.")
+            }
+            return GitHubRepositoryOverview(
+                repository: repository, description: metadata.description,
+                isPrivate: metadata.isPrivate, isFork: metadata.isFork,
+                isArchived: metadata.isArchived, defaultBranch: metadata.defaultBranch,
+                stars: metadata.stars, forks: metadata.forks, openIssues: metadata.openIssues,
+                language: metadata.language, license: metadata.license?.spdxID,
+                topics: metadata.topics, updatedAt: Self.date(metadata.updatedAt), url: url,
+                branches: [], latestCommit: nil, entries: [])
+        }
         let commits: [CommitDTO] = try await json(
             GitHubAPIRequest(
                 host: host,
@@ -113,6 +127,69 @@ public actor GitHubRepositoryClient {
             topics: metadata.topics, updatedAt: Self.date(metadata.updatedAt), url: url,
             branches: branches.map { GitHubBranchSummary(name: $0.name, sha: $0.commit.sha) },
             latestCommit: commits.first.map(Self.commit), entries: entries)
+    }
+
+    private func contentLocation(
+        host: GitHubHost, repository: GitHubRepositoryPath, revisionPath: [String]
+    ) async throws -> ContentLocation {
+        guard let first = revisionPath.first else {
+            throw GitHubRepositoryLoadError.invalidResponse(
+                "The GitHub URL does not include a branch, tag, or commit.")
+        }
+        if revisionPath.count == 1 || first.contains("/") {
+            return ContentLocation(
+                revision: first, path: revisionPath.dropFirst().joined(separator: "/"))
+        }
+        let match = try await references(host: host, repository: repository)
+            .compactMap { name -> (name: String, components: [String])? in
+                let components = name.split(separator: "/").map(String.init)
+                guard components.count <= revisionPath.count,
+                    revisionPath.prefix(components.count).elementsEqual(components)
+                else { return nil }
+                return (name, components)
+            }
+            .max { $0.components.count < $1.components.count }
+        guard let match else {
+            return ContentLocation(
+                revision: first, path: revisionPath.dropFirst().joined(separator: "/"))
+        }
+        return ContentLocation(
+            revision: match.name,
+            path: revisionPath.dropFirst(match.components.count).joined(separator: "/"))
+    }
+
+    private func references(
+        host: GitHubHost, repository: GitHubRepositoryPath
+    ) async throws -> [String] {
+        let key = RepositoryReferenceKey(host: host, repository: repository)
+        if let names = repositoryReferences[key] { return names }
+        let branches = try await referenceNames(
+            host: host, repository: repository, collection: "branches")
+        let tags = try await referenceNames(
+            host: host, repository: repository, collection: "tags")
+        let names = branches + tags
+        repositoryReferences[key] = names
+        return names
+    }
+
+    private func referenceNames(
+        host: GitHubHost, repository: GitHubRepositoryPath, collection: String
+    ) async throws -> [String] {
+        var names: [String] = []
+        var page = 1
+        while true {
+            var query = [("per_page", "100")]
+            if page > 1 { query.append(("page", String(page))) }
+            let references: [ReferenceNameDTO] = try await json(
+                GitHubAPIRequest(
+                    host: host,
+                    endpoint: GitHubCLITransport.endpoint(
+                        repository: repository, suffix: [collection]),
+                    query: query))
+            names += references.map(\.name)
+            guard references.count == 100 else { return names }
+            page += 1
+        }
     }
 
     private func directory(
@@ -325,6 +402,20 @@ private struct BranchDTO: Decodable {
     struct Commit: Decodable { let sha: String }
     let name: String
     let commit: Commit
+}
+
+private struct ReferenceNameDTO: Decodable {
+    let name: String
+}
+
+private struct ContentLocation {
+    let revision: String
+    let path: String
+}
+
+private struct RepositoryReferenceKey: Hashable {
+    let host: GitHubHost
+    let repository: GitHubRepositoryPath
 }
 
 private struct CommitDTO: Decodable {

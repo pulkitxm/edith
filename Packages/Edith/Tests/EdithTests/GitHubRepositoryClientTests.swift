@@ -200,19 +200,60 @@ import Testing
                     accept: "application/vnd.github.object+json"))
     }
 
-    @Test func nestedDirectorySortsFoldersFirstAndPreservesUnknownKinds() async throws {
+    @Test func emptyRepositoryReturnsAnEmptyOverview() async throws {
         let fixture = GitHubRequestFixture(responses: [
             response(
                 #"""
-                [
-                  {"name":"cc-file","path":"Sources/Deep/cc-file","sha":"5","size":9,"type":"file"},
-                  {"name":"z-dir","path":"Sources/Deep/z-dir","sha":"2","size":0,"type":"dir"},
-                  {"name":"aa-unknown","path":"Sources/Deep/aa-unknown","sha":"3","size":0,"type":"future-kind"},
-                  {"name":"A-dir","path":"Sources/Deep/A-dir","sha":"1","size":0,"type":"dir"},
-                  {"name":"bb-link","path":"Sources/Deep/bb-link","sha":"4","size":0,"type":"symlink"}
-                ]
-                """#)
+                {
+                  "description": null,
+                  "private": false,
+                  "fork": false,
+                  "archived": false,
+                  "default_branch": "main",
+                  "stargazers_count": 0,
+                  "forks_count": 0,
+                  "open_issues_count": 0,
+                  "language": null,
+                  "license": null,
+                  "topics": [],
+                  "updated_at": "2026-08-30T00:00:00Z",
+                  "html_url": "https://github.com/acme/orbit"
+                }
+                """#),
+            response("[]"),
         ])
+        let client = GitHubRepositoryClient(
+            cacheFile: nil, sendRequest: { request in try await fixture.send(request) })
+
+        let resource = try await client.load(repositoryRoute)
+        let overview = try #require(resource.repository)
+
+        #expect(overview.branches.isEmpty)
+        #expect(overview.latestCommit == nil)
+        #expect(overview.entries.isEmpty)
+        #expect(
+            await fixture.requests()
+                == [
+                    request(),
+                    request(
+                        endpoint: "repos/acme/orbit/branches", query: [("per_page", "40")]),
+                ])
+    }
+
+    @Test func nestedDirectorySortsFoldersFirstAndPreservesUnknownKinds() async throws {
+        let fixture = GitHubRequestFixture(
+            responses: mainReferenceResponses + [
+                response(
+                    #"""
+                    [
+                      {"name":"cc-file","path":"Sources/Deep/cc-file","sha":"5","size":9,"type":"file"},
+                      {"name":"z-dir","path":"Sources/Deep/z-dir","sha":"2","size":0,"type":"dir"},
+                      {"name":"aa-unknown","path":"Sources/Deep/aa-unknown","sha":"3","size":0,"type":"future-kind"},
+                      {"name":"A-dir","path":"Sources/Deep/A-dir","sha":"1","size":0,"type":"dir"},
+                      {"name":"bb-link","path":"Sources/Deep/bb-link","sha":"4","size":0,"type":"symlink"}
+                    ]
+                    """#)
+            ])
         let client = GitHubRepositoryClient(
             cacheFile: nil, sendRequest: { request in try await fixture.send(request) })
         let route = GitHubRoute(
@@ -230,7 +271,7 @@ import Testing
         #expect(directory.entries[2].kind.rawValue == "future-kind")
         #expect(
             await fixture.requests()
-                == [
+                == referenceRequests + [
                     request(
                         endpoint: "repos/acme/orbit/contents/Sources/Deep",
                         query: [("ref", "main")],
@@ -238,35 +279,152 @@ import Testing
                 ])
     }
 
-    @Test func filesDecodeBase64TextAndExposeLargeFileState() async throws {
+    @Test func slashBranchUsesTheLongestMatchingReference() async throws {
         let fixture = GitHubRequestFixture(responses: [
+            response(#"[{"name":"feature"},{"name":"feature/navigation"}]"#),
+            response(#"[{"name":"feature/navigation/archive"}]"#),
+            response(
+                #"""
+                [
+                  {"name":"App.swift","path":"Sources/App.swift","sha":"swift","size":42,"type":"file"}
+                ]
+                """#),
+        ])
+        let client = GitHubRepositoryClient(
+            cacheFile: nil, sendRequest: { request in try await fixture.send(request) })
+        let route = GitHubRoute(
+            host: .github,
+            resource: .content(
+                repository: repository, kind: .tree,
+                revisionPath: ["feature", "navigation", "Sources"], view: .automatic,
+                lines: nil))
+
+        let resource = try await client.load(route)
+        let directory = try #require(resource.directory)
+
+        #expect(directory.revision == "feature/navigation")
+        #expect(directory.path == "Sources")
+        #expect(
+            await fixture.requests()
+                == referenceRequests + [
+                    request(
+                        endpoint: "repos/acme/orbit/contents/Sources",
+                        query: [("ref", "feature/navigation")],
+                        accept: "application/vnd.github.object+json")
+                ])
+    }
+
+    @Test func slashTagResolvesBeforeLoadingAFile() async throws {
+        let fixture = GitHubRequestFixture(responses: [
+            response(#"[{"name":"release"}]"#),
+            response(#"[{"name":"release/v2"}]"#),
             response(
                 #"""
                 {
                   "name":"README.md",
                   "path":"README.md",
-                  "sha":"text-sha",
-                  "size":11,
+                  "sha":"readme",
+                  "size":6,
                   "type":"file",
-                  "download_url":"https://raw.githubusercontent.com/acme/orbit/main/README.md",
                   "encoding":"base64",
-                  "content":"YWxw\naGEKYmV0YQo="
-                }
-                """#),
-            response(
-                #"""
-                {
-                  "name":"archive.data",
-                  "path":"Assets/archive.data",
-                  "sha":"large-sha",
-                  "size":4000001,
-                  "type":"file",
-                  "download_url":"https://raw.githubusercontent.com/acme/orbit/main/Assets/archive.data",
-                  "encoding":"none",
-                  "content":null
+                  "content":"aGVsbG8K"
                 }
                 """#),
         ])
+        let client = GitHubRepositoryClient(
+            cacheFile: nil, sendRequest: { request in try await fixture.send(request) })
+        let route = GitHubRoute(
+            host: .github,
+            resource: .content(
+                repository: repository, kind: .blob,
+                revisionPath: ["release", "v2", "README.md"], view: .automatic, lines: nil))
+
+        let resource = try await client.load(route)
+        let file = try #require(resource.file)
+
+        #expect(file.revision == "release/v2")
+        #expect(file.path == "README.md")
+        #expect(file.text == "hello\n")
+        #expect(
+            await fixture.requests()
+                == referenceRequests + [
+                    request(
+                        endpoint: "repos/acme/orbit/contents/README.md",
+                        query: [("ref", "release/v2")],
+                        accept: "application/vnd.github.object+json", maximumOutputBytes: 6_000_000)
+                ])
+    }
+
+    @Test func unresolvedSingleSegmentReferenceFallsBackForCommitSHAs() async throws {
+        let fixture = GitHubRequestFixture(responses: [
+            response("[]"),
+            response("[]"),
+            response(
+                #"""
+                {
+                  "name":"README.md",
+                  "path":"README.md",
+                  "sha":"readme",
+                  "size":6,
+                  "type":"file",
+                  "encoding":"base64",
+                  "content":"aGVsbG8K"
+                }
+                """#),
+        ])
+        let client = GitHubRepositoryClient(
+            cacheFile: nil, sendRequest: { request in try await fixture.send(request) })
+        let route = GitHubRoute(
+            host: .github,
+            resource: .content(
+                repository: repository, kind: .blob,
+                revisionPath: ["abcdef123456", "README.md"], view: .automatic, lines: nil))
+
+        let resource = try await client.load(route)
+        let file = try #require(resource.file)
+
+        #expect(file.revision == "abcdef123456")
+        #expect(file.path == "README.md")
+        #expect(
+            await fixture.requests()
+                == referenceRequests + [
+                    request(
+                        endpoint: "repos/acme/orbit/contents/README.md",
+                        query: [("ref", "abcdef123456")],
+                        accept: "application/vnd.github.object+json", maximumOutputBytes: 6_000_000)
+                ])
+    }
+
+    @Test func filesDecodeBase64TextAndExposeLargeFileState() async throws {
+        let fixture = GitHubRequestFixture(
+            responses: mainReferenceResponses + [
+                response(
+                    #"""
+                    {
+                      "name":"README.md",
+                      "path":"README.md",
+                      "sha":"text-sha",
+                      "size":11,
+                      "type":"file",
+                      "download_url":"https://raw.githubusercontent.com/acme/orbit/main/README.md",
+                      "encoding":"base64",
+                      "content":"YWxw\naGEKYmV0YQo="
+                    }
+                    """#),
+                response(
+                    #"""
+                    {
+                      "name":"archive.data",
+                      "path":"Assets/archive.data",
+                      "sha":"large-sha",
+                      "size":4000001,
+                      "type":"file",
+                      "download_url":"https://raw.githubusercontent.com/acme/orbit/main/Assets/archive.data",
+                      "encoding":"none",
+                      "content":null
+                    }
+                    """#),
+            ])
         let client = GitHubRepositoryClient(
             cacheFile: nil, sendRequest: { request in try await fixture.send(request) })
 
@@ -286,8 +444,8 @@ import Testing
         #expect(large.size == 4_000_001)
 
         let requests = await fixture.requests()
-        #expect(requests.count == 2)
-        #expect(requests.allSatisfy { $0.maximumOutputBytes == 6_000_000 })
+        #expect(requests.count == 4)
+        #expect(requests.suffix(2).allSatisfy { $0.maximumOutputBytes == 6_000_000 })
     }
 
     @Test func persistedCacheRestoresResourceWithoutAnotherRequest() async throws {
@@ -299,14 +457,15 @@ import Testing
             resource: .content(
                 repository: repository, kind: .tree, revisionPath: ["main", "Sources"],
                 view: .automatic, lines: nil))
-        let fixture = GitHubRequestFixture(responses: [
-            response(
-                #"""
-                [
-                  {"name":"App.swift","path":"Sources/App.swift","sha":"swift","size":42,"type":"file"}
-                ]
-                """#)
-        ])
+        let fixture = GitHubRequestFixture(
+            responses: mainReferenceResponses + [
+                response(
+                    #"""
+                    [
+                      {"name":"App.swift","path":"Sources/App.swift","sha":"swift","size":42,"type":"file"}
+                    ]
+                    """#)
+            ])
         let first = GitHubRepositoryClient(
             cacheFile: cacheFile, sendRequest: { request in try await fixture.send(request) })
 
@@ -359,6 +518,17 @@ import Testing
         GitHubRoute(host: .github, resource: .repository(repository))
     }
 
+    private var mainReferenceResponses: [GitHubAPIResponse] {
+        [response(#"[{"name":"main"}]"#), response("[]")]
+    }
+
+    private var referenceRequests: [GitHubAPIRequest] {
+        [
+            request(endpoint: "repos/acme/orbit/branches", query: [("per_page", "100")]),
+            request(endpoint: "repos/acme/orbit/tags", query: [("per_page", "100")]),
+        ]
+    }
+
     private func fileRoute(_ path: String) -> GitHubRoute {
         GitHubRoute(
             host: .github,
@@ -370,9 +540,11 @@ import Testing
 
     private func request(
         endpoint: String = "repos/acme/orbit", query: [(String, String)] = [],
-        accept: String = "application/vnd.github+json"
+        accept: String = "application/vnd.github+json", maximumOutputBytes: Int = 5_000_000
     ) -> GitHubAPIRequest {
-        GitHubAPIRequest(host: .github, endpoint: endpoint, query: query, accept: accept)
+        GitHubAPIRequest(
+            host: .github, endpoint: endpoint, query: query, accept: accept,
+            maximumOutputBytes: maximumOutputBytes)
     }
 
     private func response(_ value: String) -> GitHubAPIResponse {
