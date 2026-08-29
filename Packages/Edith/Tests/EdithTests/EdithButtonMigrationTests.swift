@@ -34,6 +34,7 @@ import Testing
         let expected = [
             "Edith/Core/Navigation/MainNavigationView.swift": 1,
             "Edith/Features/Herdr/Views/HerdrPage.swift": 1,
+            "Edith/Features/Herdr/Views/HerdrSessionView.swift": 1,
             "Edith/Features/Machines/ViewModels/DockerDetailModel.swift": 1,
             "Edith/Features/Machines/ViewModels/WorkspaceModel.swift": 1,
             "Edith/Features/Machines/ViewModels/WorkspacePaneModel.swift": 1,
