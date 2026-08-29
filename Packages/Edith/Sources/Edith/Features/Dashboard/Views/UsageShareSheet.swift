@@ -101,7 +101,7 @@ struct UsageShareSheet: View {
                         )
                         .frame(width: 11, height: 11)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .help(item.element.title)
                 .accessibilityLabel(item.element.title)
                 .accessibilityAddTraits(item.offset == index ? .isSelected : [])

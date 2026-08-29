@@ -22,7 +22,7 @@ import Testing
         #expect(source.contains(".linear(duration: 14).repeatForever(autoreverses: false)"))
         #expect(source.contains(".scaleEffect(hovering ? 1.07 : 1)"))
         #expect(source.contains("shareOverlay"))
-        #expect(source.contains(".onTapGesture { closeShare() }"))
+        #expect(source.contains("Button(action: closeShare)"))
         #expect(source.contains(".move(edge: .top).combined(with: .opacity)"))
         #expect(source.contains("UsageShareSheet(snapshot: shareSnapshot, onDismiss: closeShare)"))
         #expect(source.contains("model.heatDetail.sorted"))

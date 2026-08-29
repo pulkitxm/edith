@@ -107,11 +107,13 @@ struct DashboardView: View {
 
     private var shareOverlay: some View {
         ZStack {
-            Color.black.opacity(dark ? 0.66 : 0.3)
-                .ignoresSafeArea()
-                .contentShape(Rectangle())
-                .onTapGesture { closeShare() }
-                .transition(.opacity)
+            Button(action: closeShare) {
+                Color.black.opacity(dark ? 0.66 : 0.3)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.edith(.borderless))
+            .transition(.opacity)
             UsageShareSheet(snapshot: shareSnapshot, onDismiss: closeShare)
                 .shadow(color: .black.opacity(0.34), radius: 40, y: 18)
                 .transition(
@@ -256,7 +258,7 @@ struct DashboardView: View {
                 .scaleEffect(hovering ? 1.07 : 1)
                 .animation(.easeOut(duration: 0.18), value: hovering)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .onAppear {
                 rotation = 0
                 withAnimation(.linear(duration: 14).repeatForever(autoreverses: false)) {
