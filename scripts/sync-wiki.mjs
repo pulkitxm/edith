@@ -17,6 +17,7 @@ const repoRoot = path.resolve(
 
 const SECTIONS = [
   { dir: "docs/cli", prefix: "CLI", label: "CLI reference" },
+  { dir: "docs/database", prefix: "Database", label: "Database" },
   { dir: "docs", prefix: "Guides", label: "Guides", filesOnly: true },
 ];
 
@@ -46,6 +47,7 @@ const READING_ORDER = [
   "machines-workspace",
   "homebrew",
   "homebrew-internals",
+  "database",
 ];
 
 const SMALL = new Set([
