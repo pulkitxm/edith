@@ -65,8 +65,9 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
         _ built: BuiltComposition, document: ScreenRecordingEditDocument,
         to destination: URL
     ) async throws {
-        guard let session = AVAssetExportSession(
-            asset: built.asset, presetName: AVAssetExportPresetHighestQuality)
+        guard
+            let session = AVAssetExportSession(
+                asset: built.asset, presetName: AVAssetExportPresetHighestQuality)
         else { throw ScreenRecordingExportError.unsupportedFormat }
         session.outputURL = destination
         session.outputFileType = .mp4
@@ -75,7 +76,8 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
         session.audioMix = built.audioMix
         lock.withLock { activeSession = session }
         let progressTask = Task { [weak self, weak session] in
-            while let self, let session, session.status == .waiting || session.status == .exporting {
+            while let self, let session, session.status == .waiting || session.status == .exporting
+            {
                 self.onProgress?(Double(session.progress))
                 try? await Task.sleep(for: .milliseconds(100))
             }
@@ -100,8 +102,9 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
         guard duration <= 30 else { throw ScreenRecordingExportError.gifTooLong }
         let fps = min(max(document.preset.frameRate, 5), 20)
         let count = max(1, Int((duration * Double(fps)).rounded(.up)))
-        guard let destinationWriter = CGImageDestinationCreateWithURL(
-            destination as CFURL, UTType.gif.identifier as CFString, count, nil)
+        guard
+            let destinationWriter = CGImageDestinationCreateWithURL(
+                destination as CFURL, UTType.gif.identifier as CFString, count, nil)
         else { throw ScreenRecordingExportError.exportFailed }
         CGImageDestinationSetProperties(
             destinationWriter,
@@ -112,12 +115,13 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
         generator.requestedTimeToleranceAfter = .zero
         generator.maximumSize = built.videoComposition.renderSize
         let delay = 1 / Double(fps)
-        let properties = [
-            kCGImagePropertyGIFDictionary: [
-                kCGImagePropertyGIFDelayTime: delay,
-                kCGImagePropertyGIFUnclampedDelayTime: delay,
-            ]
-        ] as CFDictionary
+        let properties =
+            [
+                kCGImagePropertyGIFDictionary: [
+                    kCGImagePropertyGIFDelayTime: delay,
+                    kCGImagePropertyGIFUnclampedDelayTime: delay,
+                ]
+            ] as CFDictionary
         for index in 0..<count {
             guard !lock.withLock({ cancelled }) else {
                 try? FileManager.default.removeItem(at: destination)
@@ -147,15 +151,17 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
         guard let sourceVideo = try await asset.loadTracks(withMediaType: .video).first
         else { throw ScreenRecordingExportError.unreadableTake }
         let composition = AVMutableComposition()
-        guard let videoTrack = composition.addMutableTrack(
-            withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
+        guard
+            let videoTrack = composition.addMutableTrack(
+                withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
         else {
             throw ScreenRecordingExportError.unreadableTake
         }
         let sourceAudio = try await asset.loadTracks(withMediaType: .audio)
         let audioTracks = sourceAudio.compactMap { source -> AVMutableCompositionTrack? in
-            guard let track = composition.addMutableTrack(
-                withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+            guard
+                let track = composition.addMutableTrack(
+                    withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
             else { return nil }
             return track
         }
@@ -181,9 +187,10 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
         let outputWidth = CGFloat(min(max(document.preset.width, 320), 3840))
         let contentScale = outputWidth / max(1, crop.width)
         let padding = CGFloat(document.padding) * 2
-        let renderSize = even(CGSize(
-            width: outputWidth + padding,
-            height: crop.height * contentScale + padding))
+        let renderSize = even(
+            CGSize(
+                width: outputWidth + padding,
+                height: crop.height * contentScale + padding))
         let instruction = AVMutableVideoCompositionInstruction()
         instruction.timeRange = CMTimeRange(start: .zero, duration: outputCursor)
         let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: videoTrack)
@@ -195,7 +202,8 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
         transform = transform.concatenating(
             CGAffineTransform(scaleX: contentScale, y: contentScale))
         transform = transform.concatenating(
-            CGAffineTransform(translationX: CGFloat(document.padding), y: CGFloat(document.padding)))
+            CGAffineTransform(translationX: CGFloat(document.padding), y: CGFloat(document.padding))
+        )
         layerInstruction.setTransform(transform, at: .zero)
         instruction.layerInstructions = [layerInstruction]
         let videoComposition = AVMutableVideoComposition()
@@ -257,10 +265,11 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
         duration: Double, size: CGSize, to parent: CALayer
     ) {
         let mapped = ScreenRecordingTimeline.smoothed(
-            track.points, amount: document.pointerSmoothing).compactMap { point -> (Double, CGPoint)? in
-                guard let time = outputTime(point.time, mappings: mappings) else { return nil }
-                return (time, CGPoint(x: point.x * size.width, y: point.y * size.height))
-            }
+            track.points, amount: document.pointerSmoothing
+        ).compactMap { point -> (Double, CGPoint)? in
+            guard let time = outputTime(point.time, mappings: mappings) else { return nil }
+            return (time, CGPoint(x: point.x * size.width, y: point.y * size.height))
+        }
         guard mapped.count > 1, duration > 0 else { return }
         let pointer = CALayer()
         let side = CGFloat(22 * document.pointerScale)
@@ -321,8 +330,10 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
                 NSNumber(value: max(start, end - 0.25) / duration),
                 NSNumber(value: end / duration),
             ]
-            values += [CATransform3DIdentity, CATransform3DMakeScale(scale, scale, 1),
-                CATransform3DMakeScale(scale, scale, 1), CATransform3DIdentity]
+            values += [
+                CATransform3DIdentity, CATransform3DMakeScale(scale, scale, 1),
+                CATransform3DMakeScale(scale, scale, 1), CATransform3DIdentity,
+            ]
         }
         guard times.count > 1 else { return }
         let animation = CAKeyframeAnimation(keyPath: "transform")
@@ -373,9 +384,11 @@ public final class ScreenRecordingExporter: @unchecked Sendable {
         _ sourceTime: Double,
         mappings: [(source: ScreenRecordingRange, outputStart: Double)]
     ) -> Double? {
-        guard let mapping = mappings.first(where: {
-            sourceTime >= $0.source.start && sourceTime <= $0.source.end
-        }) else { return nil }
+        guard
+            let mapping = mappings.first(where: {
+                sourceTime >= $0.source.start && sourceTime <= $0.source.end
+            })
+        else { return nil }
         return mapping.outputStart + sourceTime - mapping.source.start
     }
 

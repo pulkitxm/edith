@@ -54,8 +54,9 @@ private final class ScreenRecordingEditorModel {
         let value = overlayText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return }
         let time = min(max(player.currentTime().seconds, document.trimStart), document.trimEnd)
-        document.texts.append(ScreenRecordingTextOverlay(
-            text: value, start: time, end: min(document.trimEnd, time + 3)))
+        document.texts.append(
+            ScreenRecordingTextOverlay(
+                text: value, start: time, end: min(document.trimEnd, time + 3)))
         overlayText = ""
         persist()
     }
@@ -251,8 +252,9 @@ private struct ScreenRecordingEditorView: View {
                     .monospacedDigit().frame(width: 36)
                 Slider(
                     value: $model.document.trimEnd,
-                    in: min(model.take.duration, model.document.trimStart + 0.05)...max(
-                        model.take.duration, model.document.trimStart + 0.05),
+                    in: min(
+                        model.take.duration, model.document.trimStart + 0.05)...max(
+                            model.take.duration, model.document.trimStart + 0.05),
                     onEditingChanged: { if !$0 { model.persist() } })
                 Text(model.document.trimEnd, format: .number.precision(.fractionLength(1)))
                     .monospacedDigit().frame(width: 36)
@@ -261,7 +263,8 @@ private struct ScreenRecordingEditorView: View {
             if !model.document.cuts.isEmpty {
                 ScrollView(.horizontal) {
                     HStack {
-                        ForEach(Array(model.document.cuts.enumerated()), id: \.offset) { index, cut in
+                        ForEach(Array(model.document.cuts.enumerated()), id: \.offset) {
+                            index, cut in
                             Button {
                                 model.document.cuts.remove(at: index)
                                 model.persist()
@@ -310,7 +313,9 @@ private struct ScreenRecordingEditorView: View {
                             Button {
                                 model.document.texts.removeAll { $0.id == text.id }
                                 model.persist()
-                            } label: { Image(systemName: "trash") }
+                            } label: {
+                                Image(systemName: "trash")
+                            }
                         }
                     }
                 }
@@ -355,10 +360,12 @@ private struct ScreenRecordingEditorView: View {
                         Text("MP4").tag(ScreenRecordingFormat.mp4)
                         Text("GIF").tag(ScreenRecordingFormat.gif)
                     }
-                    Stepper("Width: \(model.document.preset.width)",
-                            value: $model.document.preset.width, in: 320...3840, step: 160)
-                    Stepper("Frame rate: \(model.document.preset.frameRate)",
-                            value: $model.document.preset.frameRate, in: 5...60)
+                    Stepper(
+                        "Width: \(model.document.preset.width)",
+                        value: $model.document.preset.width, in: 320...3840, step: 160)
+                    Stepper(
+                        "Frame rate: \(model.document.preset.frameRate)",
+                        value: $model.document.preset.frameRate, in: 5...60)
                     Button("Save as preset", action: model.savePreset)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }

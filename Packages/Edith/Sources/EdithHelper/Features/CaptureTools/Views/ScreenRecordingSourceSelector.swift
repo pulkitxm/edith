@@ -24,8 +24,9 @@ final class ScreenRecordingSourceSelector {
 
     private func selectArea() async throws -> ScreenRecordingRegion {
         let mouse = NSEvent.mouseLocation
-        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) })
-            ?? NSScreen.main ?? NSScreen.screens.first,
+        guard
+            let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) })
+                ?? NSScreen.main ?? NSScreen.screens.first,
             let displayID = Self.displayID(screen)
         else { throw ScreenRecordingError.sourceUnavailable }
         return try await withCheckedThrowingContinuation { continuation in
@@ -40,13 +41,14 @@ final class ScreenRecordingSourceSelector {
                     x: rect.minX - screen.frame.minX,
                     y: screen.frame.maxY - rect.maxY,
                     width: rect.width, height: rect.height)
-                continuation.resume(returning: ScreenRecordingRegion(
-                    source: .area, displayID: displayID,
-                    sourceRect: local,
-                    pixelSize: CGSize(
-                        width: floor(rect.width * scale / 2) * 2,
-                        height: floor(rect.height * scale / 2) * 2),
-                    anchorRect: rect, scale: scale))
+                continuation.resume(
+                    returning: ScreenRecordingRegion(
+                        source: .area, displayID: displayID,
+                        sourceRect: local,
+                        pixelSize: CGSize(
+                            width: floor(rect.width * scale / 2) * 2,
+                            height: floor(rect.height * scale / 2) * 2),
+                        anchorRect: rect, scale: scale))
             }
             overlay = panel
             panel.show()
@@ -71,8 +73,9 @@ final class ScreenRecordingSourceSelector {
             let title = ($0.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             return title.isEmpty ? app : "\(app): \(title)"
         }
-        guard let index = choose(
-            title: "Record a window", message: "Choose the window to record.", labels: labels)
+        guard
+            let index = choose(
+                title: "Record a window", message: "Choose the window to record.", labels: labels)
         else { throw ScreenRecordingError.cancelled }
         let window = windows[index]
         let screen = NSScreen.screens.max { lhs, rhs in
@@ -112,9 +115,11 @@ final class ScreenRecordingSourceSelector {
             throw ScreenRecordingError.cancelled
         }
         let display = displays[index]
-        guard let screen = NSScreen.screens.first(where: {
-            Self.displayID($0) == display.displayID
-        }) else { throw ScreenRecordingError.sourceUnavailable }
+        guard
+            let screen = NSScreen.screens.first(where: {
+                Self.displayID($0) == display.displayID
+            })
+        else { throw ScreenRecordingError.sourceUnavailable }
         return ScreenRecordingRegion(
             source: .display, displayID: display.displayID,
             sourceRect: CGRect(origin: .zero, size: screen.frame.size),

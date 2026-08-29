@@ -35,14 +35,16 @@ final class ScreenRecordingCoordinator {
         guard let session else { return }
         if session.isPaused {
             guard session.resume() else { return }
-            publish(ScreenRecordingStatus(
-                state: .recording, source: status.source,
-                elapsedSeconds: session.elapsedSeconds, takeID: status.takeID))
+            publish(
+                ScreenRecordingStatus(
+                    state: .recording, source: status.source,
+                    elapsedSeconds: session.elapsedSeconds, takeID: status.takeID))
         } else {
             guard session.pause() else { return }
-            publish(ScreenRecordingStatus(
-                state: .paused, source: status.source,
-                elapsedSeconds: session.elapsedSeconds, takeID: status.takeID))
+            publish(
+                ScreenRecordingStatus(
+                    state: .paused, source: status.source,
+                    elapsedSeconds: session.elapsedSeconds, takeID: status.takeID))
         }
     }
 
@@ -59,9 +61,10 @@ final class ScreenRecordingCoordinator {
     func stop() {
         guard let session else { return }
         generation &+= 1
-        publish(ScreenRecordingStatus(
-            state: .finishing, source: status.source,
-            elapsedSeconds: session.elapsedSeconds, takeID: status.takeID))
+        publish(
+            ScreenRecordingStatus(
+                state: .finishing, source: status.source,
+                elapsedSeconds: session.elapsedSeconds, takeID: status.takeID))
         controls?.close()
         controls = nil
         task = Task { [weak self] in await self?.finish(session, discard: false) }
@@ -118,10 +121,10 @@ final class ScreenRecordingCoordinator {
             let take = try ScreenRecordingLibrary.makeTake(source: source)
             let capturesSystemAudio =
                 SharedDefaults.store.object(forKey: AppStorageKeys.Capture.recordingSystemAudio)
-                    as? Bool ?? true
+                as? Bool ?? true
             let capturesMicrophone =
                 SharedDefaults.store.object(forKey: AppStorageKeys.Capture.recordingMicrophone)
-                    as? Bool ?? false
+                as? Bool ?? false
             if capturesMicrophone {
                 let authorization = AVCaptureDevice.authorizationStatus(for: .audio)
                 let granted: Bool
@@ -134,25 +137,27 @@ final class ScreenRecordingCoordinator {
             }
             let frameRate =
                 SharedDefaults.store.object(forKey: AppStorageKeys.Capture.recordingFrameRate)
-                    as? Int ?? 30
+                as? Int ?? 30
             let session = ScreenRecordingSession(
                 take: take, region: region, capturesSystemAudio: capturesSystemAudio,
                 capturesMicrophone: capturesMicrophone, frameRate: frameRate)
             session.onElapsedTime = { [weak self] seconds in
                 Task { @MainActor in
                     guard let self, self.session === session else { return }
-                    self.publish(ScreenRecordingStatus(
-                        state: session.isPaused ? .paused : .recording,
-                        source: source, elapsedSeconds: seconds, takeID: take.id))
+                    self.publish(
+                        ScreenRecordingStatus(
+                            state: session.isPaused ? .paused : .recording,
+                            source: source, elapsedSeconds: seconds, takeID: take.id))
                 }
             }
             session.onUnexpectedStop = { [weak self] error in
                 Task { @MainActor in
                     guard let self, self.session === session else { return }
-                    self.publish(ScreenRecordingStatus(
-                        state: .failed, source: source,
-                        elapsedSeconds: session.elapsedSeconds, takeID: take.id,
-                        message: error.localizedDescription))
+                    self.publish(
+                        ScreenRecordingStatus(
+                            state: .failed, source: source,
+                            elapsedSeconds: session.elapsedSeconds, takeID: take.id,
+                            message: error.localizedDescription))
                     self.stop()
                 }
             }
@@ -162,8 +167,9 @@ final class ScreenRecordingCoordinator {
                 await session.cancel()
                 return
             }
-            publish(ScreenRecordingStatus(
-                state: .recording, source: source, takeID: take.id))
+            publish(
+                ScreenRecordingStatus(
+                    state: .recording, source: source, takeID: take.id))
             controls = ScreenRecordingControlsController(
                 source: source, pause: { [weak self] in self?.pauseOrResume() },
                 stop: { [weak self] in self?.stop() },
@@ -176,7 +182,9 @@ final class ScreenRecordingCoordinator {
         } catch {
             if let session { await session.cancel() }
             session = nil
-            publish(ScreenRecordingStatus(state: .failed, source: source, message: error.localizedDescription))
+            publish(
+                ScreenRecordingStatus(
+                    state: .failed, source: source, message: error.localizedDescription))
             NSSound.beep()
         }
     }
@@ -190,9 +198,10 @@ final class ScreenRecordingCoordinator {
             let take = ScreenRecordingLibrary.load().first(where: { $0.id == id })
         else { publish(ScreenRecordingStatus()); return }
         openEditor(take)
-        publish(ScreenRecordingStatus(
-            state: .editing, source: take.source,
-            elapsedSeconds: take.duration, takeID: take.id))
+        publish(
+            ScreenRecordingStatus(
+                state: .editing, source: take.source,
+                elapsedSeconds: take.duration, takeID: take.id))
         library?.reload()
     }
 

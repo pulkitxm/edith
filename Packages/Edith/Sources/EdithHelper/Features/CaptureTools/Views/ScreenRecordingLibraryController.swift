@@ -29,12 +29,14 @@ final class ScreenRecordingLibraryController {
         panel.title = "Recent Recordings"
         panel.minSize = NSSize(width: 600, height: 400)
         panel.isReleasedWhenClosed = false
-        panel.contentView = NSHostingView(rootView: ScreenRecordingLibraryView(
-            model: model, open: open, copy: Self.copy,
-            reveal: Self.reveal, delete: { [weak self] take in
-                ScreenRecordingLibrary.remove(take)
-                self?.reload()
-            }))
+        panel.contentView = NSHostingView(
+            rootView: ScreenRecordingLibraryView(
+                model: model, open: open, copy: Self.copy,
+                reveal: Self.reveal,
+                delete: { [weak self] take in
+                    ScreenRecordingLibrary.remove(take)
+                    self?.reload()
+                }))
     }
 
     func show() {
@@ -94,8 +96,11 @@ private struct ScreenRecordingLibraryView: View {
                             .frame(width: 34, height: 34)
                             .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
                         VStack(alignment: .leading) {
-                            Text(take.completedAt == nil ? "Recovered recording" : take.source.displayName)
-                                .font(.headline)
+                            Text(
+                                take.completedAt == nil
+                                    ? "Recovered recording" : take.source.displayName
+                            )
+                            .font(.headline)
                             Text(
                                 "\(take.duration, specifier: "%.1f") seconds, \(take.pixelWidth) × \(take.pixelHeight)"
                             )
@@ -104,9 +109,19 @@ private struct ScreenRecordingLibraryView: View {
                         }
                         Spacer()
                         Button("Edit") { open(take) }
-                        Button { copy(take) } label: { Image(systemName: "doc.on.doc") }
-                        Button { reveal(take) } label: { Image(systemName: "folder") }
-                        Button(role: .destructive) { delete(take) } label: {
+                        Button {
+                            copy(take)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                        Button {
+                            reveal(take)
+                        } label: {
+                            Image(systemName: "folder")
+                        }
+                        Button(role: .destructive) {
+                            delete(take)
+                        } label: {
                             Image(systemName: "trash")
                         }
                     }

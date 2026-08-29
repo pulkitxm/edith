@@ -13,11 +13,12 @@ import Testing
                 ScreenRecordingRange(start: 7, end: 8),
             ])
 
-        #expect(document.keptRanges(duration: 10) == [
-            ScreenRecordingRange(start: 1, end: 2),
-            ScreenRecordingRange(start: 5, end: 7),
-            ScreenRecordingRange(start: 8, end: 9),
-        ])
+        #expect(
+            document.keptRanges(duration: 10) == [
+                ScreenRecordingRange(start: 1, end: 2),
+                ScreenRecordingRange(start: 5, end: 7),
+                ScreenRecordingRange(start: 8, end: 9),
+            ])
     }
 
     @Test func smoothingKeepsTimesAndCalmsAbruptMovement() throws {
@@ -81,8 +82,9 @@ import Testing
         let status = ScreenRecordingStatus(
             state: .paused, source: .window, elapsedSeconds: 12.5,
             takeID: UUID())
-        defaults.set(try JSONEncoder().encode(status),
-                     forKey: AppStorageKeys.Capture.recordingStatus)
+        defaults.set(
+            try JSONEncoder().encode(status),
+            forKey: AppStorageKeys.Capture.recordingStatus)
 
         #expect(ScreenRecordingStatusStore.load(defaults: defaults) == status)
     }

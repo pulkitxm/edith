@@ -33,17 +33,20 @@ private enum CaptureRecordBridge {
                     hint: "run `ed extensions enable captureTools`, then retry")
             }
             if operation == .status {
-                outputStatus(ScreenRecordingStatusStore.load(defaults: CLIEnvironment.sharedDefaults), json: json)
+                outputStatus(
+                    ScreenRecordingStatusStore.load(defaults: CLIEnvironment.sharedDefaults),
+                    json: json)
                 return
             }
             try AppBridge.requireHelper("controlling Screen Recorder")
             let descriptor = ScreenRecordingOperation.request(operation) { AppBridge.post($0) }
             if json {
-                CLIOut.json(.object([
-                    "operation": .string(descriptor.id.rawValue),
-                    "requested": .bool(true),
-                    "interactive": .bool(descriptor.effect == .interactive),
-                ]))
+                CLIOut.json(
+                    .object([
+                        "operation": .string(descriptor.id.rawValue),
+                        "requested": .bool(true),
+                        "interactive": .bool(descriptor.effect == .interactive),
+                    ]))
             } else {
                 CLIOut.out("\(operation.rawValue) requested")
             }
@@ -62,7 +65,9 @@ private enum CaptureRecordBridge {
             CLIOut.json(.object(object))
         } else {
             let source = status.source.map { " \($0.rawValue)" } ?? ""
-            CLIOut.out("\(status.state.rawValue)\(source) \(String(format: "%.1fs", status.elapsedSeconds))")
+            CLIOut.out(
+                "\(status.state.rawValue)\(source) \(String(format: "%.1fs", status.elapsedSeconds))"
+            )
         }
     }
 }
@@ -79,55 +84,64 @@ extension CaptureRecordRequest {
 }
 
 struct CaptureRecordAreaCommand: CaptureRecordRequest {
-    static let configuration = CommandConfiguration(commandName: "area", abstract: "Select and record an area.")
+    static let configuration = CommandConfiguration(
+        commandName: "area", abstract: "Select and record an area.")
     static let operation = ScreenRecordingOperation.area
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
 }
 
 struct CaptureRecordWindowCommand: CaptureRecordRequest {
-    static let configuration = CommandConfiguration(commandName: "window", abstract: "Choose and record a window.")
+    static let configuration = CommandConfiguration(
+        commandName: "window", abstract: "Choose and record a window.")
     static let operation = ScreenRecordingOperation.window
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
 }
 
 struct CaptureRecordDisplayCommand: CaptureRecordRequest {
-    static let configuration = CommandConfiguration(commandName: "display", abstract: "Choose and record a display.")
+    static let configuration = CommandConfiguration(
+        commandName: "display", abstract: "Choose and record a display.")
     static let operation = ScreenRecordingOperation.display
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
 }
 
 struct CaptureRecordPauseCommand: CaptureRecordRequest {
-    static let configuration = CommandConfiguration(commandName: "pause", abstract: "Pause the active recording.")
+    static let configuration = CommandConfiguration(
+        commandName: "pause", abstract: "Pause the active recording.")
     static let operation = ScreenRecordingOperation.pause
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
 }
 
 struct CaptureRecordResumeCommand: CaptureRecordRequest {
-    static let configuration = CommandConfiguration(commandName: "resume", abstract: "Resume the active recording.")
+    static let configuration = CommandConfiguration(
+        commandName: "resume", abstract: "Resume the active recording.")
     static let operation = ScreenRecordingOperation.resume
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
 }
 
 struct CaptureRecordStopCommand: CaptureRecordRequest {
-    static let configuration = CommandConfiguration(commandName: "stop", abstract: "Stop and edit the active recording.")
+    static let configuration = CommandConfiguration(
+        commandName: "stop", abstract: "Stop and edit the active recording.")
     static let operation = ScreenRecordingOperation.stop
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
 }
 
 struct CaptureRecordCancelCommand: CaptureRecordRequest {
-    static let configuration = CommandConfiguration(commandName: "cancel", abstract: "Discard the active recording.")
+    static let configuration = CommandConfiguration(
+        commandName: "cancel", abstract: "Discard the active recording.")
     static let operation = ScreenRecordingOperation.cancel
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
 }
 
 struct CaptureRecordStatusCommand: CaptureRecordRequest {
-    static let configuration = CommandConfiguration(commandName: "status", abstract: "Read the current recording state.")
+    static let configuration = CommandConfiguration(
+        commandName: "status", abstract: "Read the current recording state.")
     static let operation = ScreenRecordingOperation.status
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
 }
 
 struct CaptureRecordLibraryCommand: CaptureRecordRequest {
-    static let configuration = CommandConfiguration(commandName: "library", abstract: "Open recent and recovered recordings.")
+    static let configuration = CommandConfiguration(
+        commandName: "library", abstract: "Open recent and recovered recordings.")
     static let operation = ScreenRecordingOperation.library
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
 }

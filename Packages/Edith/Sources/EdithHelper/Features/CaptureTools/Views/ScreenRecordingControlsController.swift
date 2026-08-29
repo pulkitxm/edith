@@ -21,16 +21,18 @@ final class ScreenRecordingControlsController {
         panel.hasShadow = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false
-        panel.contentView = NSHostingView(rootView: ScreenRecordingControlsView(
-            source: source, pause: pause, stop: stop, cancel: cancel))
+        panel.contentView = NSHostingView(
+            rootView: ScreenRecordingControlsView(
+                source: source, pause: pause, stop: stop, cancel: cancel))
     }
 
     func show() {
         guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
         let frame = panel.frame
-        panel.setFrameOrigin(NSPoint(
-            x: screen.visibleFrame.midX - frame.width / 2,
-            y: screen.visibleFrame.minY + 24))
+        panel.setFrameOrigin(
+            NSPoint(
+                x: screen.visibleFrame.midX - frame.width / 2,
+                y: screen.visibleFrame.minY + 24))
         panel.orderFrontRegardless()
     }
 

@@ -359,7 +359,9 @@ private final class ScreenRecordingWriter {
         if systemAudio {
             let input = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
             input.expectsMediaDataInRealTime = true
-            if writer.canAdd(input) { writer.add(input); self.systemAudio = input } else {
+            if writer.canAdd(input) {
+                writer.add(input); self.systemAudio = input
+            } else {
                 self.systemAudio = nil
             }
         } else {
@@ -368,7 +370,9 @@ private final class ScreenRecordingWriter {
         if microphone {
             let input = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
             input.expectsMediaDataInRealTime = true
-            if writer.canAdd(input) { writer.add(input); self.microphone = input } else {
+            if writer.canAdd(input) {
+                writer.add(input); self.microphone = input
+            } else {
                 self.microphone = nil
             }
         } else {
@@ -390,16 +394,18 @@ private final class ScreenRecordingWriter {
         guard let origin else { return }
         let sampleDuration = CMSampleBufferGetDuration(sample)
         let duration = sampleDuration.isValid ? max(0, sampleDuration.seconds) : 0
-        guard let mapped = pauseClock.map(
-            start: time.seconds, duration: duration, origin: origin.seconds),
+        guard
+            let mapped = pauseClock.map(
+                start: time.seconds, duration: duration, origin: origin.seconds),
             let retimed = Self.retimed(
                 sample, to: CMTime(seconds: mapped, preferredTimescale: 600_000))
         else { return }
-        let input: AVAssetWriterInput? = switch kind {
-        case .video: video
-        case .systemAudio: systemAudio
-        case .microphone: microphone
-        }
+        let input: AVAssetWriterInput? =
+            switch kind {
+            case .video: video
+            case .systemAudio: systemAudio
+            case .microphone: microphone
+            }
         guard let input, input.isReadyForMoreMediaData else { return }
         if input.append(retimed) {
             if kind == .video { frameCount += 1 }

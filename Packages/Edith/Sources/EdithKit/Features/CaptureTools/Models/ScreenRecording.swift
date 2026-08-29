@@ -189,7 +189,9 @@ public struct ScreenRecordingExportPreset: Codable, Equatable, Hashable, Identif
 }
 
 public enum ScreenRecordingPresetStore {
-    public static func load(defaults: UserDefaults = SharedDefaults.store) -> [ScreenRecordingExportPreset] {
+    public static func load(defaults: UserDefaults = SharedDefaults.store)
+        -> [ScreenRecordingExportPreset]
+    {
         guard let data = defaults.data(forKey: AppStorageKeys.Capture.recordingPresets),
             let presets = try? JSONDecoder().decode([ScreenRecordingExportPreset].self, from: data)
         else { return [.balanced, .compact, .gif] }
@@ -318,8 +320,10 @@ public enum ScreenRecordingTimeline {
         let alpha = min(max(1 - amount, 0.05), 1)
         var forward = points
         for index in 1..<forward.count {
-            forward[index].x = forward[index - 1].x + alpha * (forward[index].x - forward[index - 1].x)
-            forward[index].y = forward[index - 1].y + alpha * (forward[index].y - forward[index - 1].y)
+            forward[index].x =
+                forward[index - 1].x + alpha * (forward[index].x - forward[index - 1].x)
+            forward[index].y =
+                forward[index - 1].y + alpha * (forward[index].y - forward[index - 1].y)
         }
         var result = forward
         for index in stride(from: result.count - 2, through: 0, by: -1) {

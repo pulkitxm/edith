@@ -34,9 +34,11 @@ public enum ScreenRecordingLibrary {
     public static let unfinishedLifetime: TimeInterval = 7 * 24 * 60 * 60
 
     public static func defaultDirectory() throws -> URL {
-        guard let root = FileManager.default.urls(
-            for: .applicationSupportDirectory, in: .userDomainMask
-        ).first else { throw CocoaError(.fileNoSuchFile) }
+        guard
+            let root = FileManager.default.urls(
+                for: .applicationSupportDirectory, in: .userDomainMask
+            ).first
+        else { throw CocoaError(.fileNoSuchFile) }
         return root.appendingPathComponent("Edith/Capture Studio/Recordings", isDirectory: true)
     }
 
@@ -105,9 +107,11 @@ public enum ScreenRecordingLibrary {
             let take = (try? Data(contentsOf: metadata)).flatMap {
                 try? JSONDecoder().decode(ScreenRecordingTake.self, from: $0)
             }
-            let expired = take.map {
-                $0.completedAt != nil || now.timeIntervalSince($0.createdAt) > unfinishedLifetime
-            } ?? true
+            let expired =
+                take.map {
+                    $0.completedAt != nil
+                        || now.timeIntervalSince($0.createdAt) > unfinishedLifetime
+                } ?? true
             if expired { try? FileManager.default.removeItem(at: folder) }
         }
     }
@@ -147,8 +151,9 @@ public enum ScreenRecordingLibrary {
     }
 
     private static func isRegularFile(_ url: URL) -> Bool {
-        guard let values = try? url.resourceValues(
-            forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+        guard
+            let values = try? url.resourceValues(
+                forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
         else { return false }
         return values.isRegularFile == true && values.isSymbolicLink != true
             && (values.fileSize ?? 0) > 0

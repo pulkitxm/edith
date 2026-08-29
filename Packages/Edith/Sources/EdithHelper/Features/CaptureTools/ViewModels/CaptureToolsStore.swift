@@ -57,14 +57,21 @@ final class CaptureToolsStore: FeatureModule {
             IPC.observe(IPC.Name.requestCaptureWindow) { [weak self] in self?.start(.window) },
             IPC.observe(IPC.Name.requestCaptureScreen) { [weak self] in self?.start(.screen) },
             IPC.observe(IPC.Name.requestCaptureLibrary) { [weak self] in self?.showLibrary() },
-            IPC.observe(IPC.Name.requestRecordingArea) { [weak self] in self?.startRecording(.area) },
-            IPC.observe(IPC.Name.requestRecordingWindow) { [weak self] in self?.startRecording(.window) },
-            IPC.observe(IPC.Name.requestRecordingDisplay) { [weak self] in self?.startRecording(.display) },
+            IPC.observe(IPC.Name.requestRecordingArea) { [weak self] in self?.startRecording(.area)
+            },
+            IPC.observe(IPC.Name.requestRecordingWindow) { [weak self] in
+                self?.startRecording(.window)
+            },
+            IPC.observe(IPC.Name.requestRecordingDisplay) { [weak self] in
+                self?.startRecording(.display)
+            },
             IPC.observe(IPC.Name.requestRecordingPause) { [weak self] in self?.recorder.pause() },
             IPC.observe(IPC.Name.requestRecordingResume) { [weak self] in self?.recorder.resume() },
             IPC.observe(IPC.Name.requestRecordingStop) { [weak self] in self?.recorder.stop() },
             IPC.observe(IPC.Name.requestRecordingCancel) { [weak self] in self?.recorder.cancel() },
-            IPC.observe(IPC.Name.requestRecordingLibrary) { [weak self] in self?.recorder.showLibrary() },
+            IPC.observe(IPC.Name.requestRecordingLibrary) { [weak self] in
+                self?.recorder.showLibrary()
+            },
         ]
     }
 
