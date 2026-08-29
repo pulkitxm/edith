@@ -246,8 +246,8 @@ struct HerdrPage: View {
                         ForEach(store.tabs) { tab in
                             tabButton(
                                 id: tab.id,
-                                title: hideAgents ? tab.agent.kind : tab.agent.title,
-                                closable: true, agent: tab.agent)
+                                title: tab.agent.title, closable: true, agent: tab.agent,
+                                blurTitle: hideAgents)
                         }
                     }
                     .padding(.leading, 0)
@@ -272,9 +272,10 @@ struct HerdrPage: View {
         .background(DashSkin.paper2(dark).opacity(0.4))
     }
 
-    private func tabButton(id: String, title: String, closable: Bool, agent: HerdrAgent? = nil)
-        -> some View
-    {
+    private func tabButton(
+        id: String, title: String, closable: Bool, agent: HerdrAgent? = nil,
+        blurTitle: Bool = false
+    ) -> some View {
         let selected = store.selectedTab == id
         return HStack(spacing: UIScale.pt(6)) {
             if let agent {
@@ -286,6 +287,7 @@ struct HerdrPage: View {
             Text(title)
                 .font(.system(size: UIScale.pt(12), weight: selected ? .semibold : .medium))
                 .lineLimit(1)
+                .presenterTextBlur(blurTitle, fontSize: 12)
             if let agent, agent.isTerminal {
                 Text(agent.machineName)
                     .font(DashSkin.mono(9))
@@ -487,23 +489,17 @@ struct HerdrPage: View {
                     }
                 }
                 .foregroundStyle(DashSkin.inkSoft(dark))
-                if hideAgents {
-                    hiddenLine
-                    Text(agent.machineName)
-                        .font(DashSkin.mono(10))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .lineLimit(1)
-                } else {
-                    Text(agent.title)
-                        .font(.system(size: UIScale.pt(13), weight: .medium))
-                        .foregroundStyle(DashSkin.ink(dark))
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    Text("\(agent.machineName) · \(agent.pane)")
-                        .font(DashSkin.mono(10))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .lineLimit(1)
-                }
+                Text(agent.title)
+                    .font(.system(size: UIScale.pt(13), weight: .medium))
+                    .foregroundStyle(DashSkin.ink(dark))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .presenterTextBlur(hideAgents, fontSize: 13)
+                Text("\(agent.machineName) · \(agent.pane)")
+                    .font(DashSkin.mono(10))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .lineLimit(1)
+                    .presenterTextBlur(hideAgents, fontSize: 10)
             }
             .padding(UIScale.pt(12))
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -623,26 +619,20 @@ struct HerdrPage: View {
                     )
                     .padding(.top, UIScale.pt(2))
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    if hideAgents {
-                        hiddenLine
-                        Text(agent.machineName)
-                            .font(DashSkin.mono(9.5))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .lineLimit(1)
-                    } else {
-                        Text(agent.title)
-                            .font(
-                                .system(
-                                    size: UIScale.pt(12.5), weight: selected ? .semibold : .medium)
-                            )
-                            .foregroundStyle(DashSkin.ink(dark))
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
-                        Text(rowDetail(agent))
-                            .font(DashSkin.mono(9.5))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .lineLimit(1)
-                    }
+                    Text(agent.title)
+                        .font(
+                            .system(
+                                size: UIScale.pt(12.5), weight: selected ? .semibold : .medium)
+                        )
+                        .foregroundStyle(DashSkin.ink(dark))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .presenterTextBlur(hideAgents, fontSize: 12.5)
+                    Text(rowDetail(agent))
+                        .font(DashSkin.mono(9.5))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .lineLimit(1)
+                        .presenterTextBlur(hideAgents, fontSize: 9.5)
                 }
                 Spacer(minLength: 0)
             }
@@ -674,14 +664,6 @@ struct HerdrPage: View {
         }
         if HerdrAgentWindow.raise(agent.id) { return }
         store.open(agent)
-    }
-
-    private var hiddenLine: some View {
-        RoundedRectangle(cornerRadius: UIScale.pt(3), style: .continuous)
-            .fill(DashSkin.ink(dark).opacity(0.14))
-            .frame(height: UIScale.pt(13))
-            .frame(maxWidth: UIScale.pt(160), alignment: .leading)
-            .accessibilityLabel("Hidden")
     }
 
     private func emptyState(title: String, detail: String) -> some View {
