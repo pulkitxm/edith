@@ -60,6 +60,7 @@ import Testing
 
         let session = FocusSession(
             profileID: profile.id, profileName: profile.name, origin: .app,
+            startedAt: Date(timeIntervalSince1970: 1_777_700_000),
             restorationScene: AutomationScene(name: "Restore", actions: []))
         try storage.saveSession(session)
         #expect(try storage.session() == session)
