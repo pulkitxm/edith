@@ -213,10 +213,7 @@ jobs:
           persist-credentials: false
       - name: Install Fish
         run: |
-          if ! command -v fish >/dev/null 2>&1; then
-            brew untap aws/tap 2>/dev/null || true
-            brew install fish
-          fi
+          command -v fish >/dev/null 2>&1 || brew install fish
           fish --version
       - name: Cache libghostty
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9

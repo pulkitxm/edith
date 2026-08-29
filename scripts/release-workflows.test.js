@@ -186,25 +186,16 @@ test("bundle verification requires one executable and its CLI launcher", () => {
   expect(makefile).toContain("for name in ed edith; do");
 });
 
-test("macOS releases require notarization credentials", () => {
+test("macOS notarization is conditional on its optional credentials", () => {
   expect(releaseWorkflow).toContain("HAS_NOTARY:");
-  expect(releaseWorkflow).toContain("notarization credentials are required");
   expect(releaseWorkflow).toContain(
-    "if: steps.release_build.outputs.superseded != 'true'",
+    "if: steps.release_build.outputs.superseded != 'true' && env.HAS_NOTARY == 'true'",
   );
-  expect(releaseWorkflow).not.toContain("env.HAS_NOTARY");
+  expect(releaseWorkflow).not.toContain("env.HAS_NOTARY != 'true'");
 });
 
-test("macOS releases require a Developer ID certificate", () => {
-  expect(releaseWorkflow).toContain(
-    "Developer ID Application certificate is required",
-  );
-  expect(releaseWorkflow).toContain("EDITH_SIGN_IDENTITY=$SIGN_IDENTITY");
-  expect(releaseWorkflow).not.toContain("EDITH_RELEASE_ALLOW_DEV_SIGNING");
-});
-
-test("Swift tests remove the untrusted hosted-runner tap before installing Fish", () => {
-  expect(ciWorkflow).toContain("brew untap aws/tap 2>/dev/null || true");
+test("macOS release accepts the configured development certificate", () => {
+  expect(releaseWorkflow).toContain('EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"');
 });
 
 test("the publisher uses a token that clears the ruleset", () => {
