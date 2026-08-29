@@ -23,6 +23,7 @@ struct DashboardView: View {
     @State private var sourcePickerOpen = false
     @State private var modelPickerOpen = false
     @State private var machinePickerOpen = false
+    @State private var showShare = false
     @State private var customFrom = Date()
     @State private var customTo = Date()
 
@@ -95,6 +96,9 @@ struct DashboardView: View {
         .onChange(of: showLog) { _, shown in
             refresh.setLogVisible(shown)
         }
+        .sheet(isPresented: $showShare) {
+            UsageShareSheet(snapshot: shareSnapshot)
+        }
     }
 
     private var background: some View {
@@ -147,7 +151,27 @@ struct DashboardView: View {
                 helperText: "Show collector log",
                 tint: showLog ? appTheme : DashSkin.inkFaint(dark)
             )
+            if model.loaded {
+                MastheadButton(
+                    action: { showShare = true },
+                    systemImage: "square.and.arrow.up",
+                    helperText: "Share usage cards"
+                )
+            }
         }
+    }
+
+    private var shareSnapshot: UsageShareSnapshot {
+        let details = model.heatDetail.sorted { $0.key < $1.key }
+        let agents = Set(details.flatMap { $0.value.sources.map(\.id) })
+        let repositories = Set(
+            details.flatMap { $0.value.projects.map(\.id) }.filter { $0 != "unattributed" })
+        return UsageShareSnapshot(
+            days: details.map { period, detail in
+                UsageShareDay(period: period, tokens: detail.tokens, cost: detail.cost)
+            },
+            agentCount: agents.count, repositoryCount: repositories.count,
+            generatedAt: model.meta.updated)
     }
 
     private struct MastheadButton: View {
