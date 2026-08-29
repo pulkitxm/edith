@@ -44,13 +44,12 @@ final class EmojiPanel: NSObject, NSWindowDelegate {
         panel.setContentSize(NSSize(width: Self.width, height: Self.height))
         let position = PopupPosition.stored(forKey: AppStorageKeys.Emoji.popupAt)
         let size = panel.frame.size
-        let statusItemFrame = PanelController.shared?.statusItemFrame
         showGeneration += 1
         let generation = showGeneration
         showTask?.cancel()
         showTask = Task.detached { [weak self] in
             let origin = await position.origin(
-                size: size, statusItemFrame: statusItemFrame, anchors: .emoji)
+                size: size, statusItemFrame: nil, anchors: .emoji)
             guard !Task.isCancelled else { return }
             await self?.finishShow(origin: origin, generation: generation)
         }
