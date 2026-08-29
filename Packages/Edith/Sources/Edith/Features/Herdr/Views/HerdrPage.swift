@@ -125,7 +125,14 @@ struct HerdrPage: View {
             if store.agentSpaces.isEmpty {
                 Text("No spaces available")
             } else {
-                ForEach(store.agentSpaces) { space in
+                if let first = store.agentSpaces.first {
+                    Button {
+                        openSpace(first)
+                    } label: {
+                        Label(first.title, systemImage: "macwindow")
+                    }
+                }
+                ForEach(Array(store.agentSpaces.dropFirst())) { space in
                     Button {
                         openSpace(space)
                     } label: {
@@ -138,7 +145,7 @@ struct HerdrPage: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help("Open a Space in its own window")
+        .help("Open a Space in its own window (⌥⌘S opens the first)")
     }
 
     private var spaceGroupingToggle: some View {
@@ -208,6 +215,10 @@ struct HerdrPage: View {
                 Button("") { store.selectTab(number: number) }
                     .keyboardShortcut(
                         KeyEquivalent(Character("\(number)")), modifiers: .option)
+            }
+            if let space = store.agentSpaces.first {
+                Button("") { openSpace(space) }
+                    .keyboardShortcut("s", modifiers: [.command, .option])
             }
         }
         .opacity(0)

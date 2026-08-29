@@ -231,8 +231,12 @@ struct HerdrSpaceView: View {
                 model.selected = tab.id
             } label: {
                 HStack(spacing: UIScale.pt(6)) {
-                    Image(systemName: tab.agentID == nil ? "terminal" : "sparkle")
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
+                    if let agent = tab.agentTab?.agent {
+                        HerdrKindMark(kind: agent.kind, size: UIScale.pt(11))
+                    } else {
+                        Image(systemName: "terminal")
+                            .font(.system(size: UIScale.pt(10), weight: .semibold))
+                    }
                     Text(tab.title)
                         .font(.system(size: UIScale.pt(11.5), weight: .medium))
                         .lineLimit(1)
