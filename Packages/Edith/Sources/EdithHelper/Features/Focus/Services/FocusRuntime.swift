@@ -362,10 +362,8 @@ final class FocusRuntime: NSObject {
     }
 
     private func installIPC() {
-        ipcObserver = DistributedNotificationCenter.default().addObserver(
-            forName: IPC.Name.requestFocusAction, object: nil, queue: .main
-        ) { [weak self] note in
-            Task { @MainActor in self?.handleIPC(note.userInfo ?? [:]) }
+        ipcObserver = IPC.observe(IPC.Name.requestFocusAction) { [weak self] info in
+            Task { @MainActor in self?.handleIPC(info) }
         }
     }
 
@@ -465,7 +463,7 @@ final class FocusRuntime: NSObject {
         calendarObserver = nil
         calendarStore = nil
         if let ipcObserver {
-            DistributedNotificationCenter.default().removeObserver(ipcObserver)
+            IPC.stopObserving(ipcObserver)
         }
         ipcObserver = nil
         for id in shortcutIDs { GlobalHotKey.clear(id: id) }
