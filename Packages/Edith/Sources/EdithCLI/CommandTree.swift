@@ -30,6 +30,7 @@ public enum ArgumentKind: Equatable, Sendable {
     case shell
     case group
     case usageRange
+    case usageShareCard
     case attentionRange
     case attentionEntity
     case attentionCategory
@@ -322,6 +323,15 @@ public enum CommandTree {
                     CommandNode(
                         "sources", "The agents that produced the history.",
                         options: common),
+                    CommandNode(
+                        "export", "Render branded usage cards as PNG images.",
+                        options: [
+                            "--json", "--help", "--range", "--source", "--machine", "--card",
+                            "-o", "--output",
+                        ],
+                        optionValues: usageValues.merging([
+                            "--card": .usageShareCard, "-o": .localPath, "--output": .localPath,
+                        ]) { current, _ in current }),
                     CommandNode(
                         "machines", "Machines counted with this Mac.",
                         children: [

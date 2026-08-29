@@ -383,6 +383,9 @@ enum JSONContract {
             mutatesTheMachine: true),
         JSONCase("ed usage sources", ["usage", "sources", "--json"]),
         JSONCase(
+            "ed usage export", ["usage", "export", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
             "ed usage refresh", ["usage", "refresh", "--json"],
             mutatesTheMachine: true),
         JSONCase(
