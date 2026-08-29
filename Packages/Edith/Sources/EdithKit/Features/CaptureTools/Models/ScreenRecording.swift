@@ -1,6 +1,30 @@
 import CoreGraphics
 import Foundation
 
+public struct ScreenRecordingRegion: @unchecked Sendable {
+    public var source: ScreenRecordingSource
+    public var displayID: CGDirectDisplayID
+    public var windowID: CGWindowID?
+    public var sourceRect: CGRect
+    public var pixelSize: CGSize
+    public var anchorRect: CGRect
+    public var scale: CGFloat
+
+    public init(
+        source: ScreenRecordingSource, displayID: CGDirectDisplayID,
+        windowID: CGWindowID? = nil, sourceRect: CGRect, pixelSize: CGSize,
+        anchorRect: CGRect, scale: CGFloat
+    ) {
+        self.source = source
+        self.displayID = displayID
+        self.windowID = windowID
+        self.sourceRect = sourceRect
+        self.pixelSize = pixelSize
+        self.anchorRect = anchorRect
+        self.scale = scale
+    }
+}
+
 public enum ScreenRecordingSource: String, CaseIterable, Codable, Sendable {
     case area
     case window
