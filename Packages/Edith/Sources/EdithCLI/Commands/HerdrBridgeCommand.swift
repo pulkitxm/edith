@@ -5,7 +5,8 @@ import Foundation
 
 struct HerdrBridgeCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "bridge", shouldDisplay: false)
+        commandName: "bridge", abstract: "Bridge terminal input to a Herdr pane.",
+        shouldDisplay: false)
 
     @Argument var specification: String
 

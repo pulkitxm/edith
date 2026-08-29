@@ -216,6 +216,7 @@ enum CommandCrawler {
             "ed machines files", "ed machines docker", "ed config", "ed extensions",
             "ed permissions", "ed usage", "ed system", "ed music", "ed calendar",
             "ed presenter", "ed herdr",
+            "ed herdr bridge",
             "ed machines", "ed __complete", "ed app", "ed clipboard", "ed color", "ed emoji",
             "ed shelf", "ed cleaner", "ed machines docker compose",
             "ed machines docker compose logs", "ed machines forwards",
