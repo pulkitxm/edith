@@ -87,6 +87,14 @@ public enum AppStorageKeys {
         public static let screenshotHotKeyCode = "captureScreenshotHotKeyCode"
         public static let screenshotHotKeyLabel = "captureScreenshotHotKeyLabel"
         public static let screenshotHotKeyMods = "captureScreenshotHotKeyMods"
+        public static let recordingSystemAudio = "captureRecordingSystemAudio"
+        public static let recordingMicrophone = "captureRecordingMicrophone"
+        public static let recordingFrameRate = "captureRecordingFrameRate"
+        public static let recordingStatus = "captureRecordingStatus"
+        public static let recordingPresets = "captureRecordingPresets"
+        public static let recordingHotKeyCode = "captureRecordingHotKeyCode"
+        public static let recordingHotKeyLabel = "captureRecordingHotKeyLabel"
+        public static let recordingHotKeyMods = "captureRecordingHotKeyMods"
     }
 
     public enum Companion {

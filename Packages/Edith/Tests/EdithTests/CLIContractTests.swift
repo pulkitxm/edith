@@ -159,6 +159,32 @@ enum JSONContract {
         JSONCase(
             "ed capture library", ["capture", "library", "--json"],
             mutatesTheMachine: true),
+        JSONCase(
+            "ed capture record area", ["capture", "record", "area", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed capture record window", ["capture", "record", "window", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed capture record display", ["capture", "record", "display", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed capture record pause", ["capture", "record", "pause", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed capture record resume", ["capture", "record", "resume", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed capture record stop", ["capture", "record", "stop", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed capture record cancel", ["capture", "record", "cancel", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed capture record status", ["capture", "record", "status", "--json"]),
+        JSONCase(
+            "ed capture record library", ["capture", "record", "library", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed shelf ls", ["shelf", "ls", "--json"]),
         JSONCase("ed shelf path", ["shelf", "path", "1", "--json"]),
         JSONCase("ed shelf open", ["shelf", "open", "999999", "--json"]),

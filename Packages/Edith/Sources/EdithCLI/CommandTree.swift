@@ -627,6 +627,22 @@ public enum CommandTree {
                     CommandNode(
                         "library", "Open recent captures.",
                         options: common),
+                    CommandNode(
+                        "record", "Record and edit an area, window, or display.",
+                        children: [
+                            CommandNode("area", "Select and record an area.", options: common),
+                            CommandNode("window", "Choose and record a window.", options: common),
+                            CommandNode("display", "Choose and record a display.", options: common),
+                            CommandNode("pause", "Pause the active recording.", options: common),
+                            CommandNode("resume", "Resume the active recording.", options: common),
+                            CommandNode(
+                                "stop", "Stop and edit the active recording.", options: common),
+                            CommandNode("cancel", "Discard the active recording.", options: common),
+                            CommandNode(
+                                "status", "Read the current recording state.", options: common),
+                            CommandNode(
+                                "library", "Open recent and recovered recordings.", options: common),
+                        ]),
                 ]),
             CommandNode(
                 "shelf", "The files parked on the notch shelf.",

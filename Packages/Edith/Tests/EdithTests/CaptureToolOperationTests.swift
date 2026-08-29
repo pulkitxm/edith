@@ -25,6 +25,23 @@ import Testing
         }
     }
 
+    @Test func recordingDescriptorsMatchSafeRoutes() {
+        let descriptors = ScreenRecordingOperation.allCases.map(\.descriptor)
+        #expect(
+            descriptors.map(\.id.rawValue) == [
+                "capture.record.area", "capture.record.window", "capture.record.display",
+                "capture.record.pause", "capture.record.resume", "capture.record.stop",
+                "capture.record.cancel", "capture.record.status", "capture.record.library",
+            ])
+        #expect(descriptors.first?.cli == ["capture", "record", "area"])
+        #expect(descriptors[7].effect == .read)
+        #expect(descriptors[6].effect == .destructive)
+        for descriptor in descriptors {
+            #expect(UserOperationCatalog.descriptor(id: descriptor.id) == descriptor)
+            #expect(UserOperationCatalog.descriptor(cli: descriptor.cli) == descriptor)
+        }
+    }
+
     @Test func requestsUseDistinctNotifications() {
         var posted: [Notification.Name] = []
         _ = CaptureToolOperationExecution.request(.read) { posted.append($0) }

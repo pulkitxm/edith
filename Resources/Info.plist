@@ -31,7 +31,7 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Edith records voice memories in the Companion capture screen.</string>
+	<string>Edith records microphone audio for voice memories and screen recordings when you enable it.</string>
 	<key>NSRemovableVolumesUsageDescription</key>
 	<string>Edith needs this to scan an external drive you pick in the Cleaner.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

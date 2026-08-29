@@ -66,7 +66,7 @@ and platform details.
 - **Music player** - your local music folder with thumbnails, drag-to-seek, fades, auto-advance and media keys; also controls Spotify and Apple Music.
 - **Clipboard history** - a global paste panel with search and paste-in-place.
 - **Color picker** - system-wide eyedropper on a hotkey, with swatch history.
-- **Capture Studio** - area, window, and full-screen PNG capture with offline OCR and barcode recognition, recent captures, annotation, redaction, crop, framing, pinning, and configurable local saves.
+- **Capture Studio** - screenshots and ScreenCaptureKit recording for an area, window, or display, with separate audio tracks, recovery, recent libraries, native editing, MP4 and GIF export, offline recognition, annotation, redaction, crop, framing, and pinning. See the [Screen Recorder guide](docs/screen-recorder.md).
 - **Notch shelf** - the notch becomes a hover-to-open shelf for drag-and-drop file staging, now-playing controls and a camera check.
 - **Calendar** - your agenda grouped by day, with one-tap join links.
 - **Audio mixer** - per-app volume control.

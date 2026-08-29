@@ -19,6 +19,12 @@ struct CaptureToolsRows: View {
         var saveFolder = ""
     @AppStorage(AppStorageKeys.Capture.filenameTemplate, store: SharedDefaults.store) private
         var filenameTemplate = CaptureFilenameTemplate.fallback
+    @AppStorage(AppStorageKeys.Capture.recordingSystemAudio, store: SharedDefaults.store) private
+        var recordingSystemAudio = true
+    @AppStorage(AppStorageKeys.Capture.recordingMicrophone, store: SharedDefaults.store) private
+        var recordingMicrophone = false
+    @AppStorage(AppStorageKeys.Capture.recordingFrameRate, store: SharedDefaults.store) private
+        var recordingFrameRate = 30
     @State private var history: [CaptureRecognition] = []
 
     var body: some View {
@@ -83,6 +89,48 @@ struct CaptureToolsRows: View {
                 .onSubmit { IPC.post(IPC.Name.settingsChanged) }
                 Text("Available tokens: {date}, {time}, {timestamp}, and {mode}.")
                     .settingsCaption()
+            }
+
+            Section("Screen Recorder") {
+                HStack {
+                    Button("Record area") {
+                        _ = ScreenRecordingOperation.request(.area)
+                    }
+                    .buttonStyle(.edith(.primary))
+                    Button("Window") { _ = ScreenRecordingOperation.request(.window) }
+                        .buttonStyle(.edith(.secondary))
+                    Button("Display") { _ = ScreenRecordingOperation.request(.display) }
+                        .buttonStyle(.edith(.secondary))
+                    Button("Recent recordings") {
+                        _ = ScreenRecordingOperation.request(.library)
+                    }
+                    .buttonStyle(.edith(.secondary))
+                }
+                Toggle(
+                    "Record system audio",
+                    isOn: $recordingSystemAudio.configured(
+                        AppStorageKeys.Capture.recordingSystemAudio))
+                Toggle(
+                    "Record microphone on a separate track",
+                    isOn: $recordingMicrophone.configured(
+                        AppStorageKeys.Capture.recordingMicrophone))
+                Picker(
+                    "Frame rate",
+                    selection: $recordingFrameRate.configured(
+                        AppStorageKeys.Capture.recordingFrameRate)
+                ) {
+                    Text("24 fps").tag(24)
+                    Text("30 fps").tag(30)
+                    Text("60 fps").tag(60)
+                }
+                LabeledContent("Record or stop shortcut") {
+                    HotKeyRecorderControl(
+                        keyPrefix: "captureRecordingHotKey", defaultLabel: "⌃⌥⌘V")
+                }
+                Text(
+                    "Controls stay outside the finished media. Interrupted takes remain recoverable in Recent Recordings."
+                )
+                .settingsCaption()
             }
 
             Section("Recognition") {

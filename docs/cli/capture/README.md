@@ -2,7 +2,8 @@
 
 `ed capture` starts Edith's local Capture Studio tools. Capture an area, a
 window, or the full main display, reopen recent captures, or recognize screen
-text and codes without sending the image anywhere.
+text and codes without sending the image anywhere. Capture Studio also records
+an area, window, or display with optional system and microphone audio.
 
 Recognition uses macOS Vision on this Mac. QR, Micro QR, Aztec, Data Matrix,
 PDF417, Code 39, Code 93, Code 128, EAN, UPC-E, and ITF-14 payloads take
@@ -24,6 +25,7 @@ framing. All work remains local.
 | `ed capture window` | Captures a selected window and opens the quick preview. |
 | `ed capture screen` | Captures the full main display and opens the quick preview. |
 | `ed capture library` | Opens the recent-captures library. |
+| `ed capture record` | Records, controls, edits, and exports screen media. |
 
 Bare `ed capture` runs `ed capture read`.
 
@@ -32,10 +34,12 @@ Bare `ed capture` runs `ed capture read`.
 - [`ed capture window`](./window.md)
 - [`ed capture screen`](./screen.md)
 - [`ed capture library`](./library.md)
+- [`ed capture record`](./record.md)
 
 Every command requires the Capture Tools extension and the running menu bar
 app. Capture commands also require Screen Recording permission. They return
 after sending the request, and interactive selection finishes asynchronously.
+Microphone recording requires Microphone permission.
 
 ## Privacy and related tools
 
