@@ -13,7 +13,7 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: ghostty build install reset reinstall release loc ci ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture
+.PHONY: ghostty build install reset reinstall release loc ci ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test verify-release-build-settings verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture
 
 ci:
 	bun install --frozen-lockfile
@@ -112,7 +112,11 @@ ci-swift: ci-swift-check
 	./build.sh --no-open
 	$(MAKE) verify-bundle
 
-verify-bundle:
+verify-release-build-settings:
+	@test "$$(xcodebuild -project edth.xcodeproj -target EdithMain -configuration Release -showBuildSettings | awk '$$1 == "DEAD_CODE_STRIPPING" { print $$3; exit }')" = YES \
+	  || { echo "Release DEAD_CODE_STRIPPING must be YES" >&2; exit 1; }
+
+verify-bundle: verify-release-build-settings
 	test -f dist/Edith.app/Contents/MacOS/Edith
 	test ! -L dist/Edith.app/Contents/MacOS/Edith
 	test -x dist/Edith.app/Contents/MacOS/Edith
