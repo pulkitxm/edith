@@ -104,7 +104,7 @@ struct ShortcutsSettingsPane: View {
         switch shortcut {
         case .commandBar:
             shortcutRow(
-                "Command Bar", subtitle: "Searches Edith actions and installed applications",
+                "Command Bar", subtitle: "Searches local actions, apps, files, and content",
                 keyPrefix: "commandBarHotKey", defaultLabel: "⌥Space")
         case .clipboard:
             shortcutRow(

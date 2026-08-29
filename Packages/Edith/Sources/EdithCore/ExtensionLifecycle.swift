@@ -590,14 +590,18 @@ public enum ExtensionLifecycleCatalog {
                     "ed clipboard ls --json")
             ]),
         descriptor(
-            "commandBar", "Reach Edith actions, installed apps, calculations and conversions.",
+            "commandBar", "Reach local actions, apps, files, settings, text, and answers.",
             workflows: [
                 instruction(
                     "open", "Open the palette",
                     "Press Option-Space, or choose another shortcut in Command Bar settings."),
                 instruction(
                     "search", "Find and run",
-                    "Type an Edith destination, enabled extension action, or application name."),
+                    "Type a destination, application, setting, emoji, clipboard item, or file name."
+                ),
+                instruction(
+                    "personalize", "Keep frequent results close",
+                    "Control-click a result to pin, hide, or assign a global shortcut."),
                 instruction(
                     "answer", "Calculate and convert",
                     "Enter arithmetic such as (24 + 6) * 3 or a conversion such as 5 km to mi."),
@@ -606,7 +610,10 @@ public enum ExtensionLifecycleCatalog {
                 instruction(
                     "shortcut", "Choose an available shortcut",
                     "The default Option-Space shortcut is distinct from Edith's global panel shortcut."
-                )
+                ),
+                instruction(
+                    "folders", "Choose file search folders",
+                    "Command Bar searches only folders selected in its extension settings."),
             ],
             examples: [
                 "ed extensions enable commandBar", "ed command-bar calculate '2 + 3 * 4'",
