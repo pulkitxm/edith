@@ -45,6 +45,48 @@ import Testing
         #expect(zooms.first?.scale == 1.8)
     }
 
+    @Test func editDocumentBoundsUnsafeValues() {
+        let document = ScreenRecordingEditDocument(
+            trimStart: -4, trimEnd: 20, pointerSmoothing: 4,
+            pointerScale: 9, padding: -2, systemAudioVolume: 5,
+            microphoneVolume: -1)
+        let normalized = document.normalized(duration: 8)
+
+        #expect(normalized.trimStart == 0)
+        #expect(normalized.trimEnd == 8)
+        #expect(normalized.pointerSmoothing == 1)
+        #expect(normalized.pointerScale == 3)
+        #expect(normalized.padding == 0)
+        #expect(normalized.systemAudioVolume == 2)
+        #expect(normalized.microphoneVolume == 0)
+    }
+
+    @Test func exportPresetsRoundTripThroughSharedSettings() throws {
+        let suite = "ScreenRecordingPresetStore.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preset = ScreenRecordingExportPreset(
+            name: "Review", format: .mp4, width: 1440, frameRate: 24, quality: 0.75)
+
+        ScreenRecordingPresetStore.save([preset], defaults: defaults)
+
+        #expect(ScreenRecordingPresetStore.load(defaults: defaults) == [preset])
+    }
+
+    @Test func statusStoreDefaultsToIdleAndDecodesRuntimeState() throws {
+        let suite = "ScreenRecordingStatusStore.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        #expect(ScreenRecordingStatusStore.load(defaults: defaults).state == .idle)
+        let status = ScreenRecordingStatus(
+            state: .paused, source: .window, elapsedSeconds: 12.5,
+            takeID: UUID())
+        defaults.set(try JSONEncoder().encode(status),
+                     forKey: AppStorageKeys.Capture.recordingStatus)
+
+        #expect(ScreenRecordingStatusStore.load(defaults: defaults) == status)
+    }
+
     @Test func unfinishedTakeSurvivesAndCompletedLibraryIsBounded() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("recording-library-\(UUID().uuidString)", isDirectory: true)
