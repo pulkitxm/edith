@@ -125,7 +125,7 @@ test("release builds and publishes the macOS assets", () => {
   expect(dmgJob).toContain("-format ULMO Edith.dmg");
   expect(dmgJob).toContain("hdiutil verify Edith.dmg");
   expect(dmgJob).toContain("name: Enforce the release size budget");
-  expect(dmgJob).toContain('test "$DMG_BYTES" -le 21000000');
+  expect(dmgJob).toContain('test "$DMG_BYTES" -le 17000000');
   expect(buildScript).toContain(
     '[ "$RELEASE" = 1 ] && XCODE_BUILD_SETTING=SWIFT_OPTIMIZATION_LEVEL=-Osize',
   );
@@ -174,9 +174,12 @@ test("superseded release builds yield the lane before packaging", () => {
 
 test("bundle verification requires one executable under two names", () => {
   expect(makefile).toContain("test ! -L dist/Edith.app/Contents/MacOS/Edith");
-  expect(makefile).toContain("test ! -L dist/Edith.app/Contents/MacOS/ed");
+  expect(makefile).toContain("test -L dist/Edith.app/Contents/MacOS/ed");
+  expect(makefile).toContain(
+    'readlink dist/Edith.app/Contents/MacOS/ed)" = Edith',
+  );
   expect(makefile).toContain("test ! -e dist/Edith.app/Contents/MacOS/edh");
-  expect(makefile).toContain("-type f \\( -name ed -o -name edh \\)");
+  expect(makefile).toContain("-type l -name ed");
   expect(makefile).toContain("for name in ed edith; do");
 });
 
