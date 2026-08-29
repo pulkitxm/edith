@@ -72,15 +72,18 @@ public enum AppStorageKeys {
     }
 
     public enum Capture {
+        public static let copyAfterCapture = "captureCopyAfterCapture"
         public static let copyMode = "captureCopyMode"
         public static let detectCodes = "captureDetectCodes"
         public static let enabled = "captureToolsEnabled"
+        public static let filenameTemplate = "captureFilenameTemplate"
         public static let history = "captureHistory"
         public static let historySize = "captureHistorySize"
         public static let readHotKeyCode = "captureReadHotKeyCode"
         public static let readHotKeyLabel = "captureReadHotKeyLabel"
         public static let readHotKeyMods = "captureReadHotKeyMods"
         public static let saveScreenshots = "captureSaveScreenshots"
+        public static let saveFolder = "captureSaveFolder"
         public static let screenshotHotKeyCode = "captureScreenshotHotKeyCode"
         public static let screenshotHotKeyLabel = "captureScreenshotHotKeyLabel"
         public static let screenshotHotKeyMods = "captureScreenshotHotKeyMods"

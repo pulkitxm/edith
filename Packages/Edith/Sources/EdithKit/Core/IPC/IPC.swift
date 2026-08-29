@@ -37,8 +37,14 @@ public enum IPC {
             "com.pulkit.edith.requestColorPick")
         public static let requestScreenRead = Notification.Name(
             "com.pulkit.edith.requestScreenRead")
-        public static let requestScreenshot = Notification.Name(
-            "com.pulkit.edith.requestScreenshot")
+        public static let requestCaptureArea = Notification.Name(
+            "com.pulkit.edith.requestCaptureArea")
+        public static let requestCaptureWindow = Notification.Name(
+            "com.pulkit.edith.requestCaptureWindow")
+        public static let requestCaptureScreen = Notification.Name(
+            "com.pulkit.edith.requestCaptureScreen")
+        public static let requestCaptureLibrary = Notification.Name(
+            "com.pulkit.edith.requestCaptureLibrary")
         public static let shelfChanged = Notification.Name("com.pulkit.edith.shelfChanged")
         public static let shelfOperation = Notification.Name("com.pulkit.edith.shelfOperation")
         public static let shelfOperationResult = Notification.Name(

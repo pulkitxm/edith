@@ -73,7 +73,7 @@ walks, and its order is the order `ls` prints. Eighteen entries, in this order:
 | `focusDim` | Focus Dim | Utilities | Dims everything behind your active app |
 | `presenter` | Presenter | Utilities | Blurs sensitive numbers while sharing your screen |
 | `colorPicker` | Color Picker | Utilities | System loupe on a hotkey, sampled color to your clipboard |
-| `captureTools` | Capture Tools | Utilities | Offline screen OCR, QR recognition, and quick screenshots |
+| `captureTools` | Capture Tools | Utilities | Local screenshots, recognition, editing, pinning, and recent captures |
 
 The same eighteen, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the

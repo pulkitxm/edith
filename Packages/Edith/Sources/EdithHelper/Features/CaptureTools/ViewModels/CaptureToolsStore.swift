@@ -4,7 +4,7 @@ import EdithKit
 import Observation
 
 protocol CaptureScreenshotCapturing: Sendable {
-    func capture() async throws -> URL
+    func capture(_ mode: CaptureMode) async throws -> URL
     func cancel()
 }
 
@@ -20,9 +20,11 @@ final class CaptureToolsStore: FeatureModule {
     @ObservationIgnored private let screenCaptureGranted: () -> Bool
     @ObservationIgnored private let requestScreenCapture: () -> Void
     @ObservationIgnored private var task: Task<Void, Never>?
-    @ObservationIgnored private var readObserver: NSObjectProtocol?
-    @ObservationIgnored private var screenshotObserver: NSObjectProtocol?
+    @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var preview: CapturePreviewController?
+    @ObservationIgnored private var library: CaptureLibraryController?
+    @ObservationIgnored private var editors: [CaptureEditorController] = []
+    @ObservationIgnored private var pins: [CapturePinController] = []
     @ObservationIgnored private var generation = 0
 
     init() {
@@ -46,12 +48,13 @@ final class CaptureToolsStore: FeatureModule {
     }
 
     private func startObservers() {
-        readObserver = IPC.observe(IPC.Name.requestScreenRead) { [weak self] in
-            self?.start(.read)
-        }
-        screenshotObserver = IPC.observe(IPC.Name.requestScreenshot) { [weak self] in
-            self?.start(.screenshot)
-        }
+        observers = [
+            IPC.observe(IPC.Name.requestScreenRead) { [weak self] in self?.start(.read) },
+            IPC.observe(IPC.Name.requestCaptureArea) { [weak self] in self?.start(.area) },
+            IPC.observe(IPC.Name.requestCaptureWindow) { [weak self] in self?.start(.window) },
+            IPC.observe(IPC.Name.requestCaptureScreen) { [weak self] in self?.start(.screen) },
+            IPC.observe(IPC.Name.requestCaptureLibrary) { [weak self] in self?.showLibrary() },
+        ]
     }
 
     func registerHotKeys() {
@@ -62,10 +65,14 @@ final class CaptureToolsStore: FeatureModule {
         GlobalHotKey.set(
             id: GlobalHotKey.ID.captureScreenshot, keyCode: CaptureToolsHotKeys.screenshotCode,
             modifiers: CaptureToolsHotKeys.screenshotMods
-        ) { [weak self] in self?.start(.screenshot) }
+        ) { [weak self] in self?.start(.area) }
     }
 
     func start(_ operation: CaptureToolOperation) {
+        guard operation != .library else {
+            showLibrary()
+            return
+        }
         if inProgress {
             cancel()
             return
@@ -101,12 +108,16 @@ final class CaptureToolsStore: FeatureModule {
         session.cancel()
         preview?.close()
         preview = nil
+        library?.close()
+        library = nil
+        editors.forEach { $0.close() }
+        editors = []
+        pins.forEach { $0.close() }
+        pins = []
         GlobalHotKey.clear(id: GlobalHotKey.ID.captureRead)
         GlobalHotKey.clear(id: GlobalHotKey.ID.captureScreenshot)
-        if let readObserver { IPC.stopObserving(readObserver) }
-        if let screenshotObserver { IPC.stopObserving(screenshotObserver) }
-        readObserver = nil
-        screenshotObserver = nil
+        observers.forEach(IPC.stopObserving)
+        observers = []
         inProgress = false
     }
 
@@ -120,7 +131,8 @@ final class CaptureToolsStore: FeatureModule {
             }
         }
         do {
-            let url = try await session.capture()
+            guard let mode = operation.captureMode else { return }
+            let url = try await session.capture(mode)
             temporaryURL = url
             guard !Task.isCancelled, generation == token else { return }
             let detectsCodes =
@@ -134,13 +146,29 @@ final class CaptureToolsStore: FeatureModule {
                 return (data, recognition)
             }.value
             guard !Task.isCancelled, generation == token else { return }
-            let result = try finalize(recognition, data: data, operation: operation)
+            let finalized = try finalize(
+                recognition, data: data, operation: operation, mode: mode)
+            let result = finalized.recognition
             let copied = operation == .read && copy(result)
+            if operation != .read,
+                SharedDefaults.store.object(forKey: AppStorageKeys.Capture.copyAfterCapture)
+                    as? Bool == true
+            {
+                copyImage(data)
+            }
             let sourceImage = NSImage(data: data) ?? NSImage(size: .zero)
             preview?.close()
             preview = CapturePreviewController(
-                image: sourceImage, pngData: data, recognition: result,
-                operation: operation, copyMode: copyMode(), copiedResult: copied)
+                item: finalized.item, image: sourceImage, pngData: data,
+                recognition: result, operation: operation, copyMode: copyMode(),
+                copiedResult: copied,
+                edit: { [weak self] in self?.openEditor($0) },
+                pin: { [weak self] in self?.pin($0) },
+                delete: { [weak self] item in
+                    try? CaptureLibraryStore.remove(item)
+                    self?.library?.reload()
+                    IPC.post(IPC.Name.settingsChanged)
+                })
             preview?.show()
         } catch CaptureScreenshotError.cancelled {
             errorMessage = nil
@@ -154,8 +182,9 @@ final class CaptureToolsStore: FeatureModule {
     }
 
     private func finalize(
-        _ recognition: CaptureRecognition, data: Data, operation: CaptureToolOperation
-    ) throws -> CaptureRecognition {
+        _ recognition: CaptureRecognition, data: Data, operation: CaptureToolOperation,
+        mode: CaptureMode
+    ) throws -> (recognition: CaptureRecognition, item: CaptureLibraryItem?) {
         var savedPath: String?
         let save =
             SharedDefaults.store.object(forKey: AppStorageKeys.Capture.saveScreenshots) as? Bool
@@ -173,8 +202,56 @@ final class CaptureToolsStore: FeatureModule {
             CaptureHistoryStore.add(result, limit: min(max(raw, 1), 25))
             history = CaptureHistoryStore.load()
             IPC.post(IPC.Name.settingsChanged)
+            return (result, nil)
+        } else {
+            let item = try CaptureLibraryStore.add(data, mode: mode, recognition: result)
+            IPC.post(IPC.Name.settingsChanged)
+            library?.reload()
+            return (result, item)
         }
-        return result
+    }
+
+    private func copyImage(_ data: Data) {
+        NSPasteboard.general.clearContents()
+        if NSPasteboard.general.setData(data, forType: .png) {
+            IPC.post(IPC.Name.clipboardChanged)
+        }
+    }
+
+    private func showLibrary() {
+        if library == nil {
+            library = CaptureLibraryController(
+                edit: { [weak self] in self?.openEditor($0) },
+                pin: { [weak self] in self?.pin($0) })
+        }
+        library?.show()
+    }
+
+    private func openEditor(_ item: CaptureLibraryItem) {
+        guard let image = NSImage(contentsOf: CaptureLibraryStore.imageURL(for: item)),
+            let editor = CaptureEditorController(
+                item: item, image: image,
+                updated: { [weak self] in
+                    self?.library?.reload()
+                    IPC.post(IPC.Name.settingsChanged)
+                }, pin: { [weak self] in self?.pin($0) })
+        else {
+            NSSound.beep()
+            return
+        }
+        editors.removeAll { !$0.isVisible }
+        editors.append(editor)
+        editor.show()
+    }
+
+    private func pin(_ data: Data) {
+        guard let controller = CapturePinController(data: data) else {
+            NSSound.beep()
+            return
+        }
+        pins.removeAll { !$0.isVisible }
+        pins.append(controller)
+        controller.show()
     }
 
     private func copy(_ result: CaptureRecognition) -> Bool {

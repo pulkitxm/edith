@@ -39,7 +39,10 @@ public enum Guide {
         ed color pick               open Edith's system colour sampler
         ed color copy 1 --format hex
         ed capture read             copy text or codes from a selected screen region
-        ed capture screenshot       open a quick preview of a selected screen region
+        ed capture area             capture a selected screen region
+        ed capture window           capture a selected window
+        ed capture screen           capture the full main display
+        ed capture library          open recent captures
         ed usage sources            the agents that produced your usage history
         ed schema                   JSON Schema for the config document
         ed version                  the CLI version, and whether the app is up

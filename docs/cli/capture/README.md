@@ -1,39 +1,49 @@
 # `ed capture`
 
-`ed capture` starts Edith's offline screen-reading and quick screenshot tools.
-Both commands use the standard macOS selector, so you can drag a region or
-choose a window without learning a separate capture interface.
+`ed capture` starts Edith's local Capture Studio tools. Capture an area, a
+window, or the full main display, reopen recent captures, or recognize screen
+text and codes without sending the image anywhere.
 
 Recognition uses macOS Vision on this Mac. QR, Micro QR, Aztec, Data Matrix,
-and PDF417 payloads take priority over OCR text. Edith copies the configured
-result after a screen read, keeps a bounded recent-read history, and shows a
-transient preview with Copy image, Save, Copy result, and Discard actions. A
-single strict HTTP or HTTPS code also gets an explicit Open action.
+PDF417, Code 39, Code 93, Code 128, EAN, UPC-E, and ITF-14 payloads take
+priority over OCR text. The quick preview can copy or drag a PNG, save, edit,
+pin, delete, copy recognition results, and open a single strict HTTP or HTTPS
+code.
 
-The first capture requests Screen Recording access when it is missing. Recent
-reads can be copied again or cleared from Capture Tools settings.
+The recent-captures library keeps up to 12 PNGs with a 256 MB bound. Its cards
+copy, save, drag, edit, pin, or delete a capture. The editor provides crop,
+pen, arrow, rectangle, ellipse, text, redaction, and optional background
+framing. All work remains local.
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
 | `ed capture read` | Selects screen content, recognizes text and codes, and copies the configured result. |
-| `ed capture screenshot` | Selects screen content and opens the lightweight screenshot preview. |
+| `ed capture area` | Captures a selected area and opens the quick preview. |
+| `ed capture window` | Captures a selected window and opens the quick preview. |
+| `ed capture screen` | Captures the full main display and opens the quick preview. |
+| `ed capture library` | Opens the recent-captures library. |
 
 Bare `ed capture` runs `ed capture read`.
 
 - [`ed capture read`](./read.md)
-- [`ed capture screenshot`](./screenshot.md)
+- [`ed capture area`](./area.md)
+- [`ed capture window`](./window.md)
+- [`ed capture screen`](./screen.md)
+- [`ed capture library`](./library.md)
 
-Both commands require the Capture Tools extension, the running menu bar app,
-and Screen Recording permission. They return after sending the request. The
-desktop selection and recognition finish asynchronously.
+Every command requires the Capture Tools extension and the running menu bar
+app. Capture commands also require Screen Recording permission. They return
+after sending the request, and interactive selection finishes asynchronously.
 
 ## Privacy and related tools
 
-Images and recognition results stay on this Mac. A selected image is temporary
-unless you click Save or enable `captureSaveScreenshots`. Saved images go to
-`~/Pictures/Edith Captures`.
+Images and recognition results stay on this Mac. Screenshots remain in the
+bounded local library until deleted or pruned. Saved images use
+`captureSaveFolder` and `captureFilenameTemplate`, with
+`~/Pictures/Edith Captures` as the default folder. Screen-read images remain
+temporary unless `captureSaveScreenshots` is enabled.
 
 Capture Tools does not duplicate Edith's other camera features. Use Color
 Picker for exact screen colors and Notch Shelf for its camera mirror preview.

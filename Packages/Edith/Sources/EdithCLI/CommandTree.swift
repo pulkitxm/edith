@@ -613,13 +613,19 @@ public enum CommandTree {
                         options: ["--json", "--yes"], destructivePolicy: .previewThenYes),
                 ]),
             CommandNode(
-                "capture", "Offline screen recognition and quick screenshots.",
+                "capture", "Screen recognition, screenshots, and recent captures.",
                 children: [
                     CommandNode(
                         "read", "Select screen content and copy recognized text or codes.",
                         options: common),
                     CommandNode(
-                        "screenshot", "Select screen content for a quick preview.",
+                        "area", "Capture a selected area.", options: common),
+                    CommandNode(
+                        "window", "Capture a selected window.", options: common),
+                    CommandNode(
+                        "screen", "Capture the full main display.", options: common),
+                    CommandNode(
+                        "library", "Open recent captures.",
                         options: common),
                 ]),
             CommandNode(

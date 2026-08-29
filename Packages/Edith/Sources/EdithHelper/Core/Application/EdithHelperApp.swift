@@ -672,9 +672,28 @@ struct RootView: View {
                             }
                             Button {
                                 dismissPanel()
-                                captureTools.start(.screenshot)
+                                captureTools.start(.area)
                             } label: {
-                                Label("Screenshot", systemImage: "camera.viewfinder")
+                                Label("Capture area", systemImage: "crop")
+                            }
+                            Button {
+                                dismissPanel()
+                                captureTools.start(.window)
+                            } label: {
+                                Label("Capture window", systemImage: "macwindow")
+                            }
+                            Button {
+                                dismissPanel()
+                                captureTools.start(.screen)
+                            } label: {
+                                Label("Capture screen", systemImage: "display")
+                            }
+                            Divider()
+                            Button {
+                                dismissPanel()
+                                captureTools.start(.library)
+                            } label: {
+                                Label("Recent captures", systemImage: "photo.stack")
                             }
                         } label: {
                             Image(systemName: "viewfinder")

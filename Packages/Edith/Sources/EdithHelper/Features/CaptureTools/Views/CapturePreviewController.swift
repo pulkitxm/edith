@@ -8,11 +8,15 @@ final class CapturePreviewController: NSObject, NSWindowDelegate {
     private var timer: Timer?
 
     init(
-        image: NSImage, pngData: Data, recognition: CaptureRecognition,
-        operation: CaptureToolOperation, copyMode: CaptureCopyMode, copiedResult: Bool
+        item: CaptureLibraryItem?, image: NSImage, pngData: Data,
+        recognition: CaptureRecognition, operation: CaptureToolOperation,
+        copyMode: CaptureCopyMode, copiedResult: Bool,
+        edit: @escaping (CaptureLibraryItem) -> Void,
+        pin: @escaping (Data) -> Void,
+        delete: @escaping (CaptureLibraryItem) -> Void
     ) {
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 390, height: 360),
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 380),
             styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered,
             defer: false)
         super.init()
@@ -28,9 +32,19 @@ final class CapturePreviewController: NSObject, NSWindowDelegate {
                 image: image, recognition: recognition, operation: operation,
                 copyMode: copyMode, copiedResult: copiedResult,
                 copyImage: { Self.copyImage(pngData) },
-                saveImage: { Self.saveImage(pngData) },
+                saveImage: { Self.saveImage(pngData, mode: item?.mode ?? .area) },
                 copyResult: { Self.copyResult(recognition.output(for: copyMode)) },
                 openResult: { Self.openResult(recognition) },
+                edit: { [weak self] in
+                    if let item { edit(item) }
+                    self?.close()
+                },
+                pin: { pin(pngData) },
+                delete: { [weak self] in
+                    if let item { delete(item) }
+                    self?.close()
+                },
+                dragURL: item.map { CaptureLibraryStore.imageURL(for: $0) },
                 discard: { [weak self] in self?.close() },
                 hovering: { [weak self] inside in self?.setHovering(inside) }))
     }
@@ -81,8 +95,8 @@ final class CapturePreviewController: NSObject, NSWindowDelegate {
         IPC.post(IPC.Name.clipboardChanged)
     }
 
-    private static func saveImage(_ data: Data) {
-        guard let url = try? CaptureScreenshotArchive.save(data) else {
+    private static func saveImage(_ data: Data, mode: CaptureMode) {
+        guard let url = try? CaptureSaveLocation.save(data, mode: mode) else {
             NSSound.beep()
             return
         }
@@ -114,6 +128,10 @@ private struct CapturePreviewView: View {
     let saveImage: () -> Void
     let copyResult: () -> Void
     let openResult: () -> Void
+    let edit: () -> Void
+    let pin: () -> Void
+    let delete: () -> Void
+    let dragURL: URL?
     let discard: () -> Void
     let hovering: (Bool) -> Void
 
@@ -124,7 +142,8 @@ private struct CapturePreviewView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Label(
-                    operation == .read ? "Screen read" : "Screenshot",
+                    operation == .read
+                        ? "Screen read" : "\(operation.captureMode?.displayName ?? "Area") capture",
                     systemImage: operation == .read ? "text.viewfinder" : "camera.viewfinder"
                 )
                 .font(.headline)
@@ -146,6 +165,9 @@ private struct CapturePreviewView: View {
                 .frame(maxWidth: .infinity, maxHeight: 178)
                 .background(.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
+                .onDrag {
+                    dragURL.flatMap { NSItemProvider(contentsOf: $0) } ?? NSItemProvider()
+                }
             Text(output.isEmpty ? "No text or codes found" : output)
                 .font(.system(size: 12, design: .rounded))
                 .foregroundStyle(output.isEmpty ? .secondary : .primary)
@@ -165,6 +187,10 @@ private struct CapturePreviewView: View {
                 }
                 Button("Save", action: saveImage)
                     .keyboardShortcut("s", modifiers: .command)
+                if dragURL != nil {
+                    Button("Edit", action: edit)
+                    Button("Pin", action: pin)
+                }
                 if recognition.codes.count == 1,
                     CaptureRecognizedLink.openable(recognition.codes[0].payload) != nil
                 {
@@ -172,8 +198,10 @@ private struct CapturePreviewView: View {
                         .keyboardShortcut("o", modifiers: .command)
                 }
                 Spacer()
-                Button("Discard", role: .destructive, action: discard)
-                    .keyboardShortcut(.cancelAction)
+                Button(dragURL == nil ? "Close" : "Delete", role: .destructive) {
+                    dragURL == nil ? discard() : delete()
+                }
+                .keyboardShortcut(.cancelAction)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
