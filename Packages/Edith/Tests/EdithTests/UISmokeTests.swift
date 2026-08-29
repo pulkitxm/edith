@@ -57,6 +57,11 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(renders(FinderSkeleton(mode: .list, dark: true)))
         #expect(renders(FinderSkeleton(mode: .icon, dark: true)))
         #expect(renders(MetricCardSkeleton(dark: false), width: 300, height: 160))
+        #expect(renders(GitHubRepositoryListSkeleton(rows: 4, dark: true)))
+        #expect(renders(GitHubTreeSkeleton(rows: 6, dark: true)))
+        #expect(renders(GitHubBrowserFileHeaderSkeleton(dark: true), height: 180))
+        #expect(renders(GitHubCodeSkeleton(rows: 12, dark: true)))
+        #expect(renders(GitHubCommitHistorySkeleton(rows: 5, dark: true)))
     }
 
     @Test func homePageRenders() {
