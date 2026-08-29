@@ -381,6 +381,9 @@ private extension GitHubRoute {
             case let .content(otherRepository, otherKind, _, _, _) = other.resource,
             kind != .tree, otherKind != .tree
         else { return false }
+        if let resolvedContentPath, let otherResolved = other.resolvedContentPath {
+            return repository == otherRepository && resolvedContentPath == otherResolved
+        }
         return repository == otherRepository && flattenedContentPath == other.flattenedContentPath
     }
 

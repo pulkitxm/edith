@@ -203,6 +203,40 @@ import Testing
         #expect(context.model.currentRoute?.url.fragment == "L4-L9")
     }
 
+    @Test func distinctResolvedBoundariesWithTheSameURLRefetch() async throws {
+        let fixture = GitHubResourceFixture()
+        let repository = GitHubRepositoryPath(owner: "acme", name: "orbit")!
+        let first = resolvedFileRoute(
+            repository: repository, revision: "release", path: ["v2", "Guide.md"])
+        let second = resolvedFileRoute(
+            repository: repository, revision: "release/v2", path: ["Guide.md"])
+        let context = try await modelContext(route: first, fixture: fixture)
+        defer { try? FileManager.default.removeItem(at: context.root) }
+
+        await context.model.start()
+        await fixture.waitUntilStarted(1)
+        let firstResource = GitHubRepositoryResource.file(
+            GitHubFileSnapshot(
+                repository: repository, revision: "release", path: "v2/Guide.md", sha: "one",
+                size: 4, text: "one\n", downloadURL: nil, presentation: .text))
+        await fixture.release(0, resource: firstResource)
+        await context.model.waitForResourceLoad()
+
+        context.model.navigate(to: second)
+        for _ in 0..<100 where await fixture.requestCount() < 2 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(first.url == second.url)
+        #expect(await fixture.requestCount() == 2)
+        let secondResource = GitHubRepositoryResource.file(
+            GitHubFileSnapshot(
+                repository: repository, revision: "release/v2", path: "Guide.md", sha: "two",
+                size: 4, text: "two\n", downloadURL: nil, presentation: .text))
+        await fixture.release(1, resource: secondResource)
+        await context.model.waitForResourceLoad()
+        #expect(context.model.resource == secondResource)
+    }
+
     @Test func deinitializationCancelsAnActiveResourceLoad() async throws {
         let fixture = GitHubCancellationFixture()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -290,6 +324,18 @@ import Testing
                 repository: GitHubRepositoryPath(owner: "acme", name: "orbit")!, kind: .blob,
                 revisionPath: ["main", "Sources", "Orbit.swift"], view: .automatic,
                 lines: lines))
+    }
+
+    private func resolvedFileRoute(
+        repository: GitHubRepositoryPath, revision: String, path: [String]
+    ) -> GitHubRoute {
+        GitHubRoute(
+            host: .github,
+            resource: .content(
+                repository: repository, kind: .blob,
+                revisionPath: revision.split(separator: "/").map(String.init) + path,
+                view: .automatic, lines: nil),
+            resolvedContentPath: GitHubResolvedContentPath(revision: revision, path: path))
     }
 
     private func fileResource(
