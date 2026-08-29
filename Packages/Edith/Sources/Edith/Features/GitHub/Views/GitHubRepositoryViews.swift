@@ -7,6 +7,7 @@ struct GitHubRepositoryResourceView: View {
     let resource: GitHubRepositoryResource
     let route: GitHubRoute
     let navigate: (GitHubRoute, Bool) -> Void
+    let openURL: (URL) -> Void
 
     @Environment(\.colorScheme) private var scheme
 
@@ -24,7 +25,7 @@ struct GitHubRepositoryResourceView: View {
             case let .file(file):
                 GitHubFileView(
                     file: file, route: route, compact: proxy.size.width < UIScale.pt(700),
-                    navigate: navigate
+                    navigate: navigate, openURL: openURL
                 )
                 .id("\(file.path)-\(file.sha)")
             }
@@ -424,6 +425,7 @@ private struct GitHubFileView: View {
     let route: GitHubRoute
     let compact: Bool
     let navigate: (GitHubRoute, Bool) -> Void
+    let openURL: (URL) -> Void
 
     @Environment(\.colorScheme) private var scheme
     @State private var wraps = false
@@ -435,12 +437,14 @@ private struct GitHubFileView: View {
 
     init(
         file: GitHubFileSnapshot, route: GitHubRoute, compact: Bool,
-        navigate: @escaping (GitHubRoute, Bool) -> Void
+        navigate: @escaping (GitHubRoute, Bool) -> Void,
+        openURL: @escaping (URL) -> Void
     ) {
         self.file = file
         self.route = route
         self.compact = compact
         self.navigate = navigate
+        self.openURL = openURL
         _selectedLines = State(initialValue: route.selectedLines)
     }
 
@@ -514,7 +518,7 @@ private struct GitHubFileView: View {
                 Button("Copy permalink", action: copyPermalink)
                     .buttonStyle(.edith(.toolbar))
                 Button("Raw") {
-                    navigate(rawRoute, NSEvent.modifierFlags.contains(.command))
+                    openURL(rawRoute.url)
                 }
                 .buttonStyle(.edith(.toolbar))
             }
@@ -528,8 +532,7 @@ private struct GitHubFileView: View {
         Button("Copy code", action: copyCode)
         Button("Copy permalink", action: copyPermalink)
         Divider()
-        Button("Open raw") { navigate(rawRoute, false) }
-        Button("Open raw in New Tab") { navigate(rawRoute, true) }
+        Button("Open raw") { openURL(rawRoute.url) }
     }
 
     private var findBar: some View {
@@ -596,7 +599,7 @@ private struct GitHubFileView: View {
             Text("\(message) Size: \(ByteFormatter.string(Int64(file.size))).")
         } actions: {
             HStack {
-                Button("Open raw") { navigate(rawRoute, false) }
+                Button("Open raw") { openURL(rawRoute.url) }
                     .buttonStyle(.edith(.secondary))
                 Button("Copy link", action: copyPermalink)
                     .buttonStyle(.edith(.borderless))

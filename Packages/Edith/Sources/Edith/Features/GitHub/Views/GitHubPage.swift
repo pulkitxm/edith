@@ -258,7 +258,7 @@ struct GitHubPage: View {
                     resource: resource, route: route,
                     navigate: { destination, newTab in
                         model.navigate(to: destination, inNewTab: newTab)
-                    })
+                    }, openURL: { openURL($0) })
             }
         } placeholder: {
             initialSkeleton

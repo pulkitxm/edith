@@ -16,10 +16,12 @@ import Testing
         let route = GitHubRoute(host: .github, resource: .repository(repository().repository))
 
         let wide = try render(
-            GitHubRepositoryResourceView(resource: resource, route: route, navigate: { _, _ in }),
+            GitHubRepositoryResourceView(
+                resource: resource, route: route, navigate: { _, _ in }, openURL: { _ in }),
             width: 1_240, height: 760)
         let narrow = try render(
-            GitHubRepositoryResourceView(resource: resource, route: route, navigate: { _, _ in }),
+            GitHubRepositoryResourceView(
+                resource: resource, route: route, navigate: { _, _ in }, openURL: { _ in }),
             width: 680, height: 760)
 
         #expect(wide.bitmap.size.width == 1_240)
@@ -52,11 +54,13 @@ import Testing
 
         let directoryImage = try render(
             GitHubRepositoryResourceView(
-                resource: .directory(directory), route: directoryRoute, navigate: { _, _ in }),
+                resource: .directory(directory), route: directoryRoute, navigate: { _, _ in },
+                openURL: { _ in }),
             width: 900, height: 640)
         let fileImage = try render(
             GitHubRepositoryResourceView(
-                resource: .file(file), route: fileRoute, navigate: { _, _ in }),
+                resource: .file(file), route: fileRoute, navigate: { _, _ in },
+                openURL: { _ in }),
             width: 900, height: 640)
 
         #expect(directoryImage.png.count > 12_000)
