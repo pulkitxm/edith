@@ -256,12 +256,23 @@ private extension View {
 private struct HighlightsShareContent: View {
     let snapshot: UsageShareSnapshot
 
+    private var busiest: UsageShareDay {
+        snapshot.busiestDay ?? UsageShareDay(period: "", tokens: 0, cost: 0)
+    }
     private var metrics: [(String, String, String)] {
         [
             (ShareFormat.tokens(snapshot.totalTokens), "tokens", "put to work"),
             ("\(snapshot.activeDays)", "active days", "in the arena"),
             ("\(snapshot.longestStreak)", "day streak", "longest run"),
             ("\(snapshot.repositoryCount)", "repositories", "moved forward"),
+        ]
+    }
+    private var records: [(String, String)] {
+        [
+            (ShareFormat.compactDate(busiest.period), "busiest date"),
+            (ShareFormat.tokens(busiest.tokens), "peak tokens"),
+            (ShareFormat.tokens(snapshot.averageTokensPerActiveDay), "average per day"),
+            ("\(snapshot.agentCount)", "agents tracked"),
         ]
     }
 
@@ -295,6 +306,31 @@ private struct HighlightsShareContent: View {
                     .sharePanel(accent: index == 0 ? ShareColors.rust : ShareColors.sand)
                 }
             }
+            HStack(spacing: 0) {
+                ForEach(Array(records.enumerated()), id: \.offset) { index, record in
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(record.0)
+                            .font(.custom("Iowan Old Style", size: 27).weight(.bold))
+                            .monospacedDigit()
+                            .minimumScaleFactor(0.72)
+                            .lineLimit(1)
+                        Text(record.1.uppercased())
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .tracking(1.1)
+                            .foregroundStyle(ShareColors.cream.opacity(0.48))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    if index < records.count - 1 {
+                        Rectangle()
+                            .fill(ShareColors.cream.opacity(0.1))
+                            .frame(width: 1, height: 54)
+                    }
+                }
+            }
+            .foregroundStyle(ShareColors.cream)
+            .frame(height: 104)
+            .sharePanel(accent: ShareColors.rust)
         }
     }
 }
@@ -563,6 +599,11 @@ private enum ShareFormat {
     static func longDate(_ period: String) -> String {
         guard let date = UsageShareSnapshot.date(from: period) else { return "NO DATA YET" }
         return date.formatted(.dateTime.weekday(.wide).month(.wide).day().year()).uppercased()
+    }
+
+    static func compactDate(_ period: String) -> String {
+        guard let date = UsageShareSnapshot.date(from: period) else { return "NO DATA" }
+        return date.formatted(.dateTime.month(.abbreviated).day()).uppercased()
     }
 
     static func period(_ date: Date) -> String {
