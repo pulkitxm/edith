@@ -849,6 +849,26 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Capture.screenshotHotKeyLabel, .string, group: "capture",
             summary: "Printable area capture shortcut.", fallback: .string("⌃⌥⌘S")),
+        SettingDefinition(
+            AppStorageKeys.Capture.recordingSystemAudio, .bool, group: "capture",
+            summary: "Record system audio on its own track.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.Capture.recordingMicrophone, .bool, group: "capture",
+            summary: "Record the microphone on its own track.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Capture.recordingFrameRate, .int, group: "capture",
+            summary: "Screen recording frame rate.", integerRange: 15...60,
+            fallback: .int(30)),
+        SettingDefinition(
+            AppStorageKeys.Capture.recordingHotKeyCode, .int, group: "capture",
+            summary: "Virtual key code for starting or stopping a recording.",
+            fallback: .int(9)),
+        SettingDefinition(
+            AppStorageKeys.Capture.recordingHotKeyMods, .int, group: "capture",
+            summary: "Carbon modifier mask for screen recording.", fallback: .int(6400)),
+        SettingDefinition(
+            AppStorageKeys.Capture.recordingHotKeyLabel, .string, group: "capture",
+            summary: "Printable screen recording shortcut.", fallback: .string("⌃⌥⌘V")),
     ]
 
     private static let micMute: [SettingDefinition] = [
