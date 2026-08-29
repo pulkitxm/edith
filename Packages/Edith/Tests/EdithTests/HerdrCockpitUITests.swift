@@ -144,6 +144,41 @@ import Testing
         #expect(!third.terminalsCollapsed)
     }
 
+    @Test func agentsCanBeGroupedIntoNamedSpaces() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        let second = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "default", pane: "w2:p2", kind: "OpenCode", status: .idle,
+            title: "Second agent", workspace: "edith", cwd: "/repo")
+        let unassigned = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "default", pane: "w2:p3", kind: "OpenCode", status: .idle,
+            title: "Third agent", workspace: "  ", cwd: "/repo")
+        store.apply([.local(herdrPresent: true, agents: [unassigned, second, agent])])
+
+        #expect(store.agentSpaces.map(\.title) == ["edith", "Unassigned"])
+        #expect(store.agentSpaces[0].agents.map(\.pane) == ["w2:p2", "w2:p1"])
+        #expect(store.agentSpaces[1].agents.map(\.pane) == ["w2:p3"])
+    }
+
+    @Test func spaceGroupingAndCollapsedSpacesSurviveARestart() {
+        let suite = defaults()
+        let first = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(!first.spaceGroupingEnabled)
+        #expect(!first.spaceIsCollapsed("edith"))
+
+        first.spaceGroupingEnabled = true
+        first.toggleSpace("edith")
+
+        let second = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(second.spaceGroupingEnabled)
+        #expect(second.spaceIsCollapsed("edith"))
+        second.toggleSpace("edith")
+
+        let third = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(!third.spaceIsCollapsed("edith"))
+    }
+
     @Test func aBurstOfUpdatesLandsOnceAsTheLatestState() async throws {
         let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
         store.settle([host])

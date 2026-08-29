@@ -9,6 +9,12 @@ typealias HerdrLiveWatcher =
         @escaping @Sendable ([HerdrHostSnapshot]) -> Void
     ) async -> Void
 
+struct HerdrAgentSpace: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let agents: [HerdrAgent]
+}
+
 @MainActor
 @Observable
 final class HerdrStore {
@@ -41,6 +47,20 @@ final class HerdrStore {
             defaults.set(terminalsCollapsed, forKey: AppStorageKeys.Herdr.terminalsCollapsed)
         }
     }
+    var spaceGroupingEnabled = false {
+        didSet {
+            guard spaceGroupingEnabled != oldValue else { return }
+            defaults.set(
+                spaceGroupingEnabled, forKey: AppStorageKeys.Herdr.spaceGroupingEnabled)
+        }
+    }
+    private(set) var collapsedSpaces: Set<String> = [] {
+        didSet {
+            guard collapsedSpaces != oldValue else { return }
+            defaults.set(
+                collapsedSpaces.sorted(), forKey: AppStorageKeys.Herdr.collapsedSpaces)
+        }
+    }
 
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
@@ -63,12 +83,38 @@ final class HerdrStore {
             defaults.object(forKey: AppStorageKeys.Herdr.agentsCollapsed) as? Bool ?? false
         terminalsCollapsed =
             defaults.object(forKey: AppStorageKeys.Herdr.terminalsCollapsed) as? Bool ?? false
+        spaceGroupingEnabled =
+            defaults.object(forKey: AppStorageKeys.Herdr.spaceGroupingEnabled) as? Bool ?? false
+        collapsedSpaces = Set(defaults.stringArray(forKey: AppStorageKeys.Herdr.collapsedSpaces) ?? [])
     }
 
     var agents: [HerdrAgent] { hosts.flatMap(\.agents) }
 
     var listedAgents: [HerdrAgent] {
         filteredAgents.isEmpty && kindFilter.isEmpty ? agents : filteredAgents
+    }
+
+    var agentSpaces: [HerdrAgentSpace] {
+        Dictionary(grouping: listedAgents, by: spaceTitle)
+            .map { HerdrAgentSpace(id: $0.key, title: $0.key, agents: $0.value) }
+            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+
+    func spaceIsCollapsed(_ id: String) -> Bool {
+        collapsedSpaces.contains(id)
+    }
+
+    func toggleSpace(_ id: String) {
+        if collapsedSpaces.contains(id) {
+            collapsedSpaces.remove(id)
+        } else {
+            collapsedSpaces.insert(id)
+        }
+    }
+
+    private func spaceTitle(_ agent: HerdrAgent) -> String {
+        let title = agent.workspace.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? "Unassigned" : title
     }
 
     var machineTerminals: [HerdrAgent] {
