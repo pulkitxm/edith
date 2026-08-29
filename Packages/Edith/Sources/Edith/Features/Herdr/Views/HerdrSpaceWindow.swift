@@ -517,7 +517,7 @@ private struct HerdrSpaceTerminalView: View {
                 MachineTerminalTab(
                     session: session, active: active, wantsFocus: wantsFocus,
                     context: MachineTerminalContext(startingDirectory: target.argument),
-                    showsRestartAction: false,
+                    showsStatusBar: false,
                     holder: holder
                 )
                 .task(id: active) { connectIfNeeded() }

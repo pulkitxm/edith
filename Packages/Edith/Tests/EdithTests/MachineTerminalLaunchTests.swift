@@ -4,18 +4,6 @@ import Testing
 @testable import Edith
 
 @Suite struct MachineTerminalLaunchTests {
-    @Test func spaceTerminalsHideOnlyTheLiveRestartAction() {
-        #expect(
-            !MachineTerminalActionVisibility.shouldShow(
-                .restart, showsRestartAction: false))
-        #expect(
-            MachineTerminalActionVisibility.shouldShow(
-                .start, showsRestartAction: false))
-        #expect(
-            MachineTerminalActionVisibility.shouldShow(
-                .connect, showsRestartAction: false))
-    }
-
     @Test func localShellStartsInItsContextWithoutHerdrState() throws {
         let environment = nestedEnvironment + ["TERM=xterm-256color"]
         let launch = try #require(
