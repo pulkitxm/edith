@@ -326,7 +326,7 @@ public enum ExtensionLifecycleCatalog {
                     "Sign in to each GitHub host with gh auth login."),
             ],
             examples: ["ed extensions enable github", "ed extensions verify github --json"],
-            docs: [documentation("guide", "GitHub guide", "docs/github/README.md")],
+            docs: [documentation("guide", "GitHub guide", "docs/github.md")],
             recovery: [
                 instruction(
                     "auth", "Repair GitHub authentication",
