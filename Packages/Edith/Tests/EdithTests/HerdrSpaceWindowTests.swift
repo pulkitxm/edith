@@ -106,6 +106,19 @@ import Testing
         #expect(root.axis == .vertical)
     }
 
+    @Test func incrementalDividerChangesResizeAdjacentPanesMonotonically() throws {
+        let model = makeModel()
+        let tab = try #require(model.selectedTab)
+        tab.split(.right)
+        let splitID = try #require(split(tab.layout.root)?.id)
+
+        for _ in 0..<6 { tab.resize(splitID: splitID, index: 0, change: 0.01) }
+
+        let resized = try #require(split(tab.layout.root))
+        #expect(abs(resized.ratios[0] - 0.56) < 0.000_001)
+        #expect(abs(resized.ratios[1] - 0.44) < 0.000_001)
+    }
+
     @Test func closingAPaneStopsOnlyItsTerminal() throws {
         let model = makeModel()
         let tab = try #require(model.selectedTab)
