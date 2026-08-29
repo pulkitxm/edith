@@ -125,7 +125,7 @@ test("release builds and publishes the macOS assets", () => {
   expect(dmgJob).toContain("-format ULMO Edith.dmg");
   expect(dmgJob).toContain("hdiutil verify Edith.dmg");
   expect(dmgJob).toContain("name: Enforce the release size budget");
-  expect(dmgJob).toContain('test "$DMG_BYTES" -le 21000000');
+  expect(dmgJob).toContain('test "$DMG_BYTES" -le 17000000');
   expect(buildScript).toContain(
     '[ "$RELEASE" = 1 ] && XCODE_BUILD_SETTING=SWIFT_OPTIMIZATION_LEVEL=-Osize',
   );

@@ -199,7 +199,7 @@ jobs:
         if: steps.release_build.outputs.superseded != 'true'
         run: |
           DMG_BYTES="$(stat -f %z Edith.dmg)"
-          test "$DMG_BYTES" -le 21000000 \
+          test "$DMG_BYTES" -le 17000000 \
             || { echo "release blocked: Edith.dmg is $DMG_BYTES bytes" >&2; exit 1; }
 
       - name: Notarize and staple
