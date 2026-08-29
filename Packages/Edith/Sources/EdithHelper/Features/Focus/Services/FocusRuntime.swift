@@ -14,7 +14,8 @@ final class FocusRuntime: NSObject {
 
     private let storage: FocusStorage
     private let automations: AutomationRuntime
-    private var transitionTask: Task<Void, Never>?
+    private var transitionWork: Task<Void, Never>?
+    private var transitionGeneration = 0
     private var sessionTimer: Timer?
     private var calendarTimer: Timer?
     private var calendarStore: EKEventStore?
@@ -56,24 +57,28 @@ final class FocusRuntime: NSObject {
         _ profile: FocusProfile, durationMinutes: Int? = nil, until: Date? = nil,
         origin: FocusActivationOrigin, meeting: EKEvent? = nil, requestID: String? = nil
     ) {
-        guard transitionTask == nil else {
+        guard transitionWork == nil else {
             postResult(
                 requestID: requestID, succeeded: false, error: "A focus change is in progress.")
             return
         }
-        transitionTask = Task { @MainActor [weak self] in
+        transitionGeneration += 1
+        let generation = transitionGeneration
+        transitionWork = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
                 try await activate(
                     profile, durationMinutes: durationMinutes, until: until, origin: origin,
                     meeting: meeting)
+                guard !Task.isCancelled, transitionGeneration == generation else { return }
                 postResult(requestID: requestID, succeeded: true)
             } catch {
+                guard !Task.isCancelled, transitionGeneration == generation else { return }
                 lastError = error.localizedDescription
                 postResult(
                     requestID: requestID, succeeded: false, error: error.localizedDescription)
             }
-            transitionTask = nil
+            if transitionGeneration == generation { transitionWork = nil }
         }
     }
 
@@ -93,7 +98,7 @@ final class FocusRuntime: NSObject {
     }
 
     func stop(requestID: String? = nil) {
-        guard transitionTask == nil else {
+        guard transitionWork == nil else {
             postResult(
                 requestID: requestID, succeeded: false, error: "A focus change is in progress.")
             return
@@ -102,33 +107,44 @@ final class FocusRuntime: NSObject {
             postResult(requestID: requestID, succeeded: true)
             return
         }
-        transitionTask = Task { @MainActor [weak self] in
+        transitionGeneration += 1
+        let generation = transitionGeneration
+        transitionWork = Task { @MainActor [weak self] in
             guard let self else { return }
             let errors = await endActive(outcome: .completed)
+            guard !Task.isCancelled, transitionGeneration == generation else { return }
             postResult(
                 requestID: requestID, succeeded: errors.isEmpty,
                 error: errors.isEmpty ? nil : errors.joined(separator: " "))
-            transitionTask = nil
+            if transitionGeneration == generation { transitionWork = nil }
         }
     }
 
     func prepareForTermination() async {
-        transitionTask?.cancel()
-        transitionTask = nil
+        transitionGeneration += 1
+        let pending = transitionWork
+        pending?.cancel()
+        transitionWork = nil
+        await pending?.value
         _ = await endActive(outcome: .recovered)
         stopSubscriptions()
     }
 
     func shutdownForDisable(onFinished: @escaping @MainActor () -> Void = {}) {
-        transitionTask?.cancel()
-        transitionTask = Task { @MainActor [weak self] in
+        transitionGeneration += 1
+        let generation = transitionGeneration
+        let pending = transitionWork
+        pending?.cancel()
+        transitionWork = Task { @MainActor [weak self] in
             guard let self else {
                 onFinished()
                 return
             }
+            await pending?.value
             _ = await endActive(outcome: .recovered)
             stopSubscriptions()
-            transitionTask = nil
+            guard transitionGeneration == generation else { return }
+            transitionWork = nil
             onFinished()
         }
     }
@@ -144,11 +160,15 @@ final class FocusRuntime: NSObject {
         {
             throw FocusRuntimeError.excludedApplication(bundleID)
         }
-        let configuredScenes = try scenes(
-            profile.sceneIDs + [profile.windowLayoutSceneID].compactMap { $0 }
-                + (meeting == nil ? [] : document.meeting.startSceneIDs))
+        var configuredSceneIDs = profile.sceneIDs
+        if let windowLayoutSceneID = profile.windowLayoutSceneID {
+            configuredSceneIDs.append(windowLayoutSceneID)
+        }
+        if meeting != nil { configuredSceneIDs.append(contentsOf: document.meeting.startSceneIDs) }
+        let configuredScenes = try scenes(configuredSceneIDs)
         let appScene = applicationScene(for: profile)
-        let startScenes = [appScene].compactMap { $0 } + configuredScenes
+        var startScenes = configuredScenes
+        if let appScene { startScenes.insert(appScene, at: 0) }
         let restorationScene = captureRestoration(profile: profile, scenes: startScenes)
         let now = Date()
         let duration = durationMinutes ?? profile.defaultDurationMinutes
@@ -165,6 +185,7 @@ final class FocusRuntime: NSObject {
             meetingEventIdentifier: meeting?.eventIdentifier)
         do {
             try await execute(startScenes, origin: origin)
+            try Task.checkCancellation()
             activeSession = session
             try storage.saveSession(session)
             scheduleSessionEnd()
@@ -245,18 +266,20 @@ final class FocusRuntime: NSObject {
         for scene in scenes {
             let record = try await automations.executeScene(
                 scene, origin: automationOrigin(origin))
+            try Task.checkCancellation()
             guard record.succeeded else { throw FocusRuntimeError.sceneFailed(scene.name) }
         }
     }
 
     private func applicationScene(for profile: FocusProfile) -> AutomationScene? {
-        let actions =
-            profile.launchApplicationIDs.map {
-                AutomationAction(operationID: "apps.open", arguments: [$0])
-            }
-            + profile.quitApplicationIDs.map {
-                AutomationAction(operationID: "apps.quit", arguments: [$0, "--yes"])
-            }
+        var actions: [AutomationAction] = []
+        for bundleID in profile.launchApplicationIDs {
+            actions.append(AutomationAction(operationID: "apps.open", arguments: [bundleID]))
+        }
+        for bundleID in profile.quitApplicationIDs {
+            actions.append(
+                AutomationAction(operationID: "apps.quit", arguments: [bundleID, "--yes"]))
+        }
         guard !actions.isEmpty else { return nil }
         return AutomationScene(name: "\(profile.name) applications", actions: actions)
     }
@@ -316,10 +339,13 @@ final class FocusRuntime: NSObject {
         guard let session = try? storage.session() else { return }
         activeSession = session
         if let endsAt = session.endsAt, endsAt <= Date() {
-            transitionTask = Task { @MainActor [weak self] in
+            transitionGeneration += 1
+            let generation = transitionGeneration
+            transitionWork = Task { @MainActor [weak self] in
                 guard let self else { return }
                 _ = await endActive(outcome: .recovered)
-                transitionTask = nil
+                guard !Task.isCancelled, transitionGeneration == generation else { return }
+                transitionWork = nil
             }
         } else {
             scheduleSessionEnd()
@@ -418,7 +444,7 @@ final class FocusRuntime: NSObject {
     private func refreshCalendar() {
         calendarTimer?.invalidate()
         calendarTimer = nil
-        guard activeSession == nil, transitionTask == nil, let store = calendarStore,
+        guard activeSession == nil, transitionWork == nil, let store = calendarStore,
             let profileID = document.meeting.profileID,
             let profile = document.profiles.first(where: { $0.id == profileID && $0.isEnabled })
         else { return }
@@ -428,16 +454,29 @@ final class FocusRuntime: NSObject {
             matching: store.predicateForEvents(
                 withStart: now.addingTimeInterval(-60 * 60), end: end, calendars: nil)
         )
-        .filter { event in
-            event.status != .canceled
-                && FocusMeetingPolicy.includes(
+        var currentEvent: EKEvent?
+        var nextStart: Date?
+        for event in events where event.status != .canceled {
+            guard
+                FocusMeetingPolicy.includes(
                     meetingCandidate(event), configuration: document.meeting)
+            else { continue }
+            if event.startDate <= now, event.endDate > now, currentEvent == nil {
+                currentEvent = event
+            }
+            if event.startDate > now {
+                if let scheduled = nextStart {
+                    nextStart = min(scheduled, event.startDate)
+                } else {
+                    nextStart = event.startDate
+                }
+            }
         }
-        if let current = events.first(where: { $0.startDate <= now && $0.endDate > now }) {
+        if let current = currentEvent {
             start(profile, until: current.endDate, origin: .meeting, meeting: current)
             return
         }
-        guard let next = events.map(\.startDate).filter({ $0 > now }).min() else { return }
+        guard let next = nextStart else { return }
         calendarTimer = Timer(fire: next, interval: 0, repeats: false) { [weak self] _ in
             Task { @MainActor in self?.refreshCalendar() }
         }
