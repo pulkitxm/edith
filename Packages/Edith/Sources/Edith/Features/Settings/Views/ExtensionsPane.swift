@@ -928,6 +928,7 @@ private struct ExtensionDetailRows: View {
             case .herdr: HerdrRows()
             case .quinjet: QuinjetRows()
             case .system: SystemRows()
+            case .networkDiagnostics: NetworkDiagnosticsRows()
             case .machines: MachinesRows()
             case .companion: CompanionRows()
             case .systemStats: SystemStatsRows()
@@ -947,6 +948,23 @@ private struct ExtensionDetailRows: View {
                 Text("No extension controls are registered for \(entry.title).")
                     .settingsCaption()
             }
+        }
+    }
+}
+
+private struct NetworkDiagnosticsRows: View {
+    var body: some View {
+        Section("Diagnostics") {
+            LabeledContent("Mode", value: "Read-only")
+            Text("Run explainable local path checks and configure explicit remote targets.")
+                .settingsCaption()
+            Button("Open Network Diagnostics") { SectionWindow.open(.network) }
+        }
+        Section("Privacy") {
+            Text("Public IP lookup and scheduled sampling stay off until you enable them.")
+                .settingsCaption()
+            Text("Copied and exported reports redact secrets and network addresses.")
+                .settingsCaption()
         }
     }
 }

@@ -65,9 +65,9 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
-        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "emoji", "colorPicker",
+        "attention", "usage", "quinjet", "system", "networkDiagnostics", "machines",
+        "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf", "clipboard",
+        "focusDim", "presenter", "emoji", "colorPicker",
     ]
 
     public static func provider(
@@ -96,6 +96,8 @@ public enum ExtensionLiveAdapters {
         case "quinjet":
             quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
         case "system": await systemReadiness()
+        case "networkDiagnostics":
+            .ready("Read-only network diagnostics are available on this Mac.")
         case "machines": machinesReadiness()
         case "systemStats": systemStatsReadiness()
         case "micMute": microphoneReadiness()

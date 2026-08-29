@@ -49,6 +49,15 @@ import Testing
         #expect(report.contains("<redacted>"))
     }
 
+    @Test func redactionPreservesTimestampsAndRedactsCompressedIPv6() {
+        let text = "captured 2026-08-29T21:41:42Z from 2001:db8::1 and ::1"
+        let redacted = NetworkDiagnosticsRedactor.redact(text)
+
+        #expect(redacted.contains("2026-08-29T21:41:42Z"))
+        #expect(!redacted.contains("2001:db8::1"))
+        #expect(!redacted.contains("::1"))
+    }
+
     @Test func baselineComparisonExplainsStateAndLatencyChanges() {
         let baseline = snapshot(
             check: NetworkDiagnosticCheck(

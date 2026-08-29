@@ -219,7 +219,7 @@ public enum NetworkDiagnosticsRedactor {
         let patterns = [
             #"(?i)(authorization|token|password|secret|api[_-]?key)(\s*[:=]\s*)[^\s&,;]+"#,
             #"\b(?:\d{1,3}\.){3}\d{1,3}\b"#,
-            #"\b[0-9a-fA-F]{0,4}:[0-9a-fA-F:]{2,}\b"#,
+            #"(?<![0-9A-Za-z])(?:(?:[0-9A-Fa-f]{0,4}:){3,7}[0-9A-Fa-f]{0,4}|(?:[0-9A-Fa-f]{1,4})?::(?:[0-9A-Fa-f]{1,4})?)(?![0-9A-Za-z])"#,
             #"\b(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\b"#,
         ]
         for (index, pattern) in patterns.enumerated() {

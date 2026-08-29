@@ -405,6 +405,9 @@ enum JSONContract {
             mutatesTheMachine: true),
         JSONCase("ed system stats", ["system", "stats", "--json"]),
         JSONCase("ed system disks", ["system", "disks", "--json"]),
+        JSONCase(
+            "ed network diagnose", ["network", "diagnose", "--json", "--no-history"]),
+        JSONCase("ed network baseline", ["network", "baseline", "--json"]),
         JSONCase("ed music status", ["music", "status", "--json"]),
         JSONCase("ed music players", ["music", "players", "--json"]),
         JSONCase("ed music play", ["music", "play", "--json"]),

@@ -25,7 +25,7 @@ struct NetworkBaselineCommand: AsyncParsableCommand {
             }
             if json {
                 let encoder = JSONEncoder()
-                encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+                encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
                 encoder.dateEncodingStrategy = .iso8601
                 let data = try encoder.encode(snapshot)
                 CLIOut.out(
@@ -40,7 +40,8 @@ struct NetworkBaselineCommand: AsyncParsableCommand {
 struct NetworkDiagnoseCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "diagnose",
-        abstract: "Run explainable route, DNS, reachability, web, and service checks.")
+        abstract: "Run explainable route, DNS, reachability, web, and service checks.",
+        usage: "ed network diagnose [<options>]")
 
     @Flag(name: .long, help: "Emit a redacted JSON snapshot on stdout.")
     var json = false
@@ -114,7 +115,7 @@ struct NetworkDiagnoseCommand: AsyncParsableCommand {
             }
             if json {
                 let encoder = JSONEncoder()
-                encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+                encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
                 encoder.dateEncodingStrategy = .iso8601
                 let data = try encoder.encode(snapshot)
                 CLIOut.out(
