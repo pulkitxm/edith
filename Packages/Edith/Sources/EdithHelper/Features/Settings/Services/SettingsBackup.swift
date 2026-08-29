@@ -60,6 +60,74 @@ func settingsBackupLidAwakeBatteryThreshold(_ value: Any) -> Int? {
     return Int(threshold)
 }
 
+private let settingsBackupValueTypeKey = "$edithSettingsBackupType"
+private let settingsBackupValuePayloadKey = "value"
+
+func settingsBackupEncodeJSONValue(_ value: Any) -> Any? {
+    switch value {
+    case let data as Data:
+        return [
+            settingsBackupValueTypeKey: "data",
+            settingsBackupValuePayloadKey: data.base64EncodedString(),
+        ]
+    case let date as Date:
+        return [
+            settingsBackupValueTypeKey: "date",
+            settingsBackupValuePayloadKey: date.timeIntervalSince1970,
+        ]
+    case let values as [Any]:
+        let encoded = values.compactMap(settingsBackupEncodeJSONValue)
+        guard encoded.count == values.count else { return nil }
+        return encoded
+    case let values as [String: Any]:
+        var encoded: [String: Any] = [:]
+        for (key, nestedValue) in values {
+            guard let nested = settingsBackupEncodeJSONValue(nestedValue) else { return nil }
+            encoded[key] = nested
+        }
+        return encoded
+    case is String, is NSNumber, is NSNull:
+        return value
+    default:
+        return nil
+    }
+}
+
+func settingsBackupDecodeJSONValue(_ value: Any) -> Any? {
+    if let values = value as? [String: Any],
+        let type = values[settingsBackupValueTypeKey] as? String,
+        values.count == 2
+    {
+        switch type {
+        case "data":
+            guard let encoded = values[settingsBackupValuePayloadKey] as? String else { return nil }
+            return Data(base64Encoded: encoded)
+        case "date":
+            guard let timestamp = values[settingsBackupValuePayloadKey] as? NSNumber else {
+                return nil
+            }
+            return Date(timeIntervalSince1970: timestamp.doubleValue)
+        default:
+            return nil
+        }
+    }
+    if let values = value as? [Any] {
+        let decoded = values.compactMap(settingsBackupDecodeJSONValue)
+        guard decoded.count == values.count else { return nil }
+        return decoded
+    }
+    if let values = value as? [String: Any] {
+        var decoded: [String: Any] = [:]
+        for (key, nestedValue) in values {
+            guard let nested = settingsBackupDecodeJSONValue(nestedValue) else { return nil }
+            decoded[key] = nested
+        }
+        return decoded
+    }
+    guard value is String || value is NSNumber || value is NSNull else { return nil }
+    return value
+}
+
 struct SettingsBackupPendingState: Equatable, Sendable {
     private(set) var remaining: Set<String>
 

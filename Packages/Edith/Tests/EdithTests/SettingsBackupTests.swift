@@ -142,6 +142,40 @@ private final class SettingsBackupBlockingReaderProbe: @unchecked Sendable {
         #expect(duplicates.isEmpty, "backedKeys repeats: \(duplicates)")
     }
 
+    @Test func backupJSONCodecRoundTripsPropertyListValues() throws {
+        let bytes = Data([0, 1, 2, 255])
+        let date = Date(timeIntervalSince1970: 1_777_777_777.25)
+        let source: [String: Any] = [
+            "bytes": bytes,
+            "date": date,
+            "nested": ["flag": true, "values": [1, "two"]],
+        ]
+        let encoded = try #require(settingsBackupEncodeJSONValue(source))
+        let data = try JSONSerialization.data(withJSONObject: encoded, options: [.sortedKeys])
+        let json = try JSONSerialization.jsonObject(with: data)
+        let decoded = try #require(settingsBackupDecodeJSONValue(json) as? [String: Any])
+        let nested = try #require(decoded["nested"] as? [String: Any])
+
+        #expect(decoded["bytes"] as? Data == bytes)
+        #expect(decoded["date"] as? Date == date)
+        #expect(nested["flag"] as? Bool == true)
+        #expect(nested["values"] as? [AnyHashable] == [1, "two"])
+    }
+
+    @Test func backupJSONCodecRejectsUnsupportedValuesAndMalformedTags() {
+        #expect(settingsBackupEncodeJSONValue(URL(fileURLWithPath: "/tmp")) == nil)
+        #expect(
+            settingsBackupDecodeJSONValue([
+                "$edithSettingsBackupType": "data",
+                "value": "not base64",
+            ]) == nil)
+        #expect(
+            settingsBackupDecodeJSONValue([
+                "$edithSettingsBackupType": "unknown",
+                "value": 1,
+            ]) == nil)
+    }
+
     @Test func iCloudBackupIsOnOutOfTheBox() {
         let defaults = UserDefaults(suiteName: "test.icloud.default")!
         defaults.removePersistentDomain(forName: "test.icloud.default")
