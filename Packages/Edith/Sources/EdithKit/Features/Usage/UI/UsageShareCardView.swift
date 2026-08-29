@@ -84,7 +84,6 @@ private enum ShareColors {
     static let rust = Color(red: 0.85, green: 0.36, blue: 0.245)
     static let apricot = Color(red: 0.94, green: 0.56, blue: 0.42)
     static let cream = Color(red: 0.975, green: 0.94, blue: 0.875)
-    static let paper = Color(red: 0.985, green: 0.965, blue: 0.92)
     static let sage = Color(red: 0.49, green: 0.62, blue: 0.53)
     static let sky = Color(red: 0.49, green: 0.65, blue: 0.74)
     static let sand = Color(red: 0.76, green: 0.67, blue: 0.53)
@@ -108,25 +107,76 @@ private struct EdithShareBackdrop: View {
                 colors: [ShareColors.espresso, ShareColors.cocoa],
                 startPoint: .topLeading, endPoint: .bottomTrailing)
             Canvas { context, size in
-                let diameter = size.width * 0.86
-                for index in 0..<5 {
-                    let inset = CGFloat(index) * 74
-                    let rect = CGRect(
-                        x: size.width * 0.48 + inset,
-                        y: -size.height * 0.42 + inset * 0.35,
-                        width: diameter - inset,
-                        height: diameter - inset)
-                    context.stroke(
-                        Path(ellipseIn: rect),
-                        with: .color(glow.opacity(0.22 - Double(index) * 0.025)),
-                        lineWidth: 48 - CGFloat(index) * 6)
+                let spacing: CGFloat = 34
+                for x in stride(from: spacing, through: size.width, by: spacing) {
+                    for y in stride(from: spacing, through: size.height, by: spacing) {
+                        let emphasized = Int(x / spacing + y / spacing) % 5 == 0
+                        let dot = CGRect(
+                            x: x - (emphasized ? 1.5 : 1), y: y - (emphasized ? 1.5 : 1),
+                            width: emphasized ? 3 : 2, height: emphasized ? 3 : 2)
+                        context.fill(
+                            Path(ellipseIn: dot),
+                            with: .color(ShareColors.cream.opacity(emphasized ? 0.09 : 0.035)))
+                    }
                 }
-                let lower = CGRect(
-                    x: -size.width * 0.2, y: size.height * 0.58,
-                    width: size.width * 0.85, height: size.width * 0.42)
+                let shift = routeShift(for: size)
+                let routes = [
+                    [
+                        CGPoint(x: -20, y: size.height * 0.76),
+                        CGPoint(x: size.width * 0.16, y: size.height * 0.76),
+                        CGPoint(x: size.width * 0.16, y: size.height * 0.63),
+                        CGPoint(x: size.width * 0.31, y: size.height * 0.63),
+                    ],
+                    [
+                        CGPoint(x: size.width * 0.72 + shift, y: -20),
+                        CGPoint(x: size.width * 0.72 + shift, y: size.height * 0.17),
+                        CGPoint(x: size.width * 0.88, y: size.height * 0.17),
+                        CGPoint(x: size.width * 0.88, y: size.height * 0.34),
+                        CGPoint(x: size.width + 20, y: size.height * 0.34),
+                    ],
+                    [
+                        CGPoint(x: size.width * 0.49, y: size.height + 20),
+                        CGPoint(x: size.width * 0.49, y: size.height * 0.86),
+                        CGPoint(x: size.width * 0.62 + shift, y: size.height * 0.86),
+                    ],
+                ]
+                for (index, points) in routes.enumerated() {
+                    var route = Path()
+                    route.move(to: points[0])
+                    for point in points.dropFirst() { route.addLine(to: point) }
+                    context.stroke(
+                        route,
+                        with: .color(glow.opacity(index == 1 ? 0.5 : 0.26)),
+                        style: StrokeStyle(
+                            lineWidth: index == 1 ? 2.5 : 1.5,
+                            lineCap: .round, lineJoin: .round, dash: [8, 10]))
+                    for point in points.dropFirst().dropLast() {
+                        context.fill(
+                            Path(ellipseIn: CGRect(x: point.x - 5, y: point.y - 5, width: 10, height: 10)),
+                            with: .color(ShareColors.espresso))
+                        context.stroke(
+                            Path(ellipseIn: CGRect(x: point.x - 5, y: point.y - 5, width: 10, height: 10)),
+                            with: .color(glow.opacity(0.85)), lineWidth: 2)
+                    }
+                }
+                let locator = CGRect(
+                    x: size.width - 138, y: size.height - 154, width: 70, height: 70)
                 context.stroke(
-                    Path(ellipseIn: lower), with: .color(glow.opacity(0.14)), lineWidth: 54)
+                    Path(roundedRect: locator, cornerRadius: 8),
+                    with: .color(glow.opacity(0.22)), lineWidth: 1.5)
+                context.stroke(
+                    Path(roundedRect: locator.insetBy(dx: 12, dy: 12), cornerRadius: 4),
+                    with: .color(glow.opacity(0.38)), lineWidth: 1.5)
             }
+        }
+    }
+
+    private func routeShift(for size: CGSize) -> CGFloat {
+        switch card {
+        case .highlights: return 0
+        case .activity: return -size.width * 0.08
+        case .daily: return size.width * 0.06
+        case .busiest: return -size.width * 0.14
         }
     }
 }
@@ -140,7 +190,7 @@ private struct ShareCardHeader: View {
                 .font(.custom("Iowan Old Style", size: 52).weight(.semibold))
                 .foregroundStyle(ShareColors.cream)
             Spacer()
-            Text("MY AGENT STORY")
+            Text("LOCAL USAGE // EDITH")
                 .font(.system(size: 15, weight: .semibold, design: .monospaced))
                 .tracking(2.4)
                 .foregroundStyle(ShareColors.cream.opacity(0.62))
@@ -181,6 +231,28 @@ private enum ShareBrand {
     }()
 }
 
+private struct SharePanel: ViewModifier {
+    let accent: Color
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                ShareColors.espresso.opacity(0.68),
+                in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(accent.opacity(0.3), lineWidth: 1.5)
+            }
+    }
+}
+
+private extension View {
+    func sharePanel(accent: Color) -> some View {
+        modifier(SharePanel(accent: accent))
+    }
+}
+
 private struct HighlightsShareContent: View {
     let snapshot: UsageShareSnapshot
 
@@ -213,14 +285,14 @@ private struct HighlightsShareContent: View {
                                 .tracking(1.5)
                             Text(metric.2)
                                 .font(.system(size: 15, weight: .medium))
-                                .foregroundStyle(ShareColors.espresso.opacity(0.58))
+                                .foregroundStyle(ShareColors.cream.opacity(0.5))
                         }
                         Spacer()
                     }
-                    .foregroundStyle(ShareColors.espresso)
+                    .foregroundStyle(ShareColors.cream)
                     .padding(.horizontal, 24)
                     .frame(height: 126)
-                    .background(ShareColors.paper, in: RoundedRectangle(cornerRadius: 20))
+                    .sharePanel(accent: index == 0 ? ShareColors.rust : ShareColors.sand)
                 }
             }
         }
@@ -238,13 +310,13 @@ private struct ActivityShareContent: View {
                 Spacer()
                 Text("\(snapshot.longestStreak) day longest streak")
                     .font(.system(size: 17, weight: .medium, design: .monospaced))
-                    .foregroundStyle(ShareColors.espresso.opacity(0.58))
+                    .foregroundStyle(ShareColors.cream.opacity(0.58))
             }
             ActivityHeatGrid(snapshot: snapshot)
         }
-        .foregroundStyle(ShareColors.espresso)
+        .foregroundStyle(ShareColors.cream)
         .padding(28)
-        .background(ShareColors.paper, in: RoundedRectangle(cornerRadius: 24))
+        .sharePanel(accent: ShareColors.sage)
     }
 }
 
@@ -269,7 +341,7 @@ private struct ActivityHeatGrid: View {
                 ) { _, label in
                     Text(label)
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(ShareColors.espresso.opacity(0.45))
+                        .foregroundStyle(ShareColors.cream.opacity(0.45))
                         .frame(width: 14, height: 14)
                 }
             }
@@ -277,11 +349,16 @@ private struct ActivityHeatGrid: View {
             HStack(alignment: .top, spacing: 5) {
                 ForEach(Array(renderedWeeks.enumerated()), id: \.offset) { index, week in
                     VStack(spacing: 5) {
-                        Text(monthLabel(at: index, in: renderedWeeks))
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(ShareColors.espresso.opacity(0.48))
-                            .frame(width: 14, height: 15, alignment: .leading)
-                            .fixedSize(horizontal: true, vertical: false)
+                        Color.clear
+                            .frame(width: 14, height: 15)
+                            .overlay(alignment: .leading) {
+                                Text(monthLabel(at: index, in: renderedWeeks))
+                                    .font(
+                                        .system(size: 10, weight: .semibold, design: .monospaced)
+                                    )
+                                    .foregroundStyle(ShareColors.cream.opacity(0.48))
+                                    .fixedSize()
+                            }
                         ForEach(week) { day in
                             RoundedRectangle(cornerRadius: 3.5)
                                 .fill(color(for: day.tokens))
@@ -298,6 +375,13 @@ private struct ActivityHeatGrid: View {
         guard let period = weeks[index].first?.id,
             let date = UsageShareSnapshot.date(from: period)
         else { return "" }
+        if index == 0, weeks.count > 1, let nextPeriod = weeks[1].first?.id,
+            let next = UsageShareSnapshot.date(from: nextPeriod),
+            Calendar(identifier: .gregorian).component(.month, from: next)
+                != Calendar(identifier: .gregorian).component(.month, from: date)
+        {
+            return ""
+        }
         if index > 0, let previousPeriod = weeks[index - 1].first?.id,
             let previous = UsageShareSnapshot.date(from: previousPeriod),
             Calendar(identifier: .gregorian).component(.month, from: previous)
@@ -309,12 +393,12 @@ private struct ActivityHeatGrid: View {
     }
 
     private func color(for tokens: Double) -> Color {
-        guard tokens > 0 else { return ShareColors.espresso.opacity(0.1) }
+        guard tokens > 0 else { return ShareColors.cream.opacity(0.08) }
         let intensity = log10(tokens + 1) / log10(maximum + 1)
         if intensity < 0.35 { return ShareColors.sage.opacity(0.42) }
         if intensity < 0.58 { return ShareColors.sage.opacity(0.66) }
         if intensity < 0.8 { return ShareColors.sage.opacity(0.84) }
-        return ShareColors.espresso.opacity(0.9)
+        return ShareColors.cream.opacity(0.92)
     }
 }
 
@@ -333,12 +417,12 @@ private struct DailyShareContent: View {
                     Text("TOTAL TOKENS")
                         .font(.system(size: 14, weight: .bold, design: .monospaced))
                         .tracking(1.6)
-                        .foregroundStyle(ShareColors.espresso.opacity(0.54))
+                        .foregroundStyle(ShareColors.cream.opacity(0.54))
                 }
                 Spacer()
                 Text("last \(days.count) days")
                     .font(.system(size: 17, weight: .medium, design: .monospaced))
-                    .foregroundStyle(ShareColors.espresso.opacity(0.58))
+                    .foregroundStyle(ShareColors.cream.opacity(0.58))
             }
             HStack(alignment: .bottom, spacing: 8) {
                 ForEach(days, id: \.period) { day in
@@ -353,7 +437,7 @@ private struct DailyShareContent: View {
                         if labelShown(day) {
                             Text(ShareFormat.day(day.period))
                                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(ShareColors.espresso.opacity(0.48))
+                                .foregroundStyle(ShareColors.cream.opacity(0.48))
                         } else {
                             Color.clear.frame(height: 13)
                         }
@@ -363,9 +447,9 @@ private struct DailyShareContent: View {
             }
             .frame(height: 228, alignment: .bottom)
         }
-        .foregroundStyle(ShareColors.espresso)
+        .foregroundStyle(ShareColors.cream)
         .padding(28)
-        .background(ShareColors.paper, in: RoundedRectangle(cornerRadius: 24))
+        .sharePanel(accent: ShareColors.sky)
     }
 
     private func labelShown(_ day: UsageShareDay) -> Bool {
@@ -390,7 +474,7 @@ private struct BusiestShareContent: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text(ShareFormat.longDate(busiest.period))
                     .font(.system(size: 20, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(ShareColors.espresso.opacity(0.58))
+                    .foregroundStyle(ShareColors.cream.opacity(0.58))
                 Text(ShareFormat.tokens(busiest.tokens))
                     .font(.custom("Iowan Old Style", size: 80).weight(.bold))
                     .monospacedDigit()
@@ -407,9 +491,9 @@ private struct BusiestShareContent: View {
             }
             .frame(width: 310)
         }
-        .foregroundStyle(ShareColors.espresso)
+        .foregroundStyle(ShareColors.cream)
         .padding(38)
-        .background(ShareColors.paper, in: RoundedRectangle(cornerRadius: 24))
+        .sharePanel(accent: ShareColors.apricot)
     }
 }
 
@@ -425,11 +509,13 @@ private struct BusiestStat: View {
             Text(label.uppercased())
                 .font(.system(size: 12, weight: .bold, design: .monospaced))
                 .tracking(1.2)
-                .foregroundStyle(ShareColors.espresso.opacity(0.52))
+                .foregroundStyle(ShareColors.cream.opacity(0.52))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(22)
-        .background(ShareColors.sand.opacity(0.18), in: RoundedRectangle(cornerRadius: 16))
+        .background(
+            ShareColors.cream.opacity(0.055),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 
