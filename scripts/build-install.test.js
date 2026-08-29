@@ -15,7 +15,7 @@ describe("build install lifecycle", () => {
     expect(script).not.toContain('sign_tool "$APP/Contents/MacOS/ed"');
   });
 
-  test("removes unused executable architectures from release bundles", () => {
+  test("removes unused executable architectures from every bundle", () => {
     expect(script).toContain('lipo "$binary" -thin arm64');
     expect(script).toContain('mv "$binary.arm64" "$binary"');
   });

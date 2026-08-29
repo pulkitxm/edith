@@ -174,21 +174,23 @@ mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS"
 cp "$PRIVILEGED_HELPER_BUILD" "$PRIVILEGED_HELPER"
 cp Resources/com.pulkit.edith.lidawake.v2.plist "$LAUNCH_DAEMONS/"
 
-if [ "$RELEASE" = 1 ]; then
-  find "$APP" -type f -perm -u+x -print0 \
-    | while IFS= read -r -d '' binary; do
-        case "$(file -b "$binary")" in
-          *"universal binary"*)
-            lipo "$binary" -thin arm64 -output "$binary.arm64"
-            mv "$binary.arm64" "$binary"
+find "$APP" -type f -perm -u+x -print0 \
+  | while IFS= read -r -d '' binary; do
+      case "$(file -b "$binary")" in
+        *"universal binary"*)
+          lipo "$binary" -thin arm64 -output "$binary.arm64"
+          mv "$binary.arm64" "$binary"
+          if [ "$RELEASE" = 1 ]; then
             strip -rSTx "$binary" 2>/dev/null || true
-            ;;
-          *Mach-O*)
+          fi
+          ;;
+        *Mach-O*)
+          if [ "$RELEASE" = 1 ]; then
             strip -rSTx "$binary" 2>/dev/null || true
-            ;;
-        esac
-      done
-fi
+          fi
+          ;;
+      esac
+    done
 
 if [ "$SIGN_IDENTITY" = "-" ]; then
   echo "WARNING: no signing identity found; signing ad-hoc. The code signature" >&2
