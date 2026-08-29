@@ -27,6 +27,7 @@ import Testing
         "ed lid-awake restore-on-quit",
         "ed maintenance install",
         "ed maintenance remove",
+        "ed maintenance update",
         "ed machines docker prune",
         "ed machines docker rm",
         "ed machines docker rmi",
