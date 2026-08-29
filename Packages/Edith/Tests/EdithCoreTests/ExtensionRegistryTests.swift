@@ -16,6 +16,7 @@ import Testing
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
                 "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
                 "clipboard", "focusDim", "presenter", "colorPicker", "windowTools",
+                "workspaceRestorer",
             ])
     }
 
@@ -30,5 +31,6 @@ import Testing
         #expect(optionalByExtension["music"] == ["yt-dlp"])
         #expect(requiredByExtension["quinjet"] == ["quinjet"])
         #expect(requiredByExtension["windowTools"]?.isEmpty == true)
+        #expect(requiredByExtension["workspaceRestorer"]?.isEmpty == true)
     }
 }

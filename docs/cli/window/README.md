@@ -38,6 +38,8 @@ Restore steps back to the frame captured before the most recent placement for
 that window. `ed window status --json` reports whether the extension, helper,
 and Accessibility grant make actions available.
 
+[Capture and restore workspace profiles](./workspaces.md)
+
 ## Settings
 
 Open Settings, Extensions, Window Tools to change the left-half, right-half,

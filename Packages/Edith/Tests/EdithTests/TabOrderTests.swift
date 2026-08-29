@@ -3,16 +3,20 @@ import Testing
 
 @Suite struct TabOrderTests {
     @Test func appendsTabsMissingFromSavedOrder() {
-        #expect(orderedTabIDs("usage,music,system") == ["usage", "music", "system", "calendar"])
+        #expect(
+            orderedTabIDs("usage,music,system")
+                == ["usage", "music", "system", "calendar", "workspace"])
     }
 
     @Test func preservesACustomOrder() {
         let order = "calendar,system,music,usage"
-        #expect(orderedTabIDs(order) == ["calendar", "system", "music", "usage"])
+        #expect(orderedTabIDs(order) == ["calendar", "system", "music", "usage", "workspace"])
     }
 
     @Test func dropsUnknownIDs() {
-        #expect(orderedTabIDs("usage,bogus,music") == ["usage", "music", "system", "calendar"])
+        #expect(
+            orderedTabIDs("usage,bogus,music")
+                == ["usage", "music", "system", "calendar", "workspace"])
     }
 
     @Test func emptyStringYieldsAllTabsInDefaultOrder() {

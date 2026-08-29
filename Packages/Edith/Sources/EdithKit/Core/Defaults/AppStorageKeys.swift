@@ -103,6 +103,21 @@ public enum AppStorageKeys {
         public static let rightHotKeyMods = "windowToolsRightHotKeyMods"
     }
 
+    public enum WorkspaceRestorer {
+        public static let enabled = "workspaceRestorerEnabled"
+        public static let library = "workspaceRestorerLibrary"
+        public static let excludedApps = "workspaceRestorerExcludedApps"
+        public static let launchPolicy = "workspaceRestorerLaunchPolicy"
+        public static let timeout = "workspaceRestorerTimeout"
+        public static let concurrency = "workspaceRestorerConcurrency"
+        public static let captureHotKeyCode = "workspaceRestorerCaptureHotKeyCode"
+        public static let captureHotKeyMods = "workspaceRestorerCaptureHotKeyMods"
+        public static let captureHotKeyLabel = "workspaceRestorerCaptureHotKeyLabel"
+        public static let restoreHotKeyCode = "workspaceRestorerRestoreHotKeyCode"
+        public static let restoreHotKeyMods = "workspaceRestorerRestoreHotKeyMods"
+        public static let restoreHotKeyLabel = "workspaceRestorerRestoreHotKeyLabel"
+    }
+
     public enum Herdr {
         public static let agentViews = "herdrAgentViews"
         public static let ghosttyTerminal = "herdrGhosttyTerminal"

@@ -50,7 +50,8 @@ public enum ConfigCatalog {
         "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
         "calendar",
         "clipboard",
-        "notch", "focusdim", "windowtools", "presenter", "colorpicker", "micmute",
+        "notch", "focusdim", "windowtools", "workspacerestorer", "presenter", "colorpicker",
+        "micmute",
         "backup", "permissions", "terminal",
     ]
 
@@ -58,7 +59,8 @@ public enum ConfigCatalog {
         appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
         + system + cleaner
-        + music + calendar + clipboard + notch + focusDim + windowTools + presenter + colorPicker
+        + music + calendar + clipboard + notch + focusDim + windowTools + workspaceRestorer
+        + presenter + colorPicker
         + micMute
         + backup + permissions + terminal
 
@@ -759,6 +761,51 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.WindowTools.restoreHotKeyLabel, .string, group: "windowtools",
             summary: "Printable label for the restore shortcut.", fallback: .string("⌃⌥R")),
+    ]
+
+    private static let workspaceRestorer: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.WorkspaceRestorer.enabled, .bool, group: "workspacerestorer",
+            summary: "Workspace Restorer extension: capture and restore app windows.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.WorkspaceRestorer.excludedApps, .string, group: "workspacerestorer",
+            summary: "Comma-separated bundle identifiers excluded from workspace profiles.",
+            fallback: .string("")),
+        SettingDefinition(
+            AppStorageKeys.WorkspaceRestorer.launchPolicy, .string, group: "workspacerestorer",
+            summary: "Whether restore launches applications that are not running.",
+            allowed: WorkspaceLaunchPolicy.allCases.map(\.rawValue), fallback: .string("never")),
+        SettingDefinition(
+            AppStorageKeys.WorkspaceRestorer.timeout, .number, group: "workspacerestorer",
+            summary: "Seconds before a workspace restore times out.", fallback: .number(12)),
+        SettingDefinition(
+            AppStorageKeys.WorkspaceRestorer.concurrency, .int, group: "workspacerestorer",
+            summary: "Maximum safe concurrent launch operations.", fallback: .int(1)),
+        SettingDefinition(
+            AppStorageKeys.WorkspaceRestorer.captureHotKeyCode, .int,
+            group: "workspacerestorer", summary: "Virtual key code of the capture shortcut.",
+            fallback: .int(1)),
+        SettingDefinition(
+            AppStorageKeys.WorkspaceRestorer.captureHotKeyMods, .int,
+            group: "workspacerestorer", summary: "Carbon modifier mask of the capture shortcut.",
+            fallback: .int(6656)),
+        SettingDefinition(
+            AppStorageKeys.WorkspaceRestorer.captureHotKeyLabel, .string,
+            group: "workspacerestorer", summary: "Printable label for the capture shortcut.",
+            fallback: .string("⌃⌥⇧S")),
+        SettingDefinition(
+            AppStorageKeys.WorkspaceRestorer.restoreHotKeyCode, .int,
+            group: "workspacerestorer", summary: "Virtual key code of the restore shortcut.",
+            fallback: .int(13)),
+        SettingDefinition(
+            AppStorageKeys.WorkspaceRestorer.restoreHotKeyMods, .int,
+            group: "workspacerestorer", summary: "Carbon modifier mask of the restore shortcut.",
+            fallback: .int(6656)),
+        SettingDefinition(
+            AppStorageKeys.WorkspaceRestorer.restoreHotKeyLabel, .string,
+            group: "workspacerestorer", summary: "Printable label for the restore shortcut.",
+            fallback: .string("⌃⌥⇧W")),
     ]
 
     private static let presenter: [SettingDefinition] = [

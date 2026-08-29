@@ -720,6 +720,45 @@ public enum ExtensionLifecycleCatalog {
                     "Confirm the extension, green button, and shortcuts are configured.",
                     "ed config ls --group windowtools --json")
             ]),
+        descriptor(
+            "workspaceRestorer", "Capture and restore named app and window layouts.",
+            workflows: [
+                instruction(
+                    "capture", "Capture a workspace",
+                    "Save running apps, restorable windows, display context, and ordering.",
+                    "ed window workspace capture Desk"),
+                instruction(
+                    "preview", "Preview and restore",
+                    "Inspect remapping and match confidence before moving any windows.",
+                    "ed window workspace preview Desk"),
+            ],
+            prerequisites: [
+                instruction(
+                    "permission", "Grant Accessibility",
+                    "Accessibility lets Edith capture and restore application windows.",
+                    "ed permissions request accessibility")
+            ],
+            examples: [
+                "ed extensions enable workspaceRestorer",
+                "ed window workspace capture Desk --json",
+                "ed window workspace restore Desk --launch-missing",
+            ],
+            docs: [
+                documentation(
+                    "guide", "Workspace Restorer guide", "docs/cli/window/workspaces.md")
+            ],
+            recovery: [
+                instruction(
+                    "recover", "Recover the previous layout",
+                    "Restore the automatic snapshot captured before the last restore.",
+                    "ed window workspace recover")
+            ],
+            verification: [
+                instruction(
+                    "profiles", "Inspect workspace profiles",
+                    "Confirm saved profiles and recent restoration results.",
+                    "ed window workspace ls --json")
+            ]),
     ]
 
     public static let byID = Dictionary(uniqueKeysWithValues: descriptors.map { ($0.id, $0) })

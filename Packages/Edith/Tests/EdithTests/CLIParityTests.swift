@@ -55,6 +55,8 @@ enum UIParity {
             "the Docker window restarts containers one at a time, never a whole project",
         "ed machines docker compose pull":
             "the Docker window never pulls images, for a project or otherwise",
+        "ed window workspace import":
+            "workspace profile files are imported from the command line",
     ]
 
     static let auditedCapabilities: [UICapability] = [

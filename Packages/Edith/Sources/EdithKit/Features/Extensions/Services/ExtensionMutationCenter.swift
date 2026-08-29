@@ -89,6 +89,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case presenter
     case colorPicker
     case windowTools
+    case workspaceRestorer
 }
 
 public enum ExtensionModalMutationOutcome: Equatable, Sendable {

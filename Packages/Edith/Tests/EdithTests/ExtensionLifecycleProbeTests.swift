@@ -70,6 +70,9 @@ import EdithCore
         MatrixRow(
             id: "windowTools", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
+        MatrixRow(
+            id: "workspaceRestorer", helper: true, machine: false, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
     ]
 
     @Test func policiesCoverTheRegistryExactly() {
