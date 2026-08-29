@@ -164,6 +164,11 @@ rm -rf "$HELPER"
 ditto "$BUILT_HELPER" "$HELPER"
 mv "$HELPER/Contents/MacOS/EdithHelper" "$HELPER/Contents/MacOS/Edith"
 /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable Edith' "$HELPER/Contents/Info.plist"
+rm -f "$HELPER/Contents/Resources/AppIcon.icns"
+ln -s ../../../../../Resources/AppIcon.icns "$HELPER/Contents/Resources/AppIcon.icns"
+rm -rf "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
+ln -s ../../../../../Resources/Edith_EdithKit.bundle \
+  "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
 
 mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS"
 cp "$PRIVILEGED_HELPER_BUILD" "$PRIVILEGED_HELPER"

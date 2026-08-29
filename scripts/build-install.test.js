@@ -20,6 +20,15 @@ describe("build install lifecycle", () => {
     expect(script).toContain('mv "$binary.arm64" "$binary"');
   });
 
+  test("shares resources with the nested login item", () => {
+    expect(script).toContain(
+      'ln -s ../../../../../Resources/AppIcon.icns "$HELPER/Contents/Resources/AppIcon.icns"',
+    );
+    expect(script).toContain(
+      '"$HELPER/Contents/Resources/Edith_EdithKit.bundle"',
+    );
+  });
+
   test("requests a normal application quit before replacing the bundle", () => {
     const stop = script.indexOf("stop_installed_app");
     const replace = script.indexOf('rm -rf "/Applications/Edith.app"');
