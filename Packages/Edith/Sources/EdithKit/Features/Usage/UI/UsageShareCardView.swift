@@ -382,6 +382,7 @@ private struct ActivityShareContent: View {
                     .foregroundStyle(ShareColors.cream.opacity(0.58))
             }
             ActivityHeatGrid(snapshot: snapshot)
+            Spacer(minLength: 0)
             ShareRecordStrip(records: records, accent: ShareColors.sage, height: 104)
         }
         .foregroundStyle(ShareColors.cream)
@@ -619,11 +620,65 @@ private struct BusiestShareContent: View {
                 ],
                 accent: ShareColors.apricot,
                 height: 112)
+            BusiestComparison(
+                average: snapshot.averageTokensPerActiveDay,
+                peak: busiest.tokens)
         }
         .foregroundStyle(ShareColors.cream)
         .padding(34)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .sharePanel(accent: ShareColors.apricot)
+    }
+}
+
+private struct BusiestComparison: View {
+    let average: Double
+    let peak: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack {
+                Text("PEAK AGAINST YOUR ACTIVE-DAY AVERAGE")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .tracking(1.2)
+                    .foregroundStyle(ShareColors.cream.opacity(0.5))
+                Spacer()
+                Text(String(format: "%.1fx", peak / max(1, average)))
+                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+            }
+            comparisonRow(
+                label: "AVERAGE", value: average,
+                fraction: average / max(1, peak), color: ShareColors.sand)
+            comparisonRow(label: "PEAK", value: peak, fraction: 1, color: ShareColors.apricot)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 15)
+        .sharePanel(accent: ShareColors.apricot)
+    }
+
+    private func comparisonRow(
+        label: String, value: Double, fraction: Double, color: Color
+    ) -> some View {
+        HStack(spacing: 14) {
+            Text(label)
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(ShareColors.cream.opacity(0.58))
+                .frame(width: 58, alignment: .leading)
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(ShareColors.cream.opacity(0.07))
+                    Capsule()
+                        .fill(color.opacity(0.86))
+                        .frame(width: max(8, proxy.size.width * fraction))
+                }
+            }
+            .frame(height: 10)
+            Text(ShareFormat.tokens(value))
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .monospacedDigit()
+                .frame(width: 72, alignment: .trailing)
+        }
     }
 }
 
