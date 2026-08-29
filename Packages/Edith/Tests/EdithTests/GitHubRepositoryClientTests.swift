@@ -28,7 +28,7 @@ import Testing
         let transport = GitHubCLITransport(
             executableURL: executable, environment: environment,
             runCommand: { request in try await recorder.run(request) })
-        let host = GitHubHost(scheme: "https", name: "github.example.com", port: 8443)!
+        let host = GitHubHost(scheme: "https", name: "github.example.com")!
         let request = GitHubAPIRequest(
             host: host, endpoint: "repos/acme/orbit/contents/Sources",
             query: [("ref", "feature/navigation")], headers: [("If-None-Match", "\"abc\"")],
@@ -45,7 +45,7 @@ import Testing
         #expect(
             command.arguments
                 == [
-                    "api", "--include", "--hostname", "github.example.com:8443", "--method", "GET",
+                    "api", "--include", "--hostname", "github.example.com", "--method", "GET",
                     "-H", "Accept: application/vnd.github+json", "-H",
                     "If-None-Match: \"abc\"", "repos/acme/orbit/contents/Sources", "--raw-field",
                     "ref=feature/navigation",
@@ -357,8 +357,6 @@ import Testing
 
     @Test func unresolvedSingleSegmentReferenceFallsBackForCommitSHAs() async throws {
         let fixture = GitHubRequestFixture(responses: [
-            response(referenceNames(100)),
-            response("[]"),
             response(
                 #"""
                 {
@@ -370,7 +368,7 @@ import Testing
                   "encoding":"base64",
                   "content":"aGVsbG8K"
                 }
-                """#),
+                """#)
         ])
         let client = GitHubRepositoryClient(
             cacheFile: nil, sendRequest: { request in try await fixture.send(request) })
@@ -387,11 +385,73 @@ import Testing
         #expect(file.path == "README.md")
         #expect(
             await fixture.requests()
-                == referenceRequests + [
+                == [
                     request(
                         endpoint: "repos/acme/orbit/contents/README.md",
                         query: [("ref", "abcdef123456")],
                         accept: "application/vnd.github.object+json", maximumOutputBytes: 6_000_000)
+                ])
+    }
+
+    @Test func referenceDiscoveryStopsAfterTheLimitedInitialPage() async throws {
+        let fixture = GitHubRequestFixture(responses: [
+            response(referenceNames(100)),
+            response("[]"),
+            response(
+                #"{"name":"README.md","path":"README.md","sha":"readme","size":6,"type":"file","encoding":"base64","content":"aGVsbG8K"}"#
+            ),
+        ])
+        let client = GitHubRepositoryClient(
+            cacheFile: nil, sendRequest: { request in try await fixture.send(request) })
+        let route = GitHubRoute(
+            host: .github,
+            resource: .content(
+                repository: repository, kind: .blob,
+                revisionPath: ["missing", "README.md"], view: .automatic, lines: nil))
+
+        let resource = try await client.load(route)
+        let file = try #require(resource.file)
+
+        #expect(file.revision == "missing")
+        #expect(
+            await fixture.requests()
+                == referenceRequests + [
+                    request(
+                        endpoint: "repos/acme/orbit/contents/README.md",
+                        query: [("ref", "missing")], accept: "application/vnd.github.object+json",
+                        maximumOutputBytes: 6_000_000)
+                ])
+    }
+
+    @Test func resolvedContentIdentityBypassesAmbiguousReferenceLookup() async throws {
+        let fixture = GitHubRequestFixture(responses: [
+            response(
+                #"{"name":"Guide.md","path":"v2/Guide.md","sha":"guide","size":6,"type":"file","encoding":"base64","content":"aGVsbG8K"}"#
+            )
+        ])
+        let client = GitHubRepositoryClient(
+            cacheFile: nil, sendRequest: { request in try await fixture.send(request) })
+        let location = try #require(
+            GitHubResolvedContentPath(revision: "release", path: ["v2", "Guide.md"]))
+        let route = GitHubRoute(
+            host: .github,
+            resource: .content(
+                repository: repository, kind: .blob,
+                revisionPath: ["release", "v2", "Guide.md"], view: .automatic, lines: nil),
+            resolvedContentPath: location)
+
+        let resource = try await client.load(route)
+        let file = try #require(resource.file)
+
+        #expect(file.revision == "release")
+        #expect(file.path == "v2/Guide.md")
+        #expect(
+            await fixture.requests()
+                == [
+                    request(
+                        endpoint: "repos/acme/orbit/contents/v2/Guide.md",
+                        query: [("ref", "release")], accept: "application/vnd.github.object+json",
+                        maximumOutputBytes: 6_000_000)
                 ])
     }
 

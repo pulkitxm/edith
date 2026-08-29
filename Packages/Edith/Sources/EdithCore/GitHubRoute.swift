@@ -8,13 +8,13 @@ public struct GitHubHost: Codable, Hashable, Sendable {
     public init?(scheme: String = "https", name: String, port: Int? = nil) {
         let normalizedScheme = scheme.lowercased()
         let normalizedName = name.lowercased()
-        guard ["http", "https"].contains(normalizedScheme), !normalizedName.isEmpty,
+        guard normalizedScheme == "https", !normalizedName.isEmpty,
             !normalizedName.contains("/"), !normalizedName.contains(where: \.isWhitespace),
-            port.map({ (1...65_535).contains($0) }) ?? true
+            port == nil || port == 443
         else { return nil }
         self.scheme = normalizedScheme
         self.name = normalizedName
-        self.port = port
+        self.port = nil
     }
 
     public init?(url: URL) {
@@ -79,6 +79,19 @@ public enum GitHubContentView: String, Codable, Hashable, Sendable {
     case code
 }
 
+public struct GitHubResolvedContentPath: Codable, Hashable, Sendable {
+    public let revision: String
+    public let path: [String]
+
+    public init?(revision: String, path: [String]) {
+        guard !revision.isEmpty, !revision.contains(where: \.isWhitespace),
+            !path.contains(where: { $0.isEmpty || $0.contains("/") })
+        else { return nil }
+        self.revision = revision
+        self.path = path
+    }
+}
+
 public struct GitHubQuery: Codable, Hashable, Sendable {
     public let name: String
     public let value: String?
@@ -127,10 +140,19 @@ public enum GitHubSupportLevel: String, Codable, Hashable, Sendable {
 public struct GitHubRoute: Codable, Hashable, Sendable {
     public let host: GitHubHost
     public let resource: GitHubRouteResource
+    public let resolvedContentPath: GitHubResolvedContentPath?
 
-    public init(host: GitHubHost, resource: GitHubRouteResource) {
+    public init(
+        host: GitHubHost, resource: GitHubRouteResource,
+        resolvedContentPath: GitHubResolvedContentPath? = nil
+    ) {
         self.host = host
         self.resource = resource
+        if case .content = resource {
+            self.resolvedContentPath = resolvedContentPath
+        } else {
+            self.resolvedContentPath = nil
+        }
     }
 
     public init?(url: URL) {
@@ -145,6 +167,7 @@ public struct GitHubRoute: Codable, Hashable, Sendable {
         }
         self.host = host
         self.resource = Self.parse(segments, query: query, fragment: components.fragment)
+        resolvedContentPath = nil
     }
 
     public var support: GitHubSupportLevel {

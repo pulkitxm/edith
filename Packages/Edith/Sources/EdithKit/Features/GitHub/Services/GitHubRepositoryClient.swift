@@ -11,9 +11,11 @@ public actor GitHubRepositoryClient {
     private let sendRequest: SendRequest
     private let cacheFile: URL?
     private var cache: [String: CacheRecord]?
-    private var repositoryReferences: [RepositoryReferenceKey: [String]] = [:]
+    private var repositoryReferences: [RepositoryReferenceKey: ReferenceCacheRecord] = [:]
     private let cacheLimit = 24
     private let cacheLifetime: TimeInterval = 60 * 60 * 24 * 7
+    private let referenceCacheLimit = 24
+    private let referenceCacheLifetime: TimeInterval = 60 * 5
 
     public init(
         transport: GitHubCLITransport = GitHubCLITransport(),
@@ -50,8 +52,14 @@ public actor GitHubRepositoryClient {
             resource = .repository(
                 try await repositoryOverview(host: route.host, repository: repository))
         case let .content(repository, kind, revisionPath, _, _):
-            let location = try await contentLocation(
-                host: route.host, repository: repository, revisionPath: revisionPath)
+            let location: ContentLocation
+            if let resolved = route.resolvedContentPath {
+                location = ContentLocation(
+                    revision: resolved.revision, path: resolved.path.joined(separator: "/"))
+            } else {
+                location = try await contentLocation(
+                    host: route.host, repository: repository, revisionPath: revisionPath)
+            }
             if kind == .tree {
                 resource = .directory(
                     try await directory(
@@ -140,6 +148,10 @@ public actor GitHubRepositoryClient {
             return ContentLocation(
                 revision: first, path: revisionPath.dropFirst().joined(separator: "/"))
         }
+        if Self.looksLikeCommitSHA(first) {
+            return ContentLocation(
+                revision: first, path: revisionPath.dropFirst().joined(separator: "/"))
+        }
         let match = try await references(host: host, repository: repository)
             .compactMap { name -> (name: String, components: [String])? in
                 let components = name.split(separator: "/").map(String.init)
@@ -162,13 +174,27 @@ public actor GitHubRepositoryClient {
         host: GitHubHost, repository: GitHubRepositoryPath
     ) async throws -> [String] {
         let key = RepositoryReferenceKey(host: host, repository: repository)
-        if let names = repositoryReferences[key] { return names }
+        let now = Date()
+        if var record = repositoryReferences[key],
+            now.timeIntervalSince(record.storedAt) <= referenceCacheLifetime
+        {
+            record.accessedAt = now
+            repositoryReferences[key] = record
+            return record.names
+        }
+        repositoryReferences[key] = nil
         let branches = try await referenceNames(
             host: host, repository: repository, collection: "branches")
         let tags = try await referenceNames(
             host: host, repository: repository, collection: "tags")
         let names = branches + tags
-        repositoryReferences[key] = names
+        repositoryReferences[key] = ReferenceCacheRecord(
+            names: names, storedAt: now, accessedAt: now)
+        if repositoryReferences.count > referenceCacheLimit,
+            let oldest = repositoryReferences.min(by: { $0.value.accessedAt < $1.value.accessedAt })
+        {
+            repositoryReferences[oldest.key] = nil
+        }
         return names
     }
 
@@ -272,6 +298,10 @@ public actor GitHubRepositoryClient {
 
     private static func date(_ value: String?) -> Date? {
         value.flatMap { ISO8601DateFormatter().date(from: $0) }
+    }
+
+    private static func looksLikeCommitSHA(_ value: String) -> Bool {
+        value.range(of: #"^[0-9a-fA-F]{7,40}$"#, options: .regularExpression) != nil
     }
 
     private static func entry(_ value: ContentDTO) -> GitHubRepositoryEntry {
@@ -408,6 +438,12 @@ private struct ContentLocation {
 private struct RepositoryReferenceKey: Hashable {
     let host: GitHubHost
     let repository: GitHubRepositoryPath
+}
+
+private struct ReferenceCacheRecord {
+    let names: [String]
+    let storedAt: Date
+    var accessedAt: Date
 }
 
 private struct CommitDTO: Decodable {

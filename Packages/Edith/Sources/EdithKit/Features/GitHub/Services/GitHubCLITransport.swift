@@ -85,9 +85,8 @@ public struct GitHubCLITransport: Sendable {
 
     public func send(_ request: GitHubAPIRequest) async throws -> GitHubAPIResponse {
         guard let executableURL else { throw GitHubRepositoryLoadError.cliUnavailable }
-        let hostname = request.host.port.map { "\(request.host.name):\($0)" } ?? request.host.name
         var arguments = [
-            "api", "--include", "--hostname", hostname, "--method", "GET", "-H",
+            "api", "--include", "--hostname", request.host.name, "--method", "GET", "-H",
             "Accept: \(request.accept)",
         ]
         if request.host.name == GitHubHost.github.name {

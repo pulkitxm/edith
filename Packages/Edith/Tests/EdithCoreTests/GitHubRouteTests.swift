@@ -41,6 +41,27 @@ import Testing
                 == "https://github.com/acme/orbit/blob/feature/navigation/Sources/App.swift#L8")
     }
 
+    @Test func persistsResolvedContentIdentityWithoutChangingItsURL() throws {
+        let location = try #require(
+            GitHubResolvedContentPath(
+                revision: "release", path: ["v2", "Sources", "App.swift"]))
+        let resolved = GitHubRoute(
+            host: .github,
+            resource: .content(
+                repository: orbit, kind: .blob,
+                revisionPath: ["release", "v2", "Sources", "App.swift"], view: .automatic,
+                lines: nil),
+            resolvedContentPath: location)
+        let decoded = try JSONDecoder().decode(
+            GitHubRoute.self, from: JSONEncoder().encode(resolved))
+
+        #expect(
+            resolved.url.absoluteString
+                == "https://github.com/acme/orbit/blob/release/v2/Sources/App.swift")
+        #expect(decoded == resolved)
+        #expect(GitHubRoute(url: resolved.url)?.resolvedContentPath == nil)
+    }
+
     @Test func parsesRepositoryCollectionsAndDetails() throws {
         #expect(try route("https://github.com/acme/orbit/branches").resource == .branches(orbit))
         #expect(try route("https://github.com/acme/orbit/tags").resource == .tags(orbit))
@@ -76,9 +97,9 @@ import Testing
 
     @Test func supportsEnterpriseHostsAndEncodedPaths() throws {
         let parsed = try route(
-            "https://git.acme.test:8443/acme/orbit/blob/main/Docs/Hello%20World.md")
+            "https://git.acme.test/acme/orbit/blob/main/Docs/Hello%20World.md")
 
-        #expect(parsed.host == GitHubHost(scheme: "https", name: "git.acme.test", port: 8443))
+        #expect(parsed.host == GitHubHost(scheme: "https", name: "git.acme.test"))
         #expect(
             parsed.resource
                 == .content(
@@ -87,7 +108,19 @@ import Testing
                     view: .automatic, lines: nil))
         #expect(
             parsed.url.absoluteString
-                == "https://git.acme.test:8443/acme/orbit/blob/main/Docs/Hello%20World.md")
+                == "https://git.acme.test/acme/orbit/blob/main/Docs/Hello%20World.md")
+    }
+
+    @Test func rejectsHostsUnsupportedByTheGitHubCLITransport() throws {
+        #expect(GitHubHost(scheme: "http", name: "git.acme.test") == nil)
+        #expect(GitHubHost(scheme: "https", name: "git.acme.test", port: 8443) == nil)
+        #expect(GitHubRoute(url: URL(string: "http://git.acme.test/acme/orbit")!) == nil)
+        #expect(GitHubRoute(url: URL(string: "https://git.acme.test:8443/acme/orbit")!) == nil)
+
+        let defaultPort = try #require(
+            GitHubRoute(url: URL(string: "https://git.acme.test:443/acme/orbit")!))
+        #expect(defaultPort.host.port == nil)
+        #expect(defaultPort.url.absoluteString == "https://git.acme.test/acme/orbit")
     }
 
     @Test func lineFragmentsRejectInvalidRanges() {
