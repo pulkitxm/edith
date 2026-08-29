@@ -333,8 +333,8 @@ private struct ActivityHeatGrid: View {
 
     var body: some View {
         let renderedWeeks = weeks
-        HStack(alignment: .top, spacing: 9) {
-            VStack(spacing: 7) {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(spacing: 6) {
                 ForEach(
                     Array(["S", "M", "T", "W", "T", "F", "S"].enumerated()),
                     id: \.offset
@@ -342,15 +342,15 @@ private struct ActivityHeatGrid: View {
                     Text(label)
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
                         .foregroundStyle(ShareColors.cream.opacity(0.45))
-                        .frame(width: 14, height: 14)
+                        .frame(width: 18, height: 22)
                 }
             }
-            .padding(.top, 20)
-            HStack(alignment: .top, spacing: 5) {
+            .padding(.top, 24)
+            HStack(alignment: .top, spacing: 7) {
                 ForEach(Array(renderedWeeks.enumerated()), id: \.offset) { index, week in
-                    VStack(spacing: 5) {
+                    VStack(spacing: 6) {
                         Color.clear
-                            .frame(width: 14, height: 15)
+                            .frame(width: 22, height: 18)
                             .overlay(alignment: .leading) {
                                 Text(monthLabel(at: index, in: renderedWeeks))
                                     .font(
@@ -360,9 +360,9 @@ private struct ActivityHeatGrid: View {
                                     .fixedSize()
                             }
                         ForEach(week) { day in
-                            RoundedRectangle(cornerRadius: 3.5)
+                            RoundedRectangle(cornerRadius: 5)
                                 .fill(color(for: day.tokens))
-                                .frame(width: 14, height: 14)
+                                .frame(width: 22, height: 22)
                         }
                     }
                 }
@@ -530,8 +530,8 @@ private enum UsageShareGrid {
         let values = Dictionary(uniqueKeysWithValues: snapshot.days.map { ($0.period, $0.tokens) })
         let endValue = snapshot.days.last.flatMap { UsageShareSnapshot.date(from: $0.period) } ?? Date()
         let end = calendar.startOfDay(for: endValue)
-        let yearStart = calendar.date(byAdding: .day, value: -364, to: end) ?? end
-        let first = yearStart
+        let windowStart = calendar.date(byAdding: .day, value: -181, to: end) ?? end
+        let first = windowStart
         let startOffset = calendar.component(.weekday, from: first) - 1
         let start = calendar.date(byAdding: .day, value: -startOffset, to: first) ?? first
         let endOffset = 7 - calendar.component(.weekday, from: end)
