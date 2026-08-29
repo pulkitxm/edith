@@ -635,25 +635,23 @@ struct HerdrPage: View {
                             }
                         }
                     }
-                    if !onBoard {
-                        agentsRailHeader
-                        if !store.agentsCollapsed, store.settling {
-                            HerdrSkeleton(dark: dark, rows: 4, card: false)
-                        }
-                        if !store.agentsCollapsed, !store.settling {
-                            if store.spaceGroupingEnabled {
-                                ForEach(store.agentSpaces) { space in
-                                    spaceHeader(space)
-                                    if !store.spaceIsCollapsed(space.id) {
-                                        ForEach(space.agents) { agent in
-                                            agentRailEntry(agent)
-                                        }
+                    agentsRailHeader
+                    if !store.agentsCollapsed, store.settling {
+                        HerdrSkeleton(dark: dark, rows: 4, card: false)
+                    }
+                    if !store.agentsCollapsed, !store.settling {
+                        if store.spaceGroupingEnabled {
+                            ForEach(store.agentSpaces) { space in
+                                spaceHeader(space)
+                                if !store.spaceIsCollapsed(space.id) {
+                                    ForEach(space.agents) { agent in
+                                        agentRailEntry(agent)
                                     }
                                 }
-                            } else {
-                                ForEach(listedAgents) { agent in
-                                    agentRailEntry(agent)
-                                }
+                            }
+                        } else {
+                            ForEach(listedAgents) { agent in
+                                agentRailEntry(agent)
                             }
                         }
                     }

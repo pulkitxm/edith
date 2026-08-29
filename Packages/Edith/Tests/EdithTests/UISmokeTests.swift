@@ -297,6 +297,22 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(renders(HerdrPage(store: HerdrStore())))
     }
 
+    @Test func herdrBoardWithAgentSpacesRenders() {
+        let name = "herdr-board-smoke-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = HerdrStore(defaults: defaults, liveWatcher: { _ in })
+        let agent = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true,
+            sshTarget: nil, session: "main", pane: "p1", kind: "Codex",
+            status: .working, title: "Build checkout", workspace: "edith", cwd: "/tmp")
+        store.apply([.local(herdrPresent: true, agents: [agent])])
+        store.spaceGroupingEnabled = true
+        store.selectBoard()
+
+        #expect(renders(HerdrPage(store: store), width: 1180, height: 760))
+    }
+
     @Test func musicPageRenders() {
         #expect(renders(MusicPage()))
     }
