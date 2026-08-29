@@ -65,7 +65,8 @@ final class AppMaintenanceModel {
                 return (applications, updates)
             }.value
             guard !Task.isCancelled else { return }
-            let previousIDs = Set(updates.map(\.id))
+            var previousIDs: Set<String> = []
+            for update in updates { previousIDs.insert(update.id) }
             updateState = updatePersistence.load()
             updateState.lastRefresh = Date()
             do {
@@ -78,8 +79,10 @@ final class AppMaintenanceModel {
                 loaded.1, state: updateState, now: updateState.lastRefresh ?? Date())
             updateHistory = updateState.history
             lastUpdateRefresh = updateState.lastRefresh
-            selectedUpdateIDs.formIntersection(updates.map(\.id))
-            if selectedUpdateIDs.isEmpty { selectedUpdateIDs = Set(updates.map(\.id)) }
+            var visibleIDs: Set<String> = []
+            for update in updates { visibleIDs.insert(update.id) }
+            selectedUpdateIDs.formIntersection(visibleIDs)
+            if selectedUpdateIDs.isEmpty { selectedUpdateIDs = visibleIDs }
             phase = .ready
             if let selectedApplicationID,
                 !loaded.0.contains(where: { $0.id == selectedApplicationID })
@@ -89,8 +92,9 @@ final class AppMaintenanceModel {
                 selectedItemIDs = []
             }
             if automatic {
-                let fresh = updates.filter { !previousIDs.contains($0.id) }
-                if !fresh.isEmpty { await notify(updateCount: fresh.count) }
+                var freshCount = 0
+                for update in updates where !previousIDs.contains(update.id) { freshCount += 1 }
+                if freshCount > 0 { await notify(updateCount: freshCount) }
             }
         }
     }

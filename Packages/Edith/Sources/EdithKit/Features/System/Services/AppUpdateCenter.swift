@@ -331,29 +331,53 @@ public enum AppUpdateDiscovery {
     public static func feedUpdates(
         applications: [InstalledApplication], now: Date, fetch: @escaping Fetch
     ) async -> [AppUpdateItem] {
-        await withTaskGroup(of: AppUpdateItem?.self) { group in
-            for application in applications {
-                guard let feed = feedURL(for: application) else { continue }
+        let candidates = applications.compactMap { application in
+            feedURL(for: application).map { (application, $0) }
+        }
+        return await withTaskGroup(of: AppUpdateItem?.self) { group in
+            let initialCount = min(4, candidates.count)
+            var remaining = candidates.dropFirst(initialCount).makeIterator()
+            for candidate in candidates.prefix(initialCount) {
                 group.addTask {
-                    guard let data = try? await fetch(feed.url),
+                    guard let data = try? await fetch(candidate.1.url),
                         let release = parseFeed(data),
-                        isNewer(release.version, than: application.version)
+                        isNewer(release.version, than: candidate.0.version)
                     else { return nil }
                     return AppUpdateItem(
-                        id: "\(feed.source.rawValue):\(application.bundleID)",
-                        name: application.name, bundleID: application.bundleID,
-                        applicationPath: application.url.path, source: feed.source,
-                        currentVersion: application.version,
+                        id: "\(candidate.1.source.rawValue):\(candidate.0.bundleID)",
+                        name: candidate.0.name, bundleID: candidate.0.bundleID,
+                        applicationPath: candidate.0.url.path, source: candidate.1.source,
+                        currentVersion: candidate.0.version,
                         availableVersion: release.version, releaseTitle: release.title,
                         releaseNotes: release.notes, releaseURL: release.url,
-                        confidence: feed.source == .sparkle ? .high : .medium, checkedAt: now,
+                        confidence: candidate.1.source == .sparkle ? .high : .medium,
+                        checkedAt: now,
                         action: .openUpdater, executablePath: "/usr/bin/open",
-                        arguments: [application.url.path])
+                        arguments: [candidate.0.url.path])
                 }
             }
             var items: [AppUpdateItem] = []
-            for await item in group {
+            while let item = await group.next() {
                 if let item { items.append(item) }
+                if let candidate = remaining.next() {
+                    group.addTask {
+                        guard let data = try? await fetch(candidate.1.url),
+                            let release = parseFeed(data),
+                            isNewer(release.version, than: candidate.0.version)
+                        else { return nil }
+                        return AppUpdateItem(
+                            id: "\(candidate.1.source.rawValue):\(candidate.0.bundleID)",
+                            name: candidate.0.name, bundleID: candidate.0.bundleID,
+                            applicationPath: candidate.0.url.path, source: candidate.1.source,
+                            currentVersion: candidate.0.version,
+                            availableVersion: release.version, releaseTitle: release.title,
+                            releaseNotes: release.notes, releaseURL: release.url,
+                            confidence: candidate.1.source == .sparkle ? .high : .medium,
+                            checkedAt: now,
+                            action: .openUpdater, executablePath: "/usr/bin/open",
+                            arguments: [candidate.0.url.path])
+                    }
+                }
             }
             return items
         }
@@ -542,18 +566,17 @@ public actor AppUpdateExecutor {
         cancellation?.cancel()
         cancellation = token
         let results = await withTaskGroup(of: AppUpdateResult.self) { group in
-            var iterator = plan.items.makeIterator()
-            for _ in 0..<min(plan.concurrency, plan.items.count) {
-                if let item = iterator.next() {
-                    group.addTask {
-                        await Self.execute(item, retries: plan.retries, token: token, run: run)
-                    }
+            let initialCount = min(plan.concurrency, plan.items.count)
+            var remaining = plan.items.dropFirst(initialCount).makeIterator()
+            for item in plan.items.prefix(initialCount) {
+                group.addTask {
+                    await Self.execute(item, retries: plan.retries, token: token, run: run)
                 }
             }
             var completed: [AppUpdateResult] = []
             while let result = await group.next() {
                 completed.append(result)
-                if let item = iterator.next() {
+                if let item = remaining.next() {
                     group.addTask {
                         await Self.execute(item, retries: plan.retries, token: token, run: run)
                     }
