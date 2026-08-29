@@ -365,6 +365,18 @@ public enum CommandTree {
                     CommandNode("disks", "Mounted volumes and their free space.", options: common),
                 ]),
             CommandNode(
+                "network", "Read-only local network diagnostics.",
+                children: [
+                    CommandNode(
+                        "diagnose", "Run route, DNS, reachability, web, and service checks.",
+                        options: [
+                            "--json", "--help", "--target", "--dns", "--http", "--https",
+                            "--service", "--exclude", "--public-ip", "--timeout", "--retries",
+                            "--count", "--save-baseline", "--no-history",
+                        ]),
+                    CommandNode("baseline", "Read the saved healthy baseline.", options: common),
+                ]),
+            CommandNode(
                 "music", "Whatever is playing, and playback control.",
                 aliases: ["nowplaying", "np"], options: playback,
                 optionValues: playbackValues,

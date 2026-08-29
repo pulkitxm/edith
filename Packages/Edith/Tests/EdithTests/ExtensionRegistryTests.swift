@@ -12,6 +12,7 @@ import Testing
         "tabHerdrEnabled",
         "tabQuinjetEnabled",
         "tabSystemEnabled",
+        "tabNetworkDiagnosticsEnabled",
         "tabMachinesEnabled",
         "tabCompanionEnabled",
         "menuBarSystemStats",
@@ -35,7 +36,8 @@ import Testing
     @Test func registryMatchesPreUtilityBaseline() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
-                "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
+                "attention", "usage", "herdr", "quinjet", "system", "networkDiagnostics",
+                "machines", "companion",
                 "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
                 "clipboard", "focusDim", "presenter", "emoji", "colorPicker",
             ])
@@ -150,7 +152,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard",
+                "clipboard", "networkDiagnostics",
             ])
     }
 
@@ -232,6 +234,7 @@ import Testing
             "herdr": [],
             "quinjet": [],
             "system": [],
+            "networkDiagnostics": [],
             "machines": [],
             "companion": [],
             "systemStats": [],
@@ -252,6 +255,7 @@ import Testing
             "herdr": [],
             "quinjet": [],
             "system": [.accessibility, .inputMonitoring],
+            "networkDiagnostics": [.notifications],
             "machines": [.notifications],
             "companion": [],
             "systemStats": [],

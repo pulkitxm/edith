@@ -336,6 +336,42 @@ public enum ExtensionLifecycleCatalog {
                     "ed apps ls --json")
             ]),
         descriptor(
+            "networkDiagnostics",
+            "Diagnose local connectivity with explainable, read-only checks and redacted reports.",
+            workflows: [
+                instruction(
+                    "snapshot", "Run a snapshot",
+                    "Inspect the route, resolvers, gateway, targets, and configured services."),
+                instruction(
+                    "baseline", "Compare with healthy",
+                    "Save a healthy result and explain meaningful changes later."),
+            ],
+            prerequisites: [
+                instruction(
+                    "targets", "Choose explicit targets",
+                    "Configure only the DNS, web, reachability, and service targets you want probed.",
+                    "ed network diagnose --help")
+            ],
+            examples: [
+                "ed extensions enable networkDiagnostics", "ed network diagnose --json",
+            ],
+            docs: [
+                documentation(
+                    "guide", "Network Diagnostics guide", "docs/cli/network/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "local", "Run local-only checks",
+                    "Omit explicit targets to inspect only local interface and resolver state.",
+                    "ed network diagnose --json")
+            ],
+            verification: [
+                instruction(
+                    "snapshot", "Capture a report",
+                    "Confirm the diagnostic engine returns a redacted snapshot.",
+                    "ed network diagnose --json")
+            ]),
+        descriptor(
             "machines", "Operate SSH computers, files, services and containers from Edith.",
             workflows: [
                 instruction(
