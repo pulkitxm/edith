@@ -24,65 +24,57 @@ enum CommandBarActionID: String, CaseIterable, Sendable {
     case focusDim
 }
 
+enum CommandBarApplicationAction: String, Sendable {
+    case open
+    case reveal
+    case quit
+    case relaunch
+}
+
 struct CommandBarApplication: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
     let url: URL
     let bundleIdentifier: String?
+    let runningPID: pid_t?
 
     var subtitle: String {
-        bundleIdentifier ?? url.deletingPathExtension().lastPathComponent
+        if runningPID != nil { return "Running application" }
+        return bundleIdentifier ?? url.deletingPathExtension().lastPathComponent
     }
 }
 
-struct CommandBarItem: Identifiable, Sendable {
-    enum Kind: Sendable {
-        case action(CommandBarActionID)
-        case application(CommandBarApplication)
-        case answer(CommandBarAnswer)
-    }
+struct CommandBarSelection: Equatable, Sendable {
+    let processIdentifier: pid_t
+    let text: String
+}
 
+enum CommandBarItemKind: Sendable {
+    case action(CommandBarActionID)
+    case application(CommandBarApplication, CommandBarApplicationAction)
+    case answer(CommandBarAnswer)
+    case file(URL)
+    case systemSettings(URL)
+    case clipboard(ClipboardEntry)
+    case emoji(String)
+    case textUtility(CommandBarTextUtility, CommandBarSelection)
+}
+
+struct CommandBarItem: Identifiable, Sendable {
     let id: String
     let title: String
     let subtitle: String
     let symbolName: String
-    let kind: Kind
+    let keywords: [String]
+    let sourceBias: Int
+    let kind: CommandBarItemKind
+    var pinned = false
+    var shortcutLabel: String?
 
     var candidate: CommandBarCandidate {
         CommandBarCandidate(
-            id: id, title: title, subtitle: subtitle,
-            keywords: keywords)
-    }
-
-    private var keywords: [String] {
-        switch kind {
-        case .action(let action):
-            switch action {
-            case .openHome: ["dashboard", "edith"]
-            case .openExtensions: ["features", "plugins", "manage"]
-            case .openGeneralSettings: ["preferences", "configure"]
-            case .openShortcuts: ["hotkey", "keyboard", "keys"]
-            case .openPermissions: ["privacy", "access", "macos"]
-            case .openAttention: ["focus", "activity", "time"]
-            case .openUsage: ["limits", "tokens", "cost"]
-            case .openHerdr: ["agents", "sessions"]
-            case .openQuinjet: ["review", "pull request", "terminal"]
-            case .openMusic: ["songs", "player", "library"]
-            case .openCalendar: ["events", "schedule", "agenda"]
-            case .openSystem: ["apps", "sleep", "clean keyboard"]
-            case .openMachines: ["ssh", "servers", "remote"]
-            case .openCompanion: ["memory", "notes", "voice"]
-            case .openCommandBarSettings: ["palette", "configure", "ranking"]
-            case .clipboard: ["history", "paste", "copied"]
-            case .colorPicker: ["sample", "eyedropper", "hex"]
-            case .micMute: ["microphone", "audio", "toggle"]
-            case .focusDim: ["dimming", "focus", "toggle"]
-            }
-        case .application(let application):
-            [application.bundleIdentifier ?? "", "application", "app"]
-        case .answer:
-            ["calculate", "convert", "copy"]
-        }
+            id: id, title: title, subtitle: subtitle, keywords: keywords,
+            bias: sourceBias + (pinned ? 60 : 0))
     }
 }
 
@@ -97,6 +89,10 @@ enum CommandBarApplicationCatalog {
     static func load(
         roots: [URL] = defaultRoots, fileManager: FileManager = .default
     ) -> [CommandBarApplication] {
+        let pairs = NSWorkspace.shared.runningApplications.compactMap { app in
+            app.bundleIdentifier.map { ($0, app.processIdentifier) }
+        }
+        let running = Dictionary(pairs, uniquingKeysWith: { first, _ in first })
         var applications: [String: CommandBarApplication] = [:]
         for root in roots {
             guard
@@ -105,7 +101,7 @@ enum CommandBarApplicationCatalog {
                     options: [.skipsHiddenFiles, .skipsPackageDescendants])
             else { continue }
             for case let url as URL in enumerator where url.pathExtension.lowercased() == "app" {
-                guard let application = application(at: url) else { continue }
+                guard let application = application(at: url, running: running) else { continue }
                 let key = application.bundleIdentifier ?? url.standardizedFileURL.path
                 if applications[key] == nil { applications[key] = application }
             }
@@ -115,7 +111,9 @@ enum CommandBarApplicationCatalog {
         }
     }
 
-    static func application(at url: URL) -> CommandBarApplication? {
+    static func application(
+        at url: URL, running: [String: pid_t] = [:]
+    ) -> CommandBarApplication? {
         guard let bundle = Bundle(url: url) else { return nil }
         let title =
             bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
@@ -126,6 +124,7 @@ enum CommandBarApplicationCatalog {
         let bundleIdentifier = bundle.bundleIdentifier
         return CommandBarApplication(
             id: "app.\(bundleIdentifier ?? url.standardizedFileURL.path)", title: clean,
-            url: url.standardizedFileURL, bundleIdentifier: bundleIdentifier)
+            url: url.standardizedFileURL, bundleIdentifier: bundleIdentifier,
+            runningPID: bundleIdentifier.flatMap { running[$0] })
     }
 }
