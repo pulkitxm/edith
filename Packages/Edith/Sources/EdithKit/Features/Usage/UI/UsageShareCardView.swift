@@ -73,7 +73,6 @@ public struct UsageShareCardView: View {
             .padding(.horizontal, 64)
             .padding(.vertical, 52)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 44, style: .continuous))
         .environment(\.colorScheme, .dark)
     }
 }

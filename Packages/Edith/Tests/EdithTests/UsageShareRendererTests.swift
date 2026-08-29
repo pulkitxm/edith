@@ -24,8 +24,13 @@ import Testing
         for card in UsageShareCard.allCases {
             let data = try UsageShareRenderer.pngData(snapshot: snapshot, card: card, scale: 1)
             let image = try #require(NSImage(data: data))
+            let bitmap = try #require(NSBitmapImageRep(data: data))
             #expect(image.size == UsageShareRenderer.size)
             #expect(data.count > 20_000)
+            #expect(bitmap.colorAt(x: 0, y: 0)?.alphaComponent == 1)
+            #expect(
+                bitmap.colorAt(x: bitmap.pixelsWide - 1, y: bitmap.pixelsHigh - 1)?.alphaComponent
+                    == 1)
             if let outputDirectory = ProcessInfo.processInfo.environment[
                 "EDITH_USAGE_SHARE_EVIDENCE_DIR"
             ] {
