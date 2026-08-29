@@ -30,27 +30,30 @@ struct CommandBarView: View {
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(themeColor(themeName))
                 .frame(width: 26)
-            TextField("Search Edith, apps, calculate, or convert", text: Bindable(model).query)
-                .textFieldStyle(.plain)
-                .font(.system(size: 19, weight: .medium))
-                .disableAutocorrection(true)
-                .focused($searchFocused)
-                .onKeyPress(.upArrow) {
-                    model.moveSelection(-1)
-                    return .handled
-                }
-                .onKeyPress(.downArrow) {
-                    model.moveSelection(1)
-                    return .handled
-                }
-                .onKeyPress(.escape) {
-                    model.dismiss()
-                    return .handled
-                }
-                .onKeyPress(keys: [.return]) { press in
-                    model.executeSelected(reveal: press.modifiers.contains(.command))
-                    return .handled
-                }
+            TextField(
+                "Search commands, apps, files, settings, clipboard, or emoji",
+                text: Bindable(model).query
+            )
+            .textFieldStyle(.plain)
+            .font(.system(size: 19, weight: .medium))
+            .disableAutocorrection(true)
+            .focused($searchFocused)
+            .onKeyPress(.upArrow) {
+                model.moveSelection(-1)
+                return .handled
+            }
+            .onKeyPress(.downArrow) {
+                model.moveSelection(1)
+                return .handled
+            }
+            .onKeyPress(.escape) {
+                model.dismiss()
+                return .handled
+            }
+            .onKeyPress(keys: [.return]) { press in
+                model.executeSelected(reveal: press.modifiers.contains(.command))
+                return .handled
+            }
             if !model.query.isEmpty {
                 Button {
                     model.query = ""
@@ -94,7 +97,7 @@ struct CommandBarView: View {
 
     private var emptyState: some View {
         VStack(spacing: 8) {
-            if model.loadingApplications {
+            if model.loadingApplications || model.searchingFiles {
                 ProgressView()
                     .controlSize(.small)
             } else {
@@ -102,9 +105,13 @@ struct CommandBarView: View {
                     .font(.system(size: 22))
                     .foregroundStyle(.tertiary)
             }
-            Text(model.loadingApplications ? "Loading applications" : "No matching commands")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
+            Text(
+                model.searchingFiles
+                    ? "Searching selected folders"
+                    : model.loadingApplications ? "Loading applications" : "No matching commands"
+            )
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 70)
@@ -129,6 +136,16 @@ struct CommandBarView: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 8)
+                if item.pinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                if let shortcut = item.shortcutLabel {
+                    Text(shortcut)
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
                 if selected {
                     Text("↩")
                         .font(.system(size: 12, weight: .semibold))
@@ -149,25 +166,109 @@ struct CommandBarView: View {
         .onHover { hovering in
             if hovering { model.select(item.id) }
         }
+        .contextMenu { resultMenu(item) }
+    }
+
+    @ViewBuilder
+    private func resultMenu(_ item: CommandBarItem) -> some View {
+        Button(item.pinned ? "Unpin Result" : "Pin Result") {
+            model.togglePin(item)
+        }
+        Button("Hide Result") {
+            model.hide(item)
+        }
+        if model.canAssignShortcut(item) {
+            Menu("Assign Shortcut") {
+                ForEach(CommandBarShortcutSlot.all) { slot in
+                    Button {
+                        model.assignShortcut(slot.shortcut, to: item)
+                    } label: {
+                        if item.shortcutLabel == slot.shortcut.label {
+                            Label(slot.shortcut.label, systemImage: "checkmark")
+                        } else {
+                            Text(slot.shortcut.label)
+                        }
+                    }
+                }
+                if item.shortcutLabel != nil {
+                    Divider()
+                    Button("Remove Shortcut") {
+                        model.assignShortcut(nil, to: item)
+                    }
+                }
+            }
+        }
+        if case .application(let application, _) = item.kind {
+            Divider()
+            Button("Open") {
+                model.execute(
+                    CommandBarItem(
+                        id: application.id, title: application.title,
+                        subtitle: application.subtitle, symbolName: "app.fill",
+                        keywords: [], sourceBias: 0,
+                        kind: .application(application, .open)))
+            }
+            Button("Reveal in Finder") {
+                model.execute(
+                    CommandBarItem(
+                        id: item.id, title: item.title, subtitle: item.subtitle,
+                        symbolName: "folder", keywords: [], sourceBias: 0,
+                        kind: .application(application, .reveal)))
+            }
+            if application.runningPID != nil {
+                Button("Quit") {
+                    model.execute(
+                        CommandBarItem(
+                            id: item.id, title: item.title, subtitle: item.subtitle,
+                            symbolName: "xmark.circle", keywords: [], sourceBias: 0,
+                            kind: .application(application, .quit)))
+                }
+                Button("Relaunch") {
+                    model.execute(
+                        CommandBarItem(
+                            id: item.id, title: item.title, subtitle: item.subtitle,
+                            symbolName: "arrow.clockwise", keywords: [], sourceBias: 0,
+                            kind: .application(application, .relaunch)))
+                }
+            }
+        }
     }
 
     @ViewBuilder
     private func icon(_ item: CommandBarItem) -> some View {
         switch item.kind {
-        case .application(let application):
+        case .application(let application, _):
             Image(nsImage: NSWorkspace.shared.icon(forFile: application.url.path))
                 .resizable()
                 .scaledToFit()
                 .frame(width: 28, height: 28)
-        case .action, .answer:
-            Image(systemName: item.symbolName)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(themeColor(themeName))
+        case .file(let url):
+            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                .resizable()
+                .scaledToFit()
                 .frame(width: 28, height: 28)
-                .background(
-                    themeColor(themeName).opacity(0.12),
-                    in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        case .emoji(let emoji):
+            Text(emoji)
+                .font(.system(size: 22))
+                .frame(width: 28, height: 28)
+        case .clipboard(let entry):
+            ClipboardThumbnailView(entry: entry, maxHeight: 28) {
+                symbolIcon(item)
+            }
+            .frame(width: 28, height: 28)
+        case .action, .answer, .systemSettings, .textUtility:
+            symbolIcon(item)
         }
+    }
+
+    private func symbolIcon(_ item: CommandBarItem) -> some View {
+        Image(systemName: item.symbolName)
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(themeColor(themeName))
+            .frame(width: 28, height: 28)
+            .background(
+                themeColor(themeName).opacity(0.12),
+                in: RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 
     private var footer: some View {
@@ -178,7 +279,7 @@ struct CommandBarView: View {
                 Text("⌘↩ reveal")
             }
             Spacer()
-            Text("local search")
+            Text(model.hasFileScopes ? "local metadata search" : "local search")
                 .foregroundStyle(.tertiary)
         }
         .font(.system(size: 10.5, weight: .medium))

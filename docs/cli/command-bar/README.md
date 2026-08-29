@@ -27,11 +27,20 @@ ed command-bar convert 72 fahrenheit celsius --json
 Enable the extension with `ed extensions enable commandBar`, then press
 Option-Space. This default does not overlap Edith's Option-Command-E global
 panel shortcut. The palette searches Edith destinations, actions exposed by
-enabled extensions, and installed applications. Return runs the selected item.
-Command-Return reveals a selected application in Finder.
+enabled extensions, installed applications, System Settings, emoji, and files
+inside folders you choose. Clipboard results appear when Clipboard is enabled.
+Selected-text actions appear when the front application exposes an editable
+selection through Accessibility. Return runs the selected item. Command-Return
+reveals a selected application or file in Finder.
 
 Arithmetic and conversion answers appear above search results. Return copies an
-answer. All evaluation and search happens on the Mac.
+answer. Application results also offer reveal, quit, and relaunch actions.
+Control-click any result to pin or hide it. Stable results can be assigned one
+of nine global Control-Option-number shortcuts.
+
+Choose file search folders in Settings, Extensions, Command Bar. File results
+use the metadata index maintained by macOS. Edith does not crawl those folders
+or build a private index.
 
 ## Privacy and ranking
 
@@ -41,7 +50,10 @@ conversion inputs. Turn ranking off or clear it in Settings, Extensions,
 Command Bar.
 
 Installed application search reads app bundle metadata from the Applications
-folders. It does not launch an app until you choose that result.
+folders. It does not launch an app until you choose that result. Folder paths,
+pinned and hidden result identifiers, and assigned shortcuts are saved in Edith
+settings. Clipboard contents and selected text are not copied into ranking or
+search state.
 
 ## Exit codes
 

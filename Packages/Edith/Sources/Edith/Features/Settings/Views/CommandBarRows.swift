@@ -1,3 +1,4 @@
+import AppKit
 import EdithKit
 import SwiftUI
 
@@ -11,6 +12,14 @@ struct CommandBarRows: View {
         var learnRanking = true
     @AppStorage(AppStorageKeys.CommandBar.registrationStatus, store: SharedDefaults.store) private
         var registrationStatus = 0
+    @AppStorage(AppStorageKeys.CommandBar.fileScopes, store: SharedDefaults.store) private
+        var fileScopes = ""
+    @AppStorage(AppStorageKeys.CommandBar.pinnedResults, store: SharedDefaults.store) private
+        var pinnedResults = ""
+    @AppStorage(AppStorageKeys.CommandBar.hiddenResults, store: SharedDefaults.store) private
+        var hiddenResults = ""
+    @AppStorage(AppStorageKeys.CommandBar.resultShortcuts, store: SharedDefaults.store) private
+        var resultShortcuts = ""
 
     var body: some View {
         Group {
@@ -49,6 +58,81 @@ struct CommandBarRows: View {
             .opacity(enabled ? 1 : 0.5)
 
             Section {
+                ForEach(CommandBarPreferences.decodeList(fileScopes), id: \.self) { path in
+                    LabeledContent {
+                        Button {
+                            removeFolder(path)
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.edith(.borderless))
+                        .help("Remove folder")
+                    } label: {
+                        Label(
+                            URL(fileURLWithPath: path).lastPathComponent,
+                            systemImage: "folder.fill")
+                        Text(path)
+                            .font(.system(size: UIScale.pt(10)))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                Button("Add Search Folder…") {
+                    chooseFolders()
+                }
+            } header: {
+                Text("File Search")
+            } footer: {
+                Text(
+                    "Uses the metadata index already maintained by macOS. Edith does not build or store a private file index."
+                )
+                .font(.system(size: UIScale.pt(10)))
+            }
+            .disabled(!enabled)
+            .opacity(enabled ? 1 : 0.5)
+
+            Section {
+                LabeledContent("Pinned results") {
+                    Text("\(CommandBarPreferences.decodeList(pinnedResults).count)")
+                        .foregroundStyle(.secondary)
+                }
+                LabeledContent("Hidden results") {
+                    Text("\(CommandBarPreferences.decodeSet(hiddenResults).count)")
+                        .foregroundStyle(.secondary)
+                }
+                LabeledContent("Assigned shortcuts") {
+                    Text("\(CommandBarPreferences.decodeShortcuts(resultShortcuts).count)")
+                        .foregroundStyle(.secondary)
+                }
+                HStack {
+                    Button("Clear Pins") {
+                        pinnedResults = ""
+                        settingsChanged()
+                    }
+                    .disabled(pinnedResults.isEmpty)
+                    Button("Show Hidden Results") {
+                        hiddenResults = ""
+                        settingsChanged()
+                    }
+                    .disabled(hiddenResults.isEmpty)
+                    Button("Clear Result Shortcuts") {
+                        resultShortcuts = ""
+                        settingsChanged()
+                    }
+                    .disabled(resultShortcuts.isEmpty)
+                }
+            } header: {
+                Text("Results")
+            } footer: {
+                Text(
+                    "Control-click a result to pin it, hide it, or assign one of nine global shortcuts."
+                )
+                .font(.system(size: UIScale.pt(10)))
+            }
+            .disabled(!enabled)
+            .opacity(enabled ? 1 : 0.5)
+
+            Section {
                 LabeledContent("Search processing") {
                     Text("On this Mac")
                         .foregroundStyle(.secondary)
@@ -66,12 +150,39 @@ struct CommandBarRows: View {
                 Text("Privacy")
             } footer: {
                 Text(
-                    "Query text is never saved. Calculations, conversions, and application search stay local."
+                    "Query and selected text are never saved. Clipboard, file, emoji, calculation, conversion, and application searches stay on this Mac."
                 )
                 .font(.system(size: UIScale.pt(10)))
             }
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.5)
         }
+    }
+
+    private func chooseFolders() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.canCreateDirectories = false
+        guard panel.runModal() == .OK else { return }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let selected = panel.urls.map { url in
+            CommandBarFileSearchSupport.abbreviating(
+                url.standardizedFileURL.path, homeDirectory: home)
+        }
+        fileScopes = CommandBarPreferences.encodeList(
+            CommandBarPreferences.decodeList(fileScopes) + selected)
+        settingsChanged()
+    }
+
+    private func removeFolder(_ path: String) {
+        fileScopes = CommandBarPreferences.encodeList(
+            CommandBarPreferences.decodeList(fileScopes).filter { $0 != path })
+        settingsChanged()
+    }
+
+    private func settingsChanged() {
+        IPC.post(IPC.Name.settingsChanged)
     }
 }
