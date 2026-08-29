@@ -8,6 +8,7 @@ const releaseStateScript = readFileSync(
   "utf8",
 );
 const makefile = readFileSync("Makefile", "utf8");
+const buildScript = readFileSync("build.sh", "utf8");
 const contributing = readFileSync("CONTRIBUTING.md", "utf8");
 const homebrewInternals = readFileSync("docs/homebrew-internals.md", "utf8");
 const sourceShaRef = ["$", "{{ inputs.source_sha || github.sha }}"].join("");
@@ -125,6 +126,12 @@ test("release builds and publishes the macOS assets", () => {
   expect(dmgJob).toContain("hdiutil verify Edith.dmg");
   expect(dmgJob).toContain("name: Enforce the release size budget");
   expect(dmgJob).toContain('test "$DMG_BYTES" -le 21000000');
+  expect(buildScript).toContain(
+    '[ "$RELEASE" = 1 ] && XCODE_BUILD_SETTINGS+=(SWIFT_OPTIMIZATION_LEVEL=-Osize)',
+  );
+  expect(makefile).toContain(
+    "Release SWIFT_OPTIMIZATION_LEVEL must be -Osize",
+  );
   expect(releaseWorkflow).toContain("release-assets/Edith.dmg");
   expect(releaseWorkflow).toContain("release-assets/appcast.xml");
   expect(releaseWorkflow).toContain("gh release create");
