@@ -57,9 +57,9 @@ final class CaptureToolsStore: FeatureModule {
             IPC.observe(IPC.Name.requestCaptureWindow) { [weak self] in self?.start(.window) },
             IPC.observe(IPC.Name.requestCaptureScreen) { [weak self] in self?.start(.screen) },
             IPC.observe(IPC.Name.requestCaptureLibrary) { [weak self] in self?.showLibrary() },
-            IPC.observe(IPC.Name.requestRecordingArea) { [weak self] in self?.recorder.start(.area) },
-            IPC.observe(IPC.Name.requestRecordingWindow) { [weak self] in self?.recorder.start(.window) },
-            IPC.observe(IPC.Name.requestRecordingDisplay) { [weak self] in self?.recorder.start(.display) },
+            IPC.observe(IPC.Name.requestRecordingArea) { [weak self] in self?.startRecording(.area) },
+            IPC.observe(IPC.Name.requestRecordingWindow) { [weak self] in self?.startRecording(.window) },
+            IPC.observe(IPC.Name.requestRecordingDisplay) { [weak self] in self?.startRecording(.display) },
             IPC.observe(IPC.Name.requestRecordingPause) { [weak self] in self?.recorder.pause() },
             IPC.observe(IPC.Name.requestRecordingResume) { [weak self] in self?.recorder.resume() },
             IPC.observe(IPC.Name.requestRecordingStop) { [weak self] in self?.recorder.stop() },
@@ -122,7 +122,14 @@ final class CaptureToolsStore: FeatureModule {
         errorMessage = nil
     }
 
-    func startRecording(_ source: ScreenRecordingSource) { recorder.start(source) }
+    func startRecording(_ source: ScreenRecordingSource) {
+        guard screenCaptureGranted() else {
+            errorMessage = "Screen Recording access is required to record the screen."
+            requestScreenCapture()
+            return
+        }
+        recorder.start(source)
+    }
 
     func stopRecording() { recorder.stop() }
 

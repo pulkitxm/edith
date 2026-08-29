@@ -146,6 +146,8 @@ private final class ScreenRecordingAreaPanel: NSPanel {
     private var localMonitor: Any?
     private var finished = false
 
+    override var canBecomeKey: Bool { true }
+
     init(screen: NSScreen, completed: @escaping (CGRect?) -> Void) {
         self.completed = completed
         super.init(

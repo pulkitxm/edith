@@ -60,6 +60,12 @@ private final class ScreenRecordingEditorModel {
         persist()
     }
 
+    func updateAutomaticZooms(_ enabled: Bool) {
+        document.automaticZooms = enabled
+        if enabled, document.zooms.isEmpty { generateZoomsIfNeeded() }
+        persist()
+    }
+
     func applyCrop(_ crop: ScreenRecordingCrop) {
         document.crop = crop.rect
         persist()
@@ -286,6 +292,9 @@ private struct ScreenRecordingEditorView: View {
                         Slider(value: $model.document.pointerScale, in: 0.5...3)
                     }
                     Toggle("Automatic click zooms", isOn: $model.document.automaticZooms)
+                        .onChange(of: model.document.automaticZooms) { _, enabled in
+                            model.updateAutomaticZooms(enabled)
+                        }
                 }
                 .padding(6)
             }

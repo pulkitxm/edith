@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import EdithKit
 import Observation
 
@@ -121,6 +122,16 @@ final class ScreenRecordingCoordinator {
             let capturesMicrophone =
                 SharedDefaults.store.object(forKey: AppStorageKeys.Capture.recordingMicrophone)
                     as? Bool ?? false
+            if capturesMicrophone {
+                let authorization = AVCaptureDevice.authorizationStatus(for: .audio)
+                let granted: Bool
+                if authorization == .notDetermined {
+                    granted = await AVCaptureDevice.requestAccess(for: .audio)
+                } else {
+                    granted = authorization == .authorized
+                }
+                guard granted else { throw ScreenRecordingError.microphoneUnavailable }
+            }
             let frameRate =
                 SharedDefaults.store.object(forKey: AppStorageKeys.Capture.recordingFrameRate)
                     as? Int ?? 30
@@ -163,6 +174,7 @@ final class ScreenRecordingCoordinator {
         } catch is CancellationError {
             publish(ScreenRecordingStatus())
         } catch {
+            if let session { await session.cancel() }
             session = nil
             publish(ScreenRecordingStatus(state: .failed, source: source, message: error.localizedDescription))
             NSSound.beep()

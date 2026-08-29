@@ -184,7 +184,8 @@ public final class ScreenRecordingSession: NSObject, @unchecked Sendable {
 
     private func append(_ sample: CMSampleBuffer, kind: ScreenRecordingWriter.Kind) {
         guard stateLock.withLock({ running && !stopping }) else { return }
-        writerQueue.async { [weak self] in self?.writer?.append(sample, kind: kind) }
+        let writer = self.writer
+        writerQueue.async { writer?.append(sample, kind: kind) }
     }
 
     private func startElapsedTimer() {
