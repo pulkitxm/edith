@@ -87,6 +87,10 @@ public actor EmojiSearchService {
         indexTask = Task.detached(priority: .userInitiated) { EmojiSearchIndex(emoji) }
     }
 
+    deinit {
+        indexTask.cancel()
+    }
+
     public func results(query: String, limit: Int = .max) async -> [Emoji] {
         let normalized = EmojiSearch.normalize(query)
         let index = await indexTask.value
