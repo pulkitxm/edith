@@ -5,7 +5,7 @@ It reports the installed identity, live diagnostics, folders, and external
 links alongside actions such as opening a window or checking for updates.
 
 Edith is two processes with two bundle ids: the menu bar helper,
-`com.pulkit.edith.statusbar`, and the main window, `com.pulkit.edith`. Live
+`com.pulkit.edith.helper`, and the main window, `com.pulkit.edith`. Live
 process actions use distributed notifications addressed to the process that
 owns the work. `clean-keys`, `test-notification`, `open`, and `diagnostics` need
 the helper. `quit`, `check-updates`, `reveal`, and `snapshot` need the main

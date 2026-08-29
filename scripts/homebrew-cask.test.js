@@ -38,6 +38,7 @@ test("the cask ships both CLI names and defers updates to Sparkle", () => {
 test("uninstalling quits every bundle and zapping clears Edith's own state", () => {
   for (const bundleID of [
     "com.pulkit.edith",
+    "com.pulkit.edith.helper",
     "com.pulkit.edith.statusbar",
     "com.pulkit.edith.files",
   ]) {

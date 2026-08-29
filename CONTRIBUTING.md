@@ -279,7 +279,7 @@ change:
 
 ```bash
 tccutil reset All com.pulkit.edith
-tccutil reset All com.pulkit.edith.statusbar
+tccutil reset All com.pulkit.edith.helper
 ```
 
 ## Website
