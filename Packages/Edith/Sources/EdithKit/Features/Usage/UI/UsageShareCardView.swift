@@ -152,10 +152,14 @@ private struct EdithShareBackdrop: View {
                             lineCap: .round, lineJoin: .round, dash: [8, 10]))
                     for point in points.dropFirst().dropLast() {
                         context.fill(
-                            Path(ellipseIn: CGRect(x: point.x - 5, y: point.y - 5, width: 10, height: 10)),
+                            Path(
+                                ellipseIn: CGRect(
+                                    x: point.x - 5, y: point.y - 5, width: 10, height: 10)),
                             with: .color(ShareColors.espresso))
                         context.stroke(
-                            Path(ellipseIn: CGRect(x: point.x - 5, y: point.y - 5, width: 10, height: 10)),
+                            Path(
+                                ellipseIn: CGRect(
+                                    x: point.x - 5, y: point.y - 5, width: 10, height: 10)),
                             with: .color(glow.opacity(0.85)), lineWidth: 2)
                     }
                 }
@@ -253,6 +257,41 @@ private extension View {
     }
 }
 
+private struct ShareRecordStrip: View {
+    let records: [(String, String)]
+    let accent: Color
+    var height: CGFloat = 112
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(records.enumerated()), id: \.offset) { index, record in
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(record.0)
+                        .font(.custom("Iowan Old Style", size: 29).weight(.bold))
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.68)
+                        .lineLimit(1)
+                    Text(record.1.uppercased())
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .tracking(1.1)
+                        .foregroundStyle(ShareColors.cream.opacity(0.48))
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                if index < records.count - 1 {
+                    Rectangle()
+                        .fill(ShareColors.cream.opacity(0.1))
+                        .frame(width: 1, height: 58)
+                }
+            }
+        }
+        .foregroundStyle(ShareColors.cream)
+        .frame(height: height)
+        .sharePanel(accent: accent)
+    }
+}
+
 private struct HighlightsShareContent: View {
     let snapshot: UsageShareSnapshot
 
@@ -277,19 +316,19 @@ private struct HighlightsShareContent: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 18) {
             Text("A local record of shipping with agents.")
                 .font(.system(size: 22, weight: .medium))
                 .foregroundStyle(ShareColors.cream.opacity(0.72))
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 18) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 14) {
                 ForEach(Array(metrics.enumerated()), id: \.offset) { index, metric in
                     HStack(alignment: .center, spacing: 18) {
                         RoundedRectangle(cornerRadius: 3)
                             .fill(index == 0 ? ShareColors.rust : ShareColors.sand.opacity(0.65))
-                            .frame(width: 6, height: 74)
+                            .frame(width: 6, height: 88)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(metric.0)
-                                .font(.custom("Iowan Old Style", size: 38).weight(.bold))
+                                .font(.custom("Iowan Old Style", size: 43).weight(.bold))
                                 .monospacedDigit()
                             Text(metric.1.uppercased())
                                 .font(.system(size: 14, weight: .bold, design: .monospaced))
@@ -302,44 +341,38 @@ private struct HighlightsShareContent: View {
                     }
                     .foregroundStyle(ShareColors.cream)
                     .padding(.horizontal, 24)
-                    .frame(height: 126)
+                    .frame(height: 142)
                     .sharePanel(accent: index == 0 ? ShareColors.rust : ShareColors.sand)
                 }
             }
-            HStack(spacing: 0) {
-                ForEach(Array(records.enumerated()), id: \.offset) { index, record in
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(record.0)
-                            .font(.custom("Iowan Old Style", size: 27).weight(.bold))
-                            .monospacedDigit()
-                            .minimumScaleFactor(0.72)
-                            .lineLimit(1)
-                        Text(record.1.uppercased())
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
-                            .tracking(1.1)
-                            .foregroundStyle(ShareColors.cream.opacity(0.48))
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20)
-                    if index < records.count - 1 {
-                        Rectangle()
-                            .fill(ShareColors.cream.opacity(0.1))
-                            .frame(width: 1, height: 54)
-                    }
-                }
-            }
-            .foregroundStyle(ShareColors.cream)
-            .frame(height: 104)
-            .sharePanel(accent: ShareColors.rust)
+            ShareRecordStrip(records: records, accent: ShareColors.rust, height: 116)
         }
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 }
 
 private struct ActivityShareContent: View {
     let snapshot: UsageShareSnapshot
 
+    private var activeWeeks: Int {
+        let days = UsageShareGrid.make(snapshot: snapshot)
+        return stride(from: 0, to: days.count, by: 7).count { offset in
+            days[offset..<min(offset + 7, days.count)].contains { $0.tokens > 0 }
+        }
+    }
+
+    private var records: [(String, String)] {
+        let busiest = snapshot.busiestDay ?? UsageShareDay(period: "", tokens: 0, cost: 0)
+        return [
+            (ShareFormat.tokens(snapshot.totalTokens), "total tokens"),
+            (ShareFormat.tokens(snapshot.averageTokensPerActiveDay), "average per active day"),
+            (ShareFormat.compactDate(busiest.period), "busiest date"),
+            ("\(activeWeeks)", "active weeks"),
+        ]
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 20) {
             HStack(alignment: .firstTextBaseline) {
                 Text("\(snapshot.activeDays) days of momentum")
                     .font(.system(size: 22, weight: .semibold))
@@ -349,9 +382,11 @@ private struct ActivityShareContent: View {
                     .foregroundStyle(ShareColors.cream.opacity(0.58))
             }
             ActivityHeatGrid(snapshot: snapshot)
+            ShareRecordStrip(records: records, accent: ShareColors.sage, height: 104)
         }
         .foregroundStyle(ShareColors.cream)
         .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .sharePanel(accent: ShareColors.sage)
     }
 }
@@ -370,7 +405,7 @@ private struct ActivityHeatGrid: View {
     var body: some View {
         let renderedWeeks = weeks
         HStack(alignment: .top, spacing: 12) {
-            VStack(spacing: 6) {
+            VStack(spacing: 7) {
                 ForEach(
                     Array(["S", "M", "T", "W", "T", "F", "S"].enumerated()),
                     id: \.offset
@@ -378,15 +413,15 @@ private struct ActivityHeatGrid: View {
                     Text(label)
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
                         .foregroundStyle(ShareColors.cream.opacity(0.45))
-                        .frame(width: 18, height: 22)
+                        .frame(width: 18, height: 28)
                 }
             }
-            .padding(.top, 24)
-            HStack(alignment: .top, spacing: 7) {
+            .padding(.top, 26)
+            HStack(alignment: .top, spacing: 8) {
                 ForEach(Array(renderedWeeks.enumerated()), id: \.offset) { index, week in
-                    VStack(spacing: 6) {
+                    VStack(spacing: 7) {
                         Color.clear
-                            .frame(width: 22, height: 18)
+                            .frame(width: 28, height: 19)
                             .overlay(alignment: .leading) {
                                 Text(monthLabel(at: index, in: renderedWeeks))
                                     .font(
@@ -398,7 +433,7 @@ private struct ActivityHeatGrid: View {
                         ForEach(week) { day in
                             RoundedRectangle(cornerRadius: 5)
                                 .fill(color(for: day.tokens))
-                                .frame(width: 22, height: 22)
+                                .frame(width: 28, height: 28)
                         }
                     }
                 }
@@ -443,22 +478,30 @@ private struct DailyShareContent: View {
 
     private var days: [UsageShareDay] { Array(snapshot.days.suffix(30)) }
     private var maximum: Double { max(1, days.map(\.tokens).max() ?? 0) }
+    private var total: Double { days.reduce(0) { $0 + $1.tokens } }
+    private var activeDays: Int { days.count(where: \.active) }
+    private var average: Double { activeDays > 0 ? total / Double(activeDays) : 0 }
+    private var peak: UsageShareDay {
+        days.max { $0.tokens < $1.tokens } ?? UsageShareDay(period: "", tokens: 0, cost: 0)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 22) {
             HStack(alignment: .lastTextBaseline) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(ShareFormat.tokens(snapshot.totalTokens))
-                        .font(.custom("Iowan Old Style", size: 50).weight(.bold))
-                    Text("TOTAL TOKENS")
+                    Text(ShareFormat.tokens(total))
+                        .font(.custom("Iowan Old Style", size: 52).weight(.bold))
+                    Text("30-DAY TOKENS")
                         .font(.system(size: 14, weight: .bold, design: .monospaced))
                         .tracking(1.6)
                         .foregroundStyle(ShareColors.cream.opacity(0.54))
                 }
                 Spacer()
-                Text("last \(days.count) days")
-                    .font(.system(size: 17, weight: .medium, design: .monospaced))
-                    .foregroundStyle(ShareColors.cream.opacity(0.58))
+                DailyInlineStat(
+                    value: ShareFormat.tokens(average), label: "average / active day")
+                DailyInlineStat(value: "\(activeDays)", label: "active days")
+                DailyInlineStat(
+                    value: ShareFormat.compactDate(peak.period), label: "peak day")
             }
             HStack(alignment: .bottom, spacing: 8) {
                 ForEach(days, id: \.period) { day in
@@ -469,7 +512,7 @@ private struct DailyShareContent: View {
                                     colors: [ShareColors.sky, ShareColors.rust],
                                     startPoint: .bottom, endPoint: .top)
                             )
-                            .frame(height: max(5, 200 * day.tokens / maximum))
+                            .frame(height: max(5, 302 * day.tokens / maximum))
                         if labelShown(day) {
                             Text(ShareFormat.day(day.period))
                                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
@@ -481,16 +524,38 @@ private struct DailyShareContent: View {
                     .frame(maxWidth: .infinity)
                 }
             }
-            .frame(height: 228, alignment: .bottom)
+            .frame(height: 330, alignment: .bottom)
         }
         .foregroundStyle(ShareColors.cream)
         .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .sharePanel(accent: ShareColors.sky)
     }
 
     private func labelShown(_ day: UsageShareDay) -> Bool {
         guard let index = days.firstIndex(where: { $0.period == day.period }) else { return false }
         return index == 0 || index == days.count - 1 || index % 7 == 0
+    }
+}
+
+private struct DailyInlineStat: View {
+    let value: String
+    let label: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(value)
+                .font(.custom("Iowan Old Style", size: 27).weight(.bold))
+                .monospacedDigit()
+                .minimumScaleFactor(0.7)
+                .lineLimit(1)
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .tracking(1)
+                .foregroundStyle(ShareColors.cream.opacity(0.48))
+                .lineLimit(1)
+        }
+        .frame(width: 154, alignment: .leading)
     }
 }
 
@@ -504,31 +569,60 @@ private struct BusiestShareContent: View {
         guard snapshot.averageTokensPerActiveDay > 0 else { return 0 }
         return busiest.tokens / snapshot.averageTokensPerActiveDay
     }
+    private var shareOfTotal: Double {
+        guard snapshot.totalTokens > 0 else { return 0 }
+        return busiest.tokens / snapshot.totalTokens
+    }
+    private var stats: [(String, String)] {
+        [
+            (String(format: "%.1fx", multiplier), "vs active-day average"),
+            (ShareFormat.cost(busiest.cost), "cost that day"),
+            (String(format: "%.1f%%", shareOfTotal * 100), "of all tokens"),
+            ("\(snapshot.repositoryCount)", "repositories moved"),
+        ]
+    }
 
     var body: some View {
-        HStack(spacing: 28) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(ShareFormat.longDate(busiest.period))
-                    .font(.system(size: 20, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(ShareColors.cream.opacity(0.58))
-                Text(ShareFormat.tokens(busiest.tokens))
-                    .font(.custom("Iowan Old Style", size: 80).weight(.bold))
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.65)
-                    .lineLimit(1)
-                Text("tokens in one day")
-                    .font(.system(size: 24, weight: .semibold))
+        VStack(spacing: 24) {
+            HStack(spacing: 32) {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(ShareFormat.longDate(busiest.period))
+                        .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(ShareColors.cream.opacity(0.58))
+                    Text(ShareFormat.tokens(busiest.tokens))
+                        .font(.custom("Iowan Old Style", size: 94).weight(.bold))
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.65)
+                        .lineLimit(1)
+                    Text("tokens in one day")
+                        .font(.system(size: 25, weight: .semibold))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                LazyVGrid(
+                    columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16
+                ) {
+                    ForEach(Array(stats.enumerated()), id: \.offset) { _, stat in
+                        BusiestStat(value: stat.0, label: stat.1)
+                    }
+                }
+                .frame(width: 440)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            VStack(spacing: 18) {
-                BusiestStat(
-                    value: String(format: "%.1fx", multiplier), label: "your daily average")
-                BusiestStat(value: "\(snapshot.agentCount)", label: "agents in your story")
-            }
-            .frame(width: 310)
+            ShareRecordStrip(
+                records: [
+                    (ShareFormat.tokens(snapshot.averageTokensPerActiveDay), "average active day"),
+                    (
+                        ShareFormat.tokens(busiest.tokens - snapshot.averageTokensPerActiveDay),
+                        "above your average"
+                    ),
+                    ("\(snapshot.agentCount)", "agents tracked"),
+                    ("\(snapshot.activeDays)", "active days in story"),
+                ],
+                accent: ShareColors.apricot,
+                height: 112)
         }
         .foregroundStyle(ShareColors.cream)
-        .padding(38)
+        .padding(34)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .sharePanel(accent: ShareColors.apricot)
     }
 }
@@ -546,9 +640,11 @@ private struct BusiestStat: View {
                 .font(.system(size: 12, weight: .bold, design: .monospaced))
                 .tracking(1.2)
                 .foregroundStyle(ShareColors.cream.opacity(0.52))
+                .lineLimit(2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(22)
+        .frame(height: 100)
+        .padding(.horizontal, 18)
         .background(
             ShareColors.cream.opacity(0.055),
             in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -564,7 +660,8 @@ private enum UsageShareGrid {
     static func make(snapshot: UsageShareSnapshot) -> [UsageShareGridDay] {
         let calendar = Calendar(identifier: .gregorian)
         let values = Dictionary(uniqueKeysWithValues: snapshot.days.map { ($0.period, $0.tokens) })
-        let endValue = snapshot.days.last.flatMap { UsageShareSnapshot.date(from: $0.period) } ?? Date()
+        let endValue =
+            snapshot.days.last.flatMap { UsageShareSnapshot.date(from: $0.period) } ?? Date()
         let end = calendar.startOfDay(for: endValue)
         let windowStart = calendar.date(byAdding: .day, value: -181, to: end) ?? end
         let first = windowStart
@@ -589,6 +686,12 @@ private enum ShareFormat {
         if value >= 1_000_000 { return String(format: "%.1fM", value / 1_000_000) }
         if value >= 1_000 { return String(format: "%.1fK", value / 1_000) }
         return String(Int(value.rounded()))
+    }
+
+    static func cost(_ value: Double) -> String {
+        if value >= 1_000 { return String(format: "$%.1fK", value / 1_000) }
+        if value >= 100 { return String(format: "$%.0f", value) }
+        return String(format: "$%.2f", value)
     }
 
     static func day(_ period: String) -> String {
