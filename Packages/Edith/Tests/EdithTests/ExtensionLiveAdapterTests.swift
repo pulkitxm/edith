@@ -117,6 +117,44 @@ import EdithCore
                 == .needsSetup("cmux is selected, but cmux is not installed in Applications."))
     }
 
+    @Test func githubRequiresInstalledAuthenticatedCliWithScopes() async {
+        let executable = URL(fileURLWithPath: "/opt/homebrew/bin/gh")
+        let missing = await ExtensionLiveAdapters.githubReadiness(executable: nil)
+        let signedOut = await ExtensionLiveAdapters.githubReadiness(executable: executable) {
+            request in
+            #expect(request.arguments == ["auth", "status", "--active", "--json", "hosts"])
+            #expect(!request.arguments.contains("--show-token"))
+            return CLICommandResult(terminationStatus: 1, output: "")
+        }
+        let insufficient = await ExtensionLiveAdapters.githubReadiness(executable: executable) {
+            _ in
+            CLICommandResult(
+                terminationStatus: 0,
+                output:
+                    #"{"hosts":{"github.com":[{"active":true,"login":"octocat","state":"success","scopes":"repo"}]}}"#
+            )
+        }
+        let ready = await ExtensionLiveAdapters.githubReadiness(executable: executable) { _ in
+            CLICommandResult(
+                terminationStatus: 0,
+                output:
+                    #"{"hosts":{"github.example.com":[{"active":true,"login":"octocat","state":"success","scopes":"repo, read:org"}]}}"#
+            )
+        }
+
+        #expect(missing == .uninstalled("The GitHub CLI is not installed."))
+        #expect(signedOut == .needsSetup("Sign in to GitHub with `gh auth login`."))
+        #expect(
+            insufficient
+                == .needsSetup(
+                    "GitHub authentication for octocat@github.com is missing required scopes: read:org."
+                ))
+        #expect(
+            ready
+                == .ready(
+                    "GitHub CLI authentication is ready for octocat@github.example.com."))
+    }
+
     @Test func machineAdapterRejectsCorruptAndIncompleteConfiguration() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

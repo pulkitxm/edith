@@ -11,6 +11,7 @@ import Testing
         "tabUsageEnabled",
         "tabHerdrEnabled",
         "tabQuinjetEnabled",
+        "tabGitHubEnabled",
         "tabSystemEnabled",
         "tabMachinesEnabled",
         "tabCompanionEnabled",
@@ -35,7 +36,8 @@ import Testing
     @Test func registryMatchesPreUtilityBaseline() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
-                "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
+                "attention", "usage", "herdr", "quinjet", "github", "system", "machines",
+                "companion",
                 "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
                 "clipboard", "focusDim", "presenter", "emoji", "colorPicker",
             ])
@@ -149,7 +151,8 @@ import Testing
             ExtensionRegistry.entries.filter(\.featured).map(\.id))
         #expect(
             featuredIdentifiers == [
-                "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
+                "attention", "usage", "herdr", "quinjet", "github", "system", "machines",
+                "notchShelf",
                 "clipboard",
             ])
     }
@@ -158,12 +161,15 @@ import Testing
         let music = ExtensionRegistry.entries.first { $0.id == "music" }!
         let usage = ExtensionRegistry.entries.first { $0.id == "usage" }!
         let quinjet = ExtensionRegistry.entries.first { $0.id == "quinjet" }!
+        let github = ExtensionRegistry.entries.first { $0.id == "github" }!
 
         #expect(music.requiredTools.isEmpty)
         #expect(music.optionalTools == [.youtubeDownloader])
         #expect(usage.requiredTools == [.claudeCode, .codex])
         #expect(usage.optionalTools.isEmpty)
         #expect(quinjet.requiredTools == [.quinjet])
+        #expect(github.requiredTools == [.github])
+        #expect(github.logoName == "github")
         #expect(CLIToolSpec.claudeCode.requirement == .always)
         #expect(
             CLIToolSpec.codex.requirement
@@ -231,6 +237,7 @@ import Testing
             "usage": [],
             "herdr": [],
             "quinjet": [],
+            "github": [],
             "system": [],
             "machines": [],
             "companion": [],
@@ -251,6 +258,7 @@ import Testing
             "usage": [.notifications],
             "herdr": [],
             "quinjet": [],
+            "github": [],
             "system": [.accessibility, .inputMonitoring],
             "machines": [.notifications],
             "companion": [],
@@ -383,6 +391,7 @@ import Testing
             "tabUsageEnabled": false,
             "tabHerdrEnabled": false,
             "tabQuinjetEnabled": false,
+            "tabGitHubEnabled": false,
             "tabSystemEnabled": true,
             "tabMachinesEnabled": false,
             "tabCompanionEnabled": false,

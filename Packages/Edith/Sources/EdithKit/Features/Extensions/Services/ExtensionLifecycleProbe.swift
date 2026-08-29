@@ -189,6 +189,8 @@ public struct ExtensionLifecycleProbe: Sendable {
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "quinjet": Policy(
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
+        "github": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "system": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "machines": Policy(

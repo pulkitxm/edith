@@ -309,6 +309,40 @@ public enum ExtensionLifecycleCatalog {
                     "ed tools ls --json")
             ]),
         descriptor(
+            "github", "Browse repositories and code in native GitHub views.",
+            workflows: [
+                instruction(
+                    "repositories", "Browse repositories",
+                    "Find repositories across authenticated GitHub hosts."),
+                instruction(
+                    "code", "Read code", "Navigate trees, files, commits, and blame."),
+            ],
+            prerequisites: [
+                instruction(
+                    "tool", "Install GitHub CLI", "Put the gh executable on Edith's PATH.",
+                    "ed tools install gh"),
+                instruction(
+                    "auth", "Authenticate GitHub",
+                    "Sign in to each GitHub host with gh auth login."),
+            ],
+            examples: ["ed extensions enable github", "ed extensions verify github --json"],
+            docs: [documentation("guide", "GitHub guide", "docs/github/README.md")],
+            recovery: [
+                instruction(
+                    "auth", "Repair GitHub authentication",
+                    "Run gh auth login or refresh the required scopes, then verify readiness.",
+                    "ed extensions verify github --json"),
+                instruction(
+                    "tool", "Repair GitHub CLI", "Retry the managed Homebrew installation.",
+                    "ed tools install gh"),
+            ],
+            verification: [
+                instruction(
+                    "status", "Verify GitHub",
+                    "Confirm gh is installed and every active host is authenticated.",
+                    "ed extensions verify github --json")
+            ]),
+        descriptor(
             "system",
             "Control running apps, sleep prevention and keyboard cleaning from one panel.",
             workflows: [

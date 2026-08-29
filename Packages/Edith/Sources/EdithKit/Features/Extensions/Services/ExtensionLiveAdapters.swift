@@ -63,9 +63,20 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
     }
 }
 
+private struct GitHubAuthStatusDocument: Decodable {
+    let hosts: [String: [GitHubAuthAccount]]
+}
+
+private struct GitHubAuthAccount: Decodable {
+    let active: Bool
+    let login: String
+    let state: String
+    let scopes: String
+}
+
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "attention", "usage", "quinjet", "system", "machines", "systemStats", "micMute",
+        "attention", "usage", "quinjet", "github", "system", "machines", "systemStats", "micMute",
         "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
         "emoji", "colorPicker",
     ]
@@ -95,6 +106,7 @@ public enum ExtensionLiveAdapters {
         case "usage": usageReadiness()
         case "quinjet":
             quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
+        case "github": await githubReadiness(executable: executableNamed("gh"))
         case "system": await systemReadiness()
         case "machines": machinesReadiness()
         case "systemStats": systemStatsReadiness()
@@ -183,6 +195,65 @@ public enum ExtensionLiveAdapters {
                 ? "cmux is selected, but cmux is not installed in Applications."
                 : "The stored Quinjet terminal or theme is invalid."
         ).readiness
+    }
+
+    static func githubReadiness(
+        executable: URL? = CLIToolEnvironment.executable(named: "gh"),
+        runCommand: @escaping @Sendable (CLICommandRequest) async throws -> CLICommandResult = {
+            try await CLICommandRunner.run($0) { _ in }
+        }
+    ) async -> ExtensionAdapterReadiness {
+        guard let executable else {
+            return .uninstalled("The GitHub CLI is not installed.")
+        }
+        let request = CLICommandRequest(
+            executableURL: executable,
+            arguments: ["auth", "status", "--active", "--json", "hosts"],
+            environment: CLIToolEnvironment.sanitized(), timeout: 10,
+            maximumOutputBytes: 262_144, terminatesProcessGroup: true)
+        let result: CLICommandResult
+        do {
+            result = try await runCommand(request)
+        } catch {
+            return .failed(
+                "GitHub authentication could not be checked: \(error.localizedDescription)")
+        }
+        guard result.terminationStatus == 0 else {
+            return .needsSetup("Sign in to GitHub with `gh auth login`.")
+        }
+        guard
+            let document = try? JSONDecoder().decode(
+                GitHubAuthStatusDocument.self, from: result.outputData)
+        else {
+            return .failed("GitHub authentication returned an unreadable response.")
+        }
+        let activeAccounts = document.hosts.flatMap { host, accounts in
+            accounts.filter(\.active).map { (host, $0) }
+        }
+        guard !activeAccounts.isEmpty else {
+            return .needsSetup("Sign in to GitHub with `gh auth login`.")
+        }
+        if let invalid = activeAccounts.first(where: { $0.1.state != "success" }) {
+            return .needsSetup(
+                "GitHub authentication for \(invalid.1.login)@\(invalid.0) is invalid. Run `gh auth login`."
+            )
+        }
+        let requiredScopes = Set(["read:org", "repo"])
+        for (host, account) in activeAccounts {
+            let scopes = Set(
+                account.scopes.split(separator: ",").map {
+                    $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                })
+            let missing = requiredScopes.subtracting(scopes).sorted()
+            guard missing.isEmpty else {
+                return .needsSetup(
+                    "GitHub authentication for \(account.login)@\(host) is missing required scopes: \(missing.joined(separator: ", "))."
+                )
+            }
+        }
+        let identities = activeAccounts.map { "\($0.1.login)@\($0.0)" }.sorted()
+        return .ready(
+            "GitHub CLI authentication is ready for \(identities.joined(separator: ", ")).")
     }
 
     static func systemReadiness() async -> ExtensionAdapterReadiness {

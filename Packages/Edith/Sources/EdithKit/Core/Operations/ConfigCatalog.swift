@@ -47,7 +47,8 @@ public enum ConfigCatalog {
     public static let groups = [
         "appearance", "panel", "attention", "usage", "limits", "menubar", "alerts", "budget",
         "dashboard",
-        "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
+        "machines", "herdr", "quinjet", "github", "companion", "finder", "system", "cleaner",
+        "music",
         "calendar",
         "clipboard",
         "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
@@ -56,7 +57,8 @@ public enum ConfigCatalog {
 
     public static let settings: [SettingDefinition] =
         appearance + panel + attention + usageAndLimits
-        + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
+        + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + github + companion
+        + finder
         + system + cleaner
         + music + calendar + clipboard + notch + focusDim + presenter + colorPicker
         + emoji
@@ -432,6 +434,13 @@ public enum ConfigCatalog {
             AppStorageKeys.Quinjet.theme, .string, group: "quinjet",
             summary: "Color theme used by embedded Quinjet terminals.",
             fallback: .string(QuinjetThemePreference.app)),
+    ]
+
+    private static let github: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Tabs.githubEnabled, .bool, group: "github",
+            summary: "GitHub extension: native repository and code browsing.",
+            fallback: .bool(false))
     ]
 
     private static let finder: [SettingDefinition] = [

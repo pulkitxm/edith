@@ -927,6 +927,7 @@ private struct ExtensionDetailRows: View {
             case .usage: UsageRows()
             case .herdr: HerdrRows()
             case .quinjet: QuinjetRows()
+            case .github: GitHubRows()
             case .system: SystemRows()
             case .machines: MachinesRows()
             case .companion: CompanionRows()
@@ -948,6 +949,21 @@ private struct ExtensionDetailRows: View {
                     .settingsCaption()
             }
         }
+    }
+}
+
+private struct GitHubRows: View {
+    @AppStorage(AppStorageKeys.Tabs.githubEnabled, store: SharedDefaults.store) private
+        var enabled =
+        false
+
+    var body: some View {
+        Section("Authentication") {
+            Text("GitHub authentication and host accounts are managed by the GitHub CLI.")
+                .settingsCaption()
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
     }
 }
 

@@ -251,6 +251,7 @@ import Testing
             ("usage", "UsageRows", "enabled", "ExtensionsPane.swift"),
             ("herdr", "HerdrRows", "enabled", "ExtensionsPane.swift"),
             ("quinjet", "QuinjetRows", "enabled", "ExtensionsPane.swift"),
+            ("github", "GitHubRows", "enabled", "ExtensionsPane.swift"),
             ("system", "SystemRows", "enabled", "ExtensionsPane.swift"),
             ("machines", "MachinesRows", "enabled", "MachinesRows.swift"),
             ("companion", "CompanionRows", "enabled", "ExtensionsPane.swift"),

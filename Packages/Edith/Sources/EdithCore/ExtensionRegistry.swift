@@ -127,6 +127,12 @@ public enum ExtensionRegistry {
             defaultsKey: "tabQuinjetEnabled", requiredCapabilities: [.localTerminal],
             requiredToolIDs: ["quinjet"]),
         ExtensionRegistryEntry(
+            id: "github", title: "GitHub",
+            subtitle: "Browse repositories and code through the GitHub CLI.",
+            symbolName: "chevron.left.forwardslash.chevron.right", group: .agent, featured: true,
+            defaultsKey: "tabGitHubEnabled", requiredCapabilities: [.githubBrowsing],
+            requiredToolIDs: ["gh"]),
+        ExtensionRegistryEntry(
             id: "system", title: "System",
             subtitle: "Running apps, prevent sleep, and the keyboard-cleaning lock.",
             symbolName: "switch.2", group: .system, featured: true,

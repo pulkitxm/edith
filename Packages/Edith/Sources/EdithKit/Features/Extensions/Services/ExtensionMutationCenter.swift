@@ -75,6 +75,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case usage
     case herdr
     case quinjet
+    case github
     case system
     case machines
     case companion

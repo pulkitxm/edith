@@ -109,6 +109,13 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
         installStrategy: .homebrew(
             arguments: ["install", "pulkitxm/tap/quinjet"],
             instruction: "Install with `brew install pulkitxm/tap/quinjet`."))
+
+    public static let github = CLIToolSpec(
+        id: "gh", displayName: "GitHub CLI",
+        why: "Authenticates and loads GitHub repositories and code.",
+        presenceStrategy: .executable(name: "gh", versionArguments: ["--version"]),
+        installStrategy: .homebrew(
+            arguments: ["install", "gh"], instruction: "Install with `brew install gh`."))
 }
 
 public enum CLIToolEnvironment {

@@ -46,6 +46,7 @@ public enum ExtensionDefaultsMigration {
         AppStorageKeys.Tabs.companionEnabled: false,
         AppStorageKeys.Tabs.herdrEnabled: false,
         AppStorageKeys.Tabs.quinjetEnabled: false,
+        AppStorageKeys.Tabs.githubEnabled: false,
         AppStorageKeys.MenuBar.systemStats: false,
         AppStorageKeys.Mic.muteEnabled: false,
         AppStorageKeys.Tabs.musicEnabled: true,

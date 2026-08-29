@@ -13,7 +13,8 @@ import Testing
     @Test func identifiersMatchPreUtilityBaseline() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
-                "attention", "usage", "herdr", "quinjet", "system", "machines", "companion",
+                "attention", "usage", "herdr", "quinjet", "github", "system", "machines",
+                "companion",
                 "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf",
                 "clipboard", "focusDim", "presenter", "emoji", "colorPicker",
             ])
@@ -29,5 +30,6 @@ import Testing
         #expect(requiredByExtension["music"]?.isEmpty == true)
         #expect(optionalByExtension["music"] == ["yt-dlp"])
         #expect(requiredByExtension["quinjet"] == ["quinjet"])
+        #expect(requiredByExtension["github"] == ["gh"])
     }
 }
