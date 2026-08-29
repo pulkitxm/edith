@@ -611,7 +611,7 @@ struct HerdrPage: View {
 
     private func spaceHeader(_ space: HerdrAgentSpace) -> some View {
         let collapsed = store.spaceIsCollapsed(space.id)
-        let title = hideAgents ? "Space" : space.title
+        let accessibleTitle = hideAgents ? "Space" : space.title
         return Button {
             withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
                 store.toggleSpace(space.id)
@@ -622,10 +622,11 @@ struct HerdrPage: View {
                     .font(.system(size: UIScale.pt(8), weight: .bold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .rotationEffect(.degrees(collapsed ? 0 : 90))
-                Text(title)
+                Text(space.title)
                     .font(.system(size: UIScale.pt(10.5), weight: .semibold))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .lineLimit(1)
+                    .presenterTextBlur(hideAgents, fontSize: 10.5)
                 Text("\(space.agents.count)")
                     .font(DashSkin.mono(9.5, weight: .medium))
                     .foregroundStyle(DashSkin.inkFaint(dark))
@@ -638,8 +639,8 @@ struct HerdrPage: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .help(collapsed ? "Show \(title)" : "Hide \(title)")
-        .accessibilityLabel("\(title), \(collapsed ? "collapsed" : "expanded")")
+        .help(collapsed ? "Show \(accessibleTitle)" : "Hide \(accessibleTitle)")
+        .accessibilityLabel("\(accessibleTitle), \(collapsed ? "collapsed" : "expanded")")
     }
 
     private func agentRailEntry(_ agent: HerdrAgent) -> some View {
