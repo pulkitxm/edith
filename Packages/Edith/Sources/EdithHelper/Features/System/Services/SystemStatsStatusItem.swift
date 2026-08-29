@@ -8,7 +8,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     private var previous: CPUTicks?
     private var sleepObservers: [NSObjectProtocol] = []
     private var lockObservers: [NSObjectProtocol] = []
-    private var cachedTintHex: String?
+    private var cachedTintKey: String?
     private var cachedGlyphs: [String: NSAttributedString] = [:]
     private var numberAttributes: [NSAttributedString.Key: Any] = [:]
     private var percentAttributes: [NSAttributedString.Key: Any] = [:]
@@ -98,10 +98,14 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     }
 
     private func ensureStyleCache() {
-        let hex = SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.statsColorHex)
-        guard cachedTintHex != hex || cachedGlyphs.isEmpty else { return }
-        cachedTintHex = hex
-        let color = LimitsStatusItem.nsColor(hex: hex) ?? .white
+        let defaults = SharedDefaults.store
+        let mode = MenuBarTintMode(
+            preference: defaults.string(forKey: AppStorageKeys.MenuBar.statsColorMode))
+        let hex = defaults.string(forKey: AppStorageKeys.MenuBar.statsColorHex)
+        let key = "\(mode):\(hex ?? "")"
+        guard cachedTintKey != key || cachedGlyphs.isEmpty else { return }
+        cachedTintKey = key
+        let color = mode.color(custom: LimitsStatusItem.nsColor(hex: hex))
         let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .semibold)
         var glyphs: [String: NSAttributedString] = [:]
         for symbol in ["cpu", "memorychip"] {

@@ -74,7 +74,7 @@ final class LimitsStatusItem {
 
     private func renderSlash(_ groups: [MenuBarProviderGroup]) {
         let title = NSMutableAttributedString()
-        let separatorColor = (subColor ?? numberOverride ?? NSColor.labelColor)
+        let separatorColor = (subColor ?? NSColor.labelColor)
             .withAlphaComponent(0.65)
         for (index, group) in groups.enumerated() {
             if index > 0 { title.append(NSAttributedString(string: "   ")) }
@@ -113,7 +113,7 @@ final class LimitsStatusItem {
     private func stackedGroup(
         _ group: MenuBarProviderGroup, multi: Bool
     ) -> StackedLimitsView.Group {
-        let logoColor = subColor ?? numberOverride ?? NSColor.labelColor
+        let logoColor = subColor ?? NSColor.labelColor
         let labelColor = subColor ?? NSColor.secondaryLabelColor
         let dimColor = subColor ?? NSColor.tertiaryLabelColor
         let columns = group.segments.map { segment -> StackedLimitsView.Column in
@@ -129,8 +129,7 @@ final class LimitsStatusItem {
             case .percent(let percent):
                 value = "\(percent)"
                 color =
-                    numberOverride
-                    ?? segment.window.map { self.color(for: $0, kind: segment.slot.kind) }
+                    segment.window.map { self.color(for: $0, kind: segment.slot.kind) }
                     ?? dimColor
             }
             return StackedLimitsView.Column(
@@ -143,7 +142,7 @@ final class LimitsStatusItem {
     }
 
     private func appendLogo(_ provider: LimitProvider, into out: NSMutableAttributedString) {
-        let textColor = subColor ?? numberOverride ?? NSColor.labelColor
+        let textColor = subColor ?? NSColor.labelColor
         guard let image = ProviderLogo.tintedImage(provider, color: textColor) else { return }
         let attachment = NSTextAttachment()
         attachment.image = image
@@ -179,8 +178,7 @@ final class LimitsStatusItem {
                     string: "\u{2013}", attributes: [.font: font, .foregroundColor: dimColor]))
         case .percent(let percent):
             let tint =
-                numberOverride
-                ?? segment.window.map { color(for: $0, kind: segment.slot.kind) }
+                segment.window.map { color(for: $0, kind: segment.slot.kind) }
                 ?? dimColor
             out.append(
                 NSAttributedString(
@@ -213,30 +211,23 @@ final class LimitsStatusItem {
         }
     }
 
-    private var mode: String {
-        SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.colorMode) ?? "auto"
+    private var mode: MenuBarTintMode {
+        MenuBarTintMode(
+            preference: SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.colorMode))
     }
 
     private var subColor: NSColor? {
         switch mode {
-        case "white": return .white
-        case "black": return .black
-        default:
+        case .automatic:
+            return nil
+        case .custom:
             return Self.nsColor(
                 hex: SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.subColorHex))
         }
     }
 
-    private var numberOverride: NSColor? {
-        switch mode {
-        case "white": return .white
-        case "black": return .black
-        default: return nil
-        }
-    }
-
     private func anchor(_ key: String, _ fallback: NSColor) -> NSColor {
-        guard mode == "custom" || mode == "auto" else { return fallback }
+        guard mode == .custom else { return fallback }
         return Self.nsColor(hex: SharedDefaults.store.string(forKey: key)) ?? fallback
     }
 

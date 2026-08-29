@@ -130,6 +130,7 @@ public enum AppStorageKeys {
         public static let lowColorHex = "menuBarLowColorHex"
         public static let midColorHex = "menuBarMidColorHex"
         public static let statsColorHex = "menuBarStatsColorHex"
+        public static let statsColorMode = "menuBarStatsColorMode"
         public static let subColorHex = "menuBarSubColorHex"
         public static let systemStats = "menuBarSystemStats"
     }
