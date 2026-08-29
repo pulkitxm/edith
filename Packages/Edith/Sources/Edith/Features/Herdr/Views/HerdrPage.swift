@@ -126,18 +126,7 @@ struct HerdrPage: View {
                 store.spaceGroupingEnabled.toggle()
             }
         } label: {
-            Text("Space")
-                .font(.system(size: UIScale.pt(11.5), weight: .semibold))
-                .foregroundStyle(enabled ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
-                .padding(.horizontal, UIScale.pt(10))
-                .padding(.vertical, UIScale.pt(5))
-                .widgetBar(
-                    cornerRadius: 8,
-                    fill: enabled ? DashSkin.paper2(dark) : .clear,
-                    stroke: enabled ? DashSkin.accent(dark).opacity(0.65) : .clear,
-                    strokeWidth: enabled ? 1.4 : 0
-                )
-                .contentShape(Rectangle())
+            HerdrSpaceGroupingLabel(enabled: enabled, dark: dark)
         }
         .buttonStyle(.edith(.borderless))
         .accessibilityLabel("Group agents by space")
@@ -814,6 +803,52 @@ struct HerdrPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .pageContent(compact)
+    }
+}
+
+struct HerdrSpaceGroupingLabel: View {
+    let enabled: Bool
+    let dark: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovered = false
+
+    private let characters = Array("SPACE•SPACE•")
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(enabled ? DashSkin.paper2(dark) : .clear)
+                .overlay {
+                    Circle()
+                        .stroke(
+                            enabled ? DashSkin.accent(dark).opacity(0.7) : .clear,
+                            lineWidth: enabled ? UIScale.pt(1.4) : 0)
+                }
+            ZStack {
+                ForEach(characters.indices, id: \.self) { index in
+                    Text(String(characters[index]))
+                        .font(
+                            .system(
+                                size: UIScale.pt(5.2), weight: .bold, design: .rounded)
+                        )
+                        .foregroundStyle(
+                            enabled ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
+                        )
+                        .offset(y: -UIScale.pt(16.5))
+                        .rotationEffect(
+                            .degrees(Double(index) * 360 / Double(characters.count)))
+                }
+            }
+            .rotationEffect(.degrees(hovered && !reduceMotion ? 42 : 0))
+            Image(systemName: "square.grid.2x2")
+                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .foregroundStyle(enabled ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
+        }
+        .frame(width: UIScale.pt(44), height: UIScale.pt(44))
+        .contentShape(Circle())
+        .scaleEffect(hovered && !reduceMotion ? 1.04 : 1)
+        .animation(Motion.animation(Motion.settle, reduceMotion: reduceMotion), value: hovered)
+        .onHover { hovered = $0 }
     }
 }
 
