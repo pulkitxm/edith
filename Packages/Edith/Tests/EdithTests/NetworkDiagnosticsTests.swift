@@ -133,6 +133,16 @@ import Testing
         #expect(Date().timeIntervalSince(started) < 1)
     }
 
+    @Test func completedFailedDiagnosisReturnsSnapshotAndSuccess() async {
+        let result = await CLIProbe.run([
+            "network", "diagnose", "--service", "127.0.0.1:1", "--timeout", "0.2", "--retries",
+            "0", "--count", "1", "--json", "--no-history",
+        ])
+
+        #expect(result.code == 0)
+        #expect(result.object?["state"] as? String == "failed")
+    }
+
     private func snapshot(check: NetworkDiagnosticCheck) -> NetworkDiagnosticSnapshot {
         NetworkDiagnosticSnapshot(
             durationMS: 1, state: check.state, path: NetworkPathSummary(), checks: [check])

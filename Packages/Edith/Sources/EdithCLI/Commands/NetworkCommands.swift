@@ -124,7 +124,6 @@ struct NetworkDiagnoseCommand: AsyncParsableCommand {
                 CLIOut.out(NetworkDiagnosticsRedactor.report(snapshot))
                 if saveBaseline { CLIOut.out("Saved as baseline.") }
             }
-            if snapshot.state == .failed { throw ExitCode.failure }
         }
     }
 
