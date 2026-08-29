@@ -99,7 +99,7 @@ let targets: [Target] = [
             .product(name: "SwiftTerm", package: "SwiftTerm"),
             "Highlighter",
         ],
-        resources: [.copy("Resources/appicon.png")],
+        exclude: ["Resources"],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .executableTarget(

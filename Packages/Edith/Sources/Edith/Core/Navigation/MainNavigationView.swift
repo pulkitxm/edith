@@ -100,24 +100,7 @@ enum MainNavigationFallback {
 }
 
 enum Brand {
-    static let icon: NSImage? = {
-        if let image = NSApp?.applicationIconImage {
-            return image
-        }
-        if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
-            let image = NSImage(contentsOf: url)
-        {
-            return image
-        }
-        let devBundle = Bundle.main.bundleURL.appendingPathComponent("Edith_Edith.bundle")
-        if let bundle = Bundle(url: devBundle),
-            let url = bundle.url(forResource: "appicon", withExtension: "png"),
-            let image = NSImage(contentsOf: url)
-        {
-            return image
-        }
-        return nil
-    }()
+    static var icon: NSImage? { AppArtwork.icon }
 }
 
 struct TitlebarChrome: View {

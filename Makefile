@@ -146,6 +146,7 @@ verify-bundle: verify-release-build-settings
 	  test ! -e "$$install_dir/edh"; \
 	  test ! -L "$$install_dir/edh"
 	test 1 -eq "$$(find dist/Edith.app -name Sparkle.framework | wc -l | tr -d ' ')"
+	test ! -e dist/Edith.app/Contents/Resources/Edith_Edith.bundle
 	test ! -e "dist/Edith.app/Contents/Library/Applications/Edith Files.app"
 	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/claude.svg
 	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/codex.svg
