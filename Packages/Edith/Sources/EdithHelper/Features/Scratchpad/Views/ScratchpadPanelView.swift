@@ -144,7 +144,7 @@ struct ScratchpadPanelView: View {
     @ViewBuilder private var editor: some View {
         if store.previewing {
             ScrollView {
-                Text(markdown)
+                ScratchpadMarkdownPreview(source: store.selectedText)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                     .padding(20)
@@ -200,16 +200,153 @@ struct ScratchpadPanelView: View {
         .padding(.vertical, 9)
     }
 
-    private var markdown: AttributedString {
-        let options = AttributedString.MarkdownParsingOptions(
-            interpretedSyntax: .full,
-            failurePolicy: .returnPartiallyParsedIfPossible)
-        return (try? AttributedString(markdown: store.selectedText, options: options))
-            ?? AttributedString(store.selectedText)
-    }
-
     private func presentRename() {
         renameValue = store.selectedPad?.name ?? ""
         renamePresented = true
+    }
+}
+
+private struct ScratchpadMarkdownPreview: View {
+    let source: String
+
+    private var lines: [ScratchpadMarkdownLine] {
+        ScratchpadMarkdownLine.parse(source)
+    }
+
+    var body: some View {
+        LazyVStack(alignment: .leading, spacing: 7) {
+            ForEach(lines) { line in
+                row(line)
+            }
+        }
+    }
+
+    @ViewBuilder private func row(_ line: ScratchpadMarkdownLine) -> some View {
+        switch line.kind {
+        case .blank:
+            Color.clear.frame(height: 5)
+        case let .heading(level):
+            Text(inline(line.text))
+                .font(.system(size: headingSize(level), weight: .semibold))
+                .padding(.top, level == 1 ? 5 : 2)
+        case let .list(marker):
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(marker)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 18, alignment: .trailing)
+                Text(inline(line.text))
+            }
+        case .quote:
+            HStack(alignment: .top, spacing: 10) {
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(.secondary.opacity(0.55))
+                    .frame(width: 3)
+                Text(inline(line.text))
+                    .italic()
+                    .foregroundStyle(.secondary)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        case .code:
+            Text(line.text.isEmpty ? " " : line.text)
+                .font(.system(size: 12.5, design: .monospaced))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 3)
+                .background(.primary.opacity(0.06))
+        case .rule:
+            Divider().padding(.vertical, 4)
+        case .body:
+            Text(inline(line.text))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func inline(_ source: String) -> AttributedString {
+        let options = AttributedString.MarkdownParsingOptions(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace,
+            failurePolicy: .returnPartiallyParsedIfPossible)
+        return (try? AttributedString(markdown: source, options: options))
+            ?? AttributedString(source)
+    }
+
+    private func headingSize(_ level: Int) -> CGFloat {
+        switch level {
+        case 1: 25
+        case 2: 21
+        case 3: 18
+        case 4: 16
+        default: 14
+        }
+    }
+}
+
+private struct ScratchpadMarkdownLine: Identifiable {
+    enum Kind {
+        case blank
+        case heading(Int)
+        case list(String)
+        case quote
+        case code
+        case rule
+        case body
+    }
+
+    let id: Int
+    let kind: Kind
+    let text: String
+
+    static func parse(_ source: String) -> [ScratchpadMarkdownLine] {
+        var code = false
+        var result: [ScratchpadMarkdownLine] = []
+        let rawLines = source.components(separatedBy: .newlines)
+        for (index, rawLine) in rawLines.enumerated() {
+            let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("```") {
+                code.toggle()
+                continue
+            }
+            if code {
+                result.append(.init(id: index, kind: .code, text: rawLine))
+                continue
+            }
+            if trimmed.isEmpty {
+                result.append(.init(id: index, kind: .blank, text: ""))
+                continue
+            }
+            if Set(trimmed) == Set("-") && trimmed.count >= 3 {
+                result.append(.init(id: index, kind: .rule, text: ""))
+                continue
+            }
+            let hashes = trimmed.prefix { $0 == "#" }.count
+            if (1...6).contains(hashes), trimmed.dropFirst(hashes).first == " " {
+                let text = String(trimmed.dropFirst(hashes + 1))
+                result.append(.init(id: index, kind: .heading(hashes), text: text))
+                continue
+            }
+            if let marker = ["- ", "* ", "+ "].first(where: trimmed.hasPrefix) {
+                result.append(
+                    .init(
+                        id: index, kind: .list("•"), text: String(trimmed.dropFirst(marker.count))))
+                continue
+            }
+            if trimmed.hasPrefix("> ") {
+                result.append(.init(id: index, kind: .quote, text: String(trimmed.dropFirst(2))))
+                continue
+            }
+            if let separator = trimmed.firstIndex(of: ".") {
+                let number = trimmed[..<separator]
+                let remainder = trimmed[trimmed.index(after: separator)...]
+                if !number.isEmpty, number.allSatisfy(\.isNumber), remainder.first == " " {
+                    result.append(
+                        .init(
+                            id: index,
+                            kind: .list("\(number)."),
+                            text: String(remainder.dropFirst())))
+                    continue
+                }
+            }
+            result.append(.init(id: index, kind: .body, text: rawLine))
+        }
+        return result
     }
 }
