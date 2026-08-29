@@ -18,6 +18,28 @@ public enum CaptureScreenshotError: LocalizedError, Equatable {
     }
 }
 
+public enum CaptureMode: String, CaseIterable, Codable, Sendable {
+    case area
+    case window
+    case screen
+
+    public var displayName: String {
+        switch self {
+        case .area: "Area"
+        case .window: "Window"
+        case .screen: "Full screen"
+        }
+    }
+
+    var screenshotArguments: [String] {
+        switch self {
+        case .area: ["-i", "-s", "-x", "-Jselection"]
+        case .window: ["-i", "-w", "-x", "-Jwindow"]
+        case .screen: ["-m", "-x"]
+        }
+    }
+}
+
 public final class CaptureScreenshotSession: @unchecked Sendable {
     private let lock = NSLock()
     private var active = false
@@ -26,13 +48,13 @@ public final class CaptureScreenshotSession: @unchecked Sendable {
 
     public init() {}
 
-    public func capture() async throws -> URL {
+    public func capture(_ mode: CaptureMode) async throws -> URL {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("edith-capture-\(UUID().uuidString)")
+            .appendingPathComponent("edith-capture-\(mode.rawValue)-\(UUID().uuidString)")
             .appendingPathExtension("png")
         try reserve()
         let worker = Task.detached(priority: .userInitiated) { [self] in
-            try captureSynchronously(at: url)
+            try captureSynchronously(mode, at: url)
         }
         return try await withTaskCancellationHandler {
             try await worker.value
@@ -68,7 +90,7 @@ public final class CaptureScreenshotSession: @unchecked Sendable {
         }
     }
 
-    private func captureSynchronously(at url: URL) throws -> URL {
+    private func captureSynchronously(_ mode: CaptureMode, at url: URL) throws -> URL {
         var launchedProcessID: pid_t?
         var completed = false
         defer {
@@ -76,7 +98,8 @@ public final class CaptureScreenshotSession: @unchecked Sendable {
             if !completed { try? FileManager.default.removeItem(at: url) }
         }
         let processID = try spawn(
-            executable: "/usr/sbin/screencapture", arguments: ["-i", "-x", url.path])
+            executable: "/usr/sbin/screencapture",
+            arguments: mode.screenshotArguments + [url.path])
         launchedProcessID = processID
         let shouldCancel = lock.withLock {
             self.processID = processID
@@ -170,16 +193,16 @@ public enum CaptureScreenshotArchive {
             ).first
         else { throw CaptureScreenshotError.saveFailed }
         let directory = pictures.appendingPathComponent("Edith Captures", isDirectory: true)
-        return try save(data, to: directory, now: now)
+        return try save(data, to: directory, template: "Edith Capture {date} at {time}", now: now)
     }
 
-    public static func save(_ data: Data, to directory: URL, now: Date = Date()) throws -> URL {
+    public static func save(
+        _ data: Data, to directory: URL, template: String = "Edith Capture {date} at {time}",
+        mode: CaptureMode = .area, now: Date = Date()
+    ) throws -> URL {
         try FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true)
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-        let name = "Edith Capture \(formatter.string(from: now))"
+        let name = CaptureFilenameTemplate.resolve(template, mode: mode, now: now)
         var destination = directory.appendingPathComponent(name).appendingPathExtension("png")
         var suffix = 2
         while FileManager.default.fileExists(atPath: destination.path) {
@@ -195,6 +218,65 @@ public enum CaptureScreenshotArchive {
         } catch {
             throw CaptureScreenshotError.saveFailed
         }
+    }
+}
+
+public enum CaptureFilenameTemplate {
+    public static let fallback = "Edith Capture {date} at {time}"
+
+    public static func resolve(
+        _ template: String, mode: CaptureMode, now: Date = Date()
+    ) -> String {
+        let locale = Locale(identifier: "en_US_POSIX")
+        let date = DateFormatter()
+        date.locale = locale
+        date.dateFormat = "yyyy-MM-dd"
+        let time = DateFormatter()
+        time.locale = locale
+        time.dateFormat = "HH.mm.ss"
+        let timestamp = DateFormatter()
+        timestamp.locale = locale
+        timestamp.dateFormat = "yyyyMMdd-HHmmss"
+        let source = template.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolved = (source.isEmpty ? fallback : source)
+            .replacingOccurrences(of: "{date}", with: date.string(from: now))
+            .replacingOccurrences(of: "{time}", with: time.string(from: now))
+            .replacingOccurrences(of: "{timestamp}", with: timestamp.string(from: now))
+            .replacingOccurrences(of: "{mode}", with: mode.rawValue)
+        let invalid = CharacterSet(charactersIn: "/:\\?%*|\"<>\n\r\t")
+        let cleaned = resolved.components(separatedBy: invalid).joined(separator: "-")
+            .trimmingCharacters(in: CharacterSet(charactersIn: " ."))
+        return cleaned.isEmpty ? "Capture \(timestamp.string(from: now))" : cleaned
+    }
+}
+
+public enum CaptureSaveLocation {
+    public static func configuredDirectory(
+        defaults: UserDefaults = SharedDefaults.store
+    ) throws -> URL {
+        if let path = defaults.string(forKey: AppStorageKeys.Capture.saveFolder)?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty
+        {
+            return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+        }
+        guard
+            let pictures = FileManager.default.urls(
+                for: .picturesDirectory, in: .userDomainMask
+            ).first
+        else { throw CaptureScreenshotError.saveFailed }
+        return pictures.appendingPathComponent("Edith Captures", isDirectory: true)
+    }
+
+    public static func save(
+        _ data: Data, mode: CaptureMode, defaults: UserDefaults = SharedDefaults.store,
+        now: Date = Date()
+    ) throws -> URL {
+        let template =
+            defaults.string(forKey: AppStorageKeys.Capture.filenameTemplate)
+            ?? CaptureFilenameTemplate.fallback
+        return try CaptureScreenshotArchive.save(
+            data, to: configuredDirectory(defaults: defaults), template: template,
+            mode: mode, now: now)
     }
 }
 

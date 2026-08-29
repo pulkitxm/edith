@@ -4,8 +4,11 @@ import EdithKit
 struct CaptureCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "capture",
-        abstract: "Offline screen recognition and quick screenshots.",
-        subcommands: [CaptureReadCommand.self, CaptureScreenshotCommand.self],
+        abstract: "Screen recognition, screenshots, and recent captures.",
+        subcommands: [
+            CaptureReadCommand.self, CaptureAreaCommand.self, CaptureWindowCommand.self,
+            CaptureScreenCommand.self, CaptureLibraryCommand.self,
+        ],
         defaultSubcommand: CaptureReadCommand.self)
 }
 
@@ -32,7 +35,7 @@ enum CaptureCommandBridge {
                     ]))
                 return
             }
-            CLIOut.out(operation == .read ? "screen read requested" : "screenshot requested")
+            CLIOut.out("\(operation.rawValue) requested")
         }
     }
 }
@@ -49,14 +52,50 @@ struct CaptureReadCommand: AsyncParsableCommand {
     }
 }
 
-struct CaptureScreenshotCommand: AsyncParsableCommand {
+struct CaptureAreaCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "screenshot", abstract: "Select screen content for a quick preview.")
+        commandName: "area", abstract: "Capture a selected area.")
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
     func run() async throws {
-        try await CaptureCommandBridge.request(.screenshot, json: json)
+        try await CaptureCommandBridge.request(.area, json: json)
+    }
+}
+
+struct CaptureWindowCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "window", abstract: "Capture a selected window.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await CaptureCommandBridge.request(.window, json: json)
+    }
+}
+
+struct CaptureScreenCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "screen", abstract: "Capture the full main display.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await CaptureCommandBridge.request(.screen, json: json)
+    }
+}
+
+struct CaptureLibraryCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "library", abstract: "Open recent captures.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await CaptureCommandBridge.request(.library, json: json)
     }
 }

@@ -92,7 +92,10 @@ public enum CaptureRecognizer {
     ) throws -> CaptureRecognition {
         let accurateRequest = textRequest(level: .accurate, detectsLanguage: true)
         let codeRequest = VNDetectBarcodesRequest()
-        codeRequest.symbologies = [.qr, .microQR, .aztec, .dataMatrix, .pdf417]
+        codeRequest.symbologies = [
+            .qr, .microQR, .aztec, .dataMatrix, .pdf417, .code128, .code39, .code93,
+            .ean8, .ean13, .upce, .itf14,
+        ]
         let requests: [VNRequest] =
             detectCodes ? [codeRequest, accurateRequest] : [accurateRequest]
         try VNImageRequestHandler(cgImage: image, options: [:]).perform(requests)

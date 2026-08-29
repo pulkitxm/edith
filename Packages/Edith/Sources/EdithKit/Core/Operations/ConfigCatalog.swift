@@ -813,7 +813,17 @@ public enum ConfigCatalog {
             allowed: CaptureCopyMode.allCases.map(\.rawValue), fallback: .string("smart")),
         SettingDefinition(
             AppStorageKeys.Capture.detectCodes, .bool, group: "capture",
-            summary: "Detect QR and other two-dimensional codes.", fallback: .bool(true)),
+            summary: "Detect QR, matrix, and linear barcodes.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.Capture.copyAfterCapture, .bool, group: "capture",
+            summary: "Copy each screenshot as PNG after capture.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Capture.saveFolder, .string, group: "capture",
+            summary: "Folder used when a screenshot is saved."),
+        SettingDefinition(
+            AppStorageKeys.Capture.filenameTemplate, .string, group: "capture",
+            summary: "Filename tokens used when a screenshot is saved.",
+            fallback: .string(CaptureFilenameTemplate.fallback)),
         SettingDefinition(
             AppStorageKeys.Capture.historySize, .int, group: "capture",
             summary: "Maximum saved screen reads.", integerRange: 1...25, fallback: .int(10)),

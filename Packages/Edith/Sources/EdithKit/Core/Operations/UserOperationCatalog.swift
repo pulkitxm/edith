@@ -1100,8 +1100,14 @@ private extension CaptureToolOperation {
         switch self {
         case .read:
             userInterface("Capture Tools settings", "read text and codes from the screen")
-        case .screenshot:
-            userInterface("Capture Tools settings", "take a quick screenshot")
+        case .area:
+            userInterface("Capture Tools settings", "capture an area")
+        case .window:
+            userInterface("Capture Tools settings", "capture a window")
+        case .screen:
+            userInterface("Capture Tools settings", "capture the full screen")
+        case .library:
+            userInterface("Capture Tools settings", "open recent captures")
         }
     }
 }
