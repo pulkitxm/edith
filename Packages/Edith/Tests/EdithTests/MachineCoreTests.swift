@@ -432,6 +432,22 @@ import Testing
         #expect(text.contains("@EDITH@"))
     }
 
+    @Test func windowsCollectorUsesCIMMetrics() {
+        let script = MachineCollector.script(for: .windows, follow: false, interval: 5)
+        let text = String(decoding: script ?? Data(), as: UTF8.self)
+        #expect(text.hasPrefix("$EdithMode = 'once'\n$EdithInterval = 5"))
+        #expect(text.contains("Win32_OperatingSystem"))
+        #expect(text.contains("Win32_PerfFormattedData_PerfOS_Processor"))
+        #expect(text.contains("Win32_PerfFormattedData_Tcpip_NetworkInterface"))
+        #expect(text.contains("@EDITH@"))
+    }
+
+    @Test func collectorSelectsShellForEachPlatform() {
+        #expect(MachineCollector.command(for: .linux, follow: true) == "sh -s -- --stream -i 2")
+        #expect(MachineCollector.command(for: .darwin, follow: false) == "sh -s -- --once")
+        #expect(MachineCollector.command(for: .windows, follow: true).contains("powershell.exe"))
+    }
+
     @Test func collectorReadsFansAndPlatformProfilesFromSysfs() {
         let text = String(decoding: MachineCollector.script() ?? Data(), as: UTF8.self)
         #expect(text.contains("/fan\" j \"_input"))

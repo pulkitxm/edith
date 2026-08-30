@@ -166,11 +166,41 @@ public enum MachineCollector {
     public static let streamCommand = "sh -s -- --stream -i 2"
     public static let onceCommand = "sh -s -- --once"
 
+    public static func command(
+        for platform: RemoteMachinePlatform, follow: Bool, interval: Int = 2
+    ) -> String {
+        switch platform {
+        case .darwin, .linux:
+            return follow ? "sh -s -- --stream -i \(max(1, interval))" : onceCommand
+        case .windows:
+            return "powershell.exe -NoLogo -NoProfile -NonInteractive "
+                + "-ExecutionPolicy Bypass -Command -"
+        }
+    }
+
     public static func script() -> Data? {
         guard
             let url = BundledResources.url(
                 forResource: "machine-collector", withExtension: "sh")
         else { return nil }
         return try? Data(contentsOf: url)
+    }
+
+    public static func script(
+        for platform: RemoteMachinePlatform, follow: Bool = true, interval: Int = 2
+    ) -> Data? {
+        switch platform {
+        case .darwin, .linux:
+            return script()
+        case .windows:
+            guard
+                let url = BundledResources.url(
+                    forResource: "windows-machine-collector", withExtension: "ps1"),
+                let source = try? String(contentsOf: url, encoding: .utf8)
+            else { return nil }
+            let mode = follow ? "stream" : "once"
+            return "$EdithMode = '\(mode)'\n$EdithInterval = \(max(1, interval))\n\(source)"
+                .data(using: .utf8)
+        }
     }
 }

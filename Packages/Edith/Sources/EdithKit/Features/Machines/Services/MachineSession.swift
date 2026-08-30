@@ -19,6 +19,7 @@ public final class MachineSession {
     public nonisolated var id: UUID { machine.id }
 
     public private(set) var state: MachineConnectionState = .disconnected
+    public private(set) var remotePlatform: RemoteMachinePlatform?
     public private(set) var hello: MachineHello?
     public private(set) var slow: MachineSlow?
     private var liveMetrics = MachineLiveMetrics()
@@ -168,6 +169,7 @@ public final class MachineSession {
                 do {
                     try await connection.connect()
                     guard !Task.isCancelled else { return }
+                    remotePlatform = await connection.remotePlatform
                     await replayForwards(on: connection)
                     guard !Task.isCancelled else { return }
                     state = .connected(latencyMillis: nil)
@@ -239,6 +241,7 @@ public final class MachineSession {
 
     private func startLocal() {
         state = .connected(latencyMillis: 0)
+        remotePlatform = .darwin
         hello = localSampler?.hello()
         localTask = Task { [weak self] in
             var tick = 0
@@ -282,8 +285,11 @@ public final class MachineSession {
     }
 
     private func startMetricsStream() {
-        guard let connection, let script = MachineCollector.script() else { return }
-        let process = connection.streamProcess(command: MachineCollector.streamCommand)
+        guard let connection, let remotePlatform,
+            let script = MachineCollector.script(for: remotePlatform)
+        else { return }
+        let process = connection.streamProcess(
+            command: MachineCollector.command(for: remotePlatform, follow: true))
         let stream = SSHLineStream(
             process: process, stdinData: script,
             onLine: { [weak self] line, isStderr in
@@ -589,13 +595,17 @@ public final class MachineSession {
     }
 
     private func loadFacts() async {
-        guard let connection else { return }
-        async let whoResult = try? connection.run(MachineFacts.whoCommand, timeout: 15)
-        async let macResult = try? connection.run(MachineFacts.macAddressCommand, timeout: 15)
-        async let updatesResult = try? connection.run(MachineFacts.updatesCommand, timeout: 45)
+        guard let connection, let remotePlatform else { return }
+        async let whoResult = try? connection.run(
+            MachineFacts.whoCommand(for: remotePlatform), timeout: 15)
+        async let macResult = try? connection.run(
+            MachineFacts.macAddressCommand(for: remotePlatform), timeout: 15)
+        async let updatesResult = try? connection.run(
+            MachineFacts.updatesCommand(for: remotePlatform), timeout: 45)
         let (who, mac, updates) = await (whoResult, macResult, updatesResult)
         facts = MachineSessionSummary(
-            who: MachineFacts.parseWho(who?.stdoutText ?? ""),
+            who: MachineFacts.parseWho(
+                who?.stdoutText ?? "", platform: remotePlatform),
             updatesAvailable: MachineFacts.parseUpdates(updates?.stdoutText ?? ""),
             macAddress: MachineFacts.parseMACAddress(mac?.stdoutText ?? ""))
     }

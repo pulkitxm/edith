@@ -51,6 +51,70 @@ public enum MachineFacts {
         esac
         """
 
+    public static func systemCommand(for platform: RemoteMachinePlatform) -> String {
+        switch platform {
+        case .darwin, .linux:
+            "uname -srm 2>/dev/null"
+        case .windows:
+            PowerShell.command(
+                "$os=Get-CimInstance Win32_OperatingSystem; "
+                    + "[Console]::Out.Write("
+                    + "$os.Caption+' '+$os.Version+' '+$os.OSArchitecture)")
+        }
+    }
+
+    public static func uptimeCommand(for platform: RemoteMachinePlatform) -> String {
+        switch platform {
+        case .darwin, .linux:
+            "uptime 2>/dev/null"
+        case .windows:
+            PowerShell.command(
+                "$os=Get-CimInstance Win32_OperatingSystem; "
+                    + "$span=[DateTime]::Now-$os.LastBootUpTime; "
+                    + "[Console]::Out.Write("
+                    + "('{0} days, {1:00}:{2:00}' -f [int]$span.TotalDays,$span.Hours,$span.Minutes))")
+        }
+    }
+
+    public static func whoCommand(for platform: RemoteMachinePlatform) -> String {
+        switch platform {
+        case .darwin, .linux:
+            whoCommand
+        case .windows:
+            PowerShell.command(
+                "$users=@(Get-CimInstance Win32_LoggedOnUser | ForEach-Object { "
+                    + "if ($_.Antecedent -match 'Name=\"([^\"]+)\"') { $matches[1] } "
+                    + "} | Sort-Object -Unique); "
+                    + "if ($users.Count -eq 0) { $users=@($env:USERNAME) }; "
+                    + "$users | ForEach-Object { [Console]::Out.WriteLine($_+' on Windows') }")
+        }
+    }
+
+    public static func macAddressCommand(for platform: RemoteMachinePlatform) -> String {
+        switch platform {
+        case .darwin, .linux:
+            macAddressCommand
+        case .windows:
+            PowerShell.command(
+                "$adapter=Get-CimInstance Win32_NetworkAdapterConfiguration | "
+                    + "Where-Object { $_.IPEnabled -and $_.MACAddress } | Select-Object -First 1; "
+                    + "if ($adapter) { [Console]::Out.Write($adapter.MACAddress.ToLower()) }")
+        }
+    }
+
+    public static func updatesCommand(for platform: RemoteMachinePlatform) -> String {
+        switch platform {
+        case .darwin, .linux:
+            updatesCommand
+        case .windows:
+            PowerShell.command(
+                "$session=New-Object -ComObject Microsoft.Update.Session; "
+                    + "$searcher=$session.CreateUpdateSearcher(); "
+                    + "$result=$searcher.Search(\"IsInstalled=0 and Type='Software'\"); "
+                    + "[Console]::Out.Write($result.Updates.Count)")
+        }
+    }
+
     public static func parseWho(_ output: String) -> [String] {
         output.split(separator: "\n").compactMap { line in
             let parts = line.split(separator: " ", omittingEmptySubsequences: true)
@@ -59,6 +123,19 @@ public enum MachineFacts {
             let tty = String(parts[1])
             let rest = parts.dropFirst(2).joined(separator: " ")
             return "\(user) on \(tty) since \(rest)"
+        }
+    }
+
+    public static func parseWho(
+        _ output: String, platform: RemoteMachinePlatform
+    ) -> [String] {
+        switch platform {
+        case .darwin, .linux:
+            parseWho(output)
+        case .windows:
+            output.split(separator: "\n").map {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            }.filter { !$0.isEmpty }
         }
     }
 

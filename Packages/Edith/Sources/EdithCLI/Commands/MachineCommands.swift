@@ -166,25 +166,28 @@ struct MachinesShowCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let runner = try await MachineResolver.runner(machine)
-            let sentinel = "EDITH-FACT-BOUNDARY-\(UUID().uuidString)"
-            let batched = [
-                "uname -srm 2>/dev/null", "echo \(sentinel)",
-                "uptime 2>/dev/null", "echo \(sentinel)",
-                MachineFacts.whoCommand,
-            ].joined(separator: "; ")
-            let output = (try? await runner.run(batched, timeout: 20))?.stdoutText ?? ""
-            let sections = output.components(separatedBy: sentinel)
-            let hello = sections.first
-            let uptime = sections.count > 1 ? sections[1] : nil
-            let who = sections.count > 2 ? sections[2] : nil
+            guard let platform = await runner.ssh.remotePlatform else {
+                throw CLIFailure.unavailable("could not identify \(runner.machine.name)")
+            }
+            async let helloResult = try? runner.run(
+                MachineFacts.systemCommand(for: platform), timeout: 20)
+            async let uptimeResult = try? runner.run(
+                MachineFacts.uptimeCommand(for: platform), timeout: 20)
+            async let whoResult = try? runner.run(
+                MachineFacts.whoCommand(for: platform), timeout: 20)
+            let (helloResponse, uptimeResponse, whoResponse) = await (
+                helloResult, uptimeResult, whoResult)
+            let hello = helloResponse?.stdoutText ?? ""
+            let uptime = uptimeResponse?.stdoutText ?? ""
+            let who = whoResponse?.stdoutText ?? ""
             let summary = MachineDirectory.summary(runner.machine)
             let facts = JSONValue.object([
                 "machine": summary,
                 "uname": .string(
-                    (hello ?? "").trimmingCharacters(in: .whitespacesAndNewlines)),
+                    hello.trimmingCharacters(in: .whitespacesAndNewlines)),
                 "uptime": .string(
-                    (uptime ?? "").trimmingCharacters(in: .whitespacesAndNewlines)),
-                "sessions": .strings(MachineFacts.parseWho(who ?? "")),
+                    uptime.trimmingCharacters(in: .whitespacesAndNewlines)),
+                "sessions": .strings(MachineFacts.parseWho(who, platform: platform)),
             ])
             guard !json else {
                 CLIOut.json(facts)
@@ -195,11 +198,11 @@ struct MachinesShowCommand: AsyncParsableCommand {
             CLIOut.out("  auth     \(runner.machine.auth.displayName)")
             CLIOut.out(
                 "  system   "
-                    + (hello ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
+                    + hello.trimmingCharacters(in: .whitespacesAndNewlines))
             CLIOut.out(
                 "  uptime   "
-                    + (uptime ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
-            for session in MachineFacts.parseWho(who ?? "") {
+                    + uptime.trimmingCharacters(in: .whitespacesAndNewlines))
+            for session in MachineFacts.parseWho(who, platform: platform) {
                 CLIOut.out("  session  \(session)")
             }
         }
@@ -230,11 +233,14 @@ struct MachinesMetricsCommand: AsyncParsableCommand {
             let interval = try ArgumentChecks.positive(self.interval, "--interval")
             let processes = try ArgumentChecks.nonNegative(self.processes, "--processes")
             let runner = try await MachineResolver.runner(machine)
-            guard let script = MachineCollector.script() else {
+            guard let platform = await runner.ssh.remotePlatform,
+                let script = MachineCollector.script(
+                    for: platform, follow: follow, interval: interval)
+            else {
                 throw CLIFailure("the metrics collector is missing from this build")
             }
-            let command =
-                follow ? "sh -s -- --stream -i \(max(1, interval))" : MachineCollector.onceCommand
+            let command = MachineCollector.command(
+                for: platform, follow: follow, interval: interval)
             let sink = MetricsSink(json: json, processes: processes, follow: follow)
             let stream = try runner.stream(command: command, stdin: script) { line, isStderr in
                 guard !isStderr else { return }
@@ -245,7 +251,7 @@ struct MachinesMetricsCommand: AsyncParsableCommand {
             if !sink.sawSample {
                 throw CLIFailure.unavailable(
                     "\(runner.machine.name) did not report metrics",
-                    hint: "the collector needs a POSIX shell and awk on the machine")
+                    hint: "check that the remote system metrics service is available")
             }
         }
     }

@@ -373,6 +373,12 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
         #expect(who[0].hasPrefix("pulkit on pts/0 since 2026-08-06 10:11"))
     }
 
+    @Test func parsesWindowsSessions() {
+        let sessions = MachineFacts.parseWho(
+            "pulkit on Windows\nadministrator on Windows\n", platform: .windows)
+        #expect(sessions == ["pulkit on Windows", "administrator on Windows"])
+    }
+
     @Test func parsesUpdateCountsAndSentinel() {
         #expect(MachineFacts.parseUpdates("12\n") == 12)
         #expect(MachineFacts.parseUpdates("0") == 0)
@@ -400,6 +406,22 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
         #expect(command.contains("apt list --upgradable"))
         #expect(command.contains("dnf -q check-update"))
         #expect(command.contains("pacman -Qu"))
+    }
+
+    @Test func windowsFactsUseNativeSystemProviders() throws {
+        func script(_ command: String) throws -> String {
+            let encoded = try #require(command.split(separator: " ").last)
+            let data = try #require(Data(base64Encoded: String(encoded)))
+            return try #require(String(data: data, encoding: .utf16LittleEndian))
+        }
+        #expect(try script(MachineFacts.systemCommand(for: .windows)).contains("Win32_OperatingSystem"))
+        #expect(try script(MachineFacts.whoCommand(for: .windows)).contains("Win32_LoggedOnUser"))
+        #expect(
+            try script(MachineFacts.macAddressCommand(for: .windows))
+                .contains("Win32_NetworkAdapterConfiguration"))
+        #expect(
+            try script(MachineFacts.updatesCommand(for: .windows))
+                .contains("Microsoft.Update.Session"))
     }
 
     @Test func buildsWakeOnLANMagicPacket() {
