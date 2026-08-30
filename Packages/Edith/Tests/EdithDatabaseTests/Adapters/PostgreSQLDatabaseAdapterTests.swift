@@ -122,15 +122,24 @@ private enum PostgreSQLDatabaseAdapterFixtures {
 private actor PostgreSQLDatabaseAdapterTestClient: PostgreSQLDatabaseClient {
     private var identities: [DatabaseProductIdentity]
     private var delaysNanoseconds: [UInt64]
+    private let cancellation: DatabaseAdapterCancellationSignal?
+    private let cancellationReason: DatabaseAdapterCancellationReason
+    private let cancellationDiscoveryCount: Int?
     private var discoveryCount = 0
     private var disconnectCount = 0
 
     init(
         identities: [DatabaseProductIdentity] = [PostgreSQLDatabaseAdapterFixtures.identity],
-        delaysNanoseconds: [UInt64] = []
+        delaysNanoseconds: [UInt64] = [],
+        cancellation: DatabaseAdapterCancellationSignal? = nil,
+        cancellationReason: DatabaseAdapterCancellationReason = .userRequested,
+        cancellationDiscoveryCount: Int? = nil
     ) {
         self.identities = identities
         self.delaysNanoseconds = delaysNanoseconds
+        self.cancellation = cancellation
+        self.cancellationReason = cancellationReason
+        self.cancellationDiscoveryCount = cancellationDiscoveryCount
     }
 
     func discoverIdentity() async throws -> DatabaseProductIdentity {
@@ -156,6 +165,9 @@ private actor PostgreSQLDatabaseAdapterTestClient: PostgreSQLDatabaseClient {
                 try await Task.sleep(nanoseconds: interval)
                 remaining -= interval
             }
+        }
+        if discoveryCount == cancellationDiscoveryCount {
+            await cancellation?.cancel(cancellationReason)
         }
         if identities.count == 1 {
             return identities[0]
@@ -297,6 +309,24 @@ private func postgresqlAdapterWaitForDiscoveries(
                 deadline: Date().addingTimeInterval(0.05)))
     }
     #expect(Date().timeIntervalSince(startedAt) < 1)
+    #expect(await client.disconnects() == 1)
+}
+
+@Test func postgresqlAdapterMapsDeadlineAfterConnectionIdentityReturns() async throws {
+    let cancellation = DatabaseAdapterCancellationSignal()
+    let client = PostgreSQLDatabaseAdapterTestClient(
+        cancellation: cancellation,
+        cancellationReason: .deadlineExceeded,
+        cancellationDiscoveryCount: 1)
+    let adapter = PostgreSQLDatabaseAdapter { _ in client }
+    let definition = try PostgreSQLDatabaseAdapterFixtures.definition()
+    await #expect(throws: PostgreSQLDatabaseAdapterSupport.deadlineExceeded) {
+        _ = try await adapter.connect(
+            PostgreSQLDatabaseAdapterFixtures.resolved(definition),
+            context: PostgreSQLDatabaseAdapterFixtures.context(
+                deadline: Date().addingTimeInterval(10),
+                cancellation: cancellation))
+    }
     #expect(await client.disconnects() == 1)
 }
 
@@ -448,6 +478,29 @@ private func postgresqlAdapterWaitForDiscoveries(
         _ = try await discovery.value
     }
     #expect(Date().timeIntervalSince(startedAt) < 1)
+    #expect(await session.lifecycleState() == .failed)
+    #expect(await client.disconnects() == 1)
+}
+
+@Test func postgresqlAdapterClosesWhenCancellationWinsAfterDriverReturn() async throws {
+    let cancellation = DatabaseAdapterCancellationSignal()
+    let client = PostgreSQLDatabaseAdapterTestClient(
+        identities: [
+            PostgreSQLDatabaseAdapterFixtures.identity,
+            PostgreSQLDatabaseAdapterFixtures.identity,
+        ],
+        cancellation: cancellation,
+        cancellationDiscoveryCount: 2)
+    let adapter = PostgreSQLDatabaseAdapter { _ in client }
+    let definition = try PostgreSQLDatabaseAdapterFixtures.definition()
+    let session = try await adapter.connect(
+        PostgreSQLDatabaseAdapterFixtures.resolved(definition),
+        context: PostgreSQLDatabaseAdapterFixtures.context())
+    await #expect(throws: DatabaseAdapterFailure.cancelled) {
+        _ = try await session.discoverCapabilities(
+            context: PostgreSQLDatabaseAdapterFixtures.context(
+                cancellation: cancellation))
+    }
     #expect(await session.lifecycleState() == .failed)
     #expect(await client.disconnects() == 1)
 }
