@@ -17,6 +17,43 @@ enum DatabaseBrokerPathsPreparationStage: Sendable {
     case runtimeDirectoryOpened
 }
 
+final class DatabaseBrokerRuntimeDirectory: @unchecked Sendable {
+    private let closeLock = NSLock()
+    private var isClosed = false
+    fileprivate let openedDirectory: DatabaseBrokerPaths.OpenDirectory
+
+    fileprivate init(openedDirectory: DatabaseBrokerPaths.OpenDirectory) {
+        self.openedDirectory = openedDirectory
+    }
+
+    var descriptor: Int32 {
+        openedDirectory.descriptor
+    }
+
+    func revalidate() -> Bool {
+        closeLock.withLock {
+            !isClosed
+                && DatabaseBrokerPaths.pathStillReferencesDirectory(openedDirectory)
+        }
+    }
+
+    func close() {
+        let descriptors = closeLock.withLock { () -> [Int32]? in
+            guard !isClosed else { return nil }
+            isClosed = true
+            return openedDirectory.descriptors
+        }
+        guard let descriptors else { return }
+        for descriptor in descriptors.reversed() {
+            Darwin.close(descriptor)
+        }
+    }
+
+    deinit {
+        close()
+    }
+}
+
 public struct DatabaseBrokerPaths: Equatable, Sendable {
     public static let databaseDirectoryName = "database"
     public static let metadataFilename = "metadata.sqlite3"
@@ -66,11 +103,8 @@ public struct DatabaseBrokerPaths: Equatable, Sendable {
         defer { close(metadataDescriptor) }
         try observe(.metadataFileOpened)
 
-        let runtime = try Self.openDirectory(
-            runtimeDirectory,
-            invalidError: .invalidRuntimeDirectory,
-            unsafeError: .unsafeRuntimeDirectory)
-        defer { Self.closeDirectory(runtime) }
+        let runtime = try openRuntimeDirectory()
+        defer { runtime.close() }
         try observe(.runtimeDirectoryOpened)
 
         guard Self.pathStillReferencesDirectory(data) else {
@@ -83,12 +117,20 @@ public struct DatabaseBrokerPaths: Equatable, Sendable {
         else {
             throw DatabaseBrokerPathsError.unsafeMetadataFile
         }
-        guard Self.pathStillReferencesDirectory(runtime) else {
+        guard runtime.revalidate() else {
             throw DatabaseBrokerPathsError.unsafeRuntimeDirectory
         }
     }
 
-    private struct OpenDirectory {
+    func openRuntimeDirectory() throws -> DatabaseBrokerRuntimeDirectory {
+        DatabaseBrokerRuntimeDirectory(
+            openedDirectory: try Self.openDirectory(
+                runtimeDirectory,
+                invalidError: .invalidRuntimeDirectory,
+                unsafeError: .unsafeRuntimeDirectory))
+    }
+
+    fileprivate struct OpenDirectory {
         let components: [String]
         let descriptors: [Int32]
 
@@ -269,7 +311,7 @@ public struct DatabaseBrokerPaths: Equatable, Sendable {
         return components
     }
 
-    private static func safeDirectoryMetadata(
+    static func safeDirectoryMetadata(
         _ metadata: stat,
         requireMode: Bool
     ) -> Bool {
@@ -317,7 +359,7 @@ public struct DatabaseBrokerPaths: Equatable, Sendable {
             && sameFile(pathMetadata, descriptorMetadata)
     }
 
-    private static func pathStillReferencesDirectory(
+    fileprivate static func pathStillReferencesDirectory(
         _ directory: OpenDirectory
     ) -> Bool {
         guard directory.descriptors.count == directory.components.count + 1 else {
