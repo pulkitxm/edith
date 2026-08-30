@@ -708,7 +708,9 @@ enum MongoDBDatabaseAdapterSupport {
             || stoppedForBytes
         while true {
             try await check(context)
-            let descriptorOutput = fieldDescriptors(converted.map(\.record))
+            let descriptorOutput = try await fieldDescriptors(
+                converted.map(\.record),
+                context: context)
             try await check(context)
             let valueTruncated = converted.contains(where: \.truncated)
             var warnings: [DatabaseWarning] = []
@@ -1308,8 +1310,11 @@ enum MongoDBDatabaseAdapterSupport {
     }
 
     private static func fieldDescriptors(
-        _ records: [DatabaseRecord]
-    ) -> (fields: [DatabaseFieldDescriptor], truncated: Bool) {
+        _ records: [DatabaseRecord],
+        context: DatabaseAdapterOperationContext
+    ) async throws(DatabaseAdapterFailure) -> (
+        fields: [DatabaseFieldDescriptor], truncated: Bool
+    ) {
         struct State {
             var typeName: String
             var nullable: Bool
@@ -1319,7 +1324,11 @@ enum MongoDBDatabaseAdapterSupport {
         var states: [String: State] = [:]
         var truncated = false
         for record in records {
-            for field in record.fields {
+            try await check(context)
+            for (index, field) in record.fields.enumerated() {
+                if index.isMultiple(of: 128) {
+                    try await check(context)
+                }
                 if var state = states[field.name] {
                     let typeName = MongoDBDatabaseValueCodec.typeName(field.value)
                     if state.typeName != typeName {
