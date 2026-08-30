@@ -17,6 +17,7 @@ The bare command runs `ed database connections`, which in turn runs
 | [`ed database connections list`](./connections-list.md) | Lists bounded saved connection summaries with server-side filters. |
 | [`ed database connections get`](./connections-get.md) | Shows one saved connection without credentials or secret references. |
 | [`ed database capabilities`](./capabilities.md) | Shows the shared capability report, optionally refreshing discovery. |
+| [`ed database mcp`](./mcp.md) | Serves bounded read-only connection and capability tools over MCP stdio. |
 
 ## Safety boundary
 
@@ -30,10 +31,12 @@ peer before sending a request. A broker timeout, unavailable runtime, unsafe
 peer, or interrupted response exits 4 and writes diagnostics only to stderr.
 Commands are not replayed automatically.
 
-The CLI prints payloads only when the broker marks them complete. Partial,
-sampled, estimated, truncated, or stale results exit 1 with an empty stdout so
-automation cannot mistake incomplete data for a complete result. Warnings for
-an otherwise complete result remain visible on stderr.
+The direct list, get, and capabilities commands print payloads only when the
+broker marks them complete. Partial, sampled, estimated, truncated, or stale
+results exit 1 with an empty stdout so automation cannot mistake incomplete
+data for a complete result. Warnings for an otherwise complete result remain
+visible on stderr. MCP tool responses preserve their explicit status,
+completeness, warnings, and partial failures in the structured response.
 
 ## Exit codes
 
