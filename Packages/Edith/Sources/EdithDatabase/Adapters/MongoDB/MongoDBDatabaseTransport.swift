@@ -23,9 +23,15 @@ typealias MongoDBDatabaseEventLoopShutdown =
     @Sendable (MultiThreadedEventLoopGroup) async throws -> Void
 
 actor MongoDBDatabaseOwnedEventLoop {
+    private enum State {
+        case active
+        case shuttingDown(Task<Void, Error>)
+        case shutDown
+    }
+
     nonisolated let group: MultiThreadedEventLoopGroup
     private let shutdownOperation: MongoDBDatabaseEventLoopShutdown
-    private var didShutdown = false
+    private var state = State.active
 
     init(
         group: MultiThreadedEventLoopGroup,
@@ -36,18 +42,34 @@ actor MongoDBDatabaseOwnedEventLoop {
     }
 
     func shutdown() async throws {
-        guard !didShutdown else { return }
-        didShutdown = true
+        let task: Task<Void, Error>
+        switch state {
+        case .active:
+            let group = group
+            let shutdownOperation = shutdownOperation
+            task = Task {
+                try await shutdownOperation(group)
+            }
+            state = .shuttingDown(task)
+        case let .shuttingDown(existingTask):
+            task = existingTask
+        case .shutDown:
+            return
+        }
         do {
-            try await shutdownOperation(group)
+            try await task.value
+            state = .shutDown
         } catch {
-            didShutdown = false
+            state = .active
             throw error
         }
     }
 
     func isShutdown() -> Bool {
-        didShutdown
+        if case .shutDown = state {
+            return true
+        }
+        return false
     }
 }
 
@@ -255,7 +277,9 @@ enum MongoDBDatabaseTransport {
         let handshake = try await authenticate(
             connection,
             settings: plan.settings,
-            deadline: deadline)
+            cancellationCheck: {
+                try await check(context: context, deadline: deadline, attempt: attempt)
+            })
         try await check(context: context, deadline: deadline, attempt: attempt)
         try await connection.ping()
         let build = try await connection.executeCodable(
@@ -275,14 +299,17 @@ enum MongoDBDatabaseTransport {
     private static func authenticate(
         _ connection: MongoConnection,
         settings: ConnectionSettings,
-        deadline: Date
+        cancellationCheck: @escaping @Sendable () async throws -> Void
     ) async throws -> ServerHandshake {
+        try await cancellationCheck()
         switch settings.authentication {
         case .unauthenticated:
-            return try await connection.doHandshake(
+            let handshake = try await connection.doHandshake(
                 clientDetails: nil,
                 credentials: .unauthenticated,
                 authenticationDatabase: settings.authenticationSource ?? "admin")
+            try await cancellationCheck()
+            return handshake
         case let .scramSha256(username, password):
             let source = settings.authenticationSource ?? "admin"
             let handshake = try await connection.doHandshake(
@@ -292,12 +319,13 @@ enum MongoDBDatabaseTransport {
             guard handshake.saslSupportedMechs?.contains("SCRAM-SHA-256") == true else {
                 throw MongoDBDatabaseDriverFailure.authentication
             }
-            await connection.setDatabaseQueryTimeout(try remainingTime(deadline))
             try await MongoDBDatabaseSCRAMSHA256.authenticate(
                 connection,
                 username: username,
                 password: password,
-                database: source)
+                database: source,
+                cancellationCheck: cancellationCheck)
+            try await cancellationCheck()
             return handshake
         case .auto, .scramSha1, .mongoDBCR:
             throw MongoDBDatabaseDriverFailure.authentication
@@ -408,6 +436,7 @@ final class MongoDBDatabaseBoundedFrameHandler: ChannelInboundHandler, @unchecke
 
     private let mongoContext: MongoClientContext
     private var buffered: ByteBuffer?
+    private var expectedLength: Int?
 
     init(context: MongoClientContext) {
         mongoContext = context
@@ -415,12 +444,8 @@ final class MongoDBDatabaseBoundedFrameHandler: ChannelInboundHandler, @unchecke
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         var input = unwrapInboundIn(data)
-        if buffered == nil {
-            buffered = context.channel.allocator.buffer(capacity: min(input.readableBytes, 65_536))
-        }
-        buffered?.writeBuffer(&input)
         do {
-            try emitFrames(context: context)
+            try consume(&input, context: context)
         } catch {
             fail(context: context, error: error)
         }
@@ -437,34 +462,53 @@ final class MongoDBDatabaseBoundedFrameHandler: ChannelInboundHandler, @unchecke
         fail(context: context, error: error)
     }
 
-    private func emitFrames(context: ChannelHandlerContext) throws {
-        while var buffer = buffered {
-            guard buffer.readableBytes >= 4 else {
-                buffered = buffer
-                return
+    private func consume(
+        _ input: inout ByteBuffer,
+        context: ChannelHandlerContext
+    ) throws {
+        while input.readableBytes > 0 {
+            if buffered == nil {
+                buffered = context.channel.allocator.buffer(capacity: 4)
             }
-            let length = try MongoDBDatabaseWireReplyValidator.frameLength(buffer)
-            guard buffer.readableBytes >= length else {
-                buffered = buffer
-                return
-            }
-            guard let frame = buffer.readSlice(length: length) else {
+            guard var frame = buffered else {
                 throw MongoDBDatabaseTransportFailure.invalidFrame
             }
+            if expectedLength == nil {
+                let prefixBytes = min(4 - frame.readableBytes, input.readableBytes)
+                guard prefixBytes > 0, var prefix = input.readSlice(length: prefixBytes) else {
+                    throw MongoDBDatabaseTransportFailure.invalidFrame
+                }
+                frame.writeBuffer(&prefix)
+                buffered = frame
+                guard frame.readableBytes == 4 else { continue }
+                expectedLength = try MongoDBDatabaseWireReplyValidator.frameLength(frame)
+            }
+            guard let expectedLength else {
+                throw MongoDBDatabaseTransportFailure.invalidFrame
+            }
+            let remaining = expectedLength - frame.readableBytes
+            guard remaining >= 0 else {
+                throw MongoDBDatabaseTransportFailure.invalidFrame
+            }
+            let count = min(remaining, input.readableBytes)
+            if count > 0 {
+                guard var chunk = input.readSlice(length: count) else {
+                    throw MongoDBDatabaseTransportFailure.invalidFrame
+                }
+                frame.writeBuffer(&chunk)
+                buffered = frame
+            }
+            guard frame.readableBytes == expectedLength else { continue }
             try MongoDBDatabaseWireReplyValidator.validate(frame)
             context.fireChannelRead(wrapInboundOut(frame))
-            if buffer.readableBytes == 0 {
-                buffered = nil
-            } else {
-                var remainder = context.channel.allocator.buffer(capacity: buffer.readableBytes)
-                remainder.writeBuffer(&buffer)
-                buffered = remainder
-            }
+            buffered = nil
+            self.expectedLength = nil
         }
     }
 
     private func fail(context: ChannelHandlerContext, error: Error) {
         buffered = nil
+        expectedLength = nil
         Task {
             await mongoContext.cancelQueries(error)
         }
@@ -848,8 +892,10 @@ private enum MongoDBDatabaseSCRAMSHA256 {
         _ connection: MongoConnection,
         username: String,
         password: String,
-        database: String
+        database: String,
+        cancellationCheck: @escaping @Sendable () async throws -> Void
     ) async throws {
+        try await cancellationCheck()
         let escapedUsername =
             username
             .replacingOccurrences(of: "=", with: "=3D")
@@ -864,16 +910,18 @@ private enum MongoDBDatabaseSCRAMSHA256 {
             namespace: MongoNamespace(to: "$cmd", inDatabase: database),
             sessionId: nil,
             traceLabel: "DatabaseAuthentication")
+        try await cancellationCheck()
         guard !reply.done else {
             throw MongoDBDatabaseDriverFailure.authentication
         }
         let serverFirst = try reply.payload.decodedString()
         let challenge = try challenge(serverFirst, nonce: nonce)
         var passwordBytes = Data(password.utf8)
-        var saltedPassword = try pbkdf2(
+        var saltedPassword = try await pbkdf2(
             password: passwordBytes,
             salt: challenge.salt,
-            iterations: challenge.iterations)
+            iterations: challenge.iterations,
+            cancellationCheck: cancellationCheck)
         var clientKey = hmac(key: saltedPassword, message: Data("Client Key".utf8))
         var serverKey = hmac(key: saltedPassword, message: Data("Server Key".utf8))
         defer {
@@ -900,6 +948,7 @@ private enum MongoDBDatabaseSCRAMSHA256 {
             namespace: MongoNamespace(to: "$cmd", inDatabase: database),
             sessionId: nil,
             traceLabel: "DatabaseAuthentication")
+        try await cancellationCheck()
         let serverFinal = try reply.payload.decodedString()
         try verify(
             serverFinal,
@@ -914,6 +963,7 @@ private enum MongoDBDatabaseSCRAMSHA256 {
                 namespace: MongoNamespace(to: "$cmd", inDatabase: database),
                 sessionId: nil,
                 traceLabel: "DatabaseAuthentication")
+            try await cancellationCheck()
         }
         guard reply.done else {
             throw MongoDBDatabaseDriverFailure.authentication
@@ -977,8 +1027,9 @@ private enum MongoDBDatabaseSCRAMSHA256 {
     private static func pbkdf2(
         password: Data,
         salt: Data,
-        iterations: Int
-    ) throws -> Data {
+        iterations: Int,
+        cancellationCheck: @escaping @Sendable () async throws -> Void
+    ) async throws -> Data {
         guard (4_096...100_000).contains(iterations) else {
             throw MongoDBDatabaseDriverFailure.authentication
         }
@@ -987,11 +1038,15 @@ private enum MongoDBDatabaseSCRAMSHA256 {
         var current = hmac(key: password, message: firstInput)
         var result = current
         if iterations > 1 {
-            for _ in 1..<iterations {
+            for iteration in 1..<iterations {
+                if iteration.isMultiple(of: 128) {
+                    try await cancellationCheck()
+                }
                 current = hmac(key: password, message: current)
                 result = xor(result, current)
             }
         }
+        try await cancellationCheck()
         current.resetBytes(in: 0..<current.count)
         return result
     }

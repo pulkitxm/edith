@@ -37,8 +37,10 @@ enum MongoDBDatabaseValueCodec {
 
     static func convertedRecord(
         _ document: Document,
-        hidesObjectID: Bool
-    ) throws -> MongoDBDatabaseConvertedRecord {
+        hidesObjectID: Bool,
+        cancellationCheck: @escaping @Sendable () async throws -> Void = {}
+    ) async throws -> MongoDBDatabaseConvertedRecord {
+        try await cancellationCheck()
         var budget = MongoDBDatabaseValueCodecBudget(
             remainingBytes: maximumRecordValueBytes,
             remainingElements: maximumRecordElements)
@@ -48,6 +50,7 @@ enum MongoDBDatabaseValueCodec {
         var truncated = false
 
         for (name, primitive) in document {
+            try await cancellationCheck()
             try validateFieldName(name)
             guard seen.insert(name).inserted else {
                 throw MongoDBDatabaseValueCodecFailure.invalidValue
@@ -63,7 +66,11 @@ enum MongoDBDatabaseValueCodec {
                 truncated = true
                 break
             }
-            let converted = try outputValue(primitive, depth: 0, budget: &budget)
+            let converted = try await outputValue(
+                primitive,
+                depth: 0,
+                budget: &budget,
+                cancellationCheck: cancellationCheck)
             fields.append(DatabaseObjectField(name: name, value: converted.value))
             truncated = truncated || converted.truncated
         }
@@ -74,10 +81,11 @@ enum MongoDBDatabaseValueCodec {
             var identityBudget = MongoDBDatabaseValueCodecBudget(
                 remainingBytes: 32_768,
                 remainingElements: 32)
-            let convertedIdentity = try outputValue(
+            let convertedIdentity = try await outputValue(
                 rawIdentity,
                 depth: 0,
-                budget: &identityBudget)
+                budget: &identityBudget,
+                cancellationCheck: cancellationCheck)
             if convertedIdentity.truncated {
                 identity = nil
                 truncated = true
@@ -248,8 +256,10 @@ enum MongoDBDatabaseValueCodec {
     private static func outputValue(
         _ primitive: Primitive,
         depth: Int,
-        budget: inout MongoDBDatabaseValueCodecBudget
-    ) throws -> (value: DatabaseValue, truncated: Bool) {
+        budget: inout MongoDBDatabaseValueCodecBudget,
+        cancellationCheck: @escaping @Sendable () async throws -> Void
+    ) async throws -> (value: DatabaseValue, truncated: Bool) {
+        try await cancellationCheck()
         guard depth <= maximumRecordDepth else {
             return (
                 .productSpecific(
@@ -427,14 +437,16 @@ enum MongoDBDatabaseValueCodec {
                 values.reserveCapacity(min(value.count, 512))
                 var truncated = false
                 for (_, primitive) in value {
+                    try await cancellationCheck()
                     guard budget.remainingElements > 0, budget.remainingBytes > 0 else {
                         truncated = true
                         break
                     }
-                    let converted = try outputValue(
+                    let converted = try await outputValue(
                         primitive,
                         depth: depth + 1,
-                        budget: &budget)
+                        budget: &budget,
+                        cancellationCheck: cancellationCheck)
                     values.append(converted.value)
                     truncated = truncated || converted.truncated
                 }
@@ -445,6 +457,7 @@ enum MongoDBDatabaseValueCodec {
             var seen = Set<String>()
             var truncated = false
             for (name, primitive) in value {
+                try await cancellationCheck()
                 try validateFieldName(name)
                 guard seen.insert(name).inserted else {
                     throw MongoDBDatabaseValueCodecFailure.invalidValue
@@ -455,10 +468,11 @@ enum MongoDBDatabaseValueCodec {
                     truncated = true
                     break
                 }
-                let converted = try outputValue(
+                let converted = try await outputValue(
                     primitive,
                     depth: depth + 1,
-                    budget: &budget)
+                    budget: &budget,
+                    cancellationCheck: cancellationCheck)
                 fields.append(DatabaseObjectField(name: name, value: converted.value))
                 truncated = truncated || converted.truncated
             }

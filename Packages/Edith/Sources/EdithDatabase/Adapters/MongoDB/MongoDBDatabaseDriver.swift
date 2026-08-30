@@ -119,9 +119,9 @@ actor MongoKittenDatabaseClient: MongoDBDatabaseClient {
     }
 
     func disconnect() async throws {
-        let transport = self.transport
+        guard let transport else { return }
+        try await transport.close()
         self.transport = nil
-        try await transport?.close()
     }
 
     private static func collect(
