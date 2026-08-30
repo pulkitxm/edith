@@ -213,6 +213,25 @@ private actor MySQLDatabaseFoundationTestClient: MySQLDatabaseClient {
     }
 }
 
+@Test func mysqlFoundationRequiredTLSRejectsDowngradeBeforeAuthentication() async throws {
+    let receivedBytes = MySQLDatabaseFoundationByteCount()
+    try await withMySQLDatabaseHandshakeServer(receivedBytes: receivedBytes) { port in
+        let plan = MySQLDatabaseConnectionPlan(
+            host: "127.0.0.1",
+            port: port,
+            username: "reader",
+            password: "fixture-password",
+            database: "edith_lab",
+            tls: .required(verifyCertificate: false),
+            tlsServerName: nil,
+            connectTimeoutMilliseconds: 2_000)
+        await #expect(throws: MySQLDatabaseDriverFailure.tls) {
+            _ = try await MySQLNIODatabaseClient.connect(plan)
+        }
+    }
+    #expect(receivedBytes.value == 0)
+}
+
 @Test func mysqlFoundationIdentityMapsStandaloneServerAndCapabilities() throws {
     let identity = try MySQLDatabaseDriverSupport.identity(
         MySQLDatabaseFoundationFixtures.values)
@@ -413,6 +432,45 @@ private actor MySQLDatabaseFoundationTestClient: MySQLDatabaseClient {
             _ = try await task.value
         }
         #expect(ContinuousClock.now - startedAt < .seconds(2))
+    }
+}
+
+@Test func mysqlFoundationRequiredTLSPreflightHonorsTimeoutAndCancellation() async throws {
+    try await withMySQLDatabaseStalledServer { port in
+        let timeoutPlan = MySQLDatabaseConnectionPlan(
+            host: "127.0.0.1",
+            port: port,
+            username: "reader",
+            password: "fixture-password",
+            database: "edith_lab",
+            tls: .required(verifyCertificate: false),
+            tlsServerName: nil,
+            connectTimeoutMilliseconds: 300)
+        let timeoutStartedAt = ContinuousClock.now
+        await #expect(throws: MySQLDatabaseDriverFailure.timeout) {
+            _ = try await MySQLNIODatabaseClient.connect(timeoutPlan)
+        }
+        #expect(ContinuousClock.now - timeoutStartedAt < .seconds(2))
+
+        let cancellationPlan = MySQLDatabaseConnectionPlan(
+            host: "127.0.0.1",
+            port: port,
+            username: "reader",
+            password: "fixture-password",
+            database: "edith_lab",
+            tls: .required(verifyCertificate: false),
+            tlsServerName: nil,
+            connectTimeoutMilliseconds: 5_000)
+        let task = Task {
+            try await MySQLNIODatabaseClient.connect(cancellationPlan)
+        }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let cancellationStartedAt = ContinuousClock.now
+        task.cancel()
+        await #expect(throws: CancellationError.self) {
+            _ = try await task.value
+        }
+        #expect(ContinuousClock.now - cancellationStartedAt < .seconds(2))
     }
 }
 
@@ -739,5 +797,102 @@ private func withMySQLDatabaseStalledServer<Output: Sendable>(
         try? await server.close()
         try? await group.shutdownGracefully()
         throw error
+    }
+}
+
+private func withMySQLDatabaseHandshakeServer<Output: Sendable>(
+    receivedBytes: MySQLDatabaseFoundationByteCount,
+    _ body: @escaping @Sendable (Int) async throws -> Output
+) async throws -> Output {
+    let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+    let server: any Channel
+    do {
+        server = try await ServerBootstrap(group: group)
+            .serverChannelOption(
+                ChannelOptions.socketOption(.so_reuseaddr),
+                value: 1
+            )
+            .childChannelInitializer { channel in
+                channel.pipeline.addHandler(
+                    MySQLDatabaseFoundationHandshakeHandler(
+                        receivedBytes: receivedBytes))
+            }
+            .bind(host: "127.0.0.1", port: 0)
+            .get()
+    } catch {
+        try? await group.shutdownGracefully()
+        throw error
+    }
+    do {
+        let port = try #require(server.localAddress?.port)
+        let output = try await body(port)
+        try await server.close()
+        try await group.shutdownGracefully()
+        return output
+    } catch {
+        try? await server.close()
+        try? await group.shutdownGracefully()
+        throw error
+    }
+}
+
+private final class MySQLDatabaseFoundationByteCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var bytes = 0
+
+    var value: Int {
+        lock.withLock { bytes }
+    }
+
+    func add(_ count: Int) {
+        lock.withLock {
+            bytes += count
+        }
+    }
+}
+
+private final class MySQLDatabaseFoundationHandshakeHandler: ChannelDuplexHandler {
+    typealias InboundIn = ByteBuffer
+    typealias OutboundIn = ByteBuffer
+    typealias OutboundOut = ByteBuffer
+
+    private let receivedBytes: MySQLDatabaseFoundationByteCount
+
+    init(receivedBytes: MySQLDatabaseFoundationByteCount) {
+        self.receivedBytes = receivedBytes
+    }
+
+    func channelActive(context: ChannelHandlerContext) {
+        var payload = context.channel.allocator.buffer(capacity: 128)
+        payload.writeInteger(UInt8(10))
+        payload.writeNullTerminatedString("8.4.11")
+        payload.writeInteger(UInt32(1), endianness: .little)
+        payload.writeBytes(Array(1...8).map(UInt8.init))
+        payload.writeInteger(UInt8(0))
+        let capabilities: UInt32 = 0x0008_8201
+        payload.writeInteger(UInt16(capabilities & 0xFFFF), endianness: .little)
+        payload.writeInteger(UInt8(45))
+        payload.writeInteger(UInt16(2), endianness: .little)
+        payload.writeInteger(UInt16(capabilities >> 16), endianness: .little)
+        payload.writeInteger(UInt8(21))
+        payload.writeRepeatingByte(0, count: 10)
+        payload.writeBytes(Array(9...20).map(UInt8.init))
+        payload.writeInteger(UInt8(0))
+        payload.writeNullTerminatedString("caching_sha2_password")
+        var packet = context.channel.allocator.buffer(
+            capacity: payload.readableBytes + 4)
+        let length = payload.readableBytes
+        packet.writeInteger(UInt8(length & 0xFF))
+        packet.writeInteger(UInt8((length >> 8) & 0xFF))
+        packet.writeInteger(UInt8((length >> 16) & 0xFF))
+        packet.writeInteger(UInt8(0))
+        packet.writeBuffer(&payload)
+        context.writeAndFlush(wrapOutboundOut(packet), promise: nil)
+        context.fireChannelActive()
+    }
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        let buffer = unwrapInboundIn(data)
+        receivedBytes.add(buffer.readableBytes)
     }
 }
