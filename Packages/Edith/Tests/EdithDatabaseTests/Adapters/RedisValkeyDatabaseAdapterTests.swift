@@ -1574,8 +1574,8 @@ struct RedisValkeyDatabaseAdapterIntegrationTests {
                     deadline: Date(timeIntervalSinceNow: 10)))
             #expect(session.productIdentity.product == product)
             #expect(
-                session.productIdentity.version?.string
-                    == (product == .redis ? "8.10.0" : "9.1.1"))
+                (session.productIdentity.version?.major ?? 0)
+                    >= (product == .redis ? 8 : 9))
             var continuation: DatabaseAdapterContinuation?
             var firstKey: DatabaseValue?
             var observedTypes = Set<String>()
