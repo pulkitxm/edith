@@ -31,6 +31,14 @@ import Testing
         #expect(MainDestination.appItems == [.extensions, .settings, .about])
     }
 
+    @Test func homeItemsUseInformationArchitectureOrder() {
+        #expect(
+            MainDestination.homeItems == [
+                .home, .attention, .dashboard, .herdr, .quinjet, .music, .calendar, .system,
+                .appMaintenance, .machines, .companion,
+            ])
+    }
+
     @Test func settingsTabsUseInformationArchitectureOrder() {
         #expect(
             SettingsPane.Tab.allCases == [

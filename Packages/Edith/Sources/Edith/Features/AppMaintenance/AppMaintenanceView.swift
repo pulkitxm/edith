@@ -360,7 +360,6 @@ private enum AppMaintenanceSection: String, CaseIterable, Identifiable {
 }
 
 struct AppMaintenanceView: View {
-    @Environment(\.dismiss) private var dismiss
     @State private var model = AppMaintenanceModel()
     @State private var query = ""
     @State private var confirmingRemoval = false
@@ -410,7 +409,8 @@ struct AppMaintenanceView: View {
             Divider()
             content
         }
-        .frame(width: UIScale.pt(900), height: UIScale.pt(640))
+        .frame(minWidth: UIScale.pt(700), minHeight: UIScale.pt(520))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task { model.refresh() }
         .task(id: updateAutoRefresh) {
             guard updateAutoRefresh else { return }
@@ -473,8 +473,6 @@ struct AppMaintenanceView: View {
                         .settingsCaption()
                 }
                 Spacer()
-                Button("Done") { dismiss() }
-                    .keyboardShortcut(.defaultAction)
             }
             HStack(spacing: UIScale.pt(10)) {
                 Picker("Section", selection: $section) {

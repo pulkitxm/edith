@@ -1,6 +1,6 @@
 # Homebrew Packages
 
-The Packages section in App Maintenance provides a native, reviewable interface for formulae and casks. Enable App Maintenance in Edith's Extensions pane, verify the optional local Homebrew tool, then open App Maintenance and choose Packages.
+The Packages section in App Maintenance provides a native, reviewable interface for formulae and casks. Enable App Maintenance in Edith's Extensions pane, verify the optional local Homebrew tool, then open App Maintenance from the main sidebar and choose Packages.
 
 ## Browse and discover packages
 

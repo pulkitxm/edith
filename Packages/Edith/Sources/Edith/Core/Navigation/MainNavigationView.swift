@@ -14,8 +14,8 @@ extension EnvironmentValues {
 }
 
 enum MainDestination: String, CaseIterable, Identifiable {
-    case home, attention, dashboard, herdr, quinjet, music, calendar, system, machines, companion
-    case extensions, settings, about
+    case home, attention, dashboard, herdr, quinjet, music, calendar, system, appMaintenance
+    case machines, companion, extensions, settings, about
 
     var id: String { rawValue }
 
@@ -29,6 +29,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
         case .music: return "Music"
         case .calendar: return "Calendar"
         case .system: return "System"
+        case .appMaintenance: return "App Maintenance"
         case .machines: return "Machines"
         case .companion: return "Companion"
         case .extensions: return "Extensions"
@@ -47,6 +48,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
         case .music: return "music.note"
         case .calendar: return "calendar"
         case .system: return "cpu"
+        case .appMaintenance: return "shippingbox.and.arrow.backward"
         case .machines: return "server.rack"
         case .companion: return "brain.head.profile"
         case .extensions: return "puzzlepiece.extension"
@@ -63,8 +65,8 @@ enum MainDestination: String, CaseIterable, Identifiable {
     }
 
     static let homeItems: [MainDestination] = [
-        .home, .attention, .dashboard, .herdr, .quinjet, .music, .calendar, .system, .machines,
-        .companion,
+        .home, .attention, .dashboard, .herdr, .quinjet, .music, .calendar, .system,
+        .appMaintenance, .machines, .companion,
     ]
     static let appItems: [MainDestination] = [
         .extensions, .settings, .about,
@@ -389,6 +391,8 @@ struct MainWindowView: View {
         var attentionEnabled = false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
         var systemEnabled = false
+    @AppStorage(AppStorageKeys.AppMaintenance.enabled, store: SharedDefaults.store) private
+        var appMaintenanceEnabled = false
     @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
         var musicEnabled = false
     @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
@@ -483,6 +487,7 @@ struct MainWindowView: View {
         case .music: musicEnabled ? requested : .home
         case .calendar: calendarEnabled ? requested : .home
         case .system: systemEnabled ? requested : .home
+        case .appMaintenance: appMaintenanceEnabled ? requested : .home
         case .machines: machinesEnabled ? requested : .home
         case .companion: companionEnabled ? requested : .home
         default: requested
@@ -912,6 +917,7 @@ struct MainWindowView: View {
             case .music: musicEnabled
             case .calendar: calendarEnabled
             case .system: systemEnabled
+            case .appMaintenance: appMaintenanceEnabled
             case .machines: machinesEnabled
             case .companion: companionEnabled
             default: true
@@ -1340,6 +1346,7 @@ struct MainWindowView: View {
         case .music: MusicPage()
         case .calendar: CalendarPage()
         case .system: SystemPage()
+        case .appMaintenance: AppMaintenanceView()
         case .machines: MachinesPage()
         case .companion: CompanionPage()
         case .extensions: ExtensionsPane()

@@ -1898,7 +1898,6 @@ private struct AppMaintenanceRows: View {
     private var installDestination = AppMaintenanceInstallDestination.user.rawValue
     @AppStorage(AppStorageKeys.Homebrew.defaultKind, store: SharedDefaults.store) private
         var defaultKind = HomebrewPackageKind.formula.rawValue
-    @State private var showingMaintenance = false
 
     var body: some View {
         CLIToolStatusSection(tools: [.homebrew], extensionEnabled: enabled)
@@ -1922,13 +1921,10 @@ private struct AppMaintenanceRows: View {
                     Text(destination.title).tag(destination.rawValue)
                 }
             }
-            Button("Open App Maintenance") { showingMaintenance = true }
+            LabeledContent("Location", value: "Main sidebar")
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
-        .sheet(isPresented: $showingMaintenance) {
-            AppMaintenanceView()
-        }
     }
 }
 

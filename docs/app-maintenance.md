@@ -1,6 +1,6 @@
 # App Maintenance
 
-App Maintenance combines Homebrew package management, an App Update Center, verified single-app disk image installation, and review-first removal. Enable one extension from Edith's Extensions pane, then open its maintenance window from the extension settings.
+App Maintenance combines Homebrew package management, an App Update Center, verified single-app disk image installation, and review-first removal. Enable one extension from Edith's Extensions pane, then open App Maintenance from the main sidebar.
 
 ## Manage Homebrew packages
 
