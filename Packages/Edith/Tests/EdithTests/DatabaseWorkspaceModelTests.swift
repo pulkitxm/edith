@@ -482,6 +482,34 @@ import Testing
                 == "Resolve the active or uncertain mutation before starting another mutation.")
     }
 
+    @Test func prewriteApplyTimeoutFailsWithoutLeavingUncertainTracking() async {
+        let sender = DatabaseWorkspaceSender()
+        let preview = Self.preview(token: "prewrite-timeout-token")
+        let model = Self.model(
+            sender: sender,
+            operationIDs: [Self.operationID(32), Self.operationID(33)])
+
+        model.requestSafetyReview(for: Self.request)
+        await sender.waitUntilRequested(1)
+        await sender.succeed(Self.previewResponse(preview), at: 0)
+        await model.waitForPreview()
+        model.confirmSafetyReview(preview.requiredConfirmation.text)
+        await sender.waitUntilRequested(2)
+        await sender.fail(.timedOut, at: 1)
+        await sender.waitUntilFinished(2)
+        await Self.waitUntil {
+            model.safetyPhase
+                == .failed("The local database broker request timed out.")
+        }
+
+        #expect(
+            model.safetyPhase
+                == .failed("The local database broker request timed out."))
+        #expect(!model.hasTrackedMutation)
+        let requests = await sender.recordedRequests()
+        #expect(requests.filter { $0.kind == .mutationApply }.count == 1)
+    }
+
     @Test func expiredConfirmationCannotSendAnApply() async {
         let sender = DatabaseWorkspaceSender()
         let preview = Self.preview(token: "expired-token")
@@ -558,16 +586,17 @@ import Testing
     private static func model(
         sender: DatabaseWorkspaceSender,
         operationIDs: [DatabaseOperationID],
-        currentDate: Date = issuedAt.addingTimeInterval(30)
+        currentDate: Date? = nil
     ) -> DatabaseWorkspaceModel {
         let sequence = DatabaseOperationIDSequence(operationIDs)
+        let resolvedCurrentDate = currentDate ?? issuedAt.addingTimeInterval(30)
         return DatabaseWorkspaceModel(
             sender: sender,
             makeOperationID: { sequence.next() },
             makeSessionID: {
                 UUID(uuidString: "BF471404-90F0-4E37-A080-F4132E14BB6E")!
             },
-            currentDate: { currentDate })
+            currentDate: { resolvedCurrentDate })
     }
 
     private static func operationID(_ value: UInt8) -> DatabaseOperationID {
@@ -578,9 +607,10 @@ import Testing
 
     private static func preview(
         token: String = "preview-token",
-        issuedAt: Date = issuedAt
+        issuedAt: Date? = nil
     ) -> DatabaseDestructivePreview {
-        DatabaseDestructivePreview(
+        let resolvedIssuedAt = issuedAt ?? Self.issuedAt
+        return DatabaseDestructivePreview(
             effect: DatabaseDestructiveEffect(
                 action: .deleteMany,
                 connection: connection,
@@ -618,8 +648,8 @@ import Testing
             requiredConfirmation: DatabaseRequiredConfirmation(
                 strength: .connectionAndTarget,
                 text: "Primary orders invoices"),
-            issuedAt: issuedAt,
-            expiresAt: issuedAt.addingTimeInterval(60),
+            issuedAt: resolvedIssuedAt,
+            expiresAt: resolvedIssuedAt.addingTimeInterval(60),
             token: DatabaseConfirmationToken(rawValue: token))
     }
 
