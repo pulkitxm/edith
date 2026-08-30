@@ -70,6 +70,11 @@ public enum HerdrTerminalBridgeRecord: Equatable, Sendable {
     case ignored
 }
 
+public enum HerdrTerminalScrollDirection: String, Sendable {
+    case up
+    case down
+}
+
 public enum HerdrTerminalBridge {
     public static let startSequence = Data(
         "\u{1B}[?1049h\u{1B}[?1006l\u{1B}[?1016l\u{1B}[?1015l\u{1B}[?1005l\u{1B}[?1003l\u{1B}[?1002l\u{1B}[?1000l\u{1B}[?1000h\u{1B}[?1002h\u{1B}[?1003h\u{1B}[?1006h\u{1B}[?1004h\u{1B}[?2004h\u{1B}[?7l"
@@ -121,6 +126,21 @@ public enum HerdrTerminalBridge {
         try command([
             "type": "terminal.input",
             "bytes": bytes.base64EncodedString(),
+        ])
+    }
+
+    public static func scrollCommand(
+        direction: HerdrTerminalScrollDirection, lines: UInt16, column: UInt16, row: UInt16,
+        modifiers: UInt8
+    ) throws -> Data {
+        try command([
+            "type": "terminal.scroll",
+            "direction": direction.rawValue,
+            "lines": lines,
+            "source": "wheel",
+            "column": column,
+            "row": row,
+            "modifiers": modifiers,
         ])
     }
 

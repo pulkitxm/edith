@@ -143,6 +143,20 @@ import Testing
         #expect(object["bytes"] == bytes.base64EncodedString())
     }
 
+    @Test func bridgeProtocolEncodesWheelScrolls() throws {
+        let command = try HerdrTerminalBridge.scrollCommand(
+            direction: .down, lines: 3, column: 10, row: 5, modifiers: 7)
+        let object = try #require(
+            JSONSerialization.jsonObject(with: command) as? [String: Any])
+        #expect(object["type"] as? String == "terminal.scroll")
+        #expect(object["direction"] as? String == "down")
+        #expect(object["source"] as? String == "wheel")
+        #expect(object["lines"] as? Int == 3)
+        #expect(object["column"] as? Int == 10)
+        #expect(object["row"] as? Int == 5)
+        #expect(object["modifiers"] as? Int == 7)
+    }
+
     @Test func bridgeEnablesHoverAndButtonMouseReporting() {
         let start = String(decoding: HerdrTerminalBridge.startSequence, as: UTF8.self)
         let stop = String(decoding: HerdrTerminalBridge.stopSequence, as: UTF8.self)

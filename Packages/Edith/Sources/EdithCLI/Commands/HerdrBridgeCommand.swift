@@ -70,6 +70,109 @@ enum HerdrTerminalStream {
     }
 }
 
+struct HerdrTerminalInputRouter {
+    private enum Report {
+        case incomplete
+        case input
+        case scroll(
+            direction: HerdrTerminalScrollDirection, column: UInt16, row: UInt16,
+            modifiers: UInt8, length: Int)
+    }
+
+    private var pending = Data()
+
+    mutating func commands(for data: Data) throws -> [Data] {
+        pending.append(data)
+        let bytes = [UInt8](pending)
+        var commands: [Data] = []
+        var inputStart = 0
+        var offset = 0
+
+        while offset < bytes.count {
+            guard isMousePrefix(bytes, at: offset) else {
+                offset += 1
+                continue
+            }
+            switch report(bytes, at: offset) {
+            case .incomplete:
+                if inputStart < offset {
+                    commands.append(
+                        try HerdrTerminalBridge.inputCommand(Data(bytes[inputStart..<offset])))
+                }
+                pending = Data(bytes[offset...])
+                return commands
+            case .input:
+                offset += 1
+            case let .scroll(direction, column, row, modifiers, length):
+                if inputStart < offset {
+                    commands.append(
+                        try HerdrTerminalBridge.inputCommand(Data(bytes[inputStart..<offset])))
+                }
+                commands.append(
+                    try HerdrTerminalBridge.scrollCommand(
+                        direction: direction, lines: 3, column: column, row: row,
+                        modifiers: modifiers))
+                offset += length
+                inputStart = offset
+            }
+        }
+
+        if inputStart < bytes.count {
+            commands.append(try HerdrTerminalBridge.inputCommand(Data(bytes[inputStart...])))
+        }
+        pending.removeAll(keepingCapacity: true)
+        return commands
+    }
+
+    mutating func finish() throws -> [Data] {
+        guard !pending.isEmpty else { return [] }
+        let command = try HerdrTerminalBridge.inputCommand(pending)
+        pending.removeAll(keepingCapacity: true)
+        return [command]
+    }
+
+    private func isMousePrefix(_ bytes: [UInt8], at offset: Int) -> Bool {
+        bytes.count - offset >= 3
+            && bytes[offset] == 0x1B && bytes[offset + 1] == 0x5B && bytes[offset + 2] == 0x3C
+    }
+
+    private func report(_ bytes: [UInt8], at offset: Int) -> Report {
+        var end = offset + 3
+        while end < bytes.count {
+            let byte = bytes[end]
+            if byte == 0x4D || byte == 0x6D {
+                return parsedReport(Array(bytes[(offset + 3)..<end]), length: end - offset + 1)
+            }
+            guard byte == 0x3B || (0x30...0x39).contains(byte) else { return .input }
+            end += 1
+        }
+        return .incomplete
+    }
+
+    private func parsedReport(_ payload: [UInt8], length: Int) -> Report {
+        let parts = String(decoding: payload, as: UTF8.self).split(
+            separator: ";", omittingEmptySubsequences: false)
+        guard parts.count == 3, let button = UInt8(parts[0]),
+            let oneBasedColumn = UInt16(parts[1]), let oneBasedRow = UInt16(parts[2]),
+            oneBasedColumn > 0, oneBasedRow > 0
+        else { return .input }
+        let buttonNumber = (button & 0b0000_0011) | ((button & 0b1100_0000) >> 4)
+        let direction: HerdrTerminalScrollDirection
+        switch buttonNumber {
+        case 4: direction = .up
+        case 5: direction = .down
+        default: return .input
+        }
+        var modifiers: UInt8 = 0
+        if button & 0b0000_0100 != 0 { modifiers |= 1 }
+        if button & 0b0000_1000 != 0 { modifiers |= 4 }
+        if button & 0b0001_0000 != 0 { modifiers |= 2 }
+        return .scroll(
+            direction: direction, column: oneBasedColumn - 1, row: oneBasedRow - 1,
+            modifiers: modifiers, length: length)
+    }
+}
+
 private final class HerdrRawTerminal {
     private var original = termios()
     private var configured = false
@@ -149,11 +252,16 @@ private final class HerdrTerminalBridgeRuntime {
 
     private func startInputForwarding(writer: HerdrTerminalWriter) {
         DispatchQueue.global(qos: .userInteractive).async { [input] in
+            var router = HerdrTerminalInputRouter()
             while true {
                 let bytes = HerdrTerminalStream.read(from: input)
-                guard !bytes.isEmpty else { return }
-                guard let command = try? HerdrTerminalBridge.inputCommand(bytes) else { return }
-                writer.send(command)
+                guard !bytes.isEmpty else {
+                    guard let commands = try? router.finish() else { return }
+                    commands.forEach(writer.send)
+                    return
+                }
+                guard let commands = try? router.commands(for: bytes) else { return }
+                commands.forEach(writer.send)
             }
         }
     }

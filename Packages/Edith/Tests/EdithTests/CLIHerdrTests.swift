@@ -40,6 +40,51 @@ private final class HerdrPipeReadBox: @unchecked Sendable {
         try pipe.fileHandleForReading.close()
     }
 
+    @Test func bridgeRoutesWheelReportsWithoutChangingOtherInput() throws {
+        var router = HerdrTerminalInputRouter()
+        let hover = Data("\u{1B}[<35;11;6M".utf8)
+        let click = Data("\u{1B}[<0;11;6M".utf8)
+        let wheel = Data("\u{1B}[<92;11;6M".utf8)
+        let commands = try router.commands(for: hover + click + wheel + Data("x".utf8))
+
+        #expect(commands.count == 3)
+        let leading = try object(commands[0])
+        #expect(leading["type"] as? String == "terminal.input")
+        #expect(
+            Data(base64Encoded: try #require(leading["bytes"] as? String)) == hover + click)
+        let scroll = try object(commands[1])
+        #expect(scroll["type"] as? String == "terminal.scroll")
+        #expect(scroll["direction"] as? String == "up")
+        #expect(scroll["lines"] as? Int == 3)
+        #expect(scroll["column"] as? Int == 10)
+        #expect(scroll["row"] as? Int == 5)
+        #expect(scroll["modifiers"] as? Int == 7)
+        let trailing = try object(commands[2])
+        #expect(Data(base64Encoded: try #require(trailing["bytes"] as? String)) == Data("x".utf8))
+    }
+
+    @Test func bridgeReassemblesWheelReportsAcrossReads() throws {
+        var router = HerdrTerminalInputRouter()
+        let first = try router.commands(for: Data("a\u{1B}[<65;12".utf8))
+        #expect(first.count == 1)
+        let firstObject = try object(first[0])
+        #expect(
+            Data(base64Encoded: try #require(firstObject["bytes"] as? String)) == Data("a".utf8))
+
+        let second = try router.commands(for: Data(";7Mb".utf8))
+        #expect(second.count == 2)
+        let scroll = try object(second[0])
+        #expect(scroll["direction"] as? String == "down")
+        #expect(scroll["column"] as? Int == 11)
+        #expect(scroll["row"] as? Int == 6)
+        let trailing = try object(second[1])
+        #expect(Data(base64Encoded: try #require(trailing["bytes"] as? String)) == Data("b".utf8))
+    }
+
+    private func object(_ command: Data) throws -> [String: Any] {
+        try #require(JSONSerialization.jsonObject(with: command) as? [String: Any])
+    }
+
     @Test func listingWithoutHerdrIsStillSuccess() async {
         let result = await CLIProbe.run(["herdr", "ls", "--json"])
         #expect(result.code == 0)
