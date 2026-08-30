@@ -90,17 +90,18 @@ struct HomebrewMaintenanceView: View {
 
     @ViewBuilder
     private var filterBar: some View {
-        if compact {
-            VStack(alignment: .leading, spacing: 10) {
-                filters
-                actions
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-        } else {
+        ViewThatFits(in: .horizontal) {
             HStack(spacing: 20) {
                 filters
+                    .fixedSize(horizontal: true, vertical: false)
+                    .layoutPriority(1)
                 Spacer(minLength: 12)
                 actions
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                compactFilters
+                actions
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
     }
@@ -118,10 +119,26 @@ struct HomebrewMaintenanceView: View {
         }
     }
 
+    private var compactFilters: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                filterLabel("Package")
+                    .frame(width: 52, alignment: .leading)
+                kindPicker
+            }
+            HStack(spacing: 8) {
+                filterLabel("View")
+                    .frame(width: 52, alignment: .leading)
+                modePicker
+            }
+        }
+    }
+
     private func filterLabel(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(.secondary)
+            .fixedSize()
     }
 
     private var kindPicker: some View {
