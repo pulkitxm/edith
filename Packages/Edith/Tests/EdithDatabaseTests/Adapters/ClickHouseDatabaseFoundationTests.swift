@@ -349,7 +349,7 @@ func clickHouseFoundationLiveCancellationLeavesTransportReusable() async throws 
     let transport = try ClickHouseDatabaseHTTPTransport(plan: plan)
     let query = Task {
         try await transport.execute(
-            query: "SELECT sleep(5) FORMAT JSONEachRow",
+            query: "SELECT sleep(2) FORMAT JSONEachRow",
             maximumResponseBytes: 4_096)
     }
     try await Task.sleep(nanoseconds: 100_000_000)
@@ -357,6 +357,31 @@ func clickHouseFoundationLiveCancellationLeavesTransportReusable() async throws 
     query.cancel()
     await #expect(throws: CancellationError.self) {
         _ = try await query.value
+    }
+    #expect(ContinuousClock.now - startedAt < .seconds(2))
+    let response = try await transport.execute(
+        query: "SELECT 1 AS value FORMAT JSONEachRow",
+        maximumResponseBytes: 4_096)
+    #expect(response.body == Data("{\"value\":1}\n".utf8))
+    await transport.close()
+}
+
+@Test(.enabled(if: ClickHouseDatabaseLiveEnvironment.isEnabled))
+func clickHouseFoundationLiveTimeoutLeavesTransportReusable() async throws {
+    let plan = try ClickHouseDatabaseLiveEnvironment.plan(
+        timeoutMilliseconds: 200)
+    let transport = try ClickHouseDatabaseHTTPTransport(plan: plan)
+    let startedAt = ContinuousClock.now
+    do {
+        _ = try await transport.execute(
+            query: "SELECT sleep(2) FORMAT JSONEachRow",
+            maximumResponseBytes: 4_096)
+        Issue.record("expected timeout")
+    } catch let error as URLError {
+        #expect(error.code == .timedOut)
+        #expect(ClickHouseDatabaseDriverErrorClassifier.classify(error.code) == .timeout)
+    } catch {
+        Issue.record("unexpected timeout failure type")
     }
     #expect(ContinuousClock.now - startedAt < .seconds(2))
     let response = try await transport.execute(
