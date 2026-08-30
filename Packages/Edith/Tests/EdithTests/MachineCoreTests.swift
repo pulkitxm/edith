@@ -104,14 +104,28 @@ import Testing
 }
 
 @Suite struct SSHConnectionPlatformTests {
-    @Test func supportsMacOSAndLinux() {
+    @Test func supportsMacOSLinuxAndWindows() {
         #expect(SSHConnection.supportsPlatform("Darwin"))
         #expect(SSHConnection.supportsPlatform("Linux"))
+        #expect(SSHConnection.supportsPlatform("Windows_NT"))
     }
 
     @Test func rejectsUnknownRemotePlatforms() {
         #expect(!SSHConnection.supportsPlatform("FreeBSD"))
         #expect(!SSHConnection.supportsPlatform(""))
+    }
+}
+
+@Suite struct PowerShellTests {
+    @Test func quotesLiteralValues() {
+        #expect(PowerShell.literal("C:\\Users\\O'Brien") == "'C:\\Users\\O''Brien'")
+    }
+
+    @Test func encodesCommandsAsUTF16LE() throws {
+        let command = PowerShell.command("Write-Output 'hello'")
+        let encoded = try #require(command.split(separator: " ").last)
+        let data = try #require(Data(base64Encoded: String(encoded)))
+        #expect(String(data: data, encoding: .utf16LittleEndian) == "Write-Output 'hello'")
     }
 }
 

@@ -105,6 +105,7 @@ public actor SSHConnection {
         label: "com.pulkit.edith.process-timeout", qos: .userInitiated)
 
     public let machine: Machine
+    public private(set) var remotePlatform: RemoteMachinePlatform?
 
     private var masterProcess: Process?
     private let socketPath: String
@@ -179,25 +180,36 @@ public actor SSHConnection {
     }
 
     private func validatePlatform() async throws {
-        let result = try await run("uname -s", timeout: 10)
-        let name = result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard result.succeeded, Self.supportsPlatform(name) else {
+        let unixResult = try await run("uname -s", timeout: 10)
+        var platform = unixResult.succeeded
+            ? RemoteMachinePlatform.unixName(unixResult.stdoutText) : nil
+        if platform == nil {
+            let windowsResult = try await run(
+                PowerShell.command("[Console]::Out.Write($env:OS)"), timeout: 10)
+            if windowsResult.succeeded {
+                platform = RemoteMachinePlatform.windowsName(windowsResult.stdoutText)
+            }
+        }
+        guard let platform else {
             await disconnect()
             throw SSHConnectionError.connectFailed(
                 SSHConnectFailure(
-                    message: "Edith supports remote macOS and Linux machines.",
+                    message: "Edith supports remote macOS, Linux and Windows machines.",
                     isRecoverable: false))
         }
+        remotePlatform = platform
     }
 
     nonisolated static func supportsPlatform(_ name: String) -> Bool {
-        name == "Darwin" || name == "Linux"
+        RemoteMachinePlatform.unixName(name) != nil
+            || RemoteMachinePlatform.windowsName(name) != nil
     }
 
     public func disconnect() async {
         _ = try? await runControl(["-O", "exit"])
         masterProcess?.terminate()
         masterProcess = nil
+        remotePlatform = nil
         try? FileManager.default.removeItem(atPath: socketPath)
     }
 
