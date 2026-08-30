@@ -19,6 +19,7 @@ let dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/groue/GRDB.swift", from: "7.11.1"),
     .package(url: "https://github.com/swift-server/RediStack.git", exact: "1.6.3"),
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.43.0"),
+    .package(url: "https://github.com/orlandos-nl/MongoKitten.git", from: "7.16.3"),
 ]
 
 let targets: [Target] = [
@@ -39,6 +40,9 @@ let targets: [Target] = [
             .product(name: "RediStack", package: "RediStack"),
             .product(name: "NIOCore", package: "swift-nio"),
             .product(name: "NIOPosix", package: "swift-nio"),
+            .product(name: "MongoKitten", package: "MongoKitten"),
+            .product(name: "MongoClient", package: "MongoKitten"),
+            .product(name: "MongoCore", package: "MongoKitten"),
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
@@ -49,6 +53,9 @@ let targets: [Target] = [
             .product(name: "RediStack", package: "RediStack"),
             .product(name: "NIOCore", package: "swift-nio"),
             .product(name: "NIOPosix", package: "swift-nio"),
+            .product(name: "MongoKitten", package: "MongoKitten"),
+            .product(name: "MongoClient", package: "MongoKitten"),
+            .product(name: "MongoCore", package: "MongoKitten"),
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
