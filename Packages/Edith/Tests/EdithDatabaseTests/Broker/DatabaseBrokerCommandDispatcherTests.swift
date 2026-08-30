@@ -78,6 +78,8 @@ private enum DatabaseBrokerCommandDispatcherFixtures {
         rawValue: UUID(uuidString: "6F58F511-A655-48DB-85E0-A521DA9A5E4A")!)
     static let otherOperationID = DatabaseOperationID(
         rawValue: UUID(uuidString: "EAFB52F5-5DD3-46EF-8D3C-1312828214FE")!)
+    static let savedQueryID = DatabaseSavedQueryID(
+        rawValue: UUID(uuidString: "093740D1-C984-48BA-A59F-56F2E1117326")!)
     static let metadata = DatabaseResultMetadata(
         completeness: DatabaseResultCompleteness(state: .complete))
     static let error = DatabaseErrorEnvelope(
@@ -88,6 +90,18 @@ private enum DatabaseBrokerCommandDispatcherFixtures {
         DatabaseOperationContext(
             operationID: operationID,
             deadline: Date(timeIntervalSince1970: 1_900_000_000))
+    }
+
+    static var savedQuery: DatabaseSavedQuery {
+        DatabaseSavedQuery(
+            id: savedQueryID,
+            connectionID: DatabaseConnectionFixtures.connectionID,
+            name: "Recent invoices",
+            language: .sql,
+            text: "SELECT * FROM invoices ORDER BY created_at DESC",
+            tags: ["billing"],
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_100))
     }
 
     static var mutation: DatabaseDestructiveRequest {
@@ -120,6 +134,28 @@ private enum DatabaseBrokerCommandDispatcherFixtures {
                 DatabaseConnectionTestRequest(
                     connection: try DatabaseConnectionFixtures.connectionDefinition(),
                     operation: operation)),
+            .connectionList(DatabaseConnectionListRequest()),
+            .connectionGet(
+                DatabaseConnectionGetRequest(
+                    connectionID: DatabaseConnectionFixtures.connectionID)),
+            .connectionSave(
+                DatabaseConnectionSaveRequest(
+                    connection: try DatabaseConnectionFixtures.connectionDefinition())),
+            .connectionEdit(
+                DatabaseConnectionEditRequest(
+                    connectionID: DatabaseConnectionFixtures.connectionID,
+                    connection: try DatabaseConnectionFixtures.connectionDefinition())),
+            .connectionDuplicate(
+                DatabaseConnectionDuplicateRequest(
+                    connectionID: DatabaseConnectionFixtures.connectionID,
+                    displayName: "Orders copy")),
+            .connectionRename(
+                DatabaseConnectionRenameRequest(
+                    connectionID: DatabaseConnectionFixtures.connectionID,
+                    displayName: "Orders primary")),
+            .connectionDelete(
+                DatabaseConnectionDeleteRequest(
+                    connectionID: DatabaseConnectionFixtures.connectionID)),
             .capabilities(
                 DatabaseCapabilitiesRequest(
                     connectionID: DatabaseConnectionFixtures.connectionID,
@@ -145,6 +181,21 @@ private enum DatabaseBrokerCommandDispatcherFixtures {
                     token: DatabaseConfirmationToken(rawValue: "payload.signature"),
                     confirmationText: "Orders invoices",
                     operation: operation)),
+            .savedQueryList(DatabaseSavedQueryListRequest()),
+            .savedQueryGet(
+                DatabaseSavedQueryGetRequest(queryID: savedQueryID)),
+            .savedQuerySave(
+                DatabaseSavedQuerySaveRequest(query: savedQuery)),
+            .savedQueryDuplicate(
+                DatabaseSavedQueryDuplicateRequest(
+                    queryID: savedQueryID,
+                    name: "Recent invoices copy")),
+            .savedQueryRename(
+                DatabaseSavedQueryRenameRequest(
+                    queryID: savedQueryID,
+                    name: "Latest invoices")),
+            .savedQueryDelete(
+                DatabaseSavedQueryDeleteRequest(queryID: savedQueryID)),
             .operationGet(
                 DatabaseOperationGetRequest(operationID: operationID)),
             .operationList(DatabaseOperationListRequest()),
@@ -220,6 +271,55 @@ private actor DatabaseBrokerCommandDispatcherTestHandler: DatabaseBrokerCommandH
         return DatabaseBrokerCommandDispatcherFixtures.failure()
     }
 
+    func connectionList(
+        _ request: DatabaseConnectionListRequest
+    ) async throws -> DatabaseCommandResult<DatabaseConnectionListResult> {
+        recordedRequests.append(.connectionList(request))
+        return DatabaseBrokerCommandDispatcherFixtures.failure()
+    }
+
+    func connectionGet(
+        _ request: DatabaseConnectionGetRequest
+    ) async throws -> DatabaseCommandResult<DatabaseConnectionGetResult> {
+        recordedRequests.append(.connectionGet(request))
+        return DatabaseBrokerCommandDispatcherFixtures.failure()
+    }
+
+    func connectionSave(
+        _ request: DatabaseConnectionSaveRequest
+    ) async throws -> DatabaseCommandResult<DatabaseConnectionSaveResult> {
+        recordedRequests.append(.connectionSave(request))
+        return DatabaseBrokerCommandDispatcherFixtures.failure()
+    }
+
+    func connectionEdit(
+        _ request: DatabaseConnectionEditRequest
+    ) async throws -> DatabaseCommandResult<DatabaseConnectionEditResult> {
+        recordedRequests.append(.connectionEdit(request))
+        return DatabaseBrokerCommandDispatcherFixtures.failure()
+    }
+
+    func connectionDuplicate(
+        _ request: DatabaseConnectionDuplicateRequest
+    ) async throws -> DatabaseCommandResult<DatabaseConnectionDuplicateResult> {
+        recordedRequests.append(.connectionDuplicate(request))
+        return DatabaseBrokerCommandDispatcherFixtures.failure()
+    }
+
+    func connectionRename(
+        _ request: DatabaseConnectionRenameRequest
+    ) async throws -> DatabaseCommandResult<DatabaseConnectionRenameResult> {
+        recordedRequests.append(.connectionRename(request))
+        return DatabaseBrokerCommandDispatcherFixtures.failure()
+    }
+
+    func connectionDelete(
+        _ request: DatabaseConnectionDeleteRequest
+    ) async throws -> DatabaseCommandResult<DatabaseConnectionDeleteResult> {
+        recordedRequests.append(.connectionDelete(request))
+        return DatabaseBrokerCommandDispatcherFixtures.failure()
+    }
+
     func capabilities(
         _ request: DatabaseCapabilitiesRequest
     ) async throws -> DatabaseCommandResult<DatabaseCapabilitiesResult> {
@@ -252,6 +352,48 @@ private actor DatabaseBrokerCommandDispatcherTestHandler: DatabaseBrokerCommandH
         _ request: DatabaseMutationApplyRequest
     ) async throws -> DatabaseCommandResult<DatabaseMutationApplyResult> {
         recordedRequests.append(.mutationApply(request))
+        return DatabaseBrokerCommandDispatcherFixtures.failure()
+    }
+
+    func savedQueryList(
+        _ request: DatabaseSavedQueryListRequest
+    ) async throws -> DatabaseCommandResult<DatabaseSavedQueryListResult> {
+        recordedRequests.append(.savedQueryList(request))
+        return DatabaseBrokerCommandDispatcherFixtures.failure()
+    }
+
+    func savedQueryGet(
+        _ request: DatabaseSavedQueryGetRequest
+    ) async throws -> DatabaseCommandResult<DatabaseSavedQueryGetResult> {
+        recordedRequests.append(.savedQueryGet(request))
+        return DatabaseBrokerCommandDispatcherFixtures.failure()
+    }
+
+    func savedQuerySave(
+        _ request: DatabaseSavedQuerySaveRequest
+    ) async throws -> DatabaseCommandResult<DatabaseSavedQuerySaveResult> {
+        recordedRequests.append(.savedQuerySave(request))
+        return DatabaseBrokerCommandDispatcherFixtures.failure()
+    }
+
+    func savedQueryDuplicate(
+        _ request: DatabaseSavedQueryDuplicateRequest
+    ) async throws -> DatabaseCommandResult<DatabaseSavedQueryDuplicateResult> {
+        recordedRequests.append(.savedQueryDuplicate(request))
+        return DatabaseBrokerCommandDispatcherFixtures.failure()
+    }
+
+    func savedQueryRename(
+        _ request: DatabaseSavedQueryRenameRequest
+    ) async throws -> DatabaseCommandResult<DatabaseSavedQueryRenameResult> {
+        recordedRequests.append(.savedQueryRename(request))
+        return DatabaseBrokerCommandDispatcherFixtures.failure()
+    }
+
+    func savedQueryDelete(
+        _ request: DatabaseSavedQueryDeleteRequest
+    ) async throws -> DatabaseCommandResult<DatabaseSavedQueryDeleteResult> {
+        recordedRequests.append(.savedQueryDelete(request))
         return DatabaseBrokerCommandDispatcherFixtures.failure()
     }
 

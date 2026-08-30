@@ -9,17 +9,50 @@ private enum DatabaseBrokerCommandContractFixtures {
         rawValue: UUID(uuidString: "91CC07D1-3700-493E-9DA2-340502824275")!)
     static let otherOperationID = DatabaseOperationID(
         rawValue: UUID(uuidString: "E850A6BE-4EE4-44A9-9F65-412CA67DC4F7")!)
+    static let savedQueryID = DatabaseSavedQueryID(
+        rawValue: UUID(uuidString: "A4E65471-F5C7-42DD-8114-9E58D8049DFE")!)
+    static let secretReference = DatabaseSecretReference(
+        identifier: UUID(uuidString: "DEABF1B2-F9F1-47E0-98D7-B3B900375436")!,
+        purpose: .password)
 
     static let metadata = DatabaseResultMetadata(
         completeness: DatabaseResultCompleteness(state: .complete))
     static let error = DatabaseErrorEnvelope(
         category: .unsupported,
         message: "fixture failure")
+    static let managementKinds: Set<DatabaseBrokerCommandKind> = [
+        .connectionList,
+        .connectionGet,
+        .connectionSave,
+        .connectionEdit,
+        .connectionDuplicate,
+        .connectionRename,
+        .connectionDelete,
+        .savedQueryList,
+        .savedQueryGet,
+        .savedQuerySave,
+        .savedQueryDuplicate,
+        .savedQueryRename,
+        .savedQueryDelete,
+    ]
 
     static var operation: DatabaseOperationContext {
         DatabaseOperationContext(
             operationID: operationID,
             deadline: Date(timeIntervalSince1970: 1_900_000_000))
+    }
+
+    static var savedQuery: DatabaseSavedQuery {
+        DatabaseSavedQuery(
+            id: savedQueryID,
+            connectionID: DatabaseConnectionFixtures.connectionID,
+            name: "Recent invoices",
+            language: .sql,
+            text: "SELECT * FROM invoices ORDER BY created_at DESC",
+            tags: ["billing", "recent"],
+            isFavorite: true,
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_100))
     }
 
     static var mutation: DatabaseDestructiveRequest {
@@ -52,6 +85,33 @@ private enum DatabaseBrokerCommandContractFixtures {
                 DatabaseConnectionTestRequest(
                     connection: try DatabaseConnectionFixtures.connectionDefinition(),
                     operation: operation)),
+            .connectionList(
+                DatabaseConnectionListRequest(
+                    search: DatabaseConnectionSearch(
+                        text: "orders",
+                        products: [.postgresql],
+                        favoritesOnly: true))),
+            .connectionGet(
+                DatabaseConnectionGetRequest(
+                    connectionID: DatabaseConnectionFixtures.connectionID)),
+            .connectionSave(
+                DatabaseConnectionSaveRequest(
+                    connection: try DatabaseConnectionFixtures.connectionDefinition())),
+            .connectionEdit(
+                DatabaseConnectionEditRequest(
+                    connectionID: DatabaseConnectionFixtures.connectionID,
+                    connection: try DatabaseConnectionFixtures.connectionDefinition())),
+            .connectionDuplicate(
+                DatabaseConnectionDuplicateRequest(
+                    connectionID: DatabaseConnectionFixtures.connectionID,
+                    displayName: "Orders copy")),
+            .connectionRename(
+                DatabaseConnectionRenameRequest(
+                    connectionID: DatabaseConnectionFixtures.connectionID,
+                    displayName: "Orders primary")),
+            .connectionDelete(
+                DatabaseConnectionDeleteRequest(
+                    connectionID: DatabaseConnectionFixtures.connectionID)),
             .capabilities(
                 DatabaseCapabilitiesRequest(
                     connectionID: DatabaseConnectionFixtures.connectionID,
@@ -85,6 +145,26 @@ private enum DatabaseBrokerCommandContractFixtures {
                     token: DatabaseConfirmationToken(rawValue: "payload.signature"),
                     confirmationText: "Orders invoices",
                     operation: operation)),
+            .savedQueryList(
+                DatabaseSavedQueryListRequest(
+                    search: DatabaseSavedQuerySearch(
+                        connectionID: DatabaseConnectionFixtures.connectionID,
+                        languages: [.sql],
+                        favoritesOnly: true))),
+            .savedQueryGet(
+                DatabaseSavedQueryGetRequest(queryID: savedQueryID)),
+            .savedQuerySave(
+                DatabaseSavedQuerySaveRequest(query: savedQuery)),
+            .savedQueryDuplicate(
+                DatabaseSavedQueryDuplicateRequest(
+                    queryID: savedQueryID,
+                    name: "Recent invoices copy")),
+            .savedQueryRename(
+                DatabaseSavedQueryRenameRequest(
+                    queryID: savedQueryID,
+                    name: "Latest invoices")),
+            .savedQueryDelete(
+                DatabaseSavedQueryDeleteRequest(queryID: savedQueryID)),
             .operationGet(
                 DatabaseOperationGetRequest(operationID: operationID)),
             .operationList(
@@ -113,6 +193,53 @@ private enum DatabaseBrokerCommandContractFixtures {
         case .connectionTest:
             try request.response(
                 failure() as DatabaseCommandResult<DatabaseConnectionTestResult>)
+        case .connectionList:
+            try request.response(
+                .success(
+                    DatabaseConnectionListResult(
+                        connections: [try DatabaseConnectionFixtures.connectionDefinition()]),
+                    metadata: metadata))
+        case .connectionGet:
+            try request.response(
+                .success(
+                    DatabaseConnectionGetResult(
+                        connection: try DatabaseConnectionFixtures.connectionDefinition()),
+                    metadata: metadata))
+        case .connectionSave:
+            try request.response(
+                .success(
+                    DatabaseConnectionSaveResult(
+                        connection: try DatabaseConnectionFixtures.connectionDefinition()),
+                    metadata: metadata))
+        case .connectionEdit:
+            try request.response(
+                .success(
+                    DatabaseConnectionEditResult(
+                        connection: try DatabaseConnectionFixtures.connectionDefinition()),
+                    metadata: metadata))
+        case .connectionDuplicate:
+            try request.response(
+                .success(
+                    DatabaseConnectionDuplicateResult(
+                        sourceConnectionID: DatabaseConnectionFixtures.connectionID,
+                        connection: try DatabaseConnectionFixtures.connectionDefinition(),
+                        sharesCredentials: true,
+                        sharedCredentialReferences: [secretReference]),
+                    metadata: metadata))
+        case .connectionRename:
+            try request.response(
+                .success(
+                    DatabaseConnectionRenameResult(
+                        connection: try DatabaseConnectionFixtures.connectionDefinition()),
+                    metadata: metadata))
+        case .connectionDelete:
+            try request.response(
+                .success(
+                    DatabaseConnectionDeleteResult(
+                        connectionID: DatabaseConnectionFixtures.connectionID,
+                        deleted: true,
+                        disconnected: true),
+                    metadata: metadata))
         case .capabilities:
             try request.response(
                 failure() as DatabaseCommandResult<DatabaseCapabilitiesResult>)
@@ -128,6 +255,40 @@ private enum DatabaseBrokerCommandContractFixtures {
         case .mutationApply:
             try request.response(
                 failure() as DatabaseCommandResult<DatabaseMutationApplyResult>)
+        case .savedQueryList:
+            try request.response(
+                .success(
+                    DatabaseSavedQueryListResult(queries: [savedQuery]),
+                    metadata: metadata))
+        case .savedQueryGet:
+            try request.response(
+                .success(
+                    DatabaseSavedQueryGetResult(query: savedQuery),
+                    metadata: metadata))
+        case .savedQuerySave:
+            try request.response(
+                .success(
+                    DatabaseSavedQuerySaveResult(query: savedQuery, created: true),
+                    metadata: metadata))
+        case .savedQueryDuplicate:
+            try request.response(
+                .success(
+                    DatabaseSavedQueryDuplicateResult(
+                        sourceQueryID: savedQueryID,
+                        query: savedQuery),
+                    metadata: metadata))
+        case .savedQueryRename:
+            try request.response(
+                .success(
+                    DatabaseSavedQueryRenameResult(query: savedQuery),
+                    metadata: metadata))
+        case .savedQueryDelete:
+            try request.response(
+                .success(
+                    DatabaseSavedQueryDeleteResult(
+                        queryID: savedQueryID,
+                        deleted: true),
+                    metadata: metadata))
         case .operationGet:
             try request.response(
                 failure() as DatabaseCommandResult<DatabaseOperationGetResult>)
@@ -269,6 +430,38 @@ struct DatabaseBrokerCommandContractsTests {
         #expect(requests.map(\.kind) == DatabaseBrokerCommandKind.allCases)
     }
 
+    @Test func managementDiscriminatorsAreStableAndCarryNoOperationIdentity() throws {
+        let requests = try DatabaseBrokerCommandContractFixtures.requests().filter {
+            DatabaseBrokerCommandContractFixtures.managementKinds.contains($0.kind)
+        }
+
+        #expect(
+            requests.map { $0.kind.rawValue }
+                == [
+                    "database.connection.list",
+                    "database.connection.get",
+                    "database.connection.save",
+                    "database.connection.edit",
+                    "database.connection.duplicate",
+                    "database.connection.rename",
+                    "database.connection.delete",
+                    "database.saved-query.list",
+                    "database.saved-query.get",
+                    "database.saved-query.save",
+                    "database.saved-query.duplicate",
+                    "database.saved-query.rename",
+                    "database.saved-query.delete",
+                ])
+        for (index, request) in requests.enumerated() {
+            let envelope = request.envelope(
+                requestID: DatabaseBrokerCommandContractFixtures.requestIdentifier(index),
+                sequence: UInt64(index))
+            #expect(request.operationID == nil)
+            #expect(envelope.operationID == nil)
+            try DatabaseBrokerCommandEnvelopeValidator.validate(envelope)
+        }
+    }
+
     @Test func everyResponseRoundTripsAgainstItsMatchingRequest() throws {
         let exchanges = try DatabaseBrokerCommandContractFixtures.exchanges()
         let requests = Dictionary(
@@ -296,26 +489,52 @@ struct DatabaseBrokerCommandContractsTests {
         #expect(requests[0].disconnectRequest == nil)
         #expect(requests[1].disconnectRequest != nil)
         #expect(requests[2].connectionTestRequest != nil)
-        #expect(requests[3].capabilitiesRequest != nil)
-        #expect(requests[4].browseRequest != nil)
-        #expect(requests[5].queryRequest != nil)
-        #expect(requests[6].mutationPreviewRequest != nil)
-        #expect(requests[7].mutationApplyRequest != nil)
-        #expect(requests[8].operationGetRequest != nil)
-        #expect(requests[9].operationListRequest != nil)
-        #expect(requests[10].operationCancelRequest != nil)
+        #expect(requests[3].connectionListRequest != nil)
+        #expect(requests[4].connectionGetRequest != nil)
+        #expect(requests[5].connectionSaveRequest != nil)
+        #expect(requests[6].connectionEditRequest != nil)
+        #expect(requests[7].connectionDuplicateRequest != nil)
+        #expect(requests[8].connectionRenameRequest != nil)
+        #expect(requests[9].connectionDeleteRequest != nil)
+        #expect(requests[10].capabilitiesRequest != nil)
+        #expect(requests[11].browseRequest != nil)
+        #expect(requests[12].queryRequest != nil)
+        #expect(requests[13].mutationPreviewRequest != nil)
+        #expect(requests[14].mutationApplyRequest != nil)
+        #expect(requests[15].savedQueryListRequest != nil)
+        #expect(requests[16].savedQueryGetRequest != nil)
+        #expect(requests[17].savedQuerySaveRequest != nil)
+        #expect(requests[18].savedQueryDuplicateRequest != nil)
+        #expect(requests[19].savedQueryRenameRequest != nil)
+        #expect(requests[20].savedQueryDeleteRequest != nil)
+        #expect(requests[21].operationGetRequest != nil)
+        #expect(requests[22].operationListRequest != nil)
+        #expect(requests[23].operationCancelRequest != nil)
         #expect(responses[0].connectResult != nil)
         #expect(responses[0].disconnectResult == nil)
         #expect(responses[1].disconnectResult != nil)
         #expect(responses[2].connectionTestResult != nil)
-        #expect(responses[3].capabilitiesResult != nil)
-        #expect(responses[4].browseResult != nil)
-        #expect(responses[5].queryResult != nil)
-        #expect(responses[6].mutationPreviewResult != nil)
-        #expect(responses[7].mutationApplyResult != nil)
-        #expect(responses[8].operationGetResult != nil)
-        #expect(responses[9].operationListResult != nil)
-        #expect(responses[10].operationCancelResult != nil)
+        #expect(responses[3].connectionListResult != nil)
+        #expect(responses[4].connectionGetResult != nil)
+        #expect(responses[5].connectionSaveResult != nil)
+        #expect(responses[6].connectionEditResult != nil)
+        #expect(responses[7].connectionDuplicateResult != nil)
+        #expect(responses[8].connectionRenameResult != nil)
+        #expect(responses[9].connectionDeleteResult != nil)
+        #expect(responses[10].capabilitiesResult != nil)
+        #expect(responses[11].browseResult != nil)
+        #expect(responses[12].queryResult != nil)
+        #expect(responses[13].mutationPreviewResult != nil)
+        #expect(responses[14].mutationApplyResult != nil)
+        #expect(responses[15].savedQueryListResult != nil)
+        #expect(responses[16].savedQueryGetResult != nil)
+        #expect(responses[17].savedQuerySaveResult != nil)
+        #expect(responses[18].savedQueryDuplicateResult != nil)
+        #expect(responses[19].savedQueryRenameResult != nil)
+        #expect(responses[20].savedQueryDeleteResult != nil)
+        #expect(responses[21].operationGetResult != nil)
+        #expect(responses[22].operationListResult != nil)
+        #expect(responses[23].operationCancelResult != nil)
     }
 
     @Test func responseFactoriesAndEnvelopesRejectCommandMismatches() throws {
@@ -356,6 +575,23 @@ struct DatabaseBrokerCommandContractsTests {
                 == .commandMismatch(
                     expected: .connect,
                     actual: .disconnect))
+
+        let managementRequest = try #require(
+            DatabaseBrokerCommandContractFixtures.requests().first {
+                $0.kind == .connectionList
+            })
+        let savedQueryResult =
+            DatabaseBrokerCommandContractFixtures.failure()
+            as DatabaseCommandResult<DatabaseSavedQueryListResult>
+        let managementError = DatabaseBrokerCommandContractFixtures.contractError {
+            _ = try managementRequest.response(savedQueryResult)
+        }
+
+        #expect(
+            managementError
+                == .commandMismatch(
+                    expected: .connectionList,
+                    actual: .savedQueryList))
     }
 
     @Test func boundedResponseDecoderRejectsMismatchedAndUnknownRequests() throws {
@@ -474,6 +710,10 @@ struct DatabaseBrokerCommandContractsTests {
             """
             {"version":1,"command":"database.operation.get","request":{"version":2,"operationID":{"rawValue":"\(operationID)"}}}
             """.utf8)
+        let unsupportedManagementRequest = Data(
+            """
+            {"version":1,"command":"database.connection.list","request":{"version":2,"search":{"environments":[],"favoritesOnly":false,"limit":100,"offset":0,"order":"recentlyUsed","products":[],"tags":[]}}}
+            """.utf8)
 
         #expect(
             DatabaseBrokerCommandContractFixtures.contractError {
@@ -500,6 +740,15 @@ struct DatabaseBrokerCommandContractsTests {
             }
                 == .unsupportedRequestVersion(
                     command: .operationGet,
+                    version: 2))
+        #expect(
+            DatabaseBrokerCommandContractFixtures.contractError {
+                _ = try JSONDecoder().decode(
+                    DatabaseBrokerCommandRequest.self,
+                    from: unsupportedManagementRequest)
+            }
+                == .unsupportedRequestVersion(
+                    command: .connectionList,
                     version: 2))
 
         let unknownResponse = Data(
@@ -819,20 +1068,48 @@ struct DatabaseBrokerCommandContractsTests {
         for _ in 0..<32 {
             #expect(try DatabaseBrokerCommandFrameCodec.encode(envelope) == first)
         }
+
+        let managementRequest = DatabaseBrokerCommandRequest.connectionGet(
+            DatabaseConnectionGetRequest(
+                connectionID: DatabaseConnectionFixtures.connectionID))
+        let managementEncoded = try encoder.encode(managementRequest)
+        let connectionID = DatabaseConnectionFixtures.connectionID.rawValue.uuidString
+
+        #expect(
+            String(decoding: managementEncoded, as: UTF8.self)
+                == "{\"command\":\"database.connection.get\",\"request\":{\"connectionID\":{\"rawValue\":\"\(connectionID)\"},\"version\":1},\"version\":1}"
+        )
+        let managementEnvelope = managementRequest.envelope(
+            requestID: DatabaseBrokerCommandContractFixtures.requestID,
+            sequence: 8)
+        let managementFrame = try DatabaseBrokerCommandFrameCodec.encode(managementEnvelope)
+        for _ in 0..<32 {
+            #expect(
+                try DatabaseBrokerCommandFrameCodec.encode(managementEnvelope)
+                    == managementFrame)
+        }
     }
 
-    @Test func connectionTestCarriesReferencesWithoutRawSecrets() throws {
-        let request = try #require(
-            DatabaseBrokerCommandContractFixtures.requests().first {
-                $0.kind == .connectionTest
-            })
-        let encoded = try JSONEncoder().encode(request)
-        let text = String(decoding: encoded, as: UTF8.self)
+    @Test func connectionCommandsCarryReferencesWithoutRawSecrets() throws {
+        let requests = try DatabaseBrokerCommandContractFixtures.requests().filter {
+            $0.kind == .connectionTest
+                || $0.kind.rawValue.hasPrefix("database.connection.")
+        }
+        let responses = try requests.map(DatabaseBrokerCommandContractFixtures.response)
+        let encodedRequests = try requests.map { try JSONEncoder().encode($0) }
+        let encodedResponses = try responses.map { try JSONEncoder().encode($0) }
+        let text = String(
+            decoding: (encodedRequests + encodedResponses).flatMap { $0 },
+            as: UTF8.self)
 
         #expect(text.contains("secretReferences"))
         #expect(text.contains("clientPrivateKey"))
+        #expect(
+            text.contains(
+                DatabaseBrokerCommandContractFixtures.secretReference.identifier.uuidString))
         #expect(!text.contains("rawSecret"))
         #expect(!text.contains("passwordValue"))
         #expect(!text.contains("privateKeyValue"))
+        #expect(!text.contains("super-secret"))
     }
 }
