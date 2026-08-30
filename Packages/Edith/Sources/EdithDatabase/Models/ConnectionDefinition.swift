@@ -271,6 +271,7 @@ public enum DatabaseSecretPurpose: String, CaseIterable, Codable, Hashable, Send
     case clientPrivateKey
     case passphrase
     case confirmationSigningKey
+    case continuationSigningKey
 }
 
 public struct DatabaseSecretReference: Codable, Hashable, Sendable {

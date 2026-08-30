@@ -1077,7 +1077,12 @@ actor DatabaseSessionPool {
         }
         var seen = Set<DatabaseSecretReference>()
         references = references.filter { seen.insert($0).inserted }
-        guard references.allSatisfy({ $0.purpose != .confirmationSigningKey }) else {
+        guard
+            references.allSatisfy({
+                $0.purpose != .confirmationSigningKey
+                    && $0.purpose != .continuationSigningKey
+            })
+        else {
             throw invalidSecretReference()
         }
         guard references.count <= DatabaseAdapterBounds.maximumResolvedSecrets else {
