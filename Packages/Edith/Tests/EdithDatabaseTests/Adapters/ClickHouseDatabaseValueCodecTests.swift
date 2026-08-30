@@ -3,6 +3,20 @@ import Testing
 
 @testable import EdithDatabase
 
+@Test func clickHouseValueCodecDistinguishesSmallIntegersFromBooleans() throws {
+    let body = Data(
+        """
+        ["zero","one","flag"]
+        ["UInt32","UInt8","Bool"]
+        [0,1,true]
+
+        """.utf8)
+    let result = try ClickHouseDatabaseValueCodec.decode(body)
+    #expect(result.rows[0].cells[0].value == .unsignedInteger(0))
+    #expect(result.rows[0].cells[1].value == .unsignedInteger(1))
+    #expect(result.rows[0].cells[2].value == .boolean(true))
+}
+
 @Test func clickHouseValueCodecPreservesTypedRows() throws {
     let body = Data(
         """

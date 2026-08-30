@@ -295,10 +295,12 @@ enum ClickHouseDatabaseValueCodec {
         if let value = value as? String {
             return value
         }
-        if value is Bool {
+        guard let number = value as? NSNumber,
+            CFGetTypeID(number) != CFBooleanGetTypeID()
+        else {
             return nil
         }
-        return (value as? NSNumber)?.stringValue
+        return number.stringValue
     }
 
     private static func boundedString(_ value: Any) throws -> String {
@@ -338,8 +340,10 @@ enum ClickHouseDatabaseValueCodec {
     }
 
     private static func boolean(_ value: Any) -> Bool? {
-        if let value = value as? Bool {
-            return value
+        if let number = value as? NSNumber,
+            CFGetTypeID(number) == CFBooleanGetTypeID()
+        {
+            return number.boolValue
         }
         guard let text = scalarText(value) else { return nil }
         switch text {
