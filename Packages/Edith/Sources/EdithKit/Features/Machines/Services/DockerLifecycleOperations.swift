@@ -114,30 +114,33 @@ public enum DockerLifecycleOperationExecution {
     public typealias Run = (String, TimeInterval) async -> Result<String, Error>
 
     public static func command(
-        _ operation: DockerLifecycleOperation, target: DockerLifecycleTarget
+        _ operation: DockerLifecycleOperation, target: DockerLifecycleTarget,
+        platform: RemoteMachinePlatform = .linux
     ) throws -> (command: String, timeout: TimeInterval) {
         switch (operation, target) {
         case let (.start, .containers(ids)), let (.stop, .containers(ids)),
             let (.restart, .containers(ids)), let (.removeContainer, .containers(ids)):
             guard !ids.isEmpty else { throw DockerLifecycleOperationError.missingContainer }
-            return (DockerCommands.lifecycle(operation.cliVerb, ids: ids), 120)
+            return (
+                DockerCommands.lifecycle(operation.cliVerb, ids: ids, platform: platform), 120)
         case let (.removeImage, .image(reference, force)):
-            return (DockerCommands.removeImage(reference, force: force), 120)
+            return (DockerCommands.removeImage(reference, force: force, platform: platform), 120)
         case let (.removeVolume, .volume(name)):
-            return (DockerCommands.removeVolume(name), 120)
+            return (DockerCommands.removeVolume(name, platform: platform), 120)
         case let (.prune, .prune(target)):
-            return (DockerCommands.prune(target.rawValue), 300)
+            return (DockerCommands.prune(target.rawValue, platform: platform), 300)
         default:
             throw DockerLifecycleOperationError.invalidTarget(operation, target)
         }
     }
 
     public static func perform(
-        _ operation: DockerLifecycleOperation, target: DockerLifecycleTarget, using run: Run
+        _ operation: DockerLifecycleOperation, target: DockerLifecycleTarget,
+        platform: RemoteMachinePlatform = .linux, using run: Run
     ) async -> Result<DockerLifecycleOperationResult, Error> {
         let request: (command: String, timeout: TimeInterval)
         do {
-            request = try command(operation, target: target)
+            request = try command(operation, target: target, platform: platform)
         } catch {
             return .failure(error)
         }

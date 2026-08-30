@@ -120,8 +120,10 @@ public struct MachineDockerShellLaunch: Equatable, Sendable {
 }
 
 public enum MachineExecOperationExecution {
-    public static func dockerShellCommand(containerID: String) -> String {
-        DockerCommands.execShell(containerID: containerID)
+    public static func dockerShellCommand(
+        containerID: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        DockerCommands.execShell(containerID: containerID, platform: platform)
     }
 
     public static func dockerShellLaunch(

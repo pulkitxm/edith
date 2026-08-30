@@ -54,22 +54,33 @@ public enum FilePlaces {
         return sections
     }
 
-    public static func remoteSections(home: String, extras: [String] = [])
+    public static func remoteSections(
+        home: String, extras: [String] = [], platform: RemoteMachinePlatform = .linux)
         -> [FilePlaceSection]
     {
         let favorites = [
             FilePlace(name: "Home", path: home, symbol: "house"),
-            FilePlace(name: "Desktop", path: home + "/Desktop", symbol: "menubar.dock.rectangle"),
-            FilePlace(name: "Documents", path: home + "/Documents", symbol: "doc"),
-            FilePlace(name: "Downloads", path: home + "/Downloads", symbol: "arrow.down.circle"),
+            FilePlace(
+                name: "Desktop", path: FileListing.join(parent: home, name: "Desktop"),
+                symbol: "menubar.dock.rectangle"),
+            FilePlace(
+                name: "Documents", path: FileListing.join(parent: home, name: "Documents"),
+                symbol: "doc"),
+            FilePlace(
+                name: "Downloads", path: FileListing.join(parent: home, name: "Downloads"),
+                symbol: "arrow.down.circle"),
         ]
-        var system = [
-            FilePlace(name: "Root", path: "/", symbol: "internaldrive"),
-            FilePlace(name: "etc", path: "/etc", symbol: "gearshape"),
-            FilePlace(name: "var/log", path: "/var/log", symbol: "doc.text"),
-            FilePlace(name: "tmp", path: "/tmp", symbol: "clock"),
-            FilePlace(name: "Media", path: "/media", symbol: "externaldrive"),
-        ]
+        var system =
+            platform == .windows
+            ? [FilePlace(
+                name: "Windows", path: String(home.prefix(3)), symbol: "internaldrive")]
+            : [
+                FilePlace(name: "Root", path: "/", symbol: "internaldrive"),
+                FilePlace(name: "etc", path: "/etc", symbol: "gearshape"),
+                FilePlace(name: "var/log", path: "/var/log", symbol: "doc.text"),
+                FilePlace(name: "tmp", path: "/tmp", symbol: "clock"),
+                FilePlace(name: "Media", path: "/media", symbol: "externaldrive"),
+            ]
         system.append(
             contentsOf: extras.map {
                 FilePlace(name: ($0 as NSString).lastPathComponent, path: $0, symbol: "folder")
@@ -80,8 +91,10 @@ public enum FilePlaces {
         ]
     }
 
-    public static func homeDirectoryCommand() -> String {
-        "echo $HOME"
+    public static func homeDirectoryCommand(
+        platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        platform == .windows ? WindowsFileCommands.home() : "echo $HOME"
     }
 }
 
@@ -101,13 +114,17 @@ public struct FileClipboard: Equatable, Sendable {
         self.operation = operation
     }
 
-    public func command(intoDirectory directory: String) -> String? {
+    public func command(
+        intoDirectory directory: String, platform: RemoteMachinePlatform = .linux
+    ) -> String? {
         guard !paths.isEmpty else { return nil }
         switch operation {
         case .copy:
-            return FileOperations.copyCommand(paths: paths, toDirectory: directory)
+            return FileOperations.copyCommand(
+                paths: paths, toDirectory: directory, platform: platform)
         case .move:
-            return FileOperations.moveCommand(paths: paths, toDirectory: directory)
+            return FileOperations.moveCommand(
+                paths: paths, toDirectory: directory, platform: platform)
         }
     }
 }
@@ -161,6 +178,7 @@ public enum RenameSelection {
 
     public static func isValid(_ name: String) -> Bool {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty && !trimmed.contains("/") && trimmed != "." && trimmed != ".."
+        return !trimmed.isEmpty && !trimmed.contains("/") && !trimmed.contains("\\")
+            && trimmed != "." && trimmed != ".."
     }
 }

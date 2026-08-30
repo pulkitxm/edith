@@ -204,20 +204,24 @@ public enum MachinePowerOperationExecution {
 
     public static func command(
         for operation: MachinePowerOperation, machineID: UUID,
+        platform: RemoteMachinePlatform = .linux,
         sudoPassword: (UUID) -> Data? = { SudoPassword.stdin(machineID: $0) }
     ) -> (command: String, stdin: Data?)? {
         guard operation != .wake else { return nil }
-        let stdin = sudoPassword(machineID)
+        let stdin = platform == .windows ? nil : sudoPassword(machineID)
         let command =
             operation == .reboot
-            ? PowerCommands.reboot(withSudoPassword: stdin != nil)
-            : PowerCommands.shutdown(withSudoPassword: stdin != nil)
+            ? PowerCommands.reboot(
+                withSudoPassword: stdin != nil, platform: platform)
+            : PowerCommands.shutdown(
+                withSudoPassword: stdin != nil, platform: platform)
         return (command, stdin)
     }
 
     public static func perform(
         _ operation: MachinePowerOperation, machine: Machine,
         learnedMACAddress: String? = nil,
+        platform: RemoteMachinePlatform = .linux,
         sudoPassword: (UUID) -> Data? = { SudoPassword.stdin(machineID: $0) },
         run: Run = { _, _, _ in
             .failure(MachinePowerOperationError.remoteExecutionUnavailable)
@@ -240,7 +244,8 @@ public enum MachinePowerOperationExecution {
         }
         guard
             let request = command(
-                for: operation, machineID: machine.id, sudoPassword: sudoPassword)
+                for: operation, machineID: machine.id, platform: platform,
+                sudoPassword: sudoPassword)
         else {
             return .failure(MachinePowerOperationError.remoteExecutionUnavailable)
         }

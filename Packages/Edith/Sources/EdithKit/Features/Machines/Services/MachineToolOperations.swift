@@ -216,22 +216,26 @@ public enum MachineServiceOperationExecution {
     public typealias Run = (String, Data?, TimeInterval) async -> Result<String, Error>
 
     public static func command(
-        _ operation: MachineServiceOperation, unit: String, hasSudoPassword: Bool
+        _ operation: MachineServiceOperation, unit: String, hasSudoPassword: Bool,
+        platform: RemoteMachinePlatform = .linux
     ) -> String {
         ServiceCommands.action(
-            operation.rawValue, unit: unit, withSudoPassword: hasSudoPassword)
+            operation.rawValue, unit: unit, withSudoPassword: hasSudoPassword,
+            platform: platform)
     }
 
     public static func perform(
-        _ operation: MachineServiceOperation, unit: String, sudoPassword: Data?, using run: Run
+        _ operation: MachineServiceOperation, unit: String, sudoPassword: Data?,
+        platform: RemoteMachinePlatform = .linux, using run: Run
     ) async -> Result<MachineServiceOperationResult, Error> {
         let trimmed = unit.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return .failure(MachineServiceOperationError.missingUnit)
         }
         let command = command(
-            operation, unit: trimmed, hasSudoPassword: sudoPassword != nil)
-        switch await run(command, sudoPassword, 60) {
+            operation, unit: trimmed, hasSudoPassword: sudoPassword != nil,
+            platform: platform)
+        switch await run(command, platform == .windows ? nil : sudoPassword, 60) {
         case let .success(output):
             return .success(
                 MachineServiceOperationResult(
@@ -283,7 +287,8 @@ public enum MachineProcessOperationExecution {
     public typealias Run = (String, TimeInterval) async -> Result<String, Error>
 
     public static func perform(
-        pid: Int, signal: String, using run: Run
+        pid: Int, signal: String, platform: RemoteMachinePlatform = .linux,
+        using run: Run
     ) async -> Result<MachineProcessOperationResult, Error> {
         guard pid > 0 else {
             return .failure(MachineProcessOperationError.invalidPID(pid))
@@ -291,7 +296,9 @@ public enum MachineProcessOperationExecution {
         guard let normalized = ProcessCommands.normalizedSignal(signal) else {
             return .failure(MachineProcessOperationError.invalidSignal(signal))
         }
-        switch await run(ProcessCommands.kill(pid: pid, signal: normalized), 30) {
+        switch await run(
+            ProcessCommands.kill(pid: pid, signal: normalized, platform: platform), 30
+        ) {
         case let .success(output):
             return .success(
                 MachineProcessOperationResult(
@@ -335,13 +342,15 @@ public enum MachineDockerPauseOperationExecution {
     public typealias Run = (String, TimeInterval) async -> Result<String, Error>
 
     public static func perform(
-        _ operation: MachineDockerPauseOperation, containerIDs: [String], using run: Run
+        _ operation: MachineDockerPauseOperation, containerIDs: [String],
+        platform: RemoteMachinePlatform = .linux, using run: Run
     ) async -> Result<MachineDockerPauseOperationResult, Error> {
         guard !containerIDs.isEmpty else {
             return .failure(MachineDockerPauseOperationError.missingContainer)
         }
         switch await run(
-            DockerCommands.lifecycle(operation.rawValue, ids: containerIDs), 120)
+            DockerCommands.lifecycle(
+                operation.rawValue, ids: containerIDs, platform: platform), 120)
         {
         case .success:
             return .success(

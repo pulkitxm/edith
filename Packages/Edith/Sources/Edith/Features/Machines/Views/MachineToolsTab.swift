@@ -480,9 +480,11 @@ struct MachineToolsTab: View {
         guard let operation = MachineServiceOperation(rawValue: action) else { return }
         Task {
             let machineID = session.machine.id
-            let stdin = SudoPassword.stdin(machineID: machineID)
+            let platform = session.remotePlatform ?? .linux
+            let stdin = platform == .windows ? nil : SudoPassword.stdin(machineID: machineID)
             let result = await MachineServiceOperationExecution.perform(
                 operation, unit: unit, sudoPassword: stdin,
+                platform: platform,
                 using: { command, stdin, timeout in
                     await session.runCommand(command, stdin: stdin, timeout: timeout)
                 })

@@ -4,6 +4,13 @@ import Testing
 
 @testable import EdithKit
 
+private func decodedPowerShell(_ command: String) -> String? {
+    guard let encoded = command.split(separator: " ").last,
+        let data = Data(base64Encoded: String(encoded))
+    else { return nil }
+    return String(data: data, encoding: .utf16LittleEndian)
+}
+
 private final class MachineSessionUpdateCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var value = 0
@@ -254,6 +261,21 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
         let command = DockerCommands.logs("web", tail: 200, follow: true)
         #expect(command == "docker logs --timestamps --tail 200 --follow web")
     }
+
+    @Test func windowsCommandsRunThroughPowerShell() {
+        let script = decodedPowerShell(
+            DockerCommands.containersWithStats(platform: .windows))
+        #expect(script?.contains("docker ps -a --no-trunc") == true)
+        #expect(script?.contains("Write-Output '@EDITHSPLIT@'") == true)
+        #expect(script?.contains("2>$null") == true)
+        #expect(script?.contains("/dev/null") == false)
+    }
+
+    @Test func windowsLifecycleQuotesPowerShellIdentifiers() {
+        let script = decodedPowerShell(
+            DockerCommands.lifecycle("rm", id: "customer's app", platform: .windows))
+        #expect(script == "docker rm -f 'customer''s app'")
+    }
 }
 
 @Suite struct FileListingTests {
@@ -312,6 +334,16 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
         let crumbs = FileListing.breadcrumbs(for: "/home/pulkit/code")
         #expect(crumbs.map(\.name) == ["/", "home", "pulkit", "code"])
         #expect(crumbs.map(\.path) == ["/", "/home", "/home/pulkit", "/home/pulkit/code"])
+    }
+
+    @Test func joinsAndWalksWindowsPaths() {
+        #expect(FileListing.join(parent: "C:\\Users", name: "Pulkit") == "C:\\Users\\Pulkit")
+        #expect(FileListing.parentPath(of: "C:\\Users\\Pulkit") == "C:\\Users")
+        #expect(FileListing.parentPath(of: "C:\\Users") == "C:\\")
+        #expect(FileListing.parentPath(of: "C:\\") == nil)
+        let crumbs = FileListing.breadcrumbs(for: "C:\\Users\\Pulkit")
+        #expect(crumbs.map(\.name) == ["C:", "Users", "Pulkit"])
+        #expect(crumbs.map(\.path) == ["C:\\", "C:\\Users", "C:\\Users\\Pulkit"])
     }
 
     @Test func quotesPathsWithSpaces() {
@@ -465,6 +497,27 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
             ServiceCommands.journal(unit: "ssh.service", lines: 300, follow: true)
                 == "journalctl -u ssh.service -n 300 --no-pager -f 2>&1")
     }
+
+    @Test func parsesWindowsServices() {
+        let separator = WindowsSystemCommands.serviceSeparator
+        let output = [
+            "Spooler\(separator)Running\(separator)Auto\(separator)Print Spooler",
+            "WSearch\(separator)Stopped\(separator)Manual\(separator)Windows Search",
+        ].joined(separator: "\n")
+        let services = ServiceCommands.parse(output, platform: .windows)
+        #expect(services.count == 2)
+        #expect(services[0].unit == "Spooler")
+        #expect(services[0].isRunning)
+        #expect(!services[1].isRunning)
+    }
+
+    @Test func buildsWindowsServiceCommands() {
+        let list = decodedPowerShell(ServiceCommands.list(platform: .windows))
+        let restart = decodedPowerShell(
+            ServiceCommands.action("restart", unit: "Spooler", platform: .windows))
+        #expect(list?.contains("Get-CimInstance Win32_Service") == true)
+        #expect(restart == "Restart-Service -Name 'Spooler' -Force -ErrorAction Stop")
+    }
 }
 
 @Suite struct PowerCommandsTests {
@@ -482,6 +535,11 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
             #expect(command.contains("sudo -S"))
             #expect(command.contains("-p ''"))
         }
+    }
+
+    @Test func windowsPowerCommandsUsePowerShell() {
+        #expect(decodedPowerShell(PowerCommands.reboot(platform: .windows)) == "Restart-Computer -Force")
+        #expect(decodedPowerShell(PowerCommands.shutdown(platform: .windows)) == "Stop-Computer -Force")
     }
 }
 

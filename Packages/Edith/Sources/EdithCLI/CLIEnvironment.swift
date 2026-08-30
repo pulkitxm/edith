@@ -5,10 +5,15 @@ import Foundation
 public struct CLIRemoteDirectoryTarget: Sendable {
     public let machine: Machine
     public let endpoint: RemoteDirectoryEndpoint
+    public let platform: RemoteMachinePlatform
 
-    public init(machine: Machine, endpoint: RemoteDirectoryEndpoint) {
+    public init(
+        machine: Machine, endpoint: RemoteDirectoryEndpoint,
+        platform: RemoteMachinePlatform = .linux
+    ) {
         self.machine = machine
         self.endpoint = endpoint
+        self.platform = platform
     }
 }
 
@@ -272,6 +277,7 @@ public enum CLIEnvironment {
         let runner = try await MachineResolver.runner(query)
         return CLIRemoteDirectoryTarget(
             machine: runner.machine,
-            endpoint: .remote(machine: runner.machine, connection: runner.ssh))
+            endpoint: .remote(machine: runner.machine, connection: runner.ssh),
+            platform: await runner.ssh.remotePlatform ?? .linux)
     }
 }

@@ -410,15 +410,17 @@ struct MachinesServicesListCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let runner = try await MachineResolver.runner(machine)
-            let output = try await runner.text(ServiceCommands.list(), timeout: 30)
-            var services = ServiceCommands.parse(output)
+            let platform = await runner.ssh.remotePlatform ?? .linux
+            let output = try await runner.text(
+                ServiceCommands.list(platform: platform), timeout: 30)
+            var services = ServiceCommands.parse(output, platform: platform)
             if failed { services = services.filter(\.isFailed) }
             guard !json else {
                 CLIOut.json(.array(services.map(MachineReports.service)))
                 return
             }
             guard !services.isEmpty else {
-                CLIOut.note("no systemd units reported")
+                CLIOut.note("no services reported")
                 return
             }
             let rows = services.map { [$0.unit, $0.active, $0.sub, $0.describes] }

@@ -56,7 +56,9 @@ public struct RemoteTransferPlanItem: Equatable, Sendable {
         self.replacesExisting = replacesExisting
     }
 
-    public var name: String { (sourcePath as NSString).lastPathComponent }
+    public var name: String {
+        (sourcePath.replacingOccurrences(of: "\\", with: "/") as NSString).lastPathComponent
+    }
 }
 
 public struct RemoteTransferPlan: Equatable, Sendable {
@@ -571,7 +573,8 @@ public enum RemoteTransferOperationExecution {
     }
 
     public static func withinMachineCommand(
-        _ plan: RemoteTransferPlan, moving: Bool
+        _ plan: RemoteTransferPlan, moving: Bool,
+        platform: RemoteMachinePlatform = .linux
     ) -> String? {
         guard
             plan.items.allSatisfy({ item in
@@ -579,6 +582,9 @@ public enum RemoteTransferOperationExecution {
                     paths: [item.sourcePath], destination: item.destinationPath)
             })
         else { return nil }
+        if platform == .windows {
+            return WindowsFileCommands.transfer(plan.items, moving: moving)
+        }
         let commands = plan.items.map { item in
             let source = ShellQuote.quote(item.sourcePath)
             let stageRootPath =

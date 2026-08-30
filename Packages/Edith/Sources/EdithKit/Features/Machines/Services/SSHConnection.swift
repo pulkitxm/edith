@@ -287,7 +287,13 @@ public actor SSHConnection {
     public func download(
         remotePath: String, to localURL: URL, progress: (@Sendable (Int64) -> Void)? = nil
     ) async throws {
-        let command = "cat \(ShellQuote.quote(remotePath))"
+        let command =
+            remotePlatform == .windows
+            ? PowerShell.command(
+                "$bytes=[IO.File]::ReadAllBytes(\(PowerShell.literal(remotePath))); "
+                    + "$output=[Console]::OpenStandardOutput(); "
+                    + "$output.Write($bytes,0,$bytes.Length); $output.Flush()")
+            : "cat \(ShellQuote.quote(remotePath))"
         let process = execProcess(command: command)
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
@@ -365,7 +371,12 @@ public actor SSHConnection {
         let expected =
             (try? FileManager.default.attributesOfItem(atPath: localURL.path)[.size]) as? Int64
             ?? -1
-        let command = "cat > \(ShellQuote.quote(remotePath))"
+        let command =
+            remotePlatform == .windows
+            ? PowerShell.command(
+                "$output=[IO.File]::Create(\(PowerShell.literal(remotePath))); "
+                    + "[Console]::OpenStandardInput().CopyTo($output); $output.Dispose()")
+            : "cat > \(ShellQuote.quote(remotePath))"
         let process = execProcess(command: command)
         let stdinPipe = Pipe()
         let stderrPipe = Pipe()
@@ -458,8 +469,15 @@ public actor SSHConnection {
     }
 
     private func remoteSize(_ path: String) async -> Int64? {
-        let quoted = ShellQuote.quote(path)
-        let command = "stat -c%s \(quoted) 2>/dev/null || stat -f%z \(quoted) 2>/dev/null"
+        let command: String
+        if remotePlatform == .windows {
+            command = PowerShell.command(
+                "[Console]::Out.Write((Get-Item -LiteralPath "
+                    + "\(PowerShell.literal(path))).Length)")
+        } else {
+            let quoted = ShellQuote.quote(path)
+            command = "stat -c%s \(quoted) 2>/dev/null || stat -f%z \(quoted) 2>/dev/null"
+        }
         guard let result = try? await run(command, timeout: 30), result.succeeded else {
             return nil
         }
@@ -467,7 +485,13 @@ public actor SSHConnection {
     }
 
     private func discard(_ path: String) async {
-        _ = try? await run("rm -f \(ShellQuote.quote(path))", timeout: 30)
+        let command =
+            remotePlatform == .windows
+            ? PowerShell.command(
+                "Remove-Item -LiteralPath \(PowerShell.literal(path)) -Force "
+                    + "-ErrorAction SilentlyContinue")
+            : "rm -f \(ShellQuote.quote(path))"
+        _ = try? await run(command, timeout: 30)
     }
 
     public func addForward(_ forward: PortForward) async throws {

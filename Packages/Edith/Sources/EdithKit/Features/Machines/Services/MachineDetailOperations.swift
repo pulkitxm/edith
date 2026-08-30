@@ -58,9 +58,9 @@ public enum DockerDetailOperationExecution {
     public typealias Run = (String, TimeInterval) async -> Result<String, Error>
 
     public static func inspect(
-        containerID: String, using run: Run
+        containerID: String, platform: RemoteMachinePlatform = .linux, using run: Run
     ) async -> Result<DockerInspectSummary, Error> {
-        switch await run(DockerCommands.inspectRaw(containerID), 30) {
+        switch await run(DockerCommands.inspectRaw(containerID, platform: platform), 30) {
         case let .success(output):
             guard let summary = DockerParsing.inspectSummary(output) else {
                 return .failure(MachineDetailOperationError.invalidInspect(containerID))
@@ -72,9 +72,9 @@ public enum DockerDetailOperationExecution {
     }
 
     public static func processes(
-        containerID: String, using run: Run
+        containerID: String, platform: RemoteMachinePlatform = .linux, using run: Run
     ) async -> Result<[DockerProcess], Error> {
-        switch await run(DockerCommands.top(containerID), 30) {
+        switch await run(DockerCommands.top(containerID, platform: platform), 30) {
         case let .success(output):
             let processes = DockerParsing.processes(output)
             guard !processes.isEmpty else {
