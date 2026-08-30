@@ -162,8 +162,14 @@ enum PostgreSQLDatabaseDriverErrorClassifier {
         if error is CancellationError || Task.isCancelled {
             throw CancellationError()
         }
+        if isConnectTimeout(error) {
+            return .timeout
+        }
         guard let error = error as? PSQLError else {
             return .connection
+        }
+        if isConnectTimeout(error.underlying) {
+            return .timeout
         }
         return classify(
             code: error.code,
@@ -194,6 +200,14 @@ enum PostgreSQLDatabaseDriverErrorClassifier {
             return .server(PostgreSQLDatabaseDriverSupport.safeSQLState(sqlState))
         }
         return .connection
+    }
+
+    private static func isConnectTimeout(_ error: Error?) -> Bool {
+        guard let channelError = error as? ChannelError else { return false }
+        if case .connectTimeout = channelError {
+            return true
+        }
+        return false
     }
 }
 
