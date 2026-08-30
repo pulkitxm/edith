@@ -82,16 +82,36 @@ actor PostgreSQLDatabaseAdapterSession: DatabaseAdapterSession {
         _ request: DatabaseAdapterPageRequest,
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterPage {
-        try await requireAvailableContext(context)
-        throw PostgreSQLDatabaseAdapterSupport.capabilityUnavailable
+        let startedAt = Date()
+        return try await perform(
+            context: context,
+            fallback: PostgreSQLDatabaseAdapterSupport.readFailed
+        ) { [connectionID = connection.id, sessionID = id] client in
+            try await PostgreSQLDatabaseReadSupport.readPage(
+                request,
+                connectionID: connectionID,
+                sessionID: sessionID,
+                client: client,
+                startedAt: startedAt)
+        }
     }
 
     func query(
         _ request: DatabaseAdapterQueryRequest,
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterPage {
-        try await requireAvailableContext(context)
-        throw PostgreSQLDatabaseAdapterSupport.capabilityUnavailable
+        let startedAt = Date()
+        return try await perform(
+            context: context,
+            fallback: PostgreSQLDatabaseAdapterSupport.queryFailed
+        ) { [connectionID = connection.id, sessionID = id] client in
+            try await PostgreSQLDatabaseReadSupport.query(
+                request,
+                connectionID: connectionID,
+                sessionID: sessionID,
+                client: client,
+                startedAt: startedAt)
+        }
     }
 
     func normalizeMutation(
@@ -325,6 +345,50 @@ enum PostgreSQLDatabaseAdapterSupport {
             message: "This PostgreSQL capability is not available yet.",
             productCode: "postgresql.capability.unavailable"))
 
+    static let invalidRead = DatabaseAdapterFailure.reported(
+        DatabaseErrorEnvelope(
+            category: .invalidRequest,
+            message: "The PostgreSQL read request is invalid.",
+            productCode: "postgresql.read.invalid"))
+
+    static let invalidQuery = DatabaseAdapterFailure.reported(
+        DatabaseErrorEnvelope(
+            category: .invalidRequest,
+            message: "The PostgreSQL query request is invalid.",
+            productCode: "postgresql.query.invalid"))
+
+    static let invalidContinuation = DatabaseAdapterFailure.reported(
+        DatabaseErrorEnvelope(
+            category: .invalidRequest,
+            message: "The PostgreSQL continuation is invalid.",
+            productCode: "postgresql.continuation.invalid"))
+
+    static let readFailed = DatabaseAdapterFailure.reported(
+        DatabaseErrorEnvelope(
+            category: .server,
+            message: "PostgreSQL could not read the requested page.",
+            productCode: "postgresql.read.failed",
+            retry: DatabaseRetryGuidance(action: .retry)))
+
+    static let queryFailed = DatabaseAdapterFailure.reported(
+        DatabaseErrorEnvelope(
+            category: .server,
+            message: "PostgreSQL could not execute the requested query.",
+            productCode: "postgresql.query.failed",
+            retry: DatabaseRetryGuidance(action: .retry)))
+
+    static let decodingFailed = DatabaseAdapterFailure.reported(
+        DatabaseErrorEnvelope(
+            category: .decoding,
+            message: "The PostgreSQL result could not be decoded safely.",
+            productCode: "postgresql.result.decoding_failed"))
+
+    static let resultTooLarge = DatabaseAdapterFailure.reported(
+        DatabaseErrorEnvelope(
+            category: .resourceLimit,
+            message: "The PostgreSQL result exceeded a bounded read limit.",
+            productCode: "postgresql.result.too_large"))
+
     static let operationBusy = DatabaseAdapterFailure.reported(
         DatabaseErrorEnvelope(
             category: .conflict,
@@ -493,17 +557,41 @@ enum PostgreSQLDatabaseAdapterSupport {
         let pendingReason = DatabaseCapabilityUnavailableReason(
             category: .notImplemented,
             message: "This capability is pending a PostgreSQL adapter extension.")
-        let available = DatabaseCapabilityStatus(
-            id: .connectionTest,
-            requirement: .sharedRequired,
-            availability: .available)
+        let available: [DatabaseCapabilityStatus] = [
+            DatabaseCapabilityStatus(
+                id: .connectionTest,
+                requirement: .sharedRequired,
+                availability: .available),
+            DatabaseCapabilityStatus(
+                id: .objectDiscovery,
+                requirement: .sharedRequired,
+                availability: .available,
+                limits: readLimits),
+            DatabaseCapabilityStatus(
+                id: .objectDescription,
+                requirement: .sharedRequired,
+                availability: .available,
+                limits: readLimits),
+            DatabaseCapabilityStatus(
+                id: .query,
+                requirement: .familyRequired,
+                availability: .available,
+                limits: readLimits),
+            DatabaseCapabilityStatus(
+                id: .queryCancellation,
+                requirement: .sharedRequired,
+                availability: .available,
+                attributes: [
+                    DatabaseStringAttribute(name: "reconnectRequired", value: "true")
+                ]),
+            DatabaseCapabilityStatus(
+                id: .browse,
+                requirement: .sharedRequired,
+                availability: .available,
+                limits: readLimits),
+        ]
         let pending: [(DatabaseCapabilityID, DatabaseCapabilityRequirement)] = [
-            (.objectDiscovery, .sharedRequired),
-            (.objectDescription, .sharedRequired),
-            (.query, .familyRequired),
-            (.queryCancellation, .sharedRequired),
             (.explain, .familyRequired),
-            (.browse, .sharedRequired),
             (.insert, .sharedRequired),
             (.update, .sharedRequired),
             (.delete, .sharedRequired),
@@ -518,7 +606,7 @@ enum PostgreSQLDatabaseAdapterSupport {
             (identifier, requirement)
         }
         let statuses =
-            [available]
+            available
             + pending.map { identifier, requirement in
                 DatabaseCapabilityStatus(
                     id: identifier,
@@ -529,7 +617,36 @@ enum PostgreSQLDatabaseAdapterSupport {
         return DatabaseCapabilityReport(
             productIdentity: identity,
             capabilities: statuses,
+            pagingModes: [.keyset, .offset],
+            cancellationModes: [.cooperative],
+            safetyLimitations: [
+                "Read pages are limited to 100 records and 8 MiB.",
+                "Arbitrary SQL uses bounded offset paging and explicit read-only transactions.",
+                "Cancellation closes the active connection and requires reconnecting.",
+                "Cross-page reads do not hold a PostgreSQL snapshot.",
+            ],
             discoveredAt: Date())
+    }
+
+    private static var readLimits: [DatabaseCapabilityLimit] {
+        [
+            DatabaseCapabilityLimit(
+                name: "maximumPageRecords",
+                value: UInt64(PostgreSQLDatabaseReadBounds.maximumPageRecords),
+                unit: "records"),
+            DatabaseCapabilityLimit(
+                name: "maximumResultBytes",
+                value: UInt64(PostgreSQLDatabaseReadBounds.maximumResultBytes),
+                unit: "bytes"),
+            DatabaseCapabilityLimit(
+                name: "maximumCellBytes",
+                value: UInt64(PostgreSQLDatabaseReadBounds.maximumCellBytes),
+                unit: "bytes"),
+            DatabaseCapabilityLimit(
+                name: "maximumQueryParameters",
+                value: UInt64(PostgreSQLDatabaseReadBounds.maximumParameters),
+                unit: "parameters"),
+        ]
     }
 
     static func map(
@@ -541,6 +658,10 @@ enum PostgreSQLDatabaseAdapterSupport {
             return authenticationFailed
         case .connection:
             return connectionFailed
+        case .decoding:
+            return decodingFailed
+        case .invalidRequest:
+            return fallback
         case let .permission(code):
             return .reported(
                 DatabaseErrorEnvelope(
@@ -550,6 +671,8 @@ enum PostgreSQLDatabaseAdapterSupport {
                     retry: DatabaseRetryGuidance(action: .userDecision)))
         case .timeout:
             return deadlineExceeded
+        case .resultTooLarge:
+            return resultTooLarge
         case let .server(code):
             return .reported(
                 DatabaseErrorEnvelope(

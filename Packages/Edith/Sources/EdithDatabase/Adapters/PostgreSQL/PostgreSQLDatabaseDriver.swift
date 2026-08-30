@@ -5,7 +5,10 @@ import PostgresNIO
 enum PostgreSQLDatabaseDriverFailure: Error, Equatable, Sendable {
     case authentication
     case connection
+    case decoding
+    case invalidRequest
     case permission(String?)
+    case resultTooLarge
     case timeout
     case server(String?)
 }
@@ -99,7 +102,18 @@ struct PostgreSQLDatabaseIdentityValues: Equatable, Sendable {
 
 protocol PostgreSQLDatabaseClient: Sendable {
     func discoverIdentity() async throws -> DatabaseProductIdentity
+    func executeRead(
+        _ plan: PostgreSQLDatabaseReadPlan
+    ) async throws -> PostgreSQLDatabaseReadResult
     func disconnect() async
+}
+
+extension PostgreSQLDatabaseClient {
+    func executeRead(
+        _ plan: PostgreSQLDatabaseReadPlan
+    ) async throws -> PostgreSQLDatabaseReadResult {
+        throw PostgreSQLDatabaseDriverFailure.invalidRequest
+    }
 }
 
 typealias PostgreSQLDatabaseClientConnector =
@@ -117,8 +131,8 @@ final class PostgresNIODatabaseClient: PostgreSQLDatabaseClient, @unchecked Send
                 (SELECT count(*)::int8 FROM pg_catalog.pg_stat_replication) AS replica_count
             """)
 
-    private let lock = NSLock()
-    private var resource: PostgreSQLDatabaseTransportResource?
+    let lock = NSLock()
+    var resource: PostgreSQLDatabaseTransportResource?
 
     private init(resource: PostgreSQLDatabaseTransportResource) {
         self.resource = resource
