@@ -278,6 +278,10 @@ actor URLSessionElasticsearchDatabaseClient: ElasticsearchDatabaseClient {
         session?.invalidateAndCancel()
     }
 
+    func outstandingPointInTimeCount() -> Int {
+        openPointInTimeIdentifiers.count
+    }
+
     private func prepare() async throws {
         let rootResponse = try await send(path: "/")
         let root: ElasticsearchDatabaseRootResponse
@@ -488,6 +492,22 @@ struct ElasticsearchDatabaseSearchResponse: Decodable, Sendable {
     struct Hits: Decodable, Sendable {
         let total: Total
         let hits: [Hit]
+
+        init(total: Total, hits: [Hit]) {
+            self.total = total
+            self.hits = hits
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            total = try container.decode(Total.self, forKey: .total)
+            hits = try container.decodeIfPresent([Hit].self, forKey: .hits) ?? []
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case total
+            case hits
+        }
     }
 
     struct Total: Decodable, Sendable {
