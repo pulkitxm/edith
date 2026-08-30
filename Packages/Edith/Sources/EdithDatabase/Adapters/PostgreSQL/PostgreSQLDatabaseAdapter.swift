@@ -214,6 +214,8 @@ actor PostgreSQLDatabaseAdapterSession: DatabaseAdapterSession {
                 break
             }
             if error is CancellationError || Task.isCancelled {
+                await context.cancellation.cancel(.userRequested)
+                await interrupt(operationID: context.operationID)
                 throw .cancelled
             }
             if let driverFailure = error as? PostgreSQLDatabaseDriverFailure {
