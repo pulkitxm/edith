@@ -830,6 +830,26 @@ private actor MongoDBDatabaseConversionCancellationProbe {
     }
 }
 
+@Test func mongoReadingConversionChecksCancellationWithinScalarPreviews() async throws {
+    var document = Document()
+    document["payload"] = String(repeating: "x", count: 1_000_000)
+    let signal = DatabaseAdapterCancellationSignal()
+    let context = MongoDBDatabaseAdapterFixtures.context(cancellation: signal)
+    let probe = MongoDBDatabaseConversionCancellationProbe(remainingChecks: 7)
+    do {
+        _ = try await MongoDBDatabaseValueCodec.convertedRecord(
+            document,
+            hidesObjectID: false,
+            cancellationCheck: {
+                await probe.check(signal: signal)
+                try await MongoDBDatabaseAdapterSupport.check(context)
+            })
+        Issue.record("Expected cancellation during the scalar preview")
+    } catch let failure as DatabaseAdapterFailure {
+        #expect(failure == .cancelled)
+    }
+}
+
 @Test func mongoReadingConversionCancellationFailsTheActiveSessionClosed() async throws {
     let signal = DatabaseAdapterCancellationSignal()
     let client = MongoDBDatabaseAdapterTestClient(
