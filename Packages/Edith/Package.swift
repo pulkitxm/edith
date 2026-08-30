@@ -24,6 +24,7 @@ let dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-nio.git", exact: "2.101.3"),
     .package(url: "https://github.com/apple/swift-nio-ssl.git", exact: "2.37.2"),
     .package(url: "https://github.com/apple/swift-nio-transport-services.git", exact: "1.28.0"),
+    .package(url: "https://github.com/vapor/postgres-nio.git", exact: "1.33.1"),
 ]
 
 let targets: [Target] = [
@@ -53,6 +54,7 @@ let targets: [Target] = [
             .product(
                 name: "NIOTransportServices",
                 package: "swift-nio-transport-services"),
+            .product(name: "PostgresNIO", package: "postgres-nio"),
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
