@@ -2,6 +2,8 @@ import Foundation
 import MongoClient
 import MongoCore
 import MongoKitten
+import NIOCore
+import NIOPosix
 
 enum MongoDBDatabaseDriverFailure: Error, Equatable, Sendable {
     case authentication
@@ -9,6 +11,7 @@ enum MongoDBDatabaseDriverFailure: Error, Equatable, Sendable {
     case permission(Int?)
     case timeout
     case server(Int?)
+    case responseTooLarge
 }
 
 struct MongoDBDatabaseConnectionPlan: Sendable {
@@ -35,62 +38,60 @@ struct MongoDBDatabaseReadResult: Sendable {
 protocol MongoDBDatabaseClient: Sendable {
     func discoverIdentity() async throws -> DatabaseProductIdentity
     func read(_ plan: MongoDBDatabaseReadPlan) async throws -> MongoDBDatabaseReadResult
-    func disconnect() async
+    func disconnect() async throws
 }
 
 typealias MongoDBDatabaseClientConnector =
-    @Sendable (MongoDBDatabaseConnectionPlan) async throws -> any MongoDBDatabaseClient
+    @Sendable (
+        MongoDBDatabaseConnectionPlan,
+        DatabaseAdapterConnectionContext
+    ) async throws -> any MongoDBDatabaseClient
 
 actor MongoKittenDatabaseClient: MongoDBDatabaseClient {
-    private var cluster: MongoCluster?
+    private var transport: MongoDBDatabaseConnectedTransport?
+    private let identity: DatabaseProductIdentity
 
-    private init(cluster: MongoCluster) {
-        self.cluster = cluster
+    private init(transport: MongoDBDatabaseConnectedTransport) {
+        self.transport = transport
+        identity = transport.identity
     }
 
     static func connect(
-        _ plan: MongoDBDatabaseConnectionPlan
+        _ plan: MongoDBDatabaseConnectionPlan,
+        context: DatabaseAdapterConnectionContext,
+        eventLoopFactory: MongoDBDatabaseEventLoopFactory = {
+            MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        },
+        eventLoopShutdown: @escaping MongoDBDatabaseEventLoopShutdown = { group in
+            try await group.shutdownGracefully()
+        }
     ) async throws -> any MongoDBDatabaseClient {
         do {
-            let cluster = try await MongoCluster(connectingTo: plan.settings)
-            return MongoKittenDatabaseClient(cluster: cluster)
+            let transport = try await MongoDBDatabaseTransport.connect(
+                plan,
+                context: context,
+                eventLoopFactory: eventLoopFactory,
+                eventLoopShutdown: eventLoopShutdown)
+            return MongoKittenDatabaseClient(transport: transport)
         } catch {
             throw try MongoDBDatabaseDriverErrorClassifier.classify(error)
         }
     }
 
     func discoverIdentity() async throws -> DatabaseProductIdentity {
-        guard let cluster else {
+        guard transport != nil else {
             throw MongoDBDatabaseDriverFailure.connection
         }
-        do {
-            let connection = try await cluster.next(for: .basic)
-            try await connection.ping()
-            guard let handshake = await connection.serverHandshake else {
-                throw MongoDBDatabaseDriverFailure.connection
-            }
-            let build = try await connection.executeCodable(
-                MongoDBBuildInfoCommand(),
-                decodeAs: MongoDBBuildInfoResponse.self,
-                namespace: .administrativeCommand,
-                sessionId: connection.implicitSessionId,
-                traceLabel: "DatabaseIdentity")
-            return MongoDBDatabaseDriverSupport.identity(
-                handshake: handshake,
-                build: build)
-        } catch let failure as MongoDBDatabaseDriverFailure {
-            throw failure
-        } catch {
-            throw try MongoDBDatabaseDriverErrorClassifier.classify(error)
-        }
+        return identity
     }
 
     func read(_ plan: MongoDBDatabaseReadPlan) async throws -> MongoDBDatabaseReadResult {
-        guard let cluster else {
+        guard let connection = transport?.connection else {
             throw MongoDBDatabaseDriverFailure.connection
         }
         do {
-            let connection = try await cluster.next(for: .basic)
+            await connection.setDatabaseQueryTimeout(
+                .milliseconds(Int64(plan.maximumTimeMilliseconds)))
             let namespace = MongoNamespace(to: plan.collection, inDatabase: plan.database)
             let response = try await connection.executeCodable(
                 MongoDBFindCommand(plan: plan),
@@ -117,10 +118,10 @@ actor MongoKittenDatabaseClient: MongoDBDatabaseClient {
         }
     }
 
-    func disconnect() async {
-        let cluster = self.cluster
-        self.cluster = nil
-        await cluster?.disconnect()
+    func disconnect() async throws {
+        let transport = self.transport
+        self.transport = nil
+        try await transport?.close()
     }
 
     private static func collect(
@@ -137,11 +138,11 @@ actor MongoKittenDatabaseClient: MongoDBDatabaseClient {
                 try Task.checkCancellation()
                 let nextSize = min(batchSize, limit - accumulator.documents.count)
                 let batch = try await cursor.getMore(batchSize: nextSize)
-                if accumulator.append(batch, cursorHasMore: !cursor.isDrained) { break }
+                if try accumulator.append(batch, cursorHasMore: !cursor.isDrained) { break }
             }
             accumulator.finish(cursorHasMore: !cursor.isDrained)
             if !cursor.isDrained {
-                try? await cursor.close()
+                try await cursor.close()
             }
             return MongoDBDatabaseReadResult(
                 documents: accumulator.documents,
@@ -149,7 +150,11 @@ actor MongoKittenDatabaseClient: MongoDBDatabaseClient {
                 bytesReceived: accumulator.bytesReceived)
         } catch {
             if !cursor.isDrained {
-                try? await cursor.close()
+                do {
+                    try await cursor.close()
+                } catch {
+                    throw MongoDBDatabaseDriverFailure.connection
+                }
             }
             throw error
         }
@@ -187,6 +192,9 @@ enum MongoDBDatabaseDriverErrorClassifier {
             }
             return .server(error.code)
         }
+        if let error = error as? MongoDBDatabaseDriverFailure {
+            return error
+        }
         return .connection
     }
 }
@@ -205,7 +213,7 @@ struct MongoDBDatabaseReadAccumulator {
         documents.reserveCapacity(min(max(0, limit), 512))
     }
 
-    mutating func append(_ batch: [Document], cursorHasMore: Bool) -> Bool {
+    mutating func append(_ batch: [Document], cursorHasMore: Bool) throws -> Bool {
         for document in batch {
             bytesReceived = Self.saturatingAdd(
                 bytesReceived,
@@ -214,6 +222,9 @@ struct MongoDBDatabaseReadAccumulator {
         for (index, document) in batch.enumerated() {
             let byteCount = document.makeData().count
             guard byteCount <= retainedByteLimit - retainedBytes else {
+                guard !documents.isEmpty else {
+                    throw MongoDBDatabaseDriverFailure.responseTooLarge
+                }
                 hasMore = true
                 return true
             }
@@ -237,11 +248,11 @@ struct MongoDBDatabaseReadAccumulator {
     }
 }
 
-private struct MongoDBBuildInfoCommand: Encodable {
+struct MongoDBBuildInfoCommand: Encodable {
     let buildInfo: Int32 = 1
 }
 
-private struct MongoDBBuildInfoResponse: Decodable {
+struct MongoDBBuildInfoResponse: Decodable {
     let version: String
     let gitVersion: String?
     let modules: [String]?
@@ -269,7 +280,7 @@ private struct MongoDBFindCommand: Encodable {
     }
 }
 
-private enum MongoDBDatabaseDriverSupport {
+enum MongoDBDatabaseDriverSupport {
     static func identity(
         handshake: ServerHandshake,
         build: MongoDBBuildInfoResponse
@@ -288,7 +299,9 @@ private enum MongoDBDatabaseDriverSupport {
         } else if let setName = handshake.setName {
             let members = Set(
                 (handshake.hosts ?? []) + (handshake.passives ?? []) + (handshake.arbiters ?? []))
-            let role = handshake.ismaster ? "primary" : (handshake.secondary == true ? "secondary" : "member")
+            let role =
+                handshake.ismaster
+                ? "primary" : (handshake.secondary == true ? "secondary" : "member")
             topology = DatabaseTopology(
                 kind: .replicaSet,
                 name: setName,

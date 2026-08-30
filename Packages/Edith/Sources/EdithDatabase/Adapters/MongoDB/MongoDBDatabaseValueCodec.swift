@@ -78,15 +78,21 @@ enum MongoDBDatabaseValueCodec {
                 rawIdentity,
                 depth: 0,
                 budget: &identityBudget)
-            identity = DatabaseRecordIdentity(
-                kind: .documentID,
-                components: [
-                    DatabaseIdentityComponent(name: "_id", value: convertedIdentity.value)
-                ])
+            if convertedIdentity.truncated {
+                identity = nil
+                truncated = true
+            } else {
+                identity = DatabaseRecordIdentity(
+                    kind: .documentID,
+                    components: [
+                        DatabaseIdentityComponent(name: "_id", value: convertedIdentity.value)
+                    ])
+            }
         } else {
             identity = nil
         }
-        let metadata = truncated
+        let metadata =
+            truncated
             ? [DatabaseStringAttribute(name: "mongodb.truncated", value: "true")]
             : []
         return MongoDBDatabaseConvertedRecord(
@@ -251,7 +257,8 @@ enum MongoDBDatabaseValueCodec {
                         product: .mongoDB,
                         typeName: "depthPreview",
                         attributes: [DatabaseStringAttribute(name: "truncated", value: "true")])),
-                true)
+                true
+            )
         }
         guard budget.consume(bytes: 1, elements: 1) else {
             return (
@@ -260,7 +267,8 @@ enum MongoDBDatabaseValueCodec {
                         product: .mongoDB,
                         typeName: "valuePreview",
                         attributes: [DatabaseStringAttribute(name: "truncated", value: "true")])),
-                true)
+                true
+            )
         }
         switch primitive {
         case is Null:
@@ -274,7 +282,8 @@ enum MongoDBDatabaseValueCodec {
         case let value as Double:
             return (.floatingPoint(value), false)
         case let value as String:
-            let preview = preview(value, byteLimit: min(max(0, budget.remainingBytes), maximumScalarPreviewBytes))
+            let preview = preview(
+                value, byteLimit: min(max(0, budget.remainingBytes), maximumScalarPreviewBytes))
             guard budget.consume(bytes: preview.text.utf8.count) else {
                 throw MongoDBDatabaseValueCodecFailure.resourceLimit
             }
@@ -291,7 +300,8 @@ enum MongoDBDatabaseValueCodec {
                                     value: String(value.utf8.count)),
                                 DatabaseStringAttribute(name: "truncated", value: "true"),
                             ])),
-                    true)
+                    true
+                )
             }
             return (.string(value), false)
         case let value as ObjectId:
@@ -304,7 +314,8 @@ enum MongoDBDatabaseValueCodec {
                         product: .mongoDB,
                         typeName: "objectId",
                         textRepresentation: value.hexString)),
-                false)
+                false
+            )
         case let value as Date:
             let text = timestampText(value)
             guard budget.consume(bytes: text.utf8.count) else {
@@ -317,14 +328,16 @@ enum MongoDBDatabaseValueCodec {
                         timeZoneIdentifier: "UTC",
                         timeZoneOffsetMinutes: 0,
                         precision: 3)),
-                false)
+                false
+            )
         case let value as Binary:
             return try outputBinary(value, budget: &budget)
         case let value as Decimal128:
             var wrapper = Document()
             wrapper["value"] = value
             let data = wrapper.makeData()
-            let available = min(data.count, maximumScalarPreviewBytes, max(0, budget.remainingBytes))
+            let available = min(
+                data.count, maximumScalarPreviewBytes, max(0, budget.remainingBytes))
             guard budget.consume(bytes: available) else {
                 throw MongoDBDatabaseValueCodecFailure.resourceLimit
             }
@@ -342,9 +355,12 @@ enum MongoDBDatabaseValueCodec {
                                     value: String(data.count)),
                                 DatabaseStringAttribute(name: "truncated", value: "true"),
                             ])),
-                data.count != available)
+                data.count != available
+            )
         case let value as Timestamp:
-            let text = "\(value.timestamp):\(value.increment)"
+            let seconds = UInt32(bitPattern: value.timestamp)
+            let increment = UInt32(bitPattern: value.increment)
+            let text = "\(seconds):\(increment)"
             guard budget.consume(bytes: text.utf8.count) else {
                 throw MongoDBDatabaseValueCodecFailure.resourceLimit
             }
@@ -357,12 +373,13 @@ enum MongoDBDatabaseValueCodec {
                         attributes: [
                             DatabaseStringAttribute(
                                 name: "seconds",
-                                value: String(value.timestamp)),
+                                value: String(seconds)),
                             DatabaseStringAttribute(
                                 name: "increment",
-                                value: String(value.increment)),
+                                value: String(increment)),
                         ])),
-                false)
+                false
+            )
         case let value as RegularExpression:
             let pattern = preview(
                 value.pattern,
@@ -382,7 +399,8 @@ enum MongoDBDatabaseValueCodec {
                                 name: "truncated",
                                 value: pattern.truncated ? "true" : "false"),
                         ])),
-                pattern.truncated)
+                pattern.truncated
+            )
         case let value as JavaScriptCode:
             return try outputCode(value.code, typeName: "javascript", budget: &budget)
         case let value as JavaScriptCodeWithScope:
@@ -395,12 +413,14 @@ enum MongoDBDatabaseValueCodec {
             return (
                 .productSpecific(
                     DatabaseProductValue(product: .mongoDB, typeName: "minKey")),
-                false)
+                false
+            )
         case is MaxKey:
             return (
                 .productSpecific(
                     DatabaseProductValue(product: .mongoDB, typeName: "maxKey")),
-                false)
+                false
+            )
         case let value as Document:
             if value.isArray {
                 var values: [DatabaseValue] = []
@@ -460,7 +480,8 @@ enum MongoDBDatabaseValueCodec {
                     bytes[0], bytes[1], bytes[2], bytes[3],
                     bytes[4], bytes[5], bytes[6], bytes[7],
                     bytes[8], bytes[9], bytes[10], bytes[11],
-                    bytes[12], bytes[13], bytes[14], bytes[15]))
+                    bytes[12], bytes[13], bytes[14], bytes[15]
+                ))
             guard budget.consume(bytes: data.count) else {
                 throw MongoDBDatabaseValueCodecFailure.resourceLimit
             }
@@ -474,7 +495,8 @@ enum MongoDBDatabaseValueCodec {
         if available == data.count {
             return (
                 .binary(.complete(data: data, mediaType: mediaType, digest: nil)),
-                false)
+                false
+            )
         }
         return (
             .binary(
@@ -483,7 +505,8 @@ enum MongoDBDatabaseValueCodec {
                     bytes: Data(data.prefix(available)),
                     mediaType: mediaType,
                     digest: nil)),
-            true)
+            true
+        )
     }
 
     private static func outputCode(
@@ -509,7 +532,8 @@ enum MongoDBDatabaseValueCodec {
                             name: "truncated",
                             value: preview.truncated ? "true" : "false"),
                     ])),
-            preview.truncated)
+            preview.truncated
+        )
     }
 
     private static func preview(
