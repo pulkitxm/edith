@@ -268,6 +268,10 @@ public protocol DatabaseMetadataStore: Sendable {
         for connection: DatabaseConnectionDefinition,
         owner: DatabaseRuntimeOwnerToken
     ) async throws -> DatabaseOwnedOperationReservationResult
+    func reserveEphemeralOperation(
+        _ summary: DatabaseOperationRecordSummary,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> DatabaseOwnedOperationReservationResult
     func transitionOperation(
         _ summary: DatabaseOperationRecordSummary,
         from expectedStates: Set<DatabaseOperationState>,
