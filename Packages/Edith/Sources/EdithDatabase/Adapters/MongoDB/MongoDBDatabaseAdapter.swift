@@ -575,7 +575,7 @@ enum MongoDBDatabaseAdapterSupport {
                 resolved.secrets.count == 1,
                 let passwordData = resolved.secrets[reference],
                 let password = String(data: passwordData, encoding: .utf8),
-                validCredentialText(password)
+                validSCRAMPassword(password)
             else {
                 throw invalidConnection
             }
@@ -1527,13 +1527,7 @@ enum MongoDBDatabaseAdapterSupport {
     }
 
     private static func validHost(_ host: String) -> Bool {
-        !host.isEmpty
-            && host.utf8.count <= 253
-            && !host.contains("\0")
-            && !host.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
-            && !host.unicodeScalars.contains(where: CharacterSet.whitespacesAndNewlines.contains)
-            && !host.contains("/")
-            && !host.contains("@")
+        MongoDBDatabaseTransport.validHost(host)
     }
 
     private static func validName(_ value: String) -> Bool {
@@ -1556,6 +1550,11 @@ enum MongoDBDatabaseAdapterSupport {
         !value.isEmpty
             && value.utf8.count <= 16_384
             && !value.contains("\0")
+    }
+
+    private static func validSCRAMPassword(_ value: String) -> Bool {
+        validCredentialText(value)
+            && value.unicodeScalars.allSatisfy { (0x20...0x7E).contains($0.value) }
     }
 
     private static func validFieldSegment(_ value: String) -> Bool {
