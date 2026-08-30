@@ -374,6 +374,42 @@ struct DatabaseExecutionValidator: Sendable {
         try Self.validateEncodedSize(request, name: "mutation apply request")
     }
 
+    func validate(_ request: DatabaseMutationStatusRequest) throws {
+        try Self.validateVersion(
+            request.version,
+            expected: DatabaseMutationStatusRequest.schemaVersion,
+            contract: "mutation status request")
+        try validate(request.operation)
+        try Self.validate(request.connectionID, name: "connection identifier")
+        try Self.validateRequiredText(
+            request.serverOperationIdentifier,
+            name: "server operation identifier",
+            maximum: DatabaseAdapterBounds.maximumServerOperationIdentifierBytes)
+        try Self.validateEncodedSize(request, name: "mutation status request")
+    }
+
+    func validate(_ request: DatabaseMutationCancelRequest) throws {
+        try Self.validateVersion(
+            request.version,
+            expected: DatabaseMutationCancelRequest.schemaVersion,
+            contract: "mutation cancel request")
+        try validate(request.operation)
+        try Self.validate(request.connectionID, name: "connection identifier")
+        try Self.validateRequiredText(
+            request.serverOperationIdentifier,
+            name: "server operation identifier",
+            maximum: DatabaseAdapterBounds.maximumServerOperationIdentifierBytes)
+        try Self.validateEncodedSize(request, name: "mutation cancel request")
+    }
+
+    func validate(_ request: DatabaseMutationOutcomeGetRequest) throws {
+        try Self.validateVersion(
+            request.version,
+            expected: DatabaseMutationOutcomeGetRequest.schemaVersion,
+            contract: "mutation outcome get request")
+        try Self.validateEncodedSize(request, name: "mutation outcome get request")
+    }
+
     func validate(_ operation: DatabaseOperationContext) throws {
         if let deadline = operation.deadline, deadline <= currentDate() {
             throw DatabaseExecutionValidationError.deadlineExceeded

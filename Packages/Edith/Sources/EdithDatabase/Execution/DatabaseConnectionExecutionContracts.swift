@@ -80,4 +80,6 @@ extension DatabaseOperationKind {
     public static let databaseQuery: Self = "database.query"
     public static let databaseMutationPreview: Self = "database.mutation.preview"
     public static let databaseMutationApply: Self = "database.mutation.apply"
+    public static let databaseMutationStatus: Self = "database.mutation.status"
+    public static let databaseMutationCancel: Self = "database.mutation.cancel"
 }

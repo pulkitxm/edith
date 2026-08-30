@@ -16,6 +16,9 @@ public enum DatabaseBrokerCommandKind: String, CaseIterable, Codable, Hashable, 
     case query = "database.query"
     case mutationPreview = "database.mutation.preview"
     case mutationApply = "database.mutation.apply"
+    case mutationStatus = "database.mutation.status"
+    case mutationCancel = "database.mutation.cancel"
+    case mutationOutcomeGet = "database.mutation.outcome.get"
     case savedQueryList = "database.saved-query.list"
     case savedQueryGet = "database.saved-query.get"
     case savedQuerySave = "database.saved-query.save"
@@ -62,6 +65,9 @@ public enum DatabaseBrokerCommandRequest: Hashable, Sendable {
     case query(DatabaseQueryRequest)
     case mutationPreview(DatabaseMutationPreviewRequest)
     case mutationApply(DatabaseMutationApplyRequest)
+    case mutationStatus(DatabaseMutationStatusRequest)
+    case mutationCancel(DatabaseMutationCancelRequest)
+    case mutationOutcomeGet(DatabaseMutationOutcomeGetRequest)
     case savedQueryList(DatabaseSavedQueryListRequest)
     case savedQueryGet(DatabaseSavedQueryGetRequest)
     case savedQuerySave(DatabaseSavedQuerySaveRequest)
@@ -104,6 +110,12 @@ public enum DatabaseBrokerCommandRequest: Hashable, Sendable {
             .mutationPreview
         case .mutationApply:
             .mutationApply
+        case .mutationStatus:
+            .mutationStatus
+        case .mutationCancel:
+            .mutationCancel
+        case .mutationOutcomeGet:
+            .mutationOutcomeGet
         case .savedQueryList:
             .savedQueryList
         case .savedQueryGet:
@@ -146,6 +158,12 @@ public enum DatabaseBrokerCommandRequest: Hashable, Sendable {
             request.operation.operationID
         case .mutationApply(let request):
             request.operation.operationID
+        case .mutationStatus(let request):
+            request.operation.operationID
+        case .mutationCancel(let request):
+            request.operation.operationID
+        case .mutationOutcomeGet(let request):
+            request.operationID
         case .savedQueryList, .savedQueryGet, .savedQuerySave, .savedQueryDuplicate,
             .savedQueryRename, .savedQueryDelete:
             nil
@@ -230,6 +248,21 @@ public enum DatabaseBrokerCommandRequest: Hashable, Sendable {
 
     public var mutationApplyRequest: DatabaseMutationApplyRequest? {
         guard case .mutationApply(let request) = self else { return nil }
+        return request
+    }
+
+    public var mutationStatusRequest: DatabaseMutationStatusRequest? {
+        guard case .mutationStatus(let request) = self else { return nil }
+        return request
+    }
+
+    public var mutationCancelRequest: DatabaseMutationCancelRequest? {
+        guard case .mutationCancel(let request) = self else { return nil }
+        return request
+    }
+
+    public var mutationOutcomeGetRequest: DatabaseMutationOutcomeGetRequest? {
+        guard case .mutationOutcomeGet(let request) = self else { return nil }
         return request
     }
 
@@ -396,6 +429,27 @@ public enum DatabaseBrokerCommandRequest: Hashable, Sendable {
     }
 
     public func response(
+        _ result: DatabaseCommandResult<DatabaseMutationStatusResult>
+    ) throws -> DatabaseBrokerCommandResponse {
+        try require(.mutationStatus)
+        return .mutationStatus(result)
+    }
+
+    public func response(
+        _ result: DatabaseCommandResult<DatabaseMutationCancelResult>
+    ) throws -> DatabaseBrokerCommandResponse {
+        try require(.mutationCancel)
+        return .mutationCancel(result)
+    }
+
+    public func response(
+        _ result: DatabaseCommandResult<DatabaseMutationOutcomeGetResult>
+    ) throws -> DatabaseBrokerCommandResponse {
+        try require(.mutationOutcomeGet)
+        return .mutationOutcomeGet(result)
+    }
+
+    public func response(
         _ result: DatabaseCommandResult<DatabaseSavedQueryListResult>
     ) throws -> DatabaseBrokerCommandResponse {
         try require(.savedQueryList)
@@ -507,6 +561,15 @@ public enum DatabaseBrokerCommandRequest: Hashable, Sendable {
         case .mutationApply(let request):
             version = request.version
             supportedVersion = DatabaseMutationApplyRequest.schemaVersion
+        case .mutationStatus(let request):
+            version = request.version
+            supportedVersion = DatabaseMutationStatusRequest.schemaVersion
+        case .mutationCancel(let request):
+            version = request.version
+            supportedVersion = DatabaseMutationCancelRequest.schemaVersion
+        case .mutationOutcomeGet(let request):
+            version = request.version
+            supportedVersion = DatabaseMutationOutcomeGetRequest.schemaVersion
         case .savedQueryList(let request):
             version = request.version
             supportedVersion = DatabaseSavedQueryListRequest.schemaVersion
@@ -616,6 +679,15 @@ extension DatabaseBrokerCommandRequest: Codable {
         case .mutationApply:
             self = .mutationApply(
                 try container.decode(DatabaseMutationApplyRequest.self, forKey: .request))
+        case .mutationStatus:
+            self = .mutationStatus(
+                try container.decode(DatabaseMutationStatusRequest.self, forKey: .request))
+        case .mutationCancel:
+            self = .mutationCancel(
+                try container.decode(DatabaseMutationCancelRequest.self, forKey: .request))
+        case .mutationOutcomeGet:
+            self = .mutationOutcomeGet(
+                try container.decode(DatabaseMutationOutcomeGetRequest.self, forKey: .request))
         case .savedQueryList:
             self = .savedQueryList(
                 try container.decode(DatabaseSavedQueryListRequest.self, forKey: .request))
@@ -683,6 +755,12 @@ extension DatabaseBrokerCommandRequest: Codable {
             try container.encode(request, forKey: .request)
         case .mutationApply(let request):
             try container.encode(request, forKey: .request)
+        case .mutationStatus(let request):
+            try container.encode(request, forKey: .request)
+        case .mutationCancel(let request):
+            try container.encode(request, forKey: .request)
+        case .mutationOutcomeGet(let request):
+            try container.encode(request, forKey: .request)
         case .savedQueryList(let request):
             try container.encode(request, forKey: .request)
         case .savedQueryGet(let request):
@@ -723,6 +801,9 @@ public enum DatabaseBrokerCommandResponse: Hashable, Sendable {
     case query(DatabaseCommandResult<DatabaseQueryResult>)
     case mutationPreview(DatabaseCommandResult<DatabaseMutationPreviewResult>)
     case mutationApply(DatabaseCommandResult<DatabaseMutationApplyResult>)
+    case mutationStatus(DatabaseCommandResult<DatabaseMutationStatusResult>)
+    case mutationCancel(DatabaseCommandResult<DatabaseMutationCancelResult>)
+    case mutationOutcomeGet(DatabaseCommandResult<DatabaseMutationOutcomeGetResult>)
     case savedQueryList(DatabaseCommandResult<DatabaseSavedQueryListResult>)
     case savedQueryGet(DatabaseCommandResult<DatabaseSavedQueryGetResult>)
     case savedQuerySave(DatabaseCommandResult<DatabaseSavedQuerySaveResult>)
@@ -765,6 +846,12 @@ public enum DatabaseBrokerCommandResponse: Hashable, Sendable {
             .mutationPreview
         case .mutationApply:
             .mutationApply
+        case .mutationStatus:
+            .mutationStatus
+        case .mutationCancel:
+            .mutationCancel
+        case .mutationOutcomeGet:
+            .mutationOutcomeGet
         case .savedQueryList:
             .savedQueryList
         case .savedQueryGet:
@@ -859,6 +946,21 @@ public enum DatabaseBrokerCommandResponse: Hashable, Sendable {
 
     public var mutationApplyResult: DatabaseCommandResult<DatabaseMutationApplyResult>? {
         guard case .mutationApply(let result) = self else { return nil }
+        return result
+    }
+
+    public var mutationStatusResult: DatabaseCommandResult<DatabaseMutationStatusResult>? {
+        guard case .mutationStatus(let result) = self else { return nil }
+        return result
+    }
+
+    public var mutationCancelResult: DatabaseCommandResult<DatabaseMutationCancelResult>? {
+        guard case .mutationCancel(let result) = self else { return nil }
+        return result
+    }
+
+    public var mutationOutcomeGetResult: DatabaseCommandResult<DatabaseMutationOutcomeGetResult>? {
+        guard case .mutationOutcomeGet(let result) = self else { return nil }
         return result
     }
 
@@ -1024,6 +1126,21 @@ extension DatabaseBrokerCommandResponse: Codable {
                 try container.decode(
                     DatabaseCommandResult<DatabaseMutationApplyResult>.self,
                     forKey: .result))
+        case .mutationStatus:
+            self = .mutationStatus(
+                try container.decode(
+                    DatabaseCommandResult<DatabaseMutationStatusResult>.self,
+                    forKey: .result))
+        case .mutationCancel:
+            self = .mutationCancel(
+                try container.decode(
+                    DatabaseCommandResult<DatabaseMutationCancelResult>.self,
+                    forKey: .result))
+        case .mutationOutcomeGet:
+            self = .mutationOutcomeGet(
+                try container.decode(
+                    DatabaseCommandResult<DatabaseMutationOutcomeGetResult>.self,
+                    forKey: .result))
         case .savedQueryList:
             self = .savedQueryList(
                 try container.decode(
@@ -1106,6 +1223,12 @@ extension DatabaseBrokerCommandResponse: Codable {
         case .mutationPreview(let result):
             try container.encode(result, forKey: .result)
         case .mutationApply(let result):
+            try container.encode(result, forKey: .result)
+        case .mutationStatus(let result):
+            try container.encode(result, forKey: .result)
+        case .mutationCancel(let result):
+            try container.encode(result, forKey: .result)
+        case .mutationOutcomeGet(let result):
             try container.encode(result, forKey: .result)
         case .savedQueryList(let result):
             try container.encode(result, forKey: .result)

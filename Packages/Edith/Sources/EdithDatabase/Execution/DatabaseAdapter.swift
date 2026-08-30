@@ -71,6 +71,7 @@ enum DatabaseAdapterContractViolation: Hashable, Sendable {
     case staleSession
     case unexpectedMutationPlan
     case partialMutationResult
+    case invalidMutationReconciliationResult
 }
 
 enum DatabaseAdapterFailure: Error, Hashable, Sendable {
@@ -539,10 +540,137 @@ struct DatabaseAdapterMutationResult: Sendable {
                 throw .contractViolation(.partialMutationResult)
             }
         }
+        if disposition == .accepted {
+            guard let serverOperationIdentifier, !serverOperationIdentifier.isEmpty,
+                returnedPage == nil
+            else {
+                throw .contractViolation(.invalidMutationReconciliationResult)
+            }
+        }
         self.disposition = disposition
         self.affectedRecords = affectedRecords
         self.returnedPage = returnedPage
         self.serverOperationIdentifier = serverOperationIdentifier
+    }
+}
+
+struct DatabaseAdapterMutationStatus: Sendable {
+    let serverOperationIdentifier: String
+    let state: DatabaseMutationOperationState
+    let progress: DatabaseOperationProgress?
+    let outcome: DatabaseAdapterMutationResult?
+    let error: DatabaseErrorEnvelope?
+    let warnings: [DatabaseWarning]
+
+    init(
+        serverOperationIdentifier: String,
+        state: DatabaseMutationOperationState,
+        progress: DatabaseOperationProgress? = nil,
+        outcome: DatabaseAdapterMutationResult? = nil,
+        error: DatabaseErrorEnvelope? = nil,
+        warnings: [DatabaseWarning] = []
+    ) throws(DatabaseAdapterFailure) {
+        let identifierBytes = serverOperationIdentifier.utf8.count
+        guard !serverOperationIdentifier.isEmpty,
+            identifierBytes <= DatabaseAdapterBounds.maximumServerOperationIdentifierBytes,
+            warnings.count <= DatabaseAdapterBounds.maximumWarnings
+        else {
+            if identifierBytes > DatabaseAdapterBounds.maximumServerOperationIdentifierBytes {
+                throw .limitExceeded(
+                    limit: .serverOperationIdentifierBytes,
+                    actual: identifierBytes,
+                    maximum: DatabaseAdapterBounds.maximumServerOperationIdentifierBytes)
+            }
+            if warnings.count > DatabaseAdapterBounds.maximumWarnings {
+                throw .limitExceeded(
+                    limit: .warnings,
+                    actual: warnings.count,
+                    maximum: DatabaseAdapterBounds.maximumWarnings)
+            }
+            throw .contractViolation(.invalidMutationReconciliationResult)
+        }
+        switch state {
+        case .accepted, .running, .cancelling:
+            guard outcome == nil, error == nil else {
+                throw .contractViolation(.invalidMutationReconciliationResult)
+            }
+        case .completed:
+            guard let outcome, outcome.disposition == .completed, error == nil,
+                outcome.serverOperationIdentifier == nil
+                    || outcome.serverOperationIdentifier == serverOperationIdentifier
+            else {
+                throw .contractViolation(.invalidMutationReconciliationResult)
+            }
+        case .failed:
+            guard outcome == nil, error != nil else {
+                throw .contractViolation(.invalidMutationReconciliationResult)
+            }
+        case .cancelled:
+            guard outcome == nil else {
+                throw .contractViolation(.invalidMutationReconciliationResult)
+            }
+        }
+        self.serverOperationIdentifier = serverOperationIdentifier
+        self.state = state
+        self.progress = progress
+        self.outcome = outcome
+        self.error = error
+        self.warnings = warnings
+    }
+}
+
+struct DatabaseAdapterMutationCancellationResult: Sendable {
+    let serverOperationIdentifier: String
+    let disposition: DatabaseMutationCancellationDisposition
+    let status: DatabaseAdapterMutationStatus?
+
+    init(
+        serverOperationIdentifier: String,
+        disposition: DatabaseMutationCancellationDisposition,
+        status: DatabaseAdapterMutationStatus? = nil
+    ) throws(DatabaseAdapterFailure) {
+        let identifierBytes = serverOperationIdentifier.utf8.count
+        guard !serverOperationIdentifier.isEmpty,
+            identifierBytes <= DatabaseAdapterBounds.maximumServerOperationIdentifierBytes,
+            status?.serverOperationIdentifier == nil
+                || status?.serverOperationIdentifier == serverOperationIdentifier
+        else {
+            if identifierBytes > DatabaseAdapterBounds.maximumServerOperationIdentifierBytes {
+                throw .limitExceeded(
+                    limit: .serverOperationIdentifierBytes,
+                    actual: identifierBytes,
+                    maximum: DatabaseAdapterBounds.maximumServerOperationIdentifierBytes)
+            }
+            throw .contractViolation(.invalidMutationReconciliationResult)
+        }
+        switch disposition {
+        case .accepted:
+            guard status.map({ !$0.state.isTerminal }) ?? true else {
+                throw .contractViolation(.invalidMutationReconciliationResult)
+            }
+        case .alreadyFinished:
+            guard status?.state.isTerminal == true else {
+                throw .contractViolation(.invalidMutationReconciliationResult)
+            }
+        case .notFound, .unavailable:
+            guard status == nil else {
+                throw .contractViolation(.invalidMutationReconciliationResult)
+            }
+        }
+        self.serverOperationIdentifier = serverOperationIdentifier
+        self.disposition = disposition
+        self.status = status
+    }
+}
+
+extension DatabaseMutationOperationState {
+    fileprivate var isTerminal: Bool {
+        switch self {
+        case .completed, .failed, .cancelled:
+            true
+        case .accepted, .running, .cancelling:
+            false
+        }
     }
 }
 
@@ -576,12 +704,42 @@ protocol DatabaseAdapterSession: Sendable {
         _ plan: DatabaseDestructivePlan,
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterMutationResult
+    func mutationStatus(
+        _ serverOperationIdentifier: String,
+        context: DatabaseAdapterOperationContext
+    ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterMutationStatus
+    func cancelMutation(
+        _ serverOperationIdentifier: String,
+        context: DatabaseAdapterOperationContext
+    ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterMutationCancellationResult
     func openStream(
         _ request: DatabaseAdapterStreamRequest,
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> any DatabaseAdapterRecordStream
     func cancel(_ operationID: DatabaseOperationID) async -> DatabaseAdapterCancellationResult
     func disconnect() async
+}
+
+extension DatabaseAdapterSession {
+    func mutationStatus(
+        _ serverOperationIdentifier: String,
+        context: DatabaseAdapterOperationContext
+    ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterMutationStatus {
+        throw .reported(
+            DatabaseErrorEnvelope(
+                category: .unsupported,
+                message: "Mutation status is not supported by this database adapter."))
+    }
+
+    func cancelMutation(
+        _ serverOperationIdentifier: String,
+        context: DatabaseAdapterOperationContext
+    ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterMutationCancellationResult {
+        throw .reported(
+            DatabaseErrorEnvelope(
+                category: .unsupported,
+                message: "Mutation cancellation is not supported by this database adapter."))
+    }
 }
 
 protocol DatabaseAdapter: Sendable {

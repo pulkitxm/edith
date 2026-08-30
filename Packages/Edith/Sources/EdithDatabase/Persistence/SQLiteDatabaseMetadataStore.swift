@@ -14,7 +14,7 @@ public struct DatabaseMetadataDiagnostics: Codable, Hashable, Sendable {
 }
 
 public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
-    public static let schemaVersion = 3
+    public static let schemaVersion = 4
     public static let maximumConnectionCount = 500
     public static let maximumSavedQueryCount = 500
     public static let maximumHistoryCount = 1_000
@@ -23,6 +23,7 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
     public static let maximumQueryBytes = 8 * 1_024 * 1_024
     public static let maximumTagCount = 64
     public static let maximumTagBytes = 128
+    public static let maximumMutationOutcomeBytes = 17 * 1_024 * 1_024
     private let pool: DatabasePool
 
     public init(path: String) throws {
@@ -778,6 +779,96 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
         }
     }
 
+    public func recordMutationOutcome(
+        _ outcome: DatabaseMutationApplyResult,
+        operationID: DatabaseOperationID,
+        owner: DatabaseRuntimeOwnerToken
+    ) throws {
+        try Self.validateMutationOutcome(outcome)
+        let data = try Self.encoder().encode(outcome)
+        guard data.count <= Self.maximumMutationOutcomeBytes else {
+            throw DatabaseMetadataStoreError.valueTooLarge(
+                name: "mutation outcome",
+                bytes: data.count,
+                maximum: Self.maximumMutationOutcomeBytes)
+        }
+        try pool.write { database in
+            try database.execute(
+                sql: """
+                    INSERT INTO database_mutation_outcomes (operation_id, outcome)
+                    SELECT :operation_id, :outcome
+                    WHERE EXISTS (
+                        SELECT 1 FROM database_operation_history
+                        WHERE id = :operation_id
+                            AND kind = :kind
+                            AND owner_token = :owner_token
+                            AND state IN (:running, :cancelling)
+                    ) AND EXISTS (
+                        SELECT 1 FROM database_runtime_owner
+                        WHERE singleton = 1
+                            AND token = :owner_token
+                            AND released_at IS NULL
+                            AND recovery_pending = 0
+                    )
+                    ON CONFLICT(operation_id) DO NOTHING
+                    """,
+                arguments: [
+                    "operation_id": operationID.rawValue.uuidString,
+                    "outcome": data,
+                    "kind": DatabaseOperationKind.databaseMutationApply.rawValue,
+                    "owner_token": owner.rawValue.uuidString,
+                    "running": DatabaseOperationState.running.rawValue,
+                    "cancelling": DatabaseOperationState.cancelling.rawValue,
+                ])
+            guard database.changesCount == 1 else {
+                guard try Self.isRuntimeOwnerActive(owner, in: database) else {
+                    throw DatabaseMetadataStoreError.runtimeOwnerNotActive
+                }
+                let exists =
+                    try Bool.fetchOne(
+                        database,
+                        sql:
+                            "SELECT EXISTS(SELECT 1 FROM database_mutation_outcomes WHERE operation_id = ?)",
+                        arguments: [operationID.rawValue.uuidString]) ?? false
+                throw DatabaseMetadataStoreError.invalidValue(
+                    name: exists
+                        ? "mutation outcome already recorded"
+                        : "mutation outcome operation")
+            }
+        }
+    }
+
+    public func mutationOutcome(
+        operationID: DatabaseOperationID
+    ) throws -> DatabaseMutationApplyResult? {
+        try pool.read { database in
+            guard
+                let data = try Data.fetchOne(
+                    database,
+                    sql: "SELECT outcome FROM database_mutation_outcomes WHERE operation_id = ?",
+                    arguments: [operationID.rawValue.uuidString])
+            else {
+                return nil
+            }
+            guard data.count <= Self.maximumMutationOutcomeBytes else {
+                throw DatabaseMetadataStoreError.corruptedRecord(
+                    kind: "mutation outcome",
+                    identifier: operationID.rawValue.uuidString)
+            }
+            do {
+                let outcome = try Self.decoder().decode(
+                    DatabaseMutationApplyResult.self,
+                    from: data)
+                try Self.validateMutationOutcome(outcome)
+                return outcome
+            } catch {
+                throw DatabaseMetadataStoreError.corruptedRecord(
+                    kind: "mutation outcome",
+                    identifier: operationID.rawValue.uuidString)
+            }
+        }
+    }
+
     public func pruneOperations(
         finishedBefore date: Date,
         limit: Int = DatabaseMetadataMaintenanceBounds.maximumBatchSize,
@@ -1276,7 +1367,45 @@ extension SQLiteDatabaseMetadataStore {
             )
             try database.execute(sql: "PRAGMA user_version = 3")
         }
+        migrator.registerMigration("database-metadata-v4") { database in
+            try database.execute(
+                sql: """
+                    CREATE TABLE database_mutation_outcomes (
+                        operation_id TEXT PRIMARY KEY NOT NULL
+                            REFERENCES database_operation_history(id) ON DELETE CASCADE,
+                        outcome BLOB NOT NULL
+                    ) WITHOUT ROWID
+                    """)
+            try database.execute(sql: "PRAGMA user_version = 4")
+        }
         return migrator
+    }
+
+    private static func validateMutationOutcome(
+        _ outcome: DatabaseMutationApplyResult
+    ) throws {
+        let identifierBytes = outcome.serverOperationIdentifier?.utf8.count ?? 0
+        guard identifierBytes <= DatabaseAdapterBounds.maximumServerOperationIdentifierBytes else {
+            throw DatabaseMetadataStoreError.valueTooLarge(
+                name: "mutation server operation identifier",
+                bytes: identifierBytes,
+                maximum: DatabaseAdapterBounds.maximumServerOperationIdentifierBytes)
+        }
+        if outcome.disposition == .accepted {
+            guard let identifier = outcome.serverOperationIdentifier, !identifier.isEmpty,
+                outcome.returnedRecords == nil
+            else {
+                throw DatabaseMetadataStoreError.invalidValue(name: "mutation outcome")
+            }
+        }
+        if let records = outcome.returnedRecords {
+            guard records.metadata.completeness.state == .complete,
+                records.metadata.partialFailures.isEmpty,
+                records.nextContinuation == nil
+            else {
+                throw DatabaseMetadataStoreError.invalidValue(name: "mutation outcome")
+            }
+        }
     }
 
     private static func decodeRuntimeOwner(_ row: Row) throws -> DatabaseRuntimeOwnerRecord {

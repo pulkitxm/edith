@@ -348,6 +348,14 @@ public protocol DatabaseMetadataStore: Sendable {
     func operation(id: DatabaseOperationID) async throws -> DatabaseOperationRecordSummary?
     func operations(matching search: DatabaseOperationHistorySearch) async throws
         -> [DatabaseOperationRecordSummary]
+    func recordMutationOutcome(
+        _ outcome: DatabaseMutationApplyResult,
+        operationID: DatabaseOperationID,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws
+    func mutationOutcome(
+        operationID: DatabaseOperationID
+    ) async throws -> DatabaseMutationApplyResult?
     func pruneOperations(
         finishedBefore date: Date,
         limit: Int,

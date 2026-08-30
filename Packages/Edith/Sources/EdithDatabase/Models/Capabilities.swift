@@ -26,6 +26,8 @@ extension DatabaseCapabilityID {
     public static let update: Self = "data.update"
     public static let delete: Self = "data.delete"
     public static let bulkMutation: Self = "data.bulk-mutation"
+    public static let mutationStatus: Self = "data.mutation-status"
+    public static let mutationCancellation: Self = "data.mutation-cancel"
     public static let importData: Self = "data.import"
     public static let exportData: Self = "data.export"
     public static let transactions: Self = "transactions"

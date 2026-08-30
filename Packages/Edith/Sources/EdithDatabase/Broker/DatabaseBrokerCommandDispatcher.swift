@@ -67,6 +67,18 @@ public protocol DatabaseBrokerCommandHandler: Sendable {
         _ request: DatabaseMutationApplyRequest
     ) async throws -> DatabaseCommandResult<DatabaseMutationApplyResult>
 
+    func mutationStatus(
+        _ request: DatabaseMutationStatusRequest
+    ) async throws -> DatabaseCommandResult<DatabaseMutationStatusResult>
+
+    func mutationCancel(
+        _ request: DatabaseMutationCancelRequest
+    ) async throws -> DatabaseCommandResult<DatabaseMutationCancelResult>
+
+    func mutationOutcomeGet(
+        _ request: DatabaseMutationOutcomeGetRequest
+    ) async throws -> DatabaseCommandResult<DatabaseMutationOutcomeGetResult>
+
     func savedQueryList(
         _ request: DatabaseSavedQueryListRequest
     ) async throws -> DatabaseCommandResult<DatabaseSavedQueryListResult>
@@ -192,6 +204,12 @@ public actor DatabaseBrokerCommandDispatcher {
             .mutationPreview(try await handler.mutationPreview(command))
         case .mutationApply(let command):
             .mutationApply(try await handler.mutationApply(command))
+        case .mutationStatus(let command):
+            .mutationStatus(try await handler.mutationStatus(command))
+        case .mutationCancel(let command):
+            .mutationCancel(try await handler.mutationCancel(command))
+        case .mutationOutcomeGet(let command):
+            .mutationOutcomeGet(try await handler.mutationOutcomeGet(command))
         case .savedQueryList(let command):
             .savedQueryList(try await handler.savedQueryList(command))
         case .savedQueryGet(let command):

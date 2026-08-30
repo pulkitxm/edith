@@ -93,6 +93,24 @@ struct DatabaseBrokerExecutorHandler: DatabaseBrokerCommandHandler {
         await executor.applyMutation(request)
     }
 
+    func mutationStatus(
+        _ request: DatabaseMutationStatusRequest
+    ) async throws -> DatabaseCommandResult<DatabaseMutationStatusResult> {
+        await executor.mutationStatus(request)
+    }
+
+    func mutationCancel(
+        _ request: DatabaseMutationCancelRequest
+    ) async throws -> DatabaseCommandResult<DatabaseMutationCancelResult> {
+        await executor.cancelMutation(request)
+    }
+
+    func mutationOutcomeGet(
+        _ request: DatabaseMutationOutcomeGetRequest
+    ) async throws -> DatabaseCommandResult<DatabaseMutationOutcomeGetResult> {
+        await executor.mutationOutcome(request)
+    }
+
     func savedQueryList(
         _ request: DatabaseSavedQueryListRequest
     ) async throws -> DatabaseCommandResult<DatabaseSavedQueryListResult> {
