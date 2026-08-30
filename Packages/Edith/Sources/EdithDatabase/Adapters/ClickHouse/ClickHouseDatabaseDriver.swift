@@ -94,6 +94,11 @@ struct ClickHouseDatabaseIdentityValues: Codable, Equatable, Sendable {
 
 protocol ClickHouseDatabaseClient: Sendable {
     func discoverIdentity() async throws -> DatabaseProductIdentity
+    func execute(
+        query: String,
+        maximumResponseBytes: Int,
+        parameters: [ClickHouseDatabaseHTTPParameter]
+    ) async throws -> ClickHouseDatabaseHTTPResponse
     func disconnect() async
 }
 
@@ -170,6 +175,26 @@ final class URLSessionClickHouseDatabaseClient: ClickHouseDatabaseClient, @unche
             return try ClickHouseDatabaseDriverSupport.identity(values)
         } catch let failure as ClickHouseDatabaseDriverFailure {
             throw failure
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw try ClickHouseDatabaseDriverErrorClassifier.classify(error)
+        }
+    }
+
+    func execute(
+        query: String,
+        maximumResponseBytes: Int,
+        parameters: [ClickHouseDatabaseHTTPParameter] = []
+    ) async throws -> ClickHouseDatabaseHTTPResponse {
+        guard let transport = lock.withLock({ transport }) else {
+            throw ClickHouseDatabaseDriverFailure.connection
+        }
+        do {
+            return try await transport.execute(
+                query: query,
+                maximumResponseBytes: maximumResponseBytes,
+                parameters: parameters)
         } catch is CancellationError {
             throw CancellationError()
         } catch {
