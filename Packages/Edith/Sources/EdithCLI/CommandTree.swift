@@ -700,6 +700,36 @@ public enum CommandTree {
                     CommandNode("drives", "The volumes the cleaner can scan.", options: common),
                 ]),
             CommandNode(
+                "maintenance", "Installed app inventory, updates, and review-first removal.",
+                children: [
+                    CommandNode(
+                        "inventory", "List installed applications and Homebrew updates.",
+                        aliases: ["ls", "list"],
+                        options: ["--json", "--help", "--no-updates"]),
+                    CommandNode(
+                        "scan", "Preview an app and its exact support files.",
+                        options: common, arguments: [.localPath]),
+                    CommandNode(
+                        "remove", "Move a reviewed app selection to the Trash.",
+                        options: ["--json", "--help", "--only-app", "--yes"],
+                        arguments: [.localPath], destructivePolicy: .previewThenYes),
+                    CommandNode(
+                        "install", "Verify and install one app from a disk image.",
+                        options: [
+                            "--json", "--help", "--system", "--replace", "--keep-image", "--yes",
+                        ], arguments: [.localPath], destructivePolicy: .previewThenYes),
+                    CommandNode(
+                        "updates", "Discover updates from every available source.", options: common),
+                    CommandNode(
+                        "update", "Review and run selected updates.",
+                        options: ["--json", "--help", "--yes", "--concurrency", "--retries"],
+                        repeatingArgument: .free, destructivePolicy: .previewThenYes),
+                    CommandNode("history", "Show recent update results.", options: common),
+                    CommandNode(
+                        "backup-updates", "Back up update policy and history.", options: common,
+                        arguments: [.localPath]),
+                ]),
+            CommandNode(
                 "quinjet", "Discover and open Quinjet review workspaces.",
                 children: [
                     CommandNode(

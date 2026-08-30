@@ -1,6 +1,16 @@
 import Foundation
 
 public enum AppStorageKeys {
+    public enum AppMaintenance {
+        public static let enabled = "appMaintenanceEnabled"
+        public static let installDestination = "appMaintenanceInstallDestination"
+        public static let updateAutoRefresh = "appUpdateAutoRefresh"
+        public static let updateConcurrency = "appUpdateConcurrency"
+        public static let updateNotifications = "appUpdateNotifications"
+        public static let updateRefreshInterval = "appUpdateRefreshInterval"
+        public static let updateRetries = "appUpdateRetries"
+    }
+
     public enum Update {
         public static let automaticChecks = "SUEnableAutomaticChecks"
         public static let checkInterval = "SUScheduledCheckInterval"

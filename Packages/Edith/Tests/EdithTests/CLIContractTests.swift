@@ -22,6 +22,29 @@ enum JSONContract {
         JSONCase("ed guide", ["guide", "--json"]),
         JSONCase("ed version", ["version", "--json"]),
         JSONCase("ed status", ["status", "--json"]),
+        JSONCase(
+            "ed maintenance inventory", ["maintenance", "inventory", "--no-updates", "--json"]),
+        JSONCase(
+            "ed maintenance scan",
+            ["maintenance", "scan", "/path/that/does/not/exist.app", "--json"]),
+        JSONCase(
+            "ed maintenance remove",
+            ["maintenance", "remove", "/path/that/does/not/exist.app", "--json"]),
+        JSONCase(
+            "ed maintenance install",
+            ["maintenance", "install", "/path/that/does/not/exist.dmg", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed maintenance updates", ["maintenance", "updates", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed maintenance update", ["maintenance", "update", "missing", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed maintenance history", ["maintenance", "history", "--json"]),
+        JSONCase(
+            "ed maintenance backup-updates",
+            ["maintenance", "backup-updates", "/tmp/edith-update-contract.json", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed completions source", ["completions", "source", "--json"]),
         JSONCase("ed attention status", ["attention", "status", "--json"]),
         JSONCase("ed attention summary", ["attention", "summary", "--json"]),
