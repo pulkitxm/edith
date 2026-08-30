@@ -418,12 +418,14 @@ actor DatabaseConfirmationAuthority {
     private let signingKey: SymmetricKey
     private let metadataStore: any DatabaseMetadataStore
     private let secretStore: any DatabaseSecretStore
+    private let runtimeOwner: DatabaseRuntimeOwnerToken
     private let currentDate: @Sendable () -> Date
 
     init(
         signingKey: Data,
         metadataStore: any DatabaseMetadataStore,
         secretStore: any DatabaseSecretStore,
+        runtimeOwner: DatabaseRuntimeOwnerToken,
         currentDate: @escaping @Sendable () -> Date
     ) throws {
         guard Self.signingKeyByteRange.contains(signingKey.count) else {
@@ -432,12 +434,14 @@ actor DatabaseConfirmationAuthority {
         self.signingKey = SymmetricKey(data: signingKey)
         self.metadataStore = metadataStore
         self.secretStore = secretStore
+        self.runtimeOwner = runtimeOwner
         self.currentDate = currentDate
     }
 
     static func create(
         secretStore: any DatabaseSecretStore,
-        metadataStore: any DatabaseMetadataStore
+        metadataStore: any DatabaseMetadataStore,
+        runtimeOwner: DatabaseRuntimeOwnerToken
     ) async throws -> DatabaseConfirmationAuthority {
         var generator = SystemRandomNumberGenerator()
         let proposedKey = Data(
@@ -451,6 +455,7 @@ actor DatabaseConfirmationAuthority {
             signingKey: signingKey,
             metadataStore: metadataStore,
             secretStore: secretStore,
+            runtimeOwner: runtimeOwner,
             currentDate: { Date() })
     }
 
@@ -462,7 +467,9 @@ actor DatabaseConfirmationAuthority {
             throw DatabaseConfirmationError.invalidLifetimeSeconds(lifetimeSeconds)
         }
         let now = currentDate()
-        _ = try await metadataStore.removeExpiredConfirmations(before: now)
+        _ = try await metadataStore.removeExpiredConfirmations(
+            before: now,
+            owner: runtimeOwner)
         let prepared = try await prepare(plan)
         let identifier = UUID()
         let expiresAt = now.addingTimeInterval(TimeInterval(lifetimeSeconds))
@@ -489,7 +496,8 @@ actor DatabaseConfirmationAuthority {
             DatabaseConfirmationReceipt(
                 identifier: identifier,
                 effectDigest: prepared.receiptDigest,
-                expiresAt: expiresAt))
+                expiresAt: expiresAt),
+            owner: runtimeOwner)
         return DatabaseDestructivePreview(
             effect: prepared.effect,
             request: prepared.request,
@@ -542,7 +550,8 @@ actor DatabaseConfirmationAuthority {
             identifier: payload.identifier,
             effectDigest: prepared.receiptDigest,
             connection: prepared.connection,
-            consumedAt: now)
+            consumedAt: now,
+            owner: runtimeOwner)
         guard consumed else {
             throw DatabaseConfirmationError.alreadyConsumedOrUnknown
         }

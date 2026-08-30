@@ -157,6 +157,12 @@ private enum DatabaseExecutionErrorMapperFixtures {
                 .reconnect
             ),
             (
+                DatabaseExecutionValidationError.savedQueryDefinitionChanged(
+                    DatabaseSavedQueryID(rawValue: UUID())),
+                .conflict,
+                .retry
+            ),
+            (
                 DatabaseExecutionValidationError.limitExceeded(
                     name: "rows",
                     actual: 2_001,

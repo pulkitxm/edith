@@ -50,65 +50,62 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
         }
     }
 
-    public func saveConnection(_ definition: DatabaseConnectionDefinition) throws {
-        try Self.validateName(definition.displayName, field: "connection name")
-        let tags = try Self.normalizedTags(definition.tags)
-        let data = try Self.encoder().encode(definition)
-        try pool.write { database in
-            try database.execute(
-                sql: """
-                    INSERT INTO database_connections (
-                        id, display_name, product, environment, group_name, is_favorite,
-                        created_at, updated_at, last_used_at, definition
-                    ) VALUES (
-                        :id, :display_name, :product, :environment, :group_name, :is_favorite,
-                        :created_at, :updated_at, :last_used_at, :definition
-                    )
-                    ON CONFLICT(id) DO UPDATE SET
-                        display_name = excluded.display_name,
-                        product = excluded.product,
-                        environment = excluded.environment,
-                        group_name = excluded.group_name,
-                        is_favorite = excluded.is_favorite,
-                        created_at = excluded.created_at,
-                        updated_at = excluded.updated_at,
-                        last_used_at = excluded.last_used_at,
-                        definition = excluded.definition
-                    """,
-                arguments: [
-                    "id": definition.id.rawValue.uuidString,
-                    "display_name": definition.displayName,
-                    "product": definition.productHint.rawValue,
-                    "environment": definition.environment.kind.rawValue,
-                    "group_name": definition.group,
-                    "is_favorite": definition.isFavorite,
-                    "created_at": definition.createdAt.timeIntervalSince1970,
-                    "updated_at": definition.updatedAt.timeIntervalSince1970,
-                    "last_used_at": definition.lastUsedAt?.timeIntervalSince1970,
-                    "definition": data,
-                ])
-            try database.execute(
-                sql: "DELETE FROM database_connection_tags WHERE connection_id = ?",
-                arguments: [definition.id.rawValue.uuidString])
-            for tag in tags {
-                try database.execute(
-                    sql: "INSERT INTO database_connection_tags (connection_id, tag) VALUES (?, ?)",
-                    arguments: [definition.id.rawValue.uuidString, tag])
+    public func saveConnection(
+        _ definition: DatabaseConnectionDefinition,
+        replacing expected: DatabaseConnectionDefinition?,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> DatabaseOwnedMetadataWriteResult {
+        guard expected?.id == nil || expected?.id == definition.id else {
+            throw DatabaseMetadataStoreError.invalidValue(name: "expected connection identifier")
+        }
+        let prepared = try Self.prepareConnection(definition)
+        let expectedData = try expected.map { try Self.encoder().encode($0) }
+        try Task.checkCancellation()
+        return try await pool.write { database in
+            try Task.checkCancellation()
+            guard try Self.isRuntimeOwnerActive(owner, in: database) else {
+                return .runtimeOwnerNotActive
             }
+            let storedData = try Data.fetchOne(
+                database,
+                sql: "SELECT definition FROM database_connections WHERE id = ?",
+                arguments: [definition.id.rawValue.uuidString])
+            if let expected, let expectedData {
+                guard let storedData else { return .resourceMissing }
+                guard storedData == expectedData else { return .resourceChanged }
+                if expected.productHint != definition.productHint,
+                    try Self.hasIncompatibleSavedQueries(
+                        connectionID: definition.id,
+                        product: definition.productHint,
+                        in: database)
+                {
+                    return .incompatibleSavedQueries
+                }
+            } else if storedData != nil {
+                return .identifierExists
+            }
+            try Task.checkCancellation()
+            try Self.writeConnection(prepared, to: database)
+            return .saved
         }
     }
 
     public func connection(id: DatabaseConnectionID) throws -> DatabaseConnectionDefinition? {
         try pool.read { database in
             guard
-                let data = try Data.fetchOne(
+                let row = try Row.fetchOne(
                     database,
-                    sql: "SELECT definition FROM database_connections WHERE id = ?",
+                    sql: """
+                        SELECT id, display_name, product, environment, group_name, is_favorite,
+                            created_at, updated_at, last_used_at, definition
+                        FROM database_connections
+                        WHERE id = ?
+                        """,
                     arguments: [id.rawValue.uuidString])
             else {
                 return nil
             }
-            return try Self.decodeConnection(data, id: id)
+            return try Self.decodeConnection(row, expectedID: id)
         }
     }
 
@@ -158,87 +155,102 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
         }
         let whereClause = clauses.isEmpty ? "" : "WHERE \(clauses.joined(separator: " AND "))"
         let sql = """
-            SELECT definition FROM database_connections
+            SELECT id, display_name, product, environment, group_name, is_favorite,
+                created_at, updated_at, last_used_at, definition
+            FROM database_connections
             \(whereClause)
             ORDER BY \(Self.connectionOrder(search.order))
             LIMIT :limit OFFSET :offset
             """
         return try pool.read { database in
             try Row.fetchAll(database, sql: sql, arguments: StatementArguments(arguments)).map {
-                row in
-                let data: Data = row["definition"]
-                let identifier = try Self.connectionIdentifier(from: data)
-                return try Self.decodeConnection(data, id: identifier)
+                try Self.decodeConnection($0)
             }
         }
     }
 
-    public func deleteConnection(id: DatabaseConnectionID) throws -> Bool {
-        try pool.write { database in
+    public func deleteConnection(
+        id: DatabaseConnectionID,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> DatabaseOwnedMetadataDeleteResult {
+        try Task.checkCancellation()
+        return try await pool.write { database in
+            try Task.checkCancellation()
+            guard try Self.isRuntimeOwnerActive(owner, in: database) else {
+                return .runtimeOwnerNotActive
+            }
+            try Task.checkCancellation()
             try database.execute(
                 sql: "DELETE FROM database_connections WHERE id = ?",
                 arguments: [id.rawValue.uuidString])
-            return database.changesCount == 1
+            return database.changesCount == 1 ? .deleted : .notFound
         }
     }
 
-    public func saveQuery(_ query: DatabaseSavedQuery) throws {
-        try Self.validateName(query.name, field: "saved query name")
-        try Self.validateSize(
-            query.text,
-            field: "saved query text",
-            maximum: Self.maximumQueryBytes)
-        let tags = try Self.normalizedTags(query.tags)
-        let data = try Self.encoder().encode(query)
-        try pool.write { database in
-            try database.execute(
-                sql: """
-                    INSERT INTO database_saved_queries (
-                        id, connection_id, name, language, is_favorite, created_at, updated_at, query
-                    ) VALUES (
-                        :id, :connection_id, :name, :language, :is_favorite, :created_at, :updated_at, :query
-                    )
-                    ON CONFLICT(id) DO UPDATE SET
-                        connection_id = excluded.connection_id,
-                        name = excluded.name,
-                        language = excluded.language,
-                        is_favorite = excluded.is_favorite,
-                        created_at = excluded.created_at,
-                        updated_at = excluded.updated_at,
-                        query = excluded.query
-                    """,
-                arguments: [
-                    "id": query.id.rawValue.uuidString,
-                    "connection_id": query.connectionID?.rawValue.uuidString,
-                    "name": query.name,
-                    "language": query.language.rawValue,
-                    "is_favorite": query.isFavorite,
-                    "created_at": query.createdAt.timeIntervalSince1970,
-                    "updated_at": query.updatedAt.timeIntervalSince1970,
-                    "query": data,
-                ])
-            try database.execute(
-                sql: "DELETE FROM database_saved_query_tags WHERE query_id = ?",
-                arguments: [query.id.rawValue.uuidString])
-            for tag in tags {
-                try database.execute(
-                    sql: "INSERT INTO database_saved_query_tags (query_id, tag) VALUES (?, ?)",
-                    arguments: [query.id.rawValue.uuidString, tag])
+    public func saveQuery(
+        _ query: DatabaseSavedQuery,
+        replacing expected: DatabaseSavedQuery?,
+        validatedAgainst connection: DatabaseConnectionDefinition?,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> DatabaseOwnedMetadataWriteResult {
+        guard expected?.id == nil || expected?.id == query.id else {
+            throw DatabaseMetadataStoreError.invalidValue(name: "expected saved query identifier")
+        }
+        let prepared = try Self.prepareSavedQuery(query)
+        let expectedData = try expected.map { try Self.encoder().encode($0) }
+        let connectionData = try connection.map { try Self.encoder().encode($0) }
+        try Task.checkCancellation()
+        return try await pool.write { database in
+            try Task.checkCancellation()
+            guard try Self.isRuntimeOwnerActive(owner, in: database) else {
+                return .runtimeOwnerNotActive
             }
+            let storedData = try Data.fetchOne(
+                database,
+                sql: "SELECT query FROM database_saved_queries WHERE id = ?",
+                arguments: [query.id.rawValue.uuidString])
+            if let expectedData {
+                guard let storedData else { return .resourceMissing }
+                guard storedData == expectedData else { return .resourceChanged }
+            } else if storedData != nil {
+                return .identifierExists
+            }
+            if let connectionID = query.connectionID {
+                guard connection?.id == connectionID, let connectionData else {
+                    return .referencedConnectionChangedOrMissing
+                }
+                let storedConnectionData = try Data.fetchOne(
+                    database,
+                    sql: "SELECT definition FROM database_connections WHERE id = ?",
+                    arguments: [connectionID.rawValue.uuidString])
+                guard storedConnectionData == connectionData else {
+                    return .referencedConnectionChangedOrMissing
+                }
+            } else if connection != nil {
+                return .referencedConnectionChangedOrMissing
+            }
+            try Task.checkCancellation()
+            try Self.writeSavedQuery(prepared, to: database)
+            return .saved
         }
     }
 
     public func savedQuery(id: DatabaseSavedQueryID) throws -> DatabaseSavedQuery? {
         try pool.read { database in
             guard
-                let data = try Data.fetchOne(
+                let row = try Row.fetchOne(
                     database,
-                    sql: "SELECT query FROM database_saved_queries WHERE id = ?",
+                    sql: """
+                        SELECT id, connection_id, name, language, is_favorite,
+                            created_at, updated_at, query
+                        FROM database_saved_queries
+                        WHERE id = ?
+                        """,
                     arguments: [id.rawValue.uuidString])
             else {
                 return nil
             }
-            return try Self.decodeSavedQuery(data, id: id)
+            return try Self.decodeSavedQuery(row, expectedID: id)
         }
     }
 
@@ -280,27 +292,35 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
         }
         let whereClause = clauses.isEmpty ? "" : "WHERE \(clauses.joined(separator: " AND "))"
         let sql = """
-            SELECT query FROM database_saved_queries
+            SELECT id, connection_id, name, language, is_favorite,
+                created_at, updated_at, query
+            FROM database_saved_queries
             \(whereClause)
             ORDER BY \(Self.savedQueryOrder(search.order))
             LIMIT :limit OFFSET :offset
             """
         return try pool.read { database in
             try Row.fetchAll(database, sql: sql, arguments: StatementArguments(arguments)).map {
-                row in
-                let data: Data = row["query"]
-                let identifier = try Self.savedQueryIdentifier(from: data)
-                return try Self.decodeSavedQuery(data, id: identifier)
+                try Self.decodeSavedQuery($0)
             }
         }
     }
 
-    public func deleteSavedQuery(id: DatabaseSavedQueryID) throws -> Bool {
-        try pool.write { database in
+    public func deleteSavedQuery(
+        id: DatabaseSavedQueryID,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> DatabaseOwnedMetadataDeleteResult {
+        try Task.checkCancellation()
+        return try await pool.write { database in
+            try Task.checkCancellation()
+            guard try Self.isRuntimeOwnerActive(owner, in: database) else {
+                return .runtimeOwnerNotActive
+            }
+            try Task.checkCancellation()
             try database.execute(
                 sql: "DELETE FROM database_saved_queries WHERE id = ?",
                 arguments: [id.rawValue.uuidString])
-            return database.changesCount == 1
+            return database.changesCount == 1 ? .deleted : .notFound
         }
     }
 
@@ -319,27 +339,12 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
         }
     }
 
-    public func claimRuntimeOwner(
-        _ token: DatabaseRuntimeOwnerToken,
-        claimedAt: Date
-    ) throws -> DatabaseRuntimeOwnerClaimResult {
+    public func claimRuntimeOwner(claimedAt: Date) throws -> DatabaseRuntimeOwnerClaimResult {
         guard claimedAt.timeIntervalSince1970.isFinite else {
             throw DatabaseMetadataStoreError.invalidValue(name: "runtime owner claimed at")
         }
+        let token = DatabaseRuntimeOwnerToken()
         return try pool.write { database in
-            if let row = try Row.fetchOne(
-                database,
-                sql:
-                    "SELECT token, claimed_at, released_at FROM database_runtime_owner WHERE singleton = 1"
-            ) {
-                let owner = try Self.decodeRuntimeOwner(row)
-                if owner.token == token, owner.isActive {
-                    return DatabaseRuntimeOwnerClaimResult(
-                        owner: owner,
-                        recoveredOperationCount: 0)
-                }
-            }
-
             let recoveredOperationCount = try Self.recoverInterruptedOperations(
                 database,
                 finishedAt: claimedAt)
@@ -398,7 +403,8 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
         }
     }
 
-    public func createOperationIfAbsent(
+    #if DEBUG
+    func seedOperationIfAbsent(
         _ summary: DatabaseOperationRecordSummary
     ) throws -> Bool {
         let data = try Self.encoder().encode(summary)
@@ -425,10 +431,10 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
         }
     }
 
-    public func reserveOperation(
+    func reserveSeededOperation(
         _ summary: DatabaseOperationRecordSummary,
         for connection: DatabaseConnectionDefinition
-    ) throws -> DatabaseOperationReservationResult {
+    ) throws -> DatabaseOwnedOperationReservationResult {
         guard summary.connection.id == connection.id else {
             throw DatabaseMetadataStoreError.invalidValue(name: "operation connection")
         }
@@ -471,6 +477,7 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
                 : .connectionChangedOrMissing
         }
     }
+    #endif
 
     public func reserveOperation(
         _ summary: DatabaseOperationRecordSummary,
@@ -635,7 +642,8 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
         }
     }
 
-    public func recordOperation(_ summary: DatabaseOperationRecordSummary) throws {
+    #if DEBUG
+    func seedOperation(_ summary: DatabaseOperationRecordSummary) throws {
         let data = try Self.encoder().encode(summary)
         try pool.write { database in
             try database.execute(
@@ -665,18 +673,23 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
                 ])
         }
     }
+    #endif
 
     public func operation(id: DatabaseOperationID) throws -> DatabaseOperationRecordSummary? {
         try pool.read { database in
             guard
-                let data = try Data.fetchOne(
+                let row = try Row.fetchOne(
                     database,
-                    sql: "SELECT summary FROM database_operation_history WHERE id = ?",
+                    sql: """
+                        SELECT id, connection_id, kind, state, started_at, finished_at, summary
+                        FROM database_operation_history
+                        WHERE id = ?
+                        """,
                     arguments: [id.rawValue.uuidString])
             else {
                 return nil
             }
-            return try Self.decodeOperation(data, id: id)
+            return try Self.decodeOperation(row, expectedID: id)
         }
     }
 
@@ -712,23 +725,27 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
         }
         let whereClause = clauses.isEmpty ? "" : "WHERE \(clauses.joined(separator: " AND "))"
         let sql = """
-            SELECT summary FROM database_operation_history
+            SELECT id, connection_id, kind, state, started_at, finished_at, summary
+            FROM database_operation_history
             \(whereClause)
             ORDER BY COALESCE(finished_at, started_at, 0) DESC, id ASC
             LIMIT :limit
             """
         return try pool.read { database in
             try Row.fetchAll(database, sql: sql, arguments: StatementArguments(arguments)).map {
-                row in
-                let data: Data = row["summary"]
-                let identifier = try Self.operationIdentifier(from: data)
-                return try Self.decodeOperation(data, id: identifier)
+                try Self.decodeOperation($0)
             }
         }
     }
 
-    public func pruneOperations(finishedBefore date: Date) throws -> Int {
+    public func pruneOperations(
+        finishedBefore date: Date,
+        owner: DatabaseRuntimeOwnerToken
+    ) throws -> Int {
         try pool.write { database in
+            guard try Self.isRuntimeOwnerActive(owner, in: database) else {
+                throw DatabaseMetadataStoreError.runtimeOwnerNotActive
+            }
             try database.execute(
                 sql:
                     "DELETE FROM database_operation_history WHERE finished_at IS NOT NULL AND finished_at < ?",
@@ -737,8 +754,14 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
         }
     }
 
-    public func registerConfirmation(_ receipt: DatabaseConfirmationReceipt) throws {
+    public func registerConfirmation(
+        _ receipt: DatabaseConfirmationReceipt,
+        owner: DatabaseRuntimeOwnerToken
+    ) throws {
         try pool.write { database in
+            guard try Self.isRuntimeOwnerActive(owner, in: database) else {
+                throw DatabaseMetadataStoreError.runtimeOwnerNotActive
+            }
             try database.execute(
                 sql: """
                     INSERT INTO database_confirmation_receipts (
@@ -758,10 +781,14 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
         identifier: UUID,
         effectDigest: String,
         connection: DatabaseConnectionDefinition,
-        consumedAt: Date
+        consumedAt: Date,
+        owner: DatabaseRuntimeOwnerToken
     ) throws -> Bool {
         let definition = try Self.encoder().encode(connection)
         return try pool.write { database in
+            guard try Self.isRuntimeOwnerActive(owner, in: database) else {
+                throw DatabaseMetadataStoreError.runtimeOwnerNotActive
+            }
             try database.execute(
                 sql: """
                     UPDATE database_confirmation_receipts
@@ -786,17 +813,248 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
         }
     }
 
-    public func removeExpiredConfirmations(before date: Date) throws -> Int {
+    public func removeExpiredConfirmations(
+        before date: Date,
+        owner: DatabaseRuntimeOwnerToken
+    ) throws -> Int {
         try pool.write { database in
+            guard try Self.isRuntimeOwnerActive(owner, in: database) else {
+                throw DatabaseMetadataStoreError.runtimeOwnerNotActive
+            }
             try database.execute(
                 sql: "DELETE FROM database_confirmation_receipts WHERE expires_at <= ?",
                 arguments: [date.timeIntervalSince1970])
             return database.changesCount
         }
     }
+
+    #if DEBUG
+    func seedConnection(_ definition: DatabaseConnectionDefinition) throws {
+        let prepared = try Self.prepareConnection(definition)
+        try pool.write { database in
+            try Self.writeConnection(prepared, to: database)
+        }
+    }
+
+    func removeSeededConnection(id: DatabaseConnectionID) throws -> Bool {
+        try pool.write { database in
+            try database.execute(
+                sql: "DELETE FROM database_connections WHERE id = ?",
+                arguments: [id.rawValue.uuidString])
+            return database.changesCount == 1
+        }
+    }
+
+    func seedSavedQuery(_ query: DatabaseSavedQuery) throws {
+        let prepared = try Self.prepareSavedQuery(query)
+        try pool.write { database in
+            try Self.writeSavedQuery(prepared, to: database)
+        }
+    }
+
+    func removeSeededSavedQuery(id: DatabaseSavedQueryID) throws -> Bool {
+        try pool.write { database in
+            try database.execute(
+                sql: "DELETE FROM database_saved_queries WHERE id = ?",
+                arguments: [id.rawValue.uuidString])
+            return database.changesCount == 1
+        }
+    }
+
+    func executeCorruptionSQLForTesting(_ sql: String) throws {
+        try pool.write { database in
+            try database.execute(sql: sql)
+        }
+    }
+    #endif
 }
 
 extension SQLiteDatabaseMetadataStore {
+    private struct PreparedConnection {
+        let definition: DatabaseConnectionDefinition
+        let tags: [String]
+        let data: Data
+    }
+
+    private struct PreparedSavedQuery {
+        let query: DatabaseSavedQuery
+        let tags: [String]
+        let data: Data
+    }
+
+    private static func prepareConnection(
+        _ definition: DatabaseConnectionDefinition
+    ) throws -> PreparedConnection {
+        try validateName(definition.displayName, field: "connection name")
+        return try PreparedConnection(
+            definition: definition,
+            tags: normalizedTags(definition.tags),
+            data: encoder().encode(definition))
+    }
+
+    private static func prepareSavedQuery(
+        _ query: DatabaseSavedQuery
+    ) throws -> PreparedSavedQuery {
+        try validateName(query.name, field: "saved query name")
+        try validateSize(
+            query.text,
+            field: "saved query text",
+            maximum: maximumQueryBytes)
+        return try PreparedSavedQuery(
+            query: query,
+            tags: normalizedTags(query.tags),
+            data: encoder().encode(query))
+    }
+
+    private static func writeConnection(
+        _ prepared: PreparedConnection,
+        to database: Database
+    ) throws {
+        let definition = prepared.definition
+        try database.execute(
+            sql: """
+                INSERT INTO database_connections (
+                    id, display_name, product, environment, group_name, is_favorite,
+                    created_at, updated_at, last_used_at, definition
+                ) VALUES (
+                    :id, :display_name, :product, :environment, :group_name, :is_favorite,
+                    :created_at, :updated_at, :last_used_at, :definition
+                )
+                ON CONFLICT(id) DO UPDATE SET
+                    display_name = excluded.display_name,
+                    product = excluded.product,
+                    environment = excluded.environment,
+                    group_name = excluded.group_name,
+                    is_favorite = excluded.is_favorite,
+                    created_at = excluded.created_at,
+                    updated_at = excluded.updated_at,
+                    last_used_at = excluded.last_used_at,
+                    definition = excluded.definition
+                """,
+            arguments: [
+                "id": definition.id.rawValue.uuidString,
+                "display_name": definition.displayName,
+                "product": definition.productHint.rawValue,
+                "environment": definition.environment.kind.rawValue,
+                "group_name": definition.group,
+                "is_favorite": definition.isFavorite,
+                "created_at": definition.createdAt.timeIntervalSince1970,
+                "updated_at": definition.updatedAt.timeIntervalSince1970,
+                "last_used_at": definition.lastUsedAt?.timeIntervalSince1970,
+                "definition": prepared.data,
+            ])
+        try database.execute(
+            sql: "DELETE FROM database_connection_tags WHERE connection_id = ?",
+            arguments: [definition.id.rawValue.uuidString])
+        for tag in prepared.tags {
+            try database.execute(
+                sql: "INSERT INTO database_connection_tags (connection_id, tag) VALUES (?, ?)",
+                arguments: [definition.id.rawValue.uuidString, tag])
+        }
+    }
+
+    private static func writeSavedQuery(
+        _ prepared: PreparedSavedQuery,
+        to database: Database
+    ) throws {
+        let query = prepared.query
+        try database.execute(
+            sql: """
+                INSERT INTO database_saved_queries (
+                    id, connection_id, name, language, is_favorite, created_at, updated_at, query
+                ) VALUES (
+                    :id, :connection_id, :name, :language, :is_favorite, :created_at, :updated_at, :query
+                )
+                ON CONFLICT(id) DO UPDATE SET
+                    connection_id = excluded.connection_id,
+                    name = excluded.name,
+                    language = excluded.language,
+                    is_favorite = excluded.is_favorite,
+                    created_at = excluded.created_at,
+                    updated_at = excluded.updated_at,
+                    query = excluded.query
+                """,
+            arguments: [
+                "id": query.id.rawValue.uuidString,
+                "connection_id": query.connectionID?.rawValue.uuidString,
+                "name": query.name,
+                "language": query.language.rawValue,
+                "is_favorite": query.isFavorite,
+                "created_at": query.createdAt.timeIntervalSince1970,
+                "updated_at": query.updatedAt.timeIntervalSince1970,
+                "query": prepared.data,
+            ])
+        try database.execute(
+            sql: "DELETE FROM database_saved_query_tags WHERE query_id = ?",
+            arguments: [query.id.rawValue.uuidString])
+        for tag in prepared.tags {
+            try database.execute(
+                sql: "INSERT INTO database_saved_query_tags (query_id, tag) VALUES (?, ?)",
+                arguments: [query.id.rawValue.uuidString, tag])
+        }
+    }
+
+    private static func isRuntimeOwnerActive(
+        _ owner: DatabaseRuntimeOwnerToken,
+        in database: Database
+    ) throws -> Bool {
+        try Bool.fetchOne(
+            database,
+            sql: """
+                SELECT EXISTS(
+                    SELECT 1 FROM database_runtime_owner
+                    WHERE singleton = 1 AND token = ? AND released_at IS NULL
+                )
+                """,
+            arguments: [owner.rawValue.uuidString]) ?? false
+    }
+
+    private static func hasIncompatibleSavedQueries(
+        connectionID: DatabaseConnectionID,
+        product: DatabaseProduct,
+        in database: Database
+    ) throws -> Bool {
+        let rows = try Row.fetchAll(
+            database,
+            sql: """
+                SELECT id, connection_id, name, language, is_favorite,
+                    created_at, updated_at, query
+                FROM database_saved_queries
+                WHERE connection_id = ?
+                """,
+            arguments: [connectionID.rawValue.uuidString])
+        for row in rows {
+            let query = try decodeSavedQuery(row)
+            guard query.connectionID == connectionID else {
+                throw DatabaseMetadataStoreError.corruptedRecord(
+                    kind: "saved query",
+                    identifier: query.id.rawValue.uuidString)
+            }
+            if !savedQueryLanguage(query.language, supports: product) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func savedQueryLanguage(
+        _ language: DatabaseSavedQueryLanguage,
+        supports product: DatabaseProduct
+    ) -> Bool {
+        switch language {
+        case .sql:
+            product.family == .relational
+        case .redisCommand:
+            product.family == .keyValue
+        case .mongoQuery:
+            product.family == .document
+        case .searchQueryDSL:
+            product.family == .search
+        case .clickHouseSQL:
+            product == .clickHouse
+        }
+    }
+
     private static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
         migrator.registerMigration("database-metadata-v1") { database in
@@ -1133,71 +1391,158 @@ extension SQLiteDatabaseMetadataStore {
     }
 
     private static func decodeConnection(
-        _ data: Data,
-        id: DatabaseConnectionID
+        _ row: Row,
+        expectedID: DatabaseConnectionID? = nil
     ) throws -> DatabaseConnectionDefinition {
+        let identifierValue: String = row["id"]
+        guard let rawIdentifier = UUID(uuidString: identifierValue) else {
+            throw DatabaseMetadataStoreError.corruptedRecord(
+                kind: "connection",
+                identifier: identifierValue)
+        }
+        let identifier = DatabaseConnectionID(rawValue: rawIdentifier)
+        let data: Data = row["definition"]
+        let definition: DatabaseConnectionDefinition
         do {
-            return try decoder().decode(DatabaseConnectionDefinition.self, from: data)
+            definition = try decoder().decode(DatabaseConnectionDefinition.self, from: data)
         } catch {
             throw DatabaseMetadataStoreError.corruptedRecord(
                 kind: "connection",
-                identifier: id.rawValue.uuidString)
+                identifier: identifierValue)
         }
+        let displayName: String = row["display_name"]
+        let product: String = row["product"]
+        let environment: String = row["environment"]
+        let group: String? = row["group_name"]
+        let isFavorite: Bool = row["is_favorite"]
+        let createdAt: Double = row["created_at"]
+        let updatedAt: Double = row["updated_at"]
+        let lastUsedAt: Double? = row["last_used_at"]
+        guard definition.id == identifier,
+            expectedID.map({ $0 == identifier }) ?? true,
+            definition.displayName == displayName,
+            definition.productHint.rawValue == product,
+            definition.environment.kind.rawValue == environment,
+            definition.group == group,
+            definition.isFavorite == isFavorite,
+            definition.createdAt.timeIntervalSince1970 == createdAt,
+            definition.updatedAt.timeIntervalSince1970 == updatedAt,
+            definition.lastUsedAt?.timeIntervalSince1970 == lastUsedAt
+        else {
+            throw DatabaseMetadataStoreError.corruptedRecord(
+                kind: "connection",
+                identifier: identifierValue)
+        }
+        return definition
     }
 
     private static func decodeSavedQuery(
-        _ data: Data,
-        id: DatabaseSavedQueryID
+        _ row: Row,
+        expectedID: DatabaseSavedQueryID? = nil
     ) throws -> DatabaseSavedQuery {
+        let identifierValue: String = row["id"]
+        guard let rawIdentifier = UUID(uuidString: identifierValue) else {
+            throw DatabaseMetadataStoreError.corruptedRecord(
+                kind: "saved query",
+                identifier: identifierValue)
+        }
+        let identifier = DatabaseSavedQueryID(rawValue: rawIdentifier)
+        let data: Data = row["query"]
+        let query: DatabaseSavedQuery
         do {
-            return try decoder().decode(DatabaseSavedQuery.self, from: data)
+            query = try decoder().decode(DatabaseSavedQuery.self, from: data)
         } catch {
             throw DatabaseMetadataStoreError.corruptedRecord(
                 kind: "saved query",
-                identifier: id.rawValue.uuidString)
+                identifier: identifierValue)
         }
+        let connectionIdentifierValue: String? = row["connection_id"]
+        let connectionIdentifier: DatabaseConnectionID?
+        if let connectionIdentifierValue {
+            guard let rawConnectionIdentifier = UUID(uuidString: connectionIdentifierValue) else {
+                throw DatabaseMetadataStoreError.corruptedRecord(
+                    kind: "saved query",
+                    identifier: identifierValue)
+            }
+            connectionIdentifier = DatabaseConnectionID(rawValue: rawConnectionIdentifier)
+        } else {
+            connectionIdentifier = nil
+        }
+        let name: String = row["name"]
+        let language: String = row["language"]
+        let isFavorite: Bool = row["is_favorite"]
+        let createdAt: Double = row["created_at"]
+        let updatedAt: Double = row["updated_at"]
+        guard query.id == identifier,
+            expectedID.map({ $0 == identifier }) ?? true,
+            query.connectionID == connectionIdentifier,
+            query.name == name,
+            query.language.rawValue == language,
+            query.isFavorite == isFavorite,
+            query.createdAt.timeIntervalSince1970 == createdAt,
+            query.updatedAt.timeIntervalSince1970 == updatedAt
+        else {
+            throw DatabaseMetadataStoreError.corruptedRecord(
+                kind: "saved query",
+                identifier: identifierValue)
+        }
+        return query
     }
 
     private static func decodeOperation(
         _ data: Data,
         id: DatabaseOperationID
     ) throws -> DatabaseOperationRecordSummary {
+        let summary: DatabaseOperationRecordSummary
         do {
-            return try decoder().decode(DatabaseOperationRecordSummary.self, from: data)
+            summary = try decoder().decode(DatabaseOperationRecordSummary.self, from: data)
         } catch {
             throw DatabaseMetadataStoreError.corruptedRecord(
                 kind: "operation",
                 identifier: id.rawValue.uuidString)
         }
-    }
-
-    private static func connectionIdentifier(from data: Data) throws -> DatabaseConnectionID {
-        do {
-            return try decoder().decode(DatabaseConnectionDefinition.self, from: data).id
-        } catch {
-            throw DatabaseMetadataStoreError.corruptedRecord(
-                kind: "connection",
-                identifier: "unknown")
-        }
-    }
-
-    private static func savedQueryIdentifier(from data: Data) throws -> DatabaseSavedQueryID {
-        do {
-            return try decoder().decode(DatabaseSavedQuery.self, from: data).id
-        } catch {
-            throw DatabaseMetadataStoreError.corruptedRecord(
-                kind: "saved query",
-                identifier: "unknown")
-        }
-    }
-
-    private static func operationIdentifier(from data: Data) throws -> DatabaseOperationID {
-        do {
-            return try decoder().decode(DatabaseOperationRecordSummary.self, from: data).id
-        } catch {
+        guard summary.id == id else {
             throw DatabaseMetadataStoreError.corruptedRecord(
                 kind: "operation",
-                identifier: "unknown")
+                identifier: id.rawValue.uuidString)
         }
+        return summary
+    }
+
+    private static func decodeOperation(
+        _ row: Row,
+        expectedID: DatabaseOperationID? = nil
+    ) throws -> DatabaseOperationRecordSummary {
+        let identifierValue: String = row["id"]
+        guard let rawIdentifier = UUID(uuidString: identifierValue) else {
+            throw DatabaseMetadataStoreError.corruptedRecord(
+                kind: "operation",
+                identifier: identifierValue)
+        }
+        let identifier = DatabaseOperationID(rawValue: rawIdentifier)
+        let data: Data = row["summary"]
+        let summary = try decodeOperation(data, id: identifier)
+        let connectionIdentifierValue: String = row["connection_id"]
+        guard let rawConnectionIdentifier = UUID(uuidString: connectionIdentifierValue) else {
+            throw DatabaseMetadataStoreError.corruptedRecord(
+                kind: "operation",
+                identifier: identifierValue)
+        }
+        let kind: String = row["kind"]
+        let state: String = row["state"]
+        let startedAt: Double? = row["started_at"]
+        let finishedAt: Double? = row["finished_at"]
+        guard expectedID.map({ $0 == identifier }) ?? true,
+            summary.connection.id.rawValue == rawConnectionIdentifier,
+            summary.kind.rawValue == kind,
+            summary.state.rawValue == state,
+            summary.startedAt?.timeIntervalSince1970 == startedAt,
+            summary.finishedAt?.timeIntervalSince1970 == finishedAt
+        else {
+            throw DatabaseMetadataStoreError.corruptedRecord(
+                kind: "operation",
+                identifier: identifierValue)
+        }
+        return summary
     }
 }
