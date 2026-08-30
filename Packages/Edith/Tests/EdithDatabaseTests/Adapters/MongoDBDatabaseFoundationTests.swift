@@ -118,7 +118,7 @@ private enum MongoDBDatabaseFoundationFixtures {
     #expect(plan.maximumTimeMilliseconds == 2_000)
 }
 
-@Test func mongoFoundationBSONConversionIsDeterministicAndBounded() throws {
+@Test func mongoFoundationBSONConversionIsDeterministicAndBounded() async throws {
     var document = Document()
     document["_id"] = MongoDBDatabaseFoundationFixtures.objectIDs[0]
     document["null"] = Null()
@@ -134,10 +134,10 @@ private enum MongoDBDatabaseFoundationFixtures {
     document["min"] = MinKey()
     document["max"] = MaxKey()
     document["long"] = String(repeating: "é", count: 10_000)
-    let first = try MongoDBDatabaseValueCodec.convertedRecord(
+    let first = try await MongoDBDatabaseValueCodec.convertedRecord(
         document,
         hidesObjectID: false)
-    let second = try MongoDBDatabaseValueCodec.convertedRecord(
+    let second = try await MongoDBDatabaseValueCodec.convertedRecord(
         document,
         hidesObjectID: false)
     #expect(first.record == second.record)
@@ -213,11 +213,11 @@ private enum MongoDBDatabaseFoundationFixtures {
     #expect(accumulator.documents.isEmpty)
 }
 
-@Test func mongoFoundationTruncatedIDsAreNeverRecordIdentities() throws {
+@Test func mongoFoundationTruncatedIDsAreNeverRecordIdentities() async throws {
     var document = Document()
     document["_id"] = String(repeating: "identity", count: 8_192)
     document["name"] = "bounded"
-    let converted = try MongoDBDatabaseValueCodec.convertedRecord(
+    let converted = try await MongoDBDatabaseValueCodec.convertedRecord(
         document,
         hidesObjectID: true)
     #expect(converted.record.identity == nil)
@@ -228,11 +228,11 @@ private enum MongoDBDatabaseFoundationFixtures {
         ])
 }
 
-@Test func mongoFoundationTimestampPreservesUnsignedWords() throws {
+@Test func mongoFoundationTimestampPreservesUnsignedWords() async throws {
     var document = Document()
     document["_id"] = MongoDBDatabaseFoundationFixtures.objectIDs[0]
     document["timestamp"] = Timestamp(increment: -1, timestamp: .min)
-    let converted = try MongoDBDatabaseValueCodec.convertedRecord(
+    let converted = try await MongoDBDatabaseValueCodec.convertedRecord(
         document,
         hidesObjectID: false)
     guard
@@ -296,9 +296,13 @@ private enum MongoDBDatabaseFoundationFixtures {
         group: MultiThreadedEventLoopGroup(numberOfThreads: 1)
     ) { group in
         await counter.increment()
+        try await Task.sleep(nanoseconds: 10_000_000)
         try await group.shutdownGracefully()
     }
-    try await eventLoop.shutdown()
+    async let firstShutdown: Void = eventLoop.shutdown()
+    async let secondShutdown: Void = eventLoop.shutdown()
+    try await firstShutdown
+    try await secondShutdown
     try await eventLoop.shutdown()
     #expect(await eventLoop.isShutdown())
     #expect(await counter.count() == 1)
