@@ -43,15 +43,20 @@ public enum HerdrCollector {
             herdrPresent: listed.present, agents: listed.agents, error: listed.error)
     }
 
-    public static func collectRemote(_ machine: Machine) async -> HerdrHostSnapshot {
-        let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
-        do {
-            try await connection.connect()
-        } catch {
-            return HerdrHostSnapshot(
-                id: machine.id.uuidString, name: machine.name, isLocal: false,
-                sshTarget: machine.sshTarget, herdrPresent: false, reachable: false,
-                error: error.localizedDescription)
+    public static func collectRemote(
+        _ machine: Machine, connection existingConnection: SSHConnection? = nil
+    ) async -> HerdrHostSnapshot {
+        let connection =
+            existingConnection ?? SSHConnection(machine: machine, controlSocketMode: .isolated)
+        if existingConnection == nil {
+            do {
+                try await connection.connect()
+            } catch {
+                return HerdrHostSnapshot(
+                    id: machine.id.uuidString, name: machine.name, isLocal: false,
+                    sshTarget: machine.sshTarget, herdrPresent: false, reachable: false,
+                    error: error.localizedDescription)
+            }
         }
         let listed = await listAgents(
             runner: .ssh(connection), machineID: machine.id.uuidString, machineName: machine.name,
@@ -232,11 +237,16 @@ public enum HerdrCollector {
 
     private static func message(from result: CommandResult) -> String? {
         let stderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !stderr.isEmpty { return stderr }
+        if !stderr.isEmpty, !isPowerShellProgress(stderr) { return stderr }
         let stdout = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         if !result.ok, !stdout.isEmpty { return stdout }
         if !result.ok { return "herdr exited \(result.status)" }
         return nil
+    }
+
+    private static func isPowerShellProgress(_ value: String) -> Bool {
+        value.hasPrefix("#< CLIXML") && value.contains("Preparing modules for first use.")
+            && !value.contains("<S S=\"Error\">")
     }
 }
 
