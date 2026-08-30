@@ -46,6 +46,63 @@ import Testing
         #expect(bytes == Data([0x1B]))
     }
 
+    @Test @MainActor func mouseButtonsReachAChildThatEnablesMouseReporting() async throws {
+        let output = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-ghostty-buttons-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: output) }
+        let command =
+            "stty raw -echo; printf '\\033[?1003h\\033[?1006h'; cat > '\(output.path)'"
+        let launch = GhosttyLaunch(
+            executable: "/bin/sh", arguments: ["-c", command],
+            environment: ProcessInfo.processInfo.environment.map { "\($0.key)=\($0.value)" })
+        let view = GhosttyTerminalView(launch: launch)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+        let window = NSWindow(
+            contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = view
+        defer {
+            window.contentView = nil
+            view.shutdown()
+        }
+
+        for _ in 0..<100 {
+            if let surface = view.surface, ghostty_surface_mouse_captured(surface) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let surface = try #require(view.surface)
+        #expect(ghostty_surface_mouse_captured(surface))
+
+        func event(_ type: NSEvent.EventType, number: Int) throws -> NSEvent {
+            try #require(
+                NSEvent.mouseEvent(
+                    with: type, location: NSPoint(x: 80, y: 500), modifierFlags: [],
+                    timestamp: Double(number), windowNumber: window.windowNumber, context: nil,
+                    eventNumber: number, clickCount: 1, pressure: 0))
+        }
+
+        view.mouseMoved(with: try event(.mouseMoved, number: 1))
+        view.mouseDown(with: try event(.leftMouseDown, number: 2))
+        view.mouseUp(with: try event(.leftMouseUp, number: 3))
+        view.rightMouseDown(with: try event(.rightMouseDown, number: 4))
+        view.rightMouseUp(with: try event(.rightMouseUp, number: 5))
+
+        var reports: [String] = []
+        for _ in 0..<100 {
+            if let data = try? Data(contentsOf: output) {
+                reports = String(decoding: data, as: UTF8.self)
+                    .split(separator: "\u{1B}").map(String.init)
+                if reports.count >= 5 { break }
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(reports.contains { $0.hasPrefix("[<35;") && $0.hasSuffix("M") })
+        #expect(reports.contains { $0.hasPrefix("[<0;") && $0.hasSuffix("M") })
+        #expect(reports.contains { $0.hasPrefix("[<0;") && $0.hasSuffix("m") })
+        #expect(reports.contains { $0.hasPrefix("[<2;") && $0.hasSuffix("M") })
+        #expect(reports.contains { $0.hasPrefix("[<2;") && $0.hasSuffix("m") })
+    }
+
     @Test func appKitFunctionKeyTextIsNotSentToTheTerminal() throws {
         let event = try #require(
             NSEvent.keyEvent(
