@@ -1195,7 +1195,13 @@ private extension RedisDatabaseReply {
 private struct RedisDatabaseContinuationPayload: Codable, Sendable {
     let version: Int
     let cursor: UInt64
-    let pendingKeys: [Data]
+    let replay: RedisDatabaseScanReplay?
+}
+
+private struct RedisDatabaseScanReplay: Codable, Sendable {
+    let cursor: UInt64
+    let count: Int
+    let offset: Int
 }
 
 private struct RedisDatabaseReadOutput: Sendable {
@@ -1645,40 +1651,46 @@ private enum RedisValkeyDatabaseAdapterSupport {
         var seen = Set<Data>()
         var scanCalls = 0
         let limit = min(request.pageSize.value, maximumPageRecords)
-        let drainsFinalCursor = request.continuation != nil && continuation.cursor == 0
 
         while keys.count < limit {
             try await check(context, deadline: deadline)
-            if continuation.pendingKeys.isEmpty {
-                if (scanCalls > 0 || drainsFinalCursor), continuation.cursor == 0 {
-                    break
-                }
-                guard scanCalls < maximumScanCallsPerPage else { break }
-                let requestedCount = max(1, min(limit - keys.count, maximumPageRecords))
-                let scan = try scanReply(
-                    try await client.execute(
-                        .scan(cursor: continuation.cursor, count: requestedCount),
-                        context: context,
-                        deadline: deadline))
-                scanCalls += 1
-                continuation = RedisDatabaseContinuationPayload(
-                    version: 1,
-                    cursor: scan.cursor,
-                    pendingKeys: scan.keys)
-                if scan.keys.isEmpty, scan.cursor == 0 {
-                    break
-                }
+            if continuation.replay == nil, scanCalls > 0, continuation.cursor == 0 {
+                break
             }
-            guard let key = continuation.pendingKeys.first else { continue }
+            guard scanCalls < maximumScanCallsPerPage else { break }
+            let scanCursor = continuation.replay?.cursor ?? continuation.cursor
+            let requestedCount =
+                continuation.replay?.count
+                ?? max(1, min(limit - keys.count, maximumPageRecords))
+            let replayOffset = continuation.replay?.offset ?? 0
+            let scan = try scanReply(
+                try await client.execute(
+                    .scan(cursor: scanCursor, count: requestedCount),
+                    context: context,
+                    deadline: deadline))
+            scanCalls += 1
             continuation = RedisDatabaseContinuationPayload(
-                version: 1,
-                cursor: continuation.cursor,
-                pendingKeys: Array(continuation.pendingKeys.dropFirst()))
-            guard key.count <= maximumKeyBytes else {
-                throw resultTooLarge
+                version: 2,
+                cursor: scan.cursor,
+                replay: nil)
+            var consumed = min(replayOffset, scan.keys.count)
+            for key in scan.keys.dropFirst(consumed) {
+                consumed += 1
+                guard seen.insert(key).inserted else { continue }
+                keys.append(key)
+                if keys.count == limit {
+                    if consumed < scan.keys.count {
+                        continuation = RedisDatabaseContinuationPayload(
+                            version: 2,
+                            cursor: scan.cursor,
+                            replay: RedisDatabaseScanReplay(
+                                cursor: scanCursor,
+                                count: requestedCount,
+                                offset: consumed))
+                    }
+                    break
+                }
             }
-            guard seen.insert(key).inserted else { continue }
-            keys.append(key)
         }
         let records = try await inspectRecords(
             keys: keys,
@@ -1995,16 +2007,19 @@ private enum RedisValkeyDatabaseAdapterSupport {
         _ continuation: DatabaseAdapterContinuation?
     ) throws(DatabaseAdapterFailure) -> RedisDatabaseContinuationPayload {
         guard let continuation else {
-            return RedisDatabaseContinuationPayload(version: 1, cursor: 0, pendingKeys: [])
+            return RedisDatabaseContinuationPayload(version: 2, cursor: 0, replay: nil)
         }
         guard continuation.mode == .scanCursor,
             continuation.expiresAt.map({ $0 > Date() }) ?? true,
             let state = try? JSONDecoder().decode(
                 RedisDatabaseContinuationPayload.self,
                 from: continuation.payload),
-            state.version == 1,
-            state.pendingKeys.count <= maximumReplyElements,
-            state.pendingKeys.allSatisfy({ !$0.isEmpty && $0.count <= maximumKeyBytes })
+            state.version == 2,
+            state.cursor != 0 || state.replay != nil,
+            state.replay.map({ replay in
+                replay.count > 0 && replay.count <= maximumPageRecords
+                    && replay.offset > 0 && replay.offset <= maximumReplyElements
+            }) ?? true
         else {
             throw invalidContinuation
         }
@@ -2014,7 +2029,7 @@ private enum RedisValkeyDatabaseAdapterSupport {
     private static func makeContinuation(
         _ state: RedisDatabaseContinuationPayload
     ) throws(DatabaseAdapterFailure) -> DatabaseAdapterContinuation? {
-        guard state.cursor != 0 || !state.pendingKeys.isEmpty else { return nil }
+        guard state.cursor != 0 || state.replay != nil else { return nil }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         guard let payload = try? encoder.encode(state),
