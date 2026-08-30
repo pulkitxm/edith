@@ -173,6 +173,48 @@ public struct DatabaseConfirmationReceipt: Codable, Hashable, Sendable {
     }
 }
 
+public struct DatabaseRuntimeOwnerToken: RawRepresentable, Codable, Hashable, Sendable {
+    public let rawValue: UUID
+
+    public init(rawValue: UUID) {
+        self.rawValue = rawValue
+    }
+
+    public init() {
+        rawValue = UUID()
+    }
+}
+
+public struct DatabaseRuntimeOwnerRecord: Codable, Hashable, Sendable {
+    public let token: DatabaseRuntimeOwnerToken
+    public let claimedAt: Date
+    public let releasedAt: Date?
+
+    public var isActive: Bool {
+        releasedAt == nil
+    }
+
+    public init(
+        token: DatabaseRuntimeOwnerToken,
+        claimedAt: Date,
+        releasedAt: Date? = nil
+    ) {
+        self.token = token
+        self.claimedAt = claimedAt
+        self.releasedAt = releasedAt
+    }
+}
+
+public struct DatabaseRuntimeOwnerClaimResult: Codable, Hashable, Sendable {
+    public let owner: DatabaseRuntimeOwnerRecord
+    public let recoveredOperationCount: Int
+
+    public init(owner: DatabaseRuntimeOwnerRecord, recoveredOperationCount: Int) {
+        self.owner = owner
+        self.recoveredOperationCount = recoveredOperationCount
+    }
+}
+
 public enum DatabaseMetadataStoreError: Error, Equatable, Sendable {
     case invalidLimit(Int)
     case invalidOffset(Int)
@@ -189,6 +231,13 @@ public enum DatabaseOperationReservationResult: String, Codable, Hashable, Senda
     case connectionChangedOrMissing
 }
 
+public enum DatabaseOwnedOperationReservationResult: String, Codable, Hashable, Sendable {
+    case reserved
+    case operationIdentifierExists
+    case connectionChangedOrMissing
+    case runtimeOwnerNotActive
+}
+
 public protocol DatabaseMetadataStore: Sendable {
     func saveConnection(_ definition: DatabaseConnectionDefinition) async throws
     func connection(id: DatabaseConnectionID) async throws -> DatabaseConnectionDefinition?
@@ -200,11 +249,30 @@ public protocol DatabaseMetadataStore: Sendable {
     func savedQueries(matching search: DatabaseSavedQuerySearch) async throws
         -> [DatabaseSavedQuery]
     func deleteSavedQuery(id: DatabaseSavedQueryID) async throws -> Bool
+    func runtimeOwner() async throws -> DatabaseRuntimeOwnerRecord?
+    func claimRuntimeOwner(
+        _ token: DatabaseRuntimeOwnerToken,
+        claimedAt: Date
+    ) async throws -> DatabaseRuntimeOwnerClaimResult
+    func releaseRuntimeOwner(
+        _ token: DatabaseRuntimeOwnerToken,
+        releasedAt: Date
+    ) async throws -> Bool
     func createOperationIfAbsent(_ summary: DatabaseOperationRecordSummary) async throws -> Bool
     func reserveOperation(
         _ summary: DatabaseOperationRecordSummary,
         for connection: DatabaseConnectionDefinition
     ) async throws -> DatabaseOperationReservationResult
+    func reserveOperation(
+        _ summary: DatabaseOperationRecordSummary,
+        for connection: DatabaseConnectionDefinition,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> DatabaseOwnedOperationReservationResult
+    func transitionOperation(
+        _ summary: DatabaseOperationRecordSummary,
+        from expectedStates: Set<DatabaseOperationState>,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> Bool
     func recordOperation(_ summary: DatabaseOperationRecordSummary) async throws
     func operation(id: DatabaseOperationID) async throws -> DatabaseOperationRecordSummary?
     func operations(matching search: DatabaseOperationHistorySearch) async throws

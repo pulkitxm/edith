@@ -14,7 +14,7 @@ public struct DatabaseMetadataDiagnostics: Codable, Hashable, Sendable {
 }
 
 public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
-    public static let schemaVersion = 1
+    public static let schemaVersion = 2
     public static let maximumConnectionCount = 500
     public static let maximumSavedQueryCount = 500
     public static let maximumHistoryCount = 1_000
@@ -23,6 +23,7 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
     public static let maximumQueryBytes = 8 * 1_024 * 1_024
     public static let maximumTagCount = 64
     public static let maximumTagBytes = 128
+    static let operationRecoveryBatchSize = 100
 
     private let pool: DatabasePool
 
@@ -303,6 +304,100 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
         }
     }
 
+    public func runtimeOwner() throws -> DatabaseRuntimeOwnerRecord? {
+        try pool.read { database in
+            guard
+                let row = try Row.fetchOne(
+                    database,
+                    sql:
+                        "SELECT token, claimed_at, released_at FROM database_runtime_owner WHERE singleton = 1"
+                )
+            else {
+                return nil
+            }
+            return try Self.decodeRuntimeOwner(row)
+        }
+    }
+
+    public func claimRuntimeOwner(
+        _ token: DatabaseRuntimeOwnerToken,
+        claimedAt: Date
+    ) throws -> DatabaseRuntimeOwnerClaimResult {
+        guard claimedAt.timeIntervalSince1970.isFinite else {
+            throw DatabaseMetadataStoreError.invalidValue(name: "runtime owner claimed at")
+        }
+        return try pool.write { database in
+            if let row = try Row.fetchOne(
+                database,
+                sql:
+                    "SELECT token, claimed_at, released_at FROM database_runtime_owner WHERE singleton = 1"
+            ) {
+                let owner = try Self.decodeRuntimeOwner(row)
+                if owner.token == token, owner.isActive {
+                    return DatabaseRuntimeOwnerClaimResult(
+                        owner: owner,
+                        recoveredOperationCount: 0)
+                }
+            }
+
+            let recoveredOperationCount = try Self.recoverInterruptedOperations(
+                database,
+                finishedAt: claimedAt)
+            try database.execute(
+                sql: """
+                    INSERT INTO database_runtime_owner (singleton, token, claimed_at, released_at)
+                    VALUES (1, :token, :claimed_at, NULL)
+                    ON CONFLICT(singleton) DO UPDATE SET
+                        token = excluded.token,
+                        claimed_at = excluded.claimed_at,
+                        released_at = NULL
+                    """,
+                arguments: [
+                    "token": token.rawValue.uuidString,
+                    "claimed_at": claimedAt.timeIntervalSince1970,
+                ])
+            return DatabaseRuntimeOwnerClaimResult(
+                owner: DatabaseRuntimeOwnerRecord(token: token, claimedAt: claimedAt),
+                recoveredOperationCount: recoveredOperationCount)
+        }
+    }
+
+    public func releaseRuntimeOwner(
+        _ token: DatabaseRuntimeOwnerToken,
+        releasedAt: Date
+    ) throws -> Bool {
+        guard releasedAt.timeIntervalSince1970.isFinite else {
+            throw DatabaseMetadataStoreError.invalidValue(name: "runtime owner released at")
+        }
+        return try pool.write { database in
+            guard
+                let claimedAt = try Double.fetchOne(
+                    database,
+                    sql: """
+                        SELECT claimed_at FROM database_runtime_owner
+                        WHERE singleton = 1 AND token = ? AND released_at IS NULL
+                        """,
+                    arguments: [token.rawValue.uuidString])
+            else {
+                return false
+            }
+            guard releasedAt.timeIntervalSince1970 >= claimedAt else {
+                throw DatabaseMetadataStoreError.invalidValue(name: "runtime owner released at")
+            }
+            try database.execute(
+                sql: """
+                    UPDATE database_runtime_owner
+                    SET released_at = :released_at
+                    WHERE singleton = 1 AND token = :token AND released_at IS NULL
+                    """,
+                arguments: [
+                    "released_at": releasedAt.timeIntervalSince1970,
+                    "token": token.rawValue.uuidString,
+                ])
+            return database.changesCount == 1
+        }
+    }
+
     public func createOperationIfAbsent(
         _ summary: DatabaseOperationRecordSummary
     ) throws -> Bool {
@@ -377,6 +472,124 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
         }
     }
 
+    public func reserveOperation(
+        _ summary: DatabaseOperationRecordSummary,
+        for connection: DatabaseConnectionDefinition,
+        owner: DatabaseRuntimeOwnerToken
+    ) throws -> DatabaseOwnedOperationReservationResult {
+        guard summary.connection.id == connection.id else {
+            throw DatabaseMetadataStoreError.invalidValue(name: "operation connection")
+        }
+        let summaryData = try Self.encoder().encode(summary)
+        let connectionData = try Self.encoder().encode(connection)
+        return try pool.write { database in
+            try database.execute(
+                sql: """
+                    INSERT INTO database_operation_history (
+                        id, connection_id, kind, state, started_at, finished_at, summary, owner_token
+                    )
+                    SELECT
+                        :id, :connection_id, :kind, :state, :started_at, :finished_at, :summary,
+                        :owner_token
+                    WHERE EXISTS (
+                        SELECT 1 FROM database_connections
+                        WHERE id = :connection_id AND definition = :definition
+                    ) AND EXISTS (
+                        SELECT 1 FROM database_runtime_owner
+                        WHERE singleton = 1 AND token = :owner_token AND released_at IS NULL
+                    )
+                    ON CONFLICT(id) DO NOTHING
+                    """,
+                arguments: [
+                    "id": summary.id.rawValue.uuidString,
+                    "connection_id": summary.connection.id.rawValue.uuidString,
+                    "kind": summary.kind.rawValue,
+                    "state": summary.state.rawValue,
+                    "started_at": summary.startedAt?.timeIntervalSince1970,
+                    "finished_at": summary.finishedAt?.timeIntervalSince1970,
+                    "summary": summaryData,
+                    "owner_token": owner.rawValue.uuidString,
+                    "definition": connectionData,
+                ])
+            if database.changesCount == 1 {
+                return .reserved
+            }
+            let operationExists =
+                try Bool.fetchOne(
+                    database,
+                    sql: "SELECT EXISTS(SELECT 1 FROM database_operation_history WHERE id = ?)",
+                    arguments: [summary.id.rawValue.uuidString]) ?? false
+            if operationExists {
+                return .operationIdentifierExists
+            }
+            let ownerIsActive =
+                try Bool.fetchOne(
+                    database,
+                    sql: """
+                        SELECT EXISTS(
+                            SELECT 1 FROM database_runtime_owner
+                            WHERE singleton = 1 AND token = ? AND released_at IS NULL
+                        )
+                        """,
+                    arguments: [owner.rawValue.uuidString]) ?? false
+            return ownerIsActive
+                ? .connectionChangedOrMissing
+                : .runtimeOwnerNotActive
+        }
+    }
+
+    public func transitionOperation(
+        _ summary: DatabaseOperationRecordSummary,
+        from expectedStates: Set<DatabaseOperationState>,
+        owner: DatabaseRuntimeOwnerToken
+    ) throws -> Bool {
+        guard
+            !expectedStates.isEmpty,
+            expectedStates.count <= DatabaseOperationState.allCases.count
+        else {
+            throw DatabaseMetadataStoreError.invalidValue(name: "operation expected states")
+        }
+        let data = try Self.encoder().encode(summary)
+        var arguments: [String: (any DatabaseValueConvertible)?] = [
+            "id": summary.id.rawValue.uuidString,
+            "connection_id": summary.connection.id.rawValue.uuidString,
+            "kind": summary.kind.rawValue,
+            "state": summary.state.rawValue,
+            "started_at": summary.startedAt?.timeIntervalSince1970,
+            "finished_at": summary.finishedAt?.timeIntervalSince1970,
+            "summary": data,
+            "owner_token": owner.rawValue.uuidString,
+        ]
+        let expectedStatesClause = Self.inClause(
+            column: "state",
+            prefix: "expected_state",
+            values: expectedStates.map(\.rawValue),
+            arguments: &arguments)
+        return try pool.write { database in
+            try database.execute(
+                sql: """
+                    UPDATE database_operation_history
+                    SET state = :state,
+                        started_at = :started_at,
+                        finished_at = :finished_at,
+                        summary = :summary
+                    WHERE id = :id
+                        AND connection_id = :connection_id
+                        AND kind = :kind
+                        AND owner_token = :owner_token
+                        AND \(expectedStatesClause)
+                        AND EXISTS (
+                            SELECT 1 FROM database_runtime_owner
+                            WHERE singleton = 1
+                                AND token = :owner_token
+                                AND released_at IS NULL
+                        )
+                    """,
+                arguments: StatementArguments(arguments))
+            return database.changesCount == 1
+        }
+    }
+
     public func recordOperation(_ summary: DatabaseOperationRecordSummary) throws {
         let data = try Self.encoder().encode(summary)
         try pool.write { database in
@@ -394,6 +607,7 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
                         started_at = excluded.started_at,
                         finished_at = excluded.finished_at,
                         summary = excluded.summary
+                    WHERE database_operation_history.owner_token IS NULL
                     """,
                 arguments: [
                     "id": summary.id.rawValue.uuidString,
@@ -626,9 +840,138 @@ extension SQLiteDatabaseMetadataStore {
                 sql:
                     "CREATE INDEX database_confirmation_expiry ON database_confirmation_receipts(expires_at)"
             )
-            try database.execute(sql: "PRAGMA user_version = \(Self.schemaVersion)")
+            try database.execute(sql: "PRAGMA user_version = 1")
+        }
+        migrator.registerMigration("database-metadata-v2") { database in
+            try database.execute(
+                sql: """
+                    CREATE TABLE database_runtime_owner (
+                        singleton INTEGER PRIMARY KEY NOT NULL CHECK (singleton = 1),
+                        token TEXT NOT NULL,
+                        claimed_at REAL NOT NULL,
+                        released_at REAL
+                    )
+                    """)
+            try database.execute(
+                sql: "ALTER TABLE database_operation_history ADD COLUMN owner_token TEXT")
+            try database.execute(
+                sql: """
+                    CREATE INDEX database_operation_history_owner_state
+                    ON database_operation_history(owner_token, state, id)
+                    """)
+            try database.execute(
+                sql: """
+                    CREATE INDEX database_operation_history_state
+                    ON database_operation_history(state, id)
+                    """)
+            try database.execute(sql: "PRAGMA user_version = 2")
         }
         return migrator
+    }
+
+    private static func decodeRuntimeOwner(_ row: Row) throws -> DatabaseRuntimeOwnerRecord {
+        let tokenValue: String = row["token"]
+        guard let rawToken = UUID(uuidString: tokenValue) else {
+            throw DatabaseMetadataStoreError.corruptedRecord(
+                kind: "runtime owner",
+                identifier: tokenValue)
+        }
+        let claimedAt: Double = row["claimed_at"]
+        let releasedAt: Double? = row["released_at"]
+        return DatabaseRuntimeOwnerRecord(
+            token: DatabaseRuntimeOwnerToken(rawValue: rawToken),
+            claimedAt: Date(timeIntervalSince1970: claimedAt),
+            releasedAt: releasedAt.map(Date.init(timeIntervalSince1970:)))
+    }
+
+    private static func recoverInterruptedOperations(
+        _ database: Database,
+        finishedAt: Date
+    ) throws -> Int {
+        var recoveredOperationCount = 0
+        while true {
+            let rows = try Row.fetchAll(
+                database,
+                sql: """
+                    SELECT id, summary
+                    FROM database_operation_history
+                    WHERE state IN ('queued', 'running', 'cancelling')
+                    ORDER BY id
+                    LIMIT ?
+                    """,
+                arguments: [operationRecoveryBatchSize])
+            guard !rows.isEmpty else {
+                return recoveredOperationCount
+            }
+            for row in rows {
+                let identifierValue: String = row["id"]
+                guard let rawIdentifier = UUID(uuidString: identifierValue) else {
+                    throw DatabaseMetadataStoreError.corruptedRecord(
+                        kind: "operation",
+                        identifier: identifierValue)
+                }
+                let identifier = DatabaseOperationID(rawValue: rawIdentifier)
+                let data: Data = row["summary"]
+                let summary = try decodeOperation(data, id: identifier)
+                guard summary.id == identifier else {
+                    throw DatabaseMetadataStoreError.corruptedRecord(
+                        kind: "operation",
+                        identifier: identifierValue)
+                }
+                let operationFinishedAt =
+                    summary.startedAt.map { max(finishedAt, $0) } ?? finishedAt
+                let recovered = interruptedOperation(summary, finishedAt: operationFinishedAt)
+                let recoveredData = try encoder().encode(recovered)
+                try database.execute(
+                    sql: """
+                        UPDATE database_operation_history
+                        SET state = :state, finished_at = :finished_at, summary = :summary
+                        WHERE id = :id AND state IN ('queued', 'running', 'cancelling')
+                        """,
+                    arguments: [
+                        "state": DatabaseOperationState.failed.rawValue,
+                        "finished_at": operationFinishedAt.timeIntervalSince1970,
+                        "summary": recoveredData,
+                        "id": identifierValue,
+                    ])
+                guard database.changesCount == 1 else {
+                    throw DatabaseMetadataStoreError.corruptedRecord(
+                        kind: "operation",
+                        identifier: identifierValue)
+                }
+                recoveredOperationCount += 1
+            }
+        }
+    }
+
+    private static func interruptedOperation(
+        _ summary: DatabaseOperationRecordSummary,
+        finishedAt: Date
+    ) -> DatabaseOperationRecordSummary {
+        DatabaseOperationRecordSummary(
+            id: summary.id,
+            kind: summary.kind,
+            state: .failed,
+            connection: summary.connection,
+            target: summary.target,
+            startedAt: summary.startedAt,
+            finishedAt: finishedAt,
+            deadline: summary.deadline,
+            progress: summary.progress,
+            cancellationSupport: summary.cancellationSupport,
+            retryClassification: .userDecision,
+            pageCount: summary.pageCount,
+            recordCount: summary.recordCount,
+            byteCount: summary.byteCount,
+            warnings: summary.warnings,
+            partialFailures: summary.partialFailures,
+            error: DatabaseErrorEnvelope(
+                category: .internalFailure,
+                message: "The database runtime stopped before the operation completed.",
+                productCode: "database.runtime.interrupted",
+                retry: DatabaseRetryGuidance(
+                    action: .userDecision,
+                    message: "Review the operation state before deciding whether to retry.")))
     }
 
     private static func encoder() -> JSONEncoder {
