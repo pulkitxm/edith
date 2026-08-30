@@ -11,7 +11,7 @@ import EdithCore
         #expect(
             ExtensionLiveAdapters.extensionIDs
                 == ExtensionRegistry.entries.map(\.id).filter {
-                    !["companion", "herdr"].contains($0)
+                    !["companion", "database", "herdr"].contains($0)
                 })
     }
 

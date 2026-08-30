@@ -931,6 +931,7 @@ private struct ExtensionDetailRows: View {
             case .system: SystemRows()
             case .appMaintenance: AppMaintenanceRows()
             case .machines: MachinesRows()
+            case .database: DatabaseRows()
             case .companion: CompanionRows()
             case .systemStats: SystemStatsRows()
             case .micMute: MicMuteRows()
@@ -968,6 +969,22 @@ private struct SEOAuditRows: View {
             )
             .settingsCaption()
             Button("Open Site Audit") { SectionWindow.open(.seoAudit) }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+    }
+}
+
+private struct DatabaseRows: View {
+    @AppStorage(AppStorageKeys.Tabs.databaseEnabled, store: SharedDefaults.store) private
+        var enabled = false
+
+    var body: some View {
+        Section("Workbench") {
+            LabeledContent("Transport", value: "Authenticated local broker")
+            Text("Explore supported databases and review destructive operations before execution.")
+                .settingsCaption()
+            Button("Open Database") { SectionWindow.open(.database) }
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)

@@ -41,6 +41,9 @@ import EdithCore
             id: "machines", helper: true, machine: true, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
+            id: "database", helper: false, machine: false, toolRule: .all, adapter: false,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "companion", helper: false, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(

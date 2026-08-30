@@ -43,6 +43,7 @@ struct DetachedSectionView: View {
         case .system: SystemPage()
         case .appMaintenance: AppMaintenanceView()
         case .machines: MachinesPage()
+        case .database: DatabasePage()
         case .companion: CompanionPage()
         case .extensions: ExtensionsPane()
         case .settings: SettingsPane(updater: UpdaterModel())

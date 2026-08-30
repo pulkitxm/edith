@@ -15,6 +15,7 @@ import Testing
         "tabSystemEnabled",
         "appMaintenanceEnabled",
         "tabMachinesEnabled",
+        "tabDatabaseEnabled",
         "tabCompanionEnabled",
         "menuBarSystemStats",
         "micMuteEnabled",
@@ -39,9 +40,9 @@ import Testing
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
                 "attention", "usage", "herdr", "quinjet", "seoAudit", "system",
-                "appMaintenance", "machines", "companion", "systemStats", "micMute", "lidAwake",
-                "music", "calendar", "notchShelf", "clipboard", "keystrokeHighlight", "focusDim",
-                "presenter", "emoji",
+                "appMaintenance", "machines", "database", "companion", "systemStats", "micMute",
+                "lidAwake", "music", "calendar", "notchShelf", "clipboard", "keystrokeHighlight",
+                "focusDim", "presenter", "emoji",
                 "colorPicker",
             ])
     }
@@ -155,7 +156,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard", "keystrokeHighlight", "appMaintenance",
+                "clipboard", "keystrokeHighlight", "appMaintenance", "database",
             ])
     }
 
@@ -243,6 +244,7 @@ import Testing
             "system": [],
             "appMaintenance": [],
             "machines": [],
+            "database": [],
             "companion": [],
             "systemStats": [],
             "micMute": [],
@@ -266,6 +268,7 @@ import Testing
             "system": [.accessibility, .inputMonitoring],
             "appMaintenance": [],
             "machines": [.notifications],
+            "database": [],
             "companion": [],
             "systemStats": [],
             "micMute": [],
@@ -400,6 +403,7 @@ import Testing
             "tabSEOAuditEnabled": false,
             "tabSystemEnabled": true,
             "tabMachinesEnabled": false,
+            "tabDatabaseEnabled": false,
             "tabCompanionEnabled": false,
             "menuBarSystemStats": false,
             "micMuteEnabled": false,

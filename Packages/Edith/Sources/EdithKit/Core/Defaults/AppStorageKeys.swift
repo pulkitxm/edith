@@ -261,6 +261,7 @@ public enum AppStorageKeys {
         public static let attentionEnabled = "tabAttentionEnabled"
         public static let calendarEnabled = "tabCalendarEnabled"
         public static let companionEnabled = "tabCompanionEnabled"
+        public static let databaseEnabled = "tabDatabaseEnabled"
         public static let herdrEnabled = "tabHerdrEnabled"
         public static let machinesEnabled = "tabMachinesEnabled"
         public static let musicEnabled = "tabMusicEnabled"
