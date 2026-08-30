@@ -45,7 +45,7 @@ import Testing
             MainDestination.homeItems == [
                 .home, .attention, .dashboard, .herdr, .quinjet, .seoAudit, .music, .calendar,
                 .system,
-                .appMaintenance, .machines, .companion,
+                .appMaintenance, .machines, .database, .companion,
             ])
     }
 
