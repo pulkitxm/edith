@@ -373,6 +373,9 @@ struct MachineTerminalTab: View {
     var active = true
     var wantsFocus = true
     @State private var ownHolder = TerminalSessionHolder()
+    @State private var selectedWindowsShell = WindowsTerminalShell.automatic
+    @State private var availableWindowsShells = [WindowsTerminalShell.automatic]
+    @State private var detectingWindowsShells = false
     private let injectedHolder: TerminalSessionHolder?
     private let context: MachineTerminalContext?
     private let showsStatusBar: Bool
@@ -423,6 +426,9 @@ struct MachineTerminalTab: View {
         .onChange(of: session.state.isConnected) { _, connected in
             if connected { startIfPossible() }
         }
+        .task(id: session.state.isConnected) {
+            await detectWindowsShells()
+        }
         .onDisappear { if injectedHolder == nil { holder.stop() } }
     }
 
@@ -437,6 +443,9 @@ struct MachineTerminalTab: View {
                     .foregroundStyle(DashSkin.warn)
             }
             Spacer(minLength: 0)
+            if session.remotePlatform == .windows {
+                windowsShellMenu
+            }
             if let action = presentation.action {
                 Button(action.title) { perform(action) }
                     .font(.system(size: UIScale.pt(11)))
@@ -444,6 +453,38 @@ struct MachineTerminalTab: View {
         }
         .padding(.horizontal, PageMetrics.gutter(compact))
         .padding(.bottom, UIScale.pt(8))
+    }
+
+    private var windowsShellMenu: some View {
+        Menu {
+            ForEach(availableWindowsShells) { shell in
+                Button {
+                    selectWindowsShell(shell)
+                } label: {
+                    if shell == selectedWindowsShell {
+                        Label(shell.label, systemImage: "checkmark")
+                    } else {
+                        Text(shell.label)
+                    }
+                }
+            }
+            if detectingWindowsShells {
+                Divider()
+                Text("Detecting installed shells…")
+            }
+        } label: {
+            HStack(spacing: UIScale.pt(5)) {
+                Image(systemName: "terminal")
+                Text(selectedWindowsShell.label)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: UIScale.pt(8), weight: .semibold))
+            }
+            .font(DashSkin.mono(11))
+            .foregroundStyle(DashSkin.inkFaint(dark))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Choose the shell for this terminal")
     }
 
     private func terminalUnavailable(_ presentation: MachineTerminalPresentation) -> some View {
@@ -494,7 +535,8 @@ struct MachineTerminalTab: View {
             let launch = MachineTerminalLaunchPlan.make(
                 isLocal: session.isLocal, connection: connection,
                 environment: Terminal.getEnvironmentVariables(termName: "xterm-256color"),
-                context: context, platform: session.remotePlatform ?? .linux)
+                context: context, platform: session.remotePlatform ?? .linux,
+                windowsShell: selectedWindowsShell)
         else { return }
         holder.start(
             executable: launch.executable, arguments: launch.arguments,
@@ -518,12 +560,43 @@ struct MachineTerminalTab: View {
 
     private func startWindowsShell() {
         guard session.state.isConnected, let connection = session.connectionRef else { return }
-        let command = WindowsTerminalCommands.interactiveShell()
+        let command = WindowsTerminalCommands.interactiveShell(selectedWindowsShell)
         holder.start(
             executable: SSHConnection.executable.path,
             arguments: connection.terminalArguments(remoteCommand: command),
             environment: Terminal.getEnvironmentVariables(termName: "xterm-256color")
                 + connection.terminalEnvironment())
+    }
+
+    private func detectWindowsShells() async {
+        guard session.state.isConnected, session.remotePlatform == .windows,
+            let connection = session.connectionRef
+        else {
+            availableWindowsShells = [.automatic]
+            detectingWindowsShells = false
+            return
+        }
+        detectingWindowsShells = true
+        defer { detectingWindowsShells = false }
+        guard
+            let result = try? await connection.run(
+                WindowsTerminalCommands.availableShells(), timeout: 10),
+            result.succeeded
+        else { return }
+        availableWindowsShells =
+            [.automatic]
+            + WindowsTerminalCommands.parseAvailableShells(result.stdoutText)
+    }
+
+    private func selectWindowsShell(_ shell: WindowsTerminalShell) {
+        guard shell != selectedWindowsShell else { return }
+        selectedWindowsShell = shell
+        guard holder.started else {
+            startIfPossible()
+            return
+        }
+        holder.reset()
+        startIfPossible()
     }
 
     private func restart() {
