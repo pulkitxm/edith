@@ -134,6 +134,12 @@ final class DatabaseBrokerSocketConnection: @unchecked Sendable {
         try descriptorState.withDescriptor(operation)
     }
 
+    func withSocketDescriptor<Result: Sendable>(
+        _ operation: @escaping @Sendable (Int32) async throws -> Result
+    ) async throws -> Result {
+        try await descriptorState.withDescriptor(operation)
+    }
+
     func close() {
         descriptorState.close()
     }
@@ -546,15 +552,17 @@ private final class DatabaseBrokerManagedSocketDescriptor: @unchecked Sendable {
     func withDescriptor<Result>(
         _ operation: (Int32) throws -> Result
     ) throws -> Result {
-        let borrowedDescriptor = try stateLock.withLock { () throws -> Int32 in
-            guard descriptor >= 0, !isClosing else {
-                throw DatabaseBrokerSocketError.notOpen
-            }
-            borrowCount += 1
-            return descriptor
-        }
+        let borrowedDescriptor = try borrowDescriptor()
         defer { finishBorrow() }
         return try operation(borrowedDescriptor)
+    }
+
+    func withDescriptor<Result: Sendable>(
+        _ operation: @escaping @Sendable (Int32) async throws -> Result
+    ) async throws -> Result {
+        let borrowedDescriptor = try borrowDescriptor()
+        defer { finishBorrow() }
+        return try await operation(borrowedDescriptor)
     }
 
     func close(_ handler: (() -> Void)? = nil) {
@@ -576,6 +584,16 @@ private final class DatabaseBrokerManagedSocketDescriptor: @unchecked Sendable {
         if closedDescriptor >= 0 {
             Darwin.close(closedDescriptor)
             completedHandler?()
+        }
+    }
+
+    private func borrowDescriptor() throws -> Int32 {
+        try stateLock.withLock {
+            guard descriptor >= 0, !isClosing else {
+                throw DatabaseBrokerSocketError.notOpen
+            }
+            borrowCount += 1
+            return descriptor
         }
     }
 

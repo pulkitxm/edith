@@ -30,6 +30,7 @@ struct DatabaseBrokerRuntimeSnapshot: Equatable, Sendable {
 
 enum DatabaseBrokerRuntimeClientResult: Equatable, Sendable {
     case completed(DatabaseBrokerHealthServerResult)
+    case commandCompleted(DatabaseBrokerCommandServerResult)
     case failed(DatabaseBrokerHealthTransportError)
     case unexpectedFailure
 
@@ -49,6 +50,7 @@ typealias DatabaseBrokerRuntimeHealthResponseProvider =
 
 struct DatabaseBrokerRuntimeConnection: @unchecked Sendable {
     let id: UUID
+    private let socketConnection: DatabaseBrokerSocketConnection?
     private let serveHealthHandler:
         @Sendable (
             DatabaseBrokerHealthTransport,
@@ -66,12 +68,14 @@ struct DatabaseBrokerRuntimeConnection: @unchecked Sendable {
         close: @escaping @Sendable () -> Void
     ) {
         self.id = id
+        socketConnection = nil
         serveHealthHandler = serveHealth
         closeHandler = close
     }
 
     init(socketConnection: DatabaseBrokerSocketConnection) {
         id = UUID()
+        self.socketConnection = socketConnection
         serveHealthHandler = { transport, response in
             try socketConnection.withSocketDescriptor { socketDescriptor in
                 try transport.serveHealth(
@@ -93,6 +97,15 @@ struct DatabaseBrokerRuntimeConnection: @unchecked Sendable {
 
     func close() {
         closeHandler()
+    }
+
+    func withSocketDescriptor<Result: Sendable>(
+        _ operation: @escaping @Sendable (Int32) async throws -> Result
+    ) async throws -> Result {
+        guard let socketConnection else {
+            throw DatabaseBrokerSocketError.notOpen
+        }
+        return try await socketConnection.withSocketDescriptor(operation)
     }
 }
 
@@ -153,25 +166,96 @@ struct DatabaseBrokerRuntimeTransport: Sendable {
         self.serve = serve
     }
 
-    static func live() throws -> DatabaseBrokerRuntimeTransport {
-        let transport = try DatabaseBrokerHealthTransport()
+    static func live(
+        commandDispatcher: DatabaseBrokerCommandDispatcher? = nil
+    ) throws -> DatabaseBrokerRuntimeTransport {
+        let transport = try DatabaseBrokerRuntimeRequestTransport()
         let worker = DatabaseBrokerRuntimeHealthWorker(
             maximumConcurrentWorkItems: DatabaseBrokerRuntime.maximumActiveClients)
         return DatabaseBrokerRuntimeTransport { connection, response in
-            await worker.perform {
-                do {
-                    return .completed(
-                        try connection.serveHealth(
-                            using: transport,
-                            response: response))
-                } catch let error as DatabaseBrokerHealthTransportError {
-                    return .failed(error)
-                } catch {
-                    return .unexpectedFailure
+            do {
+                return try await connection.withSocketDescriptor { socketDescriptor in
+                    let received = await worker.perform {
+                        do {
+                            return DatabaseBrokerRuntimeRequestReadResult.request(
+                                try transport.receiveRequest(
+                                    socketDescriptor: socketDescriptor))
+                        } catch let error as DatabaseBrokerHealthTransportError {
+                            return .failed(error)
+                        } catch {
+                            return .unexpectedFailure
+                        }
+                    }
+                    switch received {
+                    case .failed(let error):
+                        return .failed(error)
+                    case .unexpectedFailure:
+                        return .unexpectedFailure
+                    case .request(let request):
+                        switch request.payload {
+                        case .health(let payload):
+                            let healthResponse = response(payload)
+                            return await worker.perform {
+                                do {
+                                    return .completed(
+                                        try transport.sendHealthResponse(
+                                            healthResponse,
+                                            matching: request,
+                                            socketDescriptor: socketDescriptor))
+                                } catch let error as DatabaseBrokerHealthTransportError {
+                                    return .failed(error)
+                                } catch {
+                                    return .unexpectedFailure
+                                }
+                            }
+                        case .command(let payload):
+                            guard let commandDispatcher else {
+                                return .unexpectedFailure
+                            }
+                            let commandRequest = DatabaseBrokerEnvelope(
+                                requestID: request.requestID,
+                                operationID: request.operationID,
+                                sequence: request.sequence,
+                                kind: request.kind,
+                                payload: payload)
+                            let commandResponse:
+                                DatabaseBrokerEnvelope<
+                                    DatabaseBrokerCommandResponse
+                                >
+                            do {
+                                commandResponse = try await commandDispatcher.dispatch(
+                                    commandRequest,
+                                    responseSequence: 0)
+                            } catch {
+                                return .unexpectedFailure
+                            }
+                            return await worker.perform {
+                                do {
+                                    return .commandCompleted(
+                                        try transport.sendCommandResponse(
+                                            commandResponse,
+                                            matching: request,
+                                            socketDescriptor: socketDescriptor))
+                                } catch let error as DatabaseBrokerHealthTransportError {
+                                    return .failed(error)
+                                } catch {
+                                    return .unexpectedFailure
+                                }
+                            }
+                        }
+                    }
                 }
+            } catch {
+                return .unexpectedFailure
             }
         }
     }
+}
+
+private enum DatabaseBrokerRuntimeRequestReadResult: Sendable {
+    case request(DatabaseBrokerEnvelope<DatabaseBrokerRuntimeRequestPayload>)
+    case failed(DatabaseBrokerHealthTransportError)
+    case unexpectedFailure
 }
 
 struct DatabaseBrokerRuntimeAcceptSource: Sendable {
