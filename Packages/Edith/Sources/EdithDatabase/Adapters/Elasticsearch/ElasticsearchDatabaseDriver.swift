@@ -77,6 +77,19 @@ struct ElasticsearchDatabaseConnectionPlan: Sendable {
 
 protocol ElasticsearchDatabaseClient: Sendable {
     func discoverIdentity() async throws -> DatabaseProductIdentity
+    func resolveIndexes() async throws -> ElasticsearchDatabaseResolveResponse
+    func mapping(
+        target: String
+    ) async throws -> ElasticsearchDatabaseMappingResponse
+    func openPointInTime(
+        target: String,
+        keepAlive: String
+    ) async throws -> String
+    func search(
+        body: Data,
+        pointInTimeID: String
+    ) async throws -> ElasticsearchDatabaseSearchResponse
+    func closePointInTime(_ identifier: String) async throws
     func disconnect() async
 }
 
@@ -90,6 +103,7 @@ actor URLSessionElasticsearchDatabaseClient: ElasticsearchDatabaseClient {
     private let plan: ElasticsearchDatabaseConnectionPlan
     private var session: URLSession?
     private var identity: DatabaseProductIdentity?
+    private var openPointInTimeIdentifiers: Set<String> = []
 
     private init(
         plan: ElasticsearchDatabaseConnectionPlan,
@@ -132,16 +146,140 @@ actor URLSessionElasticsearchDatabaseClient: ElasticsearchDatabaseClient {
         return identity
     }
 
-    func disconnect() {
+    func resolveIndexes() async throws -> ElasticsearchDatabaseResolveResponse {
+        let response = try await send(
+            path: "/_resolve/index/*",
+            queryItems: [URLQueryItem(name: "expand_wildcards", value: "open")])
+        let decoded = try decode(ElasticsearchDatabaseResolveResponse.self, from: response.body)
+        try ElasticsearchDatabaseDriverSupport.validate(decoded)
+        return decoded
+    }
+
+    func mapping(
+        target: String
+    ) async throws -> ElasticsearchDatabaseMappingResponse {
+        let segment = try ElasticsearchDatabaseDriverSupport.pathSegment(target)
+        let response = try await send(
+            path: "/\(segment)/_mapping",
+            queryItems: [URLQueryItem(name: "filter_path", value: "*.mappings")])
+        return try decode(ElasticsearchDatabaseMappingResponse.self, from: response.body)
+    }
+
+    func openPointInTime(
+        target: String,
+        keepAlive: String
+    ) async throws -> String {
+        let segment = try ElasticsearchDatabaseDriverSupport.pathSegment(target)
+        guard ElasticsearchDatabaseDriverSupport.validKeepAlive(keepAlive) else {
+            throw ElasticsearchDatabaseDriverFailure.invalidConfiguration
+        }
+        let response = try await send(
+            method: .post,
+            path: "/\(segment)/_pit",
+            queryItems: [URLQueryItem(name: "keep_alive", value: keepAlive)])
+        let decoded = try decode(
+            ElasticsearchDatabaseOpenPointInTimeResponse.self,
+            from: response.body)
+        guard ElasticsearchDatabaseDriverSupport.validOpaqueIdentifier(decoded.id) else {
+            throw ElasticsearchDatabaseDriverFailure.invalidResponse
+        }
+        openPointInTimeIdentifiers.insert(decoded.id)
+        return decoded.id
+    }
+
+    func search(
+        body: Data,
+        pointInTimeID: String
+    ) async throws -> ElasticsearchDatabaseSearchResponse {
+        guard ElasticsearchDatabaseDriverSupport.validOpaqueIdentifier(pointInTimeID) else {
+            throw ElasticsearchDatabaseDriverFailure.invalidConfiguration
+        }
+        let boundedBody: Data
+        do {
+            var value = try JSONDecoder().decode(
+                ElasticsearchDatabaseJSONValue.self,
+                from: body)
+            guard case var .object(fields) = value,
+                case var .object(pointInTime)? = fields["pit"],
+                pointInTime["keep_alive"] == .string("60s")
+            else {
+                throw ElasticsearchDatabaseDriverFailure.invalidConfiguration
+            }
+            pointInTime["id"] = .string(pointInTimeID)
+            fields["pit"] = .object(pointInTime)
+            value = .object(fields)
+            boundedBody = try ElasticsearchDatabaseJSONCodec.encode(value)
+        } catch let failure as ElasticsearchDatabaseDriverFailure {
+            throw failure
+        } catch {
+            throw ElasticsearchDatabaseDriverFailure.invalidConfiguration
+        }
+        let response = try await send(
+            method: .post,
+            path: "/_search",
+            queryItems: [
+                URLQueryItem(name: "allow_partial_search_results", value: "true"),
+                URLQueryItem(name: "batched_reduce_size", value: "64"),
+                URLQueryItem(name: "seq_no_primary_term", value: "true"),
+                URLQueryItem(
+                    name: "filter_path",
+                    value:
+                        "took,timed_out,pit_id,_shards.total,_shards.successful,_shards.skipped,_shards.failed,_shards.failures.index,_shards.failures.shard,hits.total,hits.hits._index,hits.hits._id,hits.hits._seq_no,hits.hits._primary_term,hits.hits._source,hits.hits.sort,hits.hits.highlight,aggregations"
+                ),
+            ],
+            body: boundedBody)
+        let decoded = try decode(ElasticsearchDatabaseSearchResponse.self, from: response.body)
+        try ElasticsearchDatabaseDriverSupport.validate(decoded)
+        if let refreshed = decoded.pointInTimeID {
+            openPointInTimeIdentifiers.remove(pointInTimeID)
+            openPointInTimeIdentifiers.insert(refreshed)
+        }
+        return decoded
+    }
+
+    func closePointInTime(_ identifier: String) async throws {
+        guard ElasticsearchDatabaseDriverSupport.validOpaqueIdentifier(identifier) else {
+            throw ElasticsearchDatabaseDriverFailure.invalidConfiguration
+        }
+        defer { openPointInTimeIdentifiers.remove(identifier) }
+        let body: Data
+        do {
+            body = try ElasticsearchDatabaseJSONCodec.encode(
+                .object(["id": .string(identifier)]))
+        } catch {
+            throw ElasticsearchDatabaseDriverFailure.invalidConfiguration
+        }
+        let response = try await send(
+            method: .delete,
+            path: "/_pit",
+            body: body)
+        let decoded = try decode(
+            ElasticsearchDatabaseClosePointInTimeResponse.self,
+            from: response.body)
+        guard decoded.succeeded, decoded.freed >= 0 else {
+            throw ElasticsearchDatabaseDriverFailure.invalidResponse
+        }
+    }
+
+    func disconnect() async {
         let session = self.session
+        let identifiers = openPointInTimeIdentifiers
+        openPointInTimeIdentifiers.removeAll()
+        if let session {
+            for identifier in identifiers.prefix(8) {
+                await Self.closePointInTime(
+                    identifier,
+                    session: session,
+                    plan: plan)
+            }
+        }
         self.session = nil
         identity = nil
         session?.invalidateAndCancel()
     }
 
     private func prepare() async throws {
-        let rootResponse = try await get(path: "/")
-        try ElasticsearchDatabaseDriverErrorClassifier.validate(rootResponse)
+        let rootResponse = try await send(path: "/")
         let root: ElasticsearchDatabaseRootResponse
         do {
             root = try JSONDecoder().decode(
@@ -150,7 +288,7 @@ actor URLSessionElasticsearchDatabaseClient: ElasticsearchDatabaseClient {
         } catch {
             throw ElasticsearchDatabaseDriverFailure.invalidResponse
         }
-        let nodesResponse = try await get(
+        let nodesResponse = try await send(
             path: "/_nodes/_all/plugins",
             queryItems: [
                 URLQueryItem(
@@ -159,7 +297,6 @@ actor URLSessionElasticsearchDatabaseClient: ElasticsearchDatabaseClient {
                         "_nodes,cluster_name,nodes.*.name,nodes.*.roles,nodes.*.version,nodes.*.plugins.name,nodes.*.plugins.version,nodes.*.modules.name,nodes.*.modules.version"
                 )
             ])
-        try ElasticsearchDatabaseDriverErrorClassifier.validate(nodesResponse)
         let nodes: ElasticsearchDatabaseNodesResponse
         do {
             nodes = try JSONDecoder().decode(
@@ -173,9 +310,11 @@ actor URLSessionElasticsearchDatabaseClient: ElasticsearchDatabaseClient {
             nodes: nodes)
     }
 
-    private func get(
+    private func send(
+        method: ElasticsearchDatabaseHTTPMethod = .get,
         path: String,
-        queryItems: [URLQueryItem] = []
+        queryItems: [URLQueryItem] = [],
+        body: Data? = nil
     ) async throws -> ElasticsearchDatabaseHTTPResponse {
         guard let session else {
             throw ElasticsearchDatabaseDriverFailure.connection
@@ -183,16 +322,225 @@ actor URLSessionElasticsearchDatabaseClient: ElasticsearchDatabaseClient {
         let request = try ElasticsearchDatabaseTransport.request(
             endpoint: plan.endpoint,
             path: path,
+            method: method,
             queryItems: queryItems,
+            body: body,
             authorization: plan.authorization)
         do {
-            return try await ElasticsearchDatabaseTransport.execute(
+            let response = try await ElasticsearchDatabaseTransport.execute(
                 session: session,
                 request: request,
                 maximumResponseBytes: plan.maximumResponseBytes)
+            try ElasticsearchDatabaseDriverErrorClassifier.validate(response)
+            return response
         } catch {
             throw try ElasticsearchDatabaseDriverErrorClassifier.classify(error)
         }
+    }
+
+    private func decode<Value: Decodable>(
+        _ type: Value.Type,
+        from data: Data
+    ) throws -> Value {
+        do {
+            return try JSONDecoder().decode(type, from: data)
+        } catch {
+            throw ElasticsearchDatabaseDriverFailure.invalidResponse
+        }
+    }
+
+    private static func closePointInTime(
+        _ identifier: String,
+        session: URLSession,
+        plan: ElasticsearchDatabaseConnectionPlan
+    ) async {
+        guard
+            let body = try? ElasticsearchDatabaseJSONCodec.encode(
+                .object(["id": .string(identifier)])),
+            let request = try? ElasticsearchDatabaseTransport.request(
+                endpoint: plan.endpoint,
+                path: "/_pit",
+                method: .delete,
+                queryItems: [],
+                body: body,
+                authorization: plan.authorization),
+            let response = try? await ElasticsearchDatabaseDeadline.run(
+                milliseconds: min(plan.requestTimeoutMilliseconds, 2_000),
+                operation: {
+                    try await ElasticsearchDatabaseTransport.execute(
+                        session: session,
+                        request: request,
+                        maximumResponseBytes: plan.maximumResponseBytes)
+                })
+        else {
+            return
+        }
+        try? ElasticsearchDatabaseDriverErrorClassifier.validate(response)
+    }
+}
+
+struct ElasticsearchDatabaseResolveResponse: Decodable, Sendable {
+    let indices: [Index]
+    let aliases: [Alias]
+    let dataStreams: [DataStream]
+
+    struct Index: Decodable, Sendable {
+        let name: String
+        let aliases: [String]
+        let attributes: [String]
+        let dataStream: String?
+        let mode: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case name
+            case aliases
+            case attributes
+            case dataStream = "data_stream"
+            case mode
+        }
+    }
+
+    struct Alias: Decodable, Sendable {
+        let name: String
+        let indices: [String]
+    }
+
+    struct DataStream: Decodable, Sendable {
+        let name: String
+        let backingIndices: [String]
+        let timestampField: String
+
+        private enum CodingKeys: String, CodingKey {
+            case name
+            case backingIndices = "backing_indices"
+            case timestampField = "timestamp_field"
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case indices
+        case aliases
+        case dataStreams = "data_streams"
+    }
+}
+
+struct ElasticsearchDatabaseMappingResponse: Decodable, Sendable {
+    let indices: [String: Index]
+
+    init(indices: [String: Index]) {
+        self.indices = indices
+    }
+
+    struct Index: Decodable, Sendable {
+        let mappings: Mapping
+    }
+
+    struct Mapping: Decodable, Sendable {
+        let dynamic: ElasticsearchDatabaseJSONValue?
+        let properties: [String: Field]?
+        let runtime: [String: Field]?
+    }
+
+    struct Field: Decodable, Sendable {
+        let type: String?
+        let index: Bool?
+        let enabled: Bool?
+        let docValues: Bool?
+        let properties: [String: Field]?
+        let fields: [String: Field]?
+
+        private enum CodingKeys: String, CodingKey {
+            case type
+            case index
+            case enabled
+            case docValues = "doc_values"
+            case properties
+            case fields
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        indices = try decoder.singleValueContainer().decode([String: Index].self)
+    }
+}
+
+struct ElasticsearchDatabaseSearchResponse: Decodable, Sendable {
+    let took: UInt64
+    let timedOut: Bool
+    let pointInTimeID: String?
+    let shards: Shards
+    let hits: Hits
+    let aggregations: [String: ElasticsearchDatabaseJSONValue]?
+
+    struct Shards: Decodable, Sendable {
+        let total: Int
+        let successful: Int
+        let skipped: Int
+        let failed: Int
+        let failures: [Failure]?
+    }
+
+    struct Failure: Decodable, Sendable {
+        let index: String?
+        let shard: Int?
+    }
+
+    struct Hits: Decodable, Sendable {
+        let total: Total
+        let hits: [Hit]
+    }
+
+    struct Total: Decodable, Sendable {
+        let value: UInt64
+        let relation: Relation
+    }
+
+    enum Relation: String, Decodable, Sendable {
+        case equal = "eq"
+        case greaterThanOrEqual = "gte"
+    }
+
+    struct Hit: Decodable, Sendable {
+        let index: String
+        let identifier: String?
+        let sequenceNumber: Int64?
+        let primaryTerm: Int64?
+        let source: ElasticsearchDatabaseJSONValue?
+        let sort: [ElasticsearchDatabaseJSONValue]?
+        let highlight: [String: [String]]?
+
+        private enum CodingKeys: String, CodingKey {
+            case index = "_index"
+            case identifier = "_id"
+            case sequenceNumber = "_seq_no"
+            case primaryTerm = "_primary_term"
+            case source = "_source"
+            case sort
+            case highlight
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case took
+        case timedOut = "timed_out"
+        case pointInTimeID = "pit_id"
+        case shards = "_shards"
+        case hits
+        case aggregations
+    }
+}
+
+private struct ElasticsearchDatabaseOpenPointInTimeResponse: Decodable {
+    let id: String
+}
+
+private struct ElasticsearchDatabaseClosePointInTimeResponse: Decodable {
+    let succeeded: Bool
+    let freed: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case succeeded
+        case freed = "num_freed"
     }
 }
 
@@ -311,6 +659,13 @@ enum ElasticsearchDatabaseDriverSupport {
     private static let maximumClusterNodes = 10_000
     private static let maximumNodeRoles = 64
     private static let maximumExtensions = 128
+    private static let maximumResolvedObjects = 10_000
+    private static let maximumSearchHits = DatabasePageSize.range.upperBound + 1
+    private static let maximumSearchShards = 100_000
+    private static let maximumShardFailures = DatabaseAdapterBounds.maximumPartialFailures
+    private static let maximumSortValues = DatabaseAdapterBounds.maximumSorts + 1
+    private static let maximumHighlightFields = 64
+    private static let maximumHighlightFragments = 16
 
     static func identity(
         root: ElasticsearchDatabaseRootResponse,
@@ -401,6 +756,131 @@ enum ElasticsearchDatabaseDriverSupport {
             modules: modules.sorted().map(\.identity),
             plugins: plugins.sorted().map(\.identity),
             compatibilityNotes: compatibilityNotes)
+    }
+
+    static func validate(
+        _ response: ElasticsearchDatabaseSearchResponse
+    ) throws(ElasticsearchDatabaseDriverFailure) {
+        guard response.shards.total >= 0,
+            response.shards.total <= maximumSearchShards,
+            response.shards.successful >= 0,
+            response.shards.failed >= 0,
+            response.shards.skipped >= 0,
+            response.shards.successful + response.shards.failed == response.shards.total,
+            response.shards.skipped <= response.shards.successful,
+            response.hits.hits.count <= maximumSearchHits,
+            response.aggregations?.count ?? 0 <= 64,
+            response.pointInTimeID.map(validOpaqueIdentifier) ?? true
+        else {
+            throw .invalidResponse
+        }
+        let failures = response.shards.failures ?? []
+        guard failures.count <= maximumShardFailures else {
+            throw .responseTooLarge
+        }
+        for failure in failures {
+            guard failure.index.map({ valid($0, maximumBytes: 1_024) }) ?? true,
+                failure.shard.map({ $0 >= 0 }) ?? true
+            else {
+                throw .invalidResponse
+            }
+        }
+        for hit in response.hits.hits {
+            guard valid(hit.index, maximumBytes: 1_024),
+                hit.identifier.map({ valid($0, maximumBytes: 4_096) }) ?? true,
+                hit.sequenceNumber.map({ $0 >= 0 }) ?? true,
+                hit.primaryTerm.map({ $0 >= 0 }) ?? true,
+                hit.sort?.count ?? 0 <= maximumSortValues,
+                hit.sort?.allSatisfy({ $0.isBoundedScalar() }) ?? true,
+                hit.highlight?.count ?? 0 <= maximumHighlightFields
+            else {
+                throw .invalidResponse
+            }
+            for (field, fragments) in hit.highlight ?? [:] {
+                guard valid(field, maximumBytes: 4_096),
+                    fragments.count <= maximumHighlightFragments,
+                    fragments.allSatisfy({ valid($0, maximumBytes: 16_384) })
+                else {
+                    throw .responseTooLarge
+                }
+            }
+        }
+    }
+
+    static func validate(
+        _ response: ElasticsearchDatabaseResolveResponse
+    ) throws(ElasticsearchDatabaseDriverFailure) {
+        let count = response.indices.count + response.aliases.count + response.dataStreams.count
+        guard count <= maximumResolvedObjects else {
+            throw .responseTooLarge
+        }
+        for index in response.indices {
+            guard validTargetName(index.name),
+                index.aliases.count <= 1_024,
+                index.aliases.allSatisfy(validTargetName),
+                index.attributes.count <= 64,
+                index.attributes.allSatisfy({ valid($0, maximumBytes: 128) }),
+                index.dataStream.map(validTargetName) ?? true,
+                index.mode.map({ valid($0, maximumBytes: 128) }) ?? true
+            else {
+                throw .invalidResponse
+            }
+        }
+        for alias in response.aliases {
+            guard validTargetName(alias.name),
+                alias.indices.count <= maximumResolvedObjects,
+                alias.indices.allSatisfy(validTargetName)
+            else {
+                throw .invalidResponse
+            }
+        }
+        for dataStream in response.dataStreams {
+            guard validTargetName(dataStream.name),
+                dataStream.backingIndices.count <= maximumResolvedObjects,
+                dataStream.backingIndices.allSatisfy(validTargetName),
+                valid(dataStream.timestampField, maximumBytes: 4_096)
+            else {
+                throw .invalidResponse
+            }
+        }
+    }
+
+    static func pathSegment(
+        _ value: String
+    ) throws(ElasticsearchDatabaseDriverFailure) -> String {
+        guard validTargetName(value) else {
+            throw .invalidConfiguration
+        }
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/\\?#%:,*")
+        guard let encoded = value.addingPercentEncoding(withAllowedCharacters: allowed),
+            !encoded.isEmpty
+        else {
+            throw .invalidConfiguration
+        }
+        return encoded
+    }
+
+    static func validTargetName(_ value: String) -> Bool {
+        !value.isEmpty && value.utf8.count <= 255 && value != "." && value != ".."
+            && value != "_all" && !value.hasPrefix("_")
+            && !value.contains("\0") && !value.contains("/") && !value.contains("\\")
+            && !value.contains("?") && !value.contains("#") && !value.contains("%")
+            && !value.contains(":") && !value.contains(",") && !value.contains("*")
+            && !value.unicodeScalars.contains(where: {
+                CharacterSet.controlCharacters.contains($0)
+            })
+    }
+
+    static func validOpaqueIdentifier(_ value: String) -> Bool {
+        valid(value, maximumBytes: DatabaseAdapterBounds.maximumContinuationBytes)
+            && !value.unicodeScalars.contains(where: {
+                CharacterSet.controlCharacters.contains($0)
+            })
+    }
+
+    static func validKeepAlive(_ value: String) -> Bool {
+        value == "60s"
     }
 
     private static func collect(

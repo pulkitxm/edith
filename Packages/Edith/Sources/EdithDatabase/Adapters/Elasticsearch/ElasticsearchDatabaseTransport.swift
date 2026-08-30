@@ -6,6 +6,12 @@ struct ElasticsearchDatabaseHTTPResponse: Sendable {
     let body: Data
 }
 
+enum ElasticsearchDatabaseHTTPMethod: String, Sendable {
+    case delete = "DELETE"
+    case get = "GET"
+    case post = "POST"
+}
+
 final class ElasticsearchDatabaseURLSessionDelegate: NSObject, URLSessionTaskDelegate,
     @unchecked Sendable
 {
@@ -22,6 +28,7 @@ final class ElasticsearchDatabaseURLSessionDelegate: NSObject, URLSessionTaskDel
 }
 
 enum ElasticsearchDatabaseTransport {
+    static let maximumRequestBytes = 1_048_576
     static let minimumResponseBytes = 1_024
     static let maximumResponseBytes = 16_777_216
 
@@ -72,10 +79,13 @@ enum ElasticsearchDatabaseTransport {
     static func request(
         endpoint: URL,
         path: String,
+        method: ElasticsearchDatabaseHTTPMethod = .get,
         queryItems: [URLQueryItem],
+        body: Data? = nil,
         authorization: ElasticsearchDatabaseAuthorization
     ) throws(ElasticsearchDatabaseDriverFailure) -> URLRequest {
-        guard path.hasPrefix("/"),
+        guard path.hasPrefix("/"), !path.contains("?"), !path.contains("#"),
+            body?.count ?? 0 <= maximumRequestBytes,
             var components = URLComponents(
                 url: endpoint,
                 resolvingAgainstBaseURL: false)
@@ -92,10 +102,14 @@ enum ElasticsearchDatabaseTransport {
             throw .invalidConfiguration
         }
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        request.httpMethod = method.rawValue
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("edith-database", forHTTPHeaderField: "X-Opaque-Id")
+        if let body {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = body
+        }
         if let value = authorization.headerValue {
             request.setValue(value, forHTTPHeaderField: "Authorization")
         }
@@ -108,38 +122,34 @@ enum ElasticsearchDatabaseTransport {
         maximumResponseBytes: Int
     ) async throws -> ElasticsearchDatabaseHTTPResponse {
         do {
-            return try await withTaskCancellationHandler {
-                let (bytes, response) = try await session.bytes(for: request)
-                guard let response = response as? HTTPURLResponse else {
-                    throw ElasticsearchDatabaseDriverFailure.invalidResponse
-                }
-                if response.expectedContentLength > Int64(maximumResponseBytes) {
+            let (bytes, response) = try await session.bytes(for: request)
+            guard let response = response as? HTTPURLResponse else {
+                throw ElasticsearchDatabaseDriverFailure.invalidResponse
+            }
+            if response.expectedContentLength > Int64(maximumResponseBytes) {
+                throw ElasticsearchDatabaseDriverFailure.responseTooLarge
+            }
+            var body = Data()
+            if response.expectedContentLength > 0 {
+                body.reserveCapacity(
+                    min(Int(response.expectedContentLength), maximumResponseBytes))
+            }
+            var iterator = bytes.makeAsyncIterator()
+            while let byte = try await iterator.next() {
+                if body.count == maximumResponseBytes {
                     throw ElasticsearchDatabaseDriverFailure.responseTooLarge
                 }
-                var body = Data()
-                if response.expectedContentLength > 0 {
-                    body.reserveCapacity(
-                        min(Int(response.expectedContentLength), maximumResponseBytes))
+                body.append(byte)
+                if body.count.isMultiple(of: 4_096) {
+                    try Task.checkCancellation()
                 }
-                var iterator = bytes.makeAsyncIterator()
-                while let byte = try await iterator.next() {
-                    if body.count == maximumResponseBytes {
-                        throw ElasticsearchDatabaseDriverFailure.responseTooLarge
-                    }
-                    body.append(byte)
-                    if body.count.isMultiple(of: 4_096) {
-                        try Task.checkCancellation()
-                    }
-                }
-                try Task.checkCancellation()
-                return ElasticsearchDatabaseHTTPResponse(
-                    statusCode: response.statusCode,
-                    productHeader: response.value(
-                        forHTTPHeaderField: "X-Elastic-Product"),
-                    body: body)
-            } onCancel: {
-                session.invalidateAndCancel()
             }
+            try Task.checkCancellation()
+            return ElasticsearchDatabaseHTTPResponse(
+                statusCode: response.statusCode,
+                productHeader: response.value(
+                    forHTTPHeaderField: "X-Elastic-Product"),
+                body: body)
         } catch let failure as ElasticsearchDatabaseDriverFailure {
             if failure == .responseTooLarge {
                 session.invalidateAndCancel()
