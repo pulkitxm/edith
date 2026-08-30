@@ -29,6 +29,7 @@ final class AppMaintenanceModel {
     var updates: [AppUpdateItem] = []
     var updateHistory: [AppUpdateResult] = []
     var selectedUpdateIDs = Set<String>()
+    var focusedUpdateID: String?
     var lastUpdateRefresh: Date?
     private var updateState = AppUpdateCenterState()
     private let updatePersistence = AppUpdatePersistence()
@@ -49,6 +50,15 @@ final class AppMaintenanceModel {
             selected.append(item)
         }
         return selected
+    }
+
+    var focusedUpdate: AppUpdateItem? {
+        if let focusedUpdateID,
+            let update = updates.first(where: { $0.id == focusedUpdateID })
+        {
+            return update
+        }
+        return updates.first
     }
 
     var selectedBytes: Int64 { selectedItems.reduce(0) { $0 + $1.sizeBytes } }
@@ -83,6 +93,13 @@ final class AppMaintenanceModel {
             for update in updates { visibleIDs.insert(update.id) }
             selectedUpdateIDs.formIntersection(visibleIDs)
             if selectedUpdateIDs.isEmpty { selectedUpdateIDs = visibleIDs }
+            if let focusedUpdateID {
+                if !visibleIDs.contains(focusedUpdateID) {
+                    self.focusedUpdateID = updates.first?.id
+                }
+            } else {
+                focusedUpdateID = updates.first?.id
+            }
             phase = .ready
             if let selectedApplicationID,
                 !loaded.0.contains(where: { $0.id == selectedApplicationID })
@@ -168,6 +185,7 @@ final class AppMaintenanceModel {
             try updatePersistence.save(updateState)
             updates.removeAll { $0.id == item.id }
             selectedUpdateIDs.remove(item.id)
+            if focusedUpdateID == item.id { focusedUpdateID = updates.first?.id }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -350,23 +368,42 @@ final class AppMaintenanceModel {
     }
 }
 
-private enum AppMaintenanceSection: String, CaseIterable, Identifiable {
+enum AppMaintenanceSection: String, CaseIterable, Identifiable {
     case updates = "Updates"
+    case packages = "Packages"
     case removal = "Remove"
     case history = "History"
 
     var id: Self { self }
+
+    var symbol: String {
+        switch self {
+        case .updates: "arrow.up.circle"
+        case .packages: "shippingbox"
+        case .removal: "trash"
+        case .history: "clock.arrow.circlepath"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .updates: "Review and run available application updates."
+        case .packages: "Manage installed and discoverable Homebrew packages."
+        case .removal: "Review applications and their related files before removal."
+        case .history: "Review completed maintenance operations."
+        }
+    }
 }
 
 struct AppMaintenanceView: View {
-    @Environment(\.dismiss) private var dismiss
     @State private var model = AppMaintenanceModel()
     @State private var query = ""
     @State private var confirmingRemoval = false
     @State private var confirmingUpdates = false
     @State private var showingDiskImagePicker = false
     @State private var showingUpdateSettings = false
-    @State private var section = AppMaintenanceSection.updates
+    @AppStorage(AppStorageKeys.AppMaintenance.section, store: SharedDefaults.store)
+    private var sectionRaw = AppMaintenanceSection.updates.rawValue
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
     @AppStorage(AppStorageKeys.AppMaintenance.installDestination, store: SharedDefaults.store)
@@ -403,21 +440,24 @@ struct AppMaintenanceView: View {
 
     private var theme: Color { themeColor(themeName) }
 
+    private var section: AppMaintenanceSection {
+        AppMaintenanceSection(rawValue: sectionRaw) ?? .updates
+    }
+
+    private var sectionBinding: Binding<AppMaintenanceSection> {
+        Binding(
+            get: { section },
+            set: { sectionRaw = $0.rawValue })
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
-            HSplitView {
-                sectionInventory
-                    .frame(
-                        minWidth: 280, idealWidth: 320, maxWidth: 380,
-                        maxHeight: .infinity)
-                detail
-                    .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            content
         }
-        .frame(width: UIScale.pt(900), height: UIScale.pt(640))
+        .frame(minWidth: UIScale.pt(700), minHeight: UIScale.pt(520))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task { model.refresh() }
         .task(id: updateAutoRefresh) {
             guard updateAutoRefresh else { return }
@@ -468,70 +508,85 @@ struct AppMaintenanceView: View {
     }
 
     private var header: some View {
-        VStack(spacing: UIScale.pt(10)) {
-            HStack(spacing: UIScale.pt(12)) {
-                Image(systemName: "shippingbox.and.arrow.backward")
-                    .font(.system(size: UIScale.pt(18), weight: .semibold))
-                    .foregroundStyle(.tint)
-                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    Text("App Maintenance")
-                        .font(.system(size: UIScale.pt(17), weight: .semibold))
-                    Text("Install verified disk images, review updates, and remove apps safely.")
-                        .settingsCaption()
-                }
-                Spacer()
-                Button("Done") { dismiss() }
-                    .keyboardShortcut(.defaultAction)
-            }
-            HStack(spacing: UIScale.pt(10)) {
-                Picker("Section", selection: $section) {
+        PageHeader(
+            section.rawValue,
+            trailing: {
+                Picker("Section", selection: sectionBinding) {
                     ForEach(AppMaintenanceSection.allCases) { section in
-                        Text(section.rawValue).tag(section)
+                        Label(section.rawValue, systemImage: section.symbol).tag(section)
                     }
                 }
+                .pickerStyle(.menu)
                 .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: UIScale.pt(240))
-                Spacer()
-                Button {
-                    showingUpdateSettings.toggle()
-                } label: {
-                    Image(systemName: "gearshape")
-                }
-                .help("Update settings")
-                .popover(isPresented: $showingUpdateSettings) { updateSettings }
-                Menu {
-                    Picker("Destination", selection: $installDestinationRaw) {
-                        ForEach(AppMaintenanceInstallDestination.allCases, id: \.rawValue) {
-                            destination in
-                            Text(destination.title).tag(destination.rawValue)
+                .accessibilityLabel("App Maintenance section")
+            },
+            accessory: {
+                HStack(spacing: UIScale.pt(10)) {
+                    Text(section.summary)
+                        .font(.system(size: UIScale.pt(12)))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if section != .packages {
+                        Button {
+                            showingUpdateSettings.toggle()
+                        } label: {
+                            Image(systemName: "gearshape")
                         }
+                        .help("Update settings")
+                        .popover(isPresented: $showingUpdateSettings) { updateSettings }
+                        Menu {
+                            Picker("Destination", selection: $installDestinationRaw) {
+                                ForEach(AppMaintenanceInstallDestination.allCases, id: \.rawValue) {
+                                    destination in
+                                    Text(destination.title).tag(destination.rawValue)
+                                }
+                            }
+                        } label: {
+                            Label(installDestination.title, systemImage: "folder")
+                        }
+                        Button {
+                            showingDiskImagePicker = true
+                        } label: {
+                            Label("Install Disk Image", systemImage: "externaldrive.badge.plus")
+                        }
+                        .disabled(model.phase != .ready)
+                        Button {
+                            model.refresh()
+                        } label: {
+                            Label("Refresh", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(model.phase != .ready)
                     }
-                } label: {
-                    Label(installDestination.title, systemImage: "folder")
                 }
-                Button {
-                    showingDiskImagePicker = true
-                } label: {
-                    Label("Install Disk Image", systemImage: "externaldrive.badge.plus")
-                }
-                .disabled(model.phase != .ready)
-                Button {
-                    model.refresh()
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                }
-                .disabled(model.phase != .ready)
             }
+        )
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if section == .packages {
+            HomebrewMaintenanceView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if model.phase == .loading {
+            AppMaintenanceSectionSkeleton(section: section)
+        } else {
+            HSplitView {
+                sectionInventory
+                    .frame(
+                        minWidth: 280, idealWidth: 320, maxWidth: 380,
+                        maxHeight: .infinity)
+                detail
+                    .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(.horizontal, UIScale.pt(20))
-        .padding(.vertical, UIScale.pt(12))
     }
 
     @ViewBuilder
     private var sectionInventory: some View {
         switch section {
         case .updates: updateInventory
+        case .packages: EmptyView()
         case .removal: removalInventory
         case .history: historyInventory
         }
@@ -604,23 +659,37 @@ struct AppMaintenanceView: View {
                         )
                         .labelsHidden()
                         .toggleStyle(.checkbox)
-                        if let path = item.applicationPath {
-                            Image(nsImage: NSWorkspace.shared.icon(forFile: path))
-                                .resizable()
-                                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-                        } else {
-                            Image(systemName: "shippingbox")
-                                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+                        Button {
+                            model.focusedUpdateID = item.id
+                        } label: {
+                            HStack(spacing: UIScale.pt(9)) {
+                                if let path = item.applicationPath {
+                                    Image(nsImage: NSWorkspace.shared.icon(forFile: path))
+                                        .resizable()
+                                        .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+                                } else {
+                                    Image(systemName: "shippingbox")
+                                        .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+                                }
+                                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                                    Text(item.name).lineLimit(1)
+                                    Text("\(item.currentVersion) → \(item.availableVersion)")
+                                        .settingsCaption()
+                                }
+                                Spacer(minLength: 0)
+                                Text(item.source.title).settingsCaption().lineLimit(1)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
-                        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                            Text(item.name).lineLimit(1)
-                            Text("\(item.currentVersion) → \(item.availableVersion)")
-                                .settingsCaption()
-                        }
-                        Spacer(minLength: 0)
-                        Text(item.source.title).settingsCaption().lineLimit(1)
+                        .buttonStyle(
+                            EdithButtonStyle(
+                                .borderless, selected: model.focusedUpdateID == item.id,
+                                tint: theme))
                     }
                     .padding(.vertical, UIScale.pt(3))
+                    .listRowBackground(
+                        model.focusedUpdateID == item.id ? theme.opacity(0.2) : Color.clear)
                 }
                 .listStyle(.sidebar)
             }
@@ -689,6 +758,7 @@ struct AppMaintenanceView: View {
     private var detail: some View {
         switch section {
         case .updates: updateDetail
+        case .packages: EmptyView()
         case .removal: removalDetail
         case .history: historyDetail
         }
@@ -738,8 +808,7 @@ struct AppMaintenanceView: View {
                 Button("Cancel") { model.cancel() }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let item = model.updates.first(where: { model.selectedUpdateIDs.contains($0.id) })
-        {
+        } else if let item = model.focusedUpdate {
             VStack(alignment: .leading, spacing: UIScale.pt(18)) {
                 HStack(spacing: UIScale.pt(14)) {
                     if let path = item.applicationPath {
@@ -951,6 +1020,145 @@ struct AppMaintenanceView: View {
                 .font(.caption)
                 .foregroundStyle(.green)
         }
+    }
+}
+
+struct AppMaintenanceSectionSkeleton: View {
+    let section: AppMaintenanceSection
+
+    var body: some View {
+        SkeletonGroup {
+            HSplitView {
+                inventory
+                    .frame(
+                        minWidth: 280, idealWidth: 320, maxWidth: 380,
+                        maxHeight: .infinity)
+                detail
+                    .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityLabel("Loading \(section.rawValue)")
+    }
+
+    private var inventory: some View {
+        VStack(spacing: 0) {
+            SkeletonBlock(height: UIScale.pt(24), corner: UIScale.pt(6))
+                .padding(UIScale.pt(12))
+            Divider()
+            VStack(spacing: 0) {
+                ForEach(0..<7, id: \.self) { index in
+                    HStack(spacing: UIScale.pt(9)) {
+                        if section == .updates {
+                            SkeletonBlock(width: 14, height: 14, corner: 3)
+                        }
+                        SkeletonBlock(width: 28, height: 28, corner: 7)
+                        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                            SkeletonBlock(
+                                width: index.isMultiple(of: 2) ? 112 : 148,
+                                height: 10)
+                            SkeletonBlock(width: 82, height: 8)
+                        }
+                        Spacer(minLength: 0)
+                        if section == .updates {
+                            SkeletonBlock(width: 48, height: 8)
+                        }
+                    }
+                    .padding(.horizontal, UIScale.pt(12))
+                    .padding(.vertical, UIScale.pt(9))
+                }
+                Spacer(minLength: 0)
+            }
+            Divider()
+            HStack {
+                SkeletonBlock(width: 82, height: 8)
+                Spacer()
+                SkeletonBlock(width: 62, height: 8)
+            }
+            .padding(.horizontal, UIScale.pt(12))
+            .frame(height: UIScale.pt(34))
+        }
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        switch section {
+        case .updates:
+            AppMaintenanceUpdateSkeleton()
+        case .removal:
+            AppMaintenanceRemovalSkeleton()
+        case .history:
+            AppMaintenanceHistorySkeleton()
+        case .packages:
+            EmptyView()
+        }
+    }
+}
+
+private struct AppMaintenanceUpdateSkeleton: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(18)) {
+            HStack(spacing: UIScale.pt(14)) {
+                SkeletonBlock(width: 54, height: 54, corner: 12)
+                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                    SkeletonBlock(width: 156, height: 14)
+                    SkeletonBlock(width: 104, height: 9)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: UIScale.pt(6)) {
+                    SkeletonBlock(width: 86, height: 10)
+                    SkeletonBlock(width: 72, height: 8)
+                }
+            }
+            AppMaintenanceDetailSkeleton(lines: 4, height: 150)
+            AppMaintenanceDetailSkeleton(lines: 2, height: 104)
+            Spacer(minLength: 0)
+            HStack {
+                SkeletonBlock(width: 72, height: 30, corner: 7)
+                Spacer()
+                SkeletonBlock(width: 126, height: 32, corner: 7)
+            }
+        }
+        .padding(UIScale.pt(22))
+    }
+}
+
+private struct AppMaintenanceHistorySkeleton: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+            HStack(spacing: UIScale.pt(12)) {
+                SkeletonBlock(width: 44, height: 44, corner: 11)
+                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                    SkeletonBlock(width: 132, height: 14)
+                    SkeletonBlock(width: 248, height: 9)
+                }
+            }
+            ForEach(0..<4, id: \.self) { index in
+                AppMaintenanceDetailSkeleton(lines: index.isMultiple(of: 2) ? 2 : 3, height: 92)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(UIScale.pt(22))
+    }
+}
+
+private struct AppMaintenanceDetailSkeleton: View {
+    let lines: Int
+    let height: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(9)) {
+            SkeletonBlock(width: 94, height: 10)
+            ForEach(0..<lines, id: \.self) { index in
+                SkeletonBlock(
+                    width: index == lines - 1 ? 214 : nil,
+                    height: 8)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(UIScale.pt(14))
+        .frame(maxWidth: .infinity, minHeight: UIScale.pt(height), alignment: .topLeading)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
     }
 }
 

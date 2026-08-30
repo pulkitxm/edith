@@ -32,11 +32,8 @@ import EdithCore
             id: "system", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "homebrew", helper: false, machine: false, toolRule: .all, adapter: true,
-            requiredTools: ["homebrew"], optionalTools: []),
-        MatrixRow(
             id: "appMaintenance", helper: false, machine: false, toolRule: .all, adapter: true,
-            requiredTools: [], optionalTools: []),
+            requiredTools: [], optionalTools: ["homebrew"]),
         MatrixRow(
             id: "machines", helper: true, machine: true, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),

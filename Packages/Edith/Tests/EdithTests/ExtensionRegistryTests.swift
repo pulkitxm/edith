@@ -12,7 +12,6 @@ import Testing
         "tabHerdrEnabled",
         "tabQuinjetEnabled",
         "tabSystemEnabled",
-        "tabHomebrewEnabled",
         "appMaintenanceEnabled",
         "tabMachinesEnabled",
         "tabCompanionEnabled",
@@ -37,8 +36,7 @@ import Testing
     @Test func registryMatchesCurrentBaseline() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
-                "attention", "usage", "herdr", "quinjet", "system", "homebrew", "appMaintenance",
-                "machines",
+                "attention", "usage", "herdr", "quinjet", "system", "appMaintenance", "machines",
                 "companion", "systemStats", "micMute", "lidAwake", "music", "calendar",
                 "notchShelf", "clipboard", "focusDim", "presenter", "emoji", "colorPicker",
             ])
@@ -153,7 +151,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard", "homebrew", "appMaintenance",
+                "clipboard", "appMaintenance",
             ])
     }
 
@@ -161,14 +159,15 @@ import Testing
         let music = ExtensionRegistry.entries.first { $0.id == "music" }!
         let usage = ExtensionRegistry.entries.first { $0.id == "usage" }!
         let quinjet = ExtensionRegistry.entries.first { $0.id == "quinjet" }!
-        let homebrew = ExtensionRegistry.entries.first { $0.id == "homebrew" }!
+        let maintenance = ExtensionRegistry.entries.first { $0.id == "appMaintenance" }!
 
         #expect(music.requiredTools.isEmpty)
         #expect(music.optionalTools == [.youtubeDownloader])
         #expect(usage.requiredTools == [.claudeCode, .codex])
         #expect(usage.optionalTools.isEmpty)
         #expect(quinjet.requiredTools == [.quinjet])
-        #expect(homebrew.requiredTools == [.homebrew])
+        #expect(maintenance.requiredTools.isEmpty)
+        #expect(maintenance.optionalTools == [.homebrew])
         #expect(CLIToolSpec.claudeCode.requirement == .always)
         #expect(
             CLIToolSpec.codex.requirement
@@ -237,7 +236,6 @@ import Testing
             "herdr": [],
             "quinjet": [],
             "system": [],
-            "homebrew": [],
             "appMaintenance": [],
             "machines": [],
             "companion": [],
@@ -259,7 +257,6 @@ import Testing
             "herdr": [],
             "quinjet": [],
             "system": [.accessibility, .inputMonitoring],
-            "homebrew": [],
             "appMaintenance": [],
             "machines": [.notifications],
             "companion": [],

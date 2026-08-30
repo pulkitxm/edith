@@ -531,14 +531,41 @@ public enum AppUpdateDiscovery {
 
     private static func cleanXML(_ value: String?) -> String? {
         guard let value else { return nil }
-        let withoutTags = value.replacingOccurrences(
-            of: #"<[^>]+>"#, with: " ", options: .regularExpression)
-        let decoded = withoutTags.replacingOccurrences(of: "&amp;", with: "&")
-            .replacingOccurrences(of: "&lt;", with: "<")
-            .replacingOccurrences(of: "&gt;", with: ">")
-            .replacingOccurrences(of: "&quot;", with: "\"")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return decoded.isEmpty ? nil : String(decoded.prefix(4_000))
+        var decoded =
+            value
+            .replacingOccurrences(of: "<![CDATA[", with: "")
+            .replacingOccurrences(of: "]]>", with: "")
+        for _ in 0..<2 {
+            decoded = decoded.replacingOccurrences(of: "&lt;", with: "<")
+                .replacingOccurrences(of: "&gt;", with: ">")
+                .replacingOccurrences(of: "&quot;", with: "\"")
+                .replacingOccurrences(of: "&apos;", with: "'")
+                .replacingOccurrences(of: "&#34;", with: "\"")
+                .replacingOccurrences(of: "&#39;", with: "'")
+                .replacingOccurrences(of: "&nbsp;", with: " ")
+                .replacingOccurrences(of: "&amp;", with: "&")
+        }
+        let formatted =
+            decoded
+            .replacingOccurrences(
+                of: #"<li(?:\s[^>]*)?>"#, with: "\n• ", options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: #"<(?:br|hr)(?:\s[^>]*)?/?>"#, with: "\n", options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: #"</(?:p|div|li|ul|ol|h[1-6])>"#, with: "\n",
+                options: .regularExpression
+            )
+            .replacingOccurrences(of: #"<[^>]+>"#, with: "", options: .regularExpression)
+        let lines = formatted.components(separatedBy: .newlines).compactMap { line -> String? in
+            let collapsed = line.replacingOccurrences(
+                of: #"[\t ]+"#, with: " ", options: .regularExpression
+            ).trimmingCharacters(in: .whitespaces)
+            return collapsed.isEmpty ? nil : collapsed
+        }
+        let cleaned = lines.joined(separator: "\n")
+        return cleaned.isEmpty ? nil : String(cleaned.prefix(4_000))
     }
 }
 

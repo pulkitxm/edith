@@ -1,7 +1,7 @@
 import EdithKit
 import SwiftUI
 
-struct HomebrewPage: View {
+struct HomebrewMaintenanceView: View {
     @State private var model: HomebrewPageModel
     @State private var query = ""
     @State private var pendingUninstall: HomebrewPackage?
@@ -30,23 +30,26 @@ struct HomebrewPage: View {
     private var theme: Color { themeColor(themeName) }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                PageHeader(
-                    title: { Text("Homebrew Manager") },
-                    trailing: { kindPicker },
-                    accessory: { controls })
-
-                VStack(alignment: .leading, spacing: 16) {
-                    if model.status?.available == false {
-                        unavailableCard
-                    } else {
-                        summary
-                        operationCard
-                        packageCard
+        VStack(spacing: 0) {
+            filterBar
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            Divider()
+            if showsLoadingSkeleton {
+                HomebrewPageSkeleton()
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 16) {
+                        if model.status?.available == false {
+                            unavailableCard
+                        } else {
+                            summary
+                            operationCard
+                            packageCard
+                        }
                     }
+                    .padding(16)
                 }
-                .pageContent(compact)
             }
         }
         .background(DashSkin.paper(scheme == .dark))
@@ -89,6 +92,63 @@ struct HomebrewPage: View {
         }
     }
 
+    private var showsLoadingSkeleton: Bool {
+        !model.loaded && model.packages.isEmpty && model.errorMessage == nil
+    }
+
+    @ViewBuilder
+    private var filterBar: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 20) {
+                filters
+                    .fixedSize(horizontal: true, vertical: false)
+                    .layoutPriority(1)
+                Spacer(minLength: 12)
+                actions
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                compactFilters
+                actions
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+    }
+
+    private var filters: some View {
+        HStack(spacing: 18) {
+            HStack(spacing: 8) {
+                filterLabel("Package")
+                kindPicker
+            }
+            HStack(spacing: 8) {
+                filterLabel("View")
+                modePicker
+            }
+        }
+    }
+
+    private var compactFilters: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                filterLabel("Package")
+                    .frame(width: 52, alignment: .leading)
+                kindPicker
+            }
+            HStack(spacing: 8) {
+                filterLabel("View")
+                    .frame(width: 52, alignment: .leading)
+                modePicker
+            }
+        }
+    }
+
+    private func filterLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .fixedSize()
+    }
+
     private var kindPicker: some View {
         Picker("Package kind", selection: $kindRaw) {
             ForEach(HomebrewPackageKind.allCases) { kind in
@@ -97,41 +157,42 @@ struct HomebrewPage: View {
         }
         .labelsHidden()
         .pickerStyle(.segmented)
-        .frame(width: compact ? 180 : 220)
+        .frame(width: 190)
         .disabled(model.isBusy)
     }
 
-    private var controls: some View {
-        HStack(spacing: 12) {
-            Picker("View", selection: $model.mode) {
-                ForEach(HomebrewPageMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
-                }
+    private var modePicker: some View {
+        Picker("View", selection: $model.mode) {
+            ForEach(HomebrewPageMode.allCases) { mode in
+                Text(mode.title).tag(mode)
             }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(width: 180)
+        }
+        .labelsHidden()
+        .pickerStyle(.segmented)
+        .frame(width: 170)
+    }
 
-            if model.mode == .search {
+    @ViewBuilder
+    private var actions: some View {
+        if model.mode == .search {
+            HStack(spacing: 10) {
                 SearchField(placeholder: "Search \(kind.pluralTitle.lowercased())", text: $query)
-                    .frame(maxWidth: compact ? .infinity : 360)
+                    .frame(maxWidth: compact ? .infinity : 320)
                     .onSubmit { runSearch() }
                 Button("Search", action: runSearch)
                     .buttonStyle(.borderedProminent)
                     .disabled(
                         model.isBusy
                             || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            } else {
-                Spacer(minLength: 0)
-                Button {
-                    model.loadInstalled(kind: kind)
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                }
-                .disabled(model.isBusy)
             }
+        } else {
+            Button {
+                model.loadInstalled(kind: kind)
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .disabled(model.isBusy)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var unavailableCard: some View {
@@ -310,6 +371,83 @@ struct HomebrewPage: View {
             model.packages = []
             model.loaded = true
         }
+    }
+}
+
+struct HomebrewPageSkeleton: View {
+    var body: some View {
+        SkeletonGroup {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 190), spacing: 12)],
+                        spacing: 12
+                    ) {
+                        ForEach(0..<3, id: \.self) { index in
+                            HomebrewSkeletonCard {
+                                HStack(spacing: 12) {
+                                    SkeletonBlock(width: 32, height: 32, corner: 8)
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        SkeletonBlock(width: 62, height: 8)
+                                        SkeletonBlock(
+                                            width: index == 2 ? 92 : 48,
+                                            height: 17)
+                                        SkeletonBlock(width: 112, height: 8)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    HomebrewSkeletonCard {
+                        VStack(alignment: .leading, spacing: 0) {
+                            HStack {
+                                SkeletonBlock(width: 164, height: 12)
+                                Spacer()
+                                SkeletonBlock(width: 26, height: 10)
+                            }
+                            .padding(.bottom, 12)
+                            ForEach(0..<7, id: \.self) { index in
+                                if index > 0 { Divider() }
+                                HStack(spacing: 14) {
+                                    SkeletonBlock(width: 38, height: 38, corner: 9)
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        SkeletonBlock(
+                                            width: index.isMultiple(of: 2) ? 118 : 152,
+                                            height: 10)
+                                        SkeletonBlock(width: 236, height: 8)
+                                        SkeletonBlock(width: 84, height: 8)
+                                    }
+                                    Spacer(minLength: 8)
+                                    SkeletonBlock(width: 72, height: 28, corner: 7)
+                                }
+                                .padding(.vertical, 11)
+                            }
+                        }
+                    }
+                }
+                .padding(16)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityLabel("Loading Homebrew packages")
+    }
+}
+
+private struct HomebrewSkeletonCard<Content: View>: View {
+    @ViewBuilder let content: Content
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        content
+            .padding(16)
+            .background(
+                DashSkin.paper2(scheme == .dark),
+                in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .strokeBorder(DashSkin.line(scheme == .dark))
+            }
     }
 }
 

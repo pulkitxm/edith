@@ -1,6 +1,6 @@
 # `ed brew`
 
-`ed brew` is the command-line surface for Homebrew Manager. It searches formulae and casks, lists installed packages and updates, and performs bounded package changes through the local Homebrew executable.
+`ed brew` is the command-line surface for the Packages section in App Maintenance. It searches formulae and casks, lists installed packages and updates, and performs bounded package changes through the local Homebrew executable.
 
 [The `ed` command line](../README.md)
 

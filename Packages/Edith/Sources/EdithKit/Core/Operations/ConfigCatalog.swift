@@ -155,6 +155,10 @@ public enum ConfigCatalog {
             summary: "Whether Settings categories are expanded in the main sidebar.",
             fallback: .bool(false)),
         SettingDefinition(
+            AppStorageKeys.AppMaintenance.categoriesExpanded, .bool, group: "panel",
+            summary: "Whether App Maintenance sections are expanded in the main sidebar.",
+            fallback: .bool(true)),
+        SettingDefinition(
             Repo.pathKey, .string, group: "panel",
             summary: "Development repository root used for usage data and music."),
     ]
@@ -540,14 +544,10 @@ public enum ConfigCatalog {
 
     private static let homebrew: [SettingDefinition] = [
         SettingDefinition(
-            AppStorageKeys.Tabs.homebrewEnabled, .bool, group: "homebrew",
-            summary: "Homebrew Manager extension: formula and cask management.",
-            fallback: .bool(false)),
-        SettingDefinition(
             AppStorageKeys.Homebrew.defaultKind, .string, group: "homebrew",
-            summary: "Package kind selected when Homebrew Manager opens.",
+            summary: "Package kind selected when App Maintenance opens Packages.",
             allowed: HomebrewPackageKind.allCases.map(\.rawValue),
-            fallback: .string(HomebrewPackageKind.formula.rawValue)),
+            fallback: .string(HomebrewPackageKind.formula.rawValue))
     ]
 
     private static let music: [SettingDefinition] = [

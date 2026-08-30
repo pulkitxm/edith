@@ -2,8 +2,10 @@ import Foundation
 
 public enum AppStorageKeys {
     public enum AppMaintenance {
+        public static let categoriesExpanded = "appMaintenanceCategoriesExpanded"
         public static let enabled = "appMaintenanceEnabled"
         public static let installDestination = "appMaintenanceInstallDestination"
+        public static let section = "appMaintenanceSection"
         public static let updateAutoRefresh = "appUpdateAutoRefresh"
         public static let updateConcurrency = "appUpdateConcurrency"
         public static let updateNotifications = "appUpdateNotifications"
@@ -248,7 +250,6 @@ public enum AppStorageKeys {
         public static let calendarEnabled = "tabCalendarEnabled"
         public static let companionEnabled = "tabCompanionEnabled"
         public static let herdrEnabled = "tabHerdrEnabled"
-        public static let homebrewEnabled = "tabHomebrewEnabled"
         public static let machinesEnabled = "tabMachinesEnabled"
         public static let musicEnabled = "tabMusicEnabled"
         public static let order = "tabOrder"

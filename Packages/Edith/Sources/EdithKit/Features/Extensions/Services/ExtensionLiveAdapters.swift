@@ -65,7 +65,7 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "attention", "usage", "quinjet", "system", "homebrew", "appMaintenance", "machines",
+        "attention", "usage", "quinjet", "system", "appMaintenance", "machines",
         "systemStats", "micMute",
         "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
         "emoji", "colorPicker",
@@ -97,7 +97,6 @@ public enum ExtensionLiveAdapters {
         case "quinjet":
             quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
         case "system": await systemReadiness()
-        case "homebrew": homebrewReadiness(executable: executableNamed("brew"))
         case "appMaintenance": appMaintenanceReadiness()
         case "machines": machinesReadiness()
         case "systemStats": systemStatsReadiness()
@@ -198,13 +197,6 @@ public enum ExtensionLiveAdapters {
         ).readiness
     }
 
-    static func homebrewReadiness(executable: URL?) -> ExtensionAdapterReadiness {
-        ExtensionAdapterFacts(
-            installed: executable != nil,
-            readyDetail: "Homebrew package management is available.",
-            uninstalledDetail: "Install Homebrew from brew.sh, then check again."
-        ).readiness
-    }
     static func appMaintenanceReadiness() -> ExtensionAdapterReadiness {
         let roots = AppMaintenanceInventory.defaultApplicationRoots
         let available = roots.contains { FileManager.default.isReadableFile(atPath: $0.path) }

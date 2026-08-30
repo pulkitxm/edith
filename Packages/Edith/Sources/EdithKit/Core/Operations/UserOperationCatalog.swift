@@ -1229,24 +1229,24 @@ private extension HomebrewOperation {
     var interfaceExposure: UserOperationExposure {
         switch self {
         case .status:
-            userInterface("Homebrew manager", "inspect Homebrew availability")
+            userInterface("App Maintenance", "inspect Homebrew availability")
         case .list:
-            userInterface("Homebrew manager", "browse installed packages")
+            userInterface("App Maintenance", "browse installed packages")
         case .search:
             userInterface(
-                "Homebrew manager", "search available formulae and casks",
+                "App Maintenance", "search available formulae and casks",
                 ["ripgrep", "--kind", "formula"])
         case .install:
             userInterface(
-                "Homebrew manager", "install a package",
+                "App Maintenance", "install a package",
                 ["ripgrep", "--kind", "formula"])
         case .upgrade:
             userInterface(
-                "Homebrew manager", "upgrade a package",
+                "App Maintenance", "upgrade a package",
                 ["ripgrep", "--kind", "formula"])
         case .uninstall:
             userInterface(
-                "Homebrew manager", "uninstall a package",
+                "App Maintenance", "uninstall a package",
                 ["ripgrep", "--kind", "formula", "--yes"])
         }
     }

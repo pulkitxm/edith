@@ -1,12 +1,12 @@
-# Homebrew Manager
+# Homebrew Packages
 
-Homebrew Manager provides a native, reviewable interface for formulae and casks. Enable it in Edith's Extensions pane, verify the local Homebrew tool, then open Homebrew Manager from its settings or the main sidebar.
+The Packages section in App Maintenance provides a native, reviewable interface for formulae and casks. Enable App Maintenance in Edith's Extensions pane, verify the optional local Homebrew tool, then open App Maintenance from the main sidebar and choose Packages.
 
 ## Browse and discover packages
 
 Installed shows the selected package kind with installed versions and available updates. Packages with an update are sorted first. Discover searches Homebrew metadata and shows up to 40 exact results with descriptions, versions, homepages, and installed state.
 
-The Formulae and Casks control changes both the installed inventory and search domain. The selected kind is saved as the extension default. Refresh re-reads installed and outdated metadata without changing any package.
+The Formulae and Casks control changes both the installed inventory and search domain. The selected kind is saved with App Maintenance settings. Refresh re-reads installed and outdated metadata without changing any package.
 
 ## Install, upgrade, and uninstall
 

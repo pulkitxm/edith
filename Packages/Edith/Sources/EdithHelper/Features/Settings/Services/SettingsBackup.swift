@@ -680,7 +680,7 @@ final class SettingsBackup {
         AppStorageKeys.Tabs.attentionEnabled, AppStorageKeys.Tabs.usageEnabled,
         AppStorageKeys.Tabs.musicEnabled, "usageMachines",
         AppStorageKeys.Tabs.herdrEnabled, AppStorageKeys.Tabs.quinjetEnabled,
-        AppStorageKeys.Tabs.homebrewEnabled, AppStorageKeys.Homebrew.defaultKind,
+        AppStorageKeys.Homebrew.defaultKind,
         AppStorageKeys.Herdr.ghosttyTerminal,
         AppStorageKeys.Quinjet.terminal, AppStorageKeys.Quinjet.theme,
         AppStorageKeys.General.hotKeyCode, AppStorageKeys.General.hotKeyMods,
@@ -772,7 +772,8 @@ final class SettingsBackup {
         "SUAutomaticallyUpdate", "SUEnableAutomaticChecks", "SUScheduledCheckInterval",
         AppStorageKeys.General.mainWindowSection, AppStorageKeys.General.settingsTab,
         AppStorageKeys.General.mainSidebarOpen, AppStorageKeys.General.mainSidebarWidth,
-        AppStorageKeys.General.settingsCategoriesExpanded, AppStorageKeys.AppMaintenance.enabled,
+        AppStorageKeys.General.settingsCategoriesExpanded,
+        AppStorageKeys.AppMaintenance.categoriesExpanded, AppStorageKeys.AppMaintenance.enabled,
         AppStorageKeys.AppMaintenance.installDestination,
         AppStorageKeys.AppMaintenance.updateAutoRefresh,
         AppStorageKeys.AppMaintenance.updateRefreshInterval,
@@ -795,7 +796,7 @@ final class SettingsBackup {
         AppStorageKeys.Tabs.attentionEnabled, AppStorageKeys.Tabs.usageEnabled,
         AppStorageKeys.Tabs.musicEnabled,
         AppStorageKeys.Tabs.herdrEnabled, AppStorageKeys.Tabs.quinjetEnabled,
-        AppStorageKeys.Tabs.homebrewEnabled, AppStorageKeys.Homebrew.defaultKind,
+        AppStorageKeys.Homebrew.defaultKind,
         AppStorageKeys.Herdr.ghosttyTerminal,
         AppStorageKeys.Quinjet.terminal, AppStorageKeys.Quinjet.theme,
         AppStorageKeys.Tabs.systemEnabled, AppStorageKeys.Tabs.calendarEnabled,
@@ -891,6 +892,7 @@ final class SettingsBackup {
         AppStorageKeys.AppMaintenance.updateRetries,
         AppStorageKeys.General.mainSidebarOpen, AppStorageKeys.General.mainSidebarWidth,
         AppStorageKeys.General.settingsCategoriesExpanded,
+        AppStorageKeys.AppMaintenance.categoriesExpanded,
     ]
 
     nonisolated static let deviceLocalKeys: Set<String> = [

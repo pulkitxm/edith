@@ -14,9 +14,8 @@ extension EnvironmentValues {
 }
 
 enum MainDestination: String, CaseIterable, Identifiable {
-    case home, attention, dashboard, herdr, quinjet, music, calendar, system, homebrew, machines,
-        companion
-    case extensions, settings, about
+    case home, attention, dashboard, herdr, quinjet, music, calendar, system, appMaintenance
+    case machines, companion, extensions, settings, about
 
     var id: String { rawValue }
 
@@ -30,7 +29,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
         case .music: return "Music"
         case .calendar: return "Calendar"
         case .system: return "System"
-        case .homebrew: return "Homebrew"
+        case .appMaintenance: return "App Maintenance"
         case .machines: return "Machines"
         case .companion: return "Companion"
         case .extensions: return "Extensions"
@@ -49,7 +48,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
         case .music: return "music.note"
         case .calendar: return "calendar"
         case .system: return "cpu"
-        case .homebrew: return "shippingbox.fill"
+        case .appMaintenance: return "shippingbox.and.arrow.backward"
         case .machines: return "server.rack"
         case .companion: return "brain.head.profile"
         case .extensions: return "puzzlepiece.extension"
@@ -66,8 +65,8 @@ enum MainDestination: String, CaseIterable, Identifiable {
     }
 
     static let homeItems: [MainDestination] = [
-        .home, .attention, .dashboard, .herdr, .quinjet, .music, .calendar, .system, .homebrew,
-        .machines, .companion,
+        .home, .attention, .dashboard, .herdr, .quinjet, .music, .calendar, .system,
+        .appMaintenance, .machines, .companion,
     ]
     static let appItems: [MainDestination] = [
         .extensions, .settings, .about,
@@ -157,6 +156,7 @@ private struct SidebarNavRow: View {
     var detach: (() -> Void)?
     var disclosureExpanded: Bool? = nil
     var disclosureAction: (() -> Void)?
+    var disclosureLabel = "categories"
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var rowHovered = false
 
@@ -222,11 +222,11 @@ private struct SidebarNavRow: View {
                 .zIndex(1)
                 .accessibilityLabel(
                     disclosureExpanded
-                        ? "Collapse settings categories" : "Expand settings categories"
+                        ? "Collapse \(disclosureLabel)" : "Expand \(disclosureLabel)"
                 )
                 .help(
                     disclosureExpanded
-                        ? "Collapse settings categories" : "Expand settings categories"
+                        ? "Collapse \(disclosureLabel)" : "Expand \(disclosureLabel)"
                 )
             }
         }
@@ -327,6 +327,41 @@ private struct SettingsSidebarRow: View {
     }
 }
 
+private struct AppMaintenanceSidebarRow: View {
+    let section: AppMaintenanceSection
+    let selected: Bool
+    let theme: Color
+    let action: () -> Void
+    let detach: () -> Void
+
+    var body: some View {
+        Button {
+            if SectionWindowCommand.shouldDetach(NSEvent.modifierFlags.swiftUIValue) {
+                detach()
+            } else {
+                action()
+            }
+        } label: {
+            HStack(spacing: UIScale.pt(9)) {
+                Image(systemName: section.symbol)
+                    .frame(width: UIScale.pt(18))
+                Text(section.rawValue)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: UIScale.pt(12.5), weight: .medium))
+            .foregroundStyle(selected ? .primary : .secondary)
+        }
+        .buttonStyle(EdithButtonStyle(.row, selected: selected, tint: theme))
+        .padding(.leading, UIScale.pt(18))
+        .accessibilityHint(section.summary)
+        .help("\(section.rawValue) (⌘-click to open in its own window)")
+        .contextMenu {
+            Button("Open in New Window", action: detach)
+        }
+    }
+}
+
 extension NSEvent.ModifierFlags {
     var swiftUIValue: EventModifiers {
         var modifiers = EventModifiers()
@@ -388,10 +423,17 @@ struct MainWindowView: View {
     @AppStorage(
         AppStorageKeys.General.settingsCategoriesExpanded, store: SharedDefaults.store
     ) private var settingsCategoriesExpanded = true
+    @AppStorage(
+        AppStorageKeys.AppMaintenance.categoriesExpanded, store: SharedDefaults.store
+    ) private var appMaintenanceSectionsExpanded = true
+    @AppStorage(AppStorageKeys.AppMaintenance.section, store: SharedDefaults.store) private
+        var appMaintenanceSection = AppMaintenanceSection.updates.rawValue
     @AppStorage(AppStorageKeys.Tabs.attentionEnabled, store: SharedDefaults.store) private
         var attentionEnabled = false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
         var systemEnabled = false
+    @AppStorage(AppStorageKeys.AppMaintenance.enabled, store: SharedDefaults.store) private
+        var appMaintenanceEnabled = false
     @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
         var musicEnabled = false
     @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
@@ -406,8 +448,6 @@ struct MainWindowView: View {
     @AppStorage(AppStorageKeys.Tabs.machinesEnabled, store: SharedDefaults.store) private
         var machinesEnabled =
         false
-    @AppStorage(AppStorageKeys.Tabs.homebrewEnabled, store: SharedDefaults.store) private
-        var homebrewEnabled = false
     @AppStorage(AppStorageKeys.Tabs.companionEnabled, store: SharedDefaults.store) private
         var companionEnabled =
         false
@@ -488,7 +528,7 @@ struct MainWindowView: View {
         case .music: musicEnabled ? requested : .home
         case .calendar: calendarEnabled ? requested : .home
         case .system: systemEnabled ? requested : .home
-        case .homebrew: homebrewEnabled ? requested : .home
+        case .appMaintenance: appMaintenanceEnabled ? requested : .home
         case .machines: machinesEnabled ? requested : .home
         case .companion: companionEnabled ? requested : .home
         default: requested
@@ -828,8 +868,44 @@ struct MainWindowView: View {
                     SidebarNavRow(
                         item: item, selected: destination == item, theme: theme,
                         shortcutHint: shortcutHint(for: item),
-                        action: { select(item) },
-                        detach: { detach(item) })
+                        action: {
+                            if item == .appMaintenance, destination == .appMaintenance {
+                                appMaintenanceSectionsExpanded.toggle()
+                            } else {
+                                select(item)
+                            }
+                        },
+                        detach: { detach(item) },
+                        disclosureExpanded: item == .appMaintenance
+                            ? appMaintenanceSectionsExpanded : nil,
+                        disclosureAction: item == .appMaintenance
+                            ? { appMaintenanceSectionsExpanded.toggle() } : nil,
+                        disclosureLabel: "App Maintenance sections")
+                    if item == .appMaintenance {
+                        CollapsibleSidebarLayout(
+                            progress: appMaintenanceSectionsExpanded ? 1 : 0
+                        ) {
+                            VStack(spacing: UIScale.pt(2)) {
+                                ForEach(AppMaintenanceSection.allCases) { section in
+                                    AppMaintenanceSidebarRow(
+                                        section: section,
+                                        selected: destination == .appMaintenance
+                                            && appMaintenanceSection == section.rawValue,
+                                        theme: theme,
+                                        action: {
+                                            appMaintenanceSection = section.rawValue
+                                            mainWindowSection =
+                                                MainDestination.appMaintenance.rawValue
+                                        },
+                                        detach: { detachAppMaintenance(section) })
+                                }
+                            }
+                            .padding(.top, UIScale.pt(6))
+                        }
+                        .clipped()
+                        .allowsHitTesting(appMaintenanceSectionsExpanded)
+                        .accessibilityHidden(!appMaintenanceSectionsExpanded)
+                    }
                 }
                 Text("App")
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
@@ -852,7 +928,8 @@ struct MainWindowView: View {
                         disclosureExpanded: item == .settings
                             ? settingsCategoriesExpanded : nil,
                         disclosureAction: item == .settings
-                            ? { settingsCategoriesExpanded.toggle() } : nil)
+                            ? { settingsCategoriesExpanded.toggle() } : nil,
+                        disclosureLabel: "settings categories")
                     if item == .settings {
                         CollapsibleSidebarLayout(
                             progress: settingsCategoriesExpanded ? 1 : 0
@@ -891,7 +968,12 @@ struct MainWindowView: View {
         )
         .animation(
             Motion.animation(Motion.snap, reduceMotion: reduceMotion),
-            value: settingsCategoriesExpanded)
+            value: settingsCategoriesExpanded
+        )
+        .animation(
+            Motion.animation(Motion.snap, reduceMotion: reduceMotion),
+            value: appMaintenanceSectionsExpanded
+        )
     }
 
     private func select(_ item: MainDestination) {
@@ -908,6 +990,11 @@ struct MainWindowView: View {
         SectionWindow.open(.settings)
     }
 
+    private func detachAppMaintenance(_ section: AppMaintenanceSection) {
+        appMaintenanceSection = section.rawValue
+        SectionWindow.open(.appMaintenance)
+    }
+
     private var visibleHomeItems: [MainDestination] {
         MainDestination.homeItems.filter { item in
             switch item {
@@ -918,7 +1005,7 @@ struct MainWindowView: View {
             case .music: musicEnabled
             case .calendar: calendarEnabled
             case .system: systemEnabled
-            case .homebrew: homebrewEnabled
+            case .appMaintenance: appMaintenanceEnabled
             case .machines: machinesEnabled
             case .companion: companionEnabled
             default: true
@@ -1347,7 +1434,7 @@ struct MainWindowView: View {
         case .music: MusicPage()
         case .calendar: CalendarPage()
         case .system: SystemPage()
-        case .homebrew: HomebrewPage()
+        case .appMaintenance: AppMaintenanceView()
         case .machines: MachinesPage()
         case .companion: CompanionPage()
         case .extensions: ExtensionsPane()

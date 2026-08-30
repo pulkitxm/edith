@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Edith
+import EdithKit
 
 @Suite struct SettingsLayoutTests {
     @Test func settingsUsesPrimaryNavigationAndFullWidthContent() throws {
@@ -20,13 +21,19 @@ import Testing
         let navigation = try String(contentsOf: navigationURL, encoding: .utf8)
 
         #expect(navigation.contains("ForEach(SettingsPane.Tab.allCases"))
+        #expect(navigation.contains("ForEach(AppMaintenanceSection.allCases"))
         #expect(navigation.contains("SettingsSidebarRow"))
+        #expect(navigation.contains("AppMaintenanceSidebarRow"))
         #expect(navigation.contains("settingsCategoriesExpanded.toggle()"))
+        #expect(navigation.contains("appMaintenanceSectionsExpanded.toggle()"))
         #expect(navigation.contains("CollapsibleSidebarLayout"))
         #expect(navigation.contains(".clipped()"))
         #expect(navigation.contains("disclosureAction: item == .settings"))
         #expect(navigation.contains("Button(action: disclosureAction)"))
         #expect(navigation.contains("if item == .settings, destination == .settings"))
+        #expect(
+            navigation.contains(
+                "if item == .appMaintenance, destination == .appMaintenance"))
         #expect(navigation.contains("rowHovered && !selected"))
         #expect(!navigation.contains("SidebarDisclosureInteraction"))
         #expect(navigation.contains(".zIndex(1)"))
@@ -57,6 +64,37 @@ import Testing
         #expect(source.contains("tab.wrappedValue.summary"))
     }
 
+    @Test func appMaintenanceUsesTheSameMenuNavigationPattern() throws {
+        let maintenanceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent(
+                "Sources/Edith/Features/AppMaintenance/AppMaintenanceView.swift")
+        let maintenance = try String(contentsOf: maintenanceURL, encoding: .utf8)
+
+        #expect(maintenance.contains("PageHeader("))
+        #expect(maintenance.contains("ForEach(AppMaintenanceSection.allCases"))
+        #expect(maintenance.contains(".pickerStyle(.menu)"))
+        #expect(maintenance.contains("App Maintenance section"))
+        #expect(maintenance.contains("theme.opacity(0.2)"))
+        #expect(!maintenance.contains(".pickerStyle(.segmented)"))
+    }
+
+    @MainActor
+    @Test func appMaintenanceFocusIsIndependentFromCheckedUpdates() {
+        let dia = updateItem(id: "dia", name: "Dia")
+        let telegram = updateItem(id: "telegram", name: "Telegram")
+        let model = AppMaintenanceModel()
+        model.updates = [dia, telegram]
+        model.selectedUpdateIDs = [dia.id, telegram.id]
+
+        model.focusedUpdateID = telegram.id
+
+        #expect(model.focusedUpdate?.id == telegram.id)
+        #expect(model.selectedUpdateIDs == [dia.id, telegram.id])
+    }
+
     @Test func permissionCardsUseTheAvailableWidthAdaptively() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -77,6 +115,13 @@ import Testing
         #expect(SidebarDisclosureGeometry.visibleHeight(contentHeight: 180, progress: 1) == 180)
         #expect(SidebarDisclosureGeometry.visibleHeight(contentHeight: 180, progress: -0.2) == 0)
         #expect(SidebarDisclosureGeometry.visibleHeight(contentHeight: 180, progress: 1.2) == 180)
+    }
+
+    private func updateItem(id: String, name: String) -> AppUpdateItem {
+        AppUpdateItem(
+            id: id, name: name, source: .sparkle, currentVersion: "1.0",
+            availableVersion: "2.0", confidence: .high, checkedAt: .distantPast,
+            action: .openUpdater, executablePath: "/usr/bin/open", arguments: [])
     }
 
 }

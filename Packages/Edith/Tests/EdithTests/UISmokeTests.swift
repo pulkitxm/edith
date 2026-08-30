@@ -59,11 +59,18 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(renders(MetricCardSkeleton(dark: false), width: 300, height: 160))
     }
 
+    @Test func everyAppMaintenanceSkeletonRenders() {
+        #expect(renders(AppMaintenanceSectionSkeleton(section: .updates)))
+        #expect(renders(HomebrewPageSkeleton()))
+        #expect(renders(AppMaintenanceSectionSkeleton(section: .removal)))
+        #expect(renders(AppMaintenanceSectionSkeleton(section: .history)))
+    }
+
     @Test func homePageRenders() {
         #expect(renders(HomePage()))
     }
 
-    @Test func homebrewManagerRendersInstalledPackagesAndUpdates() {
+    @Test func appMaintenanceRendersInstalledPackagesAndUpdates() {
         let model = HomebrewPageModel()
         model.status = HomebrewStatus(
             available: true, executable: "/opt/homebrew/bin/brew", version: "Homebrew 5.0.0")
@@ -79,7 +86,7 @@ private func descendantViews(of view: NSView) -> [NSView] {
                 currentVersion: "1.7.1"),
         ]
 
-        #expect(renders(HomebrewPage(model: model)))
+        #expect(renders(HomebrewMaintenanceView(model: model)))
     }
 
     @Test func mainWindowRendersEveryDestination() {

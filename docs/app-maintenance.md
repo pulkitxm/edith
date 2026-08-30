@@ -1,6 +1,12 @@
 # App Maintenance
 
-App Maintenance combines an App Update Center, verified single-app disk image installation, and review-first removal. Enable it from Edith's Extensions pane, then open its maintenance window from the extension settings.
+App Maintenance combines Homebrew package management, an App Update Center, verified single-app disk image installation, and review-first removal. Enable one extension from Edith's Extensions pane, then open App Maintenance from the main sidebar.
+
+## Manage Homebrew packages
+
+The Packages section lists installed formulae and casks, finds available updates, and searches Homebrew metadata. It can install, upgrade, and uninstall one validated package at a time. Homebrew is optional, so app updates, disk image installation, and removal remain available without it.
+
+Edith invokes the local `brew` executable directly. It does not install Homebrew. Package operations are noninteractive, bounded, cancellable, and use the same safety rules as the `ed brew` commands. See the [Homebrew package guide](./homebrew-manager.md) for the complete behavior.
 
 ## Review application updates
 
@@ -36,9 +42,12 @@ Every row can be unchecked or revealed in Finder. Confirmed rows move to the mac
 
 No macOS permission is required to inventory apps, install into `~/Applications`, or remove user-owned files. Installing into `/Applications`, replacing administrator-owned apps, or removing administrator-owned files can be refused by macOS. App Maintenance reports the failure and never falls back to permanent deletion or privilege escalation.
 
-The command line exposes the same installer, inventory, scan, and removal plans:
+The command line exposes the same package, installer, inventory, scan, and removal operations:
 
 ```bash
+ed brew ls --kind formula --outdated
+ed brew search firefox --kind cask
+ed brew install ripgrep --kind formula
 ed maintenance inventory
 ed maintenance updates
 ed maintenance update
