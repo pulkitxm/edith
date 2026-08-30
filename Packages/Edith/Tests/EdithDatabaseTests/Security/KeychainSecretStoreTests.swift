@@ -146,14 +146,19 @@ private final class DatabaseKeychainStub: @unchecked Sendable {
         let token = DatabaseKeychainSecretStore.account(for: DatabaseSecretTestFixtures.token)
         let signingKey = DatabaseKeychainSecretStore.account(
             for: DatabaseSecretTestFixtures.confirmationSigningKey)
+        let continuationSigningKey = DatabaseKeychainSecretStore.account(
+            for: DatabaseSecretTestFixtures.continuationSigningKey)
 
         #expect(password != token)
         #expect(token != signingKey)
+        #expect(signingKey != continuationSigningKey)
         #expect(password.hasSuffix(".password"))
         #expect(token.hasSuffix(".token"))
         #expect(signingKey.hasSuffix(".confirmationSigningKey"))
+        #expect(continuationSigningKey.hasSuffix(".continuationSigningKey"))
         #expect(password.utf8.count < 128)
         #expect(signingKey.utf8.count < 128)
+        #expect(continuationSigningKey.utf8.count < 128)
     }
 
     @Test func invalidConfigurationIsRejectedBeforeSecurityAccess() {

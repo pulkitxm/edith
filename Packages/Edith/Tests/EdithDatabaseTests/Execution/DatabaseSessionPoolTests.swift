@@ -54,9 +54,13 @@ private enum DatabaseSessionPoolFixtures {
         id: DatabaseConnectionID = firstID,
         name: String = "Primary",
         updatedAt: Date = now,
-        includesSecrets: Bool = false
+        includesSecrets: Bool = false,
+        authenticationSecretReferences: [DatabaseSecretReference]? = nil
     ) throws -> DatabaseConnectionDefinition {
-        DatabaseConnectionDefinition(
+        let secretReferences =
+            authenticationSecretReferences
+            ?? (includesSecrets ? [passwordReference] : [])
+        return DatabaseConnectionDefinition(
             id: id,
             displayName: name,
             productHint: .postgresql,
@@ -69,8 +73,8 @@ private enum DatabaseSessionPoolFixtures {
             namespaces: DatabaseNamespaceDefaults(schema: "public", database: "edith"),
             deploymentMode: .standalone,
             authentication: DatabaseAuthentication(
-                kind: includesSecrets ? .usernameAndPassword : .none,
-                secretReferences: includesSecrets ? [passwordReference] : []),
+                kind: secretReferences.isEmpty ? .none : .usernameAndPassword,
+                secretReferences: secretReferences),
             tls: DatabaseTLSConfiguration(
                 mode: includesSecrets ? .required : .disabled,
                 verification: includesSecrets ? .full : .none,
@@ -304,6 +308,35 @@ private enum DatabaseSessionPoolFixtures {
                     sharedCancellationObservers: 0,
                     activeTasks: 0,
                     cleanupTasks: 0))
+    }
+
+    @Test func continuationSigningKeyCannotBeResolvedIntoAnAdapterSession() async throws {
+        let reference = DatabaseContinuationAuthority.signingKeyReference
+        let connection = try DatabaseSessionPoolFixtures.connection(
+            authenticationSecretReferences: [reference])
+        let session = try DatabaseSessionPoolFixtures.session(connection: connection)
+        let adapter = DatabaseExecutorRecordingAdapter(
+            id: "postgres",
+            products: [.postgresql],
+            session: session)
+        let store = try InMemoryDatabaseSecretStore(initialValues: [
+            reference: Data(repeating: 7, count: 32)
+        ])
+        let pool = try DatabaseSessionPoolFixtures.pool(
+            adapter: adapter,
+            store: store,
+            clock: DatabaseSessionPoolTestClock(DatabaseSessionPoolFixtures.now))
+        let failure = DatabaseAdapterFailure.reported(
+            DatabaseErrorEnvelope(
+                category: .invalidRequest,
+                message: "The connection contains an invalid secret reference."))
+
+        await #expect(throws: failure) {
+            try await pool.lease(
+                for: connection,
+                context: DatabaseSessionPoolFixtures.context())
+        }
+        #expect(await adapter.recordedInvocations().isEmpty)
     }
 
     @Test func differentConnectionsEstablishIndependently() async throws {

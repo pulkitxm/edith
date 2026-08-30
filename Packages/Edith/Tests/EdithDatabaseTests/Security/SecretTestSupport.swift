@@ -9,6 +9,9 @@ enum DatabaseSecretTestFixtures {
     static let confirmationSigningKey = DatabaseSecretReference(
         identifier: UUID(uuidString: "936B9BAA-B795-4D2C-B0BD-5775301C749B")!,
         purpose: .confirmationSigningKey)
+    static let continuationSigningKey = DatabaseSecretReference(
+        identifier: UUID(uuidString: "D6A1F14E-EAE7-4663-A9AC-CC7E7E6E5B25")!,
+        purpose: .continuationSigningKey)
 
     static func data(_ value: String) -> Data {
         Data(value.utf8)
