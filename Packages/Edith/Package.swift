@@ -4,6 +4,7 @@ import PackageDescription
 let products: [Product] = [
     .library(name: "EdithCore", targets: ["EdithCore"]),
     .library(name: "EdithDatabase", targets: ["EdithDatabase"]),
+    .library(name: "EdithDatabaseMCP", targets: ["EdithDatabaseMCP"]),
     .library(name: "Edith", targets: ["Edith"]),
     .library(name: "EdithKit", targets: ["EdithKit"]),
     .library(name: "EdithCLI", targets: ["EdithCLI"]),
@@ -25,6 +26,7 @@ let dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-nio-ssl.git", exact: "2.37.2"),
     .package(url: "https://github.com/apple/swift-nio-transport-services.git", exact: "1.28.0"),
     .package(url: "https://github.com/vapor/postgres-nio.git", exact: "1.33.1"),
+    .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", exact: "0.12.1"),
 ]
 
 let targets: [Target] = [
@@ -72,6 +74,23 @@ let targets: [Target] = [
             .product(
                 name: "NIOTransportServices",
                 package: "swift-nio-transport-services"),
+        ],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .target(
+        name: "EdithDatabaseMCP",
+        dependencies: [
+            "EdithDatabase",
+            .product(name: "MCP", package: "swift-sdk"),
+        ],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .testTarget(
+        name: "EdithDatabaseMCPTests",
+        dependencies: [
+            "EdithDatabase",
+            "EdithDatabaseMCP",
+            .product(name: "MCP", package: "swift-sdk"),
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
