@@ -234,21 +234,50 @@ public enum DatabaseMutationDisposition: String, CaseIterable, Codable, Hashable
     case accepted
 }
 
+public enum DatabaseMutationEffect: String, CaseIterable, Codable, Hashable, Sendable {
+    case applied
+    case notApplied
+    case partiallyApplied
+    case unknown
+}
+
+public struct DatabaseAcceptedMutation: Codable, Hashable, Sendable {
+    public let operationID: DatabaseOperationID
+    public let serverOperationIdentifier: String
+
+    public init(
+        operationID: DatabaseOperationID,
+        serverOperationIdentifier: String
+    ) {
+        self.operationID = operationID
+        self.serverOperationIdentifier = serverOperationIdentifier
+    }
+}
+
 public struct DatabaseMutationApplyResult: Codable, Hashable, Sendable {
     public let disposition: DatabaseMutationDisposition
+    public let effect: DatabaseMutationEffect
     public let affectedRecords: DatabaseCountMetadata
     public let returnedRecords: DatabasePage<DatabaseRecord>?
-    public let serverOperationIdentifier: String?
+    public let acceptedMutation: DatabaseAcceptedMutation?
+    public let partialFailures: [DatabasePartialFailure]
+    public let error: DatabaseErrorEnvelope?
 
     public init(
         disposition: DatabaseMutationDisposition,
+        effect: DatabaseMutationEffect,
         affectedRecords: DatabaseCountMetadata,
         returnedRecords: DatabasePage<DatabaseRecord>? = nil,
-        serverOperationIdentifier: String? = nil
+        acceptedMutation: DatabaseAcceptedMutation? = nil,
+        partialFailures: [DatabasePartialFailure] = [],
+        error: DatabaseErrorEnvelope? = nil
     ) {
         self.disposition = disposition
+        self.effect = effect
         self.affectedRecords = affectedRecords
         self.returnedRecords = returnedRecords
-        self.serverOperationIdentifier = serverOperationIdentifier
+        self.acceptedMutation = acceptedMutation
+        self.partialFailures = partialFailures
+        self.error = error
     }
 }

@@ -515,18 +515,32 @@ struct DatabaseAdapterCancellationResult: Hashable, Sendable {
 
 struct DatabaseAdapterMutationResult: Sendable {
     let disposition: DatabaseMutationDisposition
+    let effect: DatabaseMutationEffect
     let affectedRecords: DatabaseCountMetadata
     let returnedPage: DatabaseAdapterPage?
     let serverOperationIdentifier: String?
+    let partialFailures: [DatabasePartialFailure]
+    let error: DatabaseErrorEnvelope?
 
     init(
         disposition: DatabaseMutationDisposition,
+        effect: DatabaseMutationEffect,
         affectedRecords: DatabaseCountMetadata,
         returnedPage: DatabaseAdapterPage? = nil,
-        serverOperationIdentifier: String? = nil
+        serverOperationIdentifier: String? = nil,
+        partialFailures: [DatabasePartialFailure] = [],
+        error: DatabaseErrorEnvelope? = nil
     ) throws(DatabaseAdapterFailure) {
         let identifierBytes = serverOperationIdentifier?.utf8.count ?? 0
-        guard identifierBytes <= DatabaseAdapterBounds.maximumServerOperationIdentifierBytes else {
+        guard identifierBytes <= DatabaseAdapterBounds.maximumServerOperationIdentifierBytes,
+            partialFailures.count <= DatabaseAdapterBounds.maximumPartialFailures
+        else {
+            if partialFailures.count > DatabaseAdapterBounds.maximumPartialFailures {
+                throw .limitExceeded(
+                    limit: .partialFailures,
+                    actual: partialFailures.count,
+                    maximum: DatabaseAdapterBounds.maximumPartialFailures)
+            }
             throw .limitExceeded(
                 limit: .serverOperationIdentifierBytes,
                 actual: identifierBytes,
@@ -540,17 +554,43 @@ struct DatabaseAdapterMutationResult: Sendable {
                 throw .contractViolation(.partialMutationResult)
             }
         }
-        if disposition == .accepted {
+        switch disposition {
+        case .accepted:
             guard let serverOperationIdentifier, !serverOperationIdentifier.isEmpty,
-                returnedPage == nil
+                effect == .unknown,
+                returnedPage == nil,
+                partialFailures.isEmpty,
+                error == nil
             else {
                 throw .contractViolation(.invalidMutationReconciliationResult)
             }
+        case .completed:
+            switch effect {
+            case .applied:
+                guard partialFailures.isEmpty, error == nil else {
+                    throw .contractViolation(.invalidMutationReconciliationResult)
+                }
+            case .notApplied:
+                guard returnedPage == nil, partialFailures.isEmpty else {
+                    throw .contractViolation(.invalidMutationReconciliationResult)
+                }
+            case .partiallyApplied:
+                guard !partialFailures.isEmpty else {
+                    throw .contractViolation(.invalidMutationReconciliationResult)
+                }
+            case .unknown:
+                guard returnedPage == nil else {
+                    throw .contractViolation(.invalidMutationReconciliationResult)
+                }
+            }
         }
         self.disposition = disposition
+        self.effect = effect
         self.affectedRecords = affectedRecords
         self.returnedPage = returnedPage
         self.serverOperationIdentifier = serverOperationIdentifier
+        self.partialFailures = partialFailures
+        self.error = error
     }
 }
 
@@ -595,18 +635,31 @@ struct DatabaseAdapterMutationStatus: Sendable {
                 throw .contractViolation(.invalidMutationReconciliationResult)
             }
         case .completed:
-            guard let outcome, outcome.disposition == .completed, error == nil,
+            guard let outcome, outcome.disposition == .completed,
+                outcome.effect == .applied || outcome.effect == .partiallyApplied,
+                error == outcome.error,
                 outcome.serverOperationIdentifier == nil
                     || outcome.serverOperationIdentifier == serverOperationIdentifier
             else {
                 throw .contractViolation(.invalidMutationReconciliationResult)
             }
         case .failed:
-            guard outcome == nil, error != nil else {
+            guard let outcome, outcome.disposition == .completed,
+                outcome.effect != .applied,
+                let error,
+                error == outcome.error,
+                outcome.serverOperationIdentifier == nil
+                    || outcome.serverOperationIdentifier == serverOperationIdentifier
+            else {
                 throw .contractViolation(.invalidMutationReconciliationResult)
             }
         case .cancelled:
-            guard outcome == nil else {
+            guard let outcome, outcome.disposition == .completed,
+                outcome.effect != .applied,
+                error == outcome.error,
+                outcome.serverOperationIdentifier == nil
+                    || outcome.serverOperationIdentifier == serverOperationIdentifier
+            else {
                 throw .contractViolation(.invalidMutationReconciliationResult)
             }
         }
