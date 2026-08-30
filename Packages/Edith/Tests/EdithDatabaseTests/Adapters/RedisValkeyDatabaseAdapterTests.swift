@@ -1,4 +1,7 @@
 import Foundation
+import NIOCore
+import NIOPosix
+@preconcurrency import RediStack
 import Testing
 
 @testable import EdithDatabase
@@ -134,6 +137,16 @@ private enum RedisValkeyAdapterFixtures {
     }
 }
 
+private func waitForCancellationObserversToDrain(
+    _ cancellation: DatabaseAdapterCancellationSignal
+) async -> Bool {
+    for _ in 0..<2_000 {
+        if await cancellation.registeredEventStreamCount() == 0 { return true }
+        try? await Task.sleep(nanoseconds: 1_000_000)
+    }
+    return false
+}
+
 private enum FakeRedisValue: Sendable {
     case string(Data)
     case hash([(Data, Data)])
@@ -172,15 +185,18 @@ private actor FakeRedisClient: RedisDatabaseClient {
     var pauseOnScan = false
     var scanPaused = false
     var scanContinuation: CheckedContinuation<Void, Never>?
+    let scanExtraKeys: Int
 
     init(
         product: DatabaseProduct,
         values: [Data: FakeRedisValue] = [:],
-        ttls: [Data: Int64] = [:]
+        ttls: [Data: Int64] = [:],
+        scanExtraKeys: Int = 0
     ) {
         self.product = product
         self.values = values
         self.ttls = ttls
+        self.scanExtraKeys = scanExtraKeys
     }
 
     func execute(
@@ -205,7 +221,7 @@ private actor FakeRedisClient: RedisDatabaseClient {
             }
             let keys = values.keys.sorted(by: { $0.lexicographicallyPrecedes($1) })
             let start = min(Int(cursor), keys.count)
-            let end = min(start + count, keys.count)
+            let end = min(start + count + scanExtraKeys, keys.count)
             let next = end == keys.count ? UInt64(0) : UInt64(end)
             return .array([
                 .bytes(Data(next.description.utf8)),
@@ -342,6 +358,234 @@ private actor FakeRedisClientFactory: RedisDatabaseClientFactory {
     }
 }
 
+private enum RedisHostileServerBehavior: Sendable {
+    case oversizedArray
+    case oversizedBulk
+    case rejectAuthentication
+    case stall(String)
+}
+
+private final class RedisHostileServerState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var channels: [ObjectIdentifier: Channel] = [:]
+    private var commands: [String] = []
+
+    func opened(_ channel: Channel) {
+        lock.lock()
+        channels[ObjectIdentifier(channel)] = channel
+        lock.unlock()
+    }
+
+    func closed(_ channel: Channel) {
+        lock.lock()
+        channels.removeValue(forKey: ObjectIdentifier(channel))
+        lock.unlock()
+    }
+
+    func received(_ command: String) {
+        lock.lock()
+        commands.append(command)
+        lock.unlock()
+    }
+
+    func contains(_ command: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return commands.contains(command)
+    }
+
+    func activeConnectionCount() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return channels.count
+    }
+
+    func closeAll() -> [EventLoopFuture<Void>] {
+        lock.lock()
+        let channels = Array(channels.values)
+        self.channels.removeAll()
+        lock.unlock()
+        return channels.map { $0.close(mode: .all) }
+    }
+}
+
+private final class RedisHostileServerHandler: ChannelInboundHandler {
+    typealias InboundIn = RESPValue
+
+    private let behavior: RedisHostileServerBehavior
+    private let state: RedisHostileServerState
+
+    init(behavior: RedisHostileServerBehavior, state: RedisHostileServerState) {
+        self.behavior = behavior
+        self.state = state
+    }
+
+    func channelActive(context: ChannelHandlerContext) {
+        state.opened(context.channel)
+        context.fireChannelActive()
+    }
+
+    func channelInactive(context: ChannelHandlerContext) {
+        state.closed(context.channel)
+        context.fireChannelInactive()
+    }
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        guard case let .array(parts) = unwrapInboundIn(data),
+            let command = parts.first.flatMap(text)?.uppercased()
+        else {
+            context.close(mode: .all, promise: nil)
+            return
+        }
+        state.received(command)
+        if case let .stall(stalled) = behavior, command == stalled {
+            return
+        }
+        switch (behavior, command) {
+        case (.rejectAuthentication, "AUTH"):
+            write("-WRONGPASS invalid username-password pair\r\n", context: context)
+        case (.oversizedBulk, "PING"):
+            write("$1048577\r\n", context: context)
+        case (.oversizedArray, "PING"):
+            write("*4097\r\n", context: context)
+        case (_, "AUTH"), (_, "SELECT"):
+            write("+OK\r\n", context: context)
+        case (_, "PING"):
+            write("+PONG\r\n", context: context)
+        case (_, "INFO"):
+            let section = parts.dropFirst().first.flatMap(text) ?? ""
+            let payload: String
+            switch section {
+            case "server":
+                payload =
+                    "redis_version:8.10.0\r\nredis_mode:standalone\r\nrun_id:hostile-fixture\r\n"
+            case "replication":
+                payload = "role:master\r\nconnected_slaves:0\r\n"
+            default:
+                payload = "cluster_enabled:0\r\n"
+            }
+            write("$\(payload.utf8.count)\r\n\(payload)\r\n", context: context)
+        case (_, "SCAN"):
+            write("*2\r\n$1\r\n0\r\n*0\r\n", context: context)
+        default:
+            write("-ERR unsupported\r\n", context: context)
+        }
+    }
+
+    private func text(_ value: RESPValue) -> String? {
+        let buffer: ByteBuffer
+        switch value {
+        case let .simpleString(value), let .bulkString(.some(value)):
+            buffer = value
+        default:
+            return nil
+        }
+        return buffer.getString(at: buffer.readerIndex, length: buffer.readableBytes)
+    }
+
+    private func write(_ value: String, context: ChannelHandlerContext) {
+        var buffer = context.channel.allocator.buffer(capacity: value.utf8.count)
+        buffer.writeString(value)
+        context.channel.writeAndFlush(buffer, promise: nil)
+    }
+}
+
+private final class RedisHostileServer: @unchecked Sendable {
+    let state: RedisHostileServerState
+    let port: Int
+
+    private let group: MultiThreadedEventLoopGroup
+    private let channel: Channel
+
+    private init(
+        state: RedisHostileServerState,
+        port: Int,
+        group: MultiThreadedEventLoopGroup,
+        channel: Channel
+    ) {
+        self.state = state
+        self.port = port
+        self.group = group
+        self.channel = channel
+    }
+
+    static func withServer<Output: Sendable>(
+        behavior: RedisHostileServerBehavior,
+        operation: (RedisHostileServer) async throws -> Output
+    ) async throws -> Output {
+        let server = try await start(behavior: behavior)
+        do {
+            let output = try await operation(server)
+            await server.stop()
+            return output
+        } catch {
+            await server.stop()
+            throw error
+        }
+    }
+
+    func waitForCommand(_ command: String) async -> Bool {
+        for _ in 0..<2_000 {
+            if state.contains(command) { return true }
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        return false
+    }
+
+    func waitUntilClosed() async -> Bool {
+        for _ in 0..<2_000 {
+            if state.activeConnectionCount() == 0 { return true }
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        return false
+    }
+
+    private static func start(
+        behavior: RedisHostileServerBehavior
+    ) async throws -> RedisHostileServer {
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        let state = RedisHostileServerState()
+        do {
+            let channel = try await ServerBootstrap(group: group)
+                .serverChannelOption(ChannelOptions.backlog, value: 8)
+                .childChannelInitializer { channel in
+                    do {
+                        try channel.pipeline.syncOperations.addHandlers([
+                            ByteToMessageHandler(RedisByteDecoder()),
+                            RedisHostileServerHandler(behavior: behavior, state: state),
+                        ])
+                        return channel.eventLoop.makeSucceededFuture(())
+                    } catch {
+                        return channel.eventLoop.makeFailedFuture(error)
+                    }
+                }
+                .bind(host: "127.0.0.1", port: 0)
+                .get()
+            guard let port = channel.localAddress?.port else {
+                try? await channel.close(mode: .all).get()
+                try await group.shutdownGracefully()
+                throw RedisDatabaseClientFailure.connection
+            }
+            return RedisHostileServer(
+                state: state,
+                port: port,
+                group: group,
+                channel: channel)
+        } catch {
+            try? await group.shutdownGracefully()
+            throw error
+        }
+    }
+
+    private func stop() async {
+        for future in state.closeAll() {
+            try? await future.get()
+        }
+        try? await channel.close(mode: .all).get()
+        try? await group.shutdownGracefully()
+    }
+}
+
 @Suite("Redis and Valkey adapter")
 struct RedisValkeyDatabaseAdapterTests {
     @Test("connects with resolved authentication and discovers exact products")
@@ -400,6 +644,180 @@ struct RedisValkeyDatabaseAdapterTests {
             #expect(envelope?.productCode == "redis.connection.invalid")
         }
         #expect(await factory.connectionCount() == 0)
+    }
+
+    @Test("rejects oversized partial RESP frames before decoding")
+    func hostileResponseBounds() async throws {
+        for behavior in [
+            RedisHostileServerBehavior.oversizedBulk,
+            RedisHostileServerBehavior.oversizedArray,
+        ] {
+            try await RedisHostileServer.withServer(behavior: behavior) { server in
+                let definition = try RedisValkeyAdapterFixtures.definition(
+                    location: .network([
+                        DatabaseNetworkEndpoint(
+                            host: "127.0.0.1", port: try DatabasePort(server.port))
+                    ]))
+                let envelope = await RedisValkeyAdapterFixtures.envelope {
+                    _ = try await RedisValkeyDatabaseAdapter().connect(
+                        try RedisValkeyAdapterFixtures.resolved(definition),
+                        context: RedisValkeyAdapterFixtures.context(
+                            deadline: Date(timeIntervalSinceNow: 1)))
+                }
+                #expect(envelope?.productCode == "redis.result.too_large")
+                #expect(await server.waitUntilClosed())
+            }
+        }
+    }
+
+    @Test("bounds every connection setup phase and releases its channel")
+    func stalledConnectionPhases() async throws {
+        let phases: [(command: String, authenticated: Bool, database: String?)] = [
+            ("AUTH", true, nil),
+            ("SELECT", false, "1"),
+            ("PING", false, nil),
+            ("INFO", false, nil),
+        ]
+        for phase in phases {
+            try await RedisHostileServer.withServer(behavior: .stall(phase.command)) { server in
+                let reference = DatabaseSecretReference(identifier: UUID(), purpose: .password)
+                let authentication =
+                    phase.authenticated
+                    ? DatabaseAuthentication(kind: .password, secretReferences: [reference])
+                    : DatabaseAuthentication(kind: .none)
+                let definition = try RedisValkeyAdapterFixtures.definition(
+                    location: .network([
+                        DatabaseNetworkEndpoint(
+                            host: "127.0.0.1", port: try DatabasePort(server.port))
+                    ]),
+                    logicalDatabase: phase.database,
+                    authentication: authentication)
+                let secrets =
+                    phase.authenticated
+                    ? [reference: Data("fixture-secret".utf8)]
+                    : [:]
+                let context = RedisValkeyAdapterFixtures.context(
+                    deadline: Date(timeIntervalSinceNow: 0.2))
+                let startedAt = Date()
+                let envelope = await RedisValkeyAdapterFixtures.envelope {
+                    _ = try await RedisValkeyDatabaseAdapter().connect(
+                        try RedisValkeyAdapterFixtures.resolved(definition, secrets: secrets),
+                        context: context)
+                }
+                #expect(envelope?.productCode == "redis.deadline_exceeded")
+                #expect(Date().timeIntervalSince(startedAt) < 1)
+                #expect(await server.waitForCommand(phase.command))
+                #expect(await server.waitUntilClosed())
+                #expect(await waitForCancellationObserversToDrain(context.cancellation))
+            }
+        }
+    }
+
+    @Test("closes the owned channel after authentication failure")
+    func rejectedAuthenticationReleasesChannel() async throws {
+        try await RedisHostileServer.withServer(behavior: .rejectAuthentication) { server in
+            let reference = DatabaseSecretReference(identifier: UUID(), purpose: .password)
+            let definition = try RedisValkeyAdapterFixtures.definition(
+                location: .network([
+                    DatabaseNetworkEndpoint(host: "127.0.0.1", port: try DatabasePort(server.port))
+                ]),
+                authentication: DatabaseAuthentication(
+                    kind: .password,
+                    secretReferences: [reference]))
+            let envelope = await RedisValkeyAdapterFixtures.envelope {
+                _ = try await RedisValkeyDatabaseAdapter().connect(
+                    try RedisValkeyAdapterFixtures.resolved(
+                        definition,
+                        secrets: [reference: Data("fixture-secret".utf8)]),
+                    context: RedisValkeyAdapterFixtures.context(
+                        deadline: Date(timeIntervalSinceNow: 1)))
+            }
+            #expect(envelope?.productCode == "redis.authentication.failed")
+            #expect(await server.waitUntilClosed())
+        }
+    }
+
+    @Test("task cancellation interrupts connection setup immediately")
+    func cancelledConnectionSetup() async throws {
+        try await RedisHostileServer.withServer(behavior: .stall("PING")) { server in
+            let definition = try RedisValkeyAdapterFixtures.definition(
+                location: .network([
+                    DatabaseNetworkEndpoint(host: "127.0.0.1", port: try DatabasePort(server.port))
+                ]))
+            let context = RedisValkeyAdapterFixtures.context()
+            let task = Task {
+                try await RedisValkeyDatabaseAdapter().connect(
+                    try RedisValkeyAdapterFixtures.resolved(definition),
+                    context: context)
+            }
+            #expect(await server.waitForCommand("PING"))
+            let startedAt = Date()
+            task.cancel()
+            do {
+                _ = try await task.value
+                Issue.record("The cancelled connection setup unexpectedly completed.")
+            } catch let failure as DatabaseAdapterFailure {
+                #expect(failure == .cancelled)
+            }
+            #expect(Date().timeIntervalSince(startedAt) < 1)
+            #expect(await server.waitUntilClosed())
+            #expect(await waitForCancellationObserversToDrain(context.cancellation))
+        }
+    }
+
+    @Test("deadline, cancellation, and disconnect interrupt a stalled production read")
+    func stalledProductionRead() async throws {
+        for mode in ["deadline", "cancel", "disconnect"] {
+            try await RedisHostileServer.withServer(behavior: .stall("SCAN")) { server in
+                let definition = try RedisValkeyAdapterFixtures.definition(
+                    location: .network([
+                        DatabaseNetworkEndpoint(
+                            host: "127.0.0.1", port: try DatabasePort(server.port))
+                    ]))
+                let session = try await RedisValkeyDatabaseAdapter().connect(
+                    try RedisValkeyAdapterFixtures.resolved(definition),
+                    context: RedisValkeyAdapterFixtures.context(
+                        deadline: Date(timeIntervalSinceNow: 1)))
+                let operationID = DatabaseOperationID()
+                let context = RedisValkeyAdapterFixtures.context(
+                    operationID: operationID,
+                    deadline: mode == "deadline" ? Date(timeIntervalSinceNow: 0.2) : nil)
+                let task = Task {
+                    try await session.readPage(
+                        try RedisValkeyAdapterFixtures.pageRequest(definition.id),
+                        context: context)
+                }
+                #expect(await server.waitForCommand("SCAN"))
+                let startedAt = Date()
+                if mode == "cancel" {
+                    let result = await session.cancel(operationID)
+                    #expect(result.disposition == .accepted)
+                } else if mode == "disconnect" {
+                    await session.disconnect()
+                }
+                do {
+                    _ = try await task.value
+                    Issue.record("The interrupted read unexpectedly completed.")
+                } catch let failure as DatabaseAdapterFailure {
+                    if mode != "deadline" {
+                        #expect(failure == .cancelled)
+                    } else if case let .reported(envelope) = failure {
+                        #expect(envelope.productCode == "redis.deadline_exceeded")
+                    } else {
+                        Issue.record("The stalled read returned an unexpected failure.")
+                    }
+                }
+                #expect(Date().timeIntervalSince(startedAt) < 1)
+                #expect(await server.waitUntilClosed())
+                #expect(
+                    await session.lifecycleState()
+                        == (mode == "disconnect" ? .disconnected : .failed))
+                #expect(await waitForCancellationObserversToDrain(context.cancellation))
+                if mode != "disconnect" {
+                    await session.disconnect()
+                }
+            }
+        }
     }
 
     @Test("rejects a discovered product mismatch without leaking server details")
@@ -475,6 +893,49 @@ struct RedisValkeyDatabaseAdapterTests {
             context: RedisValkeyAdapterFixtures.context())
         #expect(second.records.count == 3)
         #expect(Set(first.records).isDisjoint(with: Set(second.records)))
+        await session.disconnect()
+    }
+
+    @Test("drains a final cursor continuation without restarting scan")
+    func finalCursorPendingKeys() async throws {
+        let values: [Data: FakeRedisValue] = [
+            Data("a".utf8): .string(Data("1".utf8)),
+            Data("b".utf8): .string(Data("2".utf8)),
+            Data("c".utf8): .string(Data("3".utf8)),
+        ]
+        let definition = try RedisValkeyAdapterFixtures.definition()
+        let client = FakeRedisClient(
+            product: .redis,
+            values: values,
+            scanExtraKeys: 1)
+        let session = try await RedisValkeyDatabaseAdapter(
+            clientFactory: FakeRedisClientFactory(client: client)
+        ).connect(
+            try RedisValkeyAdapterFixtures.resolved(definition),
+            context: RedisValkeyAdapterFixtures.context())
+        let first = try await session.readPage(
+            try RedisValkeyAdapterFixtures.pageRequest(definition.id, pageSize: 2),
+            context: RedisValkeyAdapterFixtures.context())
+        let second = try await session.readPage(
+            try RedisValkeyAdapterFixtures.pageRequest(
+                definition.id,
+                pageSize: 2,
+                continuation: first.nextContinuation),
+            context: RedisValkeyAdapterFixtures.context())
+        let scans = await client.snapshot().filter {
+            if case .scan = $0 { return true }
+            return false
+        }
+        #expect(first.records.count == 2)
+        #expect(second.records.count == 1)
+        #expect(first.nextContinuation != nil)
+        #expect(second.nextContinuation == nil)
+        #expect(scans.count == 1)
+        #expect(Set(first.records).isDisjoint(with: Set(second.records)))
+        #expect(first.metadata.completeness.state == .sampled)
+        #expect(second.metadata.completeness.state == .sampled)
+        #expect(first.metadata.count.accuracy == .unknown)
+        #expect(second.metadata.count.accuracy == .unknown)
         await session.disconnect()
     }
 
@@ -555,6 +1016,9 @@ struct RedisValkeyDatabaseAdapterTests {
             context: RedisValkeyAdapterFixtures.context())
         #expect(page.records.count == 1)
         #expect(RedisValkeyAdapterFixtures.field("result", in: page.records[0]) == .string("value"))
+        #expect(page.metadata.completeness.state == .complete)
+        #expect(page.metadata.count.value == 1)
+        #expect(page.metadata.count.accuracy == .exact)
         let queryOperations = Array((await client.snapshot()).dropFirst(before))
         #expect(queryOperations.first == .type(injectedKey))
         #expect(queryOperations.contains(.stringRange(injectedKey, maximumBytes: 65_536)))
