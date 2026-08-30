@@ -335,7 +335,7 @@ struct DatabaseSafetyReviewSheet: View {
                         Image(systemName: "doc.on.doc")
                             .frame(width: UIScale.pt(28), height: UIScale.pt(28))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .accessibilityLabel("Copy required confirmation text")
                     .help("Copy required confirmation text")
                 }
