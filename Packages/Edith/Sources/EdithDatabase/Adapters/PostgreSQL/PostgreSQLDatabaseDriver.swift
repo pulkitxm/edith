@@ -1,4 +1,5 @@
 import Foundation
+import NIOCore
 import PostgresNIO
 
 enum PostgreSQLDatabaseDriverFailure: Error, Equatable, Sendable {
@@ -35,6 +36,26 @@ struct PostgreSQLDatabaseConnectionPlan: Sendable {
             password: password,
             database: database,
             tls: try tls.configuration())
+        applyOptions(to: &configuration)
+        return configuration
+    }
+
+    func configuration(
+        establishedChannel: any Channel
+    ) throws -> PostgresConnection.Configuration {
+        var configuration = PostgresConnection.Configuration(
+            establishedChannel: establishedChannel,
+            tls: try tls.configuration(),
+            username: username,
+            password: password,
+            database: database)
+        applyOptions(to: &configuration)
+        return configuration
+    }
+
+    private func applyOptions(
+        to configuration: inout PostgresConnection.Configuration
+    ) {
         configuration.options.connectTimeout = .milliseconds(
             Int64(clamping: connectTimeoutMilliseconds))
         configuration.options.tlsServerName = tlsServerName
@@ -46,7 +67,6 @@ struct PostgreSQLDatabaseConnectionPlan: Sendable {
             configuration.options.additionalStartupParameters.append(
                 ("default_transaction_read_only", "on"))
         }
-        return configuration
     }
 }
 
@@ -67,7 +87,7 @@ protocol PostgreSQLDatabaseClient: Sendable {
 typealias PostgreSQLDatabaseClientConnector =
     @Sendable (PostgreSQLDatabaseConnectionPlan) async throws -> any PostgreSQLDatabaseClient
 
-actor PostgresNIODatabaseClient: PostgreSQLDatabaseClient {
+final class PostgresNIODatabaseClient: PostgreSQLDatabaseClient, @unchecked Sendable {
     private static let identityQuery = PostgresQuery(
         unsafeSQL: """
             SELECT
@@ -79,27 +99,21 @@ actor PostgresNIODatabaseClient: PostgreSQLDatabaseClient {
                 (SELECT count(*)::int8 FROM pg_catalog.pg_stat_replication) AS replica_count
             """)
 
-    private var connection: PostgresConnection?
+    private let lock = NSLock()
+    private var resource: PostgreSQLDatabaseTransportResource?
 
-    private init(connection: PostgresConnection) {
-        self.connection = connection
+    private init(resource: PostgreSQLDatabaseTransportResource) {
+        self.resource = resource
     }
 
     static func connect(
         _ plan: PostgreSQLDatabaseConnectionPlan
     ) async throws -> any PostgreSQLDatabaseClient {
-        let configuration: PostgresConnection.Configuration
         do {
-            configuration = try plan.configuration()
-        } catch {
-            throw PostgreSQLDatabaseDriverFailure.connection
-        }
-        do {
-            let connection = try await PostgresConnection.connect(
-                configuration: configuration,
-                id: await PostgreSQLDatabaseConnectionIDGenerator.shared.take(),
-                logger: Logger(label: "com.edith.database.postgresql"))
-            return PostgresNIODatabaseClient(connection: connection)
+            let resource = try await PostgreSQLDatabaseTransport.connect(
+                plan,
+                connectionID: await PostgreSQLDatabaseConnectionIDGenerator.shared.take())
+            return PostgresNIODatabaseClient(resource: resource)
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -108,7 +122,7 @@ actor PostgresNIODatabaseClient: PostgreSQLDatabaseClient {
     }
 
     func discoverIdentity() async throws -> DatabaseProductIdentity {
-        guard let connection else {
+        guard let connection = lock.withLock({ resource?.connection }) else {
             throw PostgreSQLDatabaseDriverFailure.connection
         }
         do {
@@ -131,9 +145,13 @@ actor PostgresNIODatabaseClient: PostgreSQLDatabaseClient {
     }
 
     func disconnect() async {
-        let connection = self.connection
-        self.connection = nil
-        try? await connection?.close()
+        let resource = lock.withLock {
+            let resource = self.resource
+            self.resource = nil
+            return resource
+        }
+        try? await resource?.connection.close()
+        try? await resource?.eventLoopGroup.shutdownGracefully()
     }
 }
 
@@ -294,7 +312,7 @@ enum PostgreSQLDatabaseDriverSupport {
     }
 }
 
-private extension PostgreSQLDatabaseTLSPlan {
+extension PostgreSQLDatabaseTLSPlan {
     func configuration() throws -> PostgresConnection.Configuration.TLS {
         switch self {
         case .disabled:
