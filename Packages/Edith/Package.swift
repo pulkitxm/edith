@@ -77,7 +77,7 @@ let targets: [Target] = [
     ),
     .target(
         name: "EdithKit",
-        dependencies: ["EdithCore", "EdithLidAwakeSupport"],
+        dependencies: ["EdithCore", "EdithDatabase", "EdithLidAwakeSupport"],
         resources: [
             .process("Resources"),
             .copy("ChromeExtension"),

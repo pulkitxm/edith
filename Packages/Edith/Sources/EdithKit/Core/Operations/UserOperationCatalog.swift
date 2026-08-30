@@ -1,58 +1,60 @@
 import EdithCore
 
 public enum UserOperationCatalog {
-    private static let machineRegistrations: [RegisteredUserOperation] =
-        MachineControlOperation.allCases.map {
+    private static let machineRegistrations: [RegisteredUserOperation] = {
+        var registrations = MachineControlOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineThermalOperation.allCases.map {
+        registrations += MachineThermalOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineExecOperation.allCases.map {
+        registrations += MachineExecOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineMountOperation.allCases.map {
+        registrations += MachineMountOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineBroadcastOperation.allCases.map {
+        registrations += MachineBroadcastOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineTerminalBroadcastOperation.allCases.map {
+        registrations += MachineTerminalBroadcastOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + DockerLifecycleOperation.allCases.map {
+        registrations += DockerLifecycleOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineMutationOperation.allCases.map {
+        registrations += MachineMutationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachinePowerOperation.allCases.map {
+        registrations += MachinePowerOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineConnectionOperation.allCases.map {
+        registrations += MachineConnectionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + DockerDetailOperation.allCases.map {
+        registrations += DockerDetailOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + SavedSnippetOperation.allCases.map {
+        registrations += SavedSnippetOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineForwardOperation.allCases.map {
+        registrations += MachineForwardOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineSnippetOperation.allCases.map {
+        registrations += MachineSnippetOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineServiceOperation.allCases.map {
+        registrations += MachineServiceOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineProcessOperation.allCases.map {
+        registrations += MachineProcessOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineDockerPauseOperation.allCases.map {
+        registrations += MachineDockerPauseOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        return registrations
+    }()
 
     private static let applicationRegistrations: [RegisteredUserOperation] =
         AppInspectionOperation.allCases.map {
