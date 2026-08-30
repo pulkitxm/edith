@@ -34,6 +34,8 @@ public enum Guide {
         ed config ls                every setting, with its current value
         ed config describe <key>    one setting: type, scope, allowed values
         ed extensions ls            every extension and whether it is on
+        ed database connections     saved database connection summaries
+        ed database capabilities <id>  detected support for one connection id
         ed lid-awake status          closed-lid state, session, battery and helper
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler
@@ -109,6 +111,25 @@ public enum Guide {
         ed lid-awake status --json
         ed lid-awake off
         ```
+
+        ## Databases
+
+        Database reads go through the authenticated local broker used by the app.
+        Connection output never includes credential references or secret values.
+
+        ```
+        ed database connections
+        ed database connections list --product postgresql --environment production
+        ed database connections get <connection-id>
+        ed database capabilities <connection-id>
+        ed database capabilities <connection-id> --refresh --json
+        ```
+
+        The bare `database` command defaults to `connections`, and bare `connections`
+        defaults to `list`. Use `--json` for stable fields and UUID connection ids.
+        Capability discovery uses the cached report when possible. `--refresh` asks the
+        broker to reconnect and discover the current product, version, topology,
+        permissions, limits, supported operations, and safety limitations.
 
         ## Machines
 
