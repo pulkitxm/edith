@@ -190,10 +190,6 @@ final class GitHubBrowserModel {
         await resourceTask?.value
     }
 
-    func waitForPendingSave() async {
-        await saveTask?.value
-    }
-
     func loadCurrentRoute(ignoreCache: Bool = false) {
         resourceGeneration &+= 1
         let generation = resourceGeneration
