@@ -16,10 +16,13 @@ let dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.5"),
     .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.18.0"),
     .package(url: "https://github.com/apple/swift-argument-parser", from: "1.8.2"),
+    .package(url: "https://github.com/apple/swift-crypto.git", exact: "4.5.1"),
     .package(url: "https://github.com/groue/GRDB.swift", from: "7.11.1"),
     .package(url: "https://github.com/swift-server/RediStack.git", exact: "1.6.3"),
-    .package(url: "https://github.com/apple/swift-nio.git", from: "2.43.0"),
-    .package(url: "https://github.com/orlandos-nl/MongoKitten.git", from: "7.16.3"),
+    .package(url: "https://github.com/orlandos-nl/MongoKitten.git", exact: "7.16.3"),
+    .package(url: "https://github.com/apple/swift-log.git", exact: "1.15.0"),
+    .package(url: "https://github.com/apple/swift-nio.git", exact: "2.101.3"),
+    .package(url: "https://github.com/apple/swift-nio-ssl.git", exact: "2.37.2"),
 ]
 
 let targets: [Target] = [
@@ -36,6 +39,7 @@ let targets: [Target] = [
         name: "EdithDatabase",
         dependencies: [
             "EdithCore",
+            .product(name: "Crypto", package: "swift-crypto"),
             .product(name: "GRDB", package: "GRDB.swift"),
             .product(name: "RediStack", package: "RediStack"),
             .product(name: "NIOCore", package: "swift-nio"),
@@ -43,6 +47,8 @@ let targets: [Target] = [
             .product(name: "MongoKitten", package: "MongoKitten"),
             .product(name: "MongoClient", package: "MongoKitten"),
             .product(name: "MongoCore", package: "MongoKitten"),
+            .product(name: "Logging", package: "swift-log"),
+            .product(name: "NIOSSL", package: "swift-nio-ssl"),
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
@@ -56,6 +62,7 @@ let targets: [Target] = [
             .product(name: "MongoKitten", package: "MongoKitten"),
             .product(name: "MongoClient", package: "MongoKitten"),
             .product(name: "MongoCore", package: "MongoKitten"),
+            .product(name: "NIOEmbedded", package: "swift-nio"),
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
