@@ -41,6 +41,20 @@ private struct DatabaseManagementFixture {
     let executor: DatabaseExecutor
 }
 
+private enum DatabaseManagementConnectionMutation: CaseIterable, Equatable {
+    case edit
+    case rename
+
+    var resultName: String {
+        switch self {
+        case .edit:
+            "Orders edited"
+        case .rename:
+            "Orders renamed"
+        }
+    }
+}
+
 private enum DatabaseManagementFixtures {
     static let initialDate = Date(timeIntervalSince1970: 1_900_000_000)
 
@@ -129,10 +143,9 @@ private enum DatabaseManagementFixtures {
     ) async throws -> DatabaseManagementFixture {
         let (directory, path) = try DatabasePersistenceFixtures.temporaryStorePath()
         let store = try SQLiteDatabaseMetadataStore(path: path)
-        let owner = DatabaseRuntimeOwnerToken(rawValue: uuid(250))
-        _ = try await store.claimRuntimeOwner(
-            owner,
-            claimedAt: clock.read().addingTimeInterval(-1))
+        let owner = try await store.claimRuntimeOwner(
+            claimedAt: clock.read().addingTimeInterval(-1)
+        ).owner.token
         let secretStore = try InMemoryDatabaseSecretStore(initialValues: secrets)
         let executor = try DatabaseExecutor(
             metadataStore: store,
@@ -303,7 +316,7 @@ private enum DatabaseManagementFixtures {
             uuidSource: DatabaseManagementUUIDSource([duplicateID]))
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
         let connection = try DatabaseManagementFixtures.connection()
-        try await fixture.store.saveConnection(connection)
+        try await fixture.store.seedConnection(connection)
         let input = DatabaseManagementFixtures.query(connectionID: connection.id)
 
         let first = try #require(
@@ -357,6 +370,79 @@ private enum DatabaseManagementFixtures {
             await fixture.executor.deleteSavedQuery(
                 DatabaseSavedQueryDeleteRequest(queryID: input.id)
             ).payload?.deleted == false)
+    }
+
+    @Test func savedQueryRenameReportsConcurrentChangeAsConflict() async throws {
+        let clock = DatabaseManagementClock(DatabaseManagementFixtures.initialDate)
+        let fixture = try await DatabaseManagementFixtures.make(clock: clock)
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let connection = try DatabaseManagementFixtures.connection(id: 23)
+        let query = DatabaseManagementFixtures.query(id: 60, connectionID: connection.id)
+        try await fixture.store.seedConnection(connection)
+        try await fixture.store.seedSavedQuery(query)
+        let writeGate = DatabaseExecutorTestGate(open: false)
+        let proxy = DatabaseExecutorMetadataStoreProxy(
+            base: fixture.store,
+            savedQueryWriteGate: writeGate)
+        let executor = try DatabaseExecutor(
+            metadataStore: proxy,
+            secretStore: fixture.secretStore,
+            runtimeOwner: fixture.owner,
+            adapters: [],
+            currentDate: { clock.read() })
+        let renameTask = Task {
+            await executor.renameSavedQuery(
+                DatabaseSavedQueryRenameRequest(queryID: query.id, name: "Renamed"))
+        }
+        await writeGate.waitForEntries()
+        let concurrent = DatabaseManagementFixtures.query(
+            id: 60,
+            connectionID: connection.id,
+            name: "Concurrent",
+            text: "SELECT id FROM orders",
+            createdAt: query.createdAt,
+            updatedAt: query.updatedAt.addingTimeInterval(1))
+        try await fixture.store.seedSavedQuery(concurrent)
+        await writeGate.releaseAll()
+
+        let result = await renameTask.value
+        #expect(result.error?.category == .conflict)
+        #expect(
+            result.error?.message
+                == "The saved database query changed before the operation started.")
+        #expect(try await fixture.store.savedQuery(id: query.id) == concurrent)
+    }
+
+    @Test func savedQueryRenameReportsConcurrentDeletionAsMissing() async throws {
+        let clock = DatabaseManagementClock(DatabaseManagementFixtures.initialDate)
+        let fixture = try await DatabaseManagementFixtures.make(clock: clock)
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let connection = try DatabaseManagementFixtures.connection(id: 24)
+        let query = DatabaseManagementFixtures.query(id: 61, connectionID: connection.id)
+        try await fixture.store.seedConnection(connection)
+        try await fixture.store.seedSavedQuery(query)
+        let writeGate = DatabaseExecutorTestGate(open: false)
+        let proxy = DatabaseExecutorMetadataStoreProxy(
+            base: fixture.store,
+            savedQueryWriteGate: writeGate)
+        let executor = try DatabaseExecutor(
+            metadataStore: proxy,
+            secretStore: fixture.secretStore,
+            runtimeOwner: fixture.owner,
+            adapters: [],
+            currentDate: { clock.read() })
+        let renameTask = Task {
+            await executor.renameSavedQuery(
+                DatabaseSavedQueryRenameRequest(queryID: query.id, name: "Renamed"))
+        }
+        await writeGate.waitForEntries()
+        #expect(try await fixture.store.removeSeededSavedQuery(id: query.id))
+        await writeGate.releaseAll()
+
+        let result = await renameTask.value
+        #expect(result.error?.category == .invalidRequest)
+        #expect(result.error?.message == "The saved database query was not found.")
+        #expect(try await fixture.store.savedQuery(id: query.id) == nil)
     }
 
     @Test func validationRejectsMalformedManagementInputs() async throws {
@@ -439,7 +525,7 @@ private enum DatabaseManagementFixtures {
             ).status == .succeeded)
 
         let connection = try DatabaseManagementFixtures.connection()
-        try await fixture.store.saveConnection(connection)
+        try await fixture.store.seedConnection(connection)
         let mismatch = DatabaseManagementFixtures.query(
             connectionID: connection.id,
             language: .redisCommand,
@@ -468,7 +554,7 @@ private enum DatabaseManagementFixtures {
         let connection = try DatabaseManagementFixtures.connection(
             id: 5,
             references: [token])
-        try await fixture.store.saveConnection(connection)
+        try await fixture.store.seedConnection(connection)
 
         #expect(
             await fixture.executor.connection(
@@ -478,15 +564,23 @@ private enum DatabaseManagementFixtures {
             await fixture.executor.connections(
                 DatabaseConnectionListRequest()
             ).error?.category == .internalFailure)
+        let rejectedQuery = DatabaseManagementFixtures.query(
+            id: 43,
+            connectionID: connection.id)
+        #expect(
+            await fixture.executor.saveSavedQuery(
+                DatabaseSavedQuerySaveRequest(query: rejectedQuery)
+            ).error?.category == .internalFailure)
+        #expect(try await fixture.store.savedQuery(id: rejectedQuery.id) == nil)
 
         let validConnection = try DatabaseManagementFixtures.connection(id: 6)
-        try await fixture.store.saveConnection(validConnection)
+        try await fixture.store.seedConnection(validConnection)
         let query = DatabaseManagementFixtures.query(
             id: 42,
             connectionID: validConnection.id,
             language: .redisCommand,
             text: "GET orders")
-        try await fixture.store.saveQuery(query)
+        try await fixture.store.seedSavedQuery(query)
         #expect(
             await fixture.executor.savedQuery(
                 DatabaseSavedQueryGetRequest(queryID: query.id)
@@ -570,7 +664,7 @@ private enum DatabaseManagementFixtures {
         let gate = DatabaseExecutorTestGate(open: false)
         let proxy = DatabaseExecutorMetadataStoreProxy(
             base: fixture.store,
-            connectionGate: gate)
+            connectionWriteGate: gate)
         let executor = try DatabaseExecutor(
             metadataStore: proxy,
             secretStore: fixture.secretStore,
@@ -587,10 +681,79 @@ private enum DatabaseManagementFixtures {
             try await fixture.store.releaseRuntimeOwner(
                 fixture.owner,
                 releasedAt: clock.read()))
+        _ = try await fixture.store.claimRuntimeOwner(
+            claimedAt: clock.read().addingTimeInterval(1))
         await gate.releaseAll()
 
         #expect(await saveTask.value.error?.category == .conflict)
         #expect(try await fixture.store.connection(id: connection.id) == nil)
+    }
+
+    @Test func cancelledQueuedMutationIsRemovedBeforeTheActiveMutationFinishes() async throws {
+        let clock = DatabaseManagementClock(DatabaseManagementFixtures.initialDate)
+        let fixture = try await DatabaseManagementFixtures.make(clock: clock)
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let writeGate = DatabaseExecutorTestGate(open: false)
+        let proxy = DatabaseExecutorMetadataStoreProxy(
+            base: fixture.store,
+            connectionWriteGate: writeGate)
+        let firstExecutor = try DatabaseExecutor(
+            metadataStore: proxy,
+            secretStore: fixture.secretStore,
+            runtimeOwner: fixture.owner,
+            adapters: [],
+            currentDate: { clock.read() })
+        let firstConnection = try DatabaseManagementFixtures.connection(id: 12)
+        let queuedConnection = try DatabaseManagementFixtures.connection(id: 13)
+        let activeTask = Task {
+            await firstExecutor.saveConnection(
+                DatabaseConnectionSaveRequest(connection: firstConnection))
+        }
+        await writeGate.waitForEntries()
+        let queuedTask = Task {
+            await fixture.executor.saveConnection(
+                DatabaseConnectionSaveRequest(connection: queuedConnection))
+        }
+        while await fixture.executor.managementMutationWaiterCount() == 0 {
+            await Task.yield()
+        }
+
+        queuedTask.cancel()
+        while await fixture.executor.managementMutationWaiterCount() != 0 {
+            await Task.yield()
+        }
+        let cancelled = await queuedTask.value
+        #expect(cancelled.error?.category == .cancelled)
+        #expect(try await fixture.store.connection(id: queuedConnection.id) == nil)
+
+        await writeGate.releaseAll()
+        #expect(await activeTask.value.status == .succeeded)
+        #expect(try await fixture.store.connection(id: firstConnection.id) != nil)
+    }
+
+    @Test func productEditRejectsIncompatibleLinkedSavedQueries() async throws {
+        let clock = DatabaseManagementClock(DatabaseManagementFixtures.initialDate)
+        let fixture = try await DatabaseManagementFixtures.make(clock: clock)
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let connection = try DatabaseManagementFixtures.connection(id: 14)
+        let query = DatabaseManagementFixtures.query(
+            id: 54,
+            connectionID: connection.id)
+        try await fixture.store.seedConnection(connection)
+        try await fixture.store.seedSavedQuery(query)
+        let redis = try DatabaseManagementFixtures.connection(
+            id: 14,
+            name: "Orders redis",
+            product: .redis)
+
+        let result = await fixture.executor.editConnection(
+            DatabaseConnectionEditRequest(
+                connectionID: connection.id,
+                connection: redis))
+
+        #expect(result.error?.category == .invalidRequest)
+        #expect(try await fixture.store.connection(id: connection.id)?.productHint == .postgresql)
+        #expect(try await fixture.store.savedQuery(id: query.id) == query)
     }
 
     @Test func savedQueryListsReadEachConnectionOnce() async throws {
@@ -598,9 +761,9 @@ private enum DatabaseManagementFixtures {
         let fixture = try await DatabaseManagementFixtures.make(clock: clock)
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
         let connection = try DatabaseManagementFixtures.connection(id: 8)
-        try await fixture.store.saveConnection(connection)
+        try await fixture.store.seedConnection(connection)
         for id: UInt8 in 50...52 {
-            try await fixture.store.saveQuery(
+            try await fixture.store.seedSavedQuery(
                 DatabaseManagementFixtures.query(
                     id: id,
                     connectionID: connection.id,
@@ -638,7 +801,7 @@ private enum DatabaseManagementFixtures {
             secrets: [password: Data("password-value".utf8)],
             adapters: [adapter])
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
-        try await fixture.store.saveConnection(connection)
+        try await fixture.store.seedConnection(connection)
         let peerConnectionGate = DatabaseExecutorTestGate()
         let peerStore = DatabaseExecutorMetadataStoreProxy(
             base: fixture.store,
@@ -712,13 +875,345 @@ private enum DatabaseManagementFixtures {
         #expect(await session.snapshot().disconnectCount == 2)
         #expect(await fixture.secretStore.contains(password))
 
-        _ = try await fixture.store.claimRuntimeOwner(
-            fixture.owner,
-            claimedAt: clock.read())
-        let deleted = await fixture.executor.deleteConnection(
+        let replacementOwner = try await fixture.store.claimRuntimeOwner(
+            claimedAt: clock.read()
+        ).owner.token
+        let replacementExecutor = try DatabaseExecutor(
+            metadataStore: fixture.store,
+            secretStore: fixture.secretStore,
+            runtimeOwner: replacementOwner,
+            adapters: [adapter],
+            currentDate: { clock.read() })
+        let deleted = await replacementExecutor.deleteConnection(
             DatabaseConnectionDeleteRequest(connectionID: connection.id))
         #expect(deleted.payload?.deleted == true)
         #expect(deleted.payload?.disconnected == false)
         #expect(try await fixture.store.connection(id: connection.id) == nil)
+    }
+
+    @Test func deletionAwaitsServerCancellationBeforeDisconnecting() async throws {
+        let clock = DatabaseManagementClock(DatabaseManagementFixtures.initialDate)
+        let connection = try DatabaseManagementFixtures.connection(id: 15)
+        let cancellationGate = DatabaseExecutorTestGate(open: false)
+        let disconnectGate = DatabaseExecutorTestGate(open: false)
+        let terminalGate = DatabaseExecutorTestGate(open: false)
+        let sessionGates = DatabaseExecutorTestSessionGates(
+            cancel: cancellationGate,
+            disconnect: disconnectGate)
+        let (adapter, session) = try DatabaseManagementFixtures.adapter(
+            connection: connection,
+            gates: sessionGates)
+        let fixture = try await DatabaseManagementFixtures.make(
+            clock: clock,
+            adapters: [adapter])
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        try await fixture.store.seedConnection(connection)
+        let proxy = DatabaseExecutorMetadataStoreProxy(
+            base: fixture.store,
+            terminalTransitionGate: terminalGate)
+        let connectExecutor = try DatabaseExecutor(
+            metadataStore: proxy,
+            secretStore: fixture.secretStore,
+            runtimeOwner: fixture.owner,
+            adapters: [adapter],
+            currentDate: { clock.read() })
+        let deleteExecutor = try DatabaseExecutor(
+            metadataStore: fixture.store,
+            secretStore: fixture.secretStore,
+            runtimeOwner: fixture.owner,
+            adapters: [adapter],
+            currentDate: { clock.read() },
+            managementDrainTimeoutNanoseconds: 50_000_000)
+        let connectTask = Task {
+            await connectExecutor.connect(
+                DatabaseConnectRequest(
+                    connectionID: connection.id,
+                    operation: DatabaseManagementFixtures.operation(115)))
+        }
+        await terminalGate.waitForEntries()
+        let deleteTask = Task {
+            await deleteExecutor.deleteConnection(
+                DatabaseConnectionDeleteRequest(connectionID: connection.id))
+        }
+        await cancellationGate.waitForEntries()
+
+        #expect(await disconnectGate.entryCount() == 0)
+        #expect(try await fixture.store.connection(id: connection.id) != nil)
+        #expect(await deleteTask.value.error?.category == .timeout)
+        let blockedRetry = await deleteExecutor.deleteConnection(
+            DatabaseConnectionDeleteRequest(connectionID: connection.id))
+        #expect(blockedRetry.error?.category == .timeout)
+        #expect(await disconnectGate.entryCount() == 0)
+        await cancellationGate.releaseAll()
+        let completedDeleteTask = Task {
+            await deleteExecutor.deleteConnection(
+                DatabaseConnectionDeleteRequest(connectionID: connection.id))
+        }
+        await disconnectGate.waitForEntries()
+        #expect(try await fixture.store.connection(id: connection.id) != nil)
+        await disconnectGate.releaseAll()
+        await terminalGate.releaseAll()
+
+        #expect(await connectTask.value.status == .failed)
+        #expect(await completedDeleteTask.value.payload?.deleted == true)
+        let invocations = await session.snapshot().invocations
+        let cancellationIndex = try #require(
+            invocations.firstIndex(
+                of: .cancel(DatabaseManagementFixtures.operation(115).operationID)))
+        let disconnectionIndex = try #require(invocations.firstIndex(of: .disconnect))
+        #expect(cancellationIndex < disconnectionIndex)
+    }
+
+    @Test func terminalizationWinningStillAwaitsServerCancellationBeforeDisconnect() async throws {
+        let clock = DatabaseManagementClock(DatabaseManagementFixtures.initialDate)
+        let connection = try DatabaseManagementFixtures.connection(id: 21)
+        let cancellationGate = DatabaseExecutorTestGate(open: false)
+        let disconnectGate = DatabaseExecutorTestGate(open: false)
+        let cancellingTransitionGate = DatabaseExecutorTestGate(open: false)
+        let terminalTransitionGate = DatabaseExecutorTestGate(open: false)
+        let (adapter, session) = try DatabaseManagementFixtures.adapter(
+            connection: connection,
+            gates: DatabaseExecutorTestSessionGates(
+                cancel: cancellationGate,
+                disconnect: disconnectGate))
+        let fixture = try await DatabaseManagementFixtures.make(
+            clock: clock,
+            adapters: [adapter])
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        try await fixture.store.seedConnection(connection)
+        let proxy = DatabaseExecutorMetadataStoreProxy(
+            base: fixture.store,
+            cancellingTransitionGate: cancellingTransitionGate,
+            terminalTransitionGate: terminalTransitionGate)
+        let connectExecutor = try DatabaseExecutor(
+            metadataStore: proxy,
+            secretStore: fixture.secretStore,
+            runtimeOwner: fixture.owner,
+            adapters: [adapter],
+            currentDate: { clock.read() })
+        let operation = DatabaseManagementFixtures.operation(124)
+        let connectTask = Task {
+            await connectExecutor.connect(
+                DatabaseConnectRequest(
+                    connectionID: connection.id,
+                    operation: operation))
+        }
+        await terminalTransitionGate.waitForEntries()
+        let deleteTask = Task {
+            await fixture.executor.deleteConnection(
+                DatabaseConnectionDeleteRequest(connectionID: connection.id))
+        }
+        await cancellationGate.waitForEntries()
+        await cancellingTransitionGate.waitForEntries()
+
+        await terminalTransitionGate.releaseAll()
+        #expect(await connectTask.value.status == .succeeded)
+        await cancellingTransitionGate.releaseAll()
+        #expect(await disconnectGate.entryCount() == 0)
+        #expect(try await fixture.store.operation(id: operation.operationID)?.state == .succeeded)
+        #expect(try await fixture.store.connection(id: connection.id) != nil)
+
+        await cancellationGate.releaseAll()
+        await disconnectGate.waitForEntries()
+        #expect(try await fixture.store.connection(id: connection.id) != nil)
+        await disconnectGate.releaseAll()
+
+        #expect(await deleteTask.value.payload?.deleted == true)
+        let invocations = await session.snapshot().invocations
+        let cancellationIndex = try #require(
+            invocations.firstIndex(of: .cancel(operation.operationID)))
+        let disconnectionIndex = try #require(invocations.firstIndex(of: .disconnect))
+        #expect(cancellationIndex < disconnectionIndex)
+    }
+
+    @Test func noncooperativeDisconnectTimesOutWithoutWedgingManagement() async throws {
+        let clock = DatabaseManagementClock(DatabaseManagementFixtures.initialDate)
+        let connection = try DatabaseManagementFixtures.connection(id: 16)
+        let disconnectGate = DatabaseExecutorTestGate(open: false)
+        let (adapter, session) = try DatabaseManagementFixtures.adapter(
+            connection: connection,
+            gates: DatabaseExecutorTestSessionGates(disconnect: disconnectGate))
+        let fixture = try await DatabaseManagementFixtures.make(
+            clock: clock,
+            adapters: [adapter])
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        try await fixture.store.seedConnection(connection)
+        let executor = try DatabaseExecutor(
+            metadataStore: fixture.store,
+            secretStore: fixture.secretStore,
+            runtimeOwner: fixture.owner,
+            adapters: [adapter],
+            currentDate: { clock.read() },
+            managementDrainTimeoutNanoseconds: 50_000_000)
+        #expect(
+            await executor.connect(
+                DatabaseConnectRequest(
+                    connectionID: connection.id,
+                    operation: DatabaseManagementFixtures.operation(116))
+            ).status == .succeeded)
+        let timedOutTask = Task {
+            await executor.deleteConnection(
+                DatabaseConnectionDeleteRequest(connectionID: connection.id))
+        }
+        await disconnectGate.waitForEntries()
+
+        #expect(await timedOutTask.value.error?.category == .timeout)
+        #expect(try await fixture.store.connection(id: connection.id) != nil)
+        let blockedRetry = await executor.deleteConnection(
+            DatabaseConnectionDeleteRequest(connectionID: connection.id))
+        #expect(blockedRetry.error?.category == .timeout)
+        #expect(try await fixture.store.connection(id: connection.id) != nil)
+        #expect(await executor.managementRetainedCoordinationCount() == 1)
+        #expect(await executor.managementRetainedCallbackCount(connectionID: connection.id) == 1)
+        let unrelated = try DatabaseManagementFixtures.connection(id: 18)
+        #expect(
+            await executor.saveConnection(
+                DatabaseConnectionSaveRequest(connection: unrelated)
+            ).status == .succeeded)
+        await disconnectGate.releaseAll()
+        while await executor.managementDisconnectionCompleted(connectionID: connection.id) == false
+        {
+            await Task.yield()
+        }
+        #expect(await session.snapshot().disconnectCount == 1)
+        let completedRetry = await executor.deleteConnection(
+            DatabaseConnectionDeleteRequest(connectionID: connection.id))
+        #expect(completedRetry.payload?.deleted == true)
+        #expect(completedRetry.payload?.disconnected == true)
+        #expect(try await fixture.store.connection(id: connection.id) == nil)
+        #expect(await executor.managementRetainedCoordinationCount() == 0)
+    }
+
+    @Test func neverCompletingDisconnectCannotAccumulateCoordinationIdentifiers() async throws {
+        let clock = DatabaseManagementClock(DatabaseManagementFixtures.initialDate)
+        let connection = try DatabaseManagementFixtures.connection(id: 22)
+        let disconnectGate = DatabaseExecutorTestGate(open: false)
+        let (adapter, session) = try DatabaseManagementFixtures.adapter(
+            connection: connection,
+            gates: DatabaseExecutorTestSessionGates(disconnect: disconnectGate))
+        let fixture = try await DatabaseManagementFixtures.make(
+            clock: clock,
+            adapters: [adapter])
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        try await fixture.store.seedConnection(connection)
+        let executor = try DatabaseExecutor(
+            metadataStore: fixture.store,
+            secretStore: fixture.secretStore,
+            runtimeOwner: fixture.owner,
+            adapters: [adapter],
+            currentDate: { clock.read() },
+            managementDrainTimeoutNanoseconds: 10_000_000)
+        #expect(
+            await executor.connect(
+                DatabaseConnectRequest(
+                    connectionID: connection.id,
+                    operation: DatabaseManagementFixtures.operation(125))
+            ).status == .succeeded)
+        let firstDelete = Task {
+            await executor.deleteConnection(
+                DatabaseConnectionDeleteRequest(connectionID: connection.id))
+        }
+        await disconnectGate.waitForEntries()
+        #expect(await firstDelete.value.error?.category == .timeout)
+
+        for id: UInt8 in 126...141 {
+            #expect(
+                await executor.capabilities(
+                    DatabaseCapabilitiesRequest(
+                        connectionID: connection.id,
+                        operation: DatabaseManagementFixtures.operation(id))
+                ).error?.category == .conflict)
+        }
+        for _ in 0..<4 {
+            #expect(
+                await executor.deleteConnection(
+                    DatabaseConnectionDeleteRequest(connectionID: connection.id)
+                ).error?.category == .timeout)
+        }
+
+        #expect(await executor.managementRetainedCoordinationCount() == 1)
+        #expect(await executor.managementRetainedCallbackCount(connectionID: connection.id) == 1)
+        #expect(await session.snapshot().disconnectCount == 1)
+        #expect(try await fixture.store.connection(id: connection.id) != nil)
+    }
+
+    @Test func editAndRenameExcludeOperationsAdmittedByAnotherExecutor() async throws {
+        for mutation in DatabaseManagementConnectionMutation.allCases {
+            let clock = DatabaseManagementClock(DatabaseManagementFixtures.initialDate)
+            let connection = try DatabaseManagementFixtures.connection(id: 17)
+            let lifecycleGate = DatabaseExecutorTestGate()
+            let disconnectGate = DatabaseExecutorTestGate(open: false)
+            let (adapter, session) = try DatabaseManagementFixtures.adapter(
+                connection: connection,
+                gates: DatabaseExecutorTestSessionGates(
+                    lifecycleState: lifecycleGate,
+                    disconnect: disconnectGate))
+            let fixture = try await DatabaseManagementFixtures.make(
+                clock: clock,
+                adapters: [adapter])
+            defer { try? FileManager.default.removeItem(at: fixture.directory) }
+            try await fixture.store.seedConnection(connection)
+            let peerExecutor = try DatabaseExecutor(
+                metadataStore: fixture.store,
+                secretStore: fixture.secretStore,
+                runtimeOwner: fixture.owner,
+                adapters: [adapter],
+                currentDate: { clock.read() })
+            #expect(
+                await peerExecutor.connect(
+                    DatabaseConnectRequest(
+                        connectionID: connection.id,
+                        operation: DatabaseManagementFixtures.operation(
+                            mutation == .edit ? 117 : 121))
+                ).status == .succeeded)
+            let lifecycleEntries = await lifecycleGate.entryCount()
+            await lifecycleGate.block()
+            let activeTask = Task {
+                await peerExecutor.capabilities(
+                    DatabaseCapabilitiesRequest(
+                        connectionID: connection.id,
+                        operation: DatabaseManagementFixtures.operation(
+                            mutation == .edit ? 118 : 122)))
+            }
+            await lifecycleGate.waitForEntries(lifecycleEntries + 1)
+            let edited = try DatabaseManagementFixtures.connection(
+                id: 17,
+                name: mutation.resultName,
+                tags: ["edited"])
+            let mutationTask = Task {
+                switch mutation {
+                case .edit:
+                    return await fixture.executor.editConnection(
+                        DatabaseConnectionEditRequest(
+                            connectionID: connection.id,
+                            connection: edited)
+                    ).status
+                case .rename:
+                    return await fixture.executor.renameConnection(
+                        DatabaseConnectionRenameRequest(
+                            connectionID: connection.id,
+                            displayName: mutation.resultName)
+                    ).status
+                }
+            }
+            await disconnectGate.waitForEntries()
+
+            #expect(try await fixture.store.connection(id: connection.id) == connection)
+            let rejected = await peerExecutor.capabilities(
+                DatabaseCapabilitiesRequest(
+                    connectionID: connection.id,
+                    operation: DatabaseManagementFixtures.operation(
+                        mutation == .edit ? 119 : 123)))
+            #expect(rejected.error?.category == .conflict)
+            await lifecycleGate.releaseAll()
+            await disconnectGate.releaseAll()
+
+            #expect(await activeTask.value.status == .failed)
+            #expect(await mutationTask.value == .succeeded)
+            #expect(
+                try await fixture.store.connection(id: connection.id)?.displayName
+                    == mutation.resultName)
+            #expect(await session.snapshot().disconnectCount == 1)
+        }
     }
 }

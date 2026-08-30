@@ -6,6 +6,7 @@ enum DatabaseExecutionValidationError: Error, Equatable, Sendable {
     case operationIdentifierAlreadyExists(DatabaseOperationID)
     case identifierAlreadyExists(String)
     case connectionDefinitionChanged(DatabaseConnectionID)
+    case savedQueryDefinitionChanged(DatabaseSavedQueryID)
     case runtimeOwnerNotActive
     case invalidIdentifier(String)
     case invalidDefinition(String)

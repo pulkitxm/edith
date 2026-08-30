@@ -146,6 +146,14 @@ struct DatabaseExecutionErrorMapper: Sendable {
                     .reconnect,
                     "Reconnect using the current saved connection before retrying."),
                 target: target)
+        case .savedQueryDefinitionChanged:
+            envelope(
+                category: .conflict,
+                message: "The saved database query changed before the operation started.",
+                retry: retry(
+                    .retry,
+                    "Reload the saved query before retrying."),
+                target: target)
         case .runtimeOwnerNotActive:
             envelope(
                 category: .conflict,
@@ -358,6 +366,14 @@ struct DatabaseExecutionErrorMapper: Sendable {
             envelope(
                 category: .invalidRequest,
                 message: "The saved database query was not found.",
+                target: target)
+        case .runtimeOwnerNotActive:
+            envelope(
+                category: .conflict,
+                message: "The database runtime owner is no longer active.",
+                retry: retry(
+                    .reconnect,
+                    "Restart the database runtime before retrying."),
                 target: target)
         case .corruptedRecord:
             envelope(

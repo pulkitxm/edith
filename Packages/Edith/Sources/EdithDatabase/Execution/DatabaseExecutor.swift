@@ -3,6 +3,8 @@ import Foundation
 public actor DatabaseExecutor {
     static let maximumActiveOperations = 256
     static let maximumBackgroundTasks = 256
+    static let defaultMaximumRetainedServerCancellations = 256
+    static let defaultManagementDrainTimeoutNanoseconds: UInt64 = 30_000_000_000
     static let historyFinalizationWarning = DatabaseWarning(
         code: "database.operation.history_not_finalized",
         message:
@@ -17,9 +19,16 @@ public actor DatabaseExecutor {
     private let validator: DatabaseExecutionValidator
     private let currentDate: @Sendable () -> Date
     private let makeUUID: @Sendable () -> UUID
+    private let managementDrainTimeoutNanoseconds: UInt64
+    private let maximumRetainedServerCancellations: Int
     private var activeOperations: [DatabaseOperationID: DatabaseExecutorActiveOperation] = [:]
     private var backgroundTasks: [UUID: Task<Void, Never>] = [:]
-    private var deletingConnectionIDs: Set<DatabaseConnectionID> = []
+    private var serverCancellationTasks: [DatabaseOperationID: Task<Void, Never>] = [:]
+    private var serverCancellationCompletions:
+        [DatabaseOperationID: DatabaseExecutorCompletion<Bool>] = [:]
+    private var serverCancellationReservations: Set<DatabaseOperationID> = []
+    private var mutatingConnectionIDs: Set<DatabaseConnectionID> = []
+    private var isShuttingDown = false
 
     init(
         metadataStore: any DatabaseMetadataStore,
@@ -27,7 +36,11 @@ public actor DatabaseExecutor {
         runtimeOwner: DatabaseRuntimeOwnerToken,
         adapters: [any DatabaseAdapter],
         currentDate: @escaping @Sendable () -> Date = { Date() },
-        makeUUID: @escaping @Sendable () -> UUID = { UUID() }
+        makeUUID: @escaping @Sendable () -> UUID = { UUID() },
+        managementDrainTimeoutNanoseconds: UInt64 =
+            DatabaseExecutor.defaultManagementDrainTimeoutNanoseconds,
+        maximumRetainedServerCancellations: Int =
+            DatabaseExecutor.defaultMaximumRetainedServerCancellations
     ) throws(DatabaseAdapterFailure) {
         let registry = try DatabaseAdapterRegistry(adapters: adapters)
         self.metadataStore = metadataStore
@@ -40,6 +53,12 @@ public actor DatabaseExecutor {
         validator = DatabaseExecutionValidator(currentDate: currentDate)
         self.currentDate = currentDate
         self.makeUUID = makeUUID
+        self.managementDrainTimeoutNanoseconds = max(1, managementDrainTimeoutNanoseconds)
+        self.maximumRetainedServerCancellations = max(
+            1,
+            min(
+                Self.defaultMaximumRetainedServerCancellations,
+                maximumRetainedServerCancellations))
     }
 
     public func connect(
@@ -232,8 +251,12 @@ public actor DatabaseExecutor {
                 lastTestedAt: nil,
                 lastUsedAt: nil)
             try validator.validate(connection)
-            try await requireActiveOwner()
-            try await metadataStore.saveConnection(connection)
+            try Task.checkCancellation()
+            let result = try await metadataStore.saveConnection(
+                connection,
+                replacing: nil,
+                owner: runtimeOwner)
+            try requireCreated(result, name: "connection identifier")
             return DatabaseConnectionSaveResult(connection: connection)
         }
     }
@@ -258,9 +281,14 @@ public actor DatabaseExecutor {
                 lastTestedAt: stored.lastTestedAt,
                 lastUsedAt: stored.lastUsedAt)
             try validator.validate(connection)
-            try await requireActiveOwner()
-            try await metadataStore.saveConnection(connection)
-            _ = await sessionPool.disconnect(connectionID: request.connectionID)
+            try await withExclusiveConnectionMutation(request.connectionID) { _ in
+                try Task.checkCancellation()
+                let result = try await metadataStore.saveConnection(
+                    connection,
+                    replacing: stored,
+                    owner: runtimeOwner)
+                try requireUpdated(result, connectionID: request.connectionID)
+            }
             return DatabaseConnectionEditResult(connection: connection)
         }
     }
@@ -288,8 +316,12 @@ public actor DatabaseExecutor {
                 lastTestedAt: nil,
                 lastUsedAt: nil)
             try validator.validate(connection)
-            try await requireActiveOwner()
-            try await metadataStore.saveConnection(connection)
+            try Task.checkCancellation()
+            let result = try await metadataStore.saveConnection(
+                connection,
+                replacing: nil,
+                owner: runtimeOwner)
+            try requireCreated(result, name: "connection identifier")
             let references = credentialReferences(in: connection)
             return DatabaseConnectionDuplicateResult(
                 sourceConnectionID: source.id,
@@ -320,8 +352,14 @@ public actor DatabaseExecutor {
                 lastTestedAt: stored.lastTestedAt,
                 lastUsedAt: stored.lastUsedAt)
             try validator.validate(connection)
-            try await requireActiveOwner()
-            try await metadataStore.saveConnection(connection)
+            try await withExclusiveConnectionMutation(request.connectionID) { _ in
+                try Task.checkCancellation()
+                let result = try await metadataStore.saveConnection(
+                    connection,
+                    replacing: stored,
+                    owner: runtimeOwner)
+                try requireUpdated(result, connectionID: request.connectionID)
+            }
             return DatabaseConnectionRenameResult(connection: connection)
         }
     }
@@ -335,34 +373,16 @@ public actor DatabaseExecutor {
             return failure(error)
         }
         return await performManagementMutation {
-            guard deletingConnectionIDs.insert(request.connectionID).inserted else {
-                throw DatabaseExecutionValidationError.connectionDefinitionChanged(
-                    request.connectionID)
-            }
-            let coordinatedDisconnect = await DatabaseManagementMutationCoordinator.shared
-                .beginDeletion(
-                    owner: runtimeOwner,
-                    connectionID: request.connectionID)
-            do {
-                await cancelOperations(connectionID: request.connectionID)
-                let localDisconnect = await sessionPool.disconnect(
-                    connectionID: request.connectionID)
-                try await requireActiveOwner()
-                let deleted = try await metadataStore.deleteConnection(id: request.connectionID)
-                deletingConnectionIDs.remove(request.connectionID)
-                await DatabaseManagementMutationCoordinator.shared.endDeletion(
-                    owner: runtimeOwner,
-                    connectionID: request.connectionID)
+            try await withExclusiveConnectionMutation(request.connectionID) { disconnected in
+                try Task.checkCancellation()
+                let result = try await metadataStore.deleteConnection(
+                    id: request.connectionID,
+                    owner: runtimeOwner)
+                let deleted = try requireDeleted(result)
                 return DatabaseConnectionDeleteResult(
                     connectionID: request.connectionID,
                     deleted: deleted,
-                    disconnected: coordinatedDisconnect || localDisconnect)
-            } catch {
-                deletingConnectionIDs.remove(request.connectionID)
-                await DatabaseManagementMutationCoordinator.shared.endDeletion(
-                    owner: runtimeOwner,
-                    connectionID: request.connectionID)
-                throw error
+                    disconnected: disconnected)
             }
         }
     }
@@ -420,9 +440,20 @@ public actor DatabaseExecutor {
                 from: request.query,
                 createdAt: stored?.createdAt ?? now,
                 updatedAt: now)
-            try await validateSavedQueryConnection(query, requiresConnection: true)
-            try await requireActiveOwner()
-            try await metadataStore.saveQuery(query)
+            let connection = try await validateSavedQueryConnection(
+                query,
+                requiresConnection: true)
+            try Task.checkCancellation()
+            let result = try await metadataStore.saveQuery(
+                query,
+                replacing: stored,
+                validatedAgainst: connection,
+                owner: runtimeOwner)
+            try requireSavedQueryWrite(
+                result,
+                creating: stored == nil,
+                queryID: query.id,
+                connectionID: query.connectionID)
             return DatabaseSavedQuerySaveResult(query: query, created: stored == nil)
         }
     }
@@ -447,9 +478,20 @@ public actor DatabaseExecutor {
                 name: request.name,
                 createdAt: now,
                 updatedAt: now)
-            try await validateSavedQueryConnection(query, requiresConnection: true)
-            try await requireActiveOwner()
-            try await metadataStore.saveQuery(query)
+            let connection = try await validateSavedQueryConnection(
+                query,
+                requiresConnection: true)
+            try Task.checkCancellation()
+            let result = try await metadataStore.saveQuery(
+                query,
+                replacing: nil,
+                validatedAgainst: connection,
+                owner: runtimeOwner)
+            try requireSavedQueryWrite(
+                result,
+                creating: true,
+                queryID: query.id,
+                connectionID: query.connectionID)
             return DatabaseSavedQueryDuplicateResult(
                 sourceQueryID: source.id,
                 query: query)
@@ -474,9 +516,20 @@ public actor DatabaseExecutor {
                 name: request.name,
                 createdAt: stored.createdAt,
                 updatedAt: currentDate())
-            try await validateSavedQueryConnection(query, requiresConnection: true)
-            try await requireActiveOwner()
-            try await metadataStore.saveQuery(query)
+            let connection = try await validateSavedQueryConnection(
+                query,
+                requiresConnection: true)
+            try Task.checkCancellation()
+            let result = try await metadataStore.saveQuery(
+                query,
+                replacing: stored,
+                validatedAgainst: connection,
+                owner: runtimeOwner)
+            try requireSavedQueryWrite(
+                result,
+                creating: false,
+                queryID: query.id,
+                connectionID: query.connectionID)
             return DatabaseSavedQueryRenameResult(query: query)
         }
     }
@@ -490,8 +543,11 @@ public actor DatabaseExecutor {
             return failure(error)
         }
         return await performManagementMutation {
-            try await requireActiveOwner()
-            let deleted = try await metadataStore.deleteSavedQuery(id: request.queryID)
+            try Task.checkCancellation()
+            let result = try await metadataStore.deleteSavedQuery(
+                id: request.queryID,
+                owner: runtimeOwner)
+            let deleted = try requireDeleted(result)
             return DatabaseSavedQueryDeleteResult(queryID: request.queryID, deleted: deleted)
         }
     }
@@ -568,14 +624,38 @@ public actor DatabaseExecutor {
     }
 
     func disconnectAll() async {
+        guard !isShuttingDown else { return }
+        isShuttingDown = true
         let operationIDs = Array(activeOperations.keys)
-        for operationID in operationIDs {
-            _ = await cancelActiveOperation(
-                operationID,
-                reason: .sessionDisconnected)
+        let cancellationTasks = operationIDs.map { operationID in
+            Task { [weak self] in
+                _ = await self?.cancelActiveOperation(
+                    operationID,
+                    reason: .sessionDisconnected)
+            }
         }
-        await sessionPool.disconnectAll()
+        let deadline = Self.deadline(
+            after: managementDrainTimeoutNanoseconds)
+        for operationID in operationIDs {
+            await waitForServerCancellation(operationID, until: deadline)
+        }
+        let disconnectionCompletion = DatabaseExecutorCompletion<Bool>()
+        let disconnectionTask = Task { [sessionPool] in
+            await sessionPool.disconnectAll()
+            await disconnectionCompletion.resolve(true)
+        }
+        _ = await waitForCompletion(disconnectionCompletion, until: deadline)
+        await DatabaseManagementMutationCoordinator.shared.unregisterExecutor(
+            owner: runtimeOwner,
+            executorID: executorID)
+        for task in cancellationTasks {
+            task.cancel()
+        }
+        disconnectionTask.cancel()
         for task in backgroundTasks.values {
+            task.cancel()
+        }
+        for task in serverCancellationTasks.values {
             task.cancel()
         }
     }
@@ -585,7 +665,36 @@ public actor DatabaseExecutor {
     }
 
     func backgroundTaskCount() -> Int {
-        backgroundTasks.count
+        backgroundTasks.count + serverCancellationTasks.count
+    }
+
+    func retainedServerCancellationCount() -> Int {
+        serverCancellationReservations.count
+    }
+
+    func managementMutationWaiterCount() async -> Int {
+        await DatabaseManagementMutationCoordinator.shared.waiterCount(runtimeOwner)
+    }
+
+    func managementRetainedCoordinationCount() async -> Int {
+        await DatabaseManagementMutationCoordinator.shared.retainedCoordinationCount(
+            runtimeOwner)
+    }
+
+    func managementRetainedCallbackCount(
+        connectionID: DatabaseConnectionID
+    ) async -> Int {
+        await DatabaseManagementMutationCoordinator.shared.retainedCallbackCount(
+            owner: runtimeOwner,
+            connectionID: connectionID)
+    }
+
+    func managementDisconnectionCompleted(
+        connectionID: DatabaseConnectionID
+    ) async -> Bool {
+        await DatabaseManagementMutationCoordinator.shared.disconnectionCompleted(
+            owner: runtimeOwner,
+            connectionID: connectionID)
     }
 
     private func requireActiveOwner() async throws {
@@ -600,10 +709,11 @@ public actor DatabaseExecutor {
     private func connection(
         id: DatabaseConnectionID
     ) async throws -> DatabaseConnectionDefinition {
-        let globallyDeleting = await DatabaseManagementMutationCoordinator.shared.isDeleting(
-            owner: runtimeOwner,
-            connectionID: id)
-        guard !deletingConnectionIDs.contains(id), !globallyDeleting else {
+        let globallyMutating =
+            await DatabaseManagementMutationCoordinator.shared.isExclusivelyMutating(
+                owner: runtimeOwner,
+                connectionID: id)
+        guard !mutatingConnectionIDs.contains(id), !globallyMutating else {
             throw DatabaseExecutionValidationError.connectionDefinitionChanged(id)
         }
         guard let definition = try await metadataStore.connection(id: id) else {
@@ -622,9 +732,15 @@ public actor DatabaseExecutor {
     private func performManagementMutation<Payload: Sendable>(
         _ body: () async throws -> Payload
     ) async -> DatabaseCommandResult<Payload> {
-        await DatabaseManagementMutationCoordinator.shared.acquire(runtimeOwner)
         do {
+            try await DatabaseManagementMutationCoordinator.shared.acquire(runtimeOwner)
+        } catch {
+            return failure(error)
+        }
+        do {
+            try Task.checkCancellation()
             try await requireActiveOwner()
+            try Task.checkCancellation()
             let payload = try await body()
             await DatabaseManagementMutationCoordinator.shared.release(runtimeOwner)
             return .success(payload, metadata: completeMetadata())
@@ -634,19 +750,141 @@ public actor DatabaseExecutor {
         }
     }
 
+    private func withExclusiveConnectionMutation<Payload: Sendable>(
+        _ connectionID: DatabaseConnectionID,
+        _ body: (Bool) async throws -> Payload
+    ) async throws -> Payload {
+        guard mutatingConnectionIDs.insert(connectionID).inserted else {
+            throw DatabaseExecutionValidationError.connectionDefinitionChanged(connectionID)
+        }
+        var coordinationPrepared = false
+        do {
+            try Task.checkCancellation()
+            let disconnected = try await DatabaseManagementMutationCoordinator.shared
+                .beginExclusiveConnectionMutation(
+                    owner: runtimeOwner,
+                    connectionID: connectionID,
+                    timeoutNanoseconds: managementDrainTimeoutNanoseconds)
+            coordinationPrepared = true
+            try Task.checkCancellation()
+            let payload = try await body(disconnected)
+            mutatingConnectionIDs.remove(connectionID)
+            await DatabaseManagementMutationCoordinator.shared.endExclusiveConnectionMutation(
+                owner: runtimeOwner,
+                connectionID: connectionID,
+                discardCoordination: true)
+            return payload
+        } catch {
+            mutatingConnectionIDs.remove(connectionID)
+            await DatabaseManagementMutationCoordinator.shared.endExclusiveConnectionMutation(
+                owner: runtimeOwner,
+                connectionID: connectionID,
+                discardCoordination: coordinationPrepared)
+            throw error
+        }
+    }
+
+    private func requireCreated(
+        _ result: DatabaseOwnedMetadataWriteResult,
+        name: String
+    ) throws {
+        switch result {
+        case .saved:
+            return
+        case .identifierExists, .resourceChanged:
+            throw DatabaseExecutionValidationError.identifierAlreadyExists(name)
+        case .runtimeOwnerNotActive:
+            throw DatabaseExecutionValidationError.runtimeOwnerNotActive
+        case .resourceMissing, .incompatibleSavedQueries,
+            .referencedConnectionChangedOrMissing:
+            throw DatabaseExecutionValidationError.invalidAdapterResult(
+                "The metadata store returned an invalid create result.")
+        }
+    }
+
+    private func requireUpdated(
+        _ result: DatabaseOwnedMetadataWriteResult,
+        connectionID: DatabaseConnectionID
+    ) throws {
+        switch result {
+        case .saved:
+            return
+        case .resourceMissing:
+            throw DatabaseMetadataStoreError.connectionNotFound(connectionID)
+        case .resourceChanged:
+            throw DatabaseExecutionValidationError.connectionDefinitionChanged(connectionID)
+        case .incompatibleSavedQueries:
+            throw DatabaseExecutionValidationError.invalidDefinition(
+                "The connection product is incompatible with a linked saved query.")
+        case .runtimeOwnerNotActive:
+            throw DatabaseExecutionValidationError.runtimeOwnerNotActive
+        case .identifierExists, .referencedConnectionChangedOrMissing:
+            throw DatabaseExecutionValidationError.invalidAdapterResult(
+                "The metadata store returned an invalid update result.")
+        }
+    }
+
+    private func requireSavedQueryWrite(
+        _ result: DatabaseOwnedMetadataWriteResult,
+        creating: Bool,
+        queryID: DatabaseSavedQueryID,
+        connectionID: DatabaseConnectionID? = nil
+    ) throws {
+        switch result {
+        case .saved:
+            return
+        case .identifierExists where creating:
+            throw DatabaseExecutionValidationError.identifierAlreadyExists(
+                "saved query identifier")
+        case .resourceMissing where !creating:
+            throw DatabaseMetadataStoreError.savedQueryNotFound(queryID)
+        case .resourceChanged where !creating:
+            throw DatabaseExecutionValidationError.savedQueryDefinitionChanged(queryID)
+        case .referencedConnectionChangedOrMissing:
+            if let connectionID {
+                throw DatabaseExecutionValidationError.connectionDefinitionChanged(connectionID)
+            }
+            throw DatabaseExecutionValidationError.invalidAdapterResult(
+                "The metadata store rejected an unbound saved query.")
+        case .runtimeOwnerNotActive:
+            throw DatabaseExecutionValidationError.runtimeOwnerNotActive
+        case .identifierExists, .resourceMissing, .resourceChanged,
+            .incompatibleSavedQueries:
+            throw DatabaseExecutionValidationError.invalidAdapterResult(
+                "The metadata store returned an invalid saved query result.")
+        }
+    }
+
+    private func requireDeleted(
+        _ result: DatabaseOwnedMetadataDeleteResult
+    ) throws -> Bool {
+        switch result {
+        case .deleted:
+            true
+        case .notFound:
+            false
+        case .runtimeOwnerNotActive:
+            throw DatabaseExecutionValidationError.runtimeOwnerNotActive
+        }
+    }
+
     private func validateSavedQueryConnection(
         _ query: DatabaseSavedQuery,
         requiresConnection: Bool
-    ) async throws {
+    ) async throws -> DatabaseConnectionDefinition? {
         guard let connectionID = query.connectionID else {
             try validator.validate(query, connection: nil)
-            return
+            return nil
         }
         let connection = try await metadataStore.connection(id: connectionID)
         if requiresConnection, connection == nil {
             throw DatabaseMetadataStoreError.connectionNotFound(connectionID)
         }
+        if let connection {
+            try validator.validateStored(connection)
+        }
         try validator.validate(query, connection: connection)
+        return connection
     }
 
     private func validateStoredSavedQueries(
@@ -856,6 +1094,7 @@ public actor DatabaseExecutor {
             _ = await self?.cancelActiveOperation(
                 effectiveOperation.operationID,
                 reason: .sessionDisconnected)
+            await self?.waitForServerCancellation(effectiveOperation.operationID)
         }
         do {
             let reservation =
@@ -882,7 +1121,7 @@ public actor DatabaseExecutor {
                 throw DatabaseExecutionValidationError.runtimeOwnerNotActive
             }
         } catch {
-            finishActiveOperation(effectiveOperation.operationID)
+            await finishActiveOperation(effectiveOperation.operationID)
             return .failure(
                 reservationMapper.map(error, target: target),
                 metadata: completeMetadata())
@@ -964,7 +1203,7 @@ public actor DatabaseExecutor {
             if !finalized, let reason = await cancellation.reason() {
                 throw DatabaseExecutorControlFailure(reason)
             }
-            finishActiveOperation(effectiveOperation.operationID)
+            await finishActiveOperation(effectiveOperation.operationID)
             let reported =
                 finalized
                 ? terminal
@@ -1029,7 +1268,7 @@ public actor DatabaseExecutor {
                 terminal,
                 from: [.running, .cancelling])
         }
-        finishActiveOperation(running.id)
+        await finishActiveOperation(running.id)
         let reported =
             finalized
             ? terminal
@@ -1066,7 +1305,13 @@ public actor DatabaseExecutor {
         _ running: DatabaseOperationRecordSummary,
         cancellation: DatabaseAdapterCancellationSignal
     ) throws {
+        guard !isShuttingDown else {
+            throw DatabaseExecutionValidationError.runtimeOwnerNotActive
+        }
         guard activeOperations[running.id] == nil else {
+            throw DatabaseExecutionValidationError.operationIdentifierAlreadyExists(running.id)
+        }
+        guard !serverCancellationReservations.contains(running.id) else {
             throw DatabaseExecutionValidationError.operationIdentifierAlreadyExists(running.id)
         }
         guard activeOperations.count < Self.maximumActiveOperations else {
@@ -1074,6 +1319,17 @@ public actor DatabaseExecutor {
                 name: "active database operations",
                 actual: activeOperations.count + 1,
                 maximum: Self.maximumActiveOperations)
+        }
+        if running.cancellationSupport == .serverSide {
+            guard
+                serverCancellationReservations.count < maximumRetainedServerCancellations
+            else {
+                throw DatabaseExecutionValidationError.limitExceeded(
+                    name: "retained server cancellations",
+                    actual: serverCancellationReservations.count + 1,
+                    maximum: maximumRetainedServerCancellations)
+            }
+            serverCancellationReservations.insert(running.id)
         }
         activeOperations[running.id] = DatabaseExecutorActiveOperation(
             running: running,
@@ -1171,6 +1427,7 @@ public actor DatabaseExecutor {
             _ = await cancelActiveOperation(
                 operationID,
                 reason: .sessionDisconnected)
+            await waitForServerCancellation(operationID)
         }
     }
 
@@ -1194,6 +1451,7 @@ public actor DatabaseExecutor {
             executionCancellation?()
             return nil
         }
+        let support = acceptCancellationAndSchedule(operationID)
         let metadataStore = metadataStore
         let runtimeOwner = runtimeOwner
         let cancelling = operationSummary(
@@ -1204,7 +1462,7 @@ public actor DatabaseExecutor {
             warnings: active.running.warnings,
             error: nil)
         let cancellationSupport = active.running.cancellationSupport
-        let cancellationTask = Task { [weak self] in
+        let cancellationWork = Task {
             await cancellationSignal.cancel(reason)
             executionCancellation?()
             var stored: DatabaseOperationRecordSummary?
@@ -1238,18 +1496,17 @@ public actor DatabaseExecutor {
                     cancellationSupport: cancellationSupport,
                     historyFinalized: false)
             }
-            let support =
-                await self?.acceptCancellationAndSchedule(operationID)
-                ?? cancellationSupport
             return DatabaseExecutorActiveCancellation(
                 disposition: .accepted,
                 operation: cancelling,
                 cancellationSupport: support,
                 historyFinalized: transitioned)
         }
-        active.cancellationTask = cancellationTask
-        activeOperations[operationID] = active
-        return await cancellationTask.value
+        if var scheduled = activeOperations[operationID] {
+            scheduled.cancellationTask = cancellationWork
+            activeOperations[operationID] = scheduled
+        }
+        return await cancellationWork.value
     }
 
     private func scheduleServerCancellation(
@@ -1261,15 +1518,13 @@ public actor DatabaseExecutor {
         }
         guard let session = active.session else { return .cooperative }
         guard !active.serverCancellationInvoked else { return .cooperative }
-        guard backgroundTasks.count < Self.maximumBackgroundTasks else { return .cooperative }
         active.serverCancellationInvoked = true
         activeOperations[operationID] = active
-        let identifier = UUID()
         let task = Task { [weak self] in
             _ = await session.cancel(operationID)
-            await self?.finishBackgroundTask(identifier)
+            await self?.finishServerCancellation(operationID)
         }
-        backgroundTasks[identifier] = task
+        serverCancellationTasks[operationID] = task
         return .cooperative
     }
 
@@ -1279,6 +1534,11 @@ public actor DatabaseExecutor {
         guard var active = activeOperations[operationID] else { return .unavailable }
         active.cancellationAccepted = true
         activeOperations[operationID] = active
+        if active.running.cancellationSupport == .serverSide,
+            serverCancellationCompletions[operationID] == nil
+        {
+            serverCancellationCompletions[operationID] = DatabaseExecutorCompletion<Bool>()
+        }
         return scheduleServerCancellation(operationID)
     }
 
@@ -1313,12 +1573,81 @@ public actor DatabaseExecutor {
         }
     }
 
-    private func finishActiveOperation(_ operationID: DatabaseOperationID) {
-        activeOperations.removeValue(forKey: operationID)?.deadlineTask?.cancel()
+    private func finishActiveOperation(_ operationID: DatabaseOperationID) async {
+        let active = activeOperations.removeValue(forKey: operationID)
+        active?.deadlineTask?.cancel()
+        guard serverCancellationTasks[operationID] == nil else { return }
+        let completion = serverCancellationCompletions.removeValue(forKey: operationID)
+        serverCancellationReservations.remove(operationID)
+        await completion?.resolve(false)
     }
 
     private func finishBackgroundTask(_ identifier: UUID) {
         backgroundTasks.removeValue(forKey: identifier)
+    }
+
+    private func waitForServerCancellation(_ operationID: DatabaseOperationID) async {
+        if activeOperations[operationID]?.reservationState == .pending {
+            return
+        }
+        if let completion = serverCancellationCompletions[operationID] {
+            let events = await completion.events()
+            var iterator = events.makeAsyncIterator()
+            _ = await iterator.next()
+        } else if let task = serverCancellationTasks[operationID] {
+            await task.value
+        }
+    }
+
+    private func waitForServerCancellation(
+        _ operationID: DatabaseOperationID,
+        until deadline: UInt64
+    ) async {
+        while let active = activeOperations[operationID],
+            active.cancellationReason == nil,
+            Self.remainingNanoseconds(until: deadline) > 0
+        {
+            await Task.yield()
+        }
+        if activeOperations[operationID]?.reservationState == .pending {
+            return
+        }
+        if let completion = serverCancellationCompletions[operationID] {
+            _ = await waitForCompletion(completion, until: deadline)
+        }
+    }
+
+    private func waitForCompletion<Value: Sendable>(
+        _ completion: DatabaseExecutorCompletion<Value>,
+        until deadline: UInt64
+    ) async -> Value? {
+        let events = await completion.events()
+        let remaining = Self.remainingNanoseconds(until: deadline)
+        return await withTaskGroup(of: Value?.self) { group in
+            group.addTask {
+                var iterator = events.makeAsyncIterator()
+                return await iterator.next()
+            }
+            group.addTask {
+                guard remaining > 0 else { return nil }
+                do {
+                    try await Task.sleep(nanoseconds: remaining)
+                } catch {
+                    return nil
+                }
+                return nil
+            }
+            let value = await group.next() ?? nil
+            group.cancelAll()
+            return value
+        }
+    }
+
+    private func finishServerCancellation(_ operationID: DatabaseOperationID) async {
+        let completion = serverCancellationCompletions.removeValue(forKey: operationID)
+        serverCancellationTasks.removeValue(forKey: operationID)
+        serverCancellationReservations.remove(operationID)
+        await completion?.resolve(true)
     }
 
     private func terminalSummary(
@@ -1515,6 +1844,17 @@ public actor DatabaseExecutor {
 
     private static let zeroUUID = UUID(
         uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+
+    private static func deadline(after timeoutNanoseconds: UInt64) -> UInt64 {
+        let now = DispatchTime.now().uptimeNanoseconds
+        let (deadline, overflow) = now.addingReportingOverflow(timeoutNanoseconds)
+        return overflow ? UInt64.max : deadline
+    }
+
+    private static func remainingNanoseconds(until deadline: UInt64) -> UInt64 {
+        let now = DispatchTime.now().uptimeNanoseconds
+        return deadline > now ? deadline - now : 0
+    }
 }
 
 private struct DatabaseExecutorActiveOperation: Sendable {
@@ -1573,6 +1913,11 @@ private enum DatabaseExecutorMapperOutcome: Sendable {
 
 private actor DatabaseManagementMutationCoordinator {
     static let shared = DatabaseManagementMutationCoordinator()
+    private static let maximumRetainedCoordinations = 128
+    private static let maximumConnectionCancellationCallbacks = 256
+    private static let maximumRetainedCancellationCallbacks = 4_096
+    private static let maximumConnectionDisconnectionCallbacks = 64
+    private static let maximumRetainedDisconnectionCallbacks = 1_024
 
     private struct ConnectionKey: Hashable, Sendable {
         let owner: DatabaseRuntimeOwnerToken
@@ -1582,20 +1927,52 @@ private actor DatabaseManagementMutationCoordinator {
     typealias Cancellation = @Sendable () async -> Void
     typealias Disconnection = @Sendable () async -> Bool
 
-    private var activeOwners: Set<DatabaseRuntimeOwnerToken> = []
-    private var waiters: [DatabaseRuntimeOwnerToken: [CheckedContinuation<Void, Never>]] = [:]
-    private var deletingConnections: Set<ConnectionKey> = []
-    private var operationPermits: [ConnectionKey: [UUID: Cancellation]] = [:]
-    private var disconnectors: [ConnectionKey: [UUID: Disconnection]] = [:]
-    private var drainWaiters: [ConnectionKey: [CheckedContinuation<Void, Never>]] = [:]
+    private struct MutationWaiter {
+        let id: UUID
+        let continuation: CheckedContinuation<Void, any Error>
+    }
 
-    func acquire(_ owner: DatabaseRuntimeOwnerToken) async {
+    private struct OperationPermit {
+        let cancellation: Cancellation
+    }
+
+    private struct ConnectionCoordination {
+        let cancellationCompletion: DatabaseExecutorCompletion<Bool>
+        let disconnectionCompletion: DatabaseExecutorCompletion<Bool>
+        let cancellationCount: Int
+        let disconnections: [Disconnection]
+        var disconnectionStarted: Bool
+    }
+
+    private var activeOwners: Set<DatabaseRuntimeOwnerToken> = []
+    private var waiters: [DatabaseRuntimeOwnerToken: [MutationWaiter]] = [:]
+    private var exclusiveConnections: Set<ConnectionKey> = []
+    private var operationPermits: [ConnectionKey: [UUID: OperationPermit]] = [:]
+    private var disconnectors: [ConnectionKey: [UUID: Disconnection]] = [:]
+    private var coordinations: [ConnectionKey: ConnectionCoordination] = [:]
+    private var drainWaiters: [ConnectionKey: [UUID: DatabaseExecutorCompletion<Bool>]] = [:]
+
+    func acquire(_ owner: DatabaseRuntimeOwnerToken) async throws {
+        try Task.checkCancellation()
         guard activeOwners.contains(owner) else {
             activeOwners.insert(owner)
             return
         }
-        await withCheckedContinuation { continuation in
-            waiters[owner, default: []].append(continuation)
+        let id = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation {
+                (continuation: CheckedContinuation<Void, any Error>) in
+                if Task.isCancelled {
+                    continuation.resume(throwing: CancellationError())
+                } else {
+                    waiters[owner, default: []].append(
+                        MutationWaiter(id: id, continuation: continuation))
+                }
+            }
+        } onCancel: {
+            Task {
+                await self.cancelWaiter(owner: owner, id: id)
+            }
         }
     }
 
@@ -1605,8 +1982,23 @@ private actor DatabaseManagementMutationCoordinator {
             waiters.removeValue(forKey: owner)
             return
         }
-        ownerWaiters.removeFirst().resume()
+        ownerWaiters.removeFirst().continuation.resume()
         waiters[owner] = ownerWaiters.isEmpty ? nil : ownerWaiters
+    }
+
+    func waiterCount(_ owner: DatabaseRuntimeOwnerToken) -> Int {
+        waiters[owner]?.count ?? 0
+    }
+
+    private func cancelWaiter(owner: DatabaseRuntimeOwnerToken, id: UUID) {
+        guard var ownerWaiters = waiters[owner],
+            let index = ownerWaiters.firstIndex(where: { $0.id == id })
+        else {
+            return
+        }
+        let waiter = ownerWaiters.remove(at: index)
+        waiters[owner] = ownerWaiters.isEmpty ? nil : ownerWaiters
+        waiter.continuation.resume(throwing: CancellationError())
     }
 
     func reserveOperation(
@@ -1618,8 +2010,29 @@ private actor DatabaseManagementMutationCoordinator {
         disconnect: @escaping Disconnection
     ) -> Bool {
         let key = ConnectionKey(owner: owner, connectionID: connectionID)
-        guard !deletingConnections.contains(key) else { return false }
-        operationPermits[key, default: [:]][permitID] = cancel
+        guard !exclusiveConnections.contains(key), coordinations[key] == nil else {
+            return false
+        }
+        let connectionPermitCount = operationPermits[key]?.count ?? 0
+        let globalPermitCount = operationPermits.values.reduce(0) { $0 + $1.count }
+        guard connectionPermitCount < Self.maximumConnectionCancellationCallbacks,
+            globalPermitCount < Self.maximumRetainedCancellationCallbacks,
+            operationPermits[key]?[permitID] == nil
+        else {
+            return false
+        }
+        if disconnectors[key]?[executorID] == nil {
+            let connectionDisconnectorCount = disconnectors[key]?.count ?? 0
+            let globalDisconnectorCount = disconnectors.values.reduce(0) { $0 + $1.count }
+            guard
+                connectionDisconnectorCount < Self.maximumConnectionDisconnectionCallbacks,
+                globalDisconnectorCount < Self.maximumRetainedDisconnectionCallbacks
+            else {
+                return false
+            }
+        }
+        operationPermits[key, default: [:]][permitID] = OperationPermit(
+            cancellation: cancel)
         disconnectors[key, default: [:]][executorID] = disconnect
         return true
     }
@@ -1628,75 +2041,276 @@ private actor DatabaseManagementMutationCoordinator {
         owner: DatabaseRuntimeOwnerToken,
         connectionID: DatabaseConnectionID,
         permitID: UUID
-    ) {
+    ) async {
         let key = ConnectionKey(owner: owner, connectionID: connectionID)
         operationPermits[key]?.removeValue(forKey: permitID)
         guard operationPermits[key]?.isEmpty == true else { return }
         operationPermits.removeValue(forKey: key)
-        let pending = drainWaiters.removeValue(forKey: key) ?? []
-        for continuation in pending {
-            continuation.resume()
+        let pending = drainWaiters.removeValue(forKey: key).map { Array($0.values) } ?? []
+        for completion in pending {
+            await completion.resolve(true)
         }
     }
 
-    func beginDeletion(
+    func beginExclusiveConnectionMutation(
+        owner: DatabaseRuntimeOwnerToken,
+        connectionID: DatabaseConnectionID,
+        timeoutNanoseconds: UInt64
+    ) async throws -> Bool {
+        try Task.checkCancellation()
+        let key = ConnectionKey(owner: owner, connectionID: connectionID)
+        guard exclusiveConnections.insert(key).inserted else {
+            throw DatabaseExecutionValidationError.connectionDefinitionChanged(connectionID)
+        }
+        let deadline = Self.deadline(after: timeoutNanoseconds)
+        let coordination = try createCoordinationIfNeeded(key: key)
+        _ = try await waitForCompletion(
+            coordination.cancellationCompletion,
+            until: deadline)
+        startDisconnectionsIfNeeded(key: key)
+        guard let current = coordinations[key] else {
+            throw DatabaseExecutionValidationError.connectionDefinitionChanged(connectionID)
+        }
+        let disconnected = try await waitForCompletion(
+            current.disconnectionCompletion,
+            until: deadline)
+        if operationPermits[key]?.isEmpty == false {
+            let id = UUID()
+            let completion = DatabaseExecutorCompletion<Bool>()
+            drainWaiters[key, default: [:]][id] = completion
+            do {
+                _ = try await waitForCompletion(completion, until: deadline)
+                drainWaiters[key]?.removeValue(forKey: id)
+                if drainWaiters[key]?.isEmpty == true {
+                    drainWaiters.removeValue(forKey: key)
+                }
+            } catch {
+                drainWaiters[key]?.removeValue(forKey: id)
+                if drainWaiters[key]?.isEmpty == true {
+                    drainWaiters.removeValue(forKey: key)
+                }
+                throw error
+            }
+        }
+        try Task.checkCancellation()
+        return disconnected
+    }
+
+    func endExclusiveConnectionMutation(
+        owner: DatabaseRuntimeOwnerToken,
+        connectionID: DatabaseConnectionID,
+        discardCoordination: Bool
+    ) {
+        let key = ConnectionKey(owner: owner, connectionID: connectionID)
+        exclusiveConnections.remove(key)
+        if discardCoordination {
+            coordinations.removeValue(forKey: key)
+            disconnectors.removeValue(forKey: key)
+        }
+    }
+
+    func isExclusivelyMutating(
+        owner: DatabaseRuntimeOwnerToken,
+        connectionID: DatabaseConnectionID
+    ) -> Bool {
+        exclusiveConnections.contains(ConnectionKey(owner: owner, connectionID: connectionID))
+    }
+
+    func retainedCoordinationCount(_ owner: DatabaseRuntimeOwnerToken) -> Int {
+        coordinations.keys.filter { $0.owner == owner }.count
+    }
+
+    func retainedCallbackCount(
+        owner: DatabaseRuntimeOwnerToken,
+        connectionID: DatabaseConnectionID
+    ) -> Int {
+        let key = ConnectionKey(owner: owner, connectionID: connectionID)
+        guard let coordination = coordinations[key] else { return 0 }
+        return coordination.cancellationCount + coordination.disconnections.count
+    }
+
+    func disconnectionCompleted(
         owner: DatabaseRuntimeOwnerToken,
         connectionID: DatabaseConnectionID
     ) async -> Bool {
         let key = ConnectionKey(owner: owner, connectionID: connectionID)
-        deletingConnections.insert(key)
-        let cancellations = operationPermits[key].map { Array($0.values) } ?? []
-        let connectionDisconnectors = disconnectors[key].map { Array($0.values) } ?? []
-        for cancel in cancellations {
-            await cancel()
-        }
-        var disconnected = false
-        for disconnect in connectionDisconnectors {
-            disconnected = await disconnect() || disconnected
-        }
-        if operationPermits[key]?.isEmpty == false {
-            await withCheckedContinuation { continuation in
-                drainWaiters[key, default: []].append(continuation)
+        guard let coordination = coordinations[key] else { return false }
+        return await coordination.disconnectionCompletion.isResolved()
+    }
+
+    func unregisterExecutor(
+        owner: DatabaseRuntimeOwnerToken,
+        executorID: UUID
+    ) {
+        let keys = disconnectors.keys.filter { $0.owner == owner }
+        keys.forEach { key in
+            disconnectors[key]?.removeValue(forKey: executorID)
+            if disconnectors[key]?.isEmpty == true {
+                disconnectors.removeValue(forKey: key)
             }
         }
-        return disconnected
     }
 
-    func endDeletion(
-        owner: DatabaseRuntimeOwnerToken,
-        connectionID: DatabaseConnectionID
-    ) {
-        let key = ConnectionKey(owner: owner, connectionID: connectionID)
-        deletingConnections.remove(key)
-        disconnectors.removeValue(forKey: key)
-        operationPermits.removeValue(forKey: key)
-        drainWaiters.removeValue(forKey: key)
+    private func createCoordinationIfNeeded(
+        key: ConnectionKey
+    ) throws -> ConnectionCoordination {
+        if let coordination = coordinations[key] {
+            return coordination
+        }
+        let cancellations =
+            operationPermits[key].map {
+                $0.values.map(\.cancellation)
+            } ?? []
+        let disconnections = disconnectors[key].map { Array($0.values) } ?? []
+        let retainedCancellationCount = coordinations.values.reduce(0) {
+            $0 + $1.cancellationCount
+        }
+        let retainedDisconnectionCount = coordinations.values.reduce(0) {
+            $0 + $1.disconnections.count
+        }
+        guard coordinations.count < Self.maximumRetainedCoordinations,
+            cancellations.count <= Self.maximumConnectionCancellationCallbacks,
+            retainedCancellationCount + cancellations.count
+                <= Self.maximumRetainedCancellationCallbacks,
+            disconnections.count <= Self.maximumConnectionDisconnectionCallbacks,
+            retainedDisconnectionCount + disconnections.count
+                <= Self.maximumRetainedDisconnectionCallbacks
+        else {
+            throw DatabaseExecutionValidationError.limitExceeded(
+                name: "retained connection coordination",
+                actual: coordinations.count + 1,
+                maximum: Self.maximumRetainedCoordinations)
+        }
+        let cancellationCompletion = DatabaseExecutorCompletion<Bool>()
+        let coordination = ConnectionCoordination(
+            cancellationCompletion: cancellationCompletion,
+            disconnectionCompletion: DatabaseExecutorCompletion<Bool>(),
+            cancellationCount: cancellations.count,
+            disconnections: disconnections,
+            disconnectionStarted: false)
+        coordinations[key] = coordination
+        Task {
+            await withTaskGroup(of: Void.self) { group in
+                for cancellation in cancellations.prefix(
+                    Self.maximumConnectionCancellationCallbacks)
+                {
+                    group.addTask {
+                        await cancellation()
+                    }
+                }
+            }
+            await cancellationCompletion.resolve(true)
+        }
+        return coordination
     }
 
-    func isDeleting(
-        owner: DatabaseRuntimeOwnerToken,
-        connectionID: DatabaseConnectionID
-    ) -> Bool {
-        deletingConnections.contains(ConnectionKey(owner: owner, connectionID: connectionID))
+    private func startDisconnectionsIfNeeded(key: ConnectionKey) {
+        guard var coordination = coordinations[key], !coordination.disconnectionStarted else {
+            return
+        }
+        coordination.disconnectionStarted = true
+        coordinations[key] = coordination
+        let disconnections = coordination.disconnections
+        let completion = coordination.disconnectionCompletion
+        Task {
+            let disconnected = await withTaskGroup(of: Bool.self) { group in
+                for disconnection in disconnections.prefix(
+                    Self.maximumConnectionDisconnectionCallbacks)
+                {
+                    group.addTask {
+                        await disconnection()
+                    }
+                }
+                var result = false
+                for await value in group {
+                    result = value || result
+                }
+                return result
+            }
+            await completion.resolve(disconnected)
+        }
     }
+
+    private func waitForCompletion<Value: Sendable>(
+        _ completion: DatabaseExecutorCompletion<Value>,
+        until deadline: UInt64
+    ) async throws -> Value {
+        let events = await completion.events()
+        let remaining = Self.remainingNanoseconds(until: deadline)
+        let outcome = await withTaskGroup(
+            of: DatabaseManagementWaitOutcome<Value>.self
+        ) { group in
+            group.addTask {
+                var iterator = events.makeAsyncIterator()
+                guard let value = await iterator.next() else { return .cancelled }
+                return .completed(value)
+            }
+            group.addTask {
+                guard remaining > 0 else { return .timedOut }
+                do {
+                    try await Task.sleep(nanoseconds: remaining)
+                } catch {
+                    return .cancelled
+                }
+                return Task.isCancelled ? .cancelled : .timedOut
+            }
+            let result = await group.next() ?? .cancelled
+            group.cancelAll()
+            return result
+        }
+        switch outcome {
+        case let .completed(value):
+            try Task.checkCancellation()
+            return value
+        case .timedOut:
+            throw DatabaseExecutionValidationError.deadlineExceeded
+        case .cancelled:
+            throw CancellationError()
+        }
+    }
+
+    private static func deadline(after timeoutNanoseconds: UInt64) -> UInt64 {
+        let now = DispatchTime.now().uptimeNanoseconds
+        let (deadline, overflow) = now.addingReportingOverflow(timeoutNanoseconds)
+        return overflow ? UInt64.max : deadline
+    }
+
+    private static func remainingNanoseconds(until deadline: UInt64) -> UInt64 {
+        let now = DispatchTime.now().uptimeNanoseconds
+        return deadline > now ? deadline - now : 0
+    }
+}
+
+private enum DatabaseManagementWaitOutcome<Value: Sendable>: Sendable {
+    case completed(Value)
+    case timedOut
+    case cancelled
 }
 
 private actor DatabaseExecutorOperationAdmission {
     private var cancellation: (@Sendable () async -> Void)?
+    private var cancellationTask: Task<Void, Never>?
     private var isCancelled = false
 
     func attach(_ cancellation: @escaping @Sendable () async -> Void) async {
-        guard !isCancelled else {
-            await cancellation()
-            return
-        }
         self.cancellation = cancellation
+        guard isCancelled else { return }
+        let task = Task { await cancellation() }
+        cancellationTask = task
+        await task.value
     }
 
     func cancel() async {
+        if let cancellationTask {
+            await cancellationTask.value
+            return
+        }
         guard !isCancelled else { return }
         isCancelled = true
-        await cancellation?()
+        guard let cancellation else { return }
+        let task = Task { await cancellation() }
+        cancellationTask = task
+        await task.value
     }
 }
 
@@ -1730,6 +2344,10 @@ private actor DatabaseExecutorCompletion<Value: Sendable> {
             continuations[identifier] = pair.continuation
         }
         return pair.stream
+    }
+
+    func isResolved() -> Bool {
+        value != nil
     }
 
     private func removeContinuation(_ identifier: UUID) {
