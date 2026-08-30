@@ -184,6 +184,13 @@ private enum DatabaseExecutionValidatorFixtures {
                 connectionID: connection.id,
                 operation: DatabaseExecutionValidatorFixtures.operation))
         try validator.validate(
+            DatabaseOperationGetRequest(
+                operationID: DatabaseExecutionValidatorFixtures.operationID))
+        try validator.validate(DatabaseOperationListRequest())
+        try validator.validate(
+            DatabaseOperationCancelRequest(
+                operationID: DatabaseExecutionValidatorFixtures.operationID))
+        try validator.validate(
             DatabaseBrowseRequest(
                 target: target,
                 operation: DatabaseExecutionValidatorFixtures.operation))
@@ -282,6 +289,36 @@ private enum DatabaseExecutionValidatorFixtures {
         }
         #expect(
             throws: DatabaseExecutionValidationError.unsupportedVersion(
+                contract: "operation get request",
+                expected: 1,
+                actual: 2)
+        ) {
+            try validator.validate(
+                DatabaseOperationGetRequest(
+                    version: 2,
+                    operationID: DatabaseExecutionValidatorFixtures.operationID))
+        }
+        #expect(
+            throws: DatabaseExecutionValidationError.unsupportedVersion(
+                contract: "operation list request",
+                expected: 1,
+                actual: 2)
+        ) {
+            try validator.validate(DatabaseOperationListRequest(version: 2))
+        }
+        #expect(
+            throws: DatabaseExecutionValidationError.unsupportedVersion(
+                contract: "operation cancel request",
+                expected: 1,
+                actual: 2)
+        ) {
+            try validator.validate(
+                DatabaseOperationCancelRequest(
+                    version: 2,
+                    operationID: DatabaseExecutionValidatorFixtures.operationID))
+        }
+        #expect(
+            throws: DatabaseExecutionValidationError.unsupportedVersion(
                 contract: "query request",
                 expected: 1,
                 actual: 2)
@@ -332,6 +369,23 @@ private enum DatabaseExecutionValidatorFixtures {
             DatabaseOperationContext(
                 deadline: DatabaseExecutionValidatorFixtures.now.addingTimeInterval(0.001)))
         try validator.validate(DatabaseOperationContext(deadline: nil))
+    }
+
+    @Test func operationHistoryRequestsRequireABoundedPositiveLimit() throws {
+        let validator = DatabaseExecutionValidatorFixtures.validator
+
+        for limit in [0, DatabaseExecutionValidator.maximumOperationHistoryCount + 1] {
+            #expect(
+                throws: DatabaseExecutionValidationError.limitExceeded(
+                    name: "operation history results",
+                    actual: limit,
+                    maximum: DatabaseExecutionValidator.maximumOperationHistoryCount)
+            ) {
+                try validator.validate(
+                    DatabaseOperationListRequest(
+                        search: DatabaseOperationHistorySearch(limit: limit)))
+            }
+        }
     }
 
     @Test func requiresBoundedNonemptyObjectPathsForBrowse() throws {
