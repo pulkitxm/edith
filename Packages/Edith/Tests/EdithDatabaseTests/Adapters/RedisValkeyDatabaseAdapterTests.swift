@@ -183,7 +183,11 @@ private actor FakeRedisClient: RedisDatabaseClient {
         self.ttls = ttls
     }
 
-    func execute(_ operation: RedisDatabaseReadOperation) async throws -> RedisDatabaseReply {
+    func execute(
+        _ operation: RedisDatabaseReadOperation,
+        context _: DatabaseAdapterOperationContext,
+        deadline _: Date
+    ) async throws -> RedisDatabaseReply {
         guard !closed else { throw RedisDatabaseClientFailure.connection }
         operations.append(operation)
         switch operation {
@@ -320,7 +324,11 @@ private actor FakeRedisClientFactory: RedisDatabaseClientFactory {
         self.client = client
     }
 
-    func connect(_ plan: RedisDatabaseConnectionPlan) async throws -> any RedisDatabaseClient {
+    func connect(
+        _ plan: RedisDatabaseConnectionPlan,
+        context _: DatabaseAdapterConnectionContext,
+        deadline _: Date
+    ) async throws -> any RedisDatabaseClient {
         plans.append(plan)
         return client
     }
