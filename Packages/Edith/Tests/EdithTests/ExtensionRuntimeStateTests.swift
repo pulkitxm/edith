@@ -253,6 +253,7 @@ import Testing
             ("quinjet", "QuinjetRows", "enabled", "ExtensionsPane.swift"),
             ("system", "SystemRows", "enabled", "ExtensionsPane.swift"),
             ("homebrew", "HomebrewRows", "enabled", "ExtensionsPane.swift"),
+            ("appMaintenance", "AppMaintenanceRows", "enabled", "ExtensionsPane.swift"),
             ("machines", "MachinesRows", "enabled", "MachinesRows.swift"),
             ("companion", "CompanionRows", "enabled", "ExtensionsPane.swift"),
             ("systemStats", "SystemStatsRows", "enabled", "ExtensionsPane.swift"),
@@ -265,6 +266,7 @@ import Testing
             ("focusDim", "FocusDimRows", "enabled", "FocusDimRows.swift"),
             ("presenter", "PresenterRows", "presenterEnabled", "PresenterRows.swift"),
             ("colorPicker", "ColorPickerRows", "colorPickerEnabled", "ColorPickerRows.swift"),
+            ("emoji", "EmojiRows", "emojiEnabled", "EmojiRows.swift"),
         ]
 
         #expect(Set(routes.map(\.id)) == Set(ExtensionDetailRoute.allCases.map(\.rawValue)))

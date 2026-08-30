@@ -1,4 +1,5 @@
 import EdithKit
+import EdithLidAwakeSupport
 import Security
 import ServiceManagement
 import SwiftUI
@@ -149,9 +150,15 @@ private final class LidAwakeDaemonRegistrar {
         let fingerprint = helperFingerprint()
         switch service.status {
         case .enabled, .requiresApproval:
-            guard let fingerprint else { return }
+            guard let fingerprint else {
+                publishStatus()
+                return
+            }
             guard UserDefaults.standard.string(forKey: Self.fingerprintKey) != fingerprint
-            else { return }
+            else {
+                publishStatus()
+                return
+            }
             registrationInFlight = true
             service.unregister { [weak self] error in
                 guard let self else { return }
@@ -235,7 +242,8 @@ private final class LidAwakeDaemonRegistrar {
 }
 
 private let retiredHelperBundleIdentifiers = [
-    "com.pulkit.edith.panel", "com.pulkit.edith.bar", "com.pulkit.edith.menubar",
+    "com.pulkit.edith.statusbar", "com.pulkit.edith.panel", "com.pulkit.edith.bar",
+    "com.pulkit.edith.menubar",
 ]
 
 private func launchHelperIfNeeded() async {

@@ -1,6 +1,7 @@
 import AppKit
 import CoreAudio
 import EdithCore
+import EdithLidAwakeSupport
 import EventKit
 import Foundation
 import ServiceManagement
@@ -64,9 +65,10 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "attention", "usage", "quinjet", "system", "homebrew", "machines",
-        "systemStats", "micMute", "lidAwake", "music", "calendar", "notchShelf", "clipboard",
-        "focusDim", "presenter", "colorPicker",
+        "attention", "usage", "quinjet", "system", "homebrew", "appMaintenance", "machines",
+        "systemStats", "micMute",
+        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
+        "emoji", "colorPicker",
     ]
 
     public static func provider(
@@ -96,6 +98,7 @@ public enum ExtensionLiveAdapters {
             quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
         case "system": await systemReadiness()
         case "homebrew": homebrewReadiness(executable: executableNamed("brew"))
+        case "appMaintenance": appMaintenanceReadiness()
         case "machines": machinesReadiness()
         case "systemStats": systemStatsReadiness()
         case "micMute": microphoneReadiness()
@@ -107,6 +110,7 @@ public enum ExtensionLiveAdapters {
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
+        case "emoji": emojiReadiness(defaults: defaults)
         default: nil
         }
     }
@@ -201,6 +205,21 @@ public enum ExtensionLiveAdapters {
             uninstalledDetail: "Install Homebrew from brew.sh, then check again."
         ).readiness
     }
+    static func appMaintenanceReadiness() -> ExtensionAdapterReadiness {
+        let roots = AppMaintenanceInventory.defaultApplicationRoots
+        let available = roots.contains { FileManager.default.isReadableFile(atPath: $0.path) }
+        let tools = ["/usr/bin/hdiutil", "/usr/bin/codesign", "/usr/sbin/spctl", "/usr/bin/ditto"]
+        let installerAvailable = tools.allSatisfy(FileManager.default.isExecutableFile(atPath:))
+        return ExtensionAdapterFacts(
+            configured: available && installerAvailable,
+            readyDetail:
+                "Verified disk image installation, app inventory and safe Trash review are available.",
+            setupDetail: available
+                ? "Required macOS disk image verification tools are unavailable."
+                : "No readable Applications folder is available."
+        ).readiness
+    }
+
     static func machinesReadiness(file: URL = MachinePaths.machinesFile)
         -> ExtensionAdapterReadiness
     {
@@ -467,6 +486,26 @@ public enum ExtensionLiveAdapters {
             emptyDetail: screenCount == 0
                 ? "No active display is available for color sampling."
                 : "Color sampling is ready and the history is empty."
+        ).readiness
+    }
+
+    static func emojiReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
+        let catalog = EmojiCatalog.shared
+        guard !catalog.emoji.isEmpty else {
+            return .failed("The bundled emoji catalog could not be read.")
+        }
+        let toneRaw = defaults.object(forKey: AppStorageKeys.Emoji.skinTone) as? Int
+        let frequentCount = defaults.object(forKey: AppStorageKeys.Emoji.frequentCount) as? Int
+        let configured =
+            (toneRaw == nil || EmojiSkinTone(rawValue: toneRaw!) != nil)
+            && (frequentCount == nil || (0...24).contains(frequentCount!))
+        let ledger = EmojiUsageLedger.load(from: defaults, key: AppStorageKeys.Emoji.usage)
+        return ExtensionAdapterFacts(
+            configured: configured, contentCount: ledger.entries.count,
+            readyDetail:
+                "\(catalog.emoji.count) emoji available, \(ledger.entries.count) used recently.",
+            setupDetail: "The stored skin tone or frequently used count is invalid.",
+            emptyDetail: "\(catalog.emoji.count) emoji are ready and nothing has been used yet."
         ).readiness
     }
 

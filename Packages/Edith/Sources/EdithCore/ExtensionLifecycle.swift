@@ -371,6 +371,60 @@ public enum ExtensionLifecycleCatalog {
                     "ed brew ls --json")
             ]),
         descriptor(
+            "appMaintenance",
+            "Review installed applications, available Homebrew updates and exact support files.",
+            workflows: [
+                instruction(
+                    "updates", "Review updates",
+                    "Compare managed, store, and app-native updates before running a batch."),
+                instruction(
+                    "inventory", "Review installed apps",
+                    "See versions and Homebrew update status for regular Applications folders."),
+                instruction(
+                    "remove", "Remove an app safely",
+                    "Choose exact bundle-identifier matches and move only the selection to Trash."),
+                instruction(
+                    "install", "Install a disk image safely",
+                    "Verify the single app in a disk image, stage it, install it and clean up recoverably."
+                ),
+            ],
+            prerequisites: [
+                instruction(
+                    "access", "Use regular Applications folders",
+                    "User-owned apps need no extra access. macOS may refuse protected or administrator-owned items."
+                )
+            ],
+            examples: [
+                "ed extensions enable appMaintenance", "ed maintenance inventory --json",
+                "ed maintenance updates --json", "ed maintenance update",
+                "ed maintenance scan /Applications/Example.app --json",
+                "ed maintenance install ~/Downloads/Example.dmg --json",
+            ],
+            docs: [
+                documentation(
+                    "guide", "App Maintenance guide", "docs/app-maintenance.md")
+            ],
+            recovery: [
+                instruction(
+                    "rescan", "Rescan a changed app",
+                    "Build a fresh removal plan when an app changes after review.",
+                    "ed maintenance scan /Applications/Example.app"),
+                instruction(
+                    "image", "Retry a changed disk image",
+                    "Choose the download again, review it and explicitly retry installation.",
+                    "ed maintenance install ~/Downloads/Example.dmg --yes"),
+            ],
+            verification: [
+                instruction(
+                    "inventory", "List installed apps",
+                    "Confirm the Applications folders and optional Homebrew status are readable.",
+                    "ed maintenance inventory --json"),
+                instruction(
+                    "installer", "Review an installer",
+                    "Mount, verify, preview and eject a single-app disk image without installing it.",
+                    "ed maintenance install ~/Downloads/Example.dmg --json"),
+            ]),
+        descriptor(
             "machines", "Operate SSH computers, files, services and containers from Edith.",
             workflows: [
                 instruction(
@@ -687,6 +741,42 @@ public enum ExtensionLifecycleCatalog {
                     "config", "Inspect protection",
                     "Confirm automatic detection and blur categories.",
                     "ed config ls --group presenter --json")
+            ]),
+        descriptor(
+            "emoji", "Insert any emoji macOS can draw into whatever you are typing in.",
+            workflows: [
+                instruction(
+                    "pick", "Open the picker",
+                    "Open the emoji panel from its shortcut or the command line.",
+                    "ed emoji pick"),
+                instruction(
+                    "search", "Find an emoji",
+                    "Type a name, keyword or shortcode to filter every category."),
+                instruction(
+                    "tone", "Choose a skin tone",
+                    "Set the default tone applied to emoji that support one.",
+                    "ed emoji tone medium"),
+            ],
+            prerequisites: [
+                instruction(
+                    "permission", "Grant Accessibility",
+                    "macOS requires Accessibility to type into the frontmost app.",
+                    "ed permissions request accessibility")
+            ],
+            examples: [
+                "ed extensions enable emoji", "ed emoji ls --json",
+                "ed emoji insert 1F600",
+            ],
+            docs: [documentation("guide", "Emoji Picker guide", "docs/cli/emoji/README.md")],
+            recovery: [
+                instruction(
+                    "permission", "Refresh typing access",
+                    "Refresh the mirrored Accessibility grant.", "ed permissions refresh")
+            ],
+            verification: [
+                instruction(
+                    "catalog", "Read the emoji catalog",
+                    "Confirm the bundled catalog loads on this Mac.", "ed emoji ls --json")
             ]),
         descriptor(
             "colorPicker", "Sample an exact screen color and copy it in the format you need.",

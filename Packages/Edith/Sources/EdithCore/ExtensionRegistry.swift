@@ -139,6 +139,11 @@ public enum ExtensionRegistry {
             defaultsKey: "tabHomebrewEnabled", requiredCapabilities: [.packageManagement],
             requiredToolIDs: ["homebrew"]),
         ExtensionRegistryEntry(
+            id: "appMaintenance", title: "App Maintenance",
+            subtitle: "Verified disk image installs, app updates, and review-first removal.",
+            symbolName: "shippingbox.and.arrow.backward", group: .system, featured: true,
+            defaultsKey: "appMaintenanceEnabled", requiredCapabilities: [.runningApplications]),
+        ExtensionRegistryEntry(
             id: "machines", title: "Machines",
             subtitle: "Your other computers over SSH: stats, files, Docker, and a terminal.",
             symbolName: "server.rack", group: .system, featured: true,
@@ -200,6 +205,12 @@ public enum ExtensionRegistry {
             subtitle: "Blurs sensitive numbers while sharing your screen.",
             symbolName: "theatermasks.fill", group: .utilities, featured: false,
             defaultsKey: "presenterEnabled", requiredCapabilities: [.screenShareDetection]),
+        ExtensionRegistryEntry(
+            id: "emoji", title: "Emoji Picker",
+            subtitle: "Every macOS emoji on a hotkey, straight into the app you are typing in.",
+            symbolName: "face.smiling", group: .utilities, featured: false,
+            defaultsKey: "emojiEnabled", requiredCapabilities: [.emojiInsertion],
+            optionalCapabilities: [.globalShortcuts]),
         ExtensionRegistryEntry(
             id: "colorPicker", title: "Color Picker",
             subtitle: "System loupe on a hotkey, sampled color to your clipboard.",

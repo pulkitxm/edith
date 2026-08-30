@@ -13,6 +13,7 @@ import Testing
         "tabQuinjetEnabled",
         "tabSystemEnabled",
         "tabHomebrewEnabled",
+        "appMaintenanceEnabled",
         "tabMachinesEnabled",
         "tabCompanionEnabled",
         "menuBarSystemStats",
@@ -25,6 +26,7 @@ import Testing
         "focusDimEnabled",
         "presenterEnabled",
         "colorPickerEnabled",
+        "emojiEnabled",
     ]
 
     @Test func registryIdentifiersAreUnique() {
@@ -32,12 +34,13 @@ import Testing
         #expect(Set(identifiers).count == identifiers.count)
     }
 
-    @Test func registryMatchesCurrentExtensionSet() {
+    @Test func registryMatchesCurrentBaseline() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
-                "attention", "usage", "herdr", "quinjet", "system", "homebrew", "machines",
+                "attention", "usage", "herdr", "quinjet", "system", "homebrew", "appMaintenance",
+                "machines",
                 "companion", "systemStats", "micMute", "lidAwake", "music", "calendar",
-                "notchShelf", "clipboard", "focusDim", "presenter", "colorPicker",
+                "notchShelf", "clipboard", "focusDim", "presenter", "emoji", "colorPicker",
             ])
     }
 
@@ -150,7 +153,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard", "homebrew",
+                "clipboard", "homebrew", "appMaintenance",
             ])
     }
 
@@ -235,6 +238,7 @@ import Testing
             "quinjet": [],
             "system": [],
             "homebrew": [],
+            "appMaintenance": [],
             "machines": [],
             "companion": [],
             "systemStats": [],
@@ -247,6 +251,7 @@ import Testing
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
             "colorPicker": [.screenRecording],
+            "emoji": [],
         ]
         let optional: [String: [ExtensionPermission]] = [
             "attention": [],
@@ -255,6 +260,7 @@ import Testing
             "quinjet": [],
             "system": [.accessibility, .inputMonitoring],
             "homebrew": [],
+            "appMaintenance": [],
             "machines": [.notifications],
             "companion": [],
             "systemStats": [],
@@ -267,6 +273,7 @@ import Testing
             "focusDim": [],
             "presenter": [],
             "colorPicker": [],
+            "emoji": [.accessibility],
         ]
 
         let identifiers = Set(ExtensionRegistry.entries.map(\.id))

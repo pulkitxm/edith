@@ -629,9 +629,17 @@ private struct ExtensionLifecycleRows: View {
                     ForEach(report.checks) { check in
                         checkRow(check)
                     }
-                    Button("Check again") {
+                    Button {
                         readiness.refresh(.verify)
+                    } label: {
+                        HStack(spacing: UIScale.pt(6)) {
+                            Text("Check again")
+                            ProgressView()
+                                .controlSize(.small)
+                                .opacity(readiness.isRefreshing ? 1 : 0)
+                        }
                     }
+                    .disabled(readiness.isRefreshing)
                 } else {
                     let loading = ExtensionLifecycleState.loading(extensionID: entry.id)
                     HStack(spacing: UIScale.pt(8)) {
@@ -921,6 +929,7 @@ private struct ExtensionDetailRows: View {
             case .quinjet: QuinjetRows()
             case .system: SystemRows()
             case .homebrew: HomebrewRows()
+            case .appMaintenance: AppMaintenanceRows()
             case .machines: MachinesRows()
             case .companion: CompanionRows()
             case .systemStats: SystemStatsRows()
@@ -933,6 +942,7 @@ private struct ExtensionDetailRows: View {
             case .focusDim: FocusDimRows()
             case .presenter: PresenterRows()
             case .colorPicker: ColorPickerRows()
+            case .emoji: EmojiRows()
             }
         } else {
             Section("Controls") {
@@ -1407,8 +1417,7 @@ private struct UsageRows: View {
                     }
 
                     Picker("Color", selection: colorModeBinding) {
-                        Text("White").tag("white")
-                        Text("Black").tag("black")
+                        Text("Automatic").tag("auto")
                         Text("Custom").tag("custom")
                     }
 
@@ -1667,12 +1676,12 @@ private struct UsageRows: View {
     }
 
     private var isCustomColor: Bool {
-        menuBarColorMode == "custom" || menuBarColorMode == "auto"
+        menuBarColorMode == "custom"
     }
 
     private var colorModeBinding: Binding<String> {
         Binding(
-            get: { isCustomColor ? "custom" : menuBarColorMode },
+            get: { isCustomColor ? "custom" : "auto" },
             set: {
                 $menuBarColorMode.configured(AppStorageKeys.MenuBar.colorMode).wrappedValue = $0
             })
@@ -1707,19 +1716,35 @@ private struct SystemStatsRows: View {
     @AppStorage(AppStorageKeys.MenuBar.statsColorHex, store: SharedDefaults.store) private
         var statsColorHex =
         "FFFFFF"
+    @AppStorage(AppStorageKeys.MenuBar.statsColorMode, store: SharedDefaults.store) private
+        var statsColorMode = "auto"
 
     var body: some View {
         Section {
-            ColorPicker(
+            Picker(
                 "Color",
                 selection: Binding(
-                    get: { DashPalette.color(statsColorHex) },
+                    get: { statsColorMode == "custom" ? "custom" : "auto" },
                     set: {
-                        $statsColorHex.configured(AppStorageKeys.MenuBar.statsColorHex)
-                            .wrappedValue =
-                            $0.hex6
-                    }),
-                supportsOpacity: false)
+                        $statsColorMode.configured(AppStorageKeys.MenuBar.statsColorMode)
+                            .wrappedValue = $0
+                    })
+            ) {
+                Text("Automatic").tag("auto")
+                Text("Custom").tag("custom")
+            }
+            if statsColorMode == "custom" {
+                ColorPicker(
+                    "Custom color",
+                    selection: Binding(
+                        get: { DashPalette.color(statsColorHex) },
+                        set: {
+                            $statsColorHex.configured(AppStorageKeys.MenuBar.statsColorHex)
+                                .wrappedValue =
+                                $0.hex6
+                        }),
+                    supportsOpacity: false)
+            }
             Text("Sampled every couple of seconds; costs nothing measurable.")
                 .settingsCaption()
         }
@@ -1896,6 +1921,35 @@ private struct HomebrewRows: View {
         .opacity(enabled ? 1 : 0.5)
     }
 }
+private struct AppMaintenanceRows: View {
+    @AppStorage(AppStorageKeys.AppMaintenance.enabled, store: SharedDefaults.store) private
+        var enabled = false
+    @AppStorage(AppStorageKeys.AppMaintenance.installDestination, store: SharedDefaults.store)
+    private var installDestination = AppMaintenanceInstallDestination.user.rawValue
+    @State private var showingMaintenance = false
+
+    var body: some View {
+        Section("Maintenance") {
+            LabeledContent("Removal", value: "Review first, then move to Trash")
+            Text(
+                "Inventory regular Applications folders, verify single-app disk images and select exact support files before removal."
+            )
+            .settingsCaption()
+            Picker("Disk image destination", selection: $installDestination) {
+                ForEach(AppMaintenanceInstallDestination.allCases, id: \.rawValue) { destination in
+                    Text(destination.title).tag(destination.rawValue)
+                }
+            }
+            Button("Open App Maintenance") { showingMaintenance = true }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+        .sheet(isPresented: $showingMaintenance) {
+            AppMaintenanceView()
+        }
+    }
+}
+
 private struct LimitWindowChipsRow: View {
     let title: String
     let provider: LimitProvider

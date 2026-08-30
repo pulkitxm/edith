@@ -152,7 +152,7 @@ a prebuilt binary by definition: Homebrew downloads exactly what the vendor
 published, checks its hash, and moves it into place.
 
 Edith is a cask. It is a signed `.app` bundle distributed as a `.dmg`, which is the
-canonical cask shape. The fact that the bundle also contains two command line tools
+canonical cask shape. The fact that the bundle also exposes two command line names
 does not make it a formula: the unit of distribution is still the application.
 
 An important consequence of "cask means macOS only": nothing about the cask can be
@@ -409,15 +409,17 @@ declares the processes to stop:
 ```ruby
 uninstall quit: [
   "com.pulkit.edith",
+  "com.pulkit.edith.helper",
   "com.pulkit.edith.statusbar",
   "com.pulkit.edith.files",
 ]
 ```
 
-Three bundle identifiers, because Edith is three bundles: the main application, the
-menu bar login item, and the Files helper. Quitting them before removing the app
-avoids the classic failure where a running process holds files open and a partially
-deleted app keeps its menu bar icon until logout.
+The first three identifiers cover Edith's current bundles: the main application,
+the menu bar login item, and the Files helper. The retired status-bar identifier
+keeps uninstall reliable for users upgrading from an older release. Quitting them
+before removing the app avoids the classic failure where a running process holds
+files open and a partially deleted app keeps its menu bar icon until logout.
 
 The `zap` stanza is the opt-in deep clean, listing the paths the application creates
 outside its bundle. Edith's covers the support directory, both caches, the network
@@ -574,10 +576,11 @@ cask "edith" do
 
   app "Edith.app"
   binary "#{appdir}/Edith.app/Contents/MacOS/ed"
-  binary "#{appdir}/Edith.app/Contents/MacOS/edh"
+  binary "#{appdir}/Edith.app/Contents/MacOS/ed", target: "edith"
 
   uninstall quit: [
     "com.pulkit.edith",
+    "com.pulkit.edith.helper",
     "com.pulkit.edith.statusbar",
     "com.pulkit.edith.files",
   ]
@@ -589,6 +592,7 @@ cask "edith" do
     "~/Library/HTTPStorages/com.pulkit.edith",
     "~/Library/Preferences/com.pulkit.edith.plist",
     "~/Library/Preferences/com.pulkit.edith.shared.plist",
+    "~/Library/Preferences/com.pulkit.edith.helper.plist",
     "~/Library/Preferences/com.pulkit.edith.statusbar.plist",
     "~/Library/Saved Application State/com.pulkit.edith.savedState",
   ]
@@ -638,13 +642,14 @@ takes the bundle.
 
 **The two `binary` lines** point inside the installed bundle, using `appdir`, which
 is Homebrew's variable for the applications directory rather than a hard-coded
-`/Applications`. This is the mechanism that makes `ed` and `edh` work immediately
-after install, with no separate `ed install` step, and it is also the most
-consequential line in the file, for reasons in section 15.
+`/Applications`. This is the mechanism that makes `ed` and `edith` work immediately
+after install, with no separate `ed install` step. Both paths are aliases of the
+one signed `ed` executable. These are also the most
+consequential lines in the file, for reasons in section 15.
 
-**`uninstall quit:`** lists all three bundle identifiers, as covered in section 8.
-They are not guesses: `com.pulkit.edith` is `Resources/Info.plist`,
-`com.pulkit.edith.statusbar` is `Resources/HelperInfo.plist`, and
+**`uninstall quit:`** lists the current and retired bundle identifiers, as covered
+in section 8. They are not guesses: `com.pulkit.edith` is `Resources/Info.plist`,
+`com.pulkit.edith.helper` is `Resources/HelperInfo.plist`, and
 `com.pulkit.edith.files` is the Files helper, named in
 `Packages/Edith/Sources/EdithKit/Core/AppIdentity/MainApp.swift` and used by
 `Packages/Edith/Sources/EdithCLI/AppBridge.swift`.
@@ -927,9 +932,9 @@ parse, and a bare token cannot resolve on a machine with no tap. The only free
 choice is the middle segment, which is the tap repository name. `pulkitxm/edith/edith`
 was the first attempt and reads badly, hence `homebrew-tap`.
 
-### Why both `ed` and `edh` are linked
+### Why both `ed` and `edith` are linked
 
-The alternative was linking `edh` only and leaving `ed` to the app's own
+The alternative was linking `edith` only and leaving `ed` to the app's own
 `ed install --directory ~/.local/bin` flow, which avoids shadowing the POSIX line
 editor.
 
@@ -1068,8 +1073,8 @@ about which claims are tested and which are structural.
   `Resources/HelperInfo.plist`, `MainApp.swift` and `AppBridge.swift`.
 - The zap paths match `EdithCore/AppDirectories.swift` and
   `EdithKit/Core/Defaults/SharedDefaults.swift`.
-- `ed` and `edh` exist at the linked paths inside the built bundle, asserted by
-  `make verify-bundle`.
+- `ed` is the only regular CLI executable, asserted by `make verify-bundle`
+  together with both installed names' targets, signatures, and behavior.
 - Homebrew's name resolution rules, quoted in sections 4 and 5, from
   `tap_constants.rb` and `cmd/install.rb`.
 - `scripts/homebrew-cask.test.js` guards the cask's shape, the release job's

@@ -3,6 +3,7 @@ import Foundation
 import Testing
 
 @testable import EdithKit
+@testable import EdithLidAwakeSupport
 @testable import EdithHelper
 
 private actor LidAwakeRestorationLatch {
@@ -745,10 +746,7 @@ private func lidAwakeProcessIDs(at url: URL) throws -> [pid_t] {
         #expect(
             build.contains(
                 "LAUNCH_DAEMONS=\"$APP/Contents/Library/LaunchDaemons\""))
-        #expect(
-            build.contains(
-                "STATUS_HELPER=\"$HELPER/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake\""
-            ))
+        #expect(!build.contains("STATUS_HELPER="))
         let mainApp = try String(
             contentsOf: root.appendingPathComponent(
                 "Packages/Edith/Sources/Edith/Core/Application/EdithApp.swift"),
@@ -767,6 +765,34 @@ private func lidAwakeProcessIDs(at url: URL) throws -> [pid_t] {
         #expect(
             helperInfo["CFBundleIdentifier"] as? String
                 == LidAwakePrivilegedService.bundleIdentifier)
+    }
+
+    @Test func helperIdentityMatchesDaemonClient() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let infoData = try Data(
+            contentsOf: root.appendingPathComponent("Resources/HelperInfo.plist"))
+        let info = try #require(
+            PropertyListSerialization.propertyList(from: infoData, format: nil)
+                as? [String: Any])
+        #expect(
+            info["CFBundleIdentifier"] as? String
+                == MainApp.statusBarBundleIdentifier)
+        let daemonData = try Data(
+            contentsOf: root.appendingPathComponent(
+                "Resources/com.pulkit.edith.lidawake.v2.plist"))
+        let daemon = try #require(
+            PropertyListSerialization.propertyList(from: daemonData, format: nil)
+                as? [String: Any])
+        let associated = daemon["AssociatedBundleIdentifiers"] as? [String]
+        #expect(associated == [MainApp.bundleIdentifier])
+        #expect(
+            LidAwakePrivilegedService.clientBundleIdentifier
+                == MainApp.statusBarBundleIdentifier)
     }
 
     @Test func powerSettingsReportSleepDisabled() {

@@ -247,6 +247,55 @@ import Testing
     }
 }
 
+@Suite struct HerdrSpaceKeyCommandTests {
+    @Test func terminalAndSplitCommandsUseExactModifiers() {
+        #expect(
+            HerdrSpaceKeyCommand.resolve(
+                characters: "t", keyCode: 17, modifiers: .command) == .newTerminal)
+        #expect(
+            HerdrSpaceKeyCommand.resolve(
+                characters: "d", keyCode: 2, modifiers: .command) == .splitRight)
+        #expect(
+            HerdrSpaceKeyCommand.resolve(
+                characters: "D", keyCode: 2, modifiers: [.command, .shift]) == .splitDown)
+        #expect(
+            HerdrSpaceKeyCommand.resolve(
+                characters: "t", keyCode: 17, modifiers: [.command, .option]) == nil)
+    }
+
+    @Test func closeCommandsDistinguishTabsFromPanes() {
+        #expect(
+            HerdrSpaceKeyCommand.resolve(
+                characters: "w", keyCode: 13, modifiers: .command) == .closeTab)
+        #expect(
+            HerdrSpaceKeyCommand.resolve(
+                characters: "W", keyCode: 13, modifiers: [.command, .shift]) == .closePane)
+    }
+
+    @Test func numbersAndControlTabNavigateTopLevelTabs() {
+        #expect(
+            HerdrSpaceKeyCommand.resolve(
+                characters: "4", keyCode: 21, modifiers: .command) == .selectTab(number: 4))
+        #expect(
+            HerdrSpaceKeyCommand.resolve(
+                characters: "\t", keyCode: 48, modifiers: .control) == .nextTab)
+        #expect(
+            HerdrSpaceKeyCommand.resolve(
+                characters: "\t", keyCode: 48, modifiers: [.control, .shift]) == .previousTab)
+    }
+
+    @Test func deviceFlagsDoNotChangeTheChord() {
+        #expect(
+            HerdrSpaceKeyCommand.resolve(
+                characters: "t", keyCode: 17, modifiers: [.command, .capsLock])
+                == .newTerminal)
+        #expect(
+            HerdrSpaceKeyCommand.resolve(
+                characters: "1", keyCode: 18, modifiers: [.command, .function])
+                == .selectTab(number: 1))
+    }
+}
+
 @Suite @MainActor struct WorkspaceNavigationTests {
     private func model() -> WorkspaceModel {
         let machine = UUID()

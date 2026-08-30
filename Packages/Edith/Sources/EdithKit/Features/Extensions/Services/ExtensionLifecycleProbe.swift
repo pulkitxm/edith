@@ -193,6 +193,8 @@ public struct ExtensionLifecycleProbe: Sendable {
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "homebrew": Policy(
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
+        "appMaintenance": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "machines": Policy(
             requiresHelper: true, requiresMachine: true, toolRule: .all, adapter: true),
         "companion": Policy(
@@ -216,6 +218,8 @@ public struct ExtensionLifecycleProbe: Sendable {
         "presenter": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "colorPicker": Policy(
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
+        "emoji": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
     ]
 

@@ -5,8 +5,8 @@ your `PATH` the first time the app runs, and reaches everything the UI reaches:
 settings, extensions, permissions, agent usage, this Mac's metrics, playback,
 your clipboard, your calendar, and the machines Edith can talk to over SSH.
 
-`edh` and `edith` are the same binary under different names. Every example in
-these pages works with any of the three.
+`edith` is the same binary under its full name. Every example in these pages
+works with either name.
 
 The built-in manual is `ed guide`, which is written for agents and humans alike
 and is the shortest path to being useful. These pages are the complete
@@ -60,12 +60,14 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed clipboard`](./clipboard/README.md) | Clipboard history: read, copy, pin and prune |
 | [`ed attention`](./attention/README.md) | Application, website, music, focus and distraction insight |
 | [`ed color`](./color/README.md) | Launching the colour picker and reading its swatch history |
+| [`ed emoji`](./emoji/README.md) | Opening the emoji picker, listing what this Mac can render, typing one, and the default skin tone |
 | [`ed download`](./download/README.md) | The download queue and the tools that back it |
 | [`ed apps`](./apps/README.md) | Running applications, and quitting them |
 | [`ed tools`](./tools/README.md) | The command line tools Edith can install for you |
 | [`ed shelf`](./shelf/README.md) | The notch shelf's staged files |
 | [`ed cleaner`](./cleaner/README.md) | Scanning and reclaiming disk space |
 | [`ed brew`](./brew/README.md) | Searching and managing Homebrew formulae and casks |
+| [`ed maintenance`](./maintenance/README.md) | Verified app installs, updates, inventory, and review-first removal |
 | [`ed companion`](./companion/README.md) | Local memory health, status, Markdown ingest and episodes |
 
 ## Other machines

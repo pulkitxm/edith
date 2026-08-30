@@ -34,6 +34,29 @@ enum JSONContract {
         JSONCase(
             "ed brew uninstall", ["brew", "uninstall", "edith", "--yes", "--json"],
             mutatesTheMachine: true),
+        JSONCase(
+            "ed maintenance inventory", ["maintenance", "inventory", "--no-updates", "--json"]),
+        JSONCase(
+            "ed maintenance scan",
+            ["maintenance", "scan", "/path/that/does/not/exist.app", "--json"]),
+        JSONCase(
+            "ed maintenance remove",
+            ["maintenance", "remove", "/path/that/does/not/exist.app", "--json"]),
+        JSONCase(
+            "ed maintenance install",
+            ["maintenance", "install", "/path/that/does/not/exist.dmg", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed maintenance updates", ["maintenance", "updates", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed maintenance update", ["maintenance", "update", "missing", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed maintenance history", ["maintenance", "history", "--json"]),
+        JSONCase(
+            "ed maintenance backup-updates",
+            ["maintenance", "backup-updates", "/tmp/edith-update-contract.json", "--json"],
+            mutatesTheMachine: true),
         JSONCase("ed completions source", ["completions", "source", "--json"]),
         JSONCase("ed attention status", ["attention", "status", "--json"]),
         JSONCase("ed attention summary", ["attention", "summary", "--json"]),
@@ -162,6 +185,13 @@ enum JSONContract {
             "ed color copy", ["color", "copy", "1", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed color clear", ["color", "clear", "--json"]),
+        JSONCase("ed emoji pick", ["emoji", "pick", "--json"], mutatesTheMachine: true),
+        JSONCase("ed emoji ls", ["emoji", "ls", "--json"]),
+        JSONCase(
+            "ed emoji insert", ["emoji", "insert", "1F600", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed emoji tone", ["emoji", "tone", "medium", "--json"], mutatesTheMachine: true),
+        JSONCase("ed emoji clear", ["emoji", "clear", "--json"]),
         JSONCase("ed shelf ls", ["shelf", "ls", "--json"]),
         JSONCase("ed shelf path", ["shelf", "path", "1", "--json"]),
         JSONCase("ed shelf open", ["shelf", "open", "999999", "--json"]),
@@ -388,6 +418,9 @@ enum JSONContract {
             mutatesTheMachine: true),
         JSONCase("ed usage sources", ["usage", "sources", "--json"]),
         JSONCase(
+            "ed usage export", ["usage", "export", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
             "ed usage refresh", ["usage", "refresh", "--json"],
             mutatesTheMachine: true),
         JSONCase(
@@ -612,8 +645,6 @@ enum JSONContract {
         JSONCase("ed machines workspace rm", ["machines", "workspace", "rm", "nope", "--json"]),
         JSONCase(
             "ed machines files undo", ["machines", "files", "undo", "nowhere-at-all", "--json"]),
-        JSONCase(
-            "ed machines files open", ["machines", "files", "open", "nowhere-at-all", "--json"]),
         JSONCase("ed machines mounts", ["machines", "mounts", "--json"]),
         JSONCase("ed machines mount", ["machines", "mount", "nowhere-at-all", "--json"]),
         JSONCase("ed machines unmount", ["machines", "unmount", "nowhere-at-all", "--json"]),

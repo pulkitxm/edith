@@ -12,6 +12,7 @@ final class AppServices {
     private(set) var notchShelf: NotchShelfController?
     private(set) var colorPicker: ColorPickerStore?
     private(set) var clipboard: ClipboardStore?
+    private(set) var emoji: EmojiStore?
     private(set) var focusDim: FocusDimEngine?
     private(set) var presenter: PresenterDetector?
     private(set) var micMute: MicMuteEngine?
@@ -100,6 +101,7 @@ final class AppServices {
     func prepareForTermination() async {
         startup.cancel()
         terminating = true
+        shutDownEmojiRuntime()
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
@@ -294,10 +296,25 @@ final class AppServices {
         }
         ClipboardPanel.shared.store = clipboard
 
+        let emojiOn = Self.extensionEnabled(AppStorageKeys.Emoji.enabled)
+        if emojiOn {
+            if emoji == nil { emoji = EmojiStore() }
+            EmojiHotKey.register()
+        } else {
+            shutDownEmojiRuntime()
+        }
+        EmojiPanel.shared.store = emoji
         notchShelf?.attachClipboard(clipboard)
         notchShelf?.attachUsage(usage)
         notchShelf?.attachCalendar(calendar)
         notchShelf?.attachColorPicker(colorPicker)
+    }
+
+    private func shutDownEmojiRuntime() {
+        EmojiHotKey.unregister()
+        emoji?.shutdown()
+        emoji = nil
+        EmojiPanel.shared.store = nil
     }
 
     private func reconcilePresentationServices() {

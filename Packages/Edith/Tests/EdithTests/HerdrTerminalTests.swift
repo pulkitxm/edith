@@ -88,6 +88,21 @@ import Testing
                 == "herdr --session default agent attach w2:p1 --takeover")
     }
 
+    @Test func closingAnAgentInterruptsItWithoutClosingItsPane() {
+        let agent = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "work session", pane: "w2:p1", kind: "Claude Code", status: .working,
+            title: "Work", workspace: "edith", cwd: "/repo")
+        #expect(
+            HerdrAgentCloseCommand.arguments(for: agent) == [
+                "--session", "work session", "agent", "send-keys", "w2:p1", "ctrl+c", "ctrl+c",
+            ])
+        let line = HerdrAgentCloseCommand.shellLine(for: agent)
+        #expect(line.contains("agent send-keys"))
+        #expect(line.contains("ctrl+c ctrl+c"))
+        #expect(!line.contains("pane close"))
+    }
+
     @Test func aPlainPaneIsNotListedAsAnAgent() {
         let json = """
             {"id":"s","result":{"type":"session_snapshot","snapshot":{"panes":[{"pane_id":"w2:p1","agent":"claude","agent_status":"working","terminal_title_stripped":"Work","workspace_id":"w2"},{"pane_id":"w1:pA","agent_status":"unknown","workspace_id":"w1"}],"agents":[],"workspaces":[]}}}

@@ -21,6 +21,10 @@ enum Logo {
         ?? NSImage(systemSymbolName: "eyeglasses", accessibilityDescription: nil)!
 }
 
+enum AppState {
+    @MainActor static let services = migratedServices()
+}
+
 @MainActor
 func migratedServices() -> AppServices {
     let launchTrace = PerformanceTrace.begin(.startup, "helper.services")
@@ -34,6 +38,7 @@ func migratedServices() -> AppServices {
         }
         d.set(true, forKey: "migratedFromControlCenter")
     }
+    removeRetiredStatusItemDefaults()
     SharedDefaults.migrate()
     ExtensionDefaultsMigration.migrate()
     Repo.prepareStoredPaths()
@@ -107,7 +112,6 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let launchTrace = PerformanceTrace.begin(.startup, "helper.panel")
         defer { PerformanceTrace.end(launchTrace) }
-        PanelController.shared = PanelController(services: AppState.services)
         AppState.services.start()
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -147,12 +151,6 @@ struct EdithApp: App {
 
     init() {
         _ = AppProcessUptime.launchedAt
-
-        NotificationCenter.default.addObserver(
-            forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
-        ) { _ in
-            dismissPanel()
-        }
         HotKey.register()
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             SettingsBackup.shared.start()
@@ -169,6 +167,39 @@ struct EdithApp: App {
             applyAppearance(
                 SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
             services.sync()
+        }
+        _ = IPC.observe(IPC.Name.requestEmojiPanel) {
+            MainActor.assumeIsolated { EmojiPanel.shared.toggle() }
+        }
+        _ = IPC.observe(IPC.Name.requestEmojiInsert) { info in
+            let requestID = info[EmojiInsertIPC.requestIDKey] as? String
+            guard let character = info[EmojiInsertIPC.characterKey] as? String else {
+                if let requestID {
+                    IPC.post(
+                        IPC.Name.emojiInsertResult,
+                        userInfo: EmojiInsertIPC.resultPayload(
+                            requestID: requestID, inserted: false))
+                }
+                return
+            }
+            MainActor.assumeIsolated {
+                guard let store = services.emoji else {
+                    if let requestID {
+                        IPC.post(
+                            IPC.Name.emojiInsertResult,
+                            userInfo: EmojiInsertIPC.resultPayload(
+                                requestID: requestID, inserted: false))
+                    }
+                    return
+                }
+                store.insert(character: character) { inserted in
+                    guard let requestID else { return }
+                    IPC.post(
+                        IPC.Name.emojiInsertResult,
+                        userInfo: EmojiInsertIPC.resultPayload(
+                            requestID: requestID, inserted: inserted))
+                }
+            }
         }
         _ = IPC.observe(IPC.Name.presenterAutoActiveChanged) {
             services.usage?.refreshMenuBarItem()
@@ -259,16 +290,6 @@ struct EdithApp: App {
         }
         PermissionsModel.shared.startIPCBridge()
         PermissionsModel.shared.refresh()
-
-        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            if event.keyCode == 53, !NSColorPanel.shared.isVisible,
-                PanelController.shared?.isOpen == true
-            {
-                dismissPanel()
-                return nil
-            }
-            return event
-        }
     }
 
     var body: some Scene {
@@ -295,6 +316,7 @@ enum GlobalHotKey {
         static let colorPicker: UInt32 = 5
         static let micMute: UInt32 = 6
         static let presenterToggle: UInt32 = 7
+        static let emoji: UInt32 = 8
     }
 
     fileprivate static var refs: [UInt32: EventHotKeyRef] = [:]
@@ -354,7 +376,7 @@ enum HotKey {
 
     static func register() {
         GlobalHotKey.set(id: GlobalHotKey.ID.panel, keyCode: code, modifiers: mods) {
-            togglePanel()
+            showPanel()
         }
     }
 
@@ -401,6 +423,42 @@ enum ClipboardHotKey {
         SharedDefaults.store.set(code, forKey: "clipboardHotKeyCode")
         SharedDefaults.store.set(mods, forKey: "clipboardHotKeyMods")
         SharedDefaults.store.set(label, forKey: "clipboardHotKeyLabel")
+    }
+}
+
+enum EmojiHotKey {
+    static var code: Int {
+        SharedDefaults.store.object(forKey: AppStorageKeys.Emoji.hotKeyCode) as? Int
+            ?? kVK_ANSI_E
+    }
+    static var mods: Int {
+        SharedDefaults.store.object(forKey: AppStorageKeys.Emoji.hotKeyMods) as? Int
+            ?? (controlKey | shiftKey)
+    }
+    static var label: String {
+        SharedDefaults.store.string(forKey: AppStorageKeys.Emoji.hotKeyLabel) ?? "⌃⇧E"
+    }
+
+    static func register() {
+        let enabled =
+            SharedDefaults.store.object(forKey: AppStorageKeys.Emoji.enabled) as? Bool ?? false
+        guard enabled else {
+            GlobalHotKey.clear(id: GlobalHotKey.ID.emoji)
+            return
+        }
+        GlobalHotKey.set(id: GlobalHotKey.ID.emoji, keyCode: code, modifiers: mods) {
+            MainActor.assumeIsolated { EmojiPanel.shared.toggle() }
+        }
+    }
+
+    static func unregister() {
+        GlobalHotKey.clear(id: GlobalHotKey.ID.emoji)
+    }
+
+    static func save(code: Int, mods: Int, label: String) {
+        SharedDefaults.store.set(code, forKey: AppStorageKeys.Emoji.hotKeyCode)
+        SharedDefaults.store.set(mods, forKey: AppStorageKeys.Emoji.hotKeyMods)
+        SharedDefaults.store.set(label, forKey: AppStorageKeys.Emoji.hotKeyLabel)
     }
 }
 
@@ -500,10 +558,6 @@ enum PresenterHotKey {
     }
 }
 
-func togglePanel() {
-    MainActor.assumeIsolated { PanelController.shared?.toggle() }
-}
-
 func showPanel() {
     MainActor.assumeIsolated { MainApp.openDashboard() }
 }
@@ -511,7 +565,14 @@ func showPanel() {
 func dismissPanel() {
     MainActor.assumeIsolated {
         if NSColorPanel.shared.isVisible { NSColorPanel.shared.close() }
-        PanelController.shared?.close()
+    }
+}
+
+func removeRetiredStatusItemDefaults(_ defaults: UserDefaults = .standard) {
+    let retiredNames = ["edithGlasses", "limits"]
+    for key in defaults.dictionaryRepresentation().keys
+    where key.hasPrefix("NSStatusItem") && retiredNames.contains(where: key.hasSuffix) {
+        defaults.removeObject(forKey: key)
     }
 }
 

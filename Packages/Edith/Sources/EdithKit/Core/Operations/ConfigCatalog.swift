@@ -51,7 +51,7 @@ public enum ConfigCatalog {
         "music",
         "calendar",
         "clipboard",
-        "notch", "focusdim", "presenter", "colorpicker", "micmute",
+        "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
         "backup", "permissions", "terminal",
     ]
 
@@ -59,7 +59,8 @@ public enum ConfigCatalog {
         appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
         + system + homebrew + cleaner
-        + music + calendar + clipboard + notch + focusDim + presenter + colorPicker + micMute
+        + music + calendar + clipboard + notch + focusDim + presenter + colorPicker + emoji
+        + micMute
         + backup + permissions + terminal
 
     public static var keys: [String] { settings.map(\.key) }
@@ -216,7 +217,7 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.MenuBar.colorMode, .string, group: "menubar",
             summary: "How the menu bar readout is tinted.",
-            allowed: ["auto", "white", "custom"], fallback: .string("auto")),
+            allowed: ["auto", "custom"], fallback: .string("auto")),
         SettingDefinition(
             AppStorageKeys.General.smartColor, .bool, group: "menubar",
             summary: "Tint the menu bar readout by a time-aware risk model."),
@@ -235,6 +236,10 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.MenuBar.statsColorHex, .string, group: "menubar",
             summary: "Hex colour of the CPU and memory menu bar readout."),
+        SettingDefinition(
+            AppStorageKeys.MenuBar.statsColorMode, .string, group: "menubar",
+            summary: "How the CPU and memory menu bar readout is tinted.",
+            allowed: ["auto", "custom"], fallback: .string("auto")),
         SettingDefinition(
             AppStorageKeys.MenuBar.systemStats, .bool, group: "menubar",
             summary: "CPU and memory readout as a menu bar item.", fallback: .bool(false)),
@@ -463,6 +468,31 @@ public enum ConfigCatalog {
             AppStorageKeys.Tabs.systemEnabled, .bool, group: "system",
             summary: "System extension: running apps, prevent sleep and the cleaning lock.",
             fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.enabled, .bool, group: "system",
+            summary: "App Maintenance extension: inventory, installation and safe removal.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.installDestination, .string, group: "system",
+            summary: "Default disk image installation destination.",
+            allowed: AppMaintenanceInstallDestination.allCases.map(\.rawValue),
+            fallback: .string(AppMaintenanceInstallDestination.user.rawValue)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateAutoRefresh, .bool, group: "system",
+            summary: "Refresh App Update Center automatically.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateRefreshInterval, .number, group: "system",
+            summary: "Seconds between enabled App Update Center refreshes.",
+            fallback: .double(86_400)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateNotifications, .bool, group: "system",
+            summary: "Notify after automatic refreshes find new updates.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateConcurrency, .int, group: "system",
+            summary: "Maximum updates running together.", fallback: .int(2)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateRetries, .int, group: "system",
+            summary: "Retries after an update fails.", fallback: .int(1)),
         SettingDefinition(
             AppStorageKeys.General.preventSleep, .bool, group: "system",
             summary: "Keep the Mac awake (Keep Awake).", fallback: .bool(false)),
@@ -811,6 +841,34 @@ public enum ConfigCatalog {
         SettingDefinition(
             "colorPickerHotKeyLabel", .string, group: "colorpicker",
             summary: "Printable label for the colour picker shortcut."),
+    ]
+
+    private static let emoji: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Emoji.enabled, .bool, group: "emoji",
+            summary: "Emoji Picker extension: every macOS emoji on a hotkey.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Emoji.popupAt, .string, group: "emoji",
+            summary: "Where the emoji picker opens.",
+            allowed: PopupPosition.allCases.map(\.rawValue), fallback: .string("cursor")),
+        SettingDefinition(
+            AppStorageKeys.Emoji.skinTone, .int, group: "emoji",
+            summary: "Default skin tone index applied to emoji that support one.",
+            integerRange: 0...5, fallback: .int(0)),
+        SettingDefinition(
+            AppStorageKeys.Emoji.frequentCount, .int, group: "emoji",
+            summary: "How many frequently used emoji pin to the top of the picker.",
+            integerRange: 0...EmojiCatalogSummary.maxFrequentCount, fallback: .int(10)),
+        SettingDefinition(
+            AppStorageKeys.Emoji.hotKeyCode, .int, group: "emoji",
+            summary: "Virtual key code of the emoji picker shortcut."),
+        SettingDefinition(
+            AppStorageKeys.Emoji.hotKeyMods, .int, group: "emoji",
+            summary: "Carbon modifier mask of the emoji picker shortcut."),
+        SettingDefinition(
+            AppStorageKeys.Emoji.hotKeyLabel, .string, group: "emoji",
+            summary: "Printable label for the emoji picker shortcut."),
     ]
 
     private static let micMute: [SettingDefinition] = [

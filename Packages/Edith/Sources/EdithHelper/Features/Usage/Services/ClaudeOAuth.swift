@@ -218,6 +218,7 @@ enum ClaudeCredentialStore {
             kSecReturnData: true,
             kSecMatchLimit: kSecMatchLimitOne,
             kSecUseAuthenticationContext: noninteractiveContext(),
+            kSecUseAuthenticationUI: kSecUseAuthenticationUISkip,
         ]
         var item: CFTypeRef?
         let status = readItem(query as CFDictionary, &item)

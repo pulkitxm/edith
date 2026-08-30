@@ -117,6 +117,8 @@ fi
 
 CONFIG=Debug
 [ "$RELEASE" = 1 ] && CONFIG=Release
+XCODE_BUILD_SETTING=""
+[ "$RELEASE" = 1 ] && XCODE_BUILD_SETTING=SWIFT_OPTIMIZATION_LEVEL=-Osize
 
 TEAM_ID=""
 [ "$SIGN_IDENTITY" = "-" ] || TEAM_ID="$(team_id_for "$SIGN_IDENTITY" || true)"
@@ -132,6 +134,7 @@ xcodebuild -project edth.xcodeproj -scheme EdithMain -configuration "$CONFIG" \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="$SIGN_IDENTITY" \
   DEVELOPMENT_TEAM="$TEAM_ID" \
+  ${XCODE_BUILD_SETTING:+"$XCODE_BUILD_SETTING"} \
   build
 
 BUILT="$DERIVED/Build/Products/$CONFIG/Edith.app"
@@ -149,36 +152,46 @@ PRIVILEGED_HELPER_BUILD="$($SWIFT_BIN build --package-path Packages/Edith \
 
 APP="dist/Edith.app"
 HELPER="$APP/Contents/Library/LoginItems/Edith.app"
-FILES_APP="$APP/Contents/Library/Applications/Edith Files.app"
 PRIVILEGED_HELPER="$APP/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake"
 LAUNCH_DAEMONS="$APP/Contents/Library/LaunchDaemons"
-STATUS_HELPER="$HELPER/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake"
-STATUS_LAUNCH_DAEMONS="$HELPER/Contents/Library/LaunchDaemons"
 rm -rf dist && mkdir -p dist
 ditto "$BUILT" "$APP"
+rm -f "$APP/Contents/MacOS/edh"
+rm -f "$APP/Contents/MacOS/ed"
+install -m 755 Resources/ed-launcher "$APP/Contents/Resources/ed-launcher"
+ln -s ../Resources/ed-launcher "$APP/Contents/MacOS/ed"
 
 rm -rf "$HELPER"
 ditto "$BUILT_HELPER" "$HELPER"
 mv "$HELPER/Contents/MacOS/EdithHelper" "$HELPER/Contents/MacOS/Edith"
 /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable Edith' "$HELPER/Contents/Info.plist"
+rm -f "$HELPER/Contents/Resources/AppIcon.icns"
+ln -s ../../../../../Resources/AppIcon.icns "$HELPER/Contents/Resources/AppIcon.icns"
+rm -rf "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
+ln -s ../../../../../Resources/Edith_EdithKit.bundle \
+  "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
 
-mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS" \
-  "$(dirname "$STATUS_HELPER")" "$STATUS_LAUNCH_DAEMONS"
+mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS"
 cp "$PRIVILEGED_HELPER_BUILD" "$PRIVILEGED_HELPER"
 cp Resources/com.pulkit.edith.lidawake.v2.plist "$LAUNCH_DAEMONS/"
-cp "$PRIVILEGED_HELPER_BUILD" "$STATUS_HELPER"
-cp Resources/com.pulkit.edith.lidawake.plist "$STATUS_LAUNCH_DAEMONS/"
 
-rm -rf "$FILES_APP/Contents/Frameworks"
-
-if [ "$RELEASE" = 1 ]; then
-  find "$APP" -type f -perm -u+x -print0 \
-    | while IFS= read -r -d '' binary; do
-        case "$(file -b "$binary")" in
-          *Mach-O*) strip -rSTx "$binary" 2>/dev/null || true ;;
-        esac
-      done
-fi
+find "$APP" -type f -perm -u+x -print0 \
+  | while IFS= read -r -d '' binary; do
+      case "$(file -b "$binary")" in
+        *"universal binary"*)
+          lipo "$binary" -thin arm64 -output "$binary.arm64"
+          mv "$binary.arm64" "$binary"
+          if [ "$RELEASE" = 1 ]; then
+            strip -rSTx "$binary" 2>/dev/null || true
+          fi
+          ;;
+        *Mach-O*)
+          if [ "$RELEASE" = 1 ]; then
+            strip -rSTx "$binary" 2>/dev/null || true
+          fi
+          ;;
+      esac
+    done
 
 if [ "$SIGN_IDENTITY" = "-" ]; then
   echo "WARNING: no signing identity found; signing ad-hoc. The code signature" >&2
@@ -204,15 +217,10 @@ sign_tool() {
   codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS "$1"
 }
 
-sign_tool "$APP/Contents/MacOS/ed"
-sign_tool "$APP/Contents/MacOS/edh"
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
   --identifier com.pulkit.edith.lidawake "$PRIVILEGED_HELPER"
-codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
-  --identifier com.pulkit.edith.lidawake "$STATUS_HELPER"
 sign_tool "$APP/Contents/Frameworks/Sparkle.framework"
 sign "$HELPER"
-sign "$FILES_APP"
 sign "$APP"
 
 process_is_running() {
@@ -244,6 +252,7 @@ stop_installed_app() {
     wait_for_process_exit "$installed_main" || stop_process "$installed_main"
   fi
   stop_process "$installed_helper"
+  stop_process "com.pulkit.edith.helper"
 }
 
 if [ "$INSTALL" = 1 ]; then

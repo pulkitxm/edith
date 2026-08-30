@@ -1,6 +1,16 @@
 import Foundation
 
 public enum AppStorageKeys {
+    public enum AppMaintenance {
+        public static let enabled = "appMaintenanceEnabled"
+        public static let installDestination = "appMaintenanceInstallDestination"
+        public static let updateAutoRefresh = "appUpdateAutoRefresh"
+        public static let updateConcurrency = "appUpdateConcurrency"
+        public static let updateNotifications = "appUpdateNotifications"
+        public static let updateRefreshInterval = "appUpdateRefreshInterval"
+        public static let updateRetries = "appUpdateRetries"
+    }
+
     public enum Update {
         public static let automaticChecks = "SUEnableAutomaticChecks"
         public static let checkInterval = "SUScheduledCheckInterval"
@@ -77,6 +87,17 @@ public enum AppStorageKeys {
         public static let setupDeclined = "companionSetupDeclined"
     }
 
+    public enum Emoji {
+        public static let enabled = "emojiEnabled"
+        public static let frequentCount = "emojiFrequentCount"
+        public static let hotKeyCode = "emojiHotKeyCode"
+        public static let hotKeyLabel = "emojiHotKeyLabel"
+        public static let hotKeyMods = "emojiHotKeyMods"
+        public static let popupAt = "emojiPopupAt"
+        public static let skinTone = "emojiSkinTone"
+        public static let usage = "emojiUsage"
+    }
+
     public enum FocusDim {
         public static let animationDuration = "focusDimAnimationDuration"
         public static let hotKeyCode = "focusDimHotKeyCode"
@@ -91,9 +112,16 @@ public enum AppStorageKeys {
         public static let ghosttyTerminal = "herdrGhosttyTerminal"
         public static let splitFraction = "herdrSplitFraction"
         public static let railOpen = "herdrRailOpen"
+        public static let railWidth = "herdrRailWidth"
         public static let detailOpen = "herdrDetailOpen"
+        public static let detailWidth = "herdrDetailWidth"
         public static let agentsCollapsed = "herdrAgentsCollapsed"
+        public static let agentsCollapsedCount = "herdrAgentsCollapsedCount"
         public static let terminalsCollapsed = "herdrTerminalsCollapsed"
+        public static let terminalsCollapsedCount = "herdrTerminalsCollapsedCount"
+        public static let spaceGroupingEnabled = "herdrSpaceGroupingEnabled"
+        public static let collapsedSpaces = "herdrCollapsedSpaces"
+        public static let collapsedSpaceCounts = "herdrCollapsedSpaceCounts"
     }
 
     public enum Homebrew {
@@ -134,6 +162,7 @@ public enum AppStorageKeys {
         public static let lowColorHex = "menuBarLowColorHex"
         public static let midColorHex = "menuBarMidColorHex"
         public static let statsColorHex = "menuBarStatsColorHex"
+        public static let statsColorMode = "menuBarStatsColorMode"
         public static let subColorHex = "menuBarSubColorHex"
         public static let systemStats = "menuBarSystemStats"
     }

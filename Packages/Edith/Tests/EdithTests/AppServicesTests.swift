@@ -41,6 +41,7 @@ private actor AppServicesCallProbe {
         #expect(services.notchShelf == nil)
         #expect(services.colorPicker == nil)
         #expect(services.clipboard == nil)
+        #expect(services.emoji == nil)
         #expect(services.focusDim == nil)
         #expect(services.presenter == nil)
         #expect(services.micMute == nil)

@@ -35,6 +35,9 @@ import EdithCore
             id: "homebrew", helper: false, machine: false, toolRule: .all, adapter: true,
             requiredTools: ["homebrew"], optionalTools: []),
         MatrixRow(
+            id: "appMaintenance", helper: false, machine: false, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "machines", helper: true, machine: true, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
@@ -66,6 +69,9 @@ import EdithCore
             requiredTools: [], optionalTools: []),
         MatrixRow(
             id: "presenter", helper: true, machine: false, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
+            id: "emoji", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
             id: "colorPicker", helper: true, machine: false, toolRule: .all, adapter: true,

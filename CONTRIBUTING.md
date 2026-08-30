@@ -26,7 +26,7 @@ is what assembles the app. `build.sh` drives `xcodebuild` for the `EdithMain`
 scheme, which builds and embeds `EdithHelper` (the always-on menu bar
 companion, nested at `Contents/Library/LoginItems` and shipped as
 `Edith.app`), `EdithFiles` (nested at `Contents/Library/Applications`), and
-the `ed`/`edh` CLI tools (`Contents/MacOS`). Its final embed phase also builds
+the `ed` CLI executable (`Contents/MacOS`). Its final embed phase also builds
 `EdithLidAwakeHelper` with SwiftPM and places the signed executable and launchd
 property list inside the menu bar companion.
 
@@ -124,7 +124,7 @@ job.
 | `make ci-performance` | Validates the checked performance audit and deterministic helper benchmark fixture. |
 | `make ci-promo` | `npm ci` and type check for the Remotion promo video. |
 | `make ci-swift-lint` | `swift format lint --strict` over `Sources`, `Tests` and `Package.swift`. |
-| `make ci-swift-build` | One `xcodebuild` of the `EdithMain` scheme, which builds all five Xcode targets and runs the privileged-helper SwiftPM embed phase. |
+| `make ci-swift-build` | One `xcodebuild` of the `EdithMain` scheme, which builds all four Xcode targets and runs the privileged-helper SwiftPM embed phase. |
 | `make ci-swift-test` | The Swift test suite, through `Packages/Edith/test.sh`. |
 | `make ci-swift-check` | The three above as one on-demand local target. |
 | `make ci-swift` | `ci-swift-check` plus a full `build.sh` and `make verify-bundle`. |
@@ -279,7 +279,7 @@ change:
 
 ```bash
 tccutil reset All com.pulkit.edith
-tccutil reset All com.pulkit.edith.statusbar
+tccutil reset All com.pulkit.edith.helper
 ```
 
 ## Website
