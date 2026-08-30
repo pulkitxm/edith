@@ -23,6 +23,7 @@ let dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-log.git", exact: "1.15.0"),
     .package(url: "https://github.com/apple/swift-nio.git", exact: "2.101.3"),
     .package(url: "https://github.com/apple/swift-nio-ssl.git", exact: "2.37.2"),
+    .package(url: "https://github.com/apple/swift-nio-transport-services.git", exact: "1.28.0"),
 ]
 
 let targets: [Target] = [
@@ -49,6 +50,9 @@ let targets: [Target] = [
             .product(name: "MongoCore", package: "MongoKitten"),
             .product(name: "Logging", package: "swift-log"),
             .product(name: "NIOSSL", package: "swift-nio-ssl"),
+            .product(
+                name: "NIOTransportServices",
+                package: "swift-nio-transport-services"),
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
@@ -63,6 +67,9 @@ let targets: [Target] = [
             .product(name: "MongoClient", package: "MongoKitten"),
             .product(name: "MongoCore", package: "MongoKitten"),
             .product(name: "NIOEmbedded", package: "swift-nio"),
+            .product(
+                name: "NIOTransportServices",
+                package: "swift-nio-transport-services"),
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
