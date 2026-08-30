@@ -746,6 +746,88 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
                 == .succeeded)
     }
 
+    @Test func browseAndQueryProtectAdapterContinuations() async throws {
+        let report = DatabaseExecutorFixtures.report(
+            identity: DatabaseExecutorFixtures.identity(),
+            includesQuery: true)
+        let fixture = try await DatabaseExecutorFixtures.make(report: report)
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let target = DatabaseExecutorFixtures.target(fixture.connection.id)
+        let adapterContinuation = try DatabaseAdapterContinuation(
+            mode: .keyset,
+            payload: Data("adapter-position".utf8),
+            expiresAt: DatabaseExecutorFixtures.now.addingTimeInterval(300))
+        let continuedPage = try DatabaseAdapterPage(
+            records: [],
+            nextContinuation: adapterContinuation,
+            metadata: DatabasePageMetadata(
+                completeness: DatabaseResultCompleteness(state: .complete),
+                count: DatabaseCountMetadata(value: 0, accuracy: .exact)))
+        await fixture.session.setPage(continuedPage)
+        let firstBrowse = await fixture.executor.browse(
+            DatabaseBrowseRequest(
+                target: target,
+                operation: DatabaseExecutorFixtures.operation(61)))
+
+        #expect(firstBrowse.status == .succeeded)
+        let browseToken = try #require(firstBrowse.payload?.page.nextContinuation)
+        #expect(!browseToken.rawValue.contains("adapter-position"))
+        await fixture.session.setPage(try DatabaseExecutorFixtures.page())
+        let secondBrowse = await fixture.executor.browse(
+            DatabaseBrowseRequest(
+                target: target,
+                page: DatabasePageRequest(continuation: browseToken),
+                operation: DatabaseExecutorFixtures.operation(62)))
+        #expect(secondBrowse.status == .succeeded)
+
+        await fixture.session.setQueryPage(continuedPage)
+        let firstQuery = await fixture.executor.query(
+            DatabaseQueryRequest(
+                target: target,
+                language: .sql,
+                command: "SELECT * FROM orders",
+                operation: DatabaseExecutorFixtures.operation(63)))
+        #expect(firstQuery.status == .succeeded)
+        let queryToken = try #require(firstQuery.payload?.page.nextContinuation)
+        #expect(queryToken != browseToken)
+        await fixture.session.setQueryPage(try DatabaseExecutorFixtures.page())
+        let secondQuery = await fixture.executor.query(
+            DatabaseQueryRequest(
+                target: target,
+                language: .sql,
+                command: "SELECT * FROM orders",
+                page: DatabasePageRequest(continuation: queryToken),
+                operation: DatabaseExecutorFixtures.operation(64)))
+        #expect(secondQuery.status == .succeeded)
+
+        let invalidContinuation = await fixture.executor.browse(
+            DatabaseBrowseRequest(
+                target: target,
+                page: DatabasePageRequest(
+                    continuation: DatabaseContinuationToken(
+                        rawValue: browseToken.rawValue + "x")),
+                operation: DatabaseExecutorFixtures.operation(65)))
+        #expect(invalidContinuation.status == .failed)
+        #expect(invalidContinuation.error?.category == .invalidRequest)
+        #expect(invalidContinuation.error?.target == target)
+
+        let invocations = await fixture.session.snapshot().invocations
+        let browseContinuations: [DatabaseAdapterContinuation] = invocations.compactMap {
+            invocation in
+            guard case .readPage(let request, _) = invocation else { return nil }
+            return request.continuation
+        }
+        let queryContinuations: [DatabaseAdapterContinuation] = invocations.compactMap {
+            invocation in
+            guard case .query(let request, _) = invocation else { return nil }
+            return request.source.continuation
+        }
+        #expect(browseContinuations.count == 1)
+        #expect(browseContinuations.first?.payload == adapterContinuation.payload)
+        #expect(queryContinuations.count == 1)
+        #expect(queryContinuations.first?.payload == adapterContinuation.payload)
+    }
+
     @Test func connectionTestsAreEphemeralAcrossSuccessAndFailure() async throws {
         let fixture = try await DatabaseExecutorFixtures.make()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
