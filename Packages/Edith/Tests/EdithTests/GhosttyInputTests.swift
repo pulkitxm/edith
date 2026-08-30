@@ -103,6 +103,59 @@ import Testing
         #expect(reports.contains { $0.hasPrefix("[<2;") && $0.hasSuffix("m") })
     }
 
+    @Test @MainActor func scrollWheelReachesAChildThatEnablesMouseReporting() async throws {
+        let output = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-ghostty-scroll-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: output) }
+        let command =
+            "stty raw -echo; printf '\\033[?1003h\\033[?1006h'; cat > '\(output.path)'"
+        let launch = GhosttyLaunch(
+            executable: "/bin/sh", arguments: ["-c", command],
+            environment: ProcessInfo.processInfo.environment.map { "\($0.key)=\($0.value)" })
+        let view = GhosttyTerminalView(launch: launch)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+        let window = NSWindow(
+            contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = view
+        defer {
+            window.contentView = nil
+            view.shutdown()
+        }
+
+        for _ in 0..<100 {
+            if let surface = view.surface, ghostty_surface_mouse_captured(surface) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let surface = try #require(view.surface)
+        #expect(ghostty_surface_mouse_captured(surface))
+        let position = try #require(
+            NSEvent.mouseEvent(
+                with: .mouseMoved, location: NSPoint(x: 80, y: 500), modifierFlags: [],
+                timestamp: 1, windowNumber: window.windowNumber, context: nil, eventNumber: 1,
+                clickCount: 0, pressure: 0))
+        view.mouseMoved(with: position)
+        let cgEvent = try #require(
+            CGEvent(
+                scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: 40,
+                wheel2: 0, wheel3: 0))
+        cgEvent.location = CGPoint(x: 80, y: 500)
+        view.scrollWheel(with: try #require(NSEvent(cgEvent: cgEvent)))
+
+        var reports: [String] = []
+        for _ in 0..<100 {
+            if let data = try? Data(contentsOf: output) {
+                reports = String(decoding: data, as: UTF8.self)
+                    .split(separator: "\u{1B}").map(String.init)
+                if reports.contains(where: { $0.hasPrefix("[<64;") || $0.hasPrefix("[<65;") }) {
+                    break
+                }
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(reports.contains { $0.hasPrefix("[<64;") || $0.hasPrefix("[<65;") })
+    }
+
     @Test func appKitFunctionKeyTextIsNotSentToTheTerminal() throws {
         let event = try #require(
             NSEvent.keyEvent(
