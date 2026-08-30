@@ -355,7 +355,7 @@ public actor DatabaseExecutor {
                 cancellationSupport: .serverSide,
                 retryClassification: .requiresNewPreview,
                 terminalProgress: .determinate(completed: 1, total: 1, unit: .steps)
-            ) { [self, sessionPool, validator] context, _ in
+            ) { [self, sessionPool, validator] context, mapper in
                 let lease = try await sessionPool.lease(
                     for: definition,
                     context: context)
@@ -395,9 +395,15 @@ public actor DatabaseExecutor {
                         DatabasePage(
                             records: $0.records,
                             fields: $0.fields,
-                            metadata: $0.metadata)
+                            metadata: DatabasePageMetadata(
+                                completeness: DatabaseResultCompleteness(state: .complete),
+                                count: $0.metadata.count,
+                                timing: $0.metadata.timing,
+                                bytesReceived: $0.metadata.bytesReceived,
+                                warnings: $0.metadata.warnings.map(mapper.sanitize)))
                     },
-                    serverOperationIdentifier: adapterResult.serverOperationIdentifier)
+                    serverOperationIdentifier: mapper.sanitizeServerOperationIdentifier(
+                        adapterResult.serverOperationIdentifier))
             }
         } catch {
             return failure(error, target: request.mutation.target)

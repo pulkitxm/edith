@@ -891,6 +891,67 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
                 await fixture.session.snapshot()) == 1)
     }
 
+    @Test func mutationBrokerPayloadsRedactResolvedSecrets() async throws {
+        let secret = "mutation-result-secret"
+        let reference = DatabaseSecretReference(
+            identifier: DatabaseExecutorFixtures.uuid(80),
+            purpose: .password)
+        let connection = try DatabaseExecutorFixtures.connection(
+            name: "Orders \(secret)",
+            secretReference: reference)
+        let report = DatabaseExecutorFixtures.report(
+            identity: DatabaseExecutorFixtures.identity(),
+            includesMutation: true)
+        let fixture = try await DatabaseExecutorFixtures.make(
+            connection: connection,
+            report: report,
+            secretValues: [reference: Data(secret.utf8)])
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let returnedPage = try DatabaseAdapterPage(
+            records: [],
+            metadata: DatabasePageMetadata(
+                completeness: DatabaseResultCompleteness(state: .complete),
+                count: DatabaseCountMetadata(value: 0, accuracy: .exact),
+                warnings: [
+                    DatabaseWarning(
+                        code: "server.\(secret)",
+                        message: "Server reported \(secret)",
+                        severity: .caution)
+                ]))
+        await fixture.session.setMutationResult(
+            try DatabaseAdapterMutationResult(
+                disposition: .completed,
+                affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .exact),
+                returnedPage: returnedPage,
+                serverOperationIdentifier: "job-\(secret)"))
+        let mutation = DatabaseExecutorFixtures.mutationRequest(connection: connection)
+        let preview = await fixture.executor.previewMutation(
+            DatabaseMutationPreviewRequest(
+                mutation: mutation,
+                operation: DatabaseExecutorFixtures.operation(81)))
+        let issued = try #require(preview.payload?.preview)
+
+        let applied = await fixture.executor.applyMutation(
+            DatabaseMutationApplyRequest(
+                mutation: mutation,
+                token: issued.token,
+                confirmationText: issued.requiredConfirmation.text,
+                operation: DatabaseExecutorFixtures.operation(82)))
+        let encodedPreview = String(
+            decoding: try JSONEncoder().encode(preview),
+            as: UTF8.self)
+        let encodedApply = String(
+            decoding: try JSONEncoder().encode(applied),
+            as: UTF8.self)
+
+        #expect(preview.status == .succeeded)
+        #expect(applied.status == .succeeded)
+        #expect(!encodedPreview.contains(secret))
+        #expect(!encodedApply.contains(secret))
+        #expect(encodedPreview.contains(DatabaseSecretRedactor.defaultReplacement))
+        #expect(encodedApply.contains(DatabaseSecretRedactor.defaultReplacement))
+    }
+
     @Test func connectAndDisconnectReturnTypedResultsAndPersistTerminalHistory() async throws {
         let fixture = try await DatabaseExecutorFixtures.make()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
