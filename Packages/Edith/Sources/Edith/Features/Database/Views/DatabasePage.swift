@@ -102,6 +102,7 @@ final class DatabasePageModel {
 
 struct DatabasePage: View {
     @State private var model = DatabasePageModel()
+    @State private var connectionWorkspace = DatabaseConnectionWorkspaceModel()
     @State private var workspace = DatabaseWorkspaceModel()
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.colorScheme) private var scheme
@@ -134,6 +135,16 @@ struct DatabasePage: View {
         .task {
             guard automaticActionsEnabled else { return }
             await model.refresh()
+        }
+        .task(id: connectionWorkspace.searchText) {
+            guard automaticActionsEnabled else { return }
+            let search = connectionWorkspace.searchText.trimmingCharacters(
+                in: .whitespacesAndNewlines)
+            if !search.isEmpty {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled else { return }
+            }
+            await connectionWorkspace.loadConnections()
         }
         .sheet(
             item: Binding(
@@ -171,76 +182,38 @@ struct DatabasePage: View {
         }
         .buttonStyle(.edith(.borderless))
         .help("Check the local database broker")
+        .accessibilityLabel("Database broker status")
+        .accessibilityValue(model.statusTitle)
+        .accessibilityHint("Check the authenticated local database broker")
     }
 
     private var compactContent: some View {
-        VStack(spacing: UIScale.pt(16)) {
+        VStack(spacing: 0) {
             connections
+            Divider().opacity(0.35)
             workbench
         }
-        .padding(UIScale.pt(18))
     }
 
     private var connections: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            Text("Connections")
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-                .textCase(.uppercase)
-                .tracking(0.5)
-            Spacer(minLength: UIScale.pt(12))
-            Image(systemName: "cylinder.split.1x2")
-                .font(.system(size: UIScale.pt(30), weight: .light))
-                .foregroundStyle(DashSkin.inkFaint(dark).opacity(0.7))
-            Text("No database connected")
-                .font(.system(size: UIScale.pt(14), weight: .semibold))
-            Text(
-                "Connections stay behind the authenticated local broker and never expose credentials to the app process."
-            )
-            .font(.system(size: UIScale.pt(12)))
-            .foregroundStyle(DashSkin.inkFaint(dark))
-            .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: UIScale.pt(12))
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(UIScale.pt(18))
-        .background(DashSkin.paper2(dark).opacity(0.55))
+        DatabaseConnectionSidebar(model: connectionWorkspace)
     }
 
     private var workbench: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(18)) {
-            Text("Safe database work starts here")
-                .font(.system(size: UIScale.pt(24), weight: .semibold))
-                .tracking(-0.5)
-            Text(
-                "Explore data with bounded reads, then preview every mutation before anything changes."
-            )
-            .font(.system(size: UIScale.pt(14)))
-            .foregroundStyle(DashSkin.inkFaint(dark))
-            .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 0) {
             if let detail = model.failureDetail {
                 brokerFailure(detail)
+                    .padding(.horizontal, UIScale.pt(28))
+                    .padding(.top, UIScale.pt(28))
             }
             if let notice = workspace.mutationNotice {
                 mutationNotice(notice)
+                    .padding(.horizontal, UIScale.pt(28))
+                    .padding(.top, UIScale.pt(18))
             }
-            VStack(spacing: UIScale.pt(12)) {
-                workbenchStep(
-                    "1", "Connect through the broker",
-                    "Credentials remain in the secret store while the broker owns database sessions."
-                )
-                workbenchStep(
-                    "2", "Explore with bounded reads",
-                    "Catalogs, schemas, collections, indexes and records load through paged operations."
-                )
-                workbenchStep(
-                    "3", "Review before changing data",
-                    "Destructive operations require an exact preview, fresh token and typed confirmation."
-                )
-            }
+            DatabaseConnectionOverview(model: connectionWorkspace)
         }
-        .frame(maxWidth: UIScale.pt(720), alignment: .leading)
-        .padding(UIScale.pt(28))
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func brokerFailure(_ detail: String) -> some View {
@@ -314,33 +287,4 @@ struct DatabasePage: View {
         .background(DashSkin.warn.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
     }
 
-    private func workbenchStep(_ number: String, _ title: String, _ detail: String) -> some View {
-        HStack(alignment: .top, spacing: UIScale.pt(12)) {
-            Text(number)
-                .font(.system(size: UIScale.pt(12), weight: .bold, design: .rounded))
-                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-                .foregroundStyle(DashSkin.accent(dark))
-                .background(
-                    DashSkin.accent(dark).opacity(0.12),
-                    in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
-            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                Text(title)
-                    .font(.system(size: UIScale.pt(14), weight: .semibold))
-                Text(detail)
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(UIScale.pt(14))
-        .background(
-            DashSkin.paper2(dark),
-            in: RoundedRectangle(cornerRadius: UIScale.pt(12))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: UIScale.pt(12))
-                .stroke(DashSkin.line(dark), lineWidth: 1)
-        }
-    }
 }
