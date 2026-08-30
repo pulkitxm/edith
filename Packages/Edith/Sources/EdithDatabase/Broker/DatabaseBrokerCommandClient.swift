@@ -9,12 +9,15 @@ public protocol DatabaseBrokerCommandSending: Sendable {
 
 public enum DatabaseBrokerCommandClientError: Error, Equatable, Sendable {
     case invalidRequest
+    case timedOut
     case unavailable
     case unsafePeer
     case outcomeUnknown
 }
 
 public struct DatabaseBrokerCommandClient: DatabaseBrokerCommandSending, Sendable {
+    static let defaultTransportBudgetNanoseconds: UInt64 = 30_000_000_000
+
     private let dependencies: DatabaseBrokerCommandClientDependencies
 
     public init(
@@ -42,16 +45,29 @@ public struct DatabaseBrokerCommandClient: DatabaseBrokerCommandSending, Sendabl
         try Task.checkCancellation()
 
         let requestID = dependencies.makeRequestID()
+        let deadlineNanoseconds = Self.deadline(
+            startingAt: dependencies.monotonicNanoseconds(),
+            budget: dependencies.transportBudgetNanoseconds)
         let work = DatabaseBrokerCommandClientWork()
-        dependencies.queue.async { [dependencies, request, requestID, work] in
+        dependencies.queue.async {
+            [dependencies, request, requestID, deadlineNanoseconds, work] in
             guard work.isPending else { return }
+            guard dependencies.monotonicNanoseconds() < deadlineNanoseconds else {
+                work.finishPreparation(.timedOut)
+                return
+            }
             let connection: DatabaseBrokerCommandClientConnection
             do {
-                connection = try dependencies.makeConnection()
+                connection = try dependencies.makeConnection(deadlineNanoseconds)
             } catch {
                 work.finishPreparation(
                     DatabaseBrokerCommandAttemptFailure(
                         preparationError: error))
+                return
+            }
+            guard dependencies.monotonicNanoseconds() < deadlineNanoseconds else {
+                connection.close()
+                work.finishPreparation(.timedOut)
                 return
             }
             guard work.install(connection) else { return }
@@ -65,7 +81,10 @@ public struct DatabaseBrokerCommandClient: DatabaseBrokerCommandSending, Sendabl
                     DatabaseBrokerCommandAttemptFailure
                 >
             do {
-                let response = try connection.request(request, requestID)
+                let response = try connection.request(
+                    request,
+                    requestID,
+                    deadlineNanoseconds)
                 requestResult = .success(response.payload)
             } catch {
                 requestResult = .failure(
@@ -77,25 +96,63 @@ public struct DatabaseBrokerCommandClient: DatabaseBrokerCommandSending, Sendabl
         }
         return try await work.value()
     }
+
+    static func deadline(
+        startingAt start: UInt64,
+        budget: UInt64
+    ) -> UInt64 {
+        let (deadline, overflow) = start.addingReportingOverflow(budget)
+        return overflow ? UInt64.max : deadline
+    }
+
+    static func connectionTimeoutMilliseconds(
+        deadlineNanoseconds: UInt64,
+        nowNanoseconds: UInt64
+    ) throws -> Int32 {
+        guard nowNanoseconds < deadlineNanoseconds else {
+            throw DatabaseBrokerSocketError.connectionTimedOut
+        }
+        let remainingNanoseconds = deadlineNanoseconds - nowNanoseconds
+        let wholeMilliseconds = remainingNanoseconds / 1_000_000
+        let roundedMilliseconds =
+            wholeMilliseconds
+            + (remainingNanoseconds.isMultiple(of: 1_000_000) ? 0 : 1)
+        let cappedMilliseconds = min(
+            max(roundedMilliseconds, 1),
+            UInt64(DatabaseBrokerSocketConnection.maximumTimeoutMilliseconds))
+        guard let timeout = Int32(exactly: cappedMilliseconds) else {
+            throw DatabaseBrokerSocketError.invalidTimeout
+        }
+        return timeout
+    }
 }
 
 struct DatabaseBrokerCommandClientDependencies: Sendable {
     let ensureReady: @Sendable () async throws -> Void
+    let monotonicNanoseconds: @Sendable () -> UInt64
+    let transportBudgetNanoseconds: UInt64
     let makeRequestID: @Sendable () -> UUID
-    let makeConnection: @Sendable () throws -> DatabaseBrokerCommandClientConnection
+    let makeConnection: @Sendable (UInt64) throws -> DatabaseBrokerCommandClientConnection
     let queue: DispatchQueue
 
     init(
         ensureReady: @escaping @Sendable () async throws -> Void,
+        monotonicNanoseconds: @escaping @Sendable () -> UInt64 = {
+            DispatchTime.now().uptimeNanoseconds
+        },
+        transportBudgetNanoseconds: UInt64 =
+            DatabaseBrokerCommandClient.defaultTransportBudgetNanoseconds,
         makeRequestID: @escaping @Sendable () -> UUID = { UUID() },
         makeConnection:
-            @escaping @Sendable () throws -> DatabaseBrokerCommandClientConnection,
+            @escaping @Sendable (UInt64) throws -> DatabaseBrokerCommandClientConnection,
         queue: DispatchQueue = DispatchQueue(
             label: "com.edith.database.broker.command-client",
             qos: .userInitiated,
             attributes: .concurrent)
     ) {
         self.ensureReady = ensureReady
+        self.monotonicNanoseconds = monotonicNanoseconds
+        self.transportBudgetNanoseconds = transportBudgetNanoseconds
         self.makeRequestID = makeRequestID
         self.makeConnection = makeConnection
         self.queue = queue
@@ -107,7 +164,8 @@ final class DatabaseBrokerCommandClientConnection: @unchecked Sendable {
     private let requestImplementation:
         @Sendable (
             DatabaseBrokerCommandRequest,
-            UUID
+            UUID,
+            UInt64
         ) throws -> DatabaseBrokerEnvelope<DatabaseBrokerCommandResponse>
     private let closeImplementation: @Sendable () -> Void
     private var closed = false
@@ -116,7 +174,8 @@ final class DatabaseBrokerCommandClientConnection: @unchecked Sendable {
         request:
             @escaping @Sendable (
                 DatabaseBrokerCommandRequest,
-                UUID
+                UUID,
+                UInt64
             ) throws -> DatabaseBrokerEnvelope<DatabaseBrokerCommandResponse>,
         close: @escaping @Sendable () -> Void
     ) {
@@ -126,9 +185,10 @@ final class DatabaseBrokerCommandClientConnection: @unchecked Sendable {
 
     func request(
         _ request: DatabaseBrokerCommandRequest,
-        _ requestID: UUID
+        _ requestID: UUID,
+        _ deadlineNanoseconds: UInt64
     ) throws -> DatabaseBrokerEnvelope<DatabaseBrokerCommandResponse> {
-        try requestImplementation(request, requestID)
+        try requestImplementation(request, requestID, deadlineNanoseconds)
     }
 
     func close() {
@@ -283,15 +343,21 @@ private final class DatabaseBrokerCommandClientWork: @unchecked Sendable {
 
 private enum DatabaseBrokerCommandAttemptFailure: Error, Equatable, Sendable {
     case invalidRequest
+    case timedOut
     case unavailable
     case unsafePeer
     case outcomeUnknown
 
     init(preparationError error: Error) {
-        if let error = error as? DatabaseBrokerSocketError,
-            error == .unsafeSocketEntry
-        {
-            self = .unsafePeer
+        if let error = error as? DatabaseBrokerSocketError {
+            switch error {
+            case .unsafeSocketEntry:
+                self = .unsafePeer
+            case .connectionTimedOut:
+                self = .timedOut
+            default:
+                self = .unavailable
+            }
             return
         }
         self = .unavailable
@@ -311,6 +377,8 @@ private enum DatabaseBrokerCommandAttemptFailure: Error, Equatable, Sendable {
         if let error = error as? DatabaseBrokerHealthTransportError {
             if !error.isReplaySafe {
                 self = .outcomeUnknown
+            } else if error.failure.isTimeout {
+                self = .timedOut
             } else if case .authenticationFailed = error.failure {
                 if error.failure == .authenticationFailed(.uniqueIdentifierMismatch) {
                     self = .unavailable
@@ -333,12 +401,28 @@ private enum DatabaseBrokerCommandAttemptFailure: Error, Equatable, Sendable {
         switch self {
         case .invalidRequest:
             .invalidRequest
+        case .timedOut:
+            .timedOut
         case .unavailable:
             .unavailable
         case .unsafePeer:
             .unsafePeer
         case .outcomeUnknown:
             .outcomeUnknown
+        }
+    }
+}
+
+private extension DatabaseBrokerHealthTransportFailure {
+    var isTimeout: Bool {
+        switch self {
+        case .authenticationTimedOut, .readTimedOut, .writeProgressTimedOut:
+            true
+        case .authenticationFailed, .authenticationSystemFailure, .connectionClosed,
+            .truncatedFrame, .multipleFrames, .readLimitExceeded, .invalidIOProgress,
+            .ioFailure, .protocolFailure, .requestValidationFailure,
+            .responseValidationFailure:
+            false
         }
     }
 }
@@ -351,16 +435,23 @@ extension DatabaseBrokerCommandClientDependencies {
             ensureReady: {
                 try await coordinator.ensureReady()
             },
-            makeConnection: {
+            makeConnection: { deadlineNanoseconds in
                 let transport = try DatabaseBrokerCommandTransport()
-                let socket = try DatabaseBrokerSocketConnection.connect()
+                let timeoutMilliseconds =
+                    try DatabaseBrokerCommandClient
+                    .connectionTimeoutMilliseconds(
+                        deadlineNanoseconds: deadlineNanoseconds,
+                        nowNanoseconds: DispatchTime.now().uptimeNanoseconds)
+                let socket = try DatabaseBrokerSocketConnection.connect(
+                    timeoutMilliseconds: timeoutMilliseconds)
                 return DatabaseBrokerCommandClientConnection(
-                    request: { request, requestID in
+                    request: { request, requestID, requestDeadlineNanoseconds in
                         try socket.withSocketDescriptor { descriptor in
                             try transport.request(
                                 request,
                                 requestID: requestID,
-                                socketDescriptor: descriptor)
+                                socketDescriptor: descriptor,
+                                deadlineNanoseconds: requestDeadlineNanoseconds)
                         }
                     },
                     close: {
