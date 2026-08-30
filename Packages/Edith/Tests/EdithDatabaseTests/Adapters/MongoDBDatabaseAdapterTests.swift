@@ -1,6 +1,8 @@
 import Foundation
 import MongoCore
 import MongoKitten
+import NIOCore
+import NIOPosix
 import Testing
 
 @testable import EdithDatabase
@@ -37,7 +39,8 @@ private enum MongoDBDatabaseAdapterFixtures {
             mode: .disabled,
             verification: .none),
         tunnel: DatabaseTunnelDefinition? = nil,
-        options: [DatabaseNonSecretOption] = []
+        options: [DatabaseNonSecretOption] = [],
+        connectionTimeoutMilliseconds: UInt64 = 2_000
     ) throws -> DatabaseConnectionDefinition {
         let effectiveLocation: DatabaseConnectionLocation
         if let location {
@@ -62,7 +65,8 @@ private enum MongoDBDatabaseAdapterFixtures {
             tls: tls,
             tunnel: tunnel,
             limits: DatabaseConnectionLimits(
-                connectionTimeout: try DatabaseTimeout(milliseconds: 2_000),
+                connectionTimeout: try DatabaseTimeout(
+                    milliseconds: connectionTimeoutMilliseconds),
                 operationTimeout: try DatabaseTimeout(milliseconds: 2_000),
                 poolSize: try DatabasePoolSize(2)),
             readOnlyPolicy: .required,
@@ -171,7 +175,7 @@ private enum MongoDBDatabaseAdapterFixtures {
         capture: MongoDBDatabaseConnectorCapture? = nil
     ) async throws -> (any DatabaseAdapterSession, DatabaseConnectionDefinition) {
         let definition = try definition ?? self.definition()
-        let adapter = MongoDBDatabaseAdapter { plan in
+        let adapter = MongoDBDatabaseAdapter { plan, _ in
             await capture?.record(plan)
             return client
         }
@@ -208,6 +212,8 @@ private actor MongoDBDatabaseAdapterTestClient: MongoDBDatabaseClient {
     private let identity: DatabaseProductIdentity
     private var outcomes: [Outcome]
     private let suspendsReads: Bool
+    private let failsDisconnect: Bool
+    private let cancellationAfterRead: DatabaseAdapterCancellationSignal?
     private var disconnected = false
     private var readPlans: [MongoDBDatabaseReadPlan] = []
     private var disconnects = 0
@@ -215,11 +221,15 @@ private actor MongoDBDatabaseAdapterTestClient: MongoDBDatabaseClient {
     init(
         identity: DatabaseProductIdentity = MongoDBDatabaseAdapterFixtures.identity,
         outcomes: [Outcome] = [],
-        suspendsReads: Bool = false
+        suspendsReads: Bool = false,
+        failsDisconnect: Bool = false,
+        cancellationAfterRead: DatabaseAdapterCancellationSignal? = nil
     ) {
         self.identity = identity
         self.outcomes = outcomes
         self.suspendsReads = suspendsReads
+        self.failsDisconnect = failsDisconnect
+        self.cancellationAfterRead = cancellationAfterRead
     }
 
     func discoverIdentity() async throws -> DatabaseProductIdentity {
@@ -240,6 +250,9 @@ private actor MongoDBDatabaseAdapterTestClient: MongoDBDatabaseClient {
         }
         switch outcomes.removeFirst() {
         case let .result(result):
+            if let cancellationAfterRead {
+                await cancellationAfterRead.cancel(.userRequested)
+            }
             return result
         case let .failure(failure):
             throw failure
@@ -248,9 +261,12 @@ private actor MongoDBDatabaseAdapterTestClient: MongoDBDatabaseClient {
         }
     }
 
-    func disconnect() async {
+    func disconnect() async throws {
         disconnected = true
         disconnects += 1
+        if failsDisconnect {
+            throw MongoDBDatabaseDriverFailure.connection
+        }
     }
 
     func plans() -> [MongoDBDatabaseReadPlan] {
@@ -271,6 +287,21 @@ private actor MongoDBDatabaseConnectorCapture {
 
     func last() -> MongoDBDatabaseConnectionPlan? {
         plans.last
+    }
+}
+
+private actor MongoDBDatabaseConversionCancellationProbe {
+    private var remainingChecks: Int
+
+    init(remainingChecks: Int) {
+        self.remainingChecks = remainingChecks
+    }
+
+    func check(signal: DatabaseAdapterCancellationSignal) async {
+        remainingChecks -= 1
+        if remainingChecks == 0 {
+            await signal.cancel(.userRequested)
+        }
     }
 }
 
@@ -305,13 +336,54 @@ private actor MongoDBDatabaseConnectorCapture {
     #expect(plan.settings.targetDatabase == "edith_scale")
     #expect(plan.settings.maximumNumberOfConnections == 2)
     #expect(plan.settings.applicationName == "Edith")
-    guard case let .auto(username, password) = plan.settings.authentication else {
-        Issue.record("Expected automatic SCRAM authentication")
+    guard case let .scramSha256(username, password) = plan.settings.authentication else {
+        Issue.record("Expected SCRAM-SHA-256 authentication")
         return
     }
     #expect(username == "reader")
     #expect(password == "fixture-password")
     await session.disconnect()
+}
+
+@Test func mongoReadingStalledHandshakeHonorsTheConfiguredWallTime() async throws {
+    let serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+    let server = try await ServerBootstrap(group: serverGroup)
+        .childChannelInitializer { channel in
+            channel.eventLoop.makeSucceededVoidFuture()
+        }
+        .bind(host: "127.0.0.1", port: 0)
+        .get()
+    guard let port = server.localAddress?.port else {
+        try await server.close().get()
+        try await serverGroup.shutdownGracefully()
+        Issue.record("Expected a bound server port")
+        return
+    }
+    let definition = try MongoDBDatabaseAdapterFixtures.definition(
+        location: .network([
+            DatabaseNetworkEndpoint(
+                host: "127.0.0.1",
+                port: try DatabasePort(port),
+                role: .seed)
+        ]),
+        connectionTimeoutMilliseconds: 200)
+    let started = ContinuousClock.now
+    var observedFailure: DatabaseAdapterFailure?
+    do {
+        _ = try await MongoDBDatabaseAdapter().connect(
+            try MongoDBDatabaseAdapterFixtures.resolved(definition),
+            context: MongoDBDatabaseAdapterFixtures.context(
+                deadline: Date().addingTimeInterval(3)))
+        Issue.record("Expected the stalled handshake to time out")
+    } catch let failure {
+        observedFailure = failure
+    }
+    let elapsed = started.duration(to: .now)
+    try await server.close().get()
+    try await serverGroup.shutdownGracefully()
+    #expect(
+        observedFailure.map(MongoDBDatabaseAdapterFixtures.reportedCategory) == .timeout)
+    #expect(elapsed < .seconds(2))
 }
 
 @Test func mongoReadingConnectionValidationFailsClosed() throws {
@@ -732,6 +804,74 @@ private actor MongoDBDatabaseConnectorCapture {
     #expect(page.metadata.warnings.map(\.code).contains("mongodb.value.preview"))
     #expect(try JSONEncoder().encode(page.records).count < DatabaseAdapterBounds.maximumPageBytes)
     await session.disconnect()
+}
+
+@Test func mongoReadingConversionChecksCancellationWithinNestedValues() async throws {
+    var nested = Document()
+    for index in 0..<256 {
+        nested["field-\(index)"] = String(repeating: "x", count: 512)
+    }
+    var document = MongoDBDatabaseAdapterFixtures.document(index: 0)
+    document["nested"] = nested
+    let signal = DatabaseAdapterCancellationSignal()
+    let context = MongoDBDatabaseAdapterFixtures.context(cancellation: signal)
+    let probe = MongoDBDatabaseConversionCancellationProbe(remainingChecks: 20)
+    do {
+        _ = try await MongoDBDatabaseValueCodec.convertedRecord(
+            document,
+            hidesObjectID: false,
+            cancellationCheck: {
+                await probe.check(signal: signal)
+                try await MongoDBDatabaseAdapterSupport.check(context)
+            })
+        Issue.record("Expected cancellation during BSON conversion")
+    } catch let failure as DatabaseAdapterFailure {
+        #expect(failure == .cancelled)
+    }
+}
+
+@Test func mongoReadingConversionCancellationFailsTheActiveSessionClosed() async throws {
+    let signal = DatabaseAdapterCancellationSignal()
+    let client = MongoDBDatabaseAdapterTestClient(
+        outcomes: [
+            .result(
+                MongoDBDatabaseReadResult(
+                    documents: [MongoDBDatabaseAdapterFixtures.document(index: 0)],
+                    hasMore: false,
+                    bytesReceived: 64))
+        ],
+        cancellationAfterRead: signal)
+    let (session, definition) = try await MongoDBDatabaseAdapterFixtures.connect(client: client)
+    do {
+        _ = try await session.readPage(
+            try MongoDBDatabaseAdapterFixtures.request(connectionID: definition.id),
+            context: MongoDBDatabaseAdapterFixtures.context(cancellation: signal))
+        Issue.record("Expected cancellation before BSON conversion")
+    } catch let failure as DatabaseAdapterFailure {
+        #expect(failure == .cancelled)
+    }
+    #expect(await session.lifecycleState() == .failed)
+    #expect(await client.disconnectCount() == 1)
+}
+
+@Test func mongoReadingDisconnectFailureKeepsTheSessionFailedAndRetryable() async throws {
+    let client = MongoDBDatabaseAdapterTestClient(failsDisconnect: true)
+    let (session, _) = try await MongoDBDatabaseAdapterFixtures.connect(client: client)
+    let concreteSession = try #require(session as? MongoDBDatabaseAdapterSession)
+    await session.disconnect()
+    #expect(await session.lifecycleState() == .failed)
+    #expect(await concreteSession.resourceIsOpen())
+    #expect(await client.disconnectCount() == 1)
+    await session.disconnect()
+    #expect(await client.disconnectCount() == 2)
+}
+
+@Test func mongoReadingOversizedDriverResultMapsToResourceLimit() {
+    let failure = MongoDBDatabaseAdapterSupport.map(
+        .responseTooLarge,
+        fallback: MongoDBDatabaseAdapterSupport.readFailed)
+    #expect(MongoDBDatabaseAdapterFixtures.reportedCategory(failure) == .resourceLimit)
+    #expect(MongoDBDatabaseAdapterFixtures.reportedCode(failure) == "mongodb.result.too_large")
 }
 
 @Test func mongoReadingCancellationRemainsCancelledAndClosesSession() async throws {
