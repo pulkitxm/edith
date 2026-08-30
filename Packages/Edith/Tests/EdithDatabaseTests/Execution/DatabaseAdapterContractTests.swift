@@ -492,4 +492,53 @@ private enum DatabaseAdapterContractFixtures {
                 returnedPage: page)
         }
     }
+
+    @Test func mutationReconciliationRejectsAmbiguousAdapterResults() throws {
+        #expect(
+            throws: DatabaseAdapterFailure.contractViolation(
+                .invalidMutationReconciliationResult)
+        ) {
+            try DatabaseAdapterMutationResult(
+                disposition: .accepted,
+                affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .unknown))
+        }
+
+        let page = try DatabaseAdapterPage(
+            records: [],
+            metadata: DatabasePageMetadata(
+                completeness: DatabaseResultCompleteness(state: .complete),
+                count: DatabaseCountMetadata(value: 0, accuracy: .exact)))
+        #expect(
+            throws: DatabaseAdapterFailure.contractViolation(
+                .invalidMutationReconciliationResult)
+        ) {
+            try DatabaseAdapterMutationResult(
+                disposition: .accepted,
+                affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .unknown),
+                returnedPage: page,
+                serverOperationIdentifier: "server-task-1")
+        }
+
+        #expect(
+            throws: DatabaseAdapterFailure.contractViolation(
+                .invalidMutationReconciliationResult)
+        ) {
+            try DatabaseAdapterMutationStatus(
+                serverOperationIdentifier: "server-task-1",
+                state: .completed)
+        }
+
+        let running = try DatabaseAdapterMutationStatus(
+            serverOperationIdentifier: "server-task-1",
+            state: .running)
+        #expect(
+            throws: DatabaseAdapterFailure.contractViolation(
+                .invalidMutationReconciliationResult)
+        ) {
+            try DatabaseAdapterMutationCancellationResult(
+                serverOperationIdentifier: "server-task-1",
+                disposition: .alreadyFinished,
+                status: running)
+        }
+    }
 }

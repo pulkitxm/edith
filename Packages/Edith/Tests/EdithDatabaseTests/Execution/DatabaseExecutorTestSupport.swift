@@ -143,6 +143,8 @@ enum DatabaseExecutorTestSessionInvocation: Hashable, Sendable {
     case query(DatabaseAdapterQueryRequest, DatabaseOperationContext)
     case normalizeMutation(DatabaseDestructiveRequest, DatabaseOperationContext)
     case executeMutation(DatabaseDestructivePlan, DatabaseOperationContext)
+    case mutationStatus(String, DatabaseOperationContext)
+    case cancelMutation(String, DatabaseOperationContext)
     case openStream(DatabaseAdapterStreamRequest, DatabaseOperationContext)
     case cancel(DatabaseOperationID)
     case disconnect
@@ -269,6 +271,10 @@ actor DatabaseExecutorRecordingSession: DatabaseAdapterSession {
     private var queryPages: DatabaseExecutorTestOutcomeQueue<DatabaseAdapterPage>
     private var mutationPlans: DatabaseExecutorTestOutcomeQueue<DatabaseDestructivePlan>
     private var mutationResults: DatabaseExecutorTestOutcomeQueue<DatabaseAdapterMutationResult>
+    private var mutationStatuses: [Result<DatabaseAdapterMutationStatus, DatabaseAdapterFailure>] =
+        []
+    private var mutationCancellations:
+        [Result<DatabaseAdapterMutationCancellationResult, DatabaseAdapterFailure>] = []
     private var streams: DatabaseExecutorTestOutcomeQueue<any DatabaseAdapterRecordStream>
     private var cancellationResults:
         DatabaseExecutorTestOutcomeQueue<
@@ -368,6 +374,18 @@ actor DatabaseExecutorRecordingSession: DatabaseAdapterSession {
         mutationResults.enqueue(outcome)
     }
 
+    func enqueueMutationStatus(
+        _ outcome: Result<DatabaseAdapterMutationStatus, DatabaseAdapterFailure>
+    ) {
+        mutationStatuses.append(outcome)
+    }
+
+    func enqueueMutationCancellation(
+        _ outcome: Result<DatabaseAdapterMutationCancellationResult, DatabaseAdapterFailure>
+    ) {
+        mutationCancellations.append(outcome)
+    }
+
     func setStream(_ stream: any DatabaseAdapterRecordStream) {
         streams.replaceFallback(stream)
     }
@@ -459,6 +477,36 @@ actor DatabaseExecutorRecordingSession: DatabaseAdapterSession {
             try await context.checkCancellation()
         }
         return try databaseExecutorTestResolve(outcome)
+    }
+
+    func mutationStatus(
+        _ serverOperationIdentifier: String,
+        context: DatabaseAdapterOperationContext
+    ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterMutationStatus {
+        invocations.append(.mutationStatus(serverOperationIdentifier, context.operation))
+        try await context.checkCancellation()
+        guard !mutationStatuses.isEmpty else {
+            throw .reported(
+                DatabaseErrorEnvelope(
+                    category: .unsupported,
+                    message: "No mutation status fixture is configured."))
+        }
+        return try databaseExecutorTestResolve(mutationStatuses.removeFirst())
+    }
+
+    func cancelMutation(
+        _ serverOperationIdentifier: String,
+        context: DatabaseAdapterOperationContext
+    ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterMutationCancellationResult {
+        invocations.append(.cancelMutation(serverOperationIdentifier, context.operation))
+        try await context.checkCancellation()
+        guard !mutationCancellations.isEmpty else {
+            throw .reported(
+                DatabaseErrorEnvelope(
+                    category: .unsupported,
+                    message: "No mutation cancellation fixture is configured."))
+        }
+        return try databaseExecutorTestResolve(mutationCancellations.removeFirst())
     }
 
     func openStream(
@@ -738,6 +786,23 @@ actor DatabaseExecutorMetadataStoreProxy: DatabaseMetadataStore {
         -> [DatabaseOperationRecordSummary]
     {
         try await base.operations(matching: search)
+    }
+
+    func recordMutationOutcome(
+        _ outcome: DatabaseMutationApplyResult,
+        operationID: DatabaseOperationID,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws {
+        try await base.recordMutationOutcome(
+            outcome,
+            operationID: operationID,
+            owner: owner)
+    }
+
+    func mutationOutcome(
+        operationID: DatabaseOperationID
+    ) async throws -> DatabaseMutationApplyResult? {
+        try await base.mutationOutcome(operationID: operationID)
     }
 
     func pruneOperations(
