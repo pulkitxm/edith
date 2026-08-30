@@ -55,12 +55,14 @@ enum DatabaseBrokerHealthTransportReadResult: Equatable, Sendable {
     case bytes(Data)
     case wouldBlock
     case endOfFile
+    case timedOut
 }
 
 enum DatabaseBrokerHealthTransportWriteResult: Equatable, Sendable {
     case bytes(Int)
     case wouldBlock
     case sinkClosed
+    case timedOut
 }
 
 enum DatabaseBrokerHealthTransportAuthenticationResult: Equatable, Sendable {
@@ -75,7 +77,8 @@ struct DatabaseBrokerHealthTransportDependencies: Sendable {
     let authenticatePeer:
         @Sendable (
             Int32,
-            UInt64
+            UInt64,
+            UInt64?
         ) -> DatabaseBrokerHealthTransportAuthenticationResult
     let wait:
         @Sendable (
@@ -83,15 +86,27 @@ struct DatabaseBrokerHealthTransportDependencies: Sendable {
             DatabaseBrokerHealthTransportWaitInterest,
             UInt64
         ) throws -> DatabaseBrokerHealthTransportWaitResult
-    let read: @Sendable (Int32, Int) throws -> DatabaseBrokerHealthTransportReadResult
-    let write: @Sendable (Int32, Data, Int) throws -> DatabaseBrokerHealthTransportWriteResult
+    let read:
+        @Sendable (
+            Int32,
+            Int,
+            UInt64?
+        ) throws -> DatabaseBrokerHealthTransportReadResult
+    let write:
+        @Sendable (
+            Int32,
+            Data,
+            Int,
+            UInt64?
+        ) throws -> DatabaseBrokerHealthTransportWriteResult
 
     init(
         monotonicNanoseconds: @escaping @Sendable () -> UInt64,
         authenticatePeer:
             @escaping @Sendable (
                 Int32,
-                UInt64
+                UInt64,
+                UInt64?
             ) -> DatabaseBrokerHealthTransportAuthenticationResult,
         wait:
             @escaping @Sendable (
@@ -102,13 +117,15 @@ struct DatabaseBrokerHealthTransportDependencies: Sendable {
         read:
             @escaping @Sendable (
                 Int32,
-                Int
+                Int,
+                UInt64?
             ) throws -> DatabaseBrokerHealthTransportReadResult,
         write:
             @escaping @Sendable (
                 Int32,
                 Data,
-                Int
+                Int,
+                UInt64?
             ) throws -> DatabaseBrokerHealthTransportWriteResult
     ) {
         self.monotonicNanoseconds = monotonicNanoseconds
@@ -143,9 +160,12 @@ struct DatabaseBrokerHealthTransport: Sendable {
 
     func requestHealth(
         socketDescriptor: Int32,
-        requestID: UUID = UUID()
+        requestID: UUID = UUID(),
+        deadlineNanoseconds: UInt64? = nil
     ) throws -> DatabaseBrokerHealthResponse {
-        try authenticatePeer(socketDescriptor: socketDescriptor)
+        try authenticatePeer(
+            socketDescriptor: socketDescriptor,
+            absoluteDeadline: deadlineNanoseconds)
         let request = DatabaseBrokerEnvelope(
             requestID: requestID,
             sequence: 0,
@@ -166,11 +186,13 @@ struct DatabaseBrokerHealthTransport: Sendable {
         let writeOutcome = try writeFrame(
             requestFrame,
             socketDescriptor: socketDescriptor,
-            sinkClosureIsResult: false)
+            sinkClosureIsResult: false,
+            absoluteDeadline: deadlineNanoseconds)
         let response: DatabaseBrokerEnvelope<DatabaseBrokerHealthResponse> = try readFrame(
             socketDescriptor: socketDescriptor,
             stream: .responses,
-            bytesWritten: writeOutcome.bytesWritten)
+            bytesWritten: writeOutcome.bytesWritten,
+            absoluteDeadline: deadlineNanoseconds)
         var validator = responseValidator
         do {
             try validator.validate(response)
@@ -187,11 +209,14 @@ struct DatabaseBrokerHealthTransport: Sendable {
         socketDescriptor: Int32,
         response: @Sendable (DatabaseBrokerHealthRequest) -> DatabaseBrokerHealthResponse
     ) throws -> DatabaseBrokerHealthServerResult {
-        try authenticatePeer(socketDescriptor: socketDescriptor)
+        try authenticatePeer(
+            socketDescriptor: socketDescriptor,
+            absoluteDeadline: nil)
         let request: DatabaseBrokerEnvelope<DatabaseBrokerHealthRequest> = try readFrame(
             socketDescriptor: socketDescriptor,
             stream: .requests,
-            bytesWritten: 0)
+            bytesWritten: 0,
+            absoluteDeadline: nil)
         do {
             try DatabaseBrokerHealthRequestValidator.validate(request)
         } catch {
@@ -212,18 +237,34 @@ struct DatabaseBrokerHealthTransport: Sendable {
         let writeOutcome = try writeFrame(
             responseFrame,
             socketDescriptor: socketDescriptor,
-            sinkClosureIsResult: true)
+            sinkClosureIsResult: true,
+            absoluteDeadline: nil)
         return DatabaseBrokerHealthServerResult(
             requestID: request.requestID,
             disposition: writeOutcome.sinkClosed ? .responseSinkDropped : .sent,
             responseBytesWritten: writeOutcome.bytesWritten)
     }
 
-    private func authenticatePeer(socketDescriptor: Int32) throws {
-        switch dependencies.authenticatePeer(
+    private func authenticatePeer(
+        socketDescriptor: Int32,
+        absoluteDeadline: UInt64?
+    ) throws {
+        let startedAt = dependencies.monotonicNanoseconds()
+        let authenticationDeadline = cappedDeadline(
+            budget: Self.authenticationBudgetNanoseconds,
+            startingAt: startedAt,
+            absoluteDeadline: absoluteDeadline)
+        guard startedAt < authenticationDeadline else {
+            throw transportError(.authenticationTimedOut, bytesWritten: 0)
+        }
+        let result = dependencies.authenticatePeer(
             socketDescriptor,
-            Self.authenticationBudgetNanoseconds)
-        {
+            authenticationDeadline - startedAt,
+            authenticationDeadline)
+        if dependencies.monotonicNanoseconds() >= authenticationDeadline {
+            throw transportError(.authenticationTimedOut, bytesWritten: 0)
+        }
+        switch result {
         case .authenticated:
             return
         case .failed(let error):
@@ -252,13 +293,15 @@ struct DatabaseBrokerHealthTransport: Sendable {
     private func readFrame<Payload: Codable & Sendable>(
         socketDescriptor: Int32,
         stream: DatabaseBrokerFrameStream,
-        bytesWritten: Int
+        bytesWritten: Int,
+        absoluteDeadline: UInt64?
     ) throws -> DatabaseBrokerEnvelope<Payload> {
         var decoder = DatabaseBrokerIncrementalDecoder<Payload>(stream: stream)
         var frameDeadline: UInt64?
-        let firstByteDeadline = addingBudget(
-            Self.firstByteBudgetNanoseconds,
-            to: dependencies.monotonicNanoseconds())
+        let firstByteDeadline = cappedDeadline(
+            budget: Self.firstByteBudgetNanoseconds,
+            startingAt: dependencies.monotonicNanoseconds(),
+            absoluteDeadline: absoluteDeadline)
 
         while true {
             let deadline = frameDeadline ?? firstByteDeadline
@@ -270,9 +313,13 @@ struct DatabaseBrokerHealthTransport: Sendable {
             do {
                 readResult = try dependencies.read(
                     socketDescriptor,
-                    Self.maximumReadBytes)
+                    Self.maximumReadBytes,
+                    deadline)
             } catch {
                 throw transportError(.ioFailure, bytesWritten: bytesWritten)
+            }
+            if dependencies.monotonicNanoseconds() >= deadline {
+                throw transportError(.readTimedOut, bytesWritten: bytesWritten)
             }
 
             switch readResult {
@@ -288,9 +335,10 @@ struct DatabaseBrokerHealthTransport: Sendable {
                     guard observedAt < firstByteDeadline else {
                         throw transportError(.readTimedOut, bytesWritten: bytesWritten)
                     }
-                    frameDeadline = addingBudget(
-                        Self.frameBudgetNanoseconds,
-                        to: observedAt)
+                    frameDeadline = cappedDeadline(
+                        budget: Self.frameBudgetNanoseconds,
+                        startingAt: observedAt,
+                        absoluteDeadline: absoluteDeadline)
                 } else {
                     guard let frameDeadline, observedAt < frameDeadline else {
                         throw transportError(.readTimedOut, bytesWritten: bytesWritten)
@@ -319,14 +367,20 @@ struct DatabaseBrokerHealthTransport: Sendable {
                             bytesWritten: bytesWritten)
                     }
                     let trailingRead: DatabaseBrokerHealthTransportReadResult
+                    let trailingReadDeadline = frameDeadline ?? deadline
                     do {
                         trailingRead = try dependencies.read(
                             socketDescriptor,
-                            Self.maximumReadBytes)
+                            Self.maximumReadBytes,
+                            trailingReadDeadline)
                     } catch {
                         throw transportError(.ioFailure, bytesWritten: bytesWritten)
                     }
-                    if case .bytes(let trailingBytes) = trailingRead {
+                    if dependencies.monotonicNanoseconds() >= trailingReadDeadline {
+                        throw transportError(.readTimedOut, bytesWritten: bytesWritten)
+                    }
+                    switch trailingRead {
+                    case .bytes(let trailingBytes):
                         guard !trailingBytes.isEmpty else {
                             throw transportError(
                                 .invalidIOProgress,
@@ -338,8 +392,11 @@ struct DatabaseBrokerHealthTransport: Sendable {
                                 bytesWritten: bytesWritten)
                         }
                         throw transportError(.multipleFrames, bytesWritten: bytesWritten)
+                    case .timedOut:
+                        throw transportError(.readTimedOut, bytesWritten: bytesWritten)
+                    case .wouldBlock, .endOfFile:
+                        return envelope
                     }
-                    return envelope
                 }
             case .wouldBlock:
                 let waitResult = try waitForReadiness(
@@ -348,6 +405,9 @@ struct DatabaseBrokerHealthTransport: Sendable {
                     deadline: deadline,
                     timeoutFailure: .readTimedOut,
                     bytesWritten: bytesWritten)
+                if dependencies.monotonicNanoseconds() >= deadline {
+                    throw transportError(.readTimedOut, bytesWritten: bytesWritten)
+                }
                 if waitResult == .disconnected {
                     continue
                 }
@@ -362,6 +422,8 @@ struct DatabaseBrokerHealthTransport: Sendable {
                         bytesWritten: bytesWritten)
                 }
                 throw transportError(.connectionClosed, bytesWritten: bytesWritten)
+            case .timedOut:
+                throw transportError(.readTimedOut, bytesWritten: bytesWritten)
             }
         }
     }
@@ -369,12 +431,14 @@ struct DatabaseBrokerHealthTransport: Sendable {
     private func writeFrame(
         _ frame: Data,
         socketDescriptor: Int32,
-        sinkClosureIsResult: Bool
+        sinkClosureIsResult: Bool,
+        absoluteDeadline: UInt64?
     ) throws -> DatabaseBrokerHealthWriteOutcome {
         var offset = 0
-        var progressDeadline = addingBudget(
-            Self.writeProgressBudgetNanoseconds,
-            to: dependencies.monotonicNanoseconds())
+        var progressDeadline = cappedDeadline(
+            budget: Self.writeProgressBudgetNanoseconds,
+            startingAt: dependencies.monotonicNanoseconds(),
+            absoluteDeadline: absoluteDeadline)
 
         while offset < frame.count {
             guard dependencies.monotonicNanoseconds() < progressDeadline else {
@@ -385,7 +449,8 @@ struct DatabaseBrokerHealthTransport: Sendable {
                 writeResult = try dependencies.write(
                     socketDescriptor,
                     frame,
-                    offset)
+                    offset,
+                    progressDeadline)
             } catch {
                 throw transportError(.ioFailure, bytesWritten: offset)
             }
@@ -398,9 +463,10 @@ struct DatabaseBrokerHealthTransport: Sendable {
                 guard dependencies.monotonicNanoseconds() < progressDeadline else {
                     throw transportError(.writeProgressTimedOut, bytesWritten: offset)
                 }
-                progressDeadline = addingBudget(
-                    Self.writeProgressBudgetNanoseconds,
-                    to: dependencies.monotonicNanoseconds())
+                progressDeadline = cappedDeadline(
+                    budget: Self.writeProgressBudgetNanoseconds,
+                    startingAt: dependencies.monotonicNanoseconds(),
+                    absoluteDeadline: absoluteDeadline)
             case .wouldBlock:
                 let waitResult = try waitForReadiness(
                     socketDescriptor: socketDescriptor,
@@ -408,6 +474,9 @@ struct DatabaseBrokerHealthTransport: Sendable {
                     deadline: progressDeadline,
                     timeoutFailure: .writeProgressTimedOut,
                     bytesWritten: offset)
+                if dependencies.monotonicNanoseconds() >= progressDeadline {
+                    throw transportError(.writeProgressTimedOut, bytesWritten: offset)
+                }
                 if waitResult == .disconnected {
                     if sinkClosureIsResult {
                         return DatabaseBrokerHealthWriteOutcome(
@@ -417,12 +486,17 @@ struct DatabaseBrokerHealthTransport: Sendable {
                     throw transportError(.connectionClosed, bytesWritten: offset)
                 }
             case .sinkClosed:
+                if dependencies.monotonicNanoseconds() >= progressDeadline {
+                    throw transportError(.writeProgressTimedOut, bytesWritten: offset)
+                }
                 if sinkClosureIsResult {
                     return DatabaseBrokerHealthWriteOutcome(
                         bytesWritten: offset,
                         sinkClosed: true)
                 }
                 throw transportError(.connectionClosed, bytesWritten: offset)
+            case .timedOut:
+                throw transportError(.writeProgressTimedOut, bytesWritten: offset)
             }
         }
 
@@ -466,6 +540,16 @@ struct DatabaseBrokerHealthTransport: Sendable {
     private func addingBudget(_ budget: UInt64, to time: UInt64) -> UInt64 {
         let (deadline, overflow) = time.addingReportingOverflow(budget)
         return overflow ? UInt64.max : deadline
+    }
+
+    private func cappedDeadline(
+        budget: UInt64,
+        startingAt: UInt64,
+        absoluteDeadline: UInt64?
+    ) -> UInt64 {
+        min(
+            addingBudget(budget, to: startingAt),
+            absoluteDeadline ?? UInt64.max)
     }
 
     private func transportError(
@@ -533,7 +617,12 @@ final class DatabaseBrokerHealthAuthenticationWorker: @unchecked Sendable {
     static let shared = DatabaseBrokerHealthAuthenticationWorker(maximumConcurrentWork: 4)
 
     private let admission: DispatchSemaphore
-    private let duplicateDescriptor: @Sendable (Int32) throws -> Int32
+    private let duplicateDescriptor:
+        @Sendable (
+            Int32,
+            UInt64?,
+            @Sendable () -> UInt64
+        ) throws -> Int32
     private let closeDescriptor: @Sendable (Int32) -> Void
     private let queue = DispatchQueue(
         label: "com.pulkit.edith.database.health-authentication",
@@ -542,9 +631,17 @@ final class DatabaseBrokerHealthAuthenticationWorker: @unchecked Sendable {
 
     init(
         maximumConcurrentWork: Int,
-        duplicateDescriptor: @escaping @Sendable (Int32) throws -> Int32 = {
-            try duplicateSocketDescriptor($0)
-        },
+        duplicateDescriptor:
+            @escaping @Sendable (
+                Int32,
+                UInt64?,
+                @Sendable () -> UInt64
+            ) throws -> Int32 = { socketDescriptor, deadlineNanoseconds, monotonicNanoseconds in
+                try duplicateSocketDescriptor(
+                    socketDescriptor,
+                    deadlineNanoseconds: deadlineNanoseconds,
+                    monotonicNanoseconds: monotonicNanoseconds)
+            },
         closeDescriptor: @escaping @Sendable (Int32) -> Void = {
             _ = Darwin.close($0)
         }
@@ -557,17 +654,38 @@ final class DatabaseBrokerHealthAuthenticationWorker: @unchecked Sendable {
     func authenticate(
         socketDescriptor: Int32,
         budgetNanoseconds: UInt64,
+        deadlineNanoseconds: UInt64? = nil,
+        monotonicNanoseconds: @escaping @Sendable () -> UInt64 = {
+            DispatchTime.now().uptimeNanoseconds
+        },
         operation: @escaping @Sendable (Int32) throws -> Void
     ) -> DatabaseBrokerHealthTransportAuthenticationResult {
+        guard !deadlineExpired(deadlineNanoseconds, monotonicNanoseconds) else {
+            return .timedOut
+        }
         guard admission.wait(timeout: .now()) == .success else {
+            return .timedOut
+        }
+        guard !deadlineExpired(deadlineNanoseconds, monotonicNanoseconds) else {
+            admission.signal()
             return .timedOut
         }
         let ownedSocketDescriptor: Int32
         do {
-            ownedSocketDescriptor = try duplicateDescriptor(socketDescriptor)
+            ownedSocketDescriptor = try duplicateDescriptor(
+                socketDescriptor,
+                deadlineNanoseconds,
+                monotonicNanoseconds)
         } catch {
             admission.signal()
-            return .systemFailure
+            return deadlineExpired(deadlineNanoseconds, monotonicNanoseconds)
+                ? .timedOut
+                : .systemFailure
+        }
+        guard !deadlineExpired(deadlineNanoseconds, monotonicNanoseconds) else {
+            closeDescriptor(ownedSocketDescriptor)
+            admission.signal()
+            return .timedOut
         }
         let completion = DispatchSemaphore(value: 0)
         let result = DatabaseBrokerHealthAuthenticationResultBox()
@@ -586,17 +704,44 @@ final class DatabaseBrokerHealthAuthenticationWorker: @unchecked Sendable {
                 result.set(.systemFailure)
             }
         }
-        let boundedBudget = Int(min(budgetNanoseconds, UInt64(Int.max)))
-        guard
-            completion.wait(timeout: .now() + .nanoseconds(boundedBudget)) == .success
-        else {
+        let completionDeadline: DispatchTime
+        if let deadlineNanoseconds {
+            guard monotonicNanoseconds() < deadlineNanoseconds else {
+                return .timedOut
+            }
+            completionDeadline = DispatchTime(uptimeNanoseconds: deadlineNanoseconds)
+        } else {
+            let boundedBudget = Int(min(budgetNanoseconds, UInt64(Int.max)))
+            completionDeadline = .now() + .nanoseconds(boundedBudget)
+        }
+        guard completion.wait(timeout: completionDeadline) == .success else {
+            return .timedOut
+        }
+        guard !deadlineExpired(deadlineNanoseconds, monotonicNanoseconds) else {
             return .timedOut
         }
         return result.value ?? .systemFailure
     }
 
-    private static func duplicateSocketDescriptor(_ socketDescriptor: Int32) throws -> Int32 {
+    private func deadlineExpired(
+        _ deadlineNanoseconds: UInt64?,
+        _ monotonicNanoseconds: @Sendable () -> UInt64
+    ) -> Bool {
+        guard let deadlineNanoseconds else { return false }
+        return monotonicNanoseconds() >= deadlineNanoseconds
+    }
+
+    private static func duplicateSocketDescriptor(
+        _ socketDescriptor: Int32,
+        deadlineNanoseconds: UInt64?,
+        monotonicNanoseconds: @Sendable () -> UInt64
+    ) throws -> Int32 {
         while true {
+            if let deadlineNanoseconds,
+                monotonicNanoseconds() >= deadlineNanoseconds
+            {
+                throw DatabaseBrokerHealthSystemError.systemCallFailed
+            }
             let duplicatedDescriptor = fcntl(socketDescriptor, F_DUPFD_CLOEXEC, 0)
             if duplicatedDescriptor >= 0 {
                 return duplicatedDescriptor
@@ -631,14 +776,20 @@ extension DatabaseBrokerHealthTransportDependencies {
         authenticationWorker: DatabaseBrokerHealthAuthenticationWorker = .shared,
         posixIO: DatabaseBrokerHealthPOSIXIO = .live
     ) -> DatabaseBrokerHealthTransportDependencies {
-        DatabaseBrokerHealthTransportDependencies(
-            monotonicNanoseconds: {
-                DispatchTime.now().uptimeNanoseconds
-            },
-            authenticatePeer: { socketDescriptor, budgetNanoseconds in
+        let monotonicNanoseconds: @Sendable () -> UInt64 = {
+            DispatchTime.now().uptimeNanoseconds
+        }
+        return DatabaseBrokerHealthTransportDependencies(
+            monotonicNanoseconds: monotonicNanoseconds,
+            authenticatePeer: {
+                socketDescriptor,
+                budgetNanoseconds,
+                deadlineNanoseconds in
                 authenticationWorker.authenticate(
                     socketDescriptor: socketDescriptor,
-                    budgetNanoseconds: budgetNanoseconds
+                    budgetNanoseconds: budgetNanoseconds,
+                    deadlineNanoseconds: deadlineNanoseconds,
+                    monotonicNanoseconds: monotonicNanoseconds
                 ) { authenticatedSocketDescriptor in
                     try authenticator.authenticatePeer(
                         socketDescriptor: authenticatedSocketDescriptor)
@@ -650,18 +801,22 @@ extension DatabaseBrokerHealthTransportDependencies {
                     interest: interest,
                     maximumWaitNanoseconds: maximumWaitNanoseconds)
             },
-            read: { socketDescriptor, maximumByteCount in
+            read: { socketDescriptor, maximumByteCount, deadlineNanoseconds in
                 try readFromSocket(
                     socketDescriptor: socketDescriptor,
                     maximumByteCount: maximumByteCount,
-                    posixIO: posixIO)
+                    posixIO: posixIO,
+                    deadlineNanoseconds: deadlineNanoseconds,
+                    monotonicNanoseconds: monotonicNanoseconds)
             },
-            write: { socketDescriptor, data, offset in
+            write: { socketDescriptor, data, offset, deadlineNanoseconds in
                 try writeToSocket(
                     socketDescriptor: socketDescriptor,
                     data: data,
                     offset: offset,
-                    posixIO: posixIO)
+                    posixIO: posixIO,
+                    deadlineNanoseconds: deadlineNanoseconds,
+                    monotonicNanoseconds: monotonicNanoseconds)
             })
     }
 
@@ -703,9 +858,18 @@ extension DatabaseBrokerHealthTransportDependencies {
     static func readFromSocket(
         socketDescriptor: Int32,
         maximumByteCount: Int,
-        posixIO: DatabaseBrokerHealthPOSIXIO
+        posixIO: DatabaseBrokerHealthPOSIXIO,
+        deadlineNanoseconds: UInt64? = nil,
+        monotonicNanoseconds: @escaping @Sendable () -> UInt64 = {
+            DispatchTime.now().uptimeNanoseconds
+        }
     ) throws -> DatabaseBrokerHealthTransportReadResult {
         while true {
+            if let deadlineNanoseconds,
+                monotonicNanoseconds() >= deadlineNanoseconds
+            {
+                return .timedOut
+            }
             let attempt = posixIO.read(socketDescriptor, maximumByteCount)
             if attempt.result > 0 {
                 guard attempt.data.count == attempt.result else {
@@ -733,9 +897,18 @@ extension DatabaseBrokerHealthTransportDependencies {
         socketDescriptor: Int32,
         data: Data,
         offset: Int,
-        posixIO: DatabaseBrokerHealthPOSIXIO
+        posixIO: DatabaseBrokerHealthPOSIXIO,
+        deadlineNanoseconds: UInt64? = nil,
+        monotonicNanoseconds: @escaping @Sendable () -> UInt64 = {
+            DispatchTime.now().uptimeNanoseconds
+        }
     ) throws -> DatabaseBrokerHealthTransportWriteResult {
         while true {
+            if let deadlineNanoseconds,
+                monotonicNanoseconds() >= deadlineNanoseconds
+            {
+                return .timedOut
+            }
             let attempt = posixIO.write(socketDescriptor, data, offset)
             if attempt.result > 0 {
                 return .bytes(attempt.result)
