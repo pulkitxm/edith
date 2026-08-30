@@ -117,4 +117,20 @@ private final class StreamLines: @unchecked Sendable {
         #expect(await stream.waitForExit() == 0)
         #expect(lines.read().map(\.0) == ["hello", "world"])
     }
+
+    @Test func liveStderrDoesNotBlockStdout() async throws {
+        let lines = StreamLines()
+        let stream = SSHLineStream(
+            process: process("printf 'progress\\n' >&2; printf 'record\\n'; sleep 30"),
+            onLine: { lines.append($0, $1) }, onExit: { _ in })
+        try stream.start()
+        for _ in 0..<40 {
+            if lines.read().contains(where: { $0.0 == "record" && !$0.1 }) { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        #expect(lines.read().contains { $0.0 == "progress" && $0.1 })
+        #expect(lines.read().contains { $0.0 == "record" && !$0.1 })
+        stream.cancel()
+        #expect(await stream.waitForExit() == 130)
+    }
 }

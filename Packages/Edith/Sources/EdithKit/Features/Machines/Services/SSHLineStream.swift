@@ -89,17 +89,19 @@ public final class SSHLineStream: @unchecked Sendable {
         let deliver = onLine
         let outputQueue = outputQueue
         stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+            var lines: [String] = []
+            PipeReading.consume(handle) { lines = stdout.receive($0) }
+            guard !lines.isEmpty else { return }
             outputQueue.async {
-                PipeReading.consume(handle) { data in
-                    for line in stdout.receive(data) { deliver(line, false) }
-                }
+                for line in lines { deliver(line, false) }
             }
         }
         stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+            var lines: [String] = []
+            PipeReading.consume(handle) { lines = stderr.receive($0) }
+            guard !lines.isEmpty else { return }
             outputQueue.async {
-                PipeReading.consume(handle) { data in
-                    for line in stderr.receive(data) { deliver(line, true) }
-                }
+                for line in lines { deliver(line, true) }
             }
         }
         let finish = onExit
