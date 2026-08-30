@@ -42,9 +42,10 @@ Brightness, volume and keyboard lighting accept whole numbers from 0 through
 
 `status` reports only controls the target can implement. It checks Linux tools
 such as `brightnessctl`, `wpctl`, `nmcli`, `bluetoothctl`, `rfkill` and
-`gsettings`, plus the matching macOS facilities. A missing control is `null` in
-JSON and omitted from the human table. If the target reports no controls at all,
-the human command exits 4 with an availability error.
+`gsettings`, plus the matching macOS facilities. Windows uses native CIM, Core
+Audio, network-adapter, Plug and Play, and notification settings APIs. A missing
+control is `null` in JSON and omitted from the human table. If the target reports
+no controls at all, the human command exits 4 with an availability error.
 
 Some Linux controls require a stored sudo password. Edith reads the same
 Keychain entry used by the app and passes it on standard input to `sudo -S`.

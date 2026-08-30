@@ -1,7 +1,8 @@
 # `ed machines thermal set`
 
-`ed machines thermal set <machine> <profile>` changes the Linux platform
-profile. With no duration it stays selected until another profile is applied.
+`ed machines thermal set <machine> <profile>` changes the Linux platform profile
+or Windows power scheme. With no duration it stays selected until another choice
+is applied.
 
 ```
 ed machines thermal set <machine> <profile> [--minutes <count>] [--json]
@@ -47,12 +48,9 @@ machine is resolved. An unknown profile exits 3 and lists the machine's valid
 choices. An unknown or ambiguous machine also exits 3. An unreachable machine
 or missing readable platform profile support exits 4.
 
-After validation, any remote write failure exits 1. This includes a refused
-sudo password, missing write privilege, `systemd-run` missing for a temporary
-profile, timer creation failure, or platform support disappearing between the
-read and write. Privilege failures include a hint to store or replace the sudo
-password. If timer creation fails after the profile write, the remote script
-restores the original profile and removes its saved state before reporting the
-failure.
+After validation, any remote write failure exits 1. On Linux this includes a
+refused sudo password, missing write privilege, or `systemd-run` failure. Windows
+uses `powercfg` and a hidden user-owned PowerShell process for timed reversion. A
+later profile change cancels the prior Windows reversion process.
 
 [Back to `ed machines thermal`](./README.md) or [all CLI commands](../README.md).
