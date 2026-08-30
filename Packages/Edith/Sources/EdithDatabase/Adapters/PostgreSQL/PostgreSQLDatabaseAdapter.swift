@@ -64,7 +64,10 @@ actor PostgreSQLDatabaseAdapterSession: DatabaseAdapterSession {
         ) { client in
             try await client.discoverIdentity()
         }
-        guard identity == productIdentity else {
+        guard
+            PostgreSQLDatabaseStableIdentity(identity)
+                == PostgreSQLDatabaseStableIdentity(productIdentity)
+        else {
             await failAndClose()
             throw PostgreSQLDatabaseAdapterSupport.connectionFailed
         }
@@ -256,6 +259,31 @@ struct PostgreSQLDatabaseEstablishedClient: Sendable {
     let identity: DatabaseProductIdentity
 }
 
+private struct PostgreSQLDatabaseStableIdentity: Equatable {
+    let product: DatabaseProduct
+    let version: DatabaseVersion?
+    let distribution: String?
+    let serverIdentifier: String?
+    let topologyAttributes: [DatabaseStringAttribute]
+
+    init(_ identity: DatabaseProductIdentity) {
+        product = identity.product
+        version = identity.version
+        distribution = identity.distribution
+        serverIdentifier = identity.serverIdentifier
+        topologyAttributes = identity.topology.attributes
+            .filter {
+                ["database", "serverEncoding", "serverVersionNumber"].contains($0.name)
+            }
+            .sorted {
+                if $0.name == $1.name {
+                    return $0.value < $1.value
+                }
+                return $0.name < $1.name
+            }
+    }
+}
+
 enum PostgreSQLDatabaseAdapterSupport {
     static let connectionFailed = DatabaseAdapterFailure.reported(
         DatabaseErrorEnvelope(
@@ -307,10 +335,13 @@ enum PostgreSQLDatabaseAdapterSupport {
     static func check(
         _ context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) {
-        do {
-            try await context.checkCancellation()
-        } catch {
+        switch await context.cancellation.reason() {
+        case .deadlineExceeded:
+            throw deadlineExceeded
+        case .userRequested, .sessionDisconnected:
             throw .cancelled
+        case nil:
+            break
         }
         if Task.isCancelled {
             throw .cancelled
