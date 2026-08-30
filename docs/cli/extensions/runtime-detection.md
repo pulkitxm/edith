@@ -2,8 +2,8 @@
 
 `ed extensions status`, `verify`, and `doctor` inspect the runtime behind every
 enabled extension. The Extensions settings pane uses the same probe. These
-checks are read-only and do not start a service, request access, create content,
-or repair stored data.
+checks do not request access, create content, or repair stored data. Database
+readiness may start its bundled local broker before authenticating the peer.
 
 The probe keeps setup readiness and runtime state separate:
 
@@ -25,9 +25,11 @@ system query failure produces `failed` with runtime phase `error`.
 | Agent Usage | bundled collector plus at least one verified provider executable | refresh lock and decoded `usage.json` daily samples | `ed usage refresh`; `ed usage --json` |
 | Herdr | Herdr presence on this Mac or a configured machine | collected sessions and per-host errors | `ed herdr ls --json`; `ed extensions verify herdr` |
 | Quinjet | verified Quinjet executable, terminal and theme values, and cmux when selected | terminal integration can be resolved | `ed tools install quinjet`; `ed config set quinjetTerminal embedded` |
+| Site Audit | local project storage and optional Lighthouse CLI | saved projects and bounded run history | `ed extensions verify seoAudit`; `ed extensions doctor seoAudit` |
 | System | built-in running-application module | regular applications visible through AppKit | `ed apps ls --json`; `ed app relaunch` |
 | App Maintenance | built-in app and package inspection | readable application and package sources | `ed extensions verify appMaintenance`; `ed tools install homebrew` |
 | Machines | readable machine registry with valid names, hosts, and SSH ports | configured machine count | `ed machines ls --json`; `ed machines add --help` |
+| Database | bundled local broker | bounded startup and authenticated peer readiness | `ed extensions doctor database --json`; reopen Database after resolving the reported failure |
 | Companion | configured endpoint | backend health checks and optional dependency health | `ed companion doctor --json` |
 | CPU & Memory | built-in metrics module | CPU tick sample and physical memory availability | `ed system stats --json`; `ed app relaunch` |
 | Mic Mute | built-in Core Audio module | input device discovery and input stream count | `ed config ls --group micmute --json`; `ed app relaunch` |
