@@ -1,5 +1,6 @@
 import NIOCore
 import NIOEmbedded
+import NIOPosix
 import NIOSSL
 import Testing
 
@@ -116,6 +117,94 @@ import Testing
     #expect(state.isEmpty)
     #expect(!channel.isActive)
     _ = try channel.finish(acceptAlreadyClosed: true)
+}
+
+@Test func postgresqlTransportCancelsPendingConnect() async throws {
+    let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+    var channels: [any Channel] = []
+    do {
+        let server = try await ServerBootstrap(group: group)
+            .childChannelInitializer { channel in
+                channel.eventLoop.makeSucceededFuture(())
+            }
+            .bind(host: "127.0.0.1", port: 0)
+            .get()
+        channels.append(server)
+        let port = try #require(server.localAddress?.port)
+        let channel = try await ClientBootstrap(group: group)
+            .connect(host: "127.0.0.1", port: port)
+            .get()
+        channels.append(channel)
+        let pendingChannels = PostgreSQLDatabasePendingChannels()
+        pendingChannels.register(channel)
+        let promise = channel.eventLoop.makePromise(of: (any Channel).self)
+        channel.closeFuture.whenComplete { _ in
+            promise.fail(ChannelError.ioOnClosedChannel)
+        }
+        let fallback = channel.eventLoop.scheduleTask(in: .seconds(1)) {
+            channel.close(promise: nil)
+        }
+        let connection = Task {
+            try await PostgreSQLDatabaseTransport.awaitConnectedChannel(
+                promise.futureResult,
+                pendingChannels: pendingChannels)
+        }
+        try await Task.sleep(nanoseconds: 10_000_000)
+        let startedAt = ContinuousClock.now
+        connection.cancel()
+        await #expect(throws: CancellationError.self) {
+            _ = try await connection.value
+        }
+        #expect(ContinuousClock.now - startedAt < .seconds(1))
+        #expect(!channel.isActive)
+        fallback.cancel()
+        await postgresqlTransportCloseTestChannels(channels, group: group)
+    } catch {
+        await postgresqlTransportCloseTestChannels(channels, group: group)
+        throw error
+    }
+}
+
+@Test func postgresqlTransportCancelsBlackholedConnect() async throws {
+    let plan = PostgreSQLDatabaseConnectionPlan(
+        host: "192.0.2.1",
+        port: 5_432,
+        username: "reader",
+        password: "fixture-password",
+        database: "edith_lab",
+        tls: .disabled,
+        tlsServerName: nil,
+        connectTimeoutMilliseconds: 2_000,
+        statementTimeoutMilliseconds: 2_000,
+        readOnly: true)
+    let connection = Task {
+        try await PostgreSQLDatabaseTransport.connect(
+            plan,
+            connectionID: 1)
+    }
+    try await Task.sleep(nanoseconds: 100_000_000)
+    let startedAt = ContinuousClock.now
+    connection.cancel()
+    do {
+        let resource = try await connection.value
+        try? await resource.connection.close()
+        try? await resource.eventLoopGroup.shutdownGracefully()
+        Issue.record("blackholed connection completed after cancellation")
+    } catch is CancellationError {
+    } catch {
+        Issue.record("blackholed connection returned a non-cancellation failure")
+    }
+    #expect(ContinuousClock.now - startedAt < .seconds(1))
+}
+
+private func postgresqlTransportCloseTestChannels(
+    _ channels: [any Channel],
+    group: MultiThreadedEventLoopGroup
+) async {
+    for channel in channels.reversed() {
+        try? await channel.close()
+    }
+    try? await group.shutdownGracefully()
 }
 
 private final class PostgreSQLDatabaseTestTLSInstaller: ChannelInboundHandler {

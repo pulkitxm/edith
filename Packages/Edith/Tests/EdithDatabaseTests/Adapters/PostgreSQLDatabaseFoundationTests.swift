@@ -1,4 +1,6 @@
 import Foundation
+import NIOCore
+import NIOPosix
 import PostgresNIO
 import Testing
 
@@ -151,8 +153,65 @@ private struct PostgreSQLDatabaseFoundationUnknownFailure: Error {}
     #expect(
         try PostgreSQLDatabaseDriverErrorClassifier.classify(
             PostgreSQLDatabaseFoundationUnknownFailure()) == .connection)
+    #expect(
+        try PostgreSQLDatabaseDriverErrorClassifier.classify(
+            ChannelError.connectTimeout(.milliseconds(300))) == .timeout)
     #expect(throws: CancellationError.self) {
         _ = try PostgreSQLDatabaseDriverErrorClassifier.classify(CancellationError())
+    }
+}
+
+@Test func postgresqlFoundationClassifiesStalledStartupAsTimeout() async throws {
+    try await withPostgreSQLDatabaseStalledServer { port in
+        let plan = PostgreSQLDatabaseConnectionPlan(
+            host: "127.0.0.1",
+            port: port,
+            username: "reader",
+            password: "fixture-password",
+            database: "edith_lab",
+            tls: .disabled,
+            tlsServerName: nil,
+            connectTimeoutMilliseconds: 300,
+            statementTimeoutMilliseconds: 300,
+            readOnly: true)
+        let startedAt = ContinuousClock.now
+        await #expect(throws: PostgreSQLDatabaseDriverFailure.timeout) {
+            _ = try await PostgresNIODatabaseClient.connect(plan)
+        }
+        #expect(ContinuousClock.now - startedAt < .seconds(2))
+    }
+}
+
+private func withPostgreSQLDatabaseStalledServer<Output: Sendable>(
+    _ body: @escaping @Sendable (Int) async throws -> Output
+) async throws -> Output {
+    let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+    let server: any Channel
+    do {
+        server = try await ServerBootstrap(group: group)
+            .serverChannelOption(
+                ChannelOptions.socketOption(.so_reuseaddr),
+                value: 1
+            )
+            .childChannelInitializer { channel in
+                channel.eventLoop.makeSucceededFuture(())
+            }
+            .bind(host: "127.0.0.1", port: 0)
+            .get()
+    } catch {
+        try? await group.shutdownGracefully()
+        throw error
+    }
+    do {
+        let port = try #require(server.localAddress?.port)
+        let output = try await body(port)
+        try await server.close()
+        try await group.shutdownGracefully()
+        return output
+    } catch {
+        try? await server.close()
+        try? await group.shutdownGracefully()
+        throw error
     }
 }
 
