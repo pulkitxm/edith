@@ -194,6 +194,7 @@ public protocol DatabaseMetadataStore: Sendable {
     func savedQueries(matching search: DatabaseSavedQuerySearch) async throws
         -> [DatabaseSavedQuery]
     func deleteSavedQuery(id: DatabaseSavedQueryID) async throws -> Bool
+    func createOperationIfAbsent(_ summary: DatabaseOperationRecordSummary) async throws -> Bool
     func recordOperation(_ summary: DatabaseOperationRecordSummary) async throws
     func operation(id: DatabaseOperationID) async throws -> DatabaseOperationRecordSummary?
     func operations(matching search: DatabaseOperationHistorySearch) async throws

@@ -178,6 +178,39 @@ private enum DatabaseExecutionContractFixtures {
 }
 
 @Suite struct DatabaseExecutionContractsTests {
+    @Test func connectAndDisconnectContractsPreserveOperationCorrelation() throws {
+        let request = DatabaseConnectRequest(
+            connectionID: DatabaseConnectionFixtures.connectionID,
+            operation: DatabaseExecutionContractFixtures.operation)
+        let decodedRequest = try DatabaseExecutionContractFixtures.roundTrip(request)
+
+        #expect(decodedRequest == request)
+        #expect(decodedRequest.version == DatabaseConnectRequest.schemaVersion)
+        #expect(decodedRequest.operation == DatabaseExecutionContractFixtures.operation)
+
+        let connectResult = DatabaseConnectResult(
+            connection: DatabaseConnectionFixtures.connectionIdentity,
+            productIdentity: DatabaseExecutionContractFixtures.productIdentity,
+            capabilities: DatabaseExecutionContractFixtures.capabilityReport,
+            connectedAt: DatabaseExecutionContractFixtures.testedAt)
+        #expect(try DatabaseExecutionContractFixtures.roundTrip(connectResult) == connectResult)
+
+        let disconnectRequest = DatabaseDisconnectRequest(
+            connectionID: DatabaseConnectionFixtures.connectionID,
+            operation: DatabaseExecutionContractFixtures.operation)
+        #expect(
+            try DatabaseExecutionContractFixtures.roundTrip(disconnectRequest)
+                == disconnectRequest)
+
+        let disconnectResult = DatabaseDisconnectResult(
+            connection: DatabaseConnectionFixtures.connectionIdentity,
+            disconnected: true,
+            disconnectedAt: DatabaseExecutionContractFixtures.testedAt)
+        #expect(
+            try DatabaseExecutionContractFixtures.roundTrip(disconnectResult)
+                == disconnectResult)
+    }
+
     @Test func connectionTestContractsPreserveOperationCorrelation() throws {
         let definition = try DatabaseConnectionFixtures.connectionDefinition()
         let request = DatabaseConnectionTestRequest(

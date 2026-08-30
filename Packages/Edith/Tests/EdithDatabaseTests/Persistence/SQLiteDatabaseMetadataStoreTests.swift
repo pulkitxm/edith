@@ -241,6 +241,33 @@ import Testing
                 before: Date(timeIntervalSince1970: 400)) == 1)
     }
 
+    @Test func atomicallyReservesOperationIdentifiersAcrossStoreInstances() async throws {
+        let (directory, path) = try DatabasePersistenceFixtures.temporaryStorePath()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let firstStore = try SQLiteDatabaseMetadataStore(path: path)
+        let secondStore = try SQLiteDatabaseMetadataStore(path: path)
+        let connection = try DatabasePersistenceFixtures.connection(
+            id: UUID(uuidString: "35B60AB2-F238-445D-9C3E-C0654C78F19E")!,
+            name: "Operations",
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 200))
+        let operation = DatabasePersistenceFixtures.operation(
+            id: UUID(uuidString: "0578B2F9-4E59-4464-A2EA-AB8FA78D3C28")!,
+            connection: connection,
+            kind: .databaseConnectionTest,
+            state: .running,
+            startedAt: Date(timeIntervalSince1970: 300),
+            finishedAt: nil)
+
+        async let first = firstStore.createOperationIfAbsent(operation)
+        async let second = secondStore.createOperationIfAbsent(operation)
+        let reservations = try await [first, second]
+
+        #expect(reservations.filter { $0 }.count == 1)
+        #expect(try await firstStore.operation(id: operation.id) == operation)
+        #expect(try await secondStore.createOperationIfAbsent(operation) == false)
+    }
+
     @Test func rejectsUnboundedAndOversizedMetadataRequests() async throws {
         let (directory, path) = try DatabasePersistenceFixtures.temporaryStorePath()
         defer { try? FileManager.default.removeItem(at: directory) }
