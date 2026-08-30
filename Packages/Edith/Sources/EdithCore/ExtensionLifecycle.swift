@@ -467,6 +467,39 @@ public enum ExtensionLifecycleCatalog {
                     "ed machines ls --json")
             ]),
         descriptor(
+            "database", "Explore and operate databases through a guarded local workbench.",
+            workflows: [
+                instruction(
+                    "explore", "Explore database structure",
+                    "Browse catalogs, schemas, collections, indexes and rows."),
+                instruction(
+                    "mutate", "Review changes before execution",
+                    "Preview impact and confirm destructive operations exactly."),
+            ],
+            prerequisites: [
+                instruction(
+                    "connection", "Add a database connection",
+                    "Open Database and configure a reachable database endpoint.")
+            ],
+            examples: [
+                "ed extensions enable database", "ed extensions doctor database --json",
+            ],
+            docs: [
+                documentation("extensions", "Extensions guide", "docs/cli/extensions/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "doctor", "Check Database readiness",
+                    "Inspect extension availability and local broker readiness.",
+                    "ed extensions doctor database --json")
+            ],
+            verification: [
+                instruction(
+                    "status", "Verify the Database extension",
+                    "Confirm the extension is enabled and available.",
+                    "ed extensions status database --json")
+            ]),
+        descriptor(
             "companion", "Search and reason over your notes, activity and voice memories.",
             workflows: [
                 instruction(

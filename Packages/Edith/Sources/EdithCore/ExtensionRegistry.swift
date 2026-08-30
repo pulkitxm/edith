@@ -150,6 +150,11 @@ public enum ExtensionRegistry {
             defaultsKey: "tabMachinesEnabled", requiredCapabilities: [.machineManagement],
             optionalCapabilities: [.notifications]),
         ExtensionRegistryEntry(
+            id: "database", title: "Database",
+            subtitle: "Explore databases and run guarded production mutations.",
+            symbolName: "cylinder.fill", group: .utilities, featured: true,
+            defaultsKey: "tabDatabaseEnabled", requiredCapabilities: [.databaseBroker]),
+        ExtensionRegistryEntry(
             id: "companion", title: "Companion",
             subtitle: "Your notes, voice memos and activity, remembered and searchable.",
             symbolName: "brain.head.profile", group: .agent, featured: false,
