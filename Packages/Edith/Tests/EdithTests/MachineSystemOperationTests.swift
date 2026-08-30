@@ -193,6 +193,20 @@ import Testing
         #expect(unmountCalls == 1)
     }
 
+    @Test func mountNormalizesAWindowsDriveBeforeCallingTheAdapter() async throws {
+        let mounted = MachineMount(
+            machineID: machine.id, target: machine.sshTarget, remotePath: "/C:/Users/kpulk",
+            mountPoint: "/tmp/Box")
+        let result = await MachineMountOperationExecution.perform(
+            .mount, machine: machine, remotePath: "C:\\Users\\kpulk", platform: .windows,
+            mount: { _, path, _, _ in
+                #expect(path == "/C:/Users/kpulk")
+                return mounted
+            })
+
+        #expect(try result.get().mount == mounted)
+    }
+
     @Test func defaultMountRestorationPrecedesANewMount() async throws {
         let restored = MachineMount(
             machineID: machine.id, target: machine.sshTarget, remotePath: "/",

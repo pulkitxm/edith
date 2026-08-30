@@ -174,7 +174,8 @@ struct MachineToolsTab: View {
         message = nil
         Task {
             let result = await MachineMountOperationExecution.perform(
-                .mount, machine: session.machine)
+                .mount, machine: session.machine,
+                platform: session.remotePlatform ?? .linux)
             switch result {
             case let .success(outcome):
                 message = "Mounted at \(outcome.mount.mountPoint)."

@@ -210,7 +210,8 @@ public enum MachineMountOperationExecution {
 
     public static func perform(
         _ operation: MachineMountOperation, machine: Machine, remotePath: String = "/",
-        mountPoint: URL? = nil, readOnly: Bool = false, restoreDefault: Bool = false,
+        platform: RemoteMachinePlatform = .linux, mountPoint: URL? = nil,
+        readOnly: Bool = false, restoreDefault: Bool = false,
         restore: Restore = { await MachineMounts.restore(machine: $0) },
         mount: Mount = {
             try await MachineMounts.mount(
@@ -236,7 +237,8 @@ public enum MachineMountOperationExecution {
                         break
                     }
                 }
-                let mounted = try await mount(machine, remotePath, mountPoint, readOnly)
+                let normalized = MachineMounts.remotePath(remotePath, platform: platform)
+                let mounted = try await mount(machine, normalized, mountPoint, readOnly)
                 return .success(
                     MachineMountOperationResult(operation: operation, mount: mounted))
             case .unmount:
