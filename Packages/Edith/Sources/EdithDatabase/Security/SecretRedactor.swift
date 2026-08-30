@@ -49,7 +49,36 @@ public struct DatabaseSecretRedactor: Sendable, CustomStringConvertible,
             loaded.append(secret)
         }
 
-        secrets = loaded.sorted {
+        try self.init(secrets: loaded, replacement: replacement)
+    }
+
+    init(
+        secrets: [Data],
+        replacement: String = DatabaseSecretRedactor.defaultReplacement
+    ) throws {
+        guard (1...128).contains(replacement.utf8.count) else {
+            throw DatabaseSecretRedactorError.invalidReplacement
+        }
+        guard secrets.count <= Self.maximumReferences else {
+            throw DatabaseSecretRedactorError.tooManyReferences(
+                actual: secrets.count,
+                maximum: Self.maximumReferences)
+        }
+
+        var seenSecrets = Set<Data>()
+        var loaded: [Data] = []
+        var totalBytes = 0
+        for secret in secrets where !secret.isEmpty && seenSecrets.insert(secret).inserted {
+            totalBytes += secret.count
+            guard totalBytes <= Self.maximumSecretBytes else {
+                throw DatabaseSecretRedactorError.secretMaterialTooLarge(
+                    actualBytes: totalBytes,
+                    maximumBytes: Self.maximumSecretBytes)
+            }
+            loaded.append(secret)
+        }
+
+        self.secrets = loaded.sorted {
             if $0.count != $1.count { return $0.count > $1.count }
             return $0.lexicographicallyPrecedes($1)
         }

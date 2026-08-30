@@ -403,16 +403,50 @@ private enum DatabaseAdapterContractFixtures {
     @Test func cancellationSignalKeepsTheFirstReason() async throws {
         let signal = DatabaseAdapterCancellationSignal()
         try await signal.checkCancellation()
-        let waiting = Task { await signal.wait() }
+        let stream = await signal.events()
+        let waiting = Task {
+            var iterator = stream.makeAsyncIterator()
+            return await iterator.next()
+        }
 
         await signal.cancel(.deadlineExceeded)
         await signal.cancel(.userRequested)
 
         #expect(await waiting.value == .deadlineExceeded)
         #expect(await signal.reason() == .deadlineExceeded)
+        #expect(await signal.registeredEventStreamCount() == 0)
         await #expect(throws: DatabaseAdapterFailure.cancelled) {
             try await signal.checkCancellation()
         }
+    }
+
+    @Test func cancellationEventsFinishImmediatelyAfterCancellation() async {
+        let signal = DatabaseAdapterCancellationSignal()
+        await signal.cancel(.sessionDisconnected)
+
+        let stream = await signal.events()
+        var iterator = stream.makeAsyncIterator()
+
+        #expect(await iterator.next() == .sessionDisconnected)
+        #expect(await iterator.next() == nil)
+        #expect(await signal.registeredEventStreamCount() == 0)
+    }
+
+    @Test func cancellationEventRegistrationIsRemovedWhenConsumptionStops() async {
+        let signal = DatabaseAdapterCancellationSignal()
+        let stream = await signal.events()
+        #expect(await signal.registeredEventStreamCount() == 1)
+
+        let consuming = Task {
+            for await _ in stream {}
+        }
+        consuming.cancel()
+        await consuming.value
+
+        for _ in 0..<100 where await signal.registeredEventStreamCount() != 0 {
+            await Task.yield()
+        }
+        #expect(await signal.registeredEventStreamCount() == 0)
     }
 
     @Test func mutationResultBoundsServerOperationIdentifier() throws {
