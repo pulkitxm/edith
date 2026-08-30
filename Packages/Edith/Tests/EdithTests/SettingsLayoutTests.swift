@@ -21,13 +21,19 @@ import EdithKit
         let navigation = try String(contentsOf: navigationURL, encoding: .utf8)
 
         #expect(navigation.contains("ForEach(SettingsPane.Tab.allCases"))
+        #expect(navigation.contains("ForEach(AppMaintenanceSection.allCases"))
         #expect(navigation.contains("SettingsSidebarRow"))
+        #expect(navigation.contains("AppMaintenanceSidebarRow"))
         #expect(navigation.contains("settingsCategoriesExpanded.toggle()"))
+        #expect(navigation.contains("appMaintenanceSectionsExpanded.toggle()"))
         #expect(navigation.contains("CollapsibleSidebarLayout"))
         #expect(navigation.contains(".clipped()"))
         #expect(navigation.contains("disclosureAction: item == .settings"))
         #expect(navigation.contains("Button(action: disclosureAction)"))
         #expect(navigation.contains("if item == .settings, destination == .settings"))
+        #expect(
+            navigation.contains(
+                "if item == .appMaintenance, destination == .appMaintenance"))
         #expect(navigation.contains("rowHovered && !selected"))
         #expect(!navigation.contains("SidebarDisclosureInteraction"))
         #expect(navigation.contains(".zIndex(1)"))

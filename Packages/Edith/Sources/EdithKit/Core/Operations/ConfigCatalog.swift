@@ -155,6 +155,10 @@ public enum ConfigCatalog {
             summary: "Whether Settings categories are expanded in the main sidebar.",
             fallback: .bool(false)),
         SettingDefinition(
+            AppStorageKeys.AppMaintenance.categoriesExpanded, .bool, group: "panel",
+            summary: "Whether App Maintenance sections are expanded in the main sidebar.",
+            fallback: .bool(true)),
+        SettingDefinition(
             Repo.pathKey, .string, group: "panel",
             summary: "Development repository root used for usage data and music."),
     ]
