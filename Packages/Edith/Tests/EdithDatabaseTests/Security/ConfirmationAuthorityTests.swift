@@ -299,6 +299,7 @@ enum DatabaseConfirmationFixtures {
             secretStore: secretStore)
         let target = DatabaseConfirmationFixtures.target(
             path: ["orders", password, "invoices"],
+            includeRecord: false,
             recordValue: .string(privateKey))
         let payload = DatabaseConfirmationFixtures.payload(
             command: "DELETE \(password)",
@@ -314,10 +315,10 @@ enum DatabaseConfirmationFixtures {
             target: target)
         let plan = DatabaseConfirmationFixtures.plan(
             target: target,
-            predicate: nil,
+            predicate: DatabaseConfirmationFixtures.predicate(.string(privateKey)),
             payload: payload,
-            action: .update,
-            scope: .singleRecord,
+            action: .updateMany,
+            scope: .predicate,
             impact: "removes \(password)",
             warnings: [warning])
 
@@ -519,6 +520,7 @@ enum DatabaseConfirmationFixtures {
 
         let predicate = DatabaseConfirmationFixtures.plan()
         let predicatePreview = try await authority.issuePreview(for: predicate)
+        #expect(predicatePreview.effect.predicate == DatabaseConfirmationFixtures.predicate())
         #expect(predicatePreview.requiredConfirmation.strength == .target)
 
         let selectedIdentity = try #require(DatabaseConfirmationFixtures.target().record)
