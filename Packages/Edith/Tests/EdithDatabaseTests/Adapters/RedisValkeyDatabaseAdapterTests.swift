@@ -640,6 +640,40 @@ struct RedisValkeyDatabaseAdapterTests {
         await session.disconnect()
         #expect(await session.lifecycleState() == .disconnected)
     }
+
+    @Test("task cancellation closes the active connection")
+    func taskCancellation() async throws {
+        let definition = try RedisValkeyAdapterFixtures.definition()
+        let client = FakeRedisClient(
+            product: .redis,
+            values: [Data("key".utf8): .string(Data("value".utf8))])
+        await client.setPauseOnScan(true)
+        let session = try await RedisValkeyDatabaseAdapter(
+            clientFactory: FakeRedisClientFactory(client: client)
+        ).connect(
+            try RedisValkeyAdapterFixtures.resolved(definition),
+            context: RedisValkeyAdapterFixtures.context())
+        let task = Task {
+            try await session.readPage(
+                try RedisValkeyAdapterFixtures.pageRequest(definition.id),
+                context: RedisValkeyAdapterFixtures.context())
+        }
+        for _ in 0..<1_000 {
+            if await client.isScanPaused() { break }
+            await Task.yield()
+        }
+        #expect(await client.isScanPaused())
+        task.cancel()
+        do {
+            _ = try await task.value
+            Issue.record("The cancelled task unexpectedly completed.")
+        } catch let failure as DatabaseAdapterFailure {
+            #expect(failure == .cancelled)
+        }
+        #expect(await client.isClosed())
+        #expect(await session.lifecycleState() == .failed)
+        await session.disconnect()
+    }
 }
 
 private enum RedisValkeyLiveEnvironment {
