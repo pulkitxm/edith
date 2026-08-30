@@ -2,6 +2,7 @@ import Foundation
 
 public actor DatabaseExecutor {
     static let maximumActiveOperations = 256
+    static let maximumBackgroundTasks = 256
     static let historyFinalizationWarning = DatabaseWarning(
         code: "database.operation.history_not_finalized",
         message:
@@ -15,6 +16,7 @@ public actor DatabaseExecutor {
     private let validator: DatabaseExecutionValidator
     private let currentDate: @Sendable () -> Date
     private var activeOperations: [DatabaseOperationID: DatabaseExecutorActiveOperation] = [:]
+    private var backgroundTasks: [UUID: Task<Void, Never>] = [:]
 
     init(
         metadataStore: any DatabaseMetadataStore,
@@ -145,14 +147,13 @@ public actor DatabaseExecutor {
                 kind: .databaseCapabilities,
                 definition: definition,
                 timeout: definition.limits.operationTimeout,
-                cancellationSupport: .serverSide,
+                cancellationSupport: .cooperative,
                 retryClassification: .safeIdempotent,
                 terminalProgress: .determinate(completed: 1, total: 1, unit: .steps)
-            ) { [self, sessionPool] context, _ in
+            ) { [sessionPool] context, _ in
                 let cached = try await sessionPool.lease(
                     for: definition,
                     context: context)
-                await attachSession(cached.session, to: context.operationID)
                 let lease: DatabaseSessionLease
                 if request.resolution == .refresh {
                     lease = try await sessionPool.lease(
@@ -212,9 +213,9 @@ public actor DatabaseExecutor {
                 reason: .userRequested)
             {
                 let warning =
-                    cancellation.historyFinalized
-                    ? nil
-                    : Self.historyFinalizationWarning
+                    cancellation.disposition == .accepted && !cancellation.historyFinalized
+                    ? Self.historyFinalizationWarning
+                    : nil
                 return .success(
                     DatabaseOperationCancelResult(
                         operationID: request.operationID,
@@ -250,10 +251,17 @@ public actor DatabaseExecutor {
                 reason: .sessionDisconnected)
         }
         await sessionPool.disconnectAll()
+        for task in backgroundTasks.values {
+            task.cancel()
+        }
     }
 
     func activeOperationCount() -> Int {
         activeOperations.count
+    }
+
+    func backgroundTaskCount() -> Int {
+        backgroundTasks.count
     }
 
     private func requireActiveOwner() async throws {
@@ -332,7 +340,7 @@ public actor DatabaseExecutor {
                 }
             switch reservation {
             case .reserved:
-                break
+                markOperationReserved(effectiveOperation.operationID)
             case .operationIdentifierExists:
                 throw DatabaseExecutionValidationError.operationIdentifierAlreadyExists(
                     effectiveOperation.operationID)
@@ -356,69 +364,45 @@ public actor DatabaseExecutor {
             operation: effectiveOperation,
             cancellation: cancellation)
 
-        let mapper = await errorMapper(for: definition)
-        let running = DatabaseOperationRecordSummary(
-            id: reservedRunning.id,
-            kind: reservedRunning.kind,
-            state: reservedRunning.state,
-            connection: mapper.sanitize(definition.identity),
-            target: mapper.sanitize(target),
-            startedAt: reservedRunning.startedAt,
-            deadline: reservedRunning.deadline,
-            progress: reservedRunning.progress,
-            cancellationSupport: reservedRunning.cancellationSupport,
-            retryClassification: reservedRunning.retryClassification)
-        replaceActiveRunning(running)
+        var mapper = reservationMapper
+        var running = reservedRunning
         do {
+            try await checkControl(context)
+            mapper = try await controlledErrorMapper(
+                for: definition,
+                context: context)
+            try await checkControl(context)
+            running = DatabaseOperationRecordSummary(
+                id: reservedRunning.id,
+                kind: reservedRunning.kind,
+                state: reservedRunning.state,
+                connection: mapper.sanitize(definition.identity),
+                target: mapper.sanitize(target),
+                startedAt: reservedRunning.startedAt,
+                deadline: reservedRunning.deadline,
+                progress: reservedRunning.progress,
+                cancellationSupport: reservedRunning.cancellationSupport,
+                retryClassification: reservedRunning.retryClassification)
+            replaceActiveRunning(running)
             guard
                 try await metadataStore.transitionOperation(
                     running,
                     from: [.running],
                     owner: runtimeOwner)
             else {
-                if let cancellationTask = activeOperations[effectiveOperation.operationID]?
-                    .cancellationTask
-                {
-                    _ = await cancellationTask.value
-                }
                 if let reason = await cancellation.reason() {
                     throw DatabaseExecutorControlFailure(reason)
                 }
                 throw DatabaseExecutionValidationError.runtimeOwnerNotActive
             }
         } catch {
-            let envelope: DatabaseErrorEnvelope
-            if let reason = await cancellation.reason() {
-                envelope = controlEnvelope(reason, mapper: mapper, target: target)
-            } else {
-                envelope = mapper.map(error, target: target)
-            }
-            let state: DatabaseOperationState =
-                envelope.category == .cancelled
-                ? .cancelled
-                : .failed
-            let terminal = terminalSummary(
-                from: running,
-                state: state,
-                progress: terminalProgress,
-                error: envelope)
-            let finalized = await finalizeOperation(terminal)
-            finishActiveOperation(effectiveOperation.operationID)
-            let reported =
-                finalized
-                ? terminal
-                : terminalSummary(
-                    from: running,
-                    state: state,
-                    progress: terminalProgress,
-                    warnings: [Self.historyFinalizationWarning],
-                    error: envelope)
-            return .failure(
-                envelope,
-                metadata: DatabaseResultMetadata(
-                    operation: reported,
-                    completeness: DatabaseResultCompleteness(state: .complete),
-                    warnings: finalized ? [] : [Self.historyFinalizationWarning]))
+            return await failureResult(
+                error,
+                mapper: mapper,
+                target: target,
+                running: running,
+                terminalProgress: terminalProgress,
+                cancellation: cancellation)
         }
 
         do {
@@ -445,7 +429,10 @@ public actor DatabaseExecutor {
                 state: .succeeded,
                 progress: terminalProgress,
                 error: nil)
-            let finalized = await finalizeOperation(terminal)
+            let finalized = await finalizeOperation(terminal, from: [.running])
+            if !finalized, let reason = await cancellation.reason() {
+                throw DatabaseExecutorControlFailure(reason)
+            }
             finishActiveOperation(effectiveOperation.operationID)
             let reported =
                 finalized
@@ -463,39 +450,70 @@ public actor DatabaseExecutor {
                     completeness: DatabaseResultCompleteness(state: .complete),
                     warnings: finalized ? [] : [Self.historyFinalizationWarning]))
         } catch {
-            let envelope: DatabaseErrorEnvelope
-            if let reason = await cancellation.reason() {
-                envelope = controlEnvelope(reason, mapper: mapper, target: target)
-            } else {
-                envelope = mapper.map(error, target: target)
-            }
-            let state: DatabaseOperationState =
-                envelope.category == .cancelled
-                ? .cancelled
-                : .failed
-            let terminal = terminalSummary(
+            return await failureResult(
+                error,
+                mapper: mapper,
+                target: target,
+                running: running,
+                terminalProgress: terminalProgress,
+                cancellation: cancellation)
+        }
+    }
+
+    private func failureResult<Payload: Sendable>(
+        _ error: any Error,
+        mapper: DatabaseExecutionErrorMapper,
+        target: DatabaseTargetIdentifier?,
+        running: DatabaseOperationRecordSummary,
+        terminalProgress: DatabaseOperationProgress?,
+        cancellation: DatabaseAdapterCancellationSignal
+    ) async -> DatabaseCommandResult<Payload> {
+        var reason = await cancellation.reason()
+        var envelope =
+            reason.map {
+                controlEnvelope($0, mapper: mapper, target: target)
+            } ?? mapper.map(error, target: target)
+        var state: DatabaseOperationState =
+            envelope.category == .cancelled
+            ? .cancelled
+            : .failed
+        var terminal = terminalSummary(
+            from: running,
+            state: state,
+            progress: terminalProgress,
+            error: envelope)
+        var finalized = await finalizeOperation(
+            terminal,
+            from: reason == nil ? [.running] : [.running, .cancelling])
+        if !finalized, reason == nil, let lateReason = await cancellation.reason() {
+            reason = lateReason
+            envelope = controlEnvelope(lateReason, mapper: mapper, target: target)
+            state = envelope.category == .cancelled ? .cancelled : .failed
+            terminal = terminalSummary(
                 from: running,
                 state: state,
                 progress: terminalProgress,
                 error: envelope)
-            let finalized = await finalizeOperation(terminal)
-            finishActiveOperation(effectiveOperation.operationID)
-            let reported =
-                finalized
-                ? terminal
-                : terminalSummary(
-                    from: running,
-                    state: state,
-                    progress: terminalProgress,
-                    warnings: [Self.historyFinalizationWarning],
-                    error: envelope)
-            return .failure(
-                envelope,
-                metadata: DatabaseResultMetadata(
-                    operation: reported,
-                    completeness: DatabaseResultCompleteness(state: .complete),
-                    warnings: finalized ? [] : [Self.historyFinalizationWarning]))
+            finalized = await finalizeOperation(
+                terminal,
+                from: [.running, .cancelling])
         }
+        finishActiveOperation(running.id)
+        let reported =
+            finalized
+            ? terminal
+            : terminalSummary(
+                from: running,
+                state: state,
+                progress: terminalProgress,
+                warnings: [Self.historyFinalizationWarning],
+                error: envelope)
+        return .failure(
+            envelope,
+            metadata: DatabaseResultMetadata(
+                operation: reported,
+                completeness: DatabaseResultCompleteness(state: .complete),
+                warnings: finalized ? [] : [Self.historyFinalizationWarning]))
     }
 
     private func effectiveOperation(
@@ -529,6 +547,12 @@ public actor DatabaseExecutor {
         activeOperations[running.id] = DatabaseExecutorActiveOperation(
             running: running,
             cancellation: cancellation)
+    }
+
+    private func markOperationReserved(_ operationID: DatabaseOperationID) {
+        guard var active = activeOperations[operationID] else { return }
+        active.reservationState = .owned
+        activeOperations[operationID] = active
     }
 
     private func replaceActiveRunning(_ running: DatabaseOperationRecordSummary) {
@@ -571,17 +595,9 @@ public actor DatabaseExecutor {
         if active.session == nil {
             active.session = session
         }
-        let cancellationTask = active.cancellationTask
-        let shouldCancel = cancellationTask != nil && !active.serverCancellationInvoked
-        if shouldCancel {
-            active.serverCancellationInvoked = true
-        }
         activeOperations[operationID] = active
-        if shouldCancel, let cancellationTask {
-            let cancellation = await cancellationTask.value
-            if cancellation.disposition == .accepted {
-                _ = await session.cancel(operationID)
-            }
+        if active.cancellationAccepted {
+            _ = scheduleServerCancellation(operationID)
         }
     }
 
@@ -594,17 +610,10 @@ public actor DatabaseExecutor {
             return
         }
         active.executionCancellation = cancellation
-        let cancellationTask = active.cancellationTask
-        let shouldCancel = cancellationTask != nil && !active.executionCancellationInvoked
-        if shouldCancel {
-            active.executionCancellationInvoked = true
-        }
+        let shouldCancel = active.cancellationReason != nil
         activeOperations[operationID] = active
-        if shouldCancel, let cancellationTask {
-            let outcome = await cancellationTask.value
-            if outcome.disposition == .accepted {
-                cancellation()
-            }
+        if shouldCancel {
+            cancellation()
         }
     }
 
@@ -633,10 +642,20 @@ public actor DatabaseExecutor {
         if let cancellationTask = active.cancellationTask {
             return await cancellationTask.value
         }
+        if active.cancellationReason != nil {
+            return nil
+        }
+        active.cancellationReason = reason
+        let cancellationSignal = active.cancellation
+        let executionCancellation = active.executionCancellation
+        activeOperations[operationID] = active
+        guard active.reservationState == .owned else {
+            await cancellationSignal.cancel(reason)
+            executionCancellation?()
+            return nil
+        }
         let metadataStore = metadataStore
         let runtimeOwner = runtimeOwner
-        let session = active.session
-        let executionCancellation = active.executionCancellation
         let cancelling = operationSummary(
             from: active.running,
             state: .cancelling,
@@ -644,9 +663,10 @@ public actor DatabaseExecutor {
             progress: active.running.progress,
             warnings: active.running.warnings,
             error: nil)
-        let cancellationSignal = active.cancellation
         let cancellationSupport = active.running.cancellationSupport
-        let cancellationTask = Task {
+        let cancellationTask = Task { [weak self] in
+            await cancellationSignal.cancel(reason)
+            executionCancellation?()
             var stored: DatabaseOperationRecordSummary?
             var transitioned = false
             do {
@@ -664,31 +684,62 @@ public actor DatabaseExecutor {
                 stored = nil
             }
 
-            if !transitioned, let stored, Self.isTerminal(stored.state) {
+            if !transitioned {
+                if let stored, Self.isTerminal(stored.state) {
+                    return DatabaseExecutorActiveCancellation(
+                        disposition: .alreadyFinished,
+                        operation: stored,
+                        cancellationSupport: stored.cancellationSupport,
+                        historyFinalized: true)
+                }
                 return DatabaseExecutorActiveCancellation(
-                    disposition: .alreadyFinished,
+                    disposition: .accepted,
                     operation: stored,
-                    cancellationSupport: stored.cancellationSupport,
-                    historyFinalized: true)
+                    cancellationSupport: cancellationSupport,
+                    historyFinalized: false)
             }
-
-            await cancellationSignal.cancel(reason)
-            executionCancellation?()
-            var support = cancellationSupport
-            if let session {
-                support = await session.cancel(operationID).support
-            }
+            let support =
+                await self?.acceptCancellationAndSchedule(operationID)
+                ?? cancellationSupport
             return DatabaseExecutorActiveCancellation(
                 disposition: .accepted,
                 operation: cancelling,
                 cancellationSupport: support,
                 historyFinalized: transitioned)
         }
-        active.serverCancellationInvoked = session != nil
-        active.executionCancellationInvoked = executionCancellation != nil
         active.cancellationTask = cancellationTask
         activeOperations[operationID] = active
         return await cancellationTask.value
+    }
+
+    private func scheduleServerCancellation(
+        _ operationID: DatabaseOperationID
+    ) -> DatabaseCancellationSupport {
+        guard var active = activeOperations[operationID] else { return .unavailable }
+        guard active.running.cancellationSupport == .serverSide else {
+            return active.running.cancellationSupport
+        }
+        guard let session = active.session else { return .cooperative }
+        guard !active.serverCancellationInvoked else { return .cooperative }
+        guard backgroundTasks.count < Self.maximumBackgroundTasks else { return .cooperative }
+        active.serverCancellationInvoked = true
+        activeOperations[operationID] = active
+        let identifier = UUID()
+        let task = Task { [weak self] in
+            _ = await session.cancel(operationID)
+            await self?.finishBackgroundTask(identifier)
+        }
+        backgroundTasks[identifier] = task
+        return .cooperative
+    }
+
+    private func acceptCancellationAndSchedule(
+        _ operationID: DatabaseOperationID
+    ) -> DatabaseCancellationSupport {
+        guard var active = activeOperations[operationID] else { return .unavailable }
+        active.cancellationAccepted = true
+        activeOperations[operationID] = active
+        return scheduleServerCancellation(operationID)
     }
 
     private func checkControl(
@@ -709,12 +760,13 @@ public actor DatabaseExecutor {
     }
 
     private func finalizeOperation(
-        _ terminal: DatabaseOperationRecordSummary
+        _ terminal: DatabaseOperationRecordSummary,
+        from expectedStates: Set<DatabaseOperationState>
     ) async -> Bool {
         do {
             return try await metadataStore.transitionOperation(
                 terminal,
-                from: [.running, .cancelling],
+                from: expectedStates,
                 owner: runtimeOwner)
         } catch {
             return false
@@ -723,6 +775,10 @@ public actor DatabaseExecutor {
 
     private func finishActiveOperation(_ operationID: DatabaseOperationID) {
         activeOperations.removeValue(forKey: operationID)?.deadlineTask?.cancel()
+    }
+
+    private func finishBackgroundTask(_ identifier: UUID) {
+        backgroundTasks.removeValue(forKey: identifier)
     }
 
     private func terminalSummary(
@@ -771,8 +827,76 @@ public actor DatabaseExecutor {
             error: error)
     }
 
-    private func errorMapper(
-        for definition: DatabaseConnectionDefinition
+    private func controlledErrorMapper(
+        for definition: DatabaseConnectionDefinition,
+        context: DatabaseAdapterOperationContext
+    ) async throws -> DatabaseExecutionErrorMapper {
+        guard backgroundTasks.count < Self.maximumBackgroundTasks else {
+            return DatabaseExecutionErrorMapper()
+        }
+        let completion = DatabaseExecutorCompletion<DatabaseExecutionErrorMapper>()
+        let identifier = UUID()
+        let secretStore = secretStore
+        let task = Task { [weak self] in
+            let mapper = await Self.errorMapper(
+                for: definition,
+                secretStore: secretStore)
+            await completion.resolve(mapper)
+            await self?.finishBackgroundTask(identifier)
+        }
+        backgroundTasks[identifier] = task
+        await attachExecutionCancellation(
+            { task.cancel() },
+            to: context.operationID)
+        let outcome = await withTaskCancellationHandler {
+            await waitForMapper(
+                completion: completion,
+                cancellation: context.cancellation)
+        } onCancel: { [weak self] in
+            task.cancel()
+            Task {
+                _ = await self?.cancelActiveOperation(
+                    context.operationID,
+                    reason: .userRequested)
+            }
+        }
+        switch outcome {
+        case let .resolved(mapper):
+            return mapper
+        case let .cancelled(reason):
+            task.cancel()
+            throw DatabaseExecutorControlFailure(reason)
+        }
+    }
+
+    private func waitForMapper(
+        completion: DatabaseExecutorCompletion<DatabaseExecutionErrorMapper>,
+        cancellation: DatabaseAdapterCancellationSignal
+    ) async -> DatabaseExecutorMapperOutcome {
+        let completionEvents = await completion.events()
+        let cancellationEvents = await cancellation.events()
+        return await withTaskGroup(of: DatabaseExecutorMapperOutcome?.self) { group in
+            group.addTask {
+                var iterator = completionEvents.makeAsyncIterator()
+                return await iterator.next().map(DatabaseExecutorMapperOutcome.resolved)
+            }
+            group.addTask {
+                var iterator = cancellationEvents.makeAsyncIterator()
+                return await iterator.next().map(DatabaseExecutorMapperOutcome.cancelled)
+            }
+            while let candidate = await group.next() {
+                if let candidate {
+                    group.cancelAll()
+                    return candidate
+                }
+            }
+            return .cancelled(.userRequested)
+        }
+    }
+
+    private static func errorMapper(
+        for definition: DatabaseConnectionDefinition,
+        secretStore: any DatabaseSecretStore
     ) async -> DatabaseExecutionErrorMapper {
         var references = definition.authentication.secretReferences
         if let privateKey = definition.tls.clientPrivateKey {
@@ -850,10 +974,12 @@ public actor DatabaseExecutor {
 private struct DatabaseExecutorActiveOperation: Sendable {
     var running: DatabaseOperationRecordSummary
     let cancellation: DatabaseAdapterCancellationSignal
+    var reservationState: DatabaseExecutorReservationState
+    var cancellationReason: DatabaseAdapterCancellationReason?
+    var cancellationAccepted: Bool
     var session: (any DatabaseAdapterSession)?
     var serverCancellationInvoked: Bool
     var executionCancellation: (@Sendable () -> Void)?
-    var executionCancellationInvoked: Bool
     var deadlineTask: Task<Void, Never>?
     var cancellationTask: Task<DatabaseExecutorActiveCancellation, Never>?
 
@@ -863,10 +989,12 @@ private struct DatabaseExecutorActiveOperation: Sendable {
     ) {
         self.running = running
         self.cancellation = cancellation
+        reservationState = .pending
+        cancellationReason = nil
+        cancellationAccepted = false
         session = nil
         serverCancellationInvoked = false
         executionCancellation = nil
-        executionCancellationInvoked = false
         deadlineTask = nil
         cancellationTask = nil
     }
@@ -874,9 +1002,14 @@ private struct DatabaseExecutorActiveOperation: Sendable {
 
 private struct DatabaseExecutorActiveCancellation: Sendable {
     let disposition: DatabaseOperationCancellationDisposition
-    let operation: DatabaseOperationRecordSummary
+    let operation: DatabaseOperationRecordSummary?
     let cancellationSupport: DatabaseCancellationSupport
     let historyFinalized: Bool
+}
+
+private enum DatabaseExecutorReservationState: Sendable {
+    case pending
+    case owned
 }
 
 private struct DatabaseExecutorControlFailure: Error, Sendable {
@@ -884,5 +1017,47 @@ private struct DatabaseExecutorControlFailure: Error, Sendable {
 
     init(_ reason: DatabaseAdapterCancellationReason) {
         self.reason = reason
+    }
+}
+
+private enum DatabaseExecutorMapperOutcome: Sendable {
+    case resolved(DatabaseExecutionErrorMapper)
+    case cancelled(DatabaseAdapterCancellationReason)
+}
+
+private actor DatabaseExecutorCompletion<Value: Sendable> {
+    private var value: Value?
+    private var continuations: [UUID: AsyncStream<Value>.Continuation] = [:]
+
+    func resolve(_ value: Value) {
+        guard self.value == nil else { return }
+        self.value = value
+        let pending = continuations.values
+        continuations.removeAll()
+        for continuation in pending {
+            continuation.yield(value)
+            continuation.finish()
+        }
+    }
+
+    func events() -> AsyncStream<Value> {
+        let identifier = UUID()
+        let pair = AsyncStream<Value>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        if let value {
+            pair.continuation.yield(value)
+            pair.continuation.finish()
+        } else {
+            pair.continuation.onTermination = { [weak self] _ in
+                Task {
+                    await self?.removeContinuation(identifier)
+                }
+            }
+            continuations[identifier] = pair.continuation
+        }
+        return pair.stream
+    }
+
+    private func removeContinuation(_ identifier: UUID) {
+        continuations.removeValue(forKey: identifier)
     }
 }

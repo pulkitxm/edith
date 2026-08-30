@@ -366,6 +366,207 @@ private struct DatabaseExecutorUnexpectedMetadataStore: DatabaseMetadataStore {
     }
 }
 
+private actor DatabaseExecutorGatedMetadataStore: DatabaseMetadataStore {
+    private let base: any DatabaseMetadataStore
+    private let reservationGate: DatabaseExecutorTestGate?
+    private let blockedTransitionStates: Set<DatabaseOperationState>
+    private let rejectedTransitionStates: Set<DatabaseOperationState>
+    private let transitionGate: DatabaseExecutorTestGate?
+
+    init(
+        base: any DatabaseMetadataStore,
+        reservationGate: DatabaseExecutorTestGate? = nil,
+        blockedTransitionStates: Set<DatabaseOperationState> = [],
+        rejectedTransitionStates: Set<DatabaseOperationState> = [],
+        transitionGate: DatabaseExecutorTestGate? = nil
+    ) {
+        self.base = base
+        self.reservationGate = reservationGate
+        self.blockedTransitionStates = blockedTransitionStates
+        self.rejectedTransitionStates = rejectedTransitionStates
+        self.transitionGate = transitionGate
+    }
+
+    func saveConnection(_ definition: DatabaseConnectionDefinition) async throws {
+        try await base.saveConnection(definition)
+    }
+
+    func connection(id: DatabaseConnectionID) async throws -> DatabaseConnectionDefinition? {
+        try await base.connection(id: id)
+    }
+
+    func connections(matching search: DatabaseConnectionSearch) async throws
+        -> [DatabaseConnectionDefinition]
+    {
+        try await base.connections(matching: search)
+    }
+
+    func deleteConnection(id: DatabaseConnectionID) async throws -> Bool {
+        try await base.deleteConnection(id: id)
+    }
+
+    func saveQuery(_ query: DatabaseSavedQuery) async throws {
+        try await base.saveQuery(query)
+    }
+
+    func savedQuery(id: DatabaseSavedQueryID) async throws -> DatabaseSavedQuery? {
+        try await base.savedQuery(id: id)
+    }
+
+    func savedQueries(matching search: DatabaseSavedQuerySearch) async throws
+        -> [DatabaseSavedQuery]
+    {
+        try await base.savedQueries(matching: search)
+    }
+
+    func deleteSavedQuery(id: DatabaseSavedQueryID) async throws -> Bool {
+        try await base.deleteSavedQuery(id: id)
+    }
+
+    func runtimeOwner() async throws -> DatabaseRuntimeOwnerRecord? {
+        try await base.runtimeOwner()
+    }
+
+    func claimRuntimeOwner(
+        _ token: DatabaseRuntimeOwnerToken,
+        claimedAt: Date
+    ) async throws -> DatabaseRuntimeOwnerClaimResult {
+        try await base.claimRuntimeOwner(token, claimedAt: claimedAt)
+    }
+
+    func releaseRuntimeOwner(
+        _ token: DatabaseRuntimeOwnerToken,
+        releasedAt: Date
+    ) async throws -> Bool {
+        try await base.releaseRuntimeOwner(token, releasedAt: releasedAt)
+    }
+
+    func createOperationIfAbsent(_ summary: DatabaseOperationRecordSummary) async throws -> Bool {
+        try await base.createOperationIfAbsent(summary)
+    }
+
+    func reserveOperation(
+        _ summary: DatabaseOperationRecordSummary,
+        for connection: DatabaseConnectionDefinition
+    ) async throws -> DatabaseOperationReservationResult {
+        try await base.reserveOperation(summary, for: connection)
+    }
+
+    func reserveOperation(
+        _ summary: DatabaseOperationRecordSummary,
+        for connection: DatabaseConnectionDefinition,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> DatabaseOwnedOperationReservationResult {
+        if let reservationGate {
+            await reservationGate.enter()
+        }
+        return try await base.reserveOperation(summary, for: connection, owner: owner)
+    }
+
+    func reserveEphemeralOperation(
+        _ summary: DatabaseOperationRecordSummary,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> DatabaseOwnedOperationReservationResult {
+        if let reservationGate {
+            await reservationGate.enter()
+        }
+        return try await base.reserveEphemeralOperation(summary, owner: owner)
+    }
+
+    func transitionOperation(
+        _ summary: DatabaseOperationRecordSummary,
+        from expectedStates: Set<DatabaseOperationState>,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> Bool {
+        if blockedTransitionStates.contains(summary.state), let transitionGate {
+            await transitionGate.enter()
+        }
+        if rejectedTransitionStates.contains(summary.state) {
+            return false
+        }
+        return try await base.transitionOperation(summary, from: expectedStates, owner: owner)
+    }
+
+    func recordOperation(_ summary: DatabaseOperationRecordSummary) async throws {
+        try await base.recordOperation(summary)
+    }
+
+    func operation(id: DatabaseOperationID) async throws -> DatabaseOperationRecordSummary? {
+        try await base.operation(id: id)
+    }
+
+    func operations(matching search: DatabaseOperationHistorySearch) async throws
+        -> [DatabaseOperationRecordSummary]
+    {
+        try await base.operations(matching: search)
+    }
+
+    func pruneOperations(finishedBefore date: Date) async throws -> Int {
+        try await base.pruneOperations(finishedBefore: date)
+    }
+
+    func registerConfirmation(_ receipt: DatabaseConfirmationReceipt) async throws {
+        try await base.registerConfirmation(receipt)
+    }
+
+    func consumeConfirmation(
+        identifier: UUID,
+        effectDigest: String,
+        connection: DatabaseConnectionDefinition,
+        consumedAt: Date
+    ) async throws -> Bool {
+        try await base.consumeConfirmation(
+            identifier: identifier,
+            effectDigest: effectDigest,
+            connection: connection,
+            consumedAt: consumedAt)
+    }
+
+    func removeExpiredConfirmations(before date: Date) async throws -> Int {
+        try await base.removeExpiredConfirmations(before: date)
+    }
+}
+
+private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
+    private let values: [DatabaseSecretReference: Data]
+    private let readGate: DatabaseExecutorTestGate
+
+    init(
+        values: [DatabaseSecretReference: Data],
+        readGate: DatabaseExecutorTestGate
+    ) {
+        self.values = values
+        self.readGate = readGate
+    }
+
+    func store(_ secret: Data, for reference: DatabaseSecretReference) throws {
+        throw DatabaseSecretStoreError.invalidStoredData(reference)
+    }
+
+    func storeIfAbsent(
+        _ secret: Data,
+        for reference: DatabaseSecretReference
+    ) throws -> Data {
+        throw DatabaseSecretStoreError.invalidStoredData(reference)
+    }
+
+    func read(_ reference: DatabaseSecretReference) async throws -> Data {
+        await readGate.enter()
+        guard let value = values[reference] else {
+            throw DatabaseSecretStoreError.notFound(reference)
+        }
+        return value
+    }
+
+    func delete(_ reference: DatabaseSecretReference) throws {
+        throw DatabaseSecretStoreError.notFound(reference)
+    }
+
+    func contains(_ reference: DatabaseSecretReference) -> Bool {
+        values[reference] != nil
+    }
+}
+
 @Suite struct DatabaseExecutorTests {
     @Test func connectAndDisconnectReturnTypedResultsAndPersistTerminalHistory() async throws {
         let fixture = try await DatabaseExecutorFixtures.make()
@@ -920,7 +1121,7 @@ private struct DatabaseExecutorUnexpectedMetadataStore: DatabaseMetadataStore {
         #expect(await fixture.executor.activeOperationCount() == 0)
     }
 
-    @Test func crossTaskCancellationSignalsAndCancelsTheAttachedSessionOnce() async throws {
+    @Test func capabilityRefreshCancellationUsesItsCooperativeSharedContext() async throws {
         let fixture = try await DatabaseExecutorFixtures.make()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
         #expect(
@@ -930,6 +1131,7 @@ private struct DatabaseExecutorUnexpectedMetadataStore: DatabaseMetadataStore {
                     operation: DatabaseExecutorFixtures.operation(27))
             ).status == .succeeded)
         await fixture.session.gates.discoverCapabilities.block()
+        await fixture.session.gates.cancel.block()
         let operation = DatabaseExecutorFixtures.operation(28)
         let task = Task {
             await fixture.executor.capabilities(
@@ -948,13 +1150,12 @@ private struct DatabaseExecutorUnexpectedMetadataStore: DatabaseMetadataStore {
 
         #expect(cancellation.status == .succeeded)
         #expect(cancellation.payload?.disposition == .accepted)
-        #expect(cancellation.payload?.cancellationSupport == .serverSide)
+        #expect(cancellation.payload?.cancellationSupport == .cooperative)
         #expect(result.status == .failed)
         #expect(result.error?.category == .cancelled)
         #expect(repeated.payload?.disposition == .alreadyFinished)
-        #expect(
-            await fixture.session.snapshot().cancelledOperationIDs
-                == [operation.operationID])
+        #expect(await fixture.session.snapshot().cancelledOperationIDs.isEmpty)
+        #expect(await fixture.session.gates.cancel.blockedCount() == 0)
         #expect(await fixture.executor.activeOperationCount() == 0)
         await fixture.session.gates.discoverCapabilities.releaseAll()
     }
@@ -1047,9 +1248,7 @@ private struct DatabaseExecutorUnexpectedMetadataStore: DatabaseMetadataStore {
         #expect(disconnected.status == .succeeded)
         #expect(firstResult.error?.category == .connectionFailed)
         #expect(await executor.activeOperationCount() == 1)
-        #expect(
-            await firstSession.snapshot().cancelledOperationIDs
-                == [firstOperation.operationID])
+        #expect(await firstSession.snapshot().cancelledOperationIDs.isEmpty)
         #expect(await secondSession.snapshot().cancelledOperationIDs.isEmpty)
 
         await secondSession.gates.discoverCapabilities.releaseAll()
@@ -1159,5 +1358,223 @@ private struct DatabaseExecutorUnexpectedMetadataStore: DatabaseMetadataStore {
         #expect(result.status == .succeeded)
         #expect(!resultText.contains(secret))
         #expect(resultText.contains(DatabaseSecretRedactor.defaultReplacement))
+    }
+
+    @Test func acceptedCancellationWinsTheTerminalRaceWithoutWaitingForServerCancel() async throws {
+        let successGate = DatabaseExecutorTestGate(open: false)
+        let fixture = try await DatabaseExecutorFixtures.make()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let gatedStore = DatabaseExecutorGatedMetadataStore(
+            base: fixture.store,
+            blockedTransitionStates: [.succeeded],
+            transitionGate: successGate)
+        let executor = try DatabaseExecutor(
+            metadataStore: gatedStore,
+            secretStore: fixture.secretStore,
+            runtimeOwner: fixture.runtimeOwner,
+            adapters: [fixture.adapter],
+            currentDate: { DatabaseExecutorFixtures.now })
+        await fixture.session.gates.cancel.block()
+        let operation = DatabaseExecutorFixtures.operation(38)
+        let task = Task {
+            await executor.connect(
+                DatabaseConnectRequest(
+                    connectionID: fixture.connection.id,
+                    operation: operation))
+        }
+        await successGate.waitForEntries()
+
+        let cancellation = await executor.cancel(
+            DatabaseOperationCancelRequest(operationID: operation.operationID))
+
+        #expect(cancellation.payload?.disposition == .accepted)
+        #expect(cancellation.payload?.cancellationSupport == .cooperative)
+        await fixture.session.gates.cancel.waitForEntries()
+        #expect(await fixture.session.gates.cancel.blockedCount() == 1)
+        #expect(await executor.backgroundTaskCount() == 1)
+        await successGate.releaseAll()
+        let result = await task.value
+        #expect(result.status == .failed)
+        #expect(result.error?.category == .cancelled)
+        #expect(result.metadata.operation?.state == .cancelled)
+        #expect(
+            try await fixture.store.operation(id: operation.operationID)?.state
+                == .cancelled)
+        #expect(await executor.activeOperationCount() == 0)
+
+        await executor.disconnectAll()
+        #expect(await executor.backgroundTaskCount() == 1)
+        await fixture.session.gates.cancel.releaseAll()
+        for _ in 0..<100 where await executor.backgroundTaskCount() != 0 {
+            await Task.yield()
+        }
+        #expect(await executor.backgroundTaskCount() == 0)
+    }
+
+    @Test func acceptedCancellationReplacesAConcurrentFailureTerminal() async throws {
+        let failureGate = DatabaseExecutorTestGate(open: false)
+        let fixture = try await DatabaseExecutorFixtures.make()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        await fixture.adapter.enqueueFailure(
+            .reported(
+                DatabaseErrorEnvelope(
+                    category: .network,
+                    message: "Connection failed.")))
+        let gatedStore = DatabaseExecutorGatedMetadataStore(
+            base: fixture.store,
+            blockedTransitionStates: [.failed],
+            transitionGate: failureGate)
+        let executor = try DatabaseExecutor(
+            metadataStore: gatedStore,
+            secretStore: fixture.secretStore,
+            runtimeOwner: fixture.runtimeOwner,
+            adapters: [fixture.adapter],
+            currentDate: { DatabaseExecutorFixtures.now })
+        let operation = DatabaseExecutorFixtures.operation(42)
+        let task = Task {
+            await executor.connect(
+                DatabaseConnectRequest(
+                    connectionID: fixture.connection.id,
+                    operation: operation))
+        }
+        await failureGate.waitForEntries()
+
+        let cancellation = await executor.cancel(
+            DatabaseOperationCancelRequest(operationID: operation.operationID))
+        await failureGate.releaseAll()
+        let result = await task.value
+
+        #expect(cancellation.payload?.disposition == .accepted)
+        #expect(result.error?.category == .cancelled)
+        #expect(result.metadata.operation?.state == .cancelled)
+        #expect(result.metadata.warnings.isEmpty)
+        #expect(
+            try await fixture.store.operation(id: operation.operationID)?.state
+                == .cancelled)
+    }
+
+    @Test func locallyAcceptedCancellationSurvivesACancellingHistoryFailure() async throws {
+        let connectGate = DatabaseExecutorTestGate(open: false)
+        let fixture = try await DatabaseExecutorFixtures.make(
+            adapterGates: DatabaseExecutorTestAdapterGates(connect: connectGate))
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let gatedStore = DatabaseExecutorGatedMetadataStore(
+            base: fixture.store,
+            rejectedTransitionStates: [.cancelling])
+        let executor = try DatabaseExecutor(
+            metadataStore: gatedStore,
+            secretStore: fixture.secretStore,
+            runtimeOwner: fixture.runtimeOwner,
+            adapters: [fixture.adapter],
+            currentDate: { DatabaseExecutorFixtures.now })
+        let operation = DatabaseExecutorFixtures.operation(43)
+        let task = Task {
+            await executor.connect(
+                DatabaseConnectRequest(
+                    connectionID: fixture.connection.id,
+                    operation: operation))
+        }
+        await connectGate.waitForEntries()
+
+        let cancellation = await executor.cancel(
+            DatabaseOperationCancelRequest(operationID: operation.operationID))
+        let result = await task.value
+
+        #expect(cancellation.payload?.disposition == .accepted)
+        #expect(cancellation.metadata.warnings == [DatabaseExecutor.historyFinalizationWarning])
+        #expect(result.error?.category == .cancelled)
+        #expect(result.metadata.operation?.state == .cancelled)
+        #expect(
+            try await fixture.store.operation(id: operation.operationID)?.state
+                == .cancelled)
+        await connectGate.releaseAll()
+    }
+
+    @Test func cancellationBeforeReservationCannotTouchAnotherExecutorsHistory() async throws {
+        let firstConnectGate = DatabaseExecutorTestGate(open: false)
+        let fixture = try await DatabaseExecutorFixtures.make(
+            adapterGates: DatabaseExecutorTestAdapterGates(connect: firstConnectGate))
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let operation = DatabaseExecutorFixtures.operation(39)
+        let request = DatabaseConnectRequest(
+            connectionID: fixture.connection.id,
+            operation: operation)
+        let firstTask = Task { await fixture.executor.connect(request) }
+        await firstConnectGate.waitForEntries()
+        let reservationGate = DatabaseExecutorTestGate(open: false)
+        let secondStore = DatabaseExecutorGatedMetadataStore(
+            base: fixture.store,
+            reservationGate: reservationGate)
+        let secondExecutor = try DatabaseExecutor(
+            metadataStore: secondStore,
+            secretStore: fixture.secretStore,
+            runtimeOwner: fixture.runtimeOwner,
+            adapters: [fixture.adapter],
+            currentDate: { DatabaseExecutorFixtures.now })
+        let duplicateTask = Task { await secondExecutor.connect(request) }
+        await reservationGate.waitForEntries()
+
+        let cancellation = await secondExecutor.cancel(
+            DatabaseOperationCancelRequest(operationID: operation.operationID))
+
+        #expect(cancellation.payload?.disposition == .notActive)
+        #expect(
+            try await fixture.store.operation(id: operation.operationID)?.state
+                == .running)
+        #expect(await fixture.session.snapshot().cancelledOperationIDs.isEmpty)
+        await reservationGate.releaseAll()
+        let duplicate = await duplicateTask.value
+        #expect(duplicate.error?.category == .conflict)
+        await firstConnectGate.releaseAll()
+        let first = await firstTask.value
+        #expect(first.status == .succeeded)
+        #expect(
+            try await fixture.store.operation(id: operation.operationID)?.state
+                == .succeeded)
+    }
+
+    @Test func blockedSecretRedactorCannotOutliveCancellationControl() async throws {
+        let secret = "blocked-redactor-secret"
+        let reference = DatabaseSecretReference(
+            identifier: DatabaseExecutorFixtures.uuid(40),
+            purpose: .password)
+        let connection = try DatabaseExecutorFixtures.connection(
+            name: "Orders \(secret)",
+            secretReference: reference,
+            connectionTimeoutMilliseconds: 100)
+        let fixture = try await DatabaseExecutorFixtures.make(connection: connection)
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let readGate = DatabaseExecutorTestGate(open: false)
+        let secretStore = DatabaseExecutorBlockingSecretStore(
+            values: [reference: Data(secret.utf8)],
+            readGate: readGate)
+        let executor = try DatabaseExecutor(
+            metadataStore: fixture.store,
+            secretStore: secretStore,
+            runtimeOwner: fixture.runtimeOwner,
+            adapters: [fixture.adapter],
+            currentDate: { DatabaseExecutorFixtures.now })
+        let operation = DatabaseExecutorFixtures.operation(41)
+        let task = Task {
+            await executor.connect(
+                DatabaseConnectRequest(
+                    connectionID: connection.id,
+                    operation: operation))
+        }
+        await readGate.waitForEntries()
+
+        let result = await task.value
+
+        #expect(result.error?.category == .timeout)
+        #expect(result.metadata.operation?.state == .failed)
+        #expect(await executor.activeOperationCount() == 0)
+        #expect(await executor.backgroundTaskCount() == 1)
+        let encoded = String(decoding: try JSONEncoder().encode(result), as: UTF8.self)
+        #expect(!encoded.contains(secret))
+        await readGate.releaseAll()
+        for _ in 0..<100 where await executor.backgroundTaskCount() != 0 {
+            await Task.yield()
+        }
+        #expect(await executor.backgroundTaskCount() == 0)
     }
 }
