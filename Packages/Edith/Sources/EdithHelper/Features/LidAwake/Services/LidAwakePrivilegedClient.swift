@@ -1,4 +1,5 @@
 import EdithKit
+import EdithLidAwakeSupport
 import Foundation
 import ServiceManagement
 
@@ -103,18 +104,6 @@ final class LidAwakePrivilegedClient {
     ) -> LidAwakePrivilegedClientError? {
         guard state != .enabled else { return nil }
         return .helperUnavailable(state)
-    }
-
-    static func cleanupLegacyRegistration() {
-        let service = SMAppService.daemon(plistName: LidAwakePrivilegedService.legacyPlistName)
-        guard service.status != .notRegistered, service.status != .notFound else { return }
-        service.unregister { error in
-            if let error {
-                NSLog(
-                    "Retired Lid Awake helper cleanup failed: %@",
-                    (error as NSError).localizedDescription)
-            }
-        }
     }
 
     private func makeConnection() -> NSXPCConnection {

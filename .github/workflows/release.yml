@@ -181,14 +181,19 @@ jobs:
           test "$BUILT" = "$RELEASE_VERSION" \
             || { echo "release blocked: built $BUILT, expected $RELEASE_VERSION" >&2; exit 1; }
 
+      - name: Verify the release bundle
+        if: steps.release_build.outputs.superseded != 'true'
+        run: make verify-bundle
+
       - name: Package the DMG
         if: steps.release_build.outputs.superseded != 'true'
         run: |
           rm -rf dmg-root && mkdir dmg-root
-          cp -R dist/Edith.app dmg-root/
+          ditto dist/Edith.app dmg-root/Edith.app
           ln -s /Applications dmg-root/Applications
-          hdiutil create -volname Edith -srcfolder dmg-root -format UDZO Edith.dmg
+          hdiutil create -volname Edith -srcfolder dmg-root -format ULMO Edith.dmg
           rm -rf dmg-root
+          hdiutil verify Edith.dmg
 
       - name: Notarize and staple
         if: steps.release_build.outputs.superseded != 'true' && env.HAS_NOTARY == 'true'

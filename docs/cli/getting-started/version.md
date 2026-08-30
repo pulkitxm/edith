@@ -30,7 +30,7 @@ ed --version
 ```
 
 `appRunning` is about the menu bar helper, bundle id
-`com.pulkit.edith.statusbar`, not the main window, because the helper is what
+`com.pulkit.edith.helper`, not the main window, because the helper is what
 answers the commands that need the app. This is the polite way to find out: it
 reports the state and exits 0 either way, where a command that actually needs
 the app exits 4.

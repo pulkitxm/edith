@@ -11,6 +11,9 @@ public enum ArgumentKind: Equatable, Sendable {
     case cleanerCategory
     case colorFormat
     case colorIndex
+    case emojiTone
+    case emojiGroup
+    case emojiCharacter
     case pruneTarget
     case composeProject
     case historyIndex
@@ -27,6 +30,7 @@ public enum ArgumentKind: Equatable, Sendable {
     case shell
     case group
     case usageRange
+    case usageShareCard
     case attentionRange
     case attentionEntity
     case attentionCategory
@@ -134,10 +138,10 @@ public enum CommandTree {
                     CommandNode("fish", "Print the fish completion script."),
                 ]),
             CommandNode(
-                "install", "Link ed, edh and edith into a directory on PATH.",
+                "install", "Link ed and edith into a directory on PATH.",
                 options: ["--json", "--directory"]),
             CommandNode(
-                "uninstall", "Remove the ed, edh and edith links.", options: ["--json"]),
+                "uninstall", "Remove the ed and edith links.", options: ["--json"]),
             CommandNode(
                 "config", "Read and write every setting the UI exposes.",
                 children: [
@@ -319,6 +323,15 @@ public enum CommandTree {
                     CommandNode(
                         "sources", "The agents that produced the history.",
                         options: common),
+                    CommandNode(
+                        "export", "Render branded usage cards as PNG images.",
+                        options: [
+                            "--json", "--help", "--range", "--source", "--machine", "--card",
+                            "-o", "--output",
+                        ],
+                        optionValues: usageValues.merging([
+                            "--card": .usageShareCard, "-o": .localPath, "--output": .localPath,
+                        ]) { current, _ in current }),
                     CommandNode(
                         "machines", "Machines counted with this Mac.",
                         children: [
@@ -611,6 +624,24 @@ public enum CommandTree {
                     CommandNode(
                         "clear", "Forget every picked colour.",
                         options: ["--json", "--yes"], destructivePolicy: .previewThenYes),
+                ]),
+            CommandNode(
+                "emoji", "The emoji picker and the emoji it knows about.",
+                children: [
+                    CommandNode("pick", "Open Edith's emoji picker.", options: common),
+                    CommandNode(
+                        "ls", "List the emoji this Mac can render.", aliases: ["list"],
+                        options: [
+                            "--json", "--help", "--frequent", "--search", "--group", "--limit",
+                        ],
+                        optionValues: ["--group": .emojiGroup]),
+                    CommandNode(
+                        "insert", "Type an emoji into the frontmost app.",
+                        options: common, arguments: [.emojiCharacter]),
+                    CommandNode(
+                        "tone", "Set the default emoji skin tone.",
+                        options: common, arguments: [.emojiTone]),
+                    CommandNode("clear", "Forget the frequently used emoji.", options: common),
                 ]),
             CommandNode(
                 "shelf", "The files parked on the notch shelf.",

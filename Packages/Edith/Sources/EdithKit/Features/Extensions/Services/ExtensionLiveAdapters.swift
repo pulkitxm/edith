@@ -1,6 +1,7 @@
 import AppKit
 import CoreAudio
 import EdithCore
+import EdithLidAwakeSupport
 import EventKit
 import Foundation
 import ServiceManagement
@@ -67,7 +68,7 @@ public enum ExtensionLiveAdapters {
         "attention", "usage", "quinjet", "system", "appMaintenance", "machines", "systemStats",
         "micMute",
         "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "colorPicker",
+        "emoji", "colorPicker",
     ]
 
     public static func provider(
@@ -108,6 +109,7 @@ public enum ExtensionLiveAdapters {
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
+        case "emoji": emojiReadiness(defaults: defaults)
         default: nil
         }
     }
@@ -476,6 +478,26 @@ public enum ExtensionLiveAdapters {
             emptyDetail: screenCount == 0
                 ? "No active display is available for color sampling."
                 : "Color sampling is ready and the history is empty."
+        ).readiness
+    }
+
+    static func emojiReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
+        let catalog = EmojiCatalog.shared
+        guard !catalog.emoji.isEmpty else {
+            return .failed("The bundled emoji catalog could not be read.")
+        }
+        let toneRaw = defaults.object(forKey: AppStorageKeys.Emoji.skinTone) as? Int
+        let frequentCount = defaults.object(forKey: AppStorageKeys.Emoji.frequentCount) as? Int
+        let configured =
+            (toneRaw == nil || EmojiSkinTone(rawValue: toneRaw!) != nil)
+            && (frequentCount == nil || (0...24).contains(frequentCount!))
+        let ledger = EmojiUsageLedger.load(from: defaults, key: AppStorageKeys.Emoji.usage)
+        return ExtensionAdapterFacts(
+            configured: configured, contentCount: ledger.entries.count,
+            readyDetail:
+                "\(catalog.emoji.count) emoji available, \(ledger.entries.count) used recently.",
+            setupDetail: "The stored skin tone or frequently used count is invalid.",
+            emptyDetail: "\(catalog.emoji.count) emoji are ready and nothing has been used yet."
         ).readiness
     }
 

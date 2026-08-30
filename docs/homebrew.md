@@ -23,11 +23,11 @@ short `brew tap pulkitxm/edith` form for repositories named `homebrew-<name>`, a
 because cloning a few kilobytes of cask beats cloning this repository.
 
 The cask installs `Edith.app` into `/Applications` and links the two command line
-tools that ship inside the bundle:
+names that ship inside the bundle:
 
 ```
 ed      the full CLI, everything the UI can do
-edh     the same binary under its short name
+edith   the same binary under its full name
 ```
 
 Both land in Homebrew's `bin` directory, which sits ahead of `/usr/bin` on the

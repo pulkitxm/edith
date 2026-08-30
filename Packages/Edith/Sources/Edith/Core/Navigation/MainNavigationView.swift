@@ -100,24 +100,7 @@ enum MainNavigationFallback {
 }
 
 enum Brand {
-    static let icon: NSImage? = {
-        if let image = NSApp?.applicationIconImage {
-            return image
-        }
-        if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
-            let image = NSImage(contentsOf: url)
-        {
-            return image
-        }
-        let devBundle = Bundle.main.bundleURL.appendingPathComponent("Edith_Edith.bundle")
-        if let bundle = Bundle(url: devBundle),
-            let url = bundle.url(forResource: "appicon", withExtension: "png"),
-            let image = NSImage(contentsOf: url)
-        {
-            return image
-        }
-        return nil
-    }()
+    static var icon: NSImage? { AppArtwork.icon }
 }
 
 struct TitlebarChrome: View {
@@ -226,7 +209,7 @@ private struct SidebarNavRow: View {
                             height: UIScale.pt(SidebarDisclosureGeometry.controlSlotWidth)
                         )
                         .background(
-                            Color.primary.opacity(rowHovered ? 0.055 : 0),
+                            Color.primary.opacity(rowHovered && !selected ? 0.055 : 0),
                             in: RoundedRectangle(cornerRadius: UIScale.pt(6))
                         )
                         .contentShape(Rectangle())
@@ -852,7 +835,13 @@ struct MainWindowView: View {
                     SidebarNavRow(
                         item: item, selected: destination == item, theme: theme,
                         shortcutHint: shortcutHint(for: item),
-                        action: { select(item) },
+                        action: {
+                            if item == .settings, destination == .settings {
+                                settingsCategoriesExpanded.toggle()
+                            } else {
+                                select(item)
+                            }
+                        },
                         detach: item == .about || item == .settings ? nil : { detach(item) },
                         disclosureExpanded: item == .settings
                             ? settingsCategoriesExpanded : nil,
@@ -949,6 +938,9 @@ struct MainWindowView: View {
             let code = event.keyCode
             let mods = event.modifierFlags
             let handled = MainActor.assumeIsolated {
+                guard NSApp.keyWindow?.identifier?.rawValue == MainWindowIdentifier.value else {
+                    return false
+                }
                 guard !WindowTabs.isTabbed(NSApp.keyWindow) else { return false }
                 guard
                     let command = WindowKeyCommand.resolve(

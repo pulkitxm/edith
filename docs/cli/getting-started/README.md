@@ -6,11 +6,10 @@ reaches everything the UI reaches: settings, extensions, permissions, agent
 usage, this Mac's metrics, playback, your calendar, and the machines Edith can
 talk to over SSH.
 
-`ed`, `edh` and `edith` are one command line under three names. `ed` and
-`edith` are symlinks to the same binary, `edh` is a second executable built from
-the same sources, and all three run the same entry point with the same
-arguments, so every example on this page and everywhere else works with any of
-them. Pick whichever name your shell leaves free.
+`ed` and `edith` are one command line under two names. The app ships one `ed`
+executable, while the installer links both names directly to it. Every example
+on this page and everywhere else works with either of them. Pick whichever name
+your shell leaves free.
 
 This page covers the commands you meet before any of the others: getting the
 links in place, reading the built-in manual, printing the config schema,
@@ -22,8 +21,8 @@ be running.
 | Command | What it does |
 | --- | --- |
 | `ed status` | Inspect the CLI links, shell completions, and fallback source line |
-| `ed install` | Link `ed`, `edh` and `edith` into a directory on `PATH` |
-| `ed uninstall` | Remove those three links again, and nothing else |
+| `ed install` | Link `ed` and `edith` into a directory on `PATH` |
+| `ed uninstall` | Remove those two links again, and nothing else |
 | `ed help <command>` | Show the same detailed help reached through `<command> --help` |
 | `ed guide` | Print the built-in manual, written for agents and humans alike |
 | `ed guide agent` | Print repository instructions that make an automation agent `ed`-aware |
@@ -40,8 +39,8 @@ be running.
 
 ## Installing and linking
 
-Installing Edith installs the CLI. On launch the menu bar app links `ed`, `edh`
-and `edith` into `/usr/local/bin` when that directory is writable, and into
+Installing Edith installs the CLI. On launch the menu bar app links `ed` and
+`edith` into `/usr/local/bin` when that directory is writable, and into
 `~/.local/bin` otherwise, and it only redoes the work when the links do not
 already point at the copies inside the bundle.
 
@@ -50,9 +49,8 @@ current user can write to it, `~/.local/bin` if not. `ed install --directory`
 overrides it and creates the directory when it is missing. `ed uninstall` does
 not take the flag at all, and only ever looks in the default one.
 
-The three links are not identical. `ed` and `edith` both point at the bundled
-`ed` binary; `edh` points at the separate `edh` binary beside it. That is why a
-build that produced only one of them links some names and skips others.
+Both installed links point at the bundled `ed` executable. Homebrew creates the
+same pair of aliases without packaging another executable.
 
 Building from source without the app bundle:
 
@@ -60,7 +58,7 @@ Building from source without the app bundle:
 make cli
 ```
 
-That builds `ed` and `edh` in release configuration, runs
+That builds `ed` in release configuration, runs
 `.build/release/ed install --directory $HOME/.local/bin`, and then
 `.build/release/ed completions install`. It is the supported way to get a
 working `ed` out of a checkout, and running `install` from the build product
@@ -226,8 +224,8 @@ anything that does.
   a field with no value is present as `null` rather than dropped. `ed install
   --json` always has a `message` key even when nothing went wrong.
 - Run `ed install` from the app's own copy or from a fresh build, never through
-  a link already on your `PATH`, or you will relink `ed` and `edh` onto
-  themselves. `make cli` gets this right.
+  a link already on your `PATH`, or you will relink `ed` onto itself and break
+  all three names. `make cli` gets this right.
 - `ed uninstall` looks only in the default directory. Links placed with
   `ed install --directory` survive it.
 - `ed install` replaces any symlink at those names, and `ed uninstall` removes

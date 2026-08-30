@@ -1,5 +1,6 @@
 import AppKit
 import EdithKit
+import EdithLidAwakeSupport
 
 @MainActor
 final class LidAwakeMutationSequencer {
@@ -181,7 +182,6 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
         lastError = initialError
         let savedDeadline = LidAwakeState.sessionDeadline(defaults)
         let automaticStopPending = LidAwakeState.automaticStopPending(defaults)
-        if startServices { LidAwakePrivilegedClient.cleanupLegacyRegistration() }
         active = readSystemState()
         intent = active
         if active {

@@ -249,6 +249,13 @@ enum SectionWindowMenu {
             let modifiers = event.modifierFlags
             let handled = MainActor.assumeIsolated { () -> Bool in
                 let flags = modifiers.chordOnly
+                let window = NSApp.keyWindow
+                if HerdrSpaceWindow.perform(
+                    characters: characters, keyCode: keyCode, modifiers: modifiers,
+                    in: window)
+                {
+                    return true
+                }
                 if flags == [.command, .shift], characters?.lowercased() == "o" {
                     SectionWindowMenuTarget.shared.openFilesWindow()
                     return true
@@ -259,6 +266,7 @@ enum SectionWindowMenu {
                 if let command = WorkspaceKeyCommand.resolve(
                     characters: characters, keyCode: keyCode, modifiers: modifiers)
                 {
+                    if HerdrSpaceWindow.perform(command, in: window) { return true }
                     switch command {
                     case .nextPaneTab:
                         return WorkspaceModel.shared.cycleTab(backwards: false)
@@ -274,7 +282,6 @@ enum SectionWindowMenu {
                         return TerminalTabRegistry.cycle(backwards: true)
                     }
                 }
-                let window = NSApp.keyWindow
                 guard
                     let command = WindowTabKeyCommand.resolve(
                         characters: characters, keyCode: keyCode, modifiers: modifiers,
@@ -304,6 +311,7 @@ enum SectionWindowMenu {
 enum CloseCommand {
     static func perform(on window: NSWindow?) -> Bool {
         guard let window else { return true }
+        if HerdrSpaceWindow.closeSelectedTab(in: window) { return true }
         if WindowTabs.isTabbed(window) {
             window.close()
             return true
@@ -352,22 +360,35 @@ final class SectionWindowMenuTarget: NSObject {
     }
 
     @objc func paneCommand(_ sender: NSMenuItem) {
+        let command: WorkspaceKeyCommand?
         switch sender.representedObject as? String {
-        case "nextPaneTab": WorkspaceModel.shared.cycleTab(backwards: false)
-        case "previousPaneTab": WorkspaceModel.shared.cycleTab(backwards: true)
-        case "nextPane": WorkspaceModel.shared.cyclePane(backwards: false)
-        case "previousPane": WorkspaceModel.shared.cyclePane(backwards: true)
-        case "nextTerminalTab": TerminalTabRegistry.cycle(backwards: false)
-        case "previousTerminalTab": TerminalTabRegistry.cycle(backwards: true)
-        default: break
+        case "nextPaneTab": command = .nextPaneTab
+        case "previousPaneTab": command = .previousPaneTab
+        case "nextPane": command = .nextPane
+        case "previousPane": command = .previousPane
+        case "nextTerminalTab": command = .nextTerminalTab
+        case "previousTerminalTab": command = .previousTerminalTab
+        default: command = nil
+        }
+        guard let command else { return }
+        if HerdrSpaceWindow.perform(command, in: NSApp.keyWindow) { return }
+        switch command {
+        case .nextPaneTab: WorkspaceModel.shared.cycleTab(backwards: false)
+        case .previousPaneTab: WorkspaceModel.shared.cycleTab(backwards: true)
+        case .nextPane: WorkspaceModel.shared.cyclePane(backwards: false)
+        case .previousPane: WorkspaceModel.shared.cyclePane(backwards: true)
+        case .nextTerminalTab: TerminalTabRegistry.cycle(backwards: false)
+        case .previousTerminalTab: TerminalTabRegistry.cycle(backwards: true)
         }
     }
 
     @objc func nextTab(_ sender: NSMenuItem) {
+        if HerdrSpaceWindow.perform(.nextTerminalTab, in: NSApp.keyWindow) { return }
         _ = WindowTabs.selectNextTab(in: NSApp.keyWindow, backwards: false)
     }
 
     @objc func previousTab(_ sender: NSMenuItem) {
+        if HerdrSpaceWindow.perform(.previousTerminalTab, in: NSApp.keyWindow) { return }
         _ = WindowTabs.selectNextTab(in: NSApp.keyWindow, backwards: true)
     }
 }

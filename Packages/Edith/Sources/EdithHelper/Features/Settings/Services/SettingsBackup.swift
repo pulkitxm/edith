@@ -60,6 +60,74 @@ func settingsBackupLidAwakeBatteryThreshold(_ value: Any) -> Int? {
     return Int(threshold)
 }
 
+private let settingsBackupValueTypeKey = "$edithSettingsBackupType"
+private let settingsBackupValuePayloadKey = "value"
+
+func settingsBackupEncodeJSONValue(_ value: Any) -> Any? {
+    switch value {
+    case let data as Data:
+        return [
+            settingsBackupValueTypeKey: "data",
+            settingsBackupValuePayloadKey: data.base64EncodedString(),
+        ]
+    case let date as Date:
+        return [
+            settingsBackupValueTypeKey: "date",
+            settingsBackupValuePayloadKey: date.timeIntervalSince1970,
+        ]
+    case let values as [Any]:
+        let encoded = values.compactMap(settingsBackupEncodeJSONValue)
+        guard encoded.count == values.count else { return nil }
+        return encoded
+    case let values as [String: Any]:
+        var encoded: [String: Any] = [:]
+        for (key, nestedValue) in values {
+            guard let nested = settingsBackupEncodeJSONValue(nestedValue) else { return nil }
+            encoded[key] = nested
+        }
+        return encoded
+    case is String, is NSNumber, is NSNull:
+        return value
+    default:
+        return nil
+    }
+}
+
+func settingsBackupDecodeJSONValue(_ value: Any) -> Any? {
+    if let values = value as? [String: Any],
+        let type = values[settingsBackupValueTypeKey] as? String,
+        values.count == 2
+    {
+        switch type {
+        case "data":
+            guard let encoded = values[settingsBackupValuePayloadKey] as? String else { return nil }
+            return Data(base64Encoded: encoded)
+        case "date":
+            guard let timestamp = values[settingsBackupValuePayloadKey] as? NSNumber else {
+                return nil
+            }
+            return Date(timeIntervalSince1970: timestamp.doubleValue)
+        default:
+            return nil
+        }
+    }
+    if let values = value as? [Any] {
+        let decoded = values.compactMap(settingsBackupDecodeJSONValue)
+        guard decoded.count == values.count else { return nil }
+        return decoded
+    }
+    if let values = value as? [String: Any] {
+        var decoded: [String: Any] = [:]
+        for (key, nestedValue) in values {
+            guard let nested = settingsBackupDecodeJSONValue(nestedValue) else { return nil }
+            decoded[key] = nested
+        }
+        return decoded
+    }
+    guard value is String || value is NSNumber || value is NSNull else { return nil }
+    return value
+}
+
 struct SettingsBackupPendingState: Equatable, Sendable {
     private(set) var remaining: Set<String>
 
@@ -639,7 +707,8 @@ final class SettingsBackup {
         AppStorageKeys.General.smartColor,
         AppStorageKeys.MenuBar.subColorHex, AppStorageKeys.MenuBar.lowColorHex,
         AppStorageKeys.MenuBar.midColorHex, AppStorageKeys.MenuBar.highColorHex,
-        AppStorageKeys.MenuBar.statsColorHex, AppStorageKeys.Limits.warnPercent,
+        AppStorageKeys.MenuBar.statsColorHex, AppStorageKeys.MenuBar.statsColorMode,
+        AppStorageKeys.Limits.warnPercent,
         AppStorageKeys.Limits.critPercent, AppStorageKeys.Limits.pacingMargin,
         AppStorageKeys.Notify.master, AppStorageKeys.Notify.trackSession,
         AppStorageKeys.Notify.trackWeekly,
@@ -689,6 +758,10 @@ final class SettingsBackup {
         AppStorageKeys.ColorPicker.profile,
         AppStorageKeys.ColorPicker.historySize, "colorPickerHotKeyCode", "colorPickerHotKeyMods",
         "colorPickerHotKeyLabel",
+        AppStorageKeys.Emoji.enabled, AppStorageKeys.Emoji.popupAt,
+        AppStorageKeys.Emoji.skinTone, AppStorageKeys.Emoji.frequentCount,
+        AppStorageKeys.Emoji.usage, AppStorageKeys.Emoji.hotKeyCode,
+        AppStorageKeys.Emoji.hotKeyMods, AppStorageKeys.Emoji.hotKeyLabel,
         AppStorageKeys.General.creditHidden, AppStorageKeys.General.homeClockZones,
         AppStorageKeys.Presenter.blurCalendar, AppStorageKeys.General.showDockIcon,
         AppStorageKeys.Tabs.calendarEnabled, AppStorageKeys.Music.looping,
@@ -745,7 +818,8 @@ final class SettingsBackup {
         AppStorageKeys.General.smartColor,
         AppStorageKeys.MenuBar.subColorHex, AppStorageKeys.MenuBar.lowColorHex,
         AppStorageKeys.MenuBar.midColorHex, AppStorageKeys.MenuBar.highColorHex,
-        AppStorageKeys.MenuBar.statsColorHex, AppStorageKeys.Limits.warnPercent,
+        AppStorageKeys.MenuBar.statsColorHex, AppStorageKeys.MenuBar.statsColorMode,
+        AppStorageKeys.Limits.warnPercent,
         AppStorageKeys.Limits.critPercent, AppStorageKeys.Limits.pacingMargin,
         AppStorageKeys.Notify.master, AppStorageKeys.Notify.trackSession,
         AppStorageKeys.Notify.trackWeekly,
@@ -798,6 +872,10 @@ final class SettingsBackup {
         AppStorageKeys.ColorPicker.profile,
         AppStorageKeys.ColorPicker.historySize, "colorPickerHotKeyCode", "colorPickerHotKeyMods",
         "colorPickerHotKeyLabel",
+        AppStorageKeys.Emoji.enabled, AppStorageKeys.Emoji.popupAt,
+        AppStorageKeys.Emoji.skinTone, AppStorageKeys.Emoji.frequentCount,
+        AppStorageKeys.Emoji.usage, AppStorageKeys.Emoji.hotKeyCode,
+        AppStorageKeys.Emoji.hotKeyMods, AppStorageKeys.Emoji.hotKeyLabel,
         AppStorageKeys.General.creditHidden, AppStorageKeys.General.homeClockZones,
         AppStorageKeys.Presenter.blurCalendar, AppStorageKeys.Presenter.blurAgents,
         AppStorageKeys.General.showDockIcon,
@@ -1582,7 +1660,10 @@ final class SettingsBackup {
     private func snapshot() -> Data? {
         var dict: [String: Any] = [:]
         for key in Self.backedKeys {
-            if let value = store(for: key).object(forKey: key) { dict[key] = value }
+            guard let value = store(for: key).object(forKey: key),
+                let encoded = settingsBackupEncodeJSONValue(value)
+            else { continue }
+            dict[key] = encoded
         }
         return try? JSONSerialization.data(
             withJSONObject: dict, options: [.prettyPrinted, .sortedKeys])
@@ -1891,7 +1972,8 @@ final class SettingsBackup {
             awaitSettingsDownload()
             return
         }
-        for (key, value) in dict where Self.backedKeys.contains(key) {
+        for (key, encodedValue) in dict where Self.backedKeys.contains(key) {
+            guard let value = settingsBackupDecodeJSONValue(encodedValue) else { continue }
             switch key {
             case Repo.pathKey:
                 guard let path = value as? String else { continue }

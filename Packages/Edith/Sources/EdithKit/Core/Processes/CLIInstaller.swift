@@ -17,7 +17,7 @@ public struct CLIInstallResult: Equatable, Sendable {
 }
 
 public enum CLIInstaller {
-    public static let toolNames = ["ed", "edh", "edith"]
+    public static let toolNames = ["ed", "edith"]
     public static let primaryTool = "ed"
 
     public static func bundledToolsDirectory(
@@ -84,7 +84,7 @@ public enum CLIInstaller {
         var result = CLIInstallResult(directory: target.path)
         var failures: [String] = []
         for name in toolNames {
-            let source = tools.appendingPathComponent(sourceName(for: name))
+            let source = tools.appendingPathComponent(primaryTool)
             guard fileManager.isExecutableFile(atPath: source.path) else {
                 result.skipped.append(name)
                 failures.append("\(name) is missing from this build")
@@ -143,16 +143,12 @@ public enum CLIInstaller {
             try? fileManager.destinationOfSymbolicLink(
                 atPath: target.appendingPathComponent($0).path)
         }
-        let wanted = toolNames.map { tools.appendingPathComponent(sourceName(for: $0)).path }
+        let wanted = toolNames.map { _ in tools.appendingPathComponent(primaryTool).path }
         if Set(current) != Set(wanted) {
             install(toolsDirectory: tools, into: target, fileManager: fileManager)
         }
         guard SharedDefaults.store.bool(forKey: CompletionScripts.autoRefreshKey) else { return }
         CompletionScripts.refreshInstalled(fileManager: fileManager)
-    }
-
-    static func sourceName(for name: String) -> String {
-        name == "edh" ? "edh" : primaryTool
     }
 
     static func isOurs(_ link: URL, fileManager: FileManager) -> Bool {

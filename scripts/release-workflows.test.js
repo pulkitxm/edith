@@ -8,6 +8,7 @@ const releaseStateScript = readFileSync(
   "utf8",
 );
 const makefile = readFileSync("Makefile", "utf8");
+const buildScript = readFileSync("build.sh", "utf8");
 const contributing = readFileSync("CONTRIBUTING.md", "utf8");
 const homebrewInternals = readFileSync("docs/homebrew-internals.md", "utf8");
 const sourceShaRef = ["$", "{{ inputs.source_sha || github.sha }}"].join("");
@@ -115,6 +116,18 @@ test("release builds and publishes the macOS assets", () => {
   expect(dmgJob).toContain("name: Cache libghostty");
   expect(dmgJob).toContain("name: Build libghostty");
   expect(dmgJob).toContain("make ghostty");
+  expect(dmgJob).toContain("name: Verify the release bundle");
+  expect(dmgJob).toContain("run: make verify-bundle");
+  expect(dmgJob.indexOf("run: make verify-bundle")).toBeLessThan(
+    dmgJob.indexOf("name: Package the DMG"),
+  );
+  expect(dmgJob).toContain("ditto dist/Edith.app dmg-root/Edith.app");
+  expect(dmgJob).toContain("-format ULMO Edith.dmg");
+  expect(dmgJob).toContain("hdiutil verify Edith.dmg");
+  expect(buildScript).toContain(
+    '[ "$RELEASE" = 1 ] && XCODE_BUILD_SETTING=SWIFT_OPTIMIZATION_LEVEL=-Osize',
+  );
+  expect(makefile).toContain("Release SWIFT_OPTIMIZATION_LEVEL must be -Osize");
   expect(releaseWorkflow).toContain("release-assets/Edith.dmg");
   expect(releaseWorkflow).toContain("release-assets/appcast.xml");
   expect(releaseWorkflow).toContain("gh release create");
@@ -151,10 +164,26 @@ test("superseded release builds yield the lane before packaging", () => {
   expect(
     dmgJob.match(/if: steps\.release_build\.outputs\.superseded != 'true'/g)
       ?.length,
-  ).toBe(9);
+  ).toBe(10);
   expect(releaseWorkflow).toContain(
     "needs: [version, ci, dmg]\n    if: needs.dmg.outputs.superseded != 'true'",
   );
+});
+
+test("bundle verification requires one executable and its CLI launcher", () => {
+  expect(makefile).toContain("test ! -L dist/Edith.app/Contents/MacOS/Edith");
+  expect(makefile).toContain("test -L dist/Edith.app/Contents/MacOS/ed");
+  expect(makefile).toContain(
+    'readlink dist/Edith.app/Contents/MacOS/ed)" = ../Resources/ed-launcher',
+  );
+  expect(makefile).toContain(
+    "test -f dist/Edith.app/Contents/Resources/ed-launcher",
+  );
+  expect(makefile).toContain("grep -qx '#!/bin/sh'");
+  expect(makefile).toContain("test ! -e dist/Edith.app/Contents/MacOS/edh");
+  expect(makefile).toContain("-type l -name ed");
+  expect(makefile).toContain("@set -e; install_dir=");
+  expect(makefile).toContain("for name in ed edith; do");
 });
 
 test("macOS notarization is conditional on its optional credentials", () => {

@@ -232,6 +232,7 @@ public enum CompletionEngine {
         case .shell: return ["zsh", "bash", "fish"]
         case .group: return ConfigCatalog.groups
         case .usageRange: return UsageRange.allCases.map(\.rawValue)
+        case .usageShareCard: return UsageShareCard.allCases.map(\.rawValue) + ["all"]
         case .attentionRange:
             return ["today", "yesterday", "24h", "7d", "30d", "week", "month", "all"]
         case .attentionCategory: return AttentionSettings.defaultCategories.map(\.id)
@@ -244,6 +245,10 @@ public enum CompletionEngine {
             return ColorHistoryStore.load(from: CLIEnvironment.sharedDefaults).indices.map {
                 String($0 + 1)
             }
+        case .emojiTone: return EmojiSkinTone.allCases.map(\.token)
+        case .emojiGroup: return EmojiCatalog.shared.groups.map(\.id)
+        case .emojiCharacter:
+            return EmojiCatalogSummary.frequent(store: CLIEnvironment.sharedDefaults)
         case .downloadKind: return DownloadKind.allCases.map(\.rawValue)
         case .musicPlayer: return MusicPlayer.allCases.map(\.rawValue)
         case .quinjetAppearance: return QuinjetAppearance.allCases.map(\.rawValue)

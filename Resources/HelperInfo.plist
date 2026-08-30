@@ -9,15 +9,15 @@
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.pulkit.edith.statusbar</string>
+	<string>com.pulkit.edith.helper</string>
 	<key>CFBundleName</key>
 	<string>Edith</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.0.187</string>
+	<string>0.0.201</string>
 	<key>CFBundleVersion</key>
-	<string>198</string>
+	<string>212</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>

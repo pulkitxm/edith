@@ -941,6 +941,7 @@ private struct ExtensionDetailRows: View {
             case .focusDim: FocusDimRows()
             case .presenter: PresenterRows()
             case .colorPicker: ColorPickerRows()
+            case .emoji: EmojiRows()
             }
         } else {
             Section("Controls") {
@@ -1415,8 +1416,7 @@ private struct UsageRows: View {
                     }
 
                     Picker("Color", selection: colorModeBinding) {
-                        Text("White").tag("white")
-                        Text("Black").tag("black")
+                        Text("Automatic").tag("auto")
                         Text("Custom").tag("custom")
                     }
 
@@ -1675,12 +1675,12 @@ private struct UsageRows: View {
     }
 
     private var isCustomColor: Bool {
-        menuBarColorMode == "custom" || menuBarColorMode == "auto"
+        menuBarColorMode == "custom"
     }
 
     private var colorModeBinding: Binding<String> {
         Binding(
-            get: { isCustomColor ? "custom" : menuBarColorMode },
+            get: { isCustomColor ? "custom" : "auto" },
             set: {
                 $menuBarColorMode.configured(AppStorageKeys.MenuBar.colorMode).wrappedValue = $0
             })
@@ -1715,19 +1715,35 @@ private struct SystemStatsRows: View {
     @AppStorage(AppStorageKeys.MenuBar.statsColorHex, store: SharedDefaults.store) private
         var statsColorHex =
         "FFFFFF"
+    @AppStorage(AppStorageKeys.MenuBar.statsColorMode, store: SharedDefaults.store) private
+        var statsColorMode = "auto"
 
     var body: some View {
         Section {
-            ColorPicker(
+            Picker(
                 "Color",
                 selection: Binding(
-                    get: { DashPalette.color(statsColorHex) },
+                    get: { statsColorMode == "custom" ? "custom" : "auto" },
                     set: {
-                        $statsColorHex.configured(AppStorageKeys.MenuBar.statsColorHex)
-                            .wrappedValue =
-                            $0.hex6
-                    }),
-                supportsOpacity: false)
+                        $statsColorMode.configured(AppStorageKeys.MenuBar.statsColorMode)
+                            .wrappedValue = $0
+                    })
+            ) {
+                Text("Automatic").tag("auto")
+                Text("Custom").tag("custom")
+            }
+            if statsColorMode == "custom" {
+                ColorPicker(
+                    "Custom color",
+                    selection: Binding(
+                        get: { DashPalette.color(statsColorHex) },
+                        set: {
+                            $statsColorHex.configured(AppStorageKeys.MenuBar.statsColorHex)
+                                .wrappedValue =
+                                $0.hex6
+                        }),
+                    supportsOpacity: false)
+            }
             Text("Sampled every couple of seconds; costs nothing measurable.")
                 .settingsCaption()
         }

@@ -1,3 +1,9 @@
 import Edith
+import EdithCLI
+import Foundation
 
-EdithApp.main()
+if ExecutableLaunch.isApplication(environment: ProcessInfo.processInfo.environment) {
+    EdithApp.main()
+} else {
+    await EdithCLIMain.run()
+}
