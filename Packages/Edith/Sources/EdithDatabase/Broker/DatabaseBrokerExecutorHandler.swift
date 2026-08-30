@@ -84,17 +84,13 @@ struct DatabaseBrokerExecutorHandler: DatabaseBrokerCommandHandler {
     func mutationPreview(
         _ request: DatabaseMutationPreviewRequest
     ) async throws -> DatabaseCommandResult<DatabaseMutationPreviewResult> {
-        Self.unsupported(
-            "Database mutation previews are unavailable.",
-            target: request.mutation.target)
+        await executor.previewMutation(request)
     }
 
     func mutationApply(
         _ request: DatabaseMutationApplyRequest
     ) async throws -> DatabaseCommandResult<DatabaseMutationApplyResult> {
-        Self.unsupported(
-            "Database mutations are unavailable.",
-            target: request.mutation.target)
+        await executor.applyMutation(request)
     }
 
     func savedQueryList(

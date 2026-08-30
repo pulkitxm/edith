@@ -483,7 +483,8 @@ actor DatabaseConfirmationAuthority {
     static func create(
         secretStore: any DatabaseSecretStore,
         metadataStore: any DatabaseMetadataStore,
-        runtimeOwner: DatabaseRuntimeOwnerToken
+        runtimeOwner: DatabaseRuntimeOwnerToken,
+        currentDate: @escaping @Sendable () -> Date = { Date() }
     ) async throws -> DatabaseConfirmationAuthority {
         var generator = SystemRandomNumberGenerator()
         let proposedKey = Data(
@@ -498,7 +499,7 @@ actor DatabaseConfirmationAuthority {
             metadataStore: metadataStore,
             secretStore: secretStore,
             runtimeOwner: runtimeOwner,
-            currentDate: { Date() })
+            currentDate: currentDate)
     }
 
     func issuePreview(

@@ -256,7 +256,7 @@ struct DatabaseExecutionErrorMapper: Sendable {
                 .duplicateProductRegistration, .capabilityIdentityMismatch,
                 .duplicateCapability, .pageExceedsRequest,
                 .streamBatchExceedsRequest, .encodingFailed, .staleSession,
-                .unexpectedMutationPlan:
+                .unexpectedMutationPlan, .partialMutationResult:
                 envelope(
                     category: .internalFailure,
                     message: "The database adapter violated its execution contract.",

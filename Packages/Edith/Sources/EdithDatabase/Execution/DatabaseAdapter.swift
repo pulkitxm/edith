@@ -70,6 +70,7 @@ enum DatabaseAdapterContractViolation: Hashable, Sendable {
     case encodingFailed
     case staleSession
     case unexpectedMutationPlan
+    case partialMutationResult
 }
 
 enum DatabaseAdapterFailure: Error, Hashable, Sendable {
@@ -529,6 +530,14 @@ struct DatabaseAdapterMutationResult: Sendable {
                 limit: .serverOperationIdentifierBytes,
                 actual: identifierBytes,
                 maximum: DatabaseAdapterBounds.maximumServerOperationIdentifierBytes)
+        }
+        if let returnedPage {
+            guard returnedPage.metadata.completeness.state == .complete,
+                returnedPage.metadata.partialFailures.isEmpty,
+                returnedPage.nextContinuation == nil
+            else {
+                throw .contractViolation(.partialMutationResult)
+            }
         }
         self.disposition = disposition
         self.affectedRecords = affectedRecords

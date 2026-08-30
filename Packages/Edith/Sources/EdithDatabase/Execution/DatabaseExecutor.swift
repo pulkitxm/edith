@@ -22,6 +22,7 @@ public actor DatabaseExecutor {
     private let managementDrainTimeoutNanoseconds: UInt64
     private let maximumRetainedServerCancellations: Int
     private var continuationAuthority: DatabaseContinuationAuthority?
+    private var confirmationAuthority: DatabaseConfirmationAuthority?
     private var activeOperations: [DatabaseOperationID: DatabaseExecutorActiveOperation] = [:]
     private var backgroundTasks: [UUID: Task<Void, Never>] = [:]
     private var serverCancellationTasks: [DatabaseOperationID: Task<Void, Never>] = [:]
@@ -293,6 +294,113 @@ public actor DatabaseExecutor {
             }
         } catch {
             return failure(error, target: request.target)
+        }
+    }
+
+    public func previewMutation(
+        _ request: DatabaseMutationPreviewRequest
+    ) async -> DatabaseCommandResult<DatabaseMutationPreviewResult> {
+        do {
+            try validator.validate(request)
+            try await requireActiveOwner()
+            let definition = try await connection(id: request.mutation.target.connectionID)
+            return await execute(
+                operation: request.operation,
+                kind: .databaseMutationPreview,
+                definition: definition,
+                target: request.mutation.target,
+                timeout: definition.limits.operationTimeout,
+                cancellationSupport: .serverSide,
+                retryClassification: .safeIdempotent,
+                terminalProgress: .determinate(completed: 1, total: 1, unit: .steps)
+            ) { [self, sessionPool, validator] context, _ in
+                let lease = try await sessionPool.lease(
+                    for: definition,
+                    context: context)
+                await attachSession(lease.session, to: context.operationID)
+                try await context.checkCancellation()
+                let plan = try await lease.session.normalizeMutation(
+                    request.mutation,
+                    context: context)
+                guard plan.request == request.mutation else {
+                    throw DatabaseAdapterFailure.contractViolation(.unexpectedMutationPlan)
+                }
+                try validator.require(
+                    DatabaseExecutionErrorMapper.requiredCapability(for: plan.action),
+                    in: lease.report)
+                try await context.checkCancellation()
+                let authority = try await confirmationAuthorityForUse()
+                let preview = try await authority.issuePreview(for: plan)
+                try await context.checkCancellation()
+                return DatabaseMutationPreviewResult(preview: preview)
+            }
+        } catch {
+            return failure(error, target: request.mutation.target)
+        }
+    }
+
+    public func applyMutation(
+        _ request: DatabaseMutationApplyRequest
+    ) async -> DatabaseCommandResult<DatabaseMutationApplyResult> {
+        do {
+            try validator.validate(request)
+            try await requireActiveOwner()
+            let definition = try await connection(id: request.mutation.target.connectionID)
+            return await execute(
+                operation: request.operation,
+                kind: .databaseMutationApply,
+                definition: definition,
+                target: request.mutation.target,
+                timeout: definition.limits.operationTimeout,
+                cancellationSupport: .serverSide,
+                retryClassification: .requiresNewPreview,
+                terminalProgress: .determinate(completed: 1, total: 1, unit: .steps)
+            ) { [self, sessionPool, validator] context, _ in
+                let lease = try await sessionPool.lease(
+                    for: definition,
+                    context: context)
+                await attachSession(lease.session, to: context.operationID)
+                try await context.checkCancellation()
+                let plan = try await lease.session.normalizeMutation(
+                    request.mutation,
+                    context: context)
+                guard plan.request == request.mutation else {
+                    throw DatabaseAdapterFailure.contractViolation(.unexpectedMutationPlan)
+                }
+                try validator.require(
+                    DatabaseExecutionErrorMapper.requiredCapability(for: plan.action),
+                    in: lease.report)
+                try await context.checkCancellation()
+                let authority = try await confirmationAuthorityForUse()
+                let adapterResult = try await authority.authorizeAndExecute(
+                    token: request.token,
+                    plan: plan,
+                    confirmationText: request.confirmationText
+                ) { authorizedConnection, authorizedPlan in
+                    guard authorizedConnection == lease.definition,
+                        lease.session.connection == authorizedConnection
+                    else {
+                        throw DatabaseAdapterFailure.contractViolation(.staleSession)
+                    }
+                    try await context.checkCancellation()
+                    return try await lease.session.executeMutation(
+                        authorizedPlan,
+                        context: context)
+                }
+                try await context.checkCancellation()
+                return DatabaseMutationApplyResult(
+                    disposition: adapterResult.disposition,
+                    affectedRecords: adapterResult.affectedRecords,
+                    returnedRecords: adapterResult.returnedPage.map {
+                        DatabasePage(
+                            records: $0.records,
+                            fields: $0.fields,
+                            metadata: $0.metadata)
+                    },
+                    serverOperationIdentifier: adapterResult.serverOperationIdentifier)
+            }
+        } catch {
+            return failure(error, target: request.mutation.target)
         }
     }
 
@@ -1103,6 +1211,21 @@ public actor DatabaseExecutor {
         let authority = try await DatabaseContinuationAuthority.create(
             secretStore: secretStore)
         continuationAuthority = authority
+        return authority
+    }
+
+    private func confirmationAuthorityForUse() async throws
+        -> DatabaseConfirmationAuthority
+    {
+        if let confirmationAuthority {
+            return confirmationAuthority
+        }
+        let authority = try await DatabaseConfirmationAuthority.create(
+            secretStore: secretStore,
+            metadataStore: metadataStore,
+            runtimeOwner: runtimeOwner,
+            currentDate: currentDate)
+        confirmationAuthority = authority
         return authority
     }
 
