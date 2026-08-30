@@ -1,4 +1,5 @@
 import Darwin
+import Dispatch
 import Foundation
 import Testing
 
@@ -6,6 +7,43 @@ import Testing
 
 private enum DatabaseBrokerExecutableLauncherSystemStubError: Error {
     case requestedFailure
+}
+
+private final class DatabaseBrokerExecutableLauncherBlockingGate:
+    @unchecked Sendable
+{
+    private let lock = NSLock()
+    private let releaseSemaphore = DispatchSemaphore(value: 0)
+    private var entered = false
+    private var entryContinuation: CheckedContinuation<Void, Never>?
+
+    func enterAndBlock() {
+        let continuation = lock.withLock {
+            entered = true
+            let continuation = entryContinuation
+            entryContinuation = nil
+            return continuation
+        }
+        continuation?.resume()
+        releaseSemaphore.wait()
+    }
+
+    func waitUntilEntered() async {
+        await withCheckedContinuation { continuation in
+            let resumeImmediately = lock.withLock {
+                guard !entered else { return true }
+                entryContinuation = continuation
+                return false
+            }
+            if resumeImmediately {
+                continuation.resume()
+            }
+        }
+    }
+
+    func release() {
+        releaseSemaphore.signal()
+    }
 }
 
 private final class DatabaseBrokerExecutableFileSystemStub: @unchecked Sendable,
@@ -37,6 +75,7 @@ private final class DatabaseBrokerExecutableFileSystemStub: @unchecked Sendable,
     var pathMetadataValues = [DatabaseBrokerExecutableLauncherTestValues.metadata]
     var descriptorFlagValues = [FD_CLOEXEC]
     var failure: Failure?
+    var pathMetadataAction: (() -> Void)?
     var calls: [Call] = []
 
     func copyExecutablePath(
@@ -77,6 +116,7 @@ private final class DatabaseBrokerExecutableFileSystemStub: @unchecked Sendable,
 
     func metadata(at path: String) throws -> DatabaseBrokerExecutableFileMetadata {
         calls.append(.pathMetadata(path))
+        pathMetadataAction?()
         try failIfRequested(.pathMetadata)
         return nextValue(&pathMetadataValues)
     }
@@ -623,6 +663,50 @@ private enum DatabaseBrokerExecutableLauncherTestValues {
 
         #expect(throws: DatabaseBrokerExecutableLauncherError.executableReplaced) {
             try launcher.launch()
+        }
+        #expect(processSystem.requests.isEmpty)
+        #expect(processSystem.reapedProcessIdentifiers.isEmpty)
+    }
+
+    @Test func revokedLeaseDuringFinalValidationPreventsLateSpawn() async throws {
+        let fileSystem = DatabaseBrokerExecutableFileSystemStub()
+        let codeSigningSystem = DatabaseBrokerExecutableCodeSigningSystemStub()
+        let processSystem = DatabaseBrokerProcessSpawningSystemStub()
+        let launcher = try DatabaseBrokerExecutableLauncher(
+            resolver: DatabaseBrokerExecutableResolver(
+                fileSystem: fileSystem,
+                codeSigningSystem: codeSigningSystem),
+            spawner: DatabaseBrokerProcessSpawner(
+                system: processSystem,
+                environment: [:]))
+        let validationGate = DatabaseBrokerExecutableLauncherBlockingGate()
+        fileSystem.pathMetadataAction = {
+            validationGate.enterAndBlock()
+        }
+        let lease = DatabaseBrokerExecutableLaunchLease(
+            deadlineNanoseconds: UInt64.max,
+            monotonicNanoseconds: { 0 })
+        let launch = Task {
+            try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do {
+                        try launcher.launch(lease: lease)
+                        continuation.resume()
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+        }
+
+        await validationGate.waitUntilEntered()
+        #expect(lease.revoke())
+        validationGate.release()
+
+        await #expect(
+            throws: DatabaseBrokerExecutableLaunchLeaseError.notPermitted
+        ) {
+            try await launch.value
         }
         #expect(processSystem.requests.isEmpty)
         #expect(processSystem.reapedProcessIdentifiers.isEmpty)

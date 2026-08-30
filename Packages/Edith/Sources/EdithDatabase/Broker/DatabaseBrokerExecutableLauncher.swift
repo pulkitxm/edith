@@ -25,6 +25,81 @@ enum DatabaseBrokerExecutableLauncherError: Error, Equatable, Sendable {
     case spawnFailed
 }
 
+enum DatabaseBrokerExecutableLaunchLeaseError: Error, Equatable, Sendable {
+    case notPermitted
+}
+
+final class DatabaseBrokerExecutableLaunchLease: @unchecked Sendable {
+    private enum State {
+        case active
+        case revoked
+        case committed
+        case failed
+    }
+
+    private let stateLock = NSLock()
+    private let deadlineNanoseconds: UInt64
+    private let monotonicNanoseconds: @Sendable () -> UInt64
+    private var state = State.active
+
+    init(
+        deadlineNanoseconds: UInt64,
+        monotonicNanoseconds: @escaping @Sendable () -> UInt64
+    ) {
+        self.deadlineNanoseconds = deadlineNanoseconds
+        self.monotonicNanoseconds = monotonicNanoseconds
+    }
+
+    var isCommitted: Bool {
+        stateLock.withLock {
+            if case .committed = state {
+                return true
+            }
+            return false
+        }
+    }
+
+    @discardableResult
+    func revoke() -> Bool {
+        stateLock.withLock {
+            guard case .active = state else { return false }
+            state = .revoked
+            return true
+        }
+    }
+
+    func commit<Result>(_ operation: () throws -> Result) throws -> Result {
+        stateLock.lock()
+        guard case .active = state else {
+            stateLock.unlock()
+            throw DatabaseBrokerExecutableLaunchLeaseError.notPermitted
+        }
+        guard monotonicNanoseconds() < deadlineNanoseconds else {
+            state = .revoked
+            stateLock.unlock()
+            throw DatabaseBrokerExecutableLaunchLeaseError.notPermitted
+        }
+        state = .committed
+        stateLock.unlock()
+        do {
+            return try operation()
+        } catch {
+            stateLock.withLock {
+                state = .failed
+            }
+            throw error
+        }
+    }
+
+    static func unbounded() -> DatabaseBrokerExecutableLaunchLease {
+        DatabaseBrokerExecutableLaunchLease(
+            deadlineNanoseconds: UInt64.max,
+            monotonicNanoseconds: {
+                DispatchTime.now().uptimeNanoseconds
+            })
+    }
+}
+
 struct DatabaseBrokerExecutableFileIdentity: Equatable, Sendable {
     let device: UInt64
     let inode: UInt64
@@ -151,7 +226,11 @@ protocol DatabaseBrokerProcessSpawningSystem: Sendable {
 }
 
 struct DatabaseBrokerProcessSpawner: Sendable {
-    private let spawnImplementation: @Sendable (DatabaseBrokerValidatedExecutable) throws -> pid_t
+    private let spawnImplementation:
+        @Sendable (
+            DatabaseBrokerValidatedExecutable,
+            DatabaseBrokerExecutableLaunchLease
+        ) throws -> pid_t
 
     init(environment: [String: String] = ProcessInfo.processInfo.environment) {
         self.init(
@@ -163,7 +242,7 @@ struct DatabaseBrokerProcessSpawner: Sendable {
         system: System,
         environment: [String: String]
     ) {
-        spawnImplementation = { executable in
+        spawnImplementation = { executable, lease in
             try executable.revalidate()
             let request = DatabaseBrokerSpawnRequest(
                 executablePath: executable.path,
@@ -177,22 +256,27 @@ struct DatabaseBrokerProcessSpawner: Sendable {
                 standardInputPath: "/dev/null",
                 standardOutputPath: "/dev/null",
                 standardErrorPath: "/dev/null")
-            let processIdentifier: pid_t
-            do {
-                processIdentifier = try system.spawn(request)
-            } catch let error as DatabaseBrokerExecutableLauncherError {
-                throw error
-            } catch {
-                throw DatabaseBrokerExecutableLauncherError.spawnFailed
+            return try lease.commit {
+                let processIdentifier: pid_t
+                do {
+                    processIdentifier = try system.spawn(request)
+                } catch let error as DatabaseBrokerExecutableLauncherError {
+                    throw error
+                } catch {
+                    throw DatabaseBrokerExecutableLauncherError.spawnFailed
+                }
+                system.registerReaper(for: processIdentifier)
+                return processIdentifier
             }
-            system.registerReaper(for: processIdentifier)
-            return processIdentifier
         }
     }
 
     @discardableResult
-    func spawn(_ executable: DatabaseBrokerValidatedExecutable) throws -> pid_t {
-        try spawnImplementation(executable)
+    func spawn(
+        _ executable: DatabaseBrokerValidatedExecutable,
+        lease: DatabaseBrokerExecutableLaunchLease = .unbounded()
+    ) throws -> pid_t {
+        try spawnImplementation(executable, lease)
     }
 
     private static func sanitizedEnvironment(
@@ -248,6 +332,10 @@ struct DatabaseBrokerExecutableLauncher: Sendable {
 
     func launch() throws {
         try spawner.spawn(executable)
+    }
+
+    func launch(lease: DatabaseBrokerExecutableLaunchLease) throws {
+        try spawner.spawn(executable, lease: lease)
     }
 }
 
