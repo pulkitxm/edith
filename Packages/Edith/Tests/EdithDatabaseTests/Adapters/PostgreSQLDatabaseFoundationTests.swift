@@ -47,6 +47,12 @@ private struct PostgreSQLDatabaseFoundationUnknownFailure: Error {}
     let derived = try dnsPlan.configuration(establishedChannel: channel)
     #expect(derived.options.tlsServerName == "db.example.test")
 
+    let unverifiedDNSPlan = postgresqlFoundationTLSPlan(
+        host: "unverified.example.test",
+        tls: .preferred(verifyCertificate: false))
+    let unverified = try unverifiedDNSPlan.configuration(establishedChannel: channel)
+    #expect(unverified.options.tlsServerName == "unverified.example.test")
+
     let overridePlan = postgresqlFoundationTLSPlan(
         host: "db.example.test",
         tls: .required(verifyCertificate: true),

@@ -73,7 +73,7 @@ struct PostgreSQLDatabaseConnectionPlan: Sendable {
         if let tlsServerName {
             return tlsServerName
         }
-        guard tls.verifiesCertificate, !hostIsIPAddress else { return nil }
+        guard tls.isEnabled, !hostIsIPAddress else { return nil }
         return host
     }
 
@@ -345,12 +345,12 @@ enum PostgreSQLDatabaseDriverSupport {
 }
 
 extension PostgreSQLDatabaseTLSPlan {
-    var verifiesCertificate: Bool {
+    var isEnabled: Bool {
         switch self {
         case .disabled:
             return false
-        case let .preferred(verifyCertificate), let .required(verifyCertificate):
-            return verifyCertificate
+        case .preferred, .required:
+            return true
         }
     }
 
