@@ -7,11 +7,6 @@ struct DatabaseSafetyReviewSession: Identifiable, Equatable {
     let preview: DatabaseDestructivePreview
 }
 
-struct DatabaseAcceptedMutation: Equatable {
-    let connectionID: DatabaseConnectionID
-    let serverOperationIdentifier: String
-}
-
 @MainActor
 @Observable
 final class DatabaseWorkspaceModel {
@@ -31,6 +26,7 @@ final class DatabaseWorkspaceModel {
     private var applyGeneration = UUID()
     private var previewOperationID: DatabaseOperationID?
     private var applyOperationID: DatabaseOperationID?
+    private var acceptedMutationConnectionID: DatabaseConnectionID?
     private var previewTask: Task<Void, Never>?
     private var applyTask: Task<Void, Never>?
 
@@ -71,6 +67,7 @@ final class DatabaseWorkspaceModel {
         mutationNotice = nil
         unresolvedOperationID = nil
         acceptedMutation = nil
+        acceptedMutationConnectionID = nil
         startPreview(request: request)
     }
 
@@ -106,6 +103,7 @@ final class DatabaseWorkspaceModel {
         applyOperationID = operationID
         unresolvedOperationID = operationID
         acceptedMutation = nil
+        acceptedMutationConnectionID = nil
         safetyPhase = .executing
         mutationNotice = nil
         let sender = sender
@@ -192,6 +190,10 @@ final class DatabaseWorkspaceModel {
     }
 
     func dismissSafetyReview() {
+        if case .partiallyApplied = safetyPhase {
+            acknowledgePartiallyAppliedMutation()
+            return
+        }
         invalidatePreview()
         let preservesUnresolvedOperation = safetyPhase.preservesUnresolvedOperation
         if !preservesUnresolvedOperation {
@@ -200,6 +202,7 @@ final class DatabaseWorkspaceModel {
             applyOperationID = nil
             unresolvedOperationID = nil
             acceptedMutation = nil
+            acceptedMutationConnectionID = nil
             mutationNotice = nil
         } else {
             applyTask?.cancel()
@@ -212,6 +215,23 @@ final class DatabaseWorkspaceModel {
         if !preservesUnresolvedOperation {
             safetyPhase = .ready
         }
+    }
+
+    func acknowledgePartiallyAppliedMutation() {
+        guard case .partiallyApplied = safetyPhase else { return }
+        invalidatePreview()
+        invalidateApply()
+        mutationRequest = nil
+        applyOperationID = nil
+        unresolvedOperationID = nil
+        acceptedMutation = nil
+        acceptedMutationConnectionID = nil
+        safetyReview = nil
+        reviewSessionID = nil
+        previewOperationID = nil
+        safetyPhase = .ready
+        mutationNotice =
+            "The partially applied mutation was acknowledged. Verify database state before continuing."
     }
 
     private func startPreview(request: DatabaseDestructiveRequest) {
@@ -310,34 +330,24 @@ final class DatabaseWorkspaceModel {
             result.status == .succeeded,
             let payload = result.payload
         else {
-            safetyPhase = .failed(Self.message(for: result))
-            unresolvedOperationID = nil
-            mutationNotice = safetyPhase.message
+            markOutcomeUnknown(
+                "The broker did not return a proven mutation effect. Verify its durable outcome before issuing another mutation.",
+                generation: generation,
+                operationID: operationID)
             return
         }
-        unresolvedOperationID = nil
-        switch payload.disposition {
-        case .completed:
-            acceptedMutation = nil
-            safetyPhase = .succeeded(Self.completionMessage(payload.affectedRecords))
-        case .accepted:
-            guard
-                let serverOperationIdentifier = payload.serverOperationIdentifier,
-                !serverOperationIdentifier.isEmpty,
-                let connectionID = mutationRequest?.target.connectionID
-            else {
-                markOutcomeUnknown(
-                    "The database accepted the mutation without a trackable operation identifier. Verify database state before issuing another mutation.",
-                    generation: generation,
-                    operationID: operationID)
-                return
-            }
-            acceptedMutation = DatabaseAcceptedMutation(
-                connectionID: connectionID,
-                serverOperationIdentifier: serverOperationIdentifier)
-            safetyPhase = .accepted(Self.acceptedMessage(serverOperationIdentifier))
+        guard let connectionID = mutationRequest?.target.connectionID else {
+            markOutcomeUnknown(
+                "The mutation result no longer matches a tracked database connection. Verify database state before issuing another mutation.",
+                generation: generation,
+                operationID: operationID)
+            return
         }
-        mutationNotice = safetyPhase.message
+        publishMutationOutcome(
+            payload,
+            connectionID: connectionID,
+            generation: generation,
+            operationID: operationID)
     }
 
     private func failApply(
@@ -347,8 +357,7 @@ final class DatabaseWorkspaceModel {
     ) {
         guard applyGeneration == generation, applyOperationID == operationID else { return }
         applyTask = nil
-        unresolvedOperationID = nil
-        acceptedMutation = nil
+        clearMutationTracking()
         safetyPhase = .failed(message)
         mutationNotice = message
     }
@@ -451,13 +460,15 @@ final class DatabaseWorkspaceModel {
                 generation: generation,
                 operationID: operationID)
         case .failed:
-            unresolvedOperationID = nil
-            safetyPhase = .failed(operation.error?.message ?? "The mutation failed.")
-            mutationNotice = safetyPhase.message
+            markOutcomeUnknown(
+                "The apply command failed without a proven mutation effect. Verify database state before issuing another mutation.",
+                generation: generation,
+                operationID: operationID)
         case .cancelled:
-            unresolvedOperationID = nil
-            safetyPhase = .failed("The mutation was cancelled.")
-            mutationNotice = safetyPhase.message
+            markOutcomeUnknown(
+                "The apply command was cancelled without a proven mutation effect. Verify database state before issuing another mutation.",
+                generation: generation,
+                operationID: operationID)
         }
     }
 
@@ -467,29 +478,136 @@ final class DatabaseWorkspaceModel {
         operationID: DatabaseOperationID
     ) {
         guard applyGeneration == generation, applyOperationID == operationID else { return }
-        unresolvedOperationID = nil
-        switch outcome.disposition {
-        case .completed:
-            acceptedMutation = nil
-            safetyPhase = .succeeded(Self.completionMessage(outcome.affectedRecords))
-        case .accepted:
-            guard
-                let identifier = outcome.serverOperationIdentifier,
-                !identifier.isEmpty,
-                let connectionID = mutationRequest?.target.connectionID
-            else {
+        guard let connectionID = mutationRequest?.target.connectionID else {
+            markOutcomeUnknown(
+                "The recovered mutation outcome no longer matches a tracked database connection.",
+                generation: generation,
+                operationID: operationID)
+            return
+        }
+        publishMutationOutcome(
+            outcome,
+            connectionID: connectionID,
+            generation: generation,
+            operationID: operationID)
+    }
+
+    private func publishMutationOutcome(
+        _ outcome: DatabaseMutationApplyResult,
+        connectionID: DatabaseConnectionID,
+        generation: UUID,
+        operationID: DatabaseOperationID,
+        expectedAcceptedMutation: DatabaseAcceptedMutation? = nil
+    ) {
+        guard applyGeneration == generation, applyOperationID == operationID else { return }
+        guard Self.isValidMutationOutcome(outcome) else {
+            if let expectedAcceptedMutation {
+                markAcceptedOutcomeUnknown(
+                    "The database returned an invalid terminal mutation effect.",
+                    mutation: expectedAcceptedMutation,
+                    generation: generation)
+            } else {
                 markOutcomeUnknown(
-                    "The recovered mutation outcome is not trackable. Verify database state before issuing another mutation.",
+                    "The database returned an invalid mutation effect.",
+                    generation: generation,
+                    operationID: operationID)
+            }
+            return
+        }
+        if let expectedAcceptedMutation {
+            guard outcome.acceptedMutation == expectedAcceptedMutation else {
+                markAcceptedOutcomeUnknown(
+                    "The terminal mutation outcome does not match the accepted mutation.",
+                    mutation: expectedAcceptedMutation,
+                    generation: generation)
+                return
+            }
+        } else if let acceptedMutation = outcome.acceptedMutation {
+            guard acceptedMutation.operationID == operationID else {
+                markOutcomeUnknown(
+                    "The mutation outcome does not match the originating apply operation.",
                     generation: generation,
                     operationID: operationID)
                 return
             }
-            acceptedMutation = DatabaseAcceptedMutation(
-                connectionID: connectionID,
-                serverOperationIdentifier: identifier)
-            safetyPhase = .accepted(Self.acceptedMessage(identifier))
+        }
+
+        switch outcome.disposition {
+        case .accepted:
+            guard
+                expectedAcceptedMutation == nil,
+                outcome.effect == .unknown,
+                let acceptedMutation = outcome.acceptedMutation,
+                acceptedMutation.operationID == operationID,
+                !acceptedMutation.serverOperationIdentifier.isEmpty
+            else {
+                markOutcomeUnknown(
+                    "The database accepted the mutation without valid originating operation correlation.",
+                    generation: generation,
+                    operationID: operationID)
+                return
+            }
+            trackAcceptedMutation(acceptedMutation, connectionID: connectionID)
+            safetyPhase = .accepted(
+                Self.acceptedMessage(acceptedMutation.serverOperationIdentifier))
+        case .completed:
+            switch outcome.effect {
+            case .applied:
+                clearMutationTracking()
+                safetyPhase = .succeeded(Self.completionMessage(outcome.affectedRecords))
+            case .notApplied:
+                clearMutationTracking()
+                safetyPhase = .failed(
+                    outcome.error?.message ?? "The database mutation did not apply any changes.")
+            case .partiallyApplied:
+                retainMutationTracking(
+                    operationID: operationID,
+                    acceptedMutation: outcome.acceptedMutation ?? expectedAcceptedMutation,
+                    connectionID: connectionID)
+                safetyPhase = .partiallyApplied(Self.partialApplicationMessage(outcome))
+            case .unknown:
+                retainMutationTracking(
+                    operationID: operationID,
+                    acceptedMutation: outcome.acceptedMutation ?? expectedAcceptedMutation,
+                    connectionID: connectionID)
+                safetyPhase = .outcomeUnknown(
+                    outcome.error?.message
+                        ?? "The mutation effect is unknown. Verify database state before issuing another mutation."
+                )
+            }
         }
         mutationNotice = safetyPhase.message
+    }
+
+    private func trackAcceptedMutation(
+        _ mutation: DatabaseAcceptedMutation,
+        connectionID: DatabaseConnectionID
+    ) {
+        unresolvedOperationID = nil
+        acceptedMutation = mutation
+        acceptedMutationConnectionID = connectionID
+    }
+
+    private func retainMutationTracking(
+        operationID: DatabaseOperationID,
+        acceptedMutation: DatabaseAcceptedMutation?,
+        connectionID: DatabaseConnectionID
+    ) {
+        applyOperationID = operationID
+        if let acceptedMutation {
+            trackAcceptedMutation(acceptedMutation, connectionID: connectionID)
+        } else {
+            unresolvedOperationID = operationID
+            self.acceptedMutation = nil
+            acceptedMutationConnectionID = nil
+        }
+    }
+
+    private func clearMutationTracking() {
+        applyOperationID = nil
+        unresolvedOperationID = nil
+        acceptedMutation = nil
+        acceptedMutationConnectionID = nil
     }
 
     private func finishCancellation(
@@ -542,6 +660,12 @@ final class DatabaseWorkspaceModel {
     private func reconcileAcceptedMutation(
         _ mutation: DatabaseAcceptedMutation
     ) async {
+        guard let connectionID = acceptedMutationConnectionID else {
+            safetyPhase = .outcomeUnknown(
+                "The accepted mutation no longer matches a tracked database connection.")
+            mutationNotice = safetyPhase.message
+            return
+        }
         invalidateApply()
         let generation = applyGeneration
         safetyPhase = .reconciling
@@ -552,8 +676,8 @@ final class DatabaseWorkspaceModel {
                 let response = try await sender.send(
                     .mutationStatus(
                         DatabaseMutationStatusRequest(
-                            connectionID: mutation.connectionID,
-                            serverOperationIdentifier: mutation.serverOperationIdentifier,
+                            connectionID: connectionID,
+                            acceptedMutation: mutation,
                             operation: DatabaseOperationContext(operationID: operationID))))
                 try Task.checkCancellation()
                 self?.finishAcceptedMutationStatus(
@@ -574,6 +698,12 @@ final class DatabaseWorkspaceModel {
     private func cancelAcceptedMutation(
         _ mutation: DatabaseAcceptedMutation
     ) {
+        guard let connectionID = acceptedMutationConnectionID else {
+            safetyPhase = .outcomeUnknown(
+                "The accepted mutation no longer matches a tracked database connection.")
+            mutationNotice = safetyPhase.message
+            return
+        }
         invalidateApply()
         let generation = applyGeneration
         safetyPhase = .cancelling
@@ -584,8 +714,8 @@ final class DatabaseWorkspaceModel {
                 let response = try await sender.send(
                     .mutationCancel(
                         DatabaseMutationCancelRequest(
-                            connectionID: mutation.connectionID,
-                            serverOperationIdentifier: mutation.serverOperationIdentifier,
+                            connectionID: connectionID,
+                            acceptedMutation: mutation,
                             operation: DatabaseOperationContext(operationID: operationID))))
                 try Task.checkCancellation()
                 self?.finishAcceptedMutationCancellation(
@@ -615,7 +745,7 @@ final class DatabaseWorkspaceModel {
             result.metadata.completeness.state == .complete,
             result.metadata.partialFailures.isEmpty,
             let status = result.payload,
-            status.serverOperationIdentifier == mutation.serverOperationIdentifier
+            status.acceptedMutation == mutation
         else {
             markAcceptedOutcomeUnknown(
                 "The broker returned no complete status for the accepted mutation.",
@@ -639,16 +769,12 @@ final class DatabaseWorkspaceModel {
             result.metadata.completeness.state == .complete,
             result.metadata.partialFailures.isEmpty,
             let cancellation = result.payload,
-            cancellation.serverOperationIdentifier == mutation.serverOperationIdentifier
+            cancellation.acceptedMutation == mutation
         else {
-            let message: String
-            if let result = response.mutationCancelResult {
-                message = Self.message(for: result)
-            } else {
-                message = "The broker returned an unexpected mutation cancellation response."
-            }
-            safetyPhase = .accepted(message)
-            mutationNotice = message
+            markAcceptedOutcomeUnknown(
+                "The broker returned no complete cancellation status for the accepted mutation.",
+                mutation: mutation,
+                generation: generation)
             return
         }
         if let status = cancellation.status {
@@ -687,35 +813,99 @@ final class DatabaseWorkspaceModel {
         guard
             applyGeneration == generation,
             acceptedMutation == mutation,
-            status.serverOperationIdentifier == mutation.serverOperationIdentifier
+            status.acceptedMutation == mutation,
+            let connectionID = acceptedMutationConnectionID
         else { return }
         switch status.state {
         case .accepted:
-            safetyPhase = .accepted(
-                "The database accepted the mutation. Completion has not been confirmed.")
-        case .running:
-            safetyPhase = .accepted("The accepted mutation is running.")
-        case .cancelling:
-            safetyPhase = .accepted("The accepted mutation is cancelling.")
-        case .completed:
-            guard
-                let outcome = status.outcome,
-                outcome.disposition == .completed
-            else {
+            guard status.outcome == nil, status.error == nil else {
                 markAcceptedOutcomeUnknown(
-                    "The database reports completion without a complete mutation outcome.",
+                    "The database returned an invalid accepted mutation status.",
                     mutation: mutation,
                     generation: generation)
                 return
             }
-            acceptedMutation = nil
-            safetyPhase = .succeeded(Self.completionMessage(outcome.affectedRecords))
+            safetyPhase = .accepted(
+                "The database accepted the mutation. Completion has not been confirmed.")
+        case .running:
+            guard status.outcome == nil, status.error == nil else {
+                markAcceptedOutcomeUnknown(
+                    "The database returned an invalid running mutation status.",
+                    mutation: mutation,
+                    generation: generation)
+                return
+            }
+            safetyPhase = .accepted("The accepted mutation is running.")
+        case .cancelling:
+            guard status.outcome == nil, status.error == nil else {
+                markAcceptedOutcomeUnknown(
+                    "The database returned an invalid cancelling mutation status.",
+                    mutation: mutation,
+                    generation: generation)
+                return
+            }
+            safetyPhase = .accepted("The accepted mutation is cancelling.")
+        case .completed:
+            guard
+                let outcome = status.outcome,
+                outcome.disposition == .completed,
+                outcome.acceptedMutation == mutation,
+                outcome.effect == .applied || outcome.effect == .partiallyApplied,
+                status.error == outcome.error
+            else {
+                markAcceptedOutcomeUnknown(
+                    "The database reports completion without a valid mutation effect.",
+                    mutation: mutation,
+                    generation: generation)
+                return
+            }
+            publishMutationOutcome(
+                outcome,
+                connectionID: connectionID,
+                generation: generation,
+                operationID: mutation.operationID,
+                expectedAcceptedMutation: mutation)
         case .failed:
-            acceptedMutation = nil
-            safetyPhase = .failed(status.error?.message ?? "The accepted mutation failed.")
+            guard
+                let outcome = status.outcome,
+                outcome.disposition == .completed,
+                outcome.acceptedMutation == mutation,
+                outcome.effect != .applied,
+                let error = status.error,
+                error == outcome.error
+            else {
+                markAcceptedOutcomeUnknown(
+                    "The database reports failure without a valid mutation effect.",
+                    mutation: mutation,
+                    generation: generation)
+                return
+            }
+            publishMutationOutcome(
+                outcome,
+                connectionID: connectionID,
+                generation: generation,
+                operationID: mutation.operationID,
+                expectedAcceptedMutation: mutation)
         case .cancelled:
-            acceptedMutation = nil
-            safetyPhase = .failed("The accepted mutation was cancelled.")
+            guard
+                let outcome = status.outcome,
+                outcome.disposition == .completed,
+                outcome.acceptedMutation == mutation,
+                outcome.effect != .applied,
+                status.error == outcome.error
+            else {
+                markAcceptedOutcomeUnknown(
+                    "The database reports cancellation without a valid mutation effect.",
+                    mutation: mutation,
+                    generation: generation)
+                return
+            }
+            publishMutationOutcome(
+                outcome,
+                connectionID: connectionID,
+                generation: generation,
+                operationID: mutation.operationID,
+                expectedAcceptedMutation: mutation)
         }
         mutationNotice = safetyPhase.message
     }
@@ -783,6 +973,41 @@ final class DatabaseWorkspaceModel {
     private static func completionMessage(_ count: DatabaseCountMetadata) -> String {
         guard let value = count.value else { return "The database mutation completed." }
         return "The database mutation completed and affected \(value.formatted()) records."
+    }
+
+    private static func partialApplicationMessage(_ outcome: DatabaseMutationApplyResult) -> String
+    {
+        if let error = outcome.error {
+            return
+                "The database mutation partially applied. \(error.message) Acknowledge this result only after reviewing database state."
+        }
+        if let value = outcome.affectedRecords.value {
+            return
+                "The database mutation partially applied and affected \(value.formatted()) records. Acknowledge this result only after reviewing database state."
+        }
+        return
+            "The database mutation partially applied. Acknowledge this result only after reviewing database state."
+    }
+
+    private static func isValidMutationOutcome(_ outcome: DatabaseMutationApplyResult) -> Bool {
+        switch outcome.disposition {
+        case .accepted:
+            return outcome.effect == .unknown
+                && outcome.returnedRecords == nil
+                && outcome.partialFailures.isEmpty
+                && outcome.error == nil
+        case .completed:
+            switch outcome.effect {
+            case .applied:
+                return outcome.partialFailures.isEmpty && outcome.error == nil
+            case .notApplied:
+                return outcome.returnedRecords == nil && outcome.partialFailures.isEmpty
+            case .partiallyApplied:
+                return !outcome.partialFailures.isEmpty
+            case .unknown:
+                return outcome.returnedRecords == nil
+            }
+        }
     }
 
     private static func acceptedMessage(_ serverOperationIdentifier: String?) -> String {
