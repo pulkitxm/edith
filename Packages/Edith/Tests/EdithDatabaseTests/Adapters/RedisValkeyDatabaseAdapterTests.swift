@@ -734,6 +734,15 @@ struct RedisValkeyDatabaseAdapterTests {
 }
 
 private enum RedisValkeyLiveEnvironment {
+    static let isConfigured = [
+        "EDITH_DATABASE_REDIS_HOST",
+        "EDITH_DATABASE_REDIS_PORT",
+        "EDITH_DATABASE_REDIS_PASSWORD",
+        "EDITH_DATABASE_VALKEY_HOST",
+        "EDITH_DATABASE_VALKEY_PORT",
+        "EDITH_DATABASE_VALKEY_PASSWORD",
+    ].allSatisfy { ProcessInfo.processInfo.environment[$0] != nil }
+
     static func configuration(
         product: DatabaseProduct
     ) throws -> (
@@ -769,7 +778,9 @@ private enum RedisValkeyLiveEnvironment {
 
 @Suite("Redis and Valkey adapter live")
 struct RedisValkeyDatabaseAdapterIntegrationTests {
-    @Test("reads live Redis and Valkey through bounded authenticated sessions")
+    @Test(
+        "reads live Redis and Valkey through bounded authenticated sessions",
+        .enabled(if: RedisValkeyLiveEnvironment.isConfigured))
     func liveRead() async throws {
         for product in [DatabaseProduct.redis, .valkey] {
             guard
