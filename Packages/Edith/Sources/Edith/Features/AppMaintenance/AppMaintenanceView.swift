@@ -350,7 +350,7 @@ final class AppMaintenanceModel {
     }
 }
 
-private enum AppMaintenanceSection: String, CaseIterable, Identifiable {
+enum AppMaintenanceSection: String, CaseIterable, Identifiable {
     case updates = "Updates"
     case packages = "Packages"
     case removal = "Remove"
@@ -360,13 +360,15 @@ private enum AppMaintenanceSection: String, CaseIterable, Identifiable {
 }
 
 struct AppMaintenanceView: View {
+    let showsSectionPicker: Bool
     @State private var model = AppMaintenanceModel()
     @State private var query = ""
     @State private var confirmingRemoval = false
     @State private var confirmingUpdates = false
     @State private var showingDiskImagePicker = false
     @State private var showingUpdateSettings = false
-    @State private var section = AppMaintenanceSection.updates
+    @AppStorage(AppStorageKeys.AppMaintenance.section, store: SharedDefaults.store)
+    private var sectionRaw = AppMaintenanceSection.updates.rawValue
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
     @AppStorage(AppStorageKeys.AppMaintenance.installDestination, store: SharedDefaults.store)
@@ -402,6 +404,20 @@ struct AppMaintenanceView: View {
     }
 
     private var theme: Color { themeColor(themeName) }
+
+    init(showsSectionPicker: Bool = true) {
+        self.showsSectionPicker = showsSectionPicker
+    }
+
+    private var section: AppMaintenanceSection {
+        AppMaintenanceSection(rawValue: sectionRaw) ?? .updates
+    }
+
+    private var sectionBinding: Binding<AppMaintenanceSection> {
+        Binding(
+            get: { section },
+            set: { sectionRaw = $0.rawValue })
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -474,46 +490,50 @@ struct AppMaintenanceView: View {
                 }
                 Spacer()
             }
-            HStack(spacing: UIScale.pt(10)) {
-                Picker("Section", selection: $section) {
-                    ForEach(AppMaintenanceSection.allCases) { section in
-                        Text(section.rawValue).tag(section)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: UIScale.pt(340))
-                Spacer()
-                if section != .packages {
-                    Button {
-                        showingUpdateSettings.toggle()
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .help("Update settings")
-                    .popover(isPresented: $showingUpdateSettings) { updateSettings }
-                    Menu {
-                        Picker("Destination", selection: $installDestinationRaw) {
-                            ForEach(AppMaintenanceInstallDestination.allCases, id: \.rawValue) {
-                                destination in
-                                Text(destination.title).tag(destination.rawValue)
+            if showsSectionPicker || section != .packages {
+                HStack(spacing: UIScale.pt(10)) {
+                    if showsSectionPicker {
+                        Picker("Section", selection: sectionBinding) {
+                            ForEach(AppMaintenanceSection.allCases) { section in
+                                Text(section.rawValue).tag(section)
                             }
                         }
-                    } label: {
-                        Label(installDestination.title, systemImage: "folder")
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(width: UIScale.pt(340))
                     }
-                    Button {
-                        showingDiskImagePicker = true
-                    } label: {
-                        Label("Install Disk Image", systemImage: "externaldrive.badge.plus")
+                    Spacer()
+                    if section != .packages {
+                        Button {
+                            showingUpdateSettings.toggle()
+                        } label: {
+                            Image(systemName: "gearshape")
+                        }
+                        .help("Update settings")
+                        .popover(isPresented: $showingUpdateSettings) { updateSettings }
+                        Menu {
+                            Picker("Destination", selection: $installDestinationRaw) {
+                                ForEach(AppMaintenanceInstallDestination.allCases, id: \.rawValue) {
+                                    destination in
+                                    Text(destination.title).tag(destination.rawValue)
+                                }
+                            }
+                        } label: {
+                            Label(installDestination.title, systemImage: "folder")
+                        }
+                        Button {
+                            showingDiskImagePicker = true
+                        } label: {
+                            Label("Install Disk Image", systemImage: "externaldrive.badge.plus")
+                        }
+                        .disabled(model.phase != .ready)
+                        Button {
+                            model.refresh()
+                        } label: {
+                            Label("Refresh", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(model.phase != .ready)
                     }
-                    .disabled(model.phase != .ready)
-                    Button {
-                        model.refresh()
-                    } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
-                    .disabled(model.phase != .ready)
                 }
             }
         }

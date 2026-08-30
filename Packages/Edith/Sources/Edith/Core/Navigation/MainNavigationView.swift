@@ -1346,7 +1346,7 @@ struct MainWindowView: View {
         case .music: MusicPage()
         case .calendar: CalendarPage()
         case .system: SystemPage()
-        case .appMaintenance: AppMaintenanceView()
+        case .appMaintenance: AppMaintenanceView(showsSectionPicker: false)
         case .machines: MachinesPage()
         case .companion: CompanionPage()
         case .extensions: ExtensionsPane()
