@@ -31,12 +31,9 @@ struct HomebrewMaintenanceView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                kindPicker
-                controls
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            filterBar
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
             Divider()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
@@ -91,6 +88,42 @@ struct HomebrewMaintenanceView: View {
         }
     }
 
+    @ViewBuilder
+    private var filterBar: some View {
+        if compact {
+            VStack(alignment: .leading, spacing: 10) {
+                filters
+                actions
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        } else {
+            HStack(spacing: 20) {
+                filters
+                Spacer(minLength: 12)
+                actions
+            }
+        }
+    }
+
+    private var filters: some View {
+        HStack(spacing: 18) {
+            HStack(spacing: 8) {
+                filterLabel("Package")
+                kindPicker
+            }
+            HStack(spacing: 8) {
+                filterLabel("View")
+                modePicker
+            }
+        }
+    }
+
+    private func filterLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+    }
+
     private var kindPicker: some View {
         Picker("Package kind", selection: $kindRaw) {
             ForEach(HomebrewPackageKind.allCases) { kind in
@@ -99,41 +132,42 @@ struct HomebrewMaintenanceView: View {
         }
         .labelsHidden()
         .pickerStyle(.segmented)
-        .frame(width: compact ? 170 : 200)
+        .frame(width: 190)
         .disabled(model.isBusy)
     }
 
-    private var controls: some View {
-        HStack(spacing: 12) {
-            Picker("View", selection: $model.mode) {
-                ForEach(HomebrewPageMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
-                }
+    private var modePicker: some View {
+        Picker("View", selection: $model.mode) {
+            ForEach(HomebrewPageMode.allCases) { mode in
+                Text(mode.title).tag(mode)
             }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(width: 180)
+        }
+        .labelsHidden()
+        .pickerStyle(.segmented)
+        .frame(width: 170)
+    }
 
-            if model.mode == .search {
+    @ViewBuilder
+    private var actions: some View {
+        if model.mode == .search {
+            HStack(spacing: 10) {
                 SearchField(placeholder: "Search \(kind.pluralTitle.lowercased())", text: $query)
-                    .frame(maxWidth: compact ? .infinity : 360)
+                    .frame(maxWidth: compact ? .infinity : 320)
                     .onSubmit { runSearch() }
                 Button("Search", action: runSearch)
                     .buttonStyle(.borderedProminent)
                     .disabled(
                         model.isBusy
                             || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            } else {
-                Spacer(minLength: 0)
-                Button {
-                    model.loadInstalled(kind: kind)
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                }
-                .disabled(model.isBusy)
             }
+        } else {
+            Button {
+                model.loadInstalled(kind: kind)
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .disabled(model.isBusy)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var unavailableCard: some View {
