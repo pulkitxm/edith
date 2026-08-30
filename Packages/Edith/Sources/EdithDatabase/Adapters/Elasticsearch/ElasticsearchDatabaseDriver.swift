@@ -941,7 +941,12 @@ enum ElasticsearchDatabaseDriverSupport {
                 !name.unicodeScalars.contains(where: {
                     CharacterSet.controlCharacters.contains($0)
                 }),
-                field.type.map({ valid($0, maximumBytes: 128) }) ?? true
+                field.type.map({
+                    valid($0, maximumBytes: 128)
+                        && !$0.unicodeScalars.contains(where: {
+                            CharacterSet.controlCharacters.contains($0)
+                        })
+                }) ?? true
             else {
                 throw .invalidResponse
             }

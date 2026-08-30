@@ -652,6 +652,32 @@ private func elasticsearchReadingSession(
                 requestTimeoutMilliseconds: 1_000)
         }
     }
+    let scriptedAggregation: DatabaseValue = .object([
+        DatabaseObjectField(
+            name: "aggs",
+            value: .object([
+                DatabaseObjectField(
+                    name: "dangerous",
+                    value: .object([
+                        DatabaseObjectField(
+                            name: "terms",
+                            value: .object([
+                                DatabaseObjectField(
+                                    name: "script",
+                                    value: .string("return document.secret"))
+                            ]))
+                    ]))
+            ]))
+    ])
+    #expect(throws: DatabaseAdapterFailure.self) {
+        _ = try ElasticsearchDatabaseReadCompiler.compileQuery(
+            ElasticsearchDatabaseReadingFixtures.queryRequest(
+                source: source,
+                command: "aggregate",
+                body: scriptedAggregation),
+            sessionID: DatabaseAdapterSessionID(),
+            requestTimeoutMilliseconds: 1_000)
+    }
     let unsafeTarget = ElasticsearchDatabaseReadingFixtures.target(
         connectionID: definition.id,
         name: "_all")
@@ -1009,6 +1035,25 @@ private final class ElasticsearchDatabaseReadingPITURLProtocol: URLProtocol,
         ])
     #expect(throws: ElasticsearchDatabaseDriverFailure.responseTooLarge) {
         try ElasticsearchDatabaseDriverSupport.validate(mapping)
+    }
+    let invalidMapping = ElasticsearchDatabaseMappingResponse(
+        indices: [
+            "edith-documents-v1": ElasticsearchDatabaseMappingResponse.Index(
+                mappings: ElasticsearchDatabaseMappingResponse.Mapping(
+                    dynamic: nil,
+                    properties: [
+                        "field": ElasticsearchDatabaseMappingResponse.Field(
+                            type: "keyword\nunsafe",
+                            index: true,
+                            enabled: true,
+                            docValues: true,
+                            properties: nil,
+                            fields: nil)
+                    ],
+                    runtime: nil))
+        ])
+    #expect(throws: ElasticsearchDatabaseDriverFailure.invalidResponse) {
+        try ElasticsearchDatabaseDriverSupport.validate(invalidMapping)
     }
 }
 

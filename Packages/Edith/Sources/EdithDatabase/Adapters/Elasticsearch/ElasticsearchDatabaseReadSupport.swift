@@ -754,8 +754,70 @@ enum ElasticsearchDatabaseReadCompiler {
         else {
             throw ElasticsearchDatabaseAdapterSupport.unsafeRequest
         }
+        var nodes = 0
+        try validateAggregationTree(
+            value,
+            key: nil,
+            depth: 0,
+            nodes: &nodes)
         var count = 0
         try validateAggregationObject(aggregations, depth: 0, count: &count)
+    }
+
+    private static func validateAggregationTree(
+        _ value: ElasticsearchDatabaseJSONValue,
+        key: String?,
+        depth: Int,
+        nodes: inout Int
+    ) throws(DatabaseAdapterFailure) {
+        guard depth <= maximumQueryDepth, nodes < maximumQueryNodes else {
+            throw ElasticsearchDatabaseAdapterSupport.unsafeRequest
+        }
+        nodes += 1
+        if let key {
+            let normalized = key.lowercased()
+            guard !normalized.contains("script"),
+                !["from", "pit", "runtime_mappings", "scroll", "search_after"].contains(
+                    normalized)
+            else {
+                throw ElasticsearchDatabaseAdapterSupport.unsafeRequest
+            }
+        }
+        switch value {
+        case let .array(values):
+            guard values.count <= maximumArrayElements else {
+                throw ElasticsearchDatabaseAdapterSupport.unsafeRequest
+            }
+            for child in values {
+                try validateAggregationTree(
+                    child,
+                    key: nil,
+                    depth: depth + 1,
+                    nodes: &nodes)
+            }
+        case let .object(values):
+            guard values.count <= maximumQueryFields else {
+                throw ElasticsearchDatabaseAdapterSupport.unsafeRequest
+            }
+            for (name, child) in values {
+                guard !name.isEmpty, name.utf8.count <= 4_096, !name.contains("\0") else {
+                    throw ElasticsearchDatabaseAdapterSupport.unsafeRequest
+                }
+                try validateAggregationTree(
+                    child,
+                    key: name,
+                    depth: depth + 1,
+                    nodes: &nodes)
+            }
+        case let .string(value):
+            guard value.utf8.count <= 1_048_576, !value.contains("\0") else {
+                throw ElasticsearchDatabaseAdapterSupport.unsafeRequest
+            }
+        case let .floatingPoint(value):
+            guard value.isFinite else { throw ElasticsearchDatabaseAdapterSupport.unsafeRequest }
+        case .null, .boolean, .signedInteger, .unsignedInteger:
+            break
+        }
     }
 
     private static func validateAggregationObject(
