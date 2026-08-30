@@ -285,6 +285,9 @@ actor RedisValkeyDatabaseAdapterSession: DatabaseAdapterSession {
             try await RedisValkeyDatabaseAdapterSupport.check(context, deadline: deadline)
             return output
         } catch let failure as DatabaseAdapterFailure {
+            if failure == RedisValkeyDatabaseAdapterSupport.deadlineExceeded {
+                await failAndClose()
+            }
             throw failure
         } catch let failure as RedisDatabaseClientFailure {
             if failure == .responseTooLarge {
@@ -292,9 +295,11 @@ actor RedisValkeyDatabaseAdapterSession: DatabaseAdapterSession {
             }
             let reason = await context.cancellation.reason()
             if reason == .deadlineExceeded {
+                await failAndClose()
                 throw RedisValkeyDatabaseAdapterSupport.deadlineExceeded
             }
             if reason != nil || Task.isCancelled {
+                await failAndClose()
                 throw .cancelled
             }
             await failAndClose()
@@ -302,9 +307,11 @@ actor RedisValkeyDatabaseAdapterSession: DatabaseAdapterSession {
         } catch {
             let reason = await context.cancellation.reason()
             if reason == .deadlineExceeded {
+                await failAndClose()
                 throw RedisValkeyDatabaseAdapterSupport.deadlineExceeded
             }
             if reason != nil || Task.isCancelled {
+                await failAndClose()
                 throw .cancelled
             }
             throw fallback
@@ -320,6 +327,7 @@ actor RedisValkeyDatabaseAdapterSession: DatabaseAdapterSession {
     }
 
     private func failAndClose() async {
+        guard state != .disconnected && state != .disconnecting else { return }
         state = .failed
         let closingClient = client
         client = nil
