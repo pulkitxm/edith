@@ -271,9 +271,46 @@ public struct DatabaseMutationPreview: Codable, Hashable, Sendable {
     }
 }
 
+public enum DatabaseMutationContextKind: String, CaseIterable, Codable, Hashable, Sendable {
+    case database
+    case cluster
+    case logicalDatabase
+
+    public var displayName: String {
+        switch self {
+        case .database:
+            "Database"
+        case .cluster:
+            "Cluster"
+        case .logicalDatabase:
+            "Logical database"
+        }
+    }
+}
+
+public struct DatabaseMutationContext: Codable, Hashable, Sendable {
+    public let kind: DatabaseMutationContextKind
+    public let value: String
+    public let catalog: String?
+    public let schema: String?
+
+    public init(
+        kind: DatabaseMutationContextKind,
+        value: String,
+        catalog: String? = nil,
+        schema: String? = nil
+    ) {
+        self.kind = kind
+        self.value = value
+        self.catalog = catalog
+        self.schema = schema
+    }
+}
+
 public struct DatabaseDestructiveEffect: Codable, Hashable, Sendable {
     public let action: DatabaseDestructiveAction
     public let connection: DatabaseConnectionIdentity
+    public let context: DatabaseMutationContext
     public let target: DatabaseTargetIdentifier
     public let selectedRecords: [DatabaseRecordIdentity]
     public let predicate: DatabaseFilter?
@@ -288,6 +325,7 @@ public struct DatabaseDestructiveEffect: Codable, Hashable, Sendable {
     init(
         action: DatabaseDestructiveAction,
         connection: DatabaseConnectionIdentity,
+        context: DatabaseMutationContext,
         target: DatabaseTargetIdentifier,
         selectedRecords: [DatabaseRecordIdentity],
         predicate: DatabaseFilter?,
@@ -301,6 +339,7 @@ public struct DatabaseDestructiveEffect: Codable, Hashable, Sendable {
     ) {
         self.action = action
         self.connection = connection
+        self.context = context
         self.target = target
         self.selectedRecords = selectedRecords
         self.predicate = predicate
@@ -594,6 +633,9 @@ actor DatabaseConfirmationAuthority {
             store: secretStore,
             references: Self.secretReferences(for: connection))
         let redactedConnection = Self.redact(connection.identity, with: redactor)
+        let redactedContext = Self.redact(
+            Self.mutationContext(connection: connection, target: plan.request.target),
+            with: redactor)
         let redactedTarget = Self.redact(plan.request.target, with: redactor)
         let redactedSelectedRecords = plan.request.selectedRecords.map {
             Self.redact($0, with: redactor)
@@ -620,6 +662,7 @@ actor DatabaseConfirmationAuthority {
         let effectSnapshot = DatabaseDestructiveEffectSnapshot(
             action: plan.action,
             connection: redactedConnection,
+            context: redactedContext,
             target: redactedTarget,
             selectedRecords: redactedSelectedRecords,
             predicate: redactedPredicate,
@@ -646,6 +689,7 @@ actor DatabaseConfirmationAuthority {
         let effect = DatabaseDestructiveEffect(
             action: effectSnapshot.action,
             connection: effectSnapshot.connection,
+            context: effectSnapshot.context,
             target: effectSnapshot.target,
             selectedRecords: effectSnapshot.selectedRecords,
             predicate: effectSnapshot.predicate,
@@ -774,6 +818,7 @@ private struct DatabaseMutationAuthorizationEnvelope: Codable, Hashable, Sendabl
 private struct DatabaseDestructiveEffectSnapshot: Codable, Hashable, Sendable {
     let action: DatabaseDestructiveAction
     let connection: DatabaseConnectionIdentity
+    let context: DatabaseMutationContext
     let target: DatabaseTargetIdentifier
     let selectedRecords: [DatabaseRecordIdentity]
     let predicate: DatabaseFilter?
@@ -1349,6 +1394,17 @@ extension DatabaseConfirmationAuthority {
     }
 
     private static func redact(
+        _ context: DatabaseMutationContext,
+        with redactor: DatabaseSecretRedactor
+    ) -> DatabaseMutationContext {
+        DatabaseMutationContext(
+            kind: context.kind,
+            value: redactor.redact(context.value),
+            catalog: context.catalog.map { redactor.redact($0) },
+            schema: context.schema.map { redactor.redact($0) })
+    }
+
+    private static func redact(
         _ target: DatabaseTargetIdentifier,
         with redactor: DatabaseSecretRedactor
     ) -> DatabaseTargetIdentifier {
@@ -1451,6 +1507,125 @@ extension DatabaseConfirmationAuthority {
         }
     }
 
+    private static func mutationContext(
+        connection: DatabaseConnectionDefinition,
+        target: DatabaseTargetIdentifier
+    ) -> DatabaseMutationContext {
+        switch connection.productHint {
+        case .postgresql:
+            relationalMutationContext(connection: connection, target: target)
+        case .mysql, .mariaDB, .mongoDB, .clickHouse:
+            databaseMutationContext(connection: connection, target: target)
+        case .sqlite:
+            sqliteMutationContext(connection: connection, target: target)
+        case .redis, .valkey:
+            DatabaseMutationContext(
+                kind: .logicalDatabase,
+                value: connection.namespaces.logicalDatabase
+                    ?? target.object.flatMap {
+                        $0.kind == .keyspace ? $0.path.first : nil
+                    }
+                    ?? "0")
+        case .elasticsearch, .openSearch:
+            DatabaseMutationContext(kind: .cluster, value: connection.displayName)
+        }
+    }
+
+    private static func relationalMutationContext(
+        connection: DatabaseConnectionDefinition,
+        target: DatabaseTargetIdentifier
+    ) -> DatabaseMutationContext {
+        let namespaces = connection.namespaces
+        guard let object = target.object else {
+            return DatabaseMutationContext(
+                kind: .database,
+                value: namespaces.database ?? namespaces.catalog ?? connection.displayName,
+                catalog: namespaces.catalog,
+                schema: namespaces.schema)
+        }
+        let path = object.path
+        var catalog = namespaces.catalog
+        var database = namespaces.database ?? namespaces.catalog
+        var schema = namespaces.schema
+        switch object.kind {
+        case .catalog:
+            catalog = path.last ?? catalog
+        case .database:
+            if path.count > 1 {
+                catalog = path[path.count - 2]
+            }
+            database = path.last ?? database
+        case .schema:
+            if path.count > 2 {
+                catalog = path[path.count - 3]
+            }
+            if path.count > 1 {
+                database = path[path.count - 2]
+            }
+            schema = path.last ?? schema
+        default:
+            if path.count >= 4 {
+                catalog = path[0]
+                database = path[1]
+                schema = path[2]
+            } else if path.count >= 3 {
+                database = path[0]
+                schema = path[1]
+            } else if path.count >= 2 {
+                schema = path[0]
+            }
+        }
+        return DatabaseMutationContext(
+            kind: .database,
+            value: database ?? catalog ?? connection.displayName,
+            catalog: catalog,
+            schema: schema)
+    }
+
+    private static func databaseMutationContext(
+        connection: DatabaseConnectionDefinition,
+        target: DatabaseTargetIdentifier
+    ) -> DatabaseMutationContext {
+        let object = target.object
+        let pathDatabase: String? =
+            if object?.kind == .database {
+                object?.path.last
+            } else if let path = object?.path, path.count >= 2 {
+                path.first
+            } else {
+                nil
+            }
+        return DatabaseMutationContext(
+            kind: .database,
+            value: pathDatabase ?? connection.namespaces.database
+                ?? connection.namespaces.catalog ?? connection.displayName,
+            catalog: connection.namespaces.catalog,
+            schema: connection.namespaces.schema)
+    }
+
+    private static func sqliteMutationContext(
+        connection: DatabaseConnectionDefinition,
+        target: DatabaseTargetIdentifier
+    ) -> DatabaseMutationContext {
+        let object = target.object
+        let path = object?.path ?? []
+        let pathDatabase: String? = object?.kind == .database ? path.last : nil
+        let pathSchema: String? =
+            if object?.kind == .schema {
+                path.last
+            } else if path.count >= 2 {
+                path.first
+            } else {
+                nil
+            }
+        return DatabaseMutationContext(
+            kind: .database,
+            value: pathDatabase ?? connection.namespaces.database
+                ?? connection.displayName,
+            catalog: connection.namespaces.catalog,
+            schema: pathSchema ?? connection.namespaces.schema ?? "main")
+    }
+
     private static func requiredConfirmation(
         plan: DatabaseDestructivePlan,
         connection: DatabaseConnectionIdentity,
@@ -1504,7 +1679,35 @@ extension DatabaseConfirmationAuthority {
     }
 
     private static func lengthPrefixed(_ value: String) -> String {
-        "\(value.utf8.count):\(value)"
+        let rendered = printableConfirmationIdentifier(value)
+        return "\(rendered.utf8.count):\(rendered)"
+    }
+
+    private static func printableConfirmationIdentifier(_ value: String) -> String {
+        var rendered = ""
+        rendered.reserveCapacity(value.utf8.count)
+        for scalar in value.unicodeScalars {
+            let requiresEscaping =
+                switch scalar.value {
+                case 0x3A, 0x5B, 0x5C, 0x5D, 0x7C:
+                    true
+                default:
+                    switch scalar.properties.generalCategory {
+                    case .control, .format, .lineSeparator, .paragraphSeparator:
+                        true
+                    default:
+                        false
+                    }
+                }
+            if requiresEscaping {
+                let hexadecimal = String(scalar.value, radix: 16, uppercase: true)
+                let padding = String(repeating: "0", count: max(0, 4 - hexadecimal.count))
+                rendered.append("\\u{\(padding)\(hexadecimal)}")
+            } else {
+                rendered.unicodeScalars.append(scalar)
+            }
+        }
+        return rendered
     }
 
     private static func constantTimeEqual(_ first: String, _ second: String) -> Bool {

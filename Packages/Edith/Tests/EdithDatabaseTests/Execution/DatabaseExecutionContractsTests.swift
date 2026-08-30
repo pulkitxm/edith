@@ -135,6 +135,10 @@ private enum DatabaseExecutionContractFixtures {
         let effect = DatabaseDestructiveEffect(
             action: .updateMany,
             connection: DatabaseConnectionFixtures.connectionIdentity,
+            context: DatabaseMutationContext(
+                kind: .database,
+                value: "orders",
+                schema: "public"),
             target: target,
             selectedRecords: [],
             predicate: mutation.predicate,
@@ -363,6 +367,12 @@ private enum DatabaseExecutionContractFixtures {
         let decodedResult = try DatabaseExecutionContractFixtures.roundTrip(result)
 
         #expect(decodedResult == result)
+        #expect(
+            decodedResult.preview.effect.context
+                == DatabaseMutationContext(
+                    kind: .database,
+                    value: "orders",
+                    schema: "public"))
         #expect(decodedResult.preview.effect.executionDigest == "execution-digest")
         #expect(decodedResult.preview.effect.displayDigest == "display-digest")
         #expect(decodedResult.preview.token.rawValue == "payload.signature")

@@ -60,6 +60,9 @@ enum DatabaseConfirmationFixtures {
         id: DatabaseConnectionID = DatabaseConnectionFixtures.connectionID,
         name: String = "Local orders",
         product: DatabaseProduct = .postgresql,
+        namespaces: DatabaseNamespaceDefaults = DatabaseNamespaceDefaults(
+            schema: "public",
+            database: "edith_lab"),
         environment: DatabaseEnvironmentKind = .development,
         environmentLabel: String = "development",
         protection: DatabaseEnvironmentProtection = .standard,
@@ -79,7 +82,7 @@ enum DatabaseConfirmationFixtures {
                     port: try DatabasePort(5_432))
             ]),
             username: "edith",
-            namespaces: DatabaseNamespaceDefaults(schema: "public", database: "edith_lab"),
+            namespaces: namespaces,
             deploymentMode: .standalone,
             authentication: authentication,
             tls: DatabaseTLSConfiguration(
@@ -332,8 +335,181 @@ enum DatabaseConfirmationFixtures {
         #expect(text.contains(DatabaseSecretRedactor.defaultReplacement))
         #expect(preview.effect.connection.id == connection.id)
         #expect(preview.effect.connection.productHint == connection.productHint)
+        #expect(preview.effect.context.kind == .database)
+        #expect(preview.effect.context.value == "orders")
+        #expect(preview.effect.context.schema == DatabaseSecretRedactor.defaultReplacement)
+        #expect(preview.effect.context.catalog == nil)
         #expect(preview.requiredConfirmation.strength == .connectionAndTarget)
         #expect(!preview.token.rawValue.contains("DELETE"))
+    }
+
+    @Test func mutationContextIsCanonicalAcrossEverySupportedProduct() async throws {
+        let (directory, path) = try DatabasePersistenceFixtures.temporaryStorePath()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let clock = DatabaseConfirmationTestClock(Date(timeIntervalSince1970: 1_500))
+        let secretStore = try InMemoryDatabaseSecretStore()
+        let metadata = try SQLiteDatabaseMetadataStore(path: path)
+        let authority = try await DatabaseConfirmationFixtures.authority(
+            path: path,
+            clock: clock,
+            secretStore: secretStore)
+        let cases:
+            [(
+                product: DatabaseProduct,
+                name: String,
+                namespaces: DatabaseNamespaceDefaults,
+                object: DatabaseObjectIdentifier,
+                expected: DatabaseMutationContext
+            )] = [
+                (
+                    .postgresql,
+                    "Primary orders",
+                    DatabaseNamespaceDefaults(
+                        catalog: "tenant-catalog",
+                        schema: "fallback",
+                        database: "fallback"),
+                    DatabaseObjectIdentifier(
+                        kind: .table,
+                        path: ["orders", "public", "invoices"]),
+                    DatabaseMutationContext(
+                        kind: .database,
+                        value: "orders",
+                        catalog: "tenant-catalog",
+                        schema: "public")
+                ),
+                (
+                    .mysql,
+                    "Commerce MySQL",
+                    DatabaseNamespaceDefaults(database: "fallback"),
+                    DatabaseObjectIdentifier(kind: .table, path: ["commerce", "invoices"]),
+                    DatabaseMutationContext(kind: .database, value: "commerce")
+                ),
+                (
+                    .mariaDB,
+                    "Billing MariaDB",
+                    DatabaseNamespaceDefaults(database: "fallback"),
+                    DatabaseObjectIdentifier(kind: .table, path: ["billing", "accounts"]),
+                    DatabaseMutationContext(kind: .database, value: "billing")
+                ),
+                (
+                    .sqlite,
+                    "Orders file",
+                    DatabaseNamespaceDefaults(database: "orders-file"),
+                    DatabaseObjectIdentifier(kind: .table, path: ["main", "invoices"]),
+                    DatabaseMutationContext(
+                        kind: .database,
+                        value: "orders-file",
+                        schema: "main")
+                ),
+                (
+                    .redis,
+                    "Cache primary",
+                    DatabaseNamespaceDefaults(logicalDatabase: "7"),
+                    DatabaseObjectIdentifier(kind: .keyspace, path: ["7"]),
+                    DatabaseMutationContext(kind: .logicalDatabase, value: "7")
+                ),
+                (
+                    .valkey,
+                    "Cache replica",
+                    DatabaseNamespaceDefaults(),
+                    DatabaseObjectIdentifier(kind: .keyspace, path: ["2"]),
+                    DatabaseMutationContext(kind: .logicalDatabase, value: "2")
+                ),
+                (
+                    .mongoDB,
+                    "Documents primary",
+                    DatabaseNamespaceDefaults(database: "fallback"),
+                    DatabaseObjectIdentifier(kind: .collection, path: ["archive", "invoices"]),
+                    DatabaseMutationContext(kind: .database, value: "archive")
+                ),
+                (
+                    .elasticsearch,
+                    "Search east",
+                    DatabaseNamespaceDefaults(database: "must-not-be-used"),
+                    DatabaseObjectIdentifier(kind: .index, path: ["orders-v4"]),
+                    DatabaseMutationContext(kind: .cluster, value: "Search east")
+                ),
+                (
+                    .openSearch,
+                    "Search west",
+                    DatabaseNamespaceDefaults(database: "must-not-be-used"),
+                    DatabaseObjectIdentifier(kind: .index, path: ["invoices-v2"]),
+                    DatabaseMutationContext(kind: .cluster, value: "Search west")
+                ),
+                (
+                    .clickHouse,
+                    "Analytics primary",
+                    DatabaseNamespaceDefaults(database: "fallback"),
+                    DatabaseObjectIdentifier(kind: .table, path: ["analytics", "events"]),
+                    DatabaseMutationContext(kind: .database, value: "analytics")
+                ),
+            ]
+
+        for fixture in cases {
+            let connectionID = DatabaseConnectionID()
+            try await metadata.seedConnection(
+                try DatabaseConfirmationFixtures.connection(
+                    id: connectionID,
+                    name: fixture.name,
+                    product: fixture.product,
+                    namespaces: fixture.namespaces))
+            let target = DatabaseTargetIdentifier(
+                connectionID: connectionID,
+                object: fixture.object)
+            let plan = DatabaseConfirmationFixtures.plan(
+                target: target,
+                predicate: nil,
+                payload: .administrative(
+                    product: fixture.product,
+                    command: "DROP",
+                    parameters: [],
+                    body: nil),
+                action: .dropObject,
+                scope: .entireObject)
+
+            let preview = try await authority.issuePreview(for: plan)
+
+            #expect(preview.effect.context == fixture.expected)
+            #expect(preview.effect.context.kind.displayName == fixture.expected.kind.displayName)
+        }
+    }
+
+    @Test func displayDigestBindsCanonicalMutationContext() async throws {
+        let (directory, path) = try DatabasePersistenceFixtures.temporaryStorePath()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let clock = DatabaseConfirmationTestClock(Date(timeIntervalSince1970: 1_750))
+        let secretStore = try InMemoryDatabaseSecretStore()
+        let metadata = try SQLiteDatabaseMetadataStore(path: path)
+        let connectionID = DatabaseConnectionFixtures.connectionID
+        try await metadata.seedConnection(
+            try DatabaseConfirmationFixtures.connection(
+                id: connectionID,
+                namespaces: DatabaseNamespaceDefaults(schema: "public", database: "orders")))
+        let authority = try await DatabaseConfirmationFixtures.authority(
+            path: path,
+            clock: clock,
+            secretStore: secretStore)
+        let target = DatabaseConfirmationFixtures.target(
+            connectionID: connectionID,
+            path: ["invoices"],
+            includeRecord: false)
+        let plan = DatabaseConfirmationFixtures.plan(target: target)
+        let orders = try await authority.issuePreview(for: plan)
+        try await metadata.seedConnection(
+            try DatabaseConfirmationFixtures.connection(
+                id: connectionID,
+                namespaces: DatabaseNamespaceDefaults(schema: "public", database: "archive")))
+
+        let archive = try await authority.issuePreview(for: plan)
+
+        #expect(orders.effect.connection == archive.effect.connection)
+        #expect(orders.effect.target == archive.effect.target)
+        #expect(orders.request == archive.request)
+        #expect(orders.warnings == archive.warnings)
+        #expect(orders.requiredConfirmation == archive.requiredConfirmation)
+        #expect(orders.effect.context.value == "orders")
+        #expect(archive.effect.context.value == "archive")
+        #expect(orders.effect.displayDigest != archive.effect.displayDigest)
     }
 
     @Test func executionDigestBindsCanonicalPlanSurfaces() async throws {
@@ -633,6 +809,124 @@ enum DatabaseConfirmationFixtures {
             token: first.token,
             plan: firstPlan,
             confirmationText: first.requiredConfirmation.text
+        ) { _, _ in
+            "executed"
+        }
+        #expect(result == "executed")
+    }
+
+    @Test func normalConfirmationRenderingRemainsStable() async throws {
+        let (directory, path) = try DatabasePersistenceFixtures.temporaryStorePath()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let clock = DatabaseConfirmationTestClock(Date(timeIntervalSince1970: 5_250))
+        let secretStore = try InMemoryDatabaseSecretStore()
+        let metadata = try SQLiteDatabaseMetadataStore(path: path)
+        try await metadata.seedConnection(
+            try DatabaseConfirmationFixtures.connection(
+                name: "prod/name",
+                environment: .production,
+                protection: .confirmationRequired))
+        let authority = try await DatabaseConfirmationFixtures.authority(
+            path: path,
+            clock: clock,
+            secretStore: secretStore)
+        let plan = DatabaseConfirmationFixtures.plan(
+            target: DatabaseConfirmationFixtures.target(includeRecord: false),
+            predicate: nil,
+            action: .dropObject,
+            scope: .entireObject)
+
+        let preview = try await authority.issuePreview(for: plan)
+
+        #expect(
+            preview.requiredConfirmation.text
+                == "connection[9:prod/name] target[table[6:orders|6:public|8:invoices]]")
+    }
+
+    @Test func hostileConfirmationIdentifiersArePrintableUnambiguousAndAuthoritative()
+        async throws
+    {
+        let (directory, path) = try DatabasePersistenceFixtures.temporaryStorePath()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let clock = DatabaseConfirmationTestClock(Date(timeIntervalSince1970: 5_500))
+        let secretStore = try InMemoryDatabaseSecretStore()
+        let metadata = try SQLiteDatabaseMetadataStore(path: path)
+        let connection = try DatabaseConfirmationFixtures.connection(
+            name: "prod\n\u{202E}safe\\name",
+            environment: .production,
+            protection: .confirmationRequired)
+        try await metadata.seedConnection(connection)
+        let authority = try await DatabaseConfirmationFixtures.authority(
+            path: path,
+            clock: clock,
+            secretStore: secretStore)
+        let hostilePlan = DatabaseConfirmationFixtures.plan(
+            target: DatabaseConfirmationFixtures.target(
+                path: [
+                    "orders] target[shadow|name:value\narchive",
+                    "pub\u{202E}lic",
+                    "invoices\t\u{001B}",
+                ],
+                includeRecord: false),
+            predicate: nil,
+            action: .dropObject,
+            scope: .entireObject)
+        let literalPlan = DatabaseConfirmationFixtures.plan(
+            target: DatabaseConfirmationFixtures.target(
+                path: ["orders\\u{000A}archive", "public", "invoices"],
+                includeRecord: false),
+            predicate: nil,
+            action: .dropObject,
+            scope: .entireObject)
+
+        let hostile = try await authority.issuePreview(for: hostilePlan)
+        let literal = try await authority.issuePreview(for: literalPlan)
+        let confirmation = hostile.requiredConfirmation.text
+        let escapedHostileSegment =
+            "orders\\u{005D} target\\u{005B}shadow\\u{007C}name"
+            + "\\u{003A}value\\u{000A}archive"
+        let containsNonprinting = confirmation.unicodeScalars.contains { scalar in
+            switch scalar.properties.generalCategory {
+            case .control, .format, .lineSeparator, .paragraphSeparator:
+                true
+            default:
+                false
+            }
+        }
+
+        #expect(!containsNonprinting)
+        #expect(confirmation.contains("\\u{000A}"))
+        #expect(confirmation.contains("\\u{0009}"))
+        #expect(confirmation.contains("\\u{001B}"))
+        #expect(confirmation.contains("\\u{202E}"))
+        #expect(confirmation.contains("\\u{005D}"))
+        #expect(confirmation.contains("\\u{005B}"))
+        #expect(confirmation.contains("\\u{007C}"))
+        #expect(confirmation.contains("\\u{003A}"))
+        #expect(confirmation.contains("safe\\u{005C}name"))
+        #expect(
+            confirmation.contains(
+                "\(escapedHostileSegment.utf8.count):\(escapedHostileSegment)"))
+        #expect(confirmation.components(separatedBy: "] target[").count == 2)
+        #expect(
+            literal.requiredConfirmation.text.contains(
+                "orders\\u{005C}u{000A}archive"))
+        #expect(confirmation != literal.requiredConfirmation.text)
+        await #expect(throws: DatabaseConfirmationError.confirmationTextMismatch) {
+            try await authority.authorizeAndExecute(
+                token: hostile.token,
+                plan: hostilePlan,
+                confirmationText: confirmation.replacingOccurrences(
+                    of: "\\u{000A}",
+                    with: "\n")
+            ) { _, _ in
+                "unexpected"
+            }
+        }
+        let result = try await authority.authorizeAndExecute(
+            token: hostile.token,
+            plan: hostilePlan,
+            confirmationText: confirmation
         ) { _, _ in
             "executed"
         }
