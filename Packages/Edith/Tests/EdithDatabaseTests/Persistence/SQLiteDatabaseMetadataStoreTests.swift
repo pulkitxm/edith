@@ -268,6 +268,51 @@ import Testing
         #expect(try await secondStore.createOperationIfAbsent(operation) == false)
     }
 
+    @Test func operationReservationBindsTheExactSavedConnectionDefinition() async throws {
+        let (directory, path) = try DatabasePersistenceFixtures.temporaryStorePath()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try SQLiteDatabaseMetadataStore(path: path)
+        let connectionID = UUID(uuidString: "A74C3797-0FC1-4F52-B7DF-E63358DE5CA6")!
+        let saved = try DatabasePersistenceFixtures.connection(
+            id: connectionID,
+            name: "Saved",
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 200))
+        let stale = try DatabasePersistenceFixtures.connection(
+            id: connectionID,
+            name: "Stale",
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 200))
+        try await store.saveConnection(saved)
+        let first = DatabasePersistenceFixtures.operation(
+            id: UUID(uuidString: "A2D7474C-F123-4F9B-9798-F445F4C02D3C")!,
+            connection: saved,
+            kind: .databaseConnect,
+            state: .running,
+            startedAt: Date(timeIntervalSince1970: 300),
+            finishedAt: nil)
+
+        #expect(try await store.reserveOperation(first, for: saved) == .reserved)
+        #expect(
+            try await store.reserveOperation(first, for: saved)
+                == .operationIdentifierExists)
+
+        let second = DatabasePersistenceFixtures.operation(
+            id: UUID(uuidString: "E4EB987F-E457-49B3-A8D4-13E685BF7414")!,
+            connection: stale,
+            kind: .databaseConnect,
+            state: .running,
+            startedAt: Date(timeIntervalSince1970: 301),
+            finishedAt: nil)
+        #expect(
+            try await store.reserveOperation(second, for: stale)
+                == .connectionChangedOrMissing)
+        #expect(try await store.deleteConnection(id: saved.id))
+        #expect(
+            try await store.reserveOperation(second, for: saved)
+                == .connectionChangedOrMissing)
+    }
+
     @Test func rejectsUnboundedAndOversizedMetadataRequests() async throws {
         let (directory, path) = try DatabasePersistenceFixtures.temporaryStorePath()
         defer { try? FileManager.default.removeItem(at: directory) }

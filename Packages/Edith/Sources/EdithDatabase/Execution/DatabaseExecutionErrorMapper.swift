@@ -133,6 +133,14 @@ struct DatabaseExecutionErrorMapper: Sendable {
                 category: .conflict,
                 message: "The database operation identifier is already in use.",
                 target: target)
+        case .connectionDefinitionChanged:
+            envelope(
+                category: .conflict,
+                message: "The saved database connection changed before the operation started.",
+                retry: retry(
+                    .reconnect,
+                    "Reconnect using the current saved connection before retrying."),
+                target: target)
         case .invalidTarget:
             envelope(
                 category: .invalidRequest,
@@ -195,7 +203,7 @@ struct DatabaseExecutionErrorMapper: Sendable {
     ) -> DatabaseErrorEnvelope {
         switch error {
         case let .reported(reported):
-            sanitize(reported)
+            DatabaseExecutionErrorMapper().sanitize(reported)
         case .cancelled:
             envelope(
                 category: .cancelled,
