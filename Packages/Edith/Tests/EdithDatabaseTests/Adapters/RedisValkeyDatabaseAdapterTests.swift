@@ -318,7 +318,7 @@ private actor FakeRedisClient: RedisDatabaseClient {
         case "server":
             if product == .valkey {
                 return Data(
-                    "valkey_version:9.1.1\r\nredis_version:7.2.4\r\nredis_mode:standalone\r\nrun_id:valkey-fixture\r\n"
+                    "valkey_version:9.1.1\r\nredis_version:7.2.4\r\nserver_mode:standalone\r\nrun_id:valkey-fixture\r\n"
                         .utf8)
             }
             return Data(
@@ -359,9 +359,14 @@ private actor FakeRedisClientFactory: RedisDatabaseClientFactory {
 }
 
 private enum RedisHostileServerBehavior: Sendable {
+    case connectedReplicaCount(String)
+    case noAuthentication
     case oversizedArray
     case oversizedBulk
+    case oversizedScan
+    case replica
     case rejectAuthentication
+    case valkeySentinel
     case stall(String)
 }
 
@@ -444,10 +449,14 @@ private final class RedisHostileServerHandler: ChannelInboundHandler {
         switch (behavior, command) {
         case (.rejectAuthentication, "AUTH"):
             write("-WRONGPASS invalid username-password pair\r\n", context: context)
+        case (.noAuthentication, "PING"):
+            write("-NOAUTH Authentication required\r\n", context: context)
         case (.oversizedBulk, "PING"):
             write("$1048577\r\n", context: context)
         case (.oversizedArray, "PING"):
             write("*4097\r\n", context: context)
+        case (.oversizedScan, "SCAN"):
+            write("$1048577\r\n", context: context)
         case (_, "AUTH"), (_, "SELECT"):
             write("+OK\r\n", context: context)
         case (_, "PING"):
@@ -457,10 +466,21 @@ private final class RedisHostileServerHandler: ChannelInboundHandler {
             let payload: String
             switch section {
             case "server":
-                payload =
-                    "redis_version:8.10.0\r\nredis_mode:standalone\r\nrun_id:hostile-fixture\r\n"
+                if case .valkeySentinel = behavior {
+                    payload =
+                        "valkey_version:9.1.1\r\nredis_version:7.2.4\r\nserver_mode:sentinel\r\nrun_id:hostile-fixture\r\n"
+                } else {
+                    payload =
+                        "redis_version:8.10.0\r\nredis_mode:standalone\r\nrun_id:hostile-fixture\r\n"
+                }
             case "replication":
-                payload = "role:master\r\nconnected_slaves:0\r\n"
+                if case let .connectedReplicaCount(count) = behavior {
+                    payload = "role:master\r\nconnected_slaves:\(count)\r\n"
+                } else if case .replica = behavior {
+                    payload = "role:replica\r\nconnected_slaves:0\r\n"
+                } else {
+                    payload = "role:master\r\nconnected_slaves:0\r\n"
+                }
             default:
                 payload = "cluster_enabled:0\r\n"
             }
@@ -667,6 +687,92 @@ struct RedisValkeyDatabaseAdapterTests {
                 #expect(envelope?.productCode == "redis.result.too_large")
                 #expect(await server.waitUntilClosed())
             }
+        }
+    }
+
+    @Test("rejects hostile identity metadata without overflow or topology bypass")
+    func hostileIdentityMetadata() async throws {
+        let cases: [(RedisHostileServerBehavior, DatabaseProduct, String)] = [
+            (.connectedReplicaCount(String(Int.max)), .redis, "redis.connection.failed"),
+            (.valkeySentinel, .valkey, "redis.topology.unsupported"),
+        ]
+        for (behavior, product, expectedCode) in cases {
+            try await RedisHostileServer.withServer(behavior: behavior) { server in
+                let definition = try RedisValkeyAdapterFixtures.definition(
+                    product: product,
+                    location: .network([
+                        DatabaseNetworkEndpoint(
+                            host: "127.0.0.1", port: try DatabasePort(server.port))
+                    ]))
+                let envelope = await RedisValkeyAdapterFixtures.envelope {
+                    _ = try await RedisValkeyDatabaseAdapter().connect(
+                        try RedisValkeyAdapterFixtures.resolved(definition),
+                        context: RedisValkeyAdapterFixtures.context(
+                            deadline: Date(timeIntervalSinceNow: 1)))
+                }
+                #expect(envelope?.productCode == expectedCode)
+                #expect(await server.waitUntilClosed())
+            }
+        }
+    }
+
+    @Test("counts an attached primary for replica identity")
+    func replicaIdentityCountsPrimary() async throws {
+        try await RedisHostileServer.withServer(behavior: .replica) { server in
+            let definition = try RedisValkeyAdapterFixtures.definition(
+                location: .network([
+                    DatabaseNetworkEndpoint(
+                        host: "127.0.0.1", port: try DatabasePort(server.port))
+                ]))
+            let session = try await RedisValkeyDatabaseAdapter().connect(
+                try RedisValkeyAdapterFixtures.resolved(definition),
+                context: RedisValkeyAdapterFixtures.context(
+                    deadline: Date(timeIntervalSinceNow: 1)))
+            #expect(session.productIdentity.topology.kind == .primaryReplica)
+            #expect(session.productIdentity.topology.nodeCount == 2)
+            #expect(session.productIdentity.topology.replicaCount == 1)
+            await session.disconnect()
+        }
+    }
+
+    @Test("classifies missing authentication and closes an oversized read session")
+    func serverFailureClassificationAndReadLifecycle() async throws {
+        try await RedisHostileServer.withServer(behavior: .noAuthentication) { server in
+            let definition = try RedisValkeyAdapterFixtures.definition(
+                location: .network([
+                    DatabaseNetworkEndpoint(
+                        host: "127.0.0.1", port: try DatabasePort(server.port))
+                ]))
+            let envelope = await RedisValkeyAdapterFixtures.envelope {
+                _ = try await RedisValkeyDatabaseAdapter().connect(
+                    try RedisValkeyAdapterFixtures.resolved(definition),
+                    context: RedisValkeyAdapterFixtures.context(
+                        deadline: Date(timeIntervalSinceNow: 1)))
+            }
+            #expect(envelope?.productCode == "redis.authentication.failed")
+            #expect(await server.waitUntilClosed())
+        }
+
+        try await RedisHostileServer.withServer(behavior: .oversizedScan) { server in
+            let definition = try RedisValkeyAdapterFixtures.definition(
+                location: .network([
+                    DatabaseNetworkEndpoint(
+                        host: "127.0.0.1", port: try DatabasePort(server.port))
+                ]))
+            let session = try await RedisValkeyDatabaseAdapter().connect(
+                try RedisValkeyAdapterFixtures.resolved(definition),
+                context: RedisValkeyAdapterFixtures.context(
+                    deadline: Date(timeIntervalSinceNow: 1)))
+            let envelope = await RedisValkeyAdapterFixtures.envelope {
+                _ = try await session.readPage(
+                    try RedisValkeyAdapterFixtures.pageRequest(definition.id),
+                    context: RedisValkeyAdapterFixtures.context(
+                        deadline: Date(timeIntervalSinceNow: 1)))
+            }
+            #expect(envelope?.productCode == "redis.result.too_large")
+            #expect(await session.lifecycleState() == .failed)
+            #expect(await server.waitUntilClosed())
+            await session.disconnect()
         }
     }
 
@@ -1041,6 +1147,46 @@ struct RedisValkeyDatabaseAdapterTests {
             #expect(envelope?.productCode == "redis.query.read_only_violation")
         }
         #expect(await client.snapshot().count == operationCount)
+        await session.disconnect()
+    }
+
+    @Test("reads and queries an empty binary-safe key across pages")
+    func emptyKey() async throws {
+        let empty = Data()
+        let other = Data("other".utf8)
+        let definition = try RedisValkeyAdapterFixtures.definition()
+        let session = try await RedisValkeyDatabaseAdapter(
+            clientFactory: FakeRedisClientFactory(
+                client: FakeRedisClient(
+                    product: .redis,
+                    values: [
+                        empty: .string(Data("empty-value".utf8)),
+                        other: .string(Data("other-value".utf8)),
+                    ]))
+        ).connect(
+            try RedisValkeyAdapterFixtures.resolved(definition),
+            context: RedisValkeyAdapterFixtures.context())
+        let first = try await session.readPage(
+            try RedisValkeyAdapterFixtures.pageRequest(definition.id, pageSize: 1),
+            context: RedisValkeyAdapterFixtures.context())
+        #expect(first.records.first?.identity?.components.first?.value == .string(""))
+        let continuation = try #require(first.nextContinuation)
+        let second = try await session.readPage(
+            try RedisValkeyAdapterFixtures.pageRequest(
+                definition.id,
+                pageSize: 1,
+                continuation: continuation),
+            context: RedisValkeyAdapterFixtures.context())
+        #expect(second.records.first?.identity?.components.first?.value == .string("other"))
+        let query = try await session.query(
+            try RedisValkeyAdapterFixtures.queryRequest(
+                definition.id,
+                command: "GET",
+                key: .binary(.complete(data: empty, mediaType: nil, digest: nil))),
+            context: RedisValkeyAdapterFixtures.context())
+        #expect(
+            RedisValkeyAdapterFixtures.field("result", in: query.records[0])
+                == .string("empty-value"))
         await session.disconnect()
     }
 
