@@ -135,6 +135,15 @@ struct DatabaseExecutionErrorMapper: Sendable {
         }
     }
 
+    func sanitize(_ result: DatabaseAdapterMutationResult) -> DatabaseMutationApplyResult {
+        DatabaseMutationApplyResult(
+            disposition: result.disposition,
+            affectedRecords: result.affectedRecords,
+            returnedRecords: result.returnedPage.map(sanitizeMutationPage),
+            serverOperationIdentifier: sanitizeServerOperationIdentifier(
+                result.serverOperationIdentifier))
+    }
+
     private func map(
         _ error: DatabaseExecutionValidationError,
         target: DatabaseTargetIdentifier?
@@ -279,7 +288,8 @@ struct DatabaseExecutionErrorMapper: Sendable {
                 .duplicateProductRegistration, .capabilityIdentityMismatch,
                 .duplicateCapability, .pageExceedsRequest,
                 .streamBatchExceedsRequest, .encodingFailed, .staleSession,
-                .unexpectedMutationPlan, .partialMutationResult:
+                .unexpectedMutationPlan, .partialMutationResult,
+                .invalidMutationReconciliationResult:
                 envelope(
                     category: .internalFailure,
                     message: "The database adapter violated its execution contract.",
@@ -538,7 +548,7 @@ struct DatabaseExecutionErrorMapper: Sendable {
             target: target)
     }
 
-    private func sanitize(_ envelope: DatabaseErrorEnvelope) -> DatabaseErrorEnvelope {
+    func sanitize(_ envelope: DatabaseErrorEnvelope) -> DatabaseErrorEnvelope {
         guard redactor != nil else {
             return DatabaseErrorEnvelope(
                 category: envelope.category,
@@ -579,6 +589,65 @@ struct DatabaseExecutionErrorMapper: Sendable {
             retry: safeRetry,
             partialResult: safeCompleteness,
             details: safeDetails)
+    }
+
+    private func sanitizeMutationPage(
+        _ page: DatabaseAdapterPage
+    ) -> DatabasePage<DatabaseRecord> {
+        var budget = DatabaseErrorSanitizationBudget()
+        return DatabasePage(
+            records: page.records.map {
+                DatabaseRecord(
+                    identity: $0.identity.map {
+                        DatabaseRecordIdentity(
+                            kind: $0.kind,
+                            components: $0.components.prefix(Self.maximumIdentityComponents).map {
+                                sanitizeIdentityComponent($0, budget: &budget)
+                            },
+                            concurrencyTokens: $0.concurrencyTokens
+                                .prefix(Self.maximumIdentityComponents).map {
+                                    sanitizeIdentityComponent($0, budget: &budget)
+                                })
+                    },
+                    fields: $0.fields.map {
+                        DatabaseObjectField(
+                            name: redactText(
+                                $0.name,
+                                maximumBytes: Self.maximumTargetSegmentBytes),
+                            value: sanitizeValue($0.value, depth: 1, budget: &budget))
+                    },
+                    metadata: $0.metadata.prefix(Self.maximumProductAttributes).map {
+                        DatabaseStringAttribute(
+                            name: redactText(
+                                $0.name,
+                                maximumBytes: Self.maximumDetailNameBytes),
+                            value: redactText(
+                                $0.value,
+                                maximumBytes: Self.maximumDetailValueBytes))
+                    })
+            },
+            fields: page.fields.map {
+                DatabaseFieldDescriptor(
+                    path: DatabaseFieldPath(
+                        $0.path.segments.prefix(Self.maximumTargetPathSegments).map {
+                            redactText($0, maximumBytes: Self.maximumTargetSegmentBytes)
+                        }),
+                    displayName: redactText(
+                        $0.displayName,
+                        maximumBytes: Self.maximumTargetSegmentBytes),
+                    typeName: redactText(
+                        $0.typeName,
+                        maximumBytes: Self.maximumValueTextBytes),
+                    isNullable: $0.isNullable,
+                    isSortable: $0.isSortable,
+                    isFilterable: $0.isFilterable)
+            },
+            metadata: DatabasePageMetadata(
+                completeness: DatabaseResultCompleteness(state: .complete),
+                count: page.metadata.count,
+                timing: page.metadata.timing,
+                bytesReceived: page.metadata.bytesReceived,
+                warnings: page.metadata.warnings.map(sanitize)))
     }
 
     private func envelope(
