@@ -409,6 +409,7 @@ struct AppMaintenanceView: View {
                 detail
                     .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: UIScale.pt(900), height: UIScale.pt(640))
         .task { model.refresh() }
@@ -461,59 +462,64 @@ struct AppMaintenanceView: View {
     }
 
     private var header: some View {
-        HStack(spacing: UIScale.pt(12)) {
-            Image(systemName: "shippingbox.and.arrow.backward")
-                .font(.system(size: UIScale.pt(18), weight: .semibold))
-                .foregroundStyle(.tint)
-            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                Text("App Maintenance")
-                    .font(.system(size: UIScale.pt(17), weight: .semibold))
-                Text("Install verified disk images, review updates, and remove apps safely.")
-                    .settingsCaption()
-            }
-            Spacer()
-            Picker("Section", selection: $section) {
-                ForEach(AppMaintenanceSection.allCases) { section in
-                    Text(section.rawValue).tag(section)
+        VStack(spacing: UIScale.pt(10)) {
+            HStack(spacing: UIScale.pt(12)) {
+                Image(systemName: "shippingbox.and.arrow.backward")
+                    .font(.system(size: UIScale.pt(18), weight: .semibold))
+                    .foregroundStyle(.tint)
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text("App Maintenance")
+                        .font(.system(size: UIScale.pt(17), weight: .semibold))
+                    Text("Install verified disk images, review updates, and remove apps safely.")
+                        .settingsCaption()
                 }
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
             }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(width: UIScale.pt(240))
-            Button {
-                showingUpdateSettings.toggle()
-            } label: {
-                Image(systemName: "gearshape")
-            }
-            .help("Update settings")
-            .popover(isPresented: $showingUpdateSettings) { updateSettings }
-            Menu {
-                Picker("Destination", selection: $installDestinationRaw) {
-                    ForEach(AppMaintenanceInstallDestination.allCases, id: \.rawValue) {
-                        destination in
-                        Text(destination.title).tag(destination.rawValue)
+            HStack(spacing: UIScale.pt(10)) {
+                Picker("Section", selection: $section) {
+                    ForEach(AppMaintenanceSection.allCases) { section in
+                        Text(section.rawValue).tag(section)
                     }
                 }
-            } label: {
-                Label(installDestination.title, systemImage: "folder")
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: UIScale.pt(240))
+                Spacer()
+                Button {
+                    showingUpdateSettings.toggle()
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .help("Update settings")
+                .popover(isPresented: $showingUpdateSettings) { updateSettings }
+                Menu {
+                    Picker("Destination", selection: $installDestinationRaw) {
+                        ForEach(AppMaintenanceInstallDestination.allCases, id: \.rawValue) {
+                            destination in
+                            Text(destination.title).tag(destination.rawValue)
+                        }
+                    }
+                } label: {
+                    Label(installDestination.title, systemImage: "folder")
+                }
+                Button {
+                    showingDiskImagePicker = true
+                } label: {
+                    Label("Install Disk Image", systemImage: "externaldrive.badge.plus")
+                }
+                .disabled(model.phase != .ready)
+                Button {
+                    model.refresh()
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .disabled(model.phase != .ready)
             }
-            Button {
-                showingDiskImagePicker = true
-            } label: {
-                Label("Install Disk Image", systemImage: "externaldrive.badge.plus")
-            }
-            .disabled(model.phase != .ready)
-            Button {
-                model.refresh()
-            } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
-            }
-            .disabled(model.phase != .ready)
-            Button("Done") { dismiss() }
-                .keyboardShortcut(.defaultAction)
         }
         .padding(.horizontal, UIScale.pt(20))
-        .frame(height: UIScale.pt(68))
+        .padding(.vertical, UIScale.pt(12))
     }
 
     @ViewBuilder
@@ -817,7 +823,7 @@ struct AppMaintenanceView: View {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: UIScale.pt(44), weight: .light))
                 .foregroundStyle(.secondary)
-            Text("Update history").font(.headline)
+            Text("Update History").font(.headline)
             Text("Each attempt records its source, version, retries, result, and finish time.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
