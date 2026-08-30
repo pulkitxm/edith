@@ -661,7 +661,8 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
         #expect(volume.contains("[EdithAudio]::Level = 0"))
         #expect(
             volume.contains(
-                "Add-Type -TypeDefinition $audioSource -ErrorAction SilentlyContinue\n[EdithAudio]"))
+                "Add-Type -TypeDefinition $audioSource -ErrorAction SilentlyContinue\n[EdithAudio]")
+        )
         #expect(airplane.contains(MachineControlCenterCommands.disruptiveMarker))
         #expect(airplane.contains("Disable-NetAdapter"))
         #expect(airplane.contains("Disable-PnpDevice"))

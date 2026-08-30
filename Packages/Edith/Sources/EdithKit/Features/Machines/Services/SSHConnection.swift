@@ -656,7 +656,8 @@ public actor SSHConnection {
             return SSHConnectFailure(
                 message: "Could not resolve the host name.", isRecoverable: true)
         }
-        let lastLine = text.split(whereSeparator: \Character.isNewline).last.map(String.init) ?? text
+        let lastLine =
+            text.split(whereSeparator: \Character.isNewline).last.map(String.init) ?? text
         return SSHConnectFailure(
             message: lastLine.isEmpty ? "Connection failed." : lastLine, isRecoverable: true)
     }

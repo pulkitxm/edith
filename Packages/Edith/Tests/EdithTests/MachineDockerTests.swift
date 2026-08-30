@@ -298,10 +298,11 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
 
     @Test func parsesWindowsLineEndings() {
         let sep = FileListing.separator
-        let output = [
-            "d\(sep)0\(sep)1754000000\(sep)Directory\(sep)Projects\(sep)",
-            "f\(sep)42\(sep)1754000100\(sep)Archive\(sep)notes.txt\(sep)",
-        ].joined(separator: "\r\n") + "\r\n"
+        let output =
+            [
+                "d\(sep)0\(sep)1754000000\(sep)Directory\(sep)Projects\(sep)",
+                "f\(sep)42\(sep)1754000100\(sep)Archive\(sep)notes.txt\(sep)",
+            ].joined(separator: "\r\n") + "\r\n"
         let entries = FileListing.parse(output: output, parent: "C:\\Users\\pulkit")
         #expect(entries.map(\.name) == ["Projects", "notes.txt"])
         #expect(entries.map(\.linkTarget) == [nil, nil])
@@ -525,10 +526,11 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
 
     @Test func parsesWindowsServicesWithNativeLineEndings() {
         let separator = WindowsSystemCommands.serviceSeparator
-        let output = [
-            "Spooler\(separator)Running\(separator)Auto\(separator)Print Spooler",
-            "WSearch\(separator)Stopped\(separator)Manual\(separator)Windows Search",
-        ].joined(separator: "\r\n") + "\r\n"
+        let output =
+            [
+                "Spooler\(separator)Running\(separator)Auto\(separator)Print Spooler",
+                "WSearch\(separator)Stopped\(separator)Manual\(separator)Windows Search",
+            ].joined(separator: "\r\n") + "\r\n"
         let services = ServiceCommands.parse(output, platform: .windows)
         #expect(services.map(\.unit) == ["Spooler", "WSearch"])
     }

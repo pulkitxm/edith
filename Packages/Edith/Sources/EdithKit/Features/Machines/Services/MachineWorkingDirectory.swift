@@ -34,7 +34,8 @@ public enum MachineWorkingDirectory {
         return String(decoding: data, as: UTF8.self)
             .split(
                 omittingEmptySubsequences: false,
-                whereSeparator: \Character.isNewline)
+                whereSeparator: \Character.isNewline
+            )
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
     }
