@@ -184,11 +184,19 @@ enum DatabaseConfirmationFixtures {
         clock: DatabaseConfirmationTestClock,
         secretStore: any DatabaseSecretStore,
         signingKey: Data = signingKey
-    ) throws -> DatabaseConfirmationAuthority {
-        try DatabaseConfirmationAuthority(
+    ) async throws -> DatabaseConfirmationAuthority {
+        let metadataStore = try SQLiteDatabaseMetadataStore(path: path)
+        let runtimeOwner =
+            if let owner = try await metadataStore.runtimeOwner(), owner.isActive {
+                owner.token
+            } else {
+                try await metadataStore.claimRuntimeOwner(claimedAt: clock.now()).owner.token
+            }
+        return try DatabaseConfirmationAuthority(
             signingKey: signingKey,
-            metadataStore: SQLiteDatabaseMetadataStore(path: path),
+            metadataStore: metadataStore,
             secretStore: secretStore,
+            runtimeOwner: runtimeOwner,
             currentDate: { clock.now() })
     }
 
@@ -224,14 +232,19 @@ enum DatabaseConfirmationFixtures {
         let firstMetadata = try SQLiteDatabaseMetadataStore(path: path)
         let secondMetadata = try SQLiteDatabaseMetadataStore(path: path)
         let connection = try DatabaseConfirmationFixtures.connection()
-        try await firstMetadata.saveConnection(connection)
+        try await firstMetadata.seedConnection(connection)
+        let runtimeOwner = try await firstMetadata.claimRuntimeOwner(
+            claimedAt: Date(timeIntervalSince1970: 1)
+        ).owner.token
 
         async let first = DatabaseConfirmationAuthority.create(
             secretStore: secretStore,
-            metadataStore: firstMetadata)
+            metadataStore: firstMetadata,
+            runtimeOwner: runtimeOwner)
         async let second = DatabaseConfirmationAuthority.create(
             secretStore: secretStore,
-            metadataStore: secondMetadata)
+            metadataStore: secondMetadata,
+            runtimeOwner: runtimeOwner)
         let (issuer, executor) = try await (first, second)
         let plan = DatabaseConfirmationFixtures.plan()
         let preview = try await issuer.issuePreview(for: plan)
@@ -276,8 +289,8 @@ enum DatabaseConfirmationFixtures {
                 kind: .usernameAndPassword,
                 secretReferences: [DatabaseConfirmationFixtures.passwordReference]),
             privateKey: DatabaseConfirmationFixtures.privateKeyReference)
-        try await metadata.saveConnection(connection)
-        let authority = try DatabaseConfirmationFixtures.authority(
+        try await metadata.seedConnection(connection)
+        let authority = try await DatabaseConfirmationFixtures.authority(
             path: path,
             clock: clock,
             secretStore: secretStore)
@@ -325,8 +338,8 @@ enum DatabaseConfirmationFixtures {
         let clock = DatabaseConfirmationTestClock(Date(timeIntervalSince1970: 2_000))
         let secretStore = try InMemoryDatabaseSecretStore()
         let metadata = try SQLiteDatabaseMetadataStore(path: path)
-        try await metadata.saveConnection(try DatabaseConfirmationFixtures.connection())
-        let authority = try DatabaseConfirmationFixtures.authority(
+        try await metadata.seedConnection(try DatabaseConfirmationFixtures.connection())
+        let authority = try await DatabaseConfirmationFixtures.authority(
             path: path,
             clock: clock,
             secretStore: secretStore)
@@ -411,7 +424,7 @@ enum DatabaseConfirmationFixtures {
         let clock = DatabaseConfirmationTestClock(Date(timeIntervalSince1970: 3_000))
         let secretStore = try InMemoryDatabaseSecretStore()
         let metadata = try SQLiteDatabaseMetadataStore(path: path)
-        let authority = try DatabaseConfirmationFixtures.authority(
+        let authority = try await DatabaseConfirmationFixtures.authority(
             path: path,
             clock: clock,
             secretStore: secretStore)
@@ -424,12 +437,12 @@ enum DatabaseConfirmationFixtures {
             try await authority.issuePreview(for: plan)
         }
         let allowed = try DatabaseConfirmationFixtures.connection()
-        try await metadata.saveConnection(allowed)
+        try await metadata.seedConnection(allowed)
         let preview = try await authority.issuePreview(for: plan)
         let changed = try DatabaseConfirmationFixtures.connection(
             name: "Changed identity",
             updatedAt: Date(timeIntervalSince1970: 201))
-        try await metadata.saveConnection(changed)
+        try await metadata.seedConnection(changed)
         let probe = DatabaseConfirmationExecutionProbe()
         await #expect(throws: DatabaseConfirmationError.effectMismatch) {
             try await authority.authorizeAndExecute(
@@ -440,7 +453,7 @@ enum DatabaseConfirmationFixtures {
                 await probe.invoke()
             }
         }
-        try await metadata.saveConnection(allowed)
+        try await metadata.seedConnection(allowed)
         _ = try await authority.authorizeAndExecute(
             token: preview.token,
             plan: plan,
@@ -465,12 +478,12 @@ enum DatabaseConfirmationFixtures {
                 DatabaseConfirmationError.mutationProhibited(.productionPolicy)
             ),
         ] {
-            try await metadata.saveConnection(connection)
+            try await metadata.seedConnection(connection)
             await #expect(throws: error) {
                 try await authority.issuePreview(for: plan)
             }
         }
-        try await metadata.saveConnection(
+        try await metadata.seedConnection(
             try DatabaseConfirmationFixtures.connection(product: .mysql))
         await #expect(
             throws: DatabaseConfirmationError.productMismatch(
@@ -487,8 +500,8 @@ enum DatabaseConfirmationFixtures {
         let clock = DatabaseConfirmationTestClock(Date(timeIntervalSince1970: 4_000))
         let secretStore = try InMemoryDatabaseSecretStore()
         let metadata = try SQLiteDatabaseMetadataStore(path: path)
-        try await metadata.saveConnection(try DatabaseConfirmationFixtures.connection())
-        let authority = try DatabaseConfirmationFixtures.authority(
+        try await metadata.seedConnection(try DatabaseConfirmationFixtures.connection())
+        let authority = try await DatabaseConfirmationFixtures.authority(
             path: path,
             clock: clock,
             secretStore: secretStore)
@@ -575,12 +588,12 @@ enum DatabaseConfirmationFixtures {
         let clock = DatabaseConfirmationTestClock(Date(timeIntervalSince1970: 5_000))
         let secretStore = try InMemoryDatabaseSecretStore()
         let metadata = try SQLiteDatabaseMetadataStore(path: path)
-        try await metadata.saveConnection(
+        try await metadata.seedConnection(
             try DatabaseConfirmationFixtures.connection(
                 name: "prod/name",
                 environment: .production,
                 protection: .confirmationRequired))
-        let authority = try DatabaseConfirmationFixtures.authority(
+        let authority = try await DatabaseConfirmationFixtures.authority(
             path: path,
             clock: clock,
             secretStore: secretStore)
@@ -628,8 +641,8 @@ enum DatabaseConfirmationFixtures {
         let clock = DatabaseConfirmationTestClock(issuedAt)
         let secretStore = try InMemoryDatabaseSecretStore()
         let metadata = try SQLiteDatabaseMetadataStore(path: path)
-        try await metadata.saveConnection(try DatabaseConfirmationFixtures.connection())
-        let authority = try DatabaseConfirmationFixtures.authority(
+        try await metadata.seedConnection(try DatabaseConfirmationFixtures.connection())
+        let authority = try await DatabaseConfirmationFixtures.authority(
             path: path,
             clock: clock,
             secretStore: secretStore)
@@ -682,7 +695,7 @@ enum DatabaseConfirmationFixtures {
                 confirmationText: aliasPreview.requiredConfirmation.text
             ) { _, _ in "unexpected" }
         }
-        let wrongKey = try DatabaseConfirmationFixtures.authority(
+        let wrongKey = try await DatabaseConfirmationFixtures.authority(
             path: path,
             clock: clock,
             secretStore: secretStore,
@@ -721,12 +734,12 @@ enum DatabaseConfirmationFixtures {
         let clock = DatabaseConfirmationTestClock(Date(timeIntervalSince1970: 7_000))
         let secretStore = try InMemoryDatabaseSecretStore()
         let metadata = try SQLiteDatabaseMetadataStore(path: path)
-        try await metadata.saveConnection(try DatabaseConfirmationFixtures.connection())
-        let first = try DatabaseConfirmationFixtures.authority(
+        try await metadata.seedConnection(try DatabaseConfirmationFixtures.connection())
+        let first = try await DatabaseConfirmationFixtures.authority(
             path: path,
             clock: clock,
             secretStore: secretStore)
-        let second = try DatabaseConfirmationFixtures.authority(
+        let second = try await DatabaseConfirmationFixtures.authority(
             path: path,
             clock: clock,
             secretStore: secretStore)
@@ -783,8 +796,8 @@ enum DatabaseConfirmationFixtures {
         let clock = DatabaseConfirmationTestClock(now)
         let secretStore = try InMemoryDatabaseSecretStore()
         let metadata = try SQLiteDatabaseMetadataStore(path: path)
-        try await metadata.saveConnection(try DatabaseConfirmationFixtures.connection())
-        let authority = try DatabaseConfirmationFixtures.authority(
+        try await metadata.seedConnection(try DatabaseConfirmationFixtures.connection())
+        let authority = try await DatabaseConfirmationFixtures.authority(
             path: path,
             clock: clock,
             secretStore: secretStore)
@@ -831,12 +844,17 @@ enum DatabaseConfirmationFixtures {
                 for: DatabaseConfirmationFixtures.plan(warnings: warnings))
         }
 
+        let runtimeOwner = try #require(try await metadata.runtimeOwner()?.token)
         try await metadata.registerConfirmation(
             DatabaseConfirmationReceipt(
                 identifier: UUID(),
                 effectDigest: "expired",
-                expiresAt: now.addingTimeInterval(-1)))
+                expiresAt: now.addingTimeInterval(-1)),
+            owner: runtimeOwner)
         _ = try await authority.issuePreview(for: DatabaseConfirmationFixtures.plan())
-        #expect(try await metadata.removeExpiredConfirmations(before: now) == 0)
+        #expect(
+            try await metadata.removeExpiredConfirmations(
+                before: now,
+                owner: runtimeOwner) == 0)
     }
 }

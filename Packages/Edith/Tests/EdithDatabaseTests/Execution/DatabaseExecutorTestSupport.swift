@@ -577,22 +577,44 @@ actor DatabaseExecutorRecordingAdapter: DatabaseAdapter {
 actor DatabaseExecutorMetadataStoreProxy: DatabaseMetadataStore {
     private let base: any DatabaseMetadataStore
     private let connectionGate: DatabaseExecutorTestGate?
+    private let connectionWriteGate: DatabaseExecutorTestGate?
+    private let savedQueryWriteGate: DatabaseExecutorTestGate?
+    private let cancellingTransitionGate: DatabaseExecutorTestGate?
+    private let terminalTransitionGate: DatabaseExecutorTestGate?
     private var connectionReads = 0
 
     init(
         base: any DatabaseMetadataStore,
-        connectionGate: DatabaseExecutorTestGate? = nil
+        connectionGate: DatabaseExecutorTestGate? = nil,
+        connectionWriteGate: DatabaseExecutorTestGate? = nil,
+        savedQueryWriteGate: DatabaseExecutorTestGate? = nil,
+        cancellingTransitionGate: DatabaseExecutorTestGate? = nil,
+        terminalTransitionGate: DatabaseExecutorTestGate? = nil
     ) {
         self.base = base
         self.connectionGate = connectionGate
+        self.connectionWriteGate = connectionWriteGate
+        self.savedQueryWriteGate = savedQueryWriteGate
+        self.cancellingTransitionGate = cancellingTransitionGate
+        self.terminalTransitionGate = terminalTransitionGate
     }
 
     func connectionReadCount() -> Int {
         connectionReads
     }
 
-    func saveConnection(_ definition: DatabaseConnectionDefinition) async throws {
-        try await base.saveConnection(definition)
+    func saveConnection(
+        _ definition: DatabaseConnectionDefinition,
+        replacing expected: DatabaseConnectionDefinition?,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> DatabaseOwnedMetadataWriteResult {
+        if let connectionWriteGate {
+            await connectionWriteGate.enter()
+        }
+        return try await base.saveConnection(
+            definition,
+            replacing: expected,
+            owner: owner)
     }
 
     func connection(id: DatabaseConnectionID) async throws -> DatabaseConnectionDefinition? {
@@ -610,12 +632,27 @@ actor DatabaseExecutorMetadataStoreProxy: DatabaseMetadataStore {
         try await base.connections(matching: search)
     }
 
-    func deleteConnection(id: DatabaseConnectionID) async throws -> Bool {
-        try await base.deleteConnection(id: id)
+    func deleteConnection(
+        id: DatabaseConnectionID,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> DatabaseOwnedMetadataDeleteResult {
+        try await base.deleteConnection(id: id, owner: owner)
     }
 
-    func saveQuery(_ query: DatabaseSavedQuery) async throws {
-        try await base.saveQuery(query)
+    func saveQuery(
+        _ query: DatabaseSavedQuery,
+        replacing expected: DatabaseSavedQuery?,
+        validatedAgainst connection: DatabaseConnectionDefinition?,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> DatabaseOwnedMetadataWriteResult {
+        if let savedQueryWriteGate {
+            await savedQueryWriteGate.enter()
+        }
+        return try await base.saveQuery(
+            query,
+            replacing: expected,
+            validatedAgainst: connection,
+            owner: owner)
     }
 
     func savedQuery(id: DatabaseSavedQueryID) async throws -> DatabaseSavedQuery? {
@@ -628,19 +665,19 @@ actor DatabaseExecutorMetadataStoreProxy: DatabaseMetadataStore {
         try await base.savedQueries(matching: search)
     }
 
-    func deleteSavedQuery(id: DatabaseSavedQueryID) async throws -> Bool {
-        try await base.deleteSavedQuery(id: id)
+    func deleteSavedQuery(
+        id: DatabaseSavedQueryID,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> DatabaseOwnedMetadataDeleteResult {
+        try await base.deleteSavedQuery(id: id, owner: owner)
     }
 
     func runtimeOwner() async throws -> DatabaseRuntimeOwnerRecord? {
         try await base.runtimeOwner()
     }
 
-    func claimRuntimeOwner(
-        _ token: DatabaseRuntimeOwnerToken,
-        claimedAt: Date
-    ) async throws -> DatabaseRuntimeOwnerClaimResult {
-        try await base.claimRuntimeOwner(token, claimedAt: claimedAt)
+    func claimRuntimeOwner(claimedAt: Date) async throws -> DatabaseRuntimeOwnerClaimResult {
+        try await base.claimRuntimeOwner(claimedAt: claimedAt)
     }
 
     func releaseRuntimeOwner(
@@ -648,17 +685,6 @@ actor DatabaseExecutorMetadataStoreProxy: DatabaseMetadataStore {
         releasedAt: Date
     ) async throws -> Bool {
         try await base.releaseRuntimeOwner(token, releasedAt: releasedAt)
-    }
-
-    func createOperationIfAbsent(_ summary: DatabaseOperationRecordSummary) async throws -> Bool {
-        try await base.createOperationIfAbsent(summary)
-    }
-
-    func reserveOperation(
-        _ summary: DatabaseOperationRecordSummary,
-        for connection: DatabaseConnectionDefinition
-    ) async throws -> DatabaseOperationReservationResult {
-        try await base.reserveOperation(summary, for: connection)
     }
 
     func reserveOperation(
@@ -681,11 +707,15 @@ actor DatabaseExecutorMetadataStoreProxy: DatabaseMetadataStore {
         from expectedStates: Set<DatabaseOperationState>,
         owner: DatabaseRuntimeOwnerToken
     ) async throws -> Bool {
-        try await base.transitionOperation(summary, from: expectedStates, owner: owner)
-    }
-
-    func recordOperation(_ summary: DatabaseOperationRecordSummary) async throws {
-        try await base.recordOperation(summary)
+        if summary.state == .cancelling, let cancellingTransitionGate {
+            await cancellingTransitionGate.enter()
+        }
+        if let terminalTransitionGate,
+            [.succeeded, .failed, .cancelled, .partiallySucceeded].contains(summary.state)
+        {
+            await terminalTransitionGate.enter()
+        }
+        return try await base.transitionOperation(summary, from: expectedStates, owner: owner)
     }
 
     func operation(id: DatabaseOperationID) async throws -> DatabaseOperationRecordSummary? {
@@ -698,28 +728,39 @@ actor DatabaseExecutorMetadataStoreProxy: DatabaseMetadataStore {
         try await base.operations(matching: search)
     }
 
-    func pruneOperations(finishedBefore date: Date) async throws -> Int {
-        try await base.pruneOperations(finishedBefore: date)
+    func pruneOperations(
+        finishedBefore date: Date,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> Int {
+        try await base.pruneOperations(finishedBefore: date, owner: owner)
     }
 
-    func registerConfirmation(_ receipt: DatabaseConfirmationReceipt) async throws {
-        try await base.registerConfirmation(receipt)
+    func registerConfirmation(
+        _ receipt: DatabaseConfirmationReceipt,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws {
+        try await base.registerConfirmation(receipt, owner: owner)
     }
 
     func consumeConfirmation(
         identifier: UUID,
         effectDigest: String,
         connection: DatabaseConnectionDefinition,
-        consumedAt: Date
+        consumedAt: Date,
+        owner: DatabaseRuntimeOwnerToken
     ) async throws -> Bool {
         try await base.consumeConfirmation(
             identifier: identifier,
             effectDigest: effectDigest,
             connection: connection,
-            consumedAt: consumedAt)
+            consumedAt: consumedAt,
+            owner: owner)
     }
 
-    func removeExpiredConfirmations(before date: Date) async throws -> Int {
-        try await base.removeExpiredConfirmations(before: date)
+    func removeExpiredConfirmations(
+        before date: Date,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> Int {
+        try await base.removeExpiredConfirmations(before: date, owner: owner)
     }
 }

@@ -1,5 +1,6 @@
-import EdithDatabase
 import Foundation
+
+@testable import EdithDatabase
 
 enum DatabasePersistenceFixtures {
     static func temporaryStorePath() throws -> (URL, String) {
@@ -10,15 +11,15 @@ enum DatabasePersistenceFixtures {
     }
 
     static func connection(
-        id: UUID,
+        id: UUID = UUID(),
         name: String,
         product: DatabaseProduct = .postgresql,
         environment: DatabaseEnvironmentKind = .development,
         group: String? = nil,
         tags: [String] = [],
         isFavorite: Bool = false,
-        createdAt: Date,
-        updatedAt: Date,
+        createdAt: Date = Date(timeIntervalSince1970: 100),
+        updatedAt: Date = Date(timeIntervalSince1970: 200),
         lastUsedAt: Date? = nil
     ) throws -> DatabaseConnectionDefinition {
         let connectionID = DatabaseConnectionID(rawValue: id)
@@ -55,15 +56,15 @@ enum DatabasePersistenceFixtures {
     }
 
     static func savedQuery(
-        id: UUID,
+        id: UUID = UUID(),
         connectionID: DatabaseConnectionID? = nil,
         name: String,
-        language: DatabaseSavedQueryLanguage,
-        text: String,
+        language: DatabaseSavedQueryLanguage = .sql,
+        text: String = "SELECT 1",
         tags: [String] = [],
         isFavorite: Bool = false,
-        createdAt: Date,
-        updatedAt: Date
+        createdAt: Date = Date(timeIntervalSince1970: 100),
+        updatedAt: Date = Date(timeIntervalSince1970: 200)
     ) -> DatabaseSavedQuery {
         DatabaseSavedQuery(
             id: DatabaseSavedQueryID(rawValue: id),
