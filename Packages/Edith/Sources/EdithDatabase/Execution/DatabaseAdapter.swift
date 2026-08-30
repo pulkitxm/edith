@@ -27,6 +27,19 @@ struct DatabaseAdapterSessionID: RawRepresentable, Hashable, Sendable {
 enum DatabaseAdapterLimit: String, Hashable, Sendable {
     case adapterProducts
     case capabilities
+    case capabilityReportBytes
+    case capabilityReportNodes
+    case capabilityReportCollectionElements
+    case capabilityReportDepth
+    case capabilityReportStringBytes
+    case capabilityModules
+    case capabilityPlugins
+    case capabilityCompatibilityNotes
+    case capabilityTopologyAttributes
+    case capabilityMissingPermissions
+    case capabilityReasonConstraints
+    case capabilityLimits
+    case capabilityAttributes
     case permissions
     case safetyLimitations
     case resolvedSecrets
@@ -105,27 +118,9 @@ enum DatabaseAdapterBounds {
         report: DatabaseCapabilityReport,
         identity: DatabaseProductIdentity
     ) throws(DatabaseAdapterFailure) {
-        guard report.productIdentity == identity else {
-            throw .contractViolation(.capabilityIdentityMismatch)
-        }
-        try require(
-            report.capabilities.count,
-            atMost: maximumCapabilities,
-            limit: .capabilities)
-        try require(
-            report.permissions.count,
-            atMost: maximumPermissions,
-            limit: .permissions)
-        try require(
-            report.safetyLimitations.count,
-            atMost: maximumSafetyLimitations,
-            limit: .safetyLimitations)
-        var identifiers = Set<DatabaseCapabilityID>()
-        for capability in report.capabilities {
-            guard identifiers.insert(capability.id).inserted else {
-                throw .contractViolation(.duplicateCapability(capability.id))
-            }
-        }
+        try DatabaseAdapterCapabilityReportSanitizer.validate(
+            report,
+            identity: identity)
     }
 
     static func validate(
@@ -211,16 +206,17 @@ enum DatabaseAdapterCancellationReason: String, Hashable, Sendable {
 
 actor DatabaseAdapterCancellationSignal {
     private var cancellationReason: DatabaseAdapterCancellationReason?
-    private var waiters: [UUID: CheckedContinuation<DatabaseAdapterCancellationReason, Never>] =
+    private var eventStreams: [UUID: AsyncStream<DatabaseAdapterCancellationReason>.Continuation] =
         [:]
 
     func cancel(_ reason: DatabaseAdapterCancellationReason) {
         guard cancellationReason == nil else { return }
         cancellationReason = reason
-        let pending = waiters.values
-        waiters.removeAll()
-        for waiter in pending {
-            waiter.resume(returning: reason)
+        let pending = eventStreams.values
+        eventStreams.removeAll()
+        for stream in pending {
+            stream.yield(reason)
+            stream.finish()
         }
     }
 
@@ -234,13 +230,30 @@ actor DatabaseAdapterCancellationSignal {
         cancellationReason
     }
 
-    func wait() async -> DatabaseAdapterCancellationReason {
+    func events() -> AsyncStream<DatabaseAdapterCancellationReason> {
+        let identifier = UUID()
+        let pair = AsyncStream<DatabaseAdapterCancellationReason>.makeStream(
+            bufferingPolicy: .bufferingNewest(1))
         if let cancellationReason {
-            return cancellationReason
+            pair.continuation.yield(cancellationReason)
+            pair.continuation.finish()
+        } else {
+            pair.continuation.onTermination = { [weak self] _ in
+                Task {
+                    await self?.removeEventStream(identifier)
+                }
+            }
+            eventStreams[identifier] = pair.continuation
         }
-        return await withCheckedContinuation { continuation in
-            waiters[UUID()] = continuation
-        }
+        return pair.stream
+    }
+
+    func registeredEventStreamCount() -> Int {
+        eventStreams.count
+    }
+
+    private func removeEventStream(_ identifier: UUID) {
+        eventStreams.removeValue(forKey: identifier)
     }
 }
 
