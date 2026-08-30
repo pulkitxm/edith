@@ -696,7 +696,9 @@ struct AppMaintenanceView: View {
 
     @ViewBuilder
     private var removalDetail: some View {
-        if model.phase == .scanning || model.phase == .removing || model.phase == .mounting {
+        if model.phase == .scanning {
+            AppMaintenanceRemovalSkeleton()
+        } else if model.phase == .removing || model.phase == .mounting {
             VStack(spacing: UIScale.pt(12)) {
                 ProgressView()
                     .controlSize(.large)
@@ -949,6 +951,66 @@ struct AppMaintenanceView: View {
                 .font(.caption)
                 .foregroundStyle(.green)
         }
+    }
+}
+
+private struct AppMaintenanceRemovalSkeleton: View {
+    var body: some View {
+        SkeletonGroup {
+            VStack(spacing: 0) {
+                HStack(spacing: UIScale.pt(12)) {
+                    SkeletonBlock(width: 48, height: 48, corner: 10)
+                    VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                        SkeletonBlock(width: 148, height: 14)
+                        SkeletonBlock(width: 236, height: 9)
+                        SkeletonBlock(width: 184, height: 9)
+                    }
+                    Spacer()
+                    SkeletonBlock(width: 72, height: 28, corner: 7)
+                }
+                .padding(UIScale.pt(18))
+                Divider()
+                VStack(spacing: 0) {
+                    HStack {
+                        SkeletonBlock(width: 76, height: 9)
+                        Spacer()
+                    }
+                    .padding(.horizontal, UIScale.pt(16))
+                    .padding(.top, UIScale.pt(14))
+                    .padding(.bottom, UIScale.pt(7))
+                    ForEach(0..<6, id: \.self) { index in
+                        HStack(spacing: UIScale.pt(10)) {
+                            SkeletonBlock(width: 14, height: 14, corner: 3)
+                            SkeletonBlock(width: 22, height: 22, corner: 5)
+                            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                                SkeletonBlock(
+                                    width: index.isMultiple(of: 2) ? 132 : 176,
+                                    height: 10)
+                                SkeletonBlock(width: 248, height: 8)
+                            }
+                            Spacer()
+                            SkeletonBlock(width: 48, height: 8)
+                            SkeletonBlock(width: 24, height: 24, corner: 6)
+                        }
+                        .padding(.horizontal, UIScale.pt(16))
+                        .padding(.vertical, UIScale.pt(9))
+                    }
+                    Spacer(minLength: 0)
+                }
+                Divider()
+                HStack {
+                    VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                        SkeletonBlock(width: 112, height: 10)
+                        SkeletonBlock(width: 62, height: 8)
+                    }
+                    Spacer()
+                    SkeletonBlock(width: 104, height: 32, corner: 7)
+                }
+                .padding(UIScale.pt(16))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityLabel("Finding exact support files")
     }
 }
 
