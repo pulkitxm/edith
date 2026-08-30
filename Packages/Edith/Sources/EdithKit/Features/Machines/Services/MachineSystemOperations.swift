@@ -57,11 +57,18 @@ public enum MachineThermalOperationExecution {
     public typealias SudoPasswordLookup = (UUID) -> Data?
 
     public static func status(
-        timeout: TimeInterval = 15, using run: Run
+        timeout: TimeInterval = 15, platform: RemoteMachinePlatform = .linux, using run: Run
     ) async -> Result<MachinePlatformProfile, Error> {
-        switch await run(MachineThermalControls.statusCommand, nil, timeout) {
+        let command =
+            platform == .windows
+            ? WindowsPowerProfileCommands.status : MachineThermalControls.statusCommand
+        switch await run(command, nil, timeout) {
         case let .success(output):
-            guard let profile = MachineThermalControls.parseStatus(output) else {
+            let profile =
+                platform == .windows
+                ? WindowsPowerProfileCommands.parseStatus(output)
+                : MachineThermalControls.parseStatus(output)
+            guard let profile else {
                 return .failure(MachineThermalOperationError.unavailable)
             }
             return .success(profile)
@@ -72,17 +79,21 @@ public enum MachineThermalOperationExecution {
 
     public static func set(
         profile: String, durationSeconds: Int, machineID: UUID,
+        platform: RemoteMachinePlatform = .linux,
         sudoPassword: SudoPasswordLookup = { SudoPassword.stdin(machineID: $0) },
         using run: Run
     ) async -> Result<MachineThermalSetResult, Error> {
         guard (0...604_800).contains(durationSeconds) else {
             return .failure(MachineThermalOperationError.invalidDuration(durationSeconds))
         }
-        let stdin = sudoPassword(machineID)
-        guard
-            let command = MachineThermalControls.setProfile(
+        let stdin = platform == .windows ? nil : sudoPassword(machineID)
+        let command =
+            platform == .windows
+            ? WindowsPowerProfileCommands.setProfile(
+                profile, durationSeconds: durationSeconds)
+            : MachineThermalControls.setProfile(
                 profile, durationSeconds: durationSeconds, withSudoPassword: stdin != nil)
-        else {
+        guard let command else {
             return .failure(MachineThermalOperationError.invalidProfile(profile))
         }
         switch await run(command, stdin, 30) {

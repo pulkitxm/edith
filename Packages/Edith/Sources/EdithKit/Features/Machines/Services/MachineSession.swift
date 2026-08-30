@@ -528,13 +528,11 @@ public final class MachineSession {
     public func setPlatformProfile(
         _ profile: String, duration: MachineProfileDuration
     ) async -> Result<String, Error> {
-        guard remotePlatform != .windows else {
-            return .failure(MachineThermalOperationError.unavailable)
-        }
         isApplyingPlatformProfile = true
         defer { isApplyingPlatformProfile = false }
         let result = await MachineThermalOperationExecution.set(
-            profile: profile, durationSeconds: duration.rawValue, machineID: machine.id
+            profile: profile, durationSeconds: duration.rawValue, machineID: machine.id,
+            platform: remotePlatform ?? .linux
         ) { [weak self] command, stdin, timeout in
             guard let self else {
                 return .failure(
@@ -568,8 +566,9 @@ public final class MachineSession {
     }
 
     public func refreshPlatformProfile() async {
-        guard remotePlatform != .windows else { return }
-        let result = await MachineThermalOperationExecution.status(timeout: 10) {
+        let result = await MachineThermalOperationExecution.status(
+            timeout: 10, platform: remotePlatform ?? .linux
+        ) {
             [weak self] command, stdin, timeout in
             guard let self else {
                 return .failure(

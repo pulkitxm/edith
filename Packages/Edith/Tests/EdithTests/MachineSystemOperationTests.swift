@@ -52,6 +52,36 @@ import Testing
         #expect(request?.2 == 15)
     }
 
+    @Test func thermalStatusUsesWindowsPowerSchemes() async throws {
+        var request: (String, Data?, TimeInterval)?
+        let result = await MachineThermalOperationExecution.status(platform: .windows) {
+            command, stdin, timeout in
+            request = (command, stdin, timeout)
+            return .success("Balanced\nPower saver\nBalanced\nHigh performance\n")
+        }
+
+        #expect(try result.get().current == "Balanced")
+        #expect(request?.0 == WindowsPowerProfileCommands.status)
+        #expect(request?.1 == nil)
+    }
+
+    @Test func thermalSetUsesWindowsWithoutSudoInput() async throws {
+        var request: (String, Data?, TimeInterval)?
+        let result = await MachineThermalOperationExecution.set(
+            profile: "High performance", durationSeconds: 1_800, machineID: machine.id,
+            platform: .windows,
+            sudoPassword: { _ in Data("unused\n".utf8) },
+            using: { command, stdin, timeout in
+                request = (command, stdin, timeout)
+                return .success("High performance\n")
+            })
+
+        #expect(try result.get().profile == "High performance")
+        #expect(request?.0.contains("powershell.exe") == true)
+        #expect(request?.1 == nil)
+        #expect(request?.2 == 30)
+    }
+
     @Test func thermalSetBuildsThePrivilegedTimedCommand() async throws {
         let password = Data("secret\n".utf8)
         var request: (String, Data?, TimeInterval)?

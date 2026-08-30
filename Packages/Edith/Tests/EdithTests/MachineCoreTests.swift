@@ -497,6 +497,34 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
         #expect(command.contains("/run/edith-platform-profile-original"))
         #expect(!command.contains("performance;"))
     }
+
+    @Test func parsesWindowsPowerSchemesWithSpaces() {
+        let profile = WindowsPowerProfileCommands.parseStatus(
+            "Balanced\nPower saver\nBalanced\nHigh performance\n")
+
+        #expect(profile?.current == "Balanced")
+        #expect(profile?.choices == ["Power saver", "Balanced", "High performance"])
+        #expect(WindowsPowerProfileCommands.parseStatus("Balanced\nPower saver\n") == nil)
+    }
+
+    @Test func buildsWindowsPowerSchemeCommandsAndReversion() throws {
+        let status = try #require(decodedMachinePowerShell(WindowsPowerProfileCommands.status))
+        let permanent = try #require(
+            WindowsPowerProfileCommands.setProfile("Power saver", durationSeconds: 0))
+        let timed = try #require(
+            WindowsPowerProfileCommands.setProfile("High performance", durationSeconds: 1_800))
+        let permanentScript = try #require(decodedMachinePowerShell(permanent))
+        let timedScript = try #require(decodedMachinePowerShell(timed))
+
+        #expect(status.contains("powercfg.exe /getactivescheme"))
+        #expect(status.contains("powercfg.exe /list"))
+        #expect(permanentScript.contains("$requested = 'Power saver'"))
+        #expect(permanentScript.contains("powercfg.exe /setactive $selectedGuid"))
+        #expect(!permanentScript.contains("Start-Sleep"))
+        #expect(timedScript.contains("Start-Sleep -Seconds 1800"))
+        #expect(timedScript.contains("power-profile-revert.json"))
+        #expect(WindowsPowerProfileCommands.setProfile("\n", durationSeconds: 0) == nil)
+    }
 }
 
 @Suite struct MachineControlCenterCommandsTests {
