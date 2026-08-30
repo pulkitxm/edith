@@ -595,6 +595,63 @@ struct RedisValkeyDatabaseAdapterTests {
         await session.disconnect()
     }
 
+    @Test("enforces value, key, and continuation byte limits")
+    func byteLimits() async throws {
+        let largeValue = Data(repeating: 255, count: 100_000)
+        let definition = try RedisValkeyAdapterFixtures.definition()
+        let session = try await RedisValkeyDatabaseAdapter(
+            clientFactory: FakeRedisClientFactory(
+                client: FakeRedisClient(
+                    product: .redis,
+                    values: [Data("large".utf8): .string(largeValue)]))
+        ).connect(
+            try RedisValkeyAdapterFixtures.resolved(definition),
+            context: RedisValkeyAdapterFixtures.context())
+        let page = try await session.readPage(
+            try RedisValkeyAdapterFixtures.pageRequest(definition.id, pageSize: 1),
+            context: RedisValkeyAdapterFixtures.context())
+        guard
+            case let .binary(.preview(byteCount, bytes, _, _)) =
+                RedisValkeyAdapterFixtures.field("value", in: page.records[0])
+        else {
+            Issue.record("The large value was not returned as a bounded preview.")
+            await session.disconnect()
+            return
+        }
+        #expect(byteCount == UInt64(largeValue.count))
+        #expect(bytes.count == 65_536)
+
+        let invalidContinuation = try DatabaseAdapterContinuation(
+            mode: .scanCursor,
+            payload: Data("invalid".utf8))
+        let invalidEnvelope = await RedisValkeyAdapterFixtures.envelope {
+            _ = try await session.readPage(
+                try RedisValkeyAdapterFixtures.pageRequest(
+                    definition.id,
+                    continuation: invalidContinuation),
+                context: RedisValkeyAdapterFixtures.context())
+        }
+        #expect(invalidEnvelope?.productCode == "redis.continuation.invalid")
+        await session.disconnect()
+
+        let oversizedDefinition = try RedisValkeyAdapterFixtures.definition()
+        let oversizedSession = try await RedisValkeyDatabaseAdapter(
+            clientFactory: FakeRedisClientFactory(
+                client: FakeRedisClient(
+                    product: .redis,
+                    values: [Data(repeating: 1, count: 4_097): .string(Data())]))
+        ).connect(
+            try RedisValkeyAdapterFixtures.resolved(oversizedDefinition),
+            context: RedisValkeyAdapterFixtures.context())
+        let oversizedEnvelope = await RedisValkeyAdapterFixtures.envelope {
+            _ = try await oversizedSession.readPage(
+                try RedisValkeyAdapterFixtures.pageRequest(oversizedDefinition.id),
+                context: RedisValkeyAdapterFixtures.context())
+        }
+        #expect(oversizedEnvelope?.productCode == "redis.result.too_large")
+        await oversizedSession.disconnect()
+    }
+
     @Test("enforces cancellation, deadlines, and clean lifecycle release")
     func cancellationDeadlineAndLifecycle() async throws {
         let definition = try RedisValkeyAdapterFixtures.definition()
