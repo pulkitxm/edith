@@ -469,6 +469,7 @@ actor DatabaseConfirmationAuthority {
         let now = currentDate()
         _ = try await metadataStore.removeExpiredConfirmations(
             before: now,
+            limit: DatabaseMetadataMaintenanceBounds.maximumBatchSize,
             owner: runtimeOwner)
         let prepared = try await prepare(plan)
         let identifier = UUID()

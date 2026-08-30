@@ -676,8 +676,20 @@ actor DatabaseExecutorMetadataStoreProxy: DatabaseMetadataStore {
         try await base.runtimeOwner()
     }
 
-    func claimRuntimeOwner(claimedAt: Date) async throws -> DatabaseRuntimeOwnerClaimResult {
-        try await base.claimRuntimeOwner(claimedAt: claimedAt)
+    func claimRuntimeOwner(
+        claimedAt: Date,
+        recoveryLimit: Int
+    ) async throws -> DatabaseRuntimeOwnerClaimResult {
+        try await base.claimRuntimeOwner(
+            claimedAt: claimedAt,
+            recoveryLimit: recoveryLimit)
+    }
+
+    func recoverRuntimeOwner(
+        _ owner: DatabaseRuntimeOwnerToken,
+        limit: Int
+    ) async throws -> DatabaseRuntimeRecoveryResult {
+        try await base.recoverRuntimeOwner(owner, limit: limit)
     }
 
     func releaseRuntimeOwner(
@@ -730,9 +742,13 @@ actor DatabaseExecutorMetadataStoreProxy: DatabaseMetadataStore {
 
     func pruneOperations(
         finishedBefore date: Date,
+        limit: Int,
         owner: DatabaseRuntimeOwnerToken
-    ) async throws -> Int {
-        try await base.pruneOperations(finishedBefore: date, owner: owner)
+    ) async throws -> DatabaseMetadataCleanupResult {
+        try await base.pruneOperations(
+            finishedBefore: date,
+            limit: limit,
+            owner: owner)
     }
 
     func registerConfirmation(
@@ -759,8 +775,12 @@ actor DatabaseExecutorMetadataStoreProxy: DatabaseMetadataStore {
 
     func removeExpiredConfirmations(
         before date: Date,
+        limit: Int,
         owner: DatabaseRuntimeOwnerToken
-    ) async throws -> Int {
-        try await base.removeExpiredConfirmations(before: date, owner: owner)
+    ) async throws -> DatabaseMetadataCleanupResult {
+        try await base.removeExpiredConfirmations(
+            before: date,
+            limit: limit,
+            owner: owner)
     }
 }

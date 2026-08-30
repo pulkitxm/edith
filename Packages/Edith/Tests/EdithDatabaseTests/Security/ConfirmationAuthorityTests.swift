@@ -187,10 +187,13 @@ enum DatabaseConfirmationFixtures {
     ) async throws -> DatabaseConfirmationAuthority {
         let metadataStore = try SQLiteDatabaseMetadataStore(path: path)
         let runtimeOwner =
-            if let owner = try await metadataStore.runtimeOwner(), owner.isActive {
+            if let owner = try await metadataStore.runtimeOwner(), owner.isReady {
                 owner.token
             } else {
-                try await metadataStore.claimRuntimeOwner(claimedAt: clock.now()).owner.token
+                try await DatabaseRuntimeOwnerFactory.claimReadyOwner(
+                    from: metadataStore,
+                    claimedAt: clock.now()
+                ).owner.token
             }
         return try DatabaseConfirmationAuthority(
             signingKey: signingKey,
@@ -845,16 +848,19 @@ enum DatabaseConfirmationFixtures {
         }
 
         let runtimeOwner = try #require(try await metadata.runtimeOwner()?.token)
-        try await metadata.registerConfirmation(
-            DatabaseConfirmationReceipt(
-                identifier: UUID(),
-                effectDigest: "expired",
-                expiresAt: now.addingTimeInterval(-1)),
-            owner: runtimeOwner)
+        for _ in 0...100 {
+            try await metadata.registerConfirmation(
+                DatabaseConfirmationReceipt(
+                    identifier: UUID(),
+                    effectDigest: "expired",
+                    expiresAt: now.addingTimeInterval(-1)),
+                owner: runtimeOwner)
+        }
         _ = try await authority.issuePreview(for: DatabaseConfirmationFixtures.plan())
-        #expect(
-            try await metadata.removeExpiredConfirmations(
-                before: now,
-                owner: runtimeOwner) == 0)
+        let remainder = try await metadata.removeExpiredConfirmations(
+            before: now,
+            owner: runtimeOwner)
+        #expect(remainder.removedCount == 1)
+        #expect(!remainder.hasMore)
     }
 }
