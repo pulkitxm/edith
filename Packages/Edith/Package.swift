@@ -18,7 +18,6 @@ let dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-argument-parser", from: "1.8.2"),
     .package(url: "https://github.com/groue/GRDB.swift", from: "7.11.1"),
     .package(url: "https://github.com/swift-server/RediStack.git", exact: "1.6.3"),
-    .package(url: "https://github.com/apple/swift-log.git", from: "1.6.2"),
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.43.0"),
 ]
 
@@ -38,7 +37,6 @@ let targets: [Target] = [
             "EdithCore",
             .product(name: "GRDB", package: "GRDB.swift"),
             .product(name: "RediStack", package: "RediStack"),
-            .product(name: "Logging", package: "swift-log"),
             .product(name: "NIOCore", package: "swift-nio"),
             .product(name: "NIOPosix", package: "swift-nio"),
         ],
@@ -46,7 +44,12 @@ let targets: [Target] = [
     ),
     .testTarget(
         name: "EdithDatabaseTests",
-        dependencies: ["EdithDatabase"],
+        dependencies: [
+            "EdithDatabase",
+            .product(name: "RediStack", package: "RediStack"),
+            .product(name: "NIOCore", package: "swift-nio"),
+            .product(name: "NIOPosix", package: "swift-nio"),
+        ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .target(

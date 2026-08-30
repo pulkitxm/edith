@@ -493,6 +493,13 @@ struct RediStackDatabaseClientFactory: RedisDatabaseClientFactory {
                 : RedisDatabaseClientFailure.cancelled
         } catch {
             channels.cancel()
+            if Task.isCancelled {
+                throw RedisDatabaseClientFailure.cancelled
+            }
+            if deadline <= Date() {
+                await context.cancellation.cancel(.deadlineExceeded)
+                throw RedisDatabaseClientFailure.deadlineExceeded
+            }
             throw RedisDatabaseClientFailure.connection
         }
     }
@@ -530,8 +537,10 @@ final class RediStackDatabaseClient: RedisDatabaseClient, @unchecked Sendable {
             throw failure == .deadlineExceeded
                 ? RedisDatabaseClientFailure.deadlineExceeded
                 : RedisDatabaseClientFailure.cancelled
-        } catch is RedisDatabaseInboundFrameFailure {
-            throw RedisDatabaseClientFailure.responseTooLarge
+        } catch let failure as RedisDatabaseInboundFrameFailure {
+            throw failure == .responseTooLarge
+                ? RedisDatabaseClientFailure.responseTooLarge
+                : RedisDatabaseClientFailure.protocolFailure
         } catch is ByteToMessageDecoderError.PayloadTooLargeError {
             throw RedisDatabaseClientFailure.responseTooLarge
         } catch {
@@ -617,9 +626,10 @@ final class RediStackDatabaseClient: RedisDatabaseClient, @unchecked Sendable {
         if let failure = error as? RedisDatabaseAwaitFailure {
             return failure == .deadlineExceeded ? .deadlineExceeded : .cancelled
         }
-        if error is RedisDatabaseInboundFrameFailure
-            || error is ByteToMessageDecoderError.PayloadTooLargeError
-        {
+        if let failure = error as? RedisDatabaseInboundFrameFailure {
+            return failure == .responseTooLarge ? .responseTooLarge : .protocolFailure
+        }
+        if error is ByteToMessageDecoderError.PayloadTooLargeError {
             return .responseTooLarge
         }
         return .connection
@@ -768,7 +778,7 @@ private final class RedisDatabasePendingChannels: @unchecked Sendable {
     }
 }
 
-private enum RedisDatabaseInboundFrameFailure: Error, Sendable {
+private enum RedisDatabaseInboundFrameFailure: Error, Equatable, Sendable {
     case responseTooLarge
     case protocolFailure
 }
