@@ -51,6 +51,10 @@ final class GitHubBrowserModel {
         self.loadResource = loadResource
     }
 
+    deinit {
+        resourceTask?.cancel()
+    }
+
     var selectedTab: GitHubBrowserTab? { session.selectedTab }
     var currentRoute: GitHubRoute? { selectedTab?.currentEntry.route }
     var addressDraft: String { selectedTab?.addressBarDraft ?? "" }
@@ -201,37 +205,61 @@ final class GitHubBrowserModel {
         }
         resourceError = nil
         resourceState = retainsCurrentResource ? .refreshing : .loading
-        resourceTask = Task { [readCachedResource, loadResource] in
+        resourceTask = Task { [weak self, readCachedResource, loadResource] in
             if !ignoreCache, !retainsCurrentResource,
-                let cached = await readCachedResource(route), !Task.isCancelled
+                let cached = await readCachedResource(route)
             {
-                guard generation == resourceGeneration, currentRoute == route else { return }
-                resource = cached
-                resourceState = .refreshing
+                guard !Task.isCancelled,
+                    self?.publishCachedResource(
+                        cached, route: route, generation: generation) == true
+                else { return }
             }
             do {
                 let loaded = try await loadResource(route)
-                try Task.checkCancellation()
-                guard generation == resourceGeneration, currentRoute == route else { return }
-                resource = loaded
-                loadedRoute = route
-                resourceError = nil
-                resourceState = .content
+                guard !Task.isCancelled else { return }
+                self?.publishLoadedResource(loaded, route: route, generation: generation)
             } catch is CancellationError {
             } catch let error as GitHubRepositoryLoadError {
-                guard generation == resourceGeneration, currentRoute == route else { return }
-                resourceError = error
-                resourceState = resource == nil ? error.loadingState : .content
+                guard !Task.isCancelled else { return }
+                self?.publishResourceError(error, route: route, generation: generation)
             } catch {
-                guard generation == resourceGeneration, currentRoute == route else { return }
-                resourceError = .commandFailed(error.localizedDescription)
-                resourceState = resource == nil ? .error : .content
+                guard !Task.isCancelled else { return }
+                self?.publishResourceError(
+                    .commandFailed(error.localizedDescription), route: route,
+                    generation: generation)
             }
         }
     }
 
     func waitForPendingSave() async {
         await saveTask?.value
+    }
+
+    private func publishCachedResource(
+        _ cached: GitHubRepositoryResource, route: GitHubRoute, generation: Int
+    ) -> Bool {
+        guard generation == resourceGeneration, currentRoute == route else { return false }
+        resource = cached
+        resourceState = .refreshing
+        return true
+    }
+
+    private func publishLoadedResource(
+        _ loaded: GitHubRepositoryResource, route: GitHubRoute, generation: Int
+    ) {
+        guard generation == resourceGeneration, currentRoute == route else { return }
+        resource = loaded
+        loadedRoute = route
+        resourceError = nil
+        resourceState = .content
+    }
+
+    private func publishResourceError(
+        _ error: GitHubRepositoryLoadError, route: GitHubRoute, generation: Int
+    ) {
+        guard generation == resourceGeneration, currentRoute == route else { return }
+        resourceError = error
+        resourceState = resource == nil ? error.loadingState : .content
     }
 
     private func mutateSelected(_ body: (inout GitHubBrowserSession, UUID) -> Void) {

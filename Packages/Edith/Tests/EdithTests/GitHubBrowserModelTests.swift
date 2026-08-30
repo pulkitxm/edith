@@ -93,6 +93,32 @@ import Testing
         #expect(context.model.resourceState == .content)
     }
 
+    @Test func deinitializationCancelsAnActiveResourceLoad() async throws {
+        let fixture = GitHubCancellationFixture()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = GitHubSessionStore(file: root.appendingPathComponent("session.json"))
+        let route = repositoryRoute("first")
+        let tab = GitHubBrowserTab(
+            entry: GitHubBrowserHistoryEntry(route: route), title: route.url.lastPathComponent)
+        try await store.save(GitHubBrowserSession(tabs: [tab], selectedTabID: tab.id))
+        var model: GitHubBrowserModel? = GitHubBrowserModel(
+            store: store, checkReadiness: { .ready("Signed in") },
+            readCachedResource: { _ in nil },
+            loadResource: { try await fixture.load($0) })
+        weak let releasedModel = model
+
+        await model?.start()
+        await fixture.waitUntilStarted()
+        model = nil
+
+        for _ in 0..<100 where !(await fixture.wasCancelled()) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(releasedModel == nil)
+        #expect(await fixture.wasCancelled())
+    }
+
     private func modelContext(
         route: GitHubRoute, fixture: GitHubResourceFixture,
         cached: GitHubRepositoryResource? = nil
@@ -151,4 +177,31 @@ private actor GitHubResourceFixture {
     }
 
     func requestCount() -> Int { started }
+}
+
+private actor GitHubCancellationFixture {
+    private var started = false
+    private var cancelled = false
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func load(_ route: GitHubRoute) async throws -> GitHubRepositoryResource {
+        started = true
+        let waiters = startWaiters
+        startWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+        do {
+            try await Task.sleep(for: .seconds(30))
+            throw GitHubRepositoryLoadError.commandFailed("Expected cancellation.")
+        } catch is CancellationError {
+            cancelled = true
+            throw CancellationError()
+        }
+    }
+
+    func waitUntilStarted() async {
+        guard !started else { return }
+        await withCheckedContinuation { startWaiters.append($0) }
+    }
+
+    func wasCancelled() -> Bool { cancelled }
 }
