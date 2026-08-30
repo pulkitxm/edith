@@ -25,6 +25,8 @@ private final class DatabaseBrokerCommandClientTestRecorder: @unchecked Sendable
     private var observedMainThread = false
     private var observedOperationIDs: [DatabaseOperationID?] = []
     private var observedRequestIDs: [UUID] = []
+    private var observedConnectionDeadlines: [UInt64] = []
+    private var observedRequestDeadlines: [UInt64] = []
 
     func record(_ event: DatabaseBrokerCommandClientTestEvent) {
         lock.withLock {
@@ -42,10 +44,19 @@ private final class DatabaseBrokerCommandClientTestRecorder: @unchecked Sendable
         }
     }
 
+    func recordConnection(deadlineNanoseconds: UInt64) {
+        lock.withLock {
+            events.append(.connection)
+            connectionCount += 1
+            observedConnectionDeadlines.append(deadlineNanoseconds)
+        }
+    }
+
     func recordRequest(
         _ request: DatabaseBrokerCommandRequest,
         requestID: UUID,
-        isMainThread: Bool
+        isMainThread: Bool,
+        deadlineNanoseconds: UInt64? = nil
     ) {
         lock.withLock {
             events.append(.request)
@@ -53,6 +64,9 @@ private final class DatabaseBrokerCommandClientTestRecorder: @unchecked Sendable
             observedOperationIDs.append(request.operationID)
             observedRequestIDs.append(requestID)
             observedMainThread = observedMainThread || isMainThread
+            if let deadlineNanoseconds {
+                observedRequestDeadlines.append(deadlineNanoseconds)
+            }
         }
     }
 
@@ -63,7 +77,9 @@ private final class DatabaseBrokerCommandClientTestRecorder: @unchecked Sendable
         closes: Int,
         observedMainThread: Bool,
         operationIDs: [DatabaseOperationID?],
-        requestIDs: [UUID]
+        requestIDs: [UUID],
+        connectionDeadlines: [UInt64],
+        requestDeadlines: [UInt64]
     ) {
         lock.withLock {
             (
@@ -73,8 +89,29 @@ private final class DatabaseBrokerCommandClientTestRecorder: @unchecked Sendable
                 closeCount,
                 observedMainThread,
                 observedOperationIDs,
-                observedRequestIDs
+                observedRequestIDs,
+                observedConnectionDeadlines,
+                observedRequestDeadlines
             )
+        }
+    }
+}
+
+private final class DatabaseBrokerCommandClientTestClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: UInt64
+
+    init(_ value: UInt64) {
+        self.value = value
+    }
+
+    func now() -> UInt64 {
+        lock.withLock { value }
+    }
+
+    func set(_ value: UInt64) {
+        lock.withLock {
+            self.value = value
         }
     }
 }
@@ -223,10 +260,10 @@ func databaseBrokerCommandClientEnsuresReadinessAndRunsSocketIOOffMainActor() as
                 recorder.record(.readiness)
             },
             makeRequestID: { requestID },
-            makeConnection: {
+            makeConnection: { _ in
                 recorder.record(.connection)
                 return DatabaseBrokerCommandClientConnection(
-                    request: { request, observedRequestID in
+                    request: { request, observedRequestID, _ in
                         recorder.recordRequest(
                             request,
                             requestID: observedRequestID,
@@ -254,6 +291,159 @@ func databaseBrokerCommandClientEnsuresReadinessAndRunsSocketIOOffMainActor() as
     #expect(snapshot.requestIDs == [requestID])
 }
 
+@Test func databaseBrokerCommandClientPropagatesOneDeadlineComputedAfterReadiness() async throws {
+    let recorder = DatabaseBrokerCommandClientTestRecorder()
+    let clock = DatabaseBrokerCommandClientTestClock(10)
+    let requestID = UUID(uuidString: "AD14776F-E4E9-4E49-A3C1-6EAAB2B98E97")!
+    let request = DatabaseBrokerCommandRequest.connectionList(
+        DatabaseConnectionListRequest())
+    let client = DatabaseBrokerCommandClient(
+        dependencies: DatabaseBrokerCommandClientDependencies(
+            ensureReady: {
+                recorder.record(.readiness)
+                clock.set(1_000)
+            },
+            monotonicNanoseconds: { clock.now() },
+            makeRequestID: { requestID },
+            makeConnection: { deadlineNanoseconds in
+                recorder.recordConnection(deadlineNanoseconds: deadlineNanoseconds)
+                return DatabaseBrokerCommandClientConnection(
+                    request: { request, observedRequestID, requestDeadlineNanoseconds in
+                        recorder.recordRequest(
+                            request,
+                            requestID: observedRequestID,
+                            isMainThread: Thread.isMainThread,
+                            deadlineNanoseconds: requestDeadlineNanoseconds)
+                        return try databaseBrokerCommandClientResponse(
+                            for: request,
+                            requestID: observedRequestID)
+                    },
+                    close: {
+                        recorder.record(.close)
+                    })
+            }))
+
+    let response = try await client.send(request)
+    let expectedDeadline = 1_000 + DatabaseBrokerCommandClient.defaultTransportBudgetNanoseconds
+    let snapshot = recorder.snapshot()
+
+    #expect(response.connectionListResult?.payload?.connections == [])
+    #expect(snapshot.events == [.readiness, .connection, .request, .close])
+    #expect(snapshot.connectionDeadlines == [expectedDeadline])
+    #expect(snapshot.requestDeadlines == [expectedDeadline])
+    #expect(snapshot.requestIDs == [requestID])
+}
+
+@Test func databaseBrokerCommandClientDeadlineMathIsOverflowSafeAndCapsConnectTime() throws {
+    #expect(DatabaseBrokerCommandClient.defaultTransportBudgetNanoseconds == 30_000_000_000)
+    #expect(
+        DatabaseBrokerCommandClient.deadline(
+            startingAt: UInt64.max - 10,
+            budget: 100) == UInt64.max)
+    #expect(
+        try DatabaseBrokerCommandClient.connectionTimeoutMilliseconds(
+            deadlineNanoseconds: 1_500_001,
+            nowNanoseconds: 1) == 2)
+    #expect(
+        try DatabaseBrokerCommandClient.connectionTimeoutMilliseconds(
+            deadlineNanoseconds: 100_000_000_001,
+            nowNanoseconds: 1)
+            == DatabaseBrokerSocketConnection.maximumTimeoutMilliseconds)
+    #expect(throws: DatabaseBrokerSocketError.connectionTimedOut) {
+        try DatabaseBrokerCommandClient.connectionTimeoutMilliseconds(
+            deadlineNanoseconds: 100,
+            nowNanoseconds: 100)
+    }
+}
+
+@Test func databaseBrokerCommandClientTotalDeadlineIncludesConnectionCreation() async {
+    let recorder = DatabaseBrokerCommandClientTestRecorder()
+    let clock = DatabaseBrokerCommandClientTestClock(100)
+    let request = DatabaseBrokerCommandRequest.connectionList(
+        DatabaseConnectionListRequest())
+    let client = DatabaseBrokerCommandClient(
+        dependencies: DatabaseBrokerCommandClientDependencies(
+            ensureReady: {},
+            monotonicNanoseconds: { clock.now() },
+            transportBudgetNanoseconds: 50,
+            makeConnection: { deadlineNanoseconds in
+                recorder.recordConnection(deadlineNanoseconds: deadlineNanoseconds)
+                clock.set(deadlineNanoseconds)
+                return DatabaseBrokerCommandClientConnection(
+                    request: { _, _, _ in
+                        throw DatabaseBrokerCommandClientTestError.injected(
+                            "request must not run")
+                    },
+                    close: {
+                        recorder.record(.close)
+                    })
+            }))
+
+    await #expect(throws: DatabaseBrokerCommandClientError.timedOut) {
+        _ = try await client.send(request)
+    }
+    let snapshot = recorder.snapshot()
+    #expect(snapshot.connectionDeadlines == [150])
+    #expect(snapshot.requests == 0)
+    #expect(snapshot.closes == 1)
+}
+
+@Test func databaseBrokerCommandClientClassifiesConnectTimeout() async {
+    let request = DatabaseBrokerCommandRequest.connectionList(
+        DatabaseConnectionListRequest())
+    let client = DatabaseBrokerCommandClient(
+        dependencies: DatabaseBrokerCommandClientDependencies(
+            ensureReady: {},
+            makeConnection: { _ in
+                throw DatabaseBrokerSocketError.connectionTimedOut
+            }))
+
+    await #expect(throws: DatabaseBrokerCommandClientError.timedOut) {
+        _ = try await client.send(request)
+    }
+}
+
+@Test(
+    arguments: [
+        DatabaseBrokerHealthTransportFailure.authenticationTimedOut,
+        DatabaseBrokerHealthTransportFailure.readTimedOut,
+        DatabaseBrokerHealthTransportFailure.writeProgressTimedOut,
+    ])
+func databaseBrokerCommandClientClassifiesPreWriteTransportTimeout(
+    _ failure: DatabaseBrokerHealthTransportFailure
+) async {
+    let client = databaseBrokerCommandClientFailingClient(
+        recorder: DatabaseBrokerCommandClientTestRecorder(),
+        error: DatabaseBrokerHealthTransportError(
+            failure: failure,
+            bytesWritten: 0))
+
+    await #expect(throws: DatabaseBrokerCommandClientError.timedOut) {
+        _ = try await client.send(
+            .connectionList(DatabaseConnectionListRequest()))
+    }
+}
+
+@Test(
+    arguments: [
+        DatabaseBrokerHealthTransportFailure.readTimedOut,
+        DatabaseBrokerHealthTransportFailure.writeProgressTimedOut,
+    ])
+func databaseBrokerCommandClientKeepsPostWriteTimeoutOutcomeUnknown(
+    _ failure: DatabaseBrokerHealthTransportFailure
+) async {
+    let client = databaseBrokerCommandClientFailingClient(
+        recorder: DatabaseBrokerCommandClientTestRecorder(),
+        error: DatabaseBrokerHealthTransportError(
+            failure: failure,
+            bytesWritten: 1))
+
+    await #expect(throws: DatabaseBrokerCommandClientError.outcomeUnknown) {
+        _ = try await client.send(
+            .connectionList(DatabaseConnectionListRequest()))
+    }
+}
+
 @Test func databaseBrokerCommandClientStopsBeforeConnectingWhenReadinessFails() async {
     let recorder = DatabaseBrokerCommandClientTestRecorder()
     let request = DatabaseBrokerCommandRequest.connectionList(
@@ -264,7 +454,7 @@ func databaseBrokerCommandClientEnsuresReadinessAndRunsSocketIOOffMainActor() as
                 throw DatabaseBrokerCommandClientTestError.injected(
                     "private readiness detail")
             },
-            makeConnection: {
+            makeConnection: { _ in
                 recorder.record(.connection)
                 throw DatabaseBrokerSocketError.unavailable
             }))
@@ -379,10 +569,10 @@ func databaseBrokerCommandClientEnsuresReadinessAndRunsSocketIOOffMainActor() as
     let client = DatabaseBrokerCommandClient(
         dependencies: DatabaseBrokerCommandClientDependencies(
             ensureReady: {},
-            makeConnection: {
+            makeConnection: { _ in
                 let socket = DatabaseBrokerCommandClientBlockingSocket()
                 return DatabaseBrokerCommandClientConnection(
-                    request: { request, requestID in
+                    request: { request, requestID, _ in
                         guard let operationID = request.operationID else {
                             throw DatabaseBrokerCommandClientTestError.unsupportedRequest
                         }
@@ -433,10 +623,10 @@ func databaseBrokerCommandClientEnsuresReadinessAndRunsSocketIOOffMainActor() as
     let client = DatabaseBrokerCommandClient(
         dependencies: DatabaseBrokerCommandClientDependencies(
             ensureReady: {},
-            makeConnection: {
+            makeConnection: { _ in
                 factoryGate.enterAndBlock()
                 return DatabaseBrokerCommandClientConnection(
-                    request: { _, _ in
+                    request: { _, _, _ in
                         throw DatabaseBrokerCommandClientTestError.injected(
                             "request must not run")
                     },
@@ -468,9 +658,9 @@ func databaseBrokerCommandClientEnsuresReadinessAndRunsSocketIOOffMainActor() as
     let client = DatabaseBrokerCommandClient(
         dependencies: DatabaseBrokerCommandClientDependencies(
             ensureReady: {},
-            makeConnection: {
+            makeConnection: { _ in
                 DatabaseBrokerCommandClientConnection(
-                    request: { _, _ in
+                    request: { _, _, _ in
                         try blocked.waitThenFail(bytesWritten: 1)
                     },
                     close: {
@@ -498,10 +688,10 @@ private func databaseBrokerCommandClientFailingClient(
             ensureReady: {
                 recorder.record(.readiness)
             },
-            makeConnection: {
+            makeConnection: { _ in
                 recorder.record(.connection)
                 return DatabaseBrokerCommandClientConnection(
-                    request: { request, requestID in
+                    request: { request, requestID, _ in
                         recorder.recordRequest(
                             request,
                             requestID: requestID,
