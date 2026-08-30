@@ -35,17 +35,21 @@ struct HomebrewMaintenanceView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
             Divider()
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    if model.status?.available == false {
-                        unavailableCard
-                    } else {
-                        summary
-                        operationCard
-                        packageCard
+            if showsLoadingSkeleton {
+                HomebrewPageSkeleton()
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 16) {
+                        if model.status?.available == false {
+                            unavailableCard
+                        } else {
+                            summary
+                            operationCard
+                            packageCard
+                        }
                     }
+                    .padding(16)
                 }
-                .padding(16)
             }
         }
         .background(DashSkin.paper(scheme == .dark))
@@ -86,6 +90,10 @@ struct HomebrewMaintenanceView: View {
                 "Homebrew will remove this \(pendingUninstall?.kind.rawValue ?? "package") and its managed files."
             )
         }
+    }
+
+    private var showsLoadingSkeleton: Bool {
+        !model.loaded && model.packages.isEmpty && model.errorMessage == nil
     }
 
     @ViewBuilder
@@ -363,6 +371,83 @@ struct HomebrewMaintenanceView: View {
             model.packages = []
             model.loaded = true
         }
+    }
+}
+
+struct HomebrewPageSkeleton: View {
+    var body: some View {
+        SkeletonGroup {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 190), spacing: 12)],
+                        spacing: 12
+                    ) {
+                        ForEach(0..<3, id: \.self) { index in
+                            HomebrewSkeletonCard {
+                                HStack(spacing: 12) {
+                                    SkeletonBlock(width: 32, height: 32, corner: 8)
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        SkeletonBlock(width: 62, height: 8)
+                                        SkeletonBlock(
+                                            width: index == 2 ? 92 : 48,
+                                            height: 17)
+                                        SkeletonBlock(width: 112, height: 8)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    HomebrewSkeletonCard {
+                        VStack(alignment: .leading, spacing: 0) {
+                            HStack {
+                                SkeletonBlock(width: 164, height: 12)
+                                Spacer()
+                                SkeletonBlock(width: 26, height: 10)
+                            }
+                            .padding(.bottom, 12)
+                            ForEach(0..<7, id: \.self) { index in
+                                if index > 0 { Divider() }
+                                HStack(spacing: 14) {
+                                    SkeletonBlock(width: 38, height: 38, corner: 9)
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        SkeletonBlock(
+                                            width: index.isMultiple(of: 2) ? 118 : 152,
+                                            height: 10)
+                                        SkeletonBlock(width: 236, height: 8)
+                                        SkeletonBlock(width: 84, height: 8)
+                                    }
+                                    Spacer(minLength: 8)
+                                    SkeletonBlock(width: 72, height: 28, corner: 7)
+                                }
+                                .padding(.vertical, 11)
+                            }
+                        }
+                    }
+                }
+                .padding(16)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityLabel("Loading Homebrew packages")
+    }
+}
+
+private struct HomebrewSkeletonCard<Content: View>: View {
+    @ViewBuilder let content: Content
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        content
+            .padding(16)
+            .background(
+                DashSkin.paper2(scheme == .dark),
+                in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .strokeBorder(DashSkin.line(scheme == .dark))
+            }
     }
 }
 

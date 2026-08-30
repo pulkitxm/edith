@@ -549,6 +549,8 @@ struct AppMaintenanceView: View {
         if section == .packages {
             HomebrewMaintenanceView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if model.phase == .loading {
+            AppMaintenanceSectionSkeleton(section: section)
         } else {
             HSplitView {
                 sectionInventory
@@ -987,6 +989,145 @@ struct AppMaintenanceView: View {
                 .font(.caption)
                 .foregroundStyle(.green)
         }
+    }
+}
+
+struct AppMaintenanceSectionSkeleton: View {
+    let section: AppMaintenanceSection
+
+    var body: some View {
+        SkeletonGroup {
+            HSplitView {
+                inventory
+                    .frame(
+                        minWidth: 280, idealWidth: 320, maxWidth: 380,
+                        maxHeight: .infinity)
+                detail
+                    .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityLabel("Loading \(section.rawValue)")
+    }
+
+    private var inventory: some View {
+        VStack(spacing: 0) {
+            SkeletonBlock(height: UIScale.pt(24), corner: UIScale.pt(6))
+                .padding(UIScale.pt(12))
+            Divider()
+            VStack(spacing: 0) {
+                ForEach(0..<7, id: \.self) { index in
+                    HStack(spacing: UIScale.pt(9)) {
+                        if section == .updates {
+                            SkeletonBlock(width: 14, height: 14, corner: 3)
+                        }
+                        SkeletonBlock(width: 28, height: 28, corner: 7)
+                        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                            SkeletonBlock(
+                                width: index.isMultiple(of: 2) ? 112 : 148,
+                                height: 10)
+                            SkeletonBlock(width: 82, height: 8)
+                        }
+                        Spacer(minLength: 0)
+                        if section == .updates {
+                            SkeletonBlock(width: 48, height: 8)
+                        }
+                    }
+                    .padding(.horizontal, UIScale.pt(12))
+                    .padding(.vertical, UIScale.pt(9))
+                }
+                Spacer(minLength: 0)
+            }
+            Divider()
+            HStack {
+                SkeletonBlock(width: 82, height: 8)
+                Spacer()
+                SkeletonBlock(width: 62, height: 8)
+            }
+            .padding(.horizontal, UIScale.pt(12))
+            .frame(height: UIScale.pt(34))
+        }
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        switch section {
+        case .updates:
+            AppMaintenanceUpdateSkeleton()
+        case .removal:
+            AppMaintenanceRemovalSkeleton()
+        case .history:
+            AppMaintenanceHistorySkeleton()
+        case .packages:
+            EmptyView()
+        }
+    }
+}
+
+private struct AppMaintenanceUpdateSkeleton: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(18)) {
+            HStack(spacing: UIScale.pt(14)) {
+                SkeletonBlock(width: 54, height: 54, corner: 12)
+                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                    SkeletonBlock(width: 156, height: 14)
+                    SkeletonBlock(width: 104, height: 9)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: UIScale.pt(6)) {
+                    SkeletonBlock(width: 86, height: 10)
+                    SkeletonBlock(width: 72, height: 8)
+                }
+            }
+            AppMaintenanceDetailSkeleton(lines: 4, height: 150)
+            AppMaintenanceDetailSkeleton(lines: 2, height: 104)
+            Spacer(minLength: 0)
+            HStack {
+                SkeletonBlock(width: 72, height: 30, corner: 7)
+                Spacer()
+                SkeletonBlock(width: 126, height: 32, corner: 7)
+            }
+        }
+        .padding(UIScale.pt(22))
+    }
+}
+
+private struct AppMaintenanceHistorySkeleton: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+            HStack(spacing: UIScale.pt(12)) {
+                SkeletonBlock(width: 44, height: 44, corner: 11)
+                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                    SkeletonBlock(width: 132, height: 14)
+                    SkeletonBlock(width: 248, height: 9)
+                }
+            }
+            ForEach(0..<4, id: \.self) { index in
+                AppMaintenanceDetailSkeleton(lines: index.isMultiple(of: 2) ? 2 : 3, height: 92)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(UIScale.pt(22))
+    }
+}
+
+private struct AppMaintenanceDetailSkeleton: View {
+    let lines: Int
+    let height: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(9)) {
+            SkeletonBlock(width: 94, height: 10)
+            ForEach(0..<lines, id: \.self) { index in
+                SkeletonBlock(
+                    width: index == lines - 1 ? 214 : nil,
+                    height: 8)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(UIScale.pt(14))
+        .frame(maxWidth: .infinity, minHeight: UIScale.pt(height), alignment: .topLeading)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
     }
 }
 

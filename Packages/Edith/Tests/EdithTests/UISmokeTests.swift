@@ -59,6 +59,13 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(renders(MetricCardSkeleton(dark: false), width: 300, height: 160))
     }
 
+    @Test func everyAppMaintenanceSkeletonRenders() {
+        #expect(renders(AppMaintenanceSectionSkeleton(section: .updates)))
+        #expect(renders(HomebrewPageSkeleton()))
+        #expect(renders(AppMaintenanceSectionSkeleton(section: .removal)))
+        #expect(renders(AppMaintenanceSectionSkeleton(section: .history)))
+    }
+
     @Test func homePageRenders() {
         #expect(renders(HomePage()))
     }
