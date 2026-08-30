@@ -34,17 +34,23 @@ private final class DatabaseBrokerHealthTransportSystemStub: @unchecked Sendable
 
     var now: UInt64 = 0
     var authenticationResult = DatabaseBrokerHealthTransportAuthenticationResult.authenticated
+    var authenticationAdvanceNanoseconds: UInt64 = 0
     var readSteps: [ReadStep] = []
     var writeSteps: [WriteStep] = []
     var waitSteps: [WaitStep] = []
     var calls: [Call] = []
     var writtenData = Data()
+    var authenticationDeadlines: [UInt64?] = []
+    var readDeadlines: [UInt64?] = []
+    var writeDeadlines: [UInt64?] = []
 
     func dependencies() -> DatabaseBrokerHealthTransportDependencies {
         DatabaseBrokerHealthTransportDependencies(
             monotonicNanoseconds: { self.now },
-            authenticatePeer: { socketDescriptor, budgetNanoseconds in
+            authenticatePeer: { socketDescriptor, budgetNanoseconds, deadlineNanoseconds in
                 self.calls.append(.authenticate(socketDescriptor, budgetNanoseconds))
+                self.authenticationDeadlines.append(deadlineNanoseconds)
+                self.now += self.authenticationAdvanceNanoseconds
                 return self.authenticationResult
             },
             wait: { socketDescriptor, interest, maximumWaitNanoseconds in
@@ -57,8 +63,9 @@ private final class DatabaseBrokerHealthTransportSystemStub: @unchecked Sendable
                 self.now += step.advanceNanoseconds
                 return step.result
             },
-            read: { socketDescriptor, maximumByteCount in
+            read: { socketDescriptor, maximumByteCount, deadlineNanoseconds in
                 self.calls.append(.read(socketDescriptor, maximumByteCount))
+                self.readDeadlines.append(deadlineNanoseconds)
                 guard !self.readSteps.isEmpty else {
                     return .endOfFile
                 }
@@ -66,8 +73,9 @@ private final class DatabaseBrokerHealthTransportSystemStub: @unchecked Sendable
                 self.now += step.advanceNanoseconds
                 return step.result
             },
-            write: { socketDescriptor, data, offset in
+            write: { socketDescriptor, data, offset, deadlineNanoseconds in
                 self.calls.append(.write(socketDescriptor, offset))
+                self.writeDeadlines.append(deadlineNanoseconds)
                 let step: WriteStep
                 if self.writeSteps.isEmpty {
                     step = WriteStep(
@@ -317,6 +325,9 @@ private enum DatabaseBrokerHealthTransportFixtures {
         #expect(result.disposition == .sent)
         #expect(result.responseBytesWritten == system.writtenData.count)
         #expect(system.calls.first == .authenticate(41, 2_000_000_000))
+        #expect(system.authenticationDeadlines == [2_000_000_000])
+        #expect(system.readDeadlines.allSatisfy { $0 == 5_000_000_000 })
+        #expect(system.writeDeadlines.allSatisfy { $0 == 5_000_000_000 })
         let firstReadIndex = try #require(
             system.calls.firstIndex(
                 of: .read(41, DatabaseBrokerHealthTransport.maximumReadBytes)))
@@ -358,13 +369,15 @@ private enum DatabaseBrokerHealthTransportFixtures {
         #expect(serverResult.responseBytesWritten > 0)
     }
 
-    @Test func authenticationTimeoutPreventsAllFrameIO() {
+    @Test func authenticationPhaseDeadlineWinsOverLongerOuterDeadline() {
         let system = DatabaseBrokerHealthTransportSystemStub()
         system.authenticationResult = .timedOut
         let transport = DatabaseBrokerHealthTransport(dependencies: system.dependencies())
 
         let error = DatabaseBrokerHealthTransportFixtures.transportError {
-            try transport.requestHealth(socketDescriptor: 42)
+            try transport.requestHealth(
+                socketDescriptor: 42,
+                deadlineNanoseconds: 10_000_000_000)
         }
 
         #expect(
@@ -374,6 +387,72 @@ private enum DatabaseBrokerHealthTransportFixtures {
                     bytesWritten: 0))
         #expect(error?.isReplaySafe == true)
         #expect(system.calls == [.authenticate(42, 2_000_000_000)])
+        #expect(system.authenticationDeadlines == [2_000_000_000])
+    }
+
+    @Test func absoluteDeadlineCapsAuthenticationAndRemainsReplaySafe() {
+        let system = DatabaseBrokerHealthTransportSystemStub()
+        system.now = 10_000_000_000
+        system.authenticationAdvanceNanoseconds = 250_000_000
+        let transport = DatabaseBrokerHealthTransport(dependencies: system.dependencies())
+
+        let error = DatabaseBrokerHealthTransportFixtures.transportError {
+            try transport.requestHealth(
+                socketDescriptor: 43,
+                deadlineNanoseconds: 10_250_000_000)
+        }
+
+        #expect(error?.failure == .authenticationTimedOut)
+        #expect(error?.bytesWritten == 0)
+        #expect(error?.isReplaySafe == true)
+        #expect(system.calls == [.authenticate(43, 250_000_000)])
+        #expect(system.authenticationDeadlines == [10_250_000_000])
+    }
+
+    @Test func authenticationDeadlineIncludesDescriptorSetupAndReleasesAdmission() {
+        let clock = DatabaseBrokerHealthLockedValue<UInt64>(1_000_000_000)
+        let duplicateCalls = DatabaseBrokerHealthLockedValue(0)
+        let observedDeadlines = DatabaseBrokerHealthLockedValue<[UInt64?]>([])
+        let closedDescriptors = DatabaseBrokerHealthLockedValue<[Int32]>([])
+        let operationCalled = DatabaseBrokerHealthLockedValue(false)
+        let worker = DatabaseBrokerHealthAuthenticationWorker(
+            maximumConcurrentWork: 1,
+            duplicateDescriptor: { socketDescriptor, deadlineNanoseconds, _ in
+                duplicateCalls.update { $0 += 1 }
+                observedDeadlines.update { $0.append(deadlineNanoseconds) }
+                if duplicateCalls.value == 2 {
+                    throw DatabaseBrokerHealthTransportTestError.fixtureFailure
+                }
+                clock.update { $0 += 300_000_000 }
+                return socketDescriptor + 1_000
+            },
+            closeDescriptor: { socketDescriptor in
+                closedDescriptors.update { $0.append(socketDescriptor) }
+            })
+
+        let result = worker.authenticate(
+            socketDescriptor: 44,
+            budgetNanoseconds: 250_000_000,
+            deadlineNanoseconds: 1_250_000_000,
+            monotonicNanoseconds: { clock.value }
+        ) { _ in
+            operationCalled.update { $0 = true }
+        }
+        let admissionReuseResult = worker.authenticate(
+            socketDescriptor: 45,
+            budgetNanoseconds: 700_000_000,
+            deadlineNanoseconds: 2_000_000_000,
+            monotonicNanoseconds: { clock.value }
+        ) { _ in
+            operationCalled.update { $0 = true }
+        }
+
+        #expect(result == .timedOut)
+        #expect(admissionReuseResult == .systemFailure)
+        #expect(observedDeadlines.value == [1_250_000_000, 2_000_000_000])
+        #expect(duplicateCalls.value == 2)
+        #expect(closedDescriptors.value == [1_044])
+        #expect(!operationCalled.value)
     }
 
     @Test func liveAuthenticationWorkerOwnsDuplicateAcrossTimeoutAndRetainsAdmission() {
@@ -382,7 +461,9 @@ private enum DatabaseBrokerHealthTransportFixtures {
         let descriptorClosed = DispatchSemaphore(value: 0)
         let worker = DatabaseBrokerHealthAuthenticationWorker(
             maximumConcurrentWork: 1,
-            duplicateDescriptor: { $0 + 1_000 },
+            duplicateDescriptor: { socketDescriptor, _, _ in
+                socketDescriptor + 1_000
+            },
             closeDescriptor: { socketDescriptor in
                 closedDescriptors.update { $0.append(socketDescriptor) }
                 descriptorClosed.signal()
@@ -419,7 +500,9 @@ private enum DatabaseBrokerHealthTransportFixtures {
         let closedDescriptors = DatabaseBrokerHealthLockedValue<[Int32]>([])
         let worker = DatabaseBrokerHealthAuthenticationWorker(
             maximumConcurrentWork: 1,
-            duplicateDescriptor: { $0 + 2_000 },
+            duplicateDescriptor: { socketDescriptor, _, _ in
+                socketDescriptor + 2_000
+            },
             closeDescriptor: { socketDescriptor in
                 closedDescriptors.update { $0.append(socketDescriptor) }
             })
@@ -447,7 +530,7 @@ private enum DatabaseBrokerHealthTransportFixtures {
         let operationCalled = DatabaseBrokerHealthLockedValue(false)
         let worker = DatabaseBrokerHealthAuthenticationWorker(
             maximumConcurrentWork: 1,
-            duplicateDescriptor: { _ in
+            duplicateDescriptor: { _, _, _ in
                 throw DatabaseBrokerHealthTransportTestError.fixtureFailure
             },
             closeDescriptor: { _ in })
@@ -484,6 +567,102 @@ private enum DatabaseBrokerHealthTransportFixtures {
         #expect(system.now == 9_400_000_000)
     }
 
+    @Test func absoluteDeadlineWinsDuringFirstByteWait() throws {
+        let system = DatabaseBrokerHealthTransportSystemStub()
+        system.readSteps = [
+            .init(advanceNanoseconds: 0, result: .wouldBlock)
+        ]
+        system.waitSteps = [
+            .init(advanceNanoseconds: 900_000_000, result: .timedOut)
+        ]
+        let transport = DatabaseBrokerHealthTransport(dependencies: system.dependencies())
+        let requestFrame = try DatabaseBrokerHealthTransportFixtures.requestFrame()
+
+        let error = DatabaseBrokerHealthTransportFixtures.transportError {
+            try transport.requestHealth(
+                socketDescriptor: 45,
+                deadlineNanoseconds: 900_000_000)
+        }
+
+        #expect(error?.failure == .readTimedOut)
+        #expect(error?.bytesWritten == requestFrame.count)
+        #expect(error?.isReplaySafe == false)
+        #expect(system.calls.contains(.wait(45, .readable, 900_000_000)))
+    }
+
+    @Test func firstBytePhaseDeadlineWinsOverLongerOuterDeadline() throws {
+        let system = DatabaseBrokerHealthTransportSystemStub()
+        system.readSteps = [
+            .init(advanceNanoseconds: 0, result: .wouldBlock)
+        ]
+        system.waitSteps = [
+            .init(advanceNanoseconds: 5_000_000_000, result: .timedOut)
+        ]
+        let transport = DatabaseBrokerHealthTransport(dependencies: system.dependencies())
+        let requestFrame = try DatabaseBrokerHealthTransportFixtures.requestFrame()
+
+        let error = DatabaseBrokerHealthTransportFixtures.transportError {
+            try transport.requestHealth(
+                socketDescriptor: 45,
+                deadlineNanoseconds: 10_000_000_000)
+        }
+
+        #expect(error?.failure == .readTimedOut)
+        #expect(error?.bytesWritten == requestFrame.count)
+        #expect(error?.isReplaySafe == false)
+        #expect(system.readDeadlines == [5_000_000_000])
+        #expect(system.calls.contains(.wait(45, .readable, 5_000_000_000)))
+    }
+
+    @Test func absoluteDeadlineWinsDuringFrameCompletion() throws {
+        let system = DatabaseBrokerHealthTransportSystemStub()
+        let frame = try DatabaseBrokerHealthTransportFixtures.responseFrame()
+        system.readSteps = [
+            .init(
+                advanceNanoseconds: 200_000_000,
+                result: .bytes(Data(frame.prefix(1)))),
+            .init(
+                advanceNanoseconds: 800_000_000,
+                result: .bytes(Data(frame.dropFirst()))),
+        ]
+        let transport = DatabaseBrokerHealthTransport(dependencies: system.dependencies())
+        let requestFrame = try DatabaseBrokerHealthTransportFixtures.requestFrame()
+
+        let error = DatabaseBrokerHealthTransportFixtures.transportError {
+            try transport.requestHealth(
+                socketDescriptor: 46,
+                deadlineNanoseconds: 1_000_000_000)
+        }
+
+        #expect(error?.failure == .readTimedOut)
+        #expect(error?.bytesWritten == requestFrame.count)
+        #expect(error?.isReplaySafe == false)
+        #expect(system.now == 1_000_000_000)
+    }
+
+    @Test func absoluteDeadlineReachesTerminalTrailingRead() throws {
+        let system = DatabaseBrokerHealthTransportSystemStub()
+        system.readSteps = [
+            .init(
+                advanceNanoseconds: 0,
+                result: .bytes(try DatabaseBrokerHealthTransportFixtures.responseFrame())),
+            .init(advanceNanoseconds: 900_000_000, result: .timedOut),
+        ]
+        let transport = DatabaseBrokerHealthTransport(dependencies: system.dependencies())
+        let requestFrame = try DatabaseBrokerHealthTransportFixtures.requestFrame()
+
+        let error = DatabaseBrokerHealthTransportFixtures.transportError {
+            try transport.requestHealth(
+                socketDescriptor: 47,
+                deadlineNanoseconds: 1_000_000_000)
+        }
+
+        #expect(error?.failure == .readTimedOut)
+        #expect(error?.bytesWritten == requestFrame.count)
+        #expect(error?.isReplaySafe == false)
+        #expect(system.readDeadlines == [1_000_000_000, 1_000_000_000])
+    }
+
     @Test func frameDeadlineExpiresFiveSecondsAfterFirstPrefixByte() throws {
         let system = DatabaseBrokerHealthTransportSystemStub()
         let frame = try DatabaseBrokerHealthTransportFixtures.responseFrame()
@@ -502,12 +681,14 @@ private enum DatabaseBrokerHealthTransportFixtures {
         let error = DatabaseBrokerHealthTransportFixtures.transportError {
             try transport.requestHealth(
                 socketDescriptor: 46,
-                requestID: DatabaseBrokerHealthTransportFixtures.requestID)
+                requestID: DatabaseBrokerHealthTransportFixtures.requestID,
+                deadlineNanoseconds: 10_000_000_000)
         }
 
         #expect(error?.failure == .readTimedOut)
         #expect(error?.bytesWritten == requestFrame.count)
         #expect(error?.isReplaySafe == false)
+        #expect(system.readDeadlines == [5_000_000_000, 6_000_000_000])
         #expect(system.calls.contains(.wait(46, .readable, 5_000_000_000)))
     }
 
@@ -645,14 +826,41 @@ private enum DatabaseBrokerHealthTransportFixtures {
         let transport = DatabaseBrokerHealthTransport(dependencies: system.dependencies())
 
         let error = DatabaseBrokerHealthTransportFixtures.transportError {
-            try transport.requestHealth(socketDescriptor: 52)
+            try transport.requestHealth(
+                socketDescriptor: 52,
+                deadlineNanoseconds: 10_000_000_000)
         }
 
         #expect(error?.failure == .writeProgressTimedOut)
         #expect(error?.bytesWritten == 3)
         #expect(error?.isReplaySafe == false)
         #expect(system.calls.contains(.write(52, 3)))
+        #expect(system.writeDeadlines == [5_000_000_000, 5_000_000_000])
         #expect(system.calls.contains(.wait(52, .writable, 5_000_000_000)))
+    }
+
+    @Test func absoluteDeadlineWinsDuringWriteProgressAndPreservesReplayAccounting() {
+        let system = DatabaseBrokerHealthTransportSystemStub()
+        system.writeSteps = [
+            .init(advanceNanoseconds: 200_000_000, result: .bytes(3)),
+            .init(advanceNanoseconds: 0, result: .wouldBlock),
+        ]
+        system.waitSteps = [
+            .init(advanceNanoseconds: 800_000_000, result: .timedOut)
+        ]
+        let transport = DatabaseBrokerHealthTransport(dependencies: system.dependencies())
+
+        let error = DatabaseBrokerHealthTransportFixtures.transportError {
+            try transport.requestHealth(
+                socketDescriptor: 52,
+                deadlineNanoseconds: 1_000_000_000)
+        }
+
+        #expect(error?.failure == .writeProgressTimedOut)
+        #expect(error?.bytesWritten == 3)
+        #expect(error?.isReplaySafe == false)
+        #expect(system.writtenData.count == 3)
+        #expect(system.calls.contains(.wait(52, .writable, 800_000_000)))
     }
 
     @Test func requestWriteTimeoutBeforeProgressRemainsReplaySafe() {
@@ -852,6 +1060,60 @@ private enum DatabaseBrokerHealthTransportFixtures {
         #expect(readStub.readCallCount == 2)
         #expect(writeResult == .bytes(2))
         #expect(writeStub.writeCallCount == 2)
+    }
+
+    @Test func sustainedPOSIXEINTRStopsAtAbsoluteDeadline() throws {
+        let readClock = DatabaseBrokerHealthLockedValue<UInt64>(0)
+        let readCallCount = DatabaseBrokerHealthLockedValue(0)
+        let readIO = DatabaseBrokerHealthPOSIXIO(
+            read: { _, _ in
+                readCallCount.update { $0 += 1 }
+                readClock.update { $0 += 400 }
+                return DatabaseBrokerHealthPOSIXReadAttempt(
+                    result: -1,
+                    errorCode: EINTR,
+                    data: Data())
+            },
+            write: { _, _, _ in
+                DatabaseBrokerHealthPOSIXWriteAttempt(result: -1, errorCode: EIO)
+            })
+        let readResult = try DatabaseBrokerHealthTransportDependencies.readFromSocket(
+            socketDescriptor: 65,
+            maximumByteCount: 64 * 1_024,
+            posixIO: readIO,
+            deadlineNanoseconds: 1_000,
+            monotonicNanoseconds: { readClock.value })
+
+        let writeClock = DatabaseBrokerHealthLockedValue<UInt64>(0)
+        let writeCallCount = DatabaseBrokerHealthLockedValue(0)
+        let writeIO = DatabaseBrokerHealthPOSIXIO(
+            read: { _, _ in
+                DatabaseBrokerHealthPOSIXReadAttempt(
+                    result: -1,
+                    errorCode: EIO,
+                    data: Data())
+            },
+            write: { _, _, _ in
+                writeCallCount.update { $0 += 1 }
+                writeClock.update { $0 += 400 }
+                return DatabaseBrokerHealthPOSIXWriteAttempt(
+                    result: -1,
+                    errorCode: EINTR)
+            })
+        let writeResult = try DatabaseBrokerHealthTransportDependencies.writeToSocket(
+            socketDescriptor: 66,
+            data: Data([1]),
+            offset: 0,
+            posixIO: writeIO,
+            deadlineNanoseconds: 1_000,
+            monotonicNanoseconds: { writeClock.value })
+
+        #expect(readResult == .timedOut)
+        #expect(readCallCount.value == 3)
+        #expect(readClock.value == 1_200)
+        #expect(writeResult == .timedOut)
+        #expect(writeCallCount.value == 3)
+        #expect(writeClock.value == 1_200)
     }
 
     @Test(arguments: [ECONNRESET, ENOTCONN])
