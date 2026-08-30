@@ -714,7 +714,7 @@ private enum RedisDatabaseFutureAwaiter {
                 future.whenComplete { result in
                     race.finish(result, interrupting: false)
                 }
-                let cancellationTask = Task {
+                let cancellationObserver = Task {
                     for await reason in await context.cancellation.events() {
                         let failure: RedisDatabaseAwaitFailure =
                             reason == .deadlineExceeded ? .deadlineExceeded : .cancelled
@@ -722,8 +722,8 @@ private enum RedisDatabaseFutureAwaiter {
                         return
                     }
                 }
-                race.add(cancellationTask)
-                let deadlineTask = Task {
+                race.add(cancellationObserver)
+                let deadlineObserver = Task {
                     let delay = max(0, deadline.timeIntervalSinceNow)
                     let nanoseconds = UInt64(delay * 1_000_000_000)
                     try? await Task.sleep(nanoseconds: nanoseconds)
@@ -733,7 +733,7 @@ private enum RedisDatabaseFutureAwaiter {
                         .failure(RedisDatabaseAwaitFailure.deadlineExceeded),
                         interrupting: true)
                 }
-                race.add(deadlineTask)
+                race.add(deadlineObserver)
             }
         } onCancel: {
             race.finish(
