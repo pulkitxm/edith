@@ -112,6 +112,29 @@ struct DatabaseExecutionErrorMapper: Sendable {
         target.flatMap(sanitizeTarget)
     }
 
+    func sanitize(_ warning: DatabaseWarning) -> DatabaseWarning {
+        guard redactor != nil else {
+            return DatabaseWarning(
+                code: "database.warning.redacted",
+                message: "A database warning was reported.",
+                severity: warning.severity)
+        }
+        return DatabaseWarning(
+            code: redactText(warning.code, maximumBytes: Self.maximumDetailNameBytes),
+            message: redactText(warning.message, maximumBytes: Self.maximumMessageBytes),
+            severity: warning.severity,
+            target: warning.target.flatMap(sanitizeTarget))
+    }
+
+    func sanitizeServerOperationIdentifier(_ identifier: String?) -> String? {
+        guard redactor != nil else { return nil }
+        return identifier.map {
+            redactText(
+                $0,
+                maximumBytes: DatabaseAdapterBounds.maximumServerOperationIdentifierBytes)
+        }
+    }
+
     private func map(
         _ error: DatabaseExecutionValidationError,
         target: DatabaseTargetIdentifier?
