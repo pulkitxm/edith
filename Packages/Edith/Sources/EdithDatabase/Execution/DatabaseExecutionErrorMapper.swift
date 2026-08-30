@@ -133,6 +133,11 @@ struct DatabaseExecutionErrorMapper: Sendable {
                 category: .conflict,
                 message: "The database operation identifier is already in use.",
                 target: target)
+        case .identifierAlreadyExists:
+            envelope(
+                category: .conflict,
+                message: "The database resource identifier is already in use.",
+                target: target)
         case .connectionDefinitionChanged:
             envelope(
                 category: .conflict,
@@ -148,6 +153,12 @@ struct DatabaseExecutionErrorMapper: Sendable {
                 retry: retry(
                     .reconnect,
                     "Restart the database runtime before retrying."),
+                target: target)
+        case .invalidIdentifier, .invalidDefinition, .duplicateValue,
+            .suspiciousOptionName, .invalidTimestamp:
+            envelope(
+                category: .invalidRequest,
+                message: "The database management request is invalid.",
                 target: target)
         case .invalidTarget:
             envelope(
