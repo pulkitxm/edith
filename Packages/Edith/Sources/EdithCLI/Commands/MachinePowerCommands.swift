@@ -235,7 +235,7 @@ struct MachinesWakeCommand: AsyncParsableCommand {
 struct MachinesServicesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "services",
-        abstract: "systemd units on a machine.",
+        abstract: "System services on a machine.",
         subcommands: [
             MachinesServicesListCommand.self, MachinesServiceStartCommand.self,
             MachinesServiceStopCommand.self, MachinesServiceRestartCommand.self,

@@ -14,7 +14,7 @@ other command on this page works whether or not Edith is running; every
 mutation posts the same `machinesChanged` notification the app posts to itself,
 so an open Machines window updates immediately when it is there to hear it.
 The Tools and Processes tabs use the same operation definitions as these
-commands for forwards, snippets, systemd units and process signals, including
+commands for forwards, snippets, services and process termination, including
 their validation and remote timeouts.
 
 Transport is `/usr/bin/ssh` over a ControlMaster socket shared with the app. If
@@ -23,15 +23,50 @@ round trip on an open channel. If it does not, `ed` opens one, and
 `ControlPersist=10m` keeps that socket alive for ten idle minutes so the next
 command is fast. `ed machines disconnect` closes it early.
 
+## Supported remote systems
+
+Edith detects macOS, Linux and Windows after SSH connects. macOS and Linux use
+the existing POSIX collector and commands. Windows uses PowerShell for system
+facts, metrics, files, services, processes, power actions and Docker. The
+PowerShell commands are UTF-16LE encoded before they cross SSH, so they work
+whether Windows OpenSSH starts `cmd.exe` or PowerShell as its default shell.
+
+| Integration | macOS | Linux | Windows |
+| --- | --- | --- | --- |
+| SSH connection, terminal and port forwards | yes | yes | yes |
+| System facts and live metrics | yes | yes | yes |
+| File browsing, transfer and file operations | yes | yes | yes |
+| Processes, reboot and shutdown | yes | yes | yes |
+| Service management | not available | yes | yes |
+| Docker and Docker Compose | yes | yes | yes, with Docker Desktop or Docker Engine |
+| Mounted file systems over SSHFS | yes | yes | yes, subject to the SFTP paths exposed by OpenSSH |
+| Live brightness, audio and radio controls | yes | yes | not available |
+| Platform thermal profiles | not available | yes | not available |
+
+Windows requires the built-in OpenSSH Server and Windows PowerShell 5.1 or
+newer. From an elevated PowerShell session, a typical setup is:
+
+```powershell
+Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+Start-Service sshd
+Set-Service -Name sshd -StartupType Automatic
+```
+
+The Windows account must be allowed to log in through SSH. Service changes,
+process termination, reboot and shutdown still depend on that account's Windows
+permissions. Docker commands additionally require a running Docker daemon and
+access to its CLI from the SSH session.
+
 ## Resource behaviour
 
 The app keeps one metrics stream per connected remote machine. That stream
 samples every two seconds and sends one record back over the shared SSH
 connection. It does not open a new SSH process for every measurement. The
-remote collector reads the block-device list once when it starts and obtains
+Linux collector reads the block-device list once when it starts and obtains
 the process list with one `ps` invocation per sample. CPU and memory details for
-the selected processes still come from `/proc`, so the values retain their
-per-process accuracy without launching a command for every row.
+the selected processes still come from `/proc`. The Windows collector uses CIM
+and performance counters in one persistent PowerShell process, so neither
+platform opens a new SSH command for every metric record.
 
 Local monitoring also samples every two seconds, but the more expensive process
 table is refreshed every fifth sample and reused between refreshes. Each sample
@@ -57,7 +92,7 @@ the process state between metric records.
 | Command | What it does |
 | --- | --- |
 | `ed machines ls` | Lists every configured machine with its target, auth method and whether the shared connection is open. Runs when you type `ed machines` with no subcommand. |
-| `ed machines show` | One machine: the stored record plus a live `uname`, `uptime` and login list. |
+| `ed machines show` | One machine: the stored record plus live operating system, uptime and login details. |
 | `ed machines add` | Adds a machine to the directory, optionally storing a password or key passphrase from stdin. |
 | `ed machines edit` | Changes a machine already on the list: name, host, port, user, auth, wake address. |
 | `ed machines rm` | Forgets a machine, its forwards, its machine-scoped snippets and its keychain entries. |

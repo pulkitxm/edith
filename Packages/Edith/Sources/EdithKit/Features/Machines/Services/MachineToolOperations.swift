@@ -189,7 +189,7 @@ public enum MachineServiceOperation: String, CaseIterable, Sendable {
     public var descriptor: UserOperationDescriptor {
         UserOperationDescriptor(
             id: UserOperationID(rawValue: "machines.services.\(rawValue)"),
-            summary: "\(rawValue.capitalized) a systemd unit.",
+            summary: "\(rawValue.capitalized) a system service.",
             cli: ["machines", "services", rawValue], effect: .write)
     }
 }
@@ -209,7 +209,7 @@ public struct MachineServiceOperationResult: Equatable, Sendable {
 public enum MachineServiceOperationError: LocalizedError, Equatable, Sendable {
     case missingUnit
 
-    public var errorDescription: String? { "A systemd unit name is required." }
+    public var errorDescription: String? { "A service name is required." }
 }
 
 public enum MachineServiceOperationExecution {
@@ -252,7 +252,7 @@ public enum MachineProcessOperation: String, CaseIterable, Sendable {
     public var descriptor: UserOperationDescriptor {
         UserOperationDescriptor(
             id: UserOperationID(rawValue: "machines.process.terminate"),
-            summary: "Send a signal to a process.", cli: ["machines", "kill"],
+            summary: "Stop or signal a process.", cli: ["machines", "kill"],
             effect: .destructive, requiresPreview: true)
     }
 }

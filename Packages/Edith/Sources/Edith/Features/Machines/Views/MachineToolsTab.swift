@@ -331,7 +331,7 @@ struct MachineToolsTab: View {
 
     private var servicesCard: some View {
         SkinCard(
-            title: "Services", note: session.services.isEmpty ? "systemd not detected" : nil,
+            title: "Services", note: session.services.isEmpty ? "no services reported" : nil,
             dark: dark
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {

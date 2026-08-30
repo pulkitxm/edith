@@ -396,7 +396,7 @@ struct MachinesExecCommand: AsyncParsableCommand {
 
 struct MachinesServicesListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls", abstract: "List systemd units on a machine.", aliases: ["list"])
+        commandName: "ls", abstract: "List services on a machine.", aliases: ["list"])
 
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false

@@ -12,6 +12,10 @@ struct MachinesThermalCommand: AsyncParsableCommand {
 
 enum MachineThermalBridge {
     static func status(runner: RemoteRunner) async throws -> MachinePlatformProfile {
+        guard await runner.ssh.remotePlatform != .windows else {
+            throw CLIFailure.unavailable(
+                "Windows does not expose Linux platform thermal profiles")
+        }
         let result = await MachineThermalOperationExecution.status { command, _, timeout in
             do {
                 let output = try await runner.run(command, timeout: timeout)

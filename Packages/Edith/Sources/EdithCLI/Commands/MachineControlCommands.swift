@@ -32,6 +32,10 @@ final class MachineControlTarget {
     let isLocal: Bool
     private let connection: SSHConnection?
 
+    var remotePlatform: RemoteMachinePlatform? {
+        get async { await connection?.remotePlatform }
+    }
+
     init(query: String) async throws {
         if ["local", "this-mac", "thismac"].contains(query.lowercased()) {
             machine = .local
@@ -78,6 +82,7 @@ final class MachineControlTarget {
 enum MachineControlCLI {
     static func status(machine query: String, json: Bool) async throws {
         let target = try await MachineControlTarget(query: query)
+        try await requireSupported(target)
         let result = await MachineControlOperationExecution.status { command, stdin, timeout in
             await target.run(command, stdin: stdin, timeout: timeout)
         }
@@ -99,6 +104,7 @@ enum MachineControlCLI {
         confirmed: Bool = true
     ) async throws {
         let target = try await MachineControlTarget(query: query)
+        try await requireSupported(target)
         if action.isDisruptive, !confirmed {
             renderPreview(action, target: target, json: json)
             return
@@ -138,6 +144,13 @@ enum MachineControlCLI {
             throw CLIFailure.unavailable(
                 "could not read controls from \(target.machine.name)",
                 hint: PowerOutcome.explain(error))
+        }
+    }
+
+    private static func requireSupported(_ target: MachineControlTarget) async throws {
+        guard await target.remotePlatform != .windows else {
+            throw CLIFailure.unavailable(
+                "Windows live controls are not available yet")
         }
     }
 

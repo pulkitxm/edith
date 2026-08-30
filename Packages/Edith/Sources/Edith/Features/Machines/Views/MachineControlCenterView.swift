@@ -96,6 +96,13 @@ final class MachineControlCenterModel {
             return
         }
         requiresConnection = false
+        guard session.remotePlatform != .windows else {
+            snapshot = nil
+            resultFailed = false
+            resultMessage = "Windows live controls are not available yet."
+            hasLoaded = true
+            return
+        }
         lastRefreshStartedAt = Date()
         isRefreshing = true
         defer {
