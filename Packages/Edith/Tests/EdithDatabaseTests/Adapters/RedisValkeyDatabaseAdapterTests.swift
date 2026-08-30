@@ -1152,41 +1152,43 @@ struct RedisValkeyDatabaseAdapterTests {
         await session.disconnect()
     }
 
-    @Test("drains a final cursor continuation without restarting scan")
-    func finalCursorPendingKeys() async throws {
-        let values: [Data: FakeRedisValue] = [
-            Data("a".utf8): .string(Data("1".utf8)),
-            Data("b".utf8): .string(Data("2".utf8)),
-            Data("c".utf8): .string(Data("3".utf8)),
-        ]
+    @Test("replays a SCAN over-return through a bounded continuation")
+    func scanOverReturnContinuation() async throws {
+        var values: [Data: FakeRedisValue] = [:]
+        for index in 0..<116 {
+            var key = Data(String(format: "%03d:", index).utf8)
+            key.append(Data(repeating: UInt8(65 + index % 26), count: 4_096 - key.count))
+            values[key] = .string(Data())
+        }
         let definition = try RedisValkeyAdapterFixtures.definition()
         let client = FakeRedisClient(
             product: .redis,
             values: values,
-            scanExtraKeys: 1)
+            scanExtraKeys: 16)
         let session = try await RedisValkeyDatabaseAdapter(
             clientFactory: FakeRedisClientFactory(client: client)
         ).connect(
             try RedisValkeyAdapterFixtures.resolved(definition),
             context: RedisValkeyAdapterFixtures.context())
         let first = try await session.readPage(
-            try RedisValkeyAdapterFixtures.pageRequest(definition.id, pageSize: 2),
+            try RedisValkeyAdapterFixtures.pageRequest(definition.id, pageSize: 100),
             context: RedisValkeyAdapterFixtures.context())
+        let continuation = try #require(first.nextContinuation)
         let second = try await session.readPage(
             try RedisValkeyAdapterFixtures.pageRequest(
                 definition.id,
-                pageSize: 2,
-                continuation: first.nextContinuation),
+                pageSize: 100,
+                continuation: continuation),
             context: RedisValkeyAdapterFixtures.context())
         let scans = await client.snapshot().filter {
             if case .scan = $0 { return true }
             return false
         }
-        #expect(first.records.count == 2)
-        #expect(second.records.count == 1)
-        #expect(first.nextContinuation != nil)
+        #expect(first.records.count == 100)
+        #expect(second.records.count == 16)
+        #expect(continuation.payload.count < 256)
         #expect(second.nextContinuation == nil)
-        #expect(scans.count == 1)
+        #expect(scans.count == 2)
         #expect(Set(first.records).isDisjoint(with: Set(second.records)))
         #expect(first.metadata.completeness.state == .sampled)
         #expect(second.metadata.completeness.state == .sampled)
