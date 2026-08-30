@@ -367,6 +367,8 @@ struct AppMaintenanceView: View {
     @State private var showingDiskImagePicker = false
     @State private var showingUpdateSettings = false
     @State private var section = AppMaintenanceSection.updates
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
     @AppStorage(AppStorageKeys.AppMaintenance.installDestination, store: SharedDefaults.store)
     private var installDestinationRaw = AppMaintenanceInstallDestination.user.rawValue
     @AppStorage(AppStorageKeys.AppMaintenance.updateAutoRefresh, store: SharedDefaults.store)
@@ -398,6 +400,8 @@ struct AppMaintenanceView: View {
                 || $0.bundleID?.localizedCaseInsensitiveContains(value) == true
         }
     }
+
+    private var theme: Color { themeColor(themeName) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -547,9 +551,19 @@ struct AppMaintenanceView: View {
                     "No applications", systemImage: "app.dashed",
                     description: Text("No installed app matches this search."))
             } else {
-                List(filteredApplications, selection: selectionBinding) { application in
-                    AppMaintenanceApplicationRow(application: application)
-                        .tag(application.id)
+                List(filteredApplications) { application in
+                    Button {
+                        model.select(application)
+                    } label: {
+                        AppMaintenanceApplicationRow(application: application)
+                    }
+                    .buttonStyle(
+                        EdithButtonStyle(
+                            .selection,
+                            selected: model.selectedApplicationID == application.id,
+                            tint: theme)
+                    )
+                    .listRowBackground(Color.clear)
                 }
                 .listStyle(.sidebar)
             }
@@ -648,17 +662,6 @@ struct AppMaintenanceView: View {
                 .listStyle(.sidebar)
             }
         }
-    }
-
-    private var selectionBinding: Binding<String?> {
-        Binding(
-            get: { model.selectedApplicationID },
-            set: { value in
-                guard let value,
-                    let application = model.applications.first(where: { $0.id == value })
-                else { return }
-                model.select(application)
-            })
     }
 
     private var installDestination: AppMaintenanceInstallDestination {
