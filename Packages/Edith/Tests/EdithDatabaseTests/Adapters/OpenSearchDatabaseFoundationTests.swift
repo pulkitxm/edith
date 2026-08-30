@@ -297,13 +297,9 @@ struct OpenSearchDatabaseFoundationTransportTests {
               "cluster_uuid": "elastic-cluster-id",
               "version": {
                 "number": "9.5.2",
+                "build_flavor": "default",
                 "build_type": "docker",
-                "build_hash": "abcdef",
-                "build_date": "2026-08-01T00:00:00Z",
-                "build_snapshot": false,
-                "lucene_version": "10.5.0",
-                "minimum_wire_compatibility_version": "8.19.0",
-                "minimum_index_compatibility_version": "8.0.0"
+                "build_hash": "abcdef"
               },
               "tagline": "You Know, for Search"
             }
@@ -507,9 +503,8 @@ private func waitForOpenSearchFoundationStop() async throws {
             == "Bearer fixture-token")
     #expect(
         OpenSearchDatabaseAuthorization.apiKey(
-            identifier: "fixture-id",
-            secret: "fixture-secret"
-        ).headerValue?.hasPrefix("ApiKey ") == true)
+            token: "os_fixture-token"
+        ).headerValue == "ApiKey os_fixture-token")
     #expect(throws: OpenSearchDatabaseDriverFailure.invalidConfiguration) {
         try OpenSearchDatabaseAuthorization.basic(
             username: "invalid:name",
@@ -520,10 +515,10 @@ private func waitForOpenSearchFoundationStop() async throws {
         try OpenSearchDatabaseAuthorization.bearer(token: "unsafe\nvalue").validate()
     }
     #expect(throws: OpenSearchDatabaseDriverFailure.invalidConfiguration) {
-        try OpenSearchDatabaseAuthorization.apiKey(
-            identifier: "",
-            secret: "fixture-secret"
-        ).validate()
+        try OpenSearchDatabaseAuthorization.apiKey(token: "fixture-token").validate()
+    }
+    #expect(throws: OpenSearchDatabaseDriverFailure.invalidConfiguration) {
+        try OpenSearchDatabaseAuthorization.apiKey(token: "os_unsafe token").validate()
     }
 }
 
@@ -737,8 +732,8 @@ private enum OpenSearchDatabaseLiveEnvironment {
     }
 }
 
-private final class OpenSearchDatabaseLiveURLSessionDelegate: NSObject, URLSessionDelegate,
-    URLSessionTaskDelegate, @unchecked Sendable
+private final class OpenSearchDatabaseLiveURLSessionDelegate: NSObject, URLSessionTaskDelegate,
+    @unchecked Sendable
 {
     func urlSession(
         _ session: URLSession,

@@ -17,7 +17,7 @@ enum OpenSearchDatabaseAuthorization: Equatable, Sendable {
     case none
     case basic(username: String, password: String)
     case bearer(token: String)
-    case apiKey(identifier: String, secret: String)
+    case apiKey(token: String)
 
     var headerValue: String? {
         switch self {
@@ -27,9 +27,8 @@ enum OpenSearchDatabaseAuthorization: Equatable, Sendable {
             return "Basic \(Data("\(username):\(password)".utf8).base64EncodedString())"
         case let .bearer(token):
             return "Bearer \(token)"
-        case let .apiKey(identifier, secret):
-            let encoded = Data("\(identifier):\(secret)".utf8).base64EncodedString()
-            return "ApiKey \(encoded)"
+        case let .apiKey(token):
+            return "ApiKey \(token)"
         }
     }
 
@@ -45,13 +44,12 @@ enum OpenSearchDatabaseAuthorization: Equatable, Sendable {
                 throw .invalidConfiguration
             }
         case let .bearer(token):
-            guard Self.valid(token, maximumBytes: 1_048_576) else {
+            guard Self.validToken(token, maximumBytes: 1_048_576) else {
                 throw .invalidConfiguration
             }
-        case let .apiKey(identifier, secret):
-            guard Self.valid(identifier, maximumBytes: 4_096),
-                !identifier.contains(":"),
-                Self.valid(secret, maximumBytes: 1_048_576)
+        case let .apiKey(token):
+            guard token.hasPrefix("os_"),
+                Self.validToken(token, maximumBytes: 1_048_576)
             else {
                 throw .invalidConfiguration
             }
@@ -64,6 +62,16 @@ enum OpenSearchDatabaseAuthorization: Equatable, Sendable {
     ) -> Bool {
         !value.isEmpty && value.utf8.count <= maximumBytes
             && !value.contains("\0") && !value.contains("\r") && !value.contains("\n")
+    }
+
+    private static func validToken(
+        _ value: String,
+        maximumBytes: Int
+    ) -> Bool {
+        valid(value, maximumBytes: maximumBytes)
+            && value.unicodeScalars.allSatisfy {
+                !CharacterSet.whitespacesAndNewlines.contains($0)
+            }
     }
 }
 
@@ -143,6 +151,17 @@ actor URLSessionOpenSearchDatabaseClient: OpenSearchDatabaseClient {
     private func prepare() async throws {
         let rootResponse = try await get(path: "/")
         try OpenSearchDatabaseDriverErrorClassifier.validate(rootResponse)
+        let signature: OpenSearchDatabaseProductSignature
+        do {
+            signature = try JSONDecoder().decode(
+                OpenSearchDatabaseProductSignature.self,
+                from: rootResponse.body)
+        } catch {
+            throw OpenSearchDatabaseDriverFailure.invalidResponse
+        }
+        try OpenSearchDatabaseDriverSupport.validateProduct(
+            signature: signature,
+            response: rootResponse)
         let root: OpenSearchDatabaseRootResponse
         do {
             root = try JSONDecoder().decode(
@@ -297,6 +316,16 @@ struct OpenSearchDatabaseRootResponse: Decodable, Equatable, Sendable {
     }
 }
 
+struct OpenSearchDatabaseProductSignature: Decodable, Equatable, Sendable {
+    let version: Version
+    let tagline: String?
+
+    struct Version: Decodable, Equatable, Sendable {
+        let distribution: String?
+        let number: String?
+    }
+}
+
 struct OpenSearchDatabaseNodesResponse: Decodable, Equatable, Sendable {
     let summary: Summary
     let clusterName: String
@@ -334,10 +363,30 @@ enum OpenSearchDatabaseDriverSupport {
     private static let maximumExtensions = 128
 
     static func validateProduct(
+        signature: OpenSearchDatabaseProductSignature,
+        response: OpenSearchDatabaseHTTPResponse
+    ) throws(OpenSearchDatabaseDriverFailure) {
+        guard signature.version.distribution == "opensearch",
+            signature.tagline?.hasPrefix("The OpenSearch Project:") == true,
+            response.elasticProductHeader == nil
+        else {
+            throw .unsupportedProduct
+        }
+        guard let version = signature.version.number,
+            valid(version, maximumBytes: 128)
+        else {
+            throw .invalidResponse
+        }
+        try validateProductHeaders(
+            response: response,
+            expectedVersion: version)
+    }
+
+    static func validateProduct(
         root: OpenSearchDatabaseRootResponse,
         response: OpenSearchDatabaseHTTPResponse
     ) throws(OpenSearchDatabaseDriverFailure) {
-        guard root.version.distribution?.lowercased() == "opensearch",
+        guard root.version.distribution == "opensearch",
             root.tagline.hasPrefix("The OpenSearch Project:"),
             response.elasticProductHeader == nil
         else {
@@ -366,7 +415,7 @@ enum OpenSearchDatabaseDriverSupport {
         root: OpenSearchDatabaseRootResponse,
         nodes: OpenSearchDatabaseNodesResponse
     ) throws(OpenSearchDatabaseDriverFailure) -> DatabaseProductIdentity {
-        guard root.version.distribution?.lowercased() == "opensearch",
+        guard root.version.distribution == "opensearch",
             valid(root.name, maximumBytes: 1_024),
             valid(root.clusterName, maximumBytes: 1_024),
             valid(root.clusterUUID, maximumBytes: 256),
