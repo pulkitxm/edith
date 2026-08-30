@@ -391,6 +391,11 @@ protocol RedisDatabaseClient: Sendable {
         context: DatabaseAdapterOperationContext,
         deadline: Date
     ) async throws -> RedisDatabaseReply
+    func executeBatch(
+        _ operations: [RedisDatabaseReadOperation],
+        context: DatabaseAdapterOperationContext,
+        deadline: Date
+    ) async throws -> [RedisDatabaseCommandResult]
     func close() async
 }
 
@@ -425,6 +430,11 @@ enum RedisDatabaseReadOperation: Equatable, Sendable {
     case sortedSetRange(Data, count: Int)
     case streamLength(Data)
     case streamRange(Data, count: Int)
+}
+
+enum RedisDatabaseCommandResult: Sendable {
+    case reply(RedisDatabaseReply)
+    case failure(RedisDatabaseClientFailure)
 }
 
 indirect enum RedisDatabaseReply: Equatable, Sendable {
@@ -561,6 +571,60 @@ final class RediStackDatabaseClient: RedisDatabaseClient, @unchecked Sendable {
         }
     }
 
+    func executeBatch(
+        _ operations: [RedisDatabaseReadOperation],
+        context: DatabaseAdapterOperationContext,
+        deadline: Date
+    ) async throws -> [RedisDatabaseCommandResult] {
+        guard operations.count <= RedisValkeyDatabaseAdapterSupport.maximumBatchOperations else {
+            throw RedisDatabaseClientFailure.responseTooLarge
+        }
+        guard !operations.isEmpty else { return [] }
+        let budget = RedisDatabaseBatchBudget(
+            maximumBytes: DatabaseAdapterBounds.maximumPageBytes)
+        let futures = operations.map { operation in
+            let request = operation.request
+            return sendFuture(command: request.command, arguments: request.arguments)
+                .map { response -> RedisDatabaseCommandResult in
+                    do {
+                        var bytes = RedisValkeyDatabaseAdapterSupport.maximumRawReplyBytes
+                        var elements = 0
+                        let reply = try RedisDatabaseReply.convert(
+                            response,
+                            budget: &bytes,
+                            elements: &elements,
+                            depth: 0)
+                        guard
+                            budget.consume(
+                                RedisValkeyDatabaseAdapterSupport.maximumRawReplyBytes - bytes)
+                        else {
+                            return .failure(.responseTooLarge)
+                        }
+                        return .reply(reply)
+                    } catch let failure as RedisDatabaseClientFailure {
+                        return .failure(failure)
+                    } catch {
+                        return .failure(.protocolFailure)
+                    }
+                }
+                .flatMapError { error -> EventLoopFuture<RedisDatabaseCommandResult> in
+                    self.channel.eventLoop.makeSucceededFuture(
+                        RedisDatabaseCommandResult.failure(self.clientFailure(error)))
+                }
+        }
+        do {
+            return try await RedisDatabaseFutureAwaiter.value(
+                EventLoopFuture.whenAllSucceed(futures, on: channel.eventLoop),
+                context: context,
+                deadline: deadline,
+                interrupt: { [channel] in
+                    channel.close(mode: .all, promise: nil)
+                })
+        } catch {
+            throw clientFailure(error)
+        }
+    }
+
     func close() async {
         try? await channel.close(mode: .all).get()
     }
@@ -609,19 +673,25 @@ final class RediStackDatabaseClient: RedisDatabaseClient, @unchecked Sendable {
         context: DatabaseAdapterOperationContext,
         deadline: Date
     ) async throws -> RESPValue {
-        var message = [RESPValue(from: command)]
-        message.append(contentsOf: arguments)
-        let response = channel.eventLoop.makePromise(of: RESPValue.self)
-        let request = RedisCommand(message: .array(message), responsePromise: response)
-        let write: EventLoopFuture<Void> = channel.writeAndFlush(request)
-        let future = write.flatMap { response.futureResult }
         return try await RedisDatabaseFutureAwaiter.value(
-            future,
+            sendFuture(command: command, arguments: arguments),
             context: context,
             deadline: deadline,
             interrupt: { [channel] in
                 channel.close(mode: .all, promise: nil)
             })
+    }
+
+    private func sendFuture(
+        command: String,
+        arguments: [RESPValue]
+    ) -> EventLoopFuture<RESPValue> {
+        var message = [RESPValue(from: command)]
+        message.append(contentsOf: arguments)
+        let response = channel.eventLoop.makePromise(of: RESPValue.self)
+        let request = RedisCommand(message: .array(message), responsePromise: response)
+        let write: EventLoopFuture<Void> = channel.writeAndFlush(request)
+        return write.flatMap { response.futureResult }
     }
 
     private func clientFailure(_ error: any Error) -> RedisDatabaseClientFailure {
@@ -649,6 +719,23 @@ final class RediStackDatabaseClient: RedisDatabaseClient, @unchecked Sendable {
             return .server
         }
         return .connection
+    }
+}
+
+private final class RedisDatabaseBatchBudget: @unchecked Sendable {
+    private let lock = NSLock()
+    private var remainingBytes: Int
+
+    init(maximumBytes: Int) {
+        remainingBytes = maximumBytes
+    }
+
+    func consume(_ bytes: Int) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard bytes >= 0, bytes <= remainingBytes else { return false }
+        remainingBytes -= bytes
+        return true
     }
 }
 
@@ -1135,6 +1222,7 @@ private enum RedisValkeyDatabaseAdapterSupport {
     static let maximumReplyDepth = 8
     static let maximumInboundReplyBytes = maximumRawReplyBytes + 65_536
     static let maximumScanCallsPerPage = 256
+    static let maximumBatchOperations = maximumPageRecords * 2
 
     static let connectionFailed = failure(
         category: .connectionFailed,
@@ -1553,21 +1641,20 @@ private enum RedisValkeyDatabaseAdapterSupport {
             connectionID: connectionID,
             logicalDatabase: logicalDatabase)
         var continuation = try continuationState(request.continuation)
-        var records: [DatabaseRecord] = []
+        var keys: [Data] = []
         var seen = Set<Data>()
-        var sampledValues = false
         var scanCalls = 0
         let limit = min(request.pageSize.value, maximumPageRecords)
         let drainsFinalCursor = request.continuation != nil && continuation.cursor == 0
 
-        while records.count < limit {
+        while keys.count < limit {
             try await check(context, deadline: deadline)
             if continuation.pendingKeys.isEmpty {
                 if (scanCalls > 0 || drainsFinalCursor), continuation.cursor == 0 {
                     break
                 }
                 guard scanCalls < maximumScanCallsPerPage else { break }
-                let requestedCount = max(1, min(limit - records.count, maximumPageRecords))
+                let requestedCount = max(1, min(limit - keys.count, maximumPageRecords))
                 let scan = try scanReply(
                     try await client.execute(
                         .scan(cursor: continuation.cursor, count: requestedCount),
@@ -1591,23 +1678,22 @@ private enum RedisValkeyDatabaseAdapterSupport {
                 throw resultTooLarge
             }
             guard seen.insert(key).inserted else { continue }
-            let record = try await inspectRecord(
-                key: key,
-                product: product,
-                client: client,
-                context: context,
-                deadline: deadline)
-            sampledValues =
-                sampledValues
-                || record.metadata.contains { $0.value != "complete" }
-            records.append(record)
+            keys.append(key)
         }
+        let records = try await inspectRecords(
+            keys: keys,
+            product: product,
+            client: client,
+            context: context,
+            deadline: deadline)
         let next = try makeContinuation(continuation)
         return RedisDatabaseReadOutput(
             records: records,
             fields: fields,
             continuation: next,
-            sampledValues: sampledValues,
+            sampledValues: records.contains { record in
+                record.metadata.contains { $0.value != "complete" }
+            },
             scanTraversal: true)
     }
 
@@ -1939,60 +2025,117 @@ private enum RedisValkeyDatabaseAdapterSupport {
         return try DatabaseAdapterContinuation(mode: .scanCursor, payload: payload)
     }
 
-    private static func inspectRecord(
-        key: Data,
+    private static func inspectRecords(
+        keys: [Data],
         product: DatabaseProduct,
         client: any RedisDatabaseClient,
         context: DatabaseAdapterOperationContext,
         deadline: Date
-    ) async throws -> DatabaseRecord {
-        let type = try text(
-            try await client.execute(.type(key), context: context, deadline: deadline))
-        try await check(context, deadline: deadline)
-        let ttl = try integer(
-            try await client.execute(.pttl(key), context: context, deadline: deadline))
-        let inspected = try await inspectValue(
-            type: type,
-            key: key,
-            product: product,
-            client: client,
+    ) async throws -> [DatabaseRecord] {
+        guard !keys.isEmpty else { return [] }
+        let metadataOperations = keys.flatMap {
+            [RedisDatabaseReadOperation.type($0), .pttl($0)]
+        }
+        let metadataResults = try await client.executeBatch(
+            metadataOperations,
             context: context,
             deadline: deadline)
-        var recordFields = [
-            DatabaseObjectField(name: "key", value: scalar(key)),
-            DatabaseObjectField(name: "type", value: .string(type)),
-            DatabaseObjectField(name: "ttlMilliseconds", value: .signedInteger(ttl)),
-            DatabaseObjectField(
-                name: "length",
-                value: inspected.length.map(DatabaseValue.unsignedInteger) ?? .null),
-            DatabaseObjectField(name: "value", value: inspected.value),
-        ]
-        if type == "none" {
-            recordFields[2] = DatabaseObjectField(
-                name: "ttlMilliseconds",
-                value: .signedInteger(-2))
+        guard metadataResults.count == metadataOperations.count else {
+            throw RedisDatabaseClientFailure.protocolFailure
         }
-        return DatabaseRecord(
-            identity: DatabaseRecordIdentity(
-                kind: .key,
-                components: [DatabaseIdentityComponent(name: "key", value: scalar(key))]),
-            fields: recordFields,
-            metadata: [
-                DatabaseStringAttribute(
-                    name: "valueCompleteness",
-                    value: inspected.completeness)
-            ])
+        var seeds: [(key: Data, type: String, ttl: Int64)] = []
+        for index in keys.indices {
+            seeds.append(
+                (
+                    keys[index],
+                    try text(try commandReply(metadataResults[index * 2])),
+                    try integer(try commandReply(metadataResults[index * 2 + 1]))
+                ))
+        }
+        try await check(context, deadline: deadline)
+        var valueOperations: [RedisDatabaseReadOperation] = []
+        var ranges: [Range<Int>] = []
+        for seed in seeds {
+            let start = valueOperations.count
+            valueOperations.append(contentsOf: inspectionOperations(type: seed.type, key: seed.key))
+            ranges.append(start..<valueOperations.count)
+        }
+        let valueResults = try await client.executeBatch(
+            valueOperations,
+            context: context,
+            deadline: deadline)
+        guard valueResults.count == valueOperations.count else {
+            throw RedisDatabaseClientFailure.protocolFailure
+        }
+        try await check(context, deadline: deadline)
+        return try zip(seeds, ranges).map { seed, range in
+            let inspected = try inspectValue(
+                type: seed.type,
+                product: product,
+                results: valueResults[range])
+            let fields = [
+                DatabaseObjectField(name: "key", value: scalar(seed.key)),
+                DatabaseObjectField(name: "type", value: .string(seed.type)),
+                DatabaseObjectField(
+                    name: "ttlMilliseconds",
+                    value: .signedInteger(seed.type == "none" ? -2 : seed.ttl)),
+                DatabaseObjectField(
+                    name: "length",
+                    value: inspected.length.map(DatabaseValue.unsignedInteger) ?? .null),
+                DatabaseObjectField(name: "value", value: inspected.value),
+            ]
+            return DatabaseRecord(
+                identity: DatabaseRecordIdentity(
+                    kind: .key,
+                    components: [
+                        DatabaseIdentityComponent(name: "key", value: scalar(seed.key))
+                    ]),
+                fields: fields,
+                metadata: [
+                    DatabaseStringAttribute(
+                        name: "valueCompleteness",
+                        value: inspected.completeness)
+                ])
+        }
+    }
+
+    private static func inspectionOperations(
+        type: String,
+        key: Data
+    ) -> [RedisDatabaseReadOperation] {
+        switch type {
+        case "string":
+            [.stringLength(key), .stringRange(key, maximumBytes: maximumValueBytes)]
+        case "hash":
+            [.hashLength(key), .hashScan(key, count: maximumCollectionEntries)]
+        case "list":
+            [.listLength(key), .listRange(key, count: maximumCollectionEntries)]
+        case "set":
+            [.setCardinality(key), .setScan(key, count: maximumCollectionEntries)]
+        case "zset":
+            [
+                .sortedSetCardinality(key),
+                .sortedSetRange(key, count: maximumCollectionEntries),
+            ]
+        case "stream":
+            [.streamLength(key), .streamRange(key, count: maximumCollectionEntries)]
+        default:
+            []
+        }
     }
 
     private static func inspectValue(
         type: String,
-        key: Data,
         product: DatabaseProduct,
-        client: any RedisDatabaseClient,
-        context: DatabaseAdapterOperationContext,
-        deadline: Date
-    ) async throws -> RedisDatabaseInspectedValue {
-        try await check(context, deadline: deadline)
+        results: ArraySlice<RedisDatabaseCommandResult>
+    ) throws -> RedisDatabaseInspectedValue {
+        if results.contains(where: { result in
+            if case .failure(.wrongType) = result { return true }
+            return false
+        }) {
+            return unavailableValue(type: type, product: product)
+        }
+        let replies = try results.map(commandReply)
         switch type {
         case "none":
             return RedisDatabaseInspectedValue(
@@ -2000,115 +2143,80 @@ private enum RedisValkeyDatabaseAdapterSupport {
                 length: nil,
                 completeness: "complete")
         case "string":
-            let length = try nonnegative(
-                try await client.execute(
-                    .stringLength(key),
-                    context: context,
-                    deadline: deadline))
-            let data = try bytes(
-                try await client.execute(
-                    .stringRange(key, maximumBytes: maximumValueBytes),
-                    context: context,
-                    deadline: deadline))
+            guard replies.count == 2 else { throw RedisDatabaseClientFailure.protocolFailure }
+            let length = try nonnegative(replies[0])
+            let data = try bytes(replies[1])
             return RedisDatabaseInspectedValue(
-                value: scalar(
-                    data,
-                    totalByteCount: length,
-                    maximumBytes: maximumValueBytes),
+                value: scalar(data, totalByteCount: length),
                 length: length,
                 completeness: length > UInt64(data.count) ? "truncated" : "complete")
         case "hash":
-            let length = try nonnegative(
-                try await client.execute(
-                    .hashLength(key),
-                    context: context,
-                    deadline: deadline))
-            let reply = try await client.execute(
-                .hashScan(key, count: maximumCollectionEntries),
-                context: context,
-                deadline: deadline)
-            let scanned = try collectionScanReply(reply)
-            let pairs = try paired(scanned.values)
+            guard replies.count == 2 else { throw RedisDatabaseClientFailure.protocolFailure }
+            let pairs = try paired(collectionScanReply(replies[1]).values)
                 .sorted { $0.0.lexicographicallyPrecedes($1.0) }
             return RedisDatabaseInspectedValue(
                 value: boundedPairs(pairs, firstName: "field", secondName: "value"),
-                length: length,
+                length: try nonnegative(replies[0]),
                 completeness: "sampled")
         case "list":
-            let length = try nonnegative(
-                try await client.execute(
-                    .listLength(key),
-                    context: context,
-                    deadline: deadline))
-            let values = try byteArray(
-                try await client.execute(
-                    .listRange(key, count: maximumCollectionEntries),
-                    context: context,
-                    deadline: deadline))
+            guard replies.count == 2 else { throw RedisDatabaseClientFailure.protocolFailure }
             return RedisDatabaseInspectedValue(
-                value: boundedArray(values),
-                length: length,
+                value: boundedArray(try byteArray(replies[1])),
+                length: try nonnegative(replies[0]),
                 completeness: "sampled")
         case "set":
-            let length = try nonnegative(
-                try await client.execute(
-                    .setCardinality(key),
-                    context: context,
-                    deadline: deadline))
-            let scanned = try collectionScanReply(
-                try await client.execute(
-                    .setScan(key, count: maximumCollectionEntries),
-                    context: context,
-                    deadline: deadline))
-            let values = scanned.values.sorted(by: { $0.lexicographicallyPrecedes($1) })
+            guard replies.count == 2 else { throw RedisDatabaseClientFailure.protocolFailure }
+            let values = try collectionScanReply(replies[1]).values.sorted {
+                $0.lexicographicallyPrecedes($1)
+            }
             return RedisDatabaseInspectedValue(
                 value: boundedArray(values),
-                length: length,
+                length: try nonnegative(replies[0]),
                 completeness: "sampled")
         case "zset":
-            let length = try nonnegative(
-                try await client.execute(
-                    .sortedSetCardinality(key),
-                    context: context,
-                    deadline: deadline))
-            let values = try paired(
-                byteArray(
-                    try await client.execute(
-                        .sortedSetRange(key, count: maximumCollectionEntries),
-                        context: context,
-                        deadline: deadline)))
+            guard replies.count == 2 else { throw RedisDatabaseClientFailure.protocolFailure }
             return RedisDatabaseInspectedValue(
-                value: boundedPairs(values, firstName: "member", secondName: "score"),
-                length: length,
+                value: boundedPairs(
+                    try paired(byteArray(replies[1])),
+                    firstName: "member",
+                    secondName: "score"),
+                length: try nonnegative(replies[0]),
                 completeness: "sampled")
         case "stream":
-            let length = try nonnegative(
-                try await client.execute(
-                    .streamLength(key),
-                    context: context,
-                    deadline: deadline))
-            let entries = try streamEntries(
-                try await client.execute(
-                    .streamRange(key, count: maximumCollectionEntries),
-                    context: context,
-                    deadline: deadline))
+            guard replies.count == 2 else { throw RedisDatabaseClientFailure.protocolFailure }
             return RedisDatabaseInspectedValue(
-                value: boundedStream(entries),
-                length: length,
+                value: boundedStream(try streamEntries(replies[1])),
+                length: try nonnegative(replies[0]),
                 completeness: "sampled")
         default:
-            return RedisDatabaseInspectedValue(
-                value: .productSpecific(
-                    DatabaseProductValue(
-                        product: product,
-                        typeName: type,
-                        attributes: [
-                            DatabaseStringAttribute(
-                                name: "retrieval",
-                                value: "unavailable")
-                        ])),
-                length: nil,
-                completeness: "unavailable")
+            return unavailableValue(type: type, product: product)
+        }
+    }
+
+    private static func unavailableValue(
+        type: String,
+        product: DatabaseProduct
+    ) -> RedisDatabaseInspectedValue {
+        RedisDatabaseInspectedValue(
+            value: .productSpecific(
+                DatabaseProductValue(
+                    product: product,
+                    typeName: type,
+                    attributes: [
+                        DatabaseStringAttribute(name: "retrieval", value: "unavailable")
+                    ])),
+            length: nil,
+            completeness: "unavailable")
+    }
+
+    private static func commandReply(
+        _ result: RedisDatabaseCommandResult
+    ) throws -> RedisDatabaseReply {
+        switch result {
+        case let .reply(reply):
+            return reply
+        case let .failure(failure):
+            throw failure
         }
     }
 
