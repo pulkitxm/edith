@@ -4,7 +4,42 @@ import Testing
 @testable import EdithCLI
 @testable import EdithKit
 
+private final class HerdrPipeReadBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = Data()
+
+    func set(_ data: Data) {
+        lock.lock()
+        value = data
+        lock.unlock()
+    }
+
+    func read() -> Data {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+}
+
 @Suite struct CLIHerdrTests {
+    @Test func bridgeReadsAFrameWithoutWaitingForThePipeToClose() throws {
+        let pipe = Pipe()
+        let result = HerdrPipeReadBox()
+        let finished = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            result.set(HerdrTerminalStream.read(from: pipe.fileHandleForReading))
+            finished.signal()
+        }
+
+        let frame = Data("frame\n".utf8)
+        try pipe.fileHandleForWriting.write(contentsOf: frame)
+
+        #expect(finished.wait(timeout: .now() + 2) == .success)
+        #expect(result.read() == frame)
+        try pipe.fileHandleForWriting.close()
+        try pipe.fileHandleForReading.close()
+    }
+
     @Test func listingWithoutHerdrIsStillSuccess() async {
         let result = await CLIProbe.run(["herdr", "ls", "--json"])
         #expect(result.code == 0)

@@ -64,6 +64,12 @@ private final class HerdrTerminalWriter: @unchecked Sendable {
     }
 }
 
+enum HerdrTerminalStream {
+    static func read(from handle: FileHandle) -> Data {
+        handle.availableData
+    }
+}
+
 private final class HerdrRawTerminal {
     private var original = termios()
     private var configured = false
@@ -143,7 +149,9 @@ private final class HerdrTerminalBridgeRuntime {
 
     private func startInputForwarding(writer: HerdrTerminalWriter) {
         DispatchQueue.global(qos: .userInteractive).async { [input] in
-            while let bytes = try? input.read(upToCount: 4096), !bytes.isEmpty {
+            while true {
+                let bytes = HerdrTerminalStream.read(from: input)
+                guard !bytes.isEmpty else { return }
                 guard let command = try? HerdrTerminalBridge.inputCommand(bytes) else { return }
                 writer.send(command)
             }
@@ -172,7 +180,9 @@ private final class HerdrTerminalBridgeRuntime {
 
     private func forwardFrames(from handle: FileHandle) throws {
         var buffer = Data()
-        while let chunk = try handle.read(upToCount: 65_536), !chunk.isEmpty {
+        while true {
+            let chunk = HerdrTerminalStream.read(from: handle)
+            guard !chunk.isEmpty else { break }
             buffer.append(chunk)
             while let newline = buffer.firstIndex(of: 0x0A) {
                 let line = buffer[..<newline]
