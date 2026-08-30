@@ -226,6 +226,52 @@ struct ClickHouseDatabaseHTTPTestHarness {
     #expect(UUID(uuidString: settings["query_id"] ?? "") != nil)
 }
 
+@Test func clickHouseHTTPTransportBindsValidatedQueryParameters() async throws {
+    let harness = ClickHouseDatabaseHTTPTestHarness { _ in
+        .response(statusCode: 200, headers: [:], body: Data())
+    }
+    defer { harness.remove() }
+    let transport = try ClickHouseDatabaseHTTPTransport(
+        plan: harness.plan,
+        configuration: harness.configuration)
+    _ = try await transport.execute(
+        query: "SELECT {minimum:UInt64}",
+        maximumResponseBytes: 4_096,
+        parameters: [
+            ClickHouseDatabaseHTTPParameter(name: "minimum", value: "42")
+        ])
+    await transport.close()
+    let request = try #require(harness.stub.requests.first)
+    let requestURL = try #require(request.url)
+    let components = try #require(
+        URLComponents(url: requestURL, resolvingAgainstBaseURL: false))
+    let items = components.queryItems ?? []
+    #expect(items.filter { $0.name == "param_minimum" }.map(\.value) == ["42"])
+    #expect(items.filter { $0.name == "result_overflow_mode" }.count == 1)
+    #expect(items.filter { $0.name == "output_format_json_quote_decimals" }.map(\.value) == ["1"])
+}
+
+@Test func clickHouseHTTPTransportRejectsInvalidQueryParametersBeforeNetworkUse() async throws {
+    let harness = ClickHouseDatabaseHTTPTestHarness { _ in
+        .response(statusCode: 200, headers: [:], body: Data())
+    }
+    defer { harness.remove() }
+    let transport = try ClickHouseDatabaseHTTPTransport(
+        plan: harness.plan,
+        configuration: harness.configuration)
+    await #expect(throws: ClickHouseDatabaseHTTPTransportFailure.invalidConfiguration) {
+        _ = try await transport.execute(
+            query: "SELECT {value:String}",
+            maximumResponseBytes: 4_096,
+            parameters: [
+                ClickHouseDatabaseHTTPParameter(name: "bad-name", value: "secret"),
+                ClickHouseDatabaseHTTPParameter(name: "bad-name", value: "duplicate"),
+            ])
+    }
+    #expect(harness.stub.requests.isEmpty)
+    await transport.close()
+}
+
 @Test func clickHouseHTTPTransportRejectsDeclaredOversizedResponses() async throws {
     let body = Data(repeating: 65, count: 4_097)
     let harness = ClickHouseDatabaseHTTPTestHarness { _ in

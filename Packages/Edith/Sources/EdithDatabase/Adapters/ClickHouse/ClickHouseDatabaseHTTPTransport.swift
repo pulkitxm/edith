@@ -13,10 +13,19 @@ struct ClickHouseDatabaseHTTPResponse: Equatable, Sendable {
     let body: Data
 }
 
+struct ClickHouseDatabaseHTTPParameter: Equatable, Sendable {
+    let name: String
+    let value: String
+}
+
 final class ClickHouseDatabaseHTTPTransport: @unchecked Sendable {
     static let maximumQueryBytes = 1_048_576
     static let maximumCredentialBytes = 16_384
     static let maximumBufferedResponseBytes = 16_777_216
+    static let maximumParameters = 512
+    static let maximumParameterNameBytes = 128
+    static let maximumParameterValueBytes = 1_048_576
+    static let maximumParameterBytes = 4_194_304
 
     private let plan: ClickHouseDatabaseConnectionPlan
     private let baseURL: URL
@@ -59,7 +68,8 @@ final class ClickHouseDatabaseHTTPTransport: @unchecked Sendable {
 
     func execute(
         query: String,
-        maximumResponseBytes: Int
+        maximumResponseBytes: Int,
+        parameters: [ClickHouseDatabaseHTTPParameter] = []
     ) async throws -> ClickHouseDatabaseHTTPResponse {
         guard !query.isEmpty,
             query.utf8.count <= Self.maximumQueryBytes,
@@ -68,6 +78,7 @@ final class ClickHouseDatabaseHTTPTransport: @unchecked Sendable {
         else {
             throw ClickHouseDatabaseHTTPTransportFailure.invalidConfiguration
         }
+        try Self.validate(parameters)
         let queryID = UUID()
         let session = try beginQuery(queryID)
         defer {
@@ -76,7 +87,8 @@ final class ClickHouseDatabaseHTTPTransport: @unchecked Sendable {
         let request = try request(
             query: query,
             queryID: queryID,
-            maximumResponseBytes: maximumResponseBytes)
+            maximumResponseBytes: maximumResponseBytes,
+            parameters: parameters)
         do {
             return try await response(
                 session: session,
@@ -137,7 +149,8 @@ final class ClickHouseDatabaseHTTPTransport: @unchecked Sendable {
     private func request(
         query: String,
         queryID: UUID,
-        maximumResponseBytes: Int
+        maximumResponseBytes: Int,
+        parameters: [ClickHouseDatabaseHTTPParameter]
     ) throws -> URLRequest {
         let executionSeconds = max(
             1,
@@ -149,7 +162,12 @@ final class ClickHouseDatabaseHTTPTransport: @unchecked Sendable {
             URLQueryItem(name: "max_result_bytes", value: String(maximumResponseBytes)),
             URLQueryItem(name: "result_overflow_mode", value: "throw"),
             URLQueryItem(name: "output_format_json_quote_64bit_integers", value: "0"),
+            URLQueryItem(name: "output_format_json_quote_decimals", value: "1"),
         ])
+        components.queryItems?.append(
+            contentsOf: parameters.map {
+                URLQueryItem(name: "param_\($0.name)", value: $0.value)
+            })
         if plan.readOnly {
             components.queryItems?.append(URLQueryItem(name: "readonly", value: "1"))
         }
@@ -298,6 +316,44 @@ final class ClickHouseDatabaseHTTPTransport: @unchecked Sendable {
                 CharacterSet.controlCharacters.contains($0)
                     || CharacterSet.newlines.contains($0)
             })
+    }
+
+    private static func validate(
+        _ parameters: [ClickHouseDatabaseHTTPParameter]
+    ) throws {
+        guard parameters.count <= maximumParameters else {
+            throw ClickHouseDatabaseHTTPTransportFailure.invalidConfiguration
+        }
+        var names = Set<String>()
+        var totalBytes = 0
+        for parameter in parameters {
+            let valueBytes = parameter.value.utf8.count
+            guard validParameterName(parameter.name),
+                names.insert(parameter.name).inserted,
+                valueBytes <= maximumParameterValueBytes,
+                !parameter.value.contains("\0")
+            else {
+                throw ClickHouseDatabaseHTTPTransportFailure.invalidConfiguration
+            }
+            totalBytes += parameter.name.utf8.count + valueBytes
+            guard totalBytes <= maximumParameterBytes else {
+                throw ClickHouseDatabaseHTTPTransportFailure.invalidConfiguration
+            }
+        }
+    }
+
+    private static func validParameterName(_ value: String) -> Bool {
+        guard !value.isEmpty,
+            value.utf8.count <= maximumParameterNameBytes,
+            let first = value.utf8.first,
+            (first >= 65 && first <= 90) || (first >= 97 && first <= 122) || first == 95
+        else {
+            return false
+        }
+        return value.utf8.dropFirst().allSatisfy {
+            ($0 >= 65 && $0 <= 90) || ($0 >= 97 && $0 <= 122)
+                || ($0 >= 48 && $0 <= 57) || $0 == 95
+        }
     }
 
     private static func safeExceptionCode(_ value: String?) -> String? {
