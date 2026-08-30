@@ -31,7 +31,10 @@ let targets: [Target] = [
     ),
     .target(
         name: "EdithDatabase",
-        dependencies: [.product(name: "GRDB", package: "GRDB.swift")],
+        dependencies: [
+            "EdithCore",
+            .product(name: "GRDB", package: "GRDB.swift"),
+        ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
