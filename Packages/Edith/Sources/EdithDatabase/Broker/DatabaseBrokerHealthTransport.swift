@@ -245,7 +245,7 @@ struct DatabaseBrokerHealthTransport: Sendable {
             responseBytesWritten: writeOutcome.bytesWritten)
     }
 
-    private func authenticatePeer(
+    func authenticatePeer(
         socketDescriptor: Int32,
         absoluteDeadline: UInt64?
     ) throws {
@@ -290,7 +290,7 @@ struct DatabaseBrokerHealthTransport: Sendable {
         }
     }
 
-    private func readFrame<Payload: Codable & Sendable>(
+    func readFrame<Payload: Codable & Sendable>(
         socketDescriptor: Int32,
         stream: DatabaseBrokerFrameStream,
         bytesWritten: Int,
@@ -428,7 +428,7 @@ struct DatabaseBrokerHealthTransport: Sendable {
         }
     }
 
-    private func writeFrame(
+    func writeFrame(
         _ frame: Data,
         socketDescriptor: Int32,
         sinkClosureIsResult: Bool,
@@ -562,7 +562,7 @@ struct DatabaseBrokerHealthTransport: Sendable {
     }
 }
 
-private struct DatabaseBrokerHealthWriteOutcome {
+struct DatabaseBrokerHealthWriteOutcome {
     let bytesWritten: Int
     let sinkClosed: Bool
 }
