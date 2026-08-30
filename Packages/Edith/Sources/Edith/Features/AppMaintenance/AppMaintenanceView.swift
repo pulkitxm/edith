@@ -405,7 +405,9 @@ struct AppMaintenanceView: View {
             Divider()
             HSplitView {
                 sectionInventory
-                    .frame(minWidth: 280, idealWidth: 320, maxWidth: 380)
+                    .frame(
+                        minWidth: 280, idealWidth: 320, maxWidth: 380,
+                        maxHeight: .infinity)
                 detail
                     .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -624,7 +626,7 @@ struct AppMaintenanceView: View {
         Group {
             if model.updateHistory.isEmpty {
                 ContentUnavailableView(
-                    "No update history", systemImage: "clock",
+                    "No Update History", systemImage: "clock",
                     description: Text("Completed update attempts will appear here."))
             } else {
                 List(model.updateHistory, id: \.finishedAt) { result in
