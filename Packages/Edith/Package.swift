@@ -144,6 +144,7 @@ let targets: [Target] = [
     .target(
         name: "Edith",
         dependencies: [
+            "EdithDatabase",
             "EdithKit",
             "EdithLidAwakeSupport",
             "GhosttyTerminal",
@@ -184,7 +185,8 @@ let targets: [Target] = [
     .testTarget(
         name: "EdithTests",
         dependencies: [
-            "EdithCore", "Edith", "EdithKit", "EdithLidAwakeSupport", "EdithHelper",
+            "EdithCore", "Edith", "EdithDatabase", "EdithKit", "EdithLidAwakeSupport",
+            "EdithHelper",
             "EdithCLI", "Highlighter", "ed", "UsageSnapshotCrashDriver",
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
