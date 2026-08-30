@@ -1,9 +1,14 @@
+import Darwin
 import Edith
 import EdithCLI
+import EdithDatabase
 import Foundation
 
-if ExecutableLaunch.isApplication(environment: ProcessInfo.processInfo.environment) {
+switch ExecutableLaunch.destination(environment: ProcessInfo.processInfo.environment) {
+case .application:
     EdithApp.main()
-} else {
+case .commandLine:
     await EdithCLIMain.run()
+case .databaseBroker:
+    Darwin.exit(await DatabaseBrokerProcess.run())
 }

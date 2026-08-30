@@ -14,6 +14,7 @@
 		3EE67C3597AF4232B0A60A7E /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 5729B458450B4A17A4E43121 /* Sparkle */; };
 		5806BA00CEAD40AE831B94B2 /* EdithKit in Frameworks */ = {isa = PBXBuildFile; productRef = 4BF07CFCBD4C4C2BB2F631D3 /* EdithKit */; };
 		5A455842DEDC4A4C97F744E6 /* Highlighter in Frameworks */ = {isa = PBXBuildFile; productRef = D09B7FAF0E894B2E88306846 /* Highlighter */; };
+		6DBA5E0A0C4D4C9EB8F10001 /* EdithDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 6DBA5E0A0C4D4C9EB8F10002 /* EdithDatabase */; };
 		77BA436F11A366B6EB38F5A6 /* EdithCLI in Frameworks */ = {isa = PBXBuildFile; productRef = 85207CCF2D3033EE450F487B /* EdithCLI */; };
 		7E3203658C894E09A8D136CA /* EdithCLI in Frameworks */ = {isa = PBXBuildFile; productRef = 85207CCF2D3033EE450F487B /* EdithCLI */; };
 		83AFC3A4B6374B8F8E3AEE16 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 50E40C33BF204D7FBD48418B /* Sparkle */; };
@@ -127,6 +128,7 @@
 				9158E2CD1C3E9F209ADBEA16 /* Cocoa.framework in Frameworks */,
 				2B8D44E9C70B5F3DAE1F8024 /* Edith in Frameworks */,
 				7E3203658C894E09A8D136CA /* EdithCLI in Frameworks */,
+				6DBA5E0A0C4D4C9EB8F10001 /* EdithDatabase in Frameworks */,
 				A191C1CE3CD44753BB045A59 /* (null) in Frameworks */,
 				5A455842DEDC4A4C97F744E6 /* Highlighter in Frameworks */,
 				83AFC3A4B6374B8F8E3AEE16 /* Sparkle in Frameworks */,
@@ -225,6 +227,7 @@
 			packageProductDependencies = (
 				0F4B21C7A5E94D3B8C1D6E22 /* Edith */,
 				85207CCF2D3033EE450F487B /* EdithCLI */,
+				6DBA5E0A0C4D4C9EB8F10002 /* EdithDatabase */,
 				D09B7FAF0E894B2E88306846 /* Highlighter */,
 				50E40C33BF204D7FBD48418B /* Sparkle */,
 				CCC83B99D6204A92B3072609 /* SwiftTerm */,
@@ -806,6 +809,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 81DDD922D2E24BF7A251EF30 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		6DBA5E0A0C4D4C9EB8F10002 /* EdithDatabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
+			productName = EdithDatabase;
 		};
 		85207CCF2D3033EE450F487B /* EdithCLI */ = {
 			isa = XCSwiftPackageProductDependency;
