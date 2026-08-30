@@ -208,3 +208,33 @@ func postgresqlFoundationLiveAuthenticatedIdentity() async throws {
     print(
         "postgresql live verified version=\(version) database=\(database)")
 }
+
+@Test(.enabled(if: PostgreSQLDatabaseLiveEnvironment.isEnabled))
+func postgresqlFoundationLiveRepeatedConnectionLifecycle() async throws {
+    let environment = PostgreSQLDatabaseLiveEnvironment.values
+    let host = try #require(environment["EDITH_DATABASE_POSTGRESQL_HOST"])
+    let portText = try #require(environment["EDITH_DATABASE_POSTGRESQL_PORT"])
+    let port = try #require(Int(portText))
+    let database = try #require(environment["EDITH_DATABASE_POSTGRESQL_DATABASE"])
+    let username = try #require(environment["EDITH_DATABASE_POSTGRESQL_USERNAME"])
+    let password = try #require(environment["EDITH_DATABASE_POSTGRESQL_PASSWORD"])
+    let plan = PostgreSQLDatabaseConnectionPlan(
+        host: host,
+        port: port,
+        username: username,
+        password: password,
+        database: database,
+        tls: .disabled,
+        tlsServerName: nil,
+        connectTimeoutMilliseconds: 5_000,
+        statementTimeoutMilliseconds: 5_000,
+        readOnly: true)
+    for _ in 0..<4 {
+        let client = try await PostgresNIODatabaseClient.connect(plan)
+        _ = try await client.discoverIdentity()
+        await client.disconnect()
+        await #expect(throws: PostgreSQLDatabaseDriverFailure.connection) {
+            _ = try await client.discoverIdentity()
+        }
+    }
+}
