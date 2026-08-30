@@ -161,7 +161,7 @@ final class ClickHouseDatabaseHTTPTransport: @unchecked Sendable {
             URLQueryItem(name: "max_execution_time", value: String(executionSeconds)),
             URLQueryItem(name: "max_result_bytes", value: String(maximumResponseBytes)),
             URLQueryItem(name: "result_overflow_mode", value: "throw"),
-            URLQueryItem(name: "output_format_json_quote_64bit_integers", value: "0"),
+            URLQueryItem(name: "output_format_json_quote_64bit_integers", value: "1"),
             URLQueryItem(name: "output_format_json_quote_decimals", value: "1"),
         ])
         components.queryItems?.append(
