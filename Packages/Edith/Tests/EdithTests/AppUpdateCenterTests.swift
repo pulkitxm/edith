@@ -97,6 +97,24 @@ private final class UpdateExecutionProbe: @unchecked Sendable {
         #expect(items[0].releaseURL?.absoluteString == "https://example.com/releases/2")
     }
 
+    @Test func formatsEscapedHTMLReleaseNotes() throws {
+        let feed = try #require(
+            """
+            <rss xmlns:sparkle="https://sparkle-project.org/xml-namespaces/sparkle"><channel><item><title>Example 2</title><description>&lt;p&gt;Faster and safer.&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Improved reliability&lt;/li&gt;&lt;li&gt;Keep &amp;quot;On&amp;quot;&lt;/li&gt;&lt;li&gt;App&amp;#39;s updater&lt;/li&gt;&lt;/ul&gt;</description><enclosure sparkle:shortVersionString="2.0" /></item></channel></rss>
+            """.data(using: .utf8))
+
+        let release = try #require(AppUpdateDiscovery.parseFeed(feed))
+
+        #expect(
+            release.notes
+                == """
+                Faster and safer.
+                • Improved reliability
+                • Keep "On"
+                • App's updater
+                """)
+    }
+
     @Test func persistenceAppliesIgnoreSnoozeExclusionHistoryAndBackup() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
