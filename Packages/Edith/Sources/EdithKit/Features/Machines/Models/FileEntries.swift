@@ -71,7 +71,7 @@ public enum FileListing {
     }
 
     public static func parse(output: String, parent: String) -> [RemoteFileEntry] {
-        let lines = output.split(separator: "\n").map(String.init)
+        let lines = output.split(whereSeparator: \Character.isNewline).map(String.init)
         let findEntries = lines.compactMap { parseFindLine($0, parent: parent) }
         if !findEntries.isEmpty { return sorted(findEntries) }
         return sorted(lines.compactMap { parseLSLine($0, parent: parent) })

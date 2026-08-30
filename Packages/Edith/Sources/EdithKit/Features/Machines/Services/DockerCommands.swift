@@ -274,7 +274,7 @@ public struct DockerInspectSummary: Equatable, Sendable {
 
 extension DockerParsing {
     public static func processes(_ output: String) -> [DockerProcess] {
-        let lines = output.split(separator: "\n").map(String.init)
+        let lines = output.split(whereSeparator: \Character.isNewline).map(String.init)
         guard let header = lines.first else { return [] }
         let columns = header.split(separator: " ", omittingEmptySubsequences: true).map {
             $0.uppercased()

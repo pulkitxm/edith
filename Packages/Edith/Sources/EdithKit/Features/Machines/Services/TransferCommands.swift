@@ -87,7 +87,7 @@ public struct MachineTransferFacts: Equatable, Sendable {
 
     public static func parse(_ output: String) -> MachineTransferFacts {
         var facts = MachineTransferFacts()
-        for line in output.split(separator: "\n").map(String.init) {
+        for line in output.split(whereSeparator: \Character.isNewline).map(String.init) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.hasPrefix("rsync=") {
                 facts.rsync = flavour(String(trimmed.dropFirst(6)))

@@ -39,7 +39,7 @@ public enum MachineThermalControls {
     }
 
     public static func parseStatus(_ output: String) -> MachinePlatformProfile? {
-        let lines = output.split(separator: "\n", omittingEmptySubsequences: true)
+        let lines = output.split(whereSeparator: \Character.isNewline)
         guard let current = lines.first.map(String.init), validProfile(current) else { return nil }
         let choices = lines.dropFirst().joined(separator: " ").split(
             whereSeparator: \Character.isWhitespace
