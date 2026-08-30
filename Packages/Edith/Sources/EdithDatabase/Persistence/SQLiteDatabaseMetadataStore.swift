@@ -538,6 +538,51 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
         }
     }
 
+    public func reserveEphemeralOperation(
+        _ summary: DatabaseOperationRecordSummary,
+        owner: DatabaseRuntimeOwnerToken
+    ) throws -> DatabaseOwnedOperationReservationResult {
+        let summaryData = try Self.encoder().encode(summary)
+        return try pool.write { database in
+            try database.execute(
+                sql: """
+                    INSERT INTO database_operation_history (
+                        id, connection_id, kind, state, started_at, finished_at, summary, owner_token
+                    )
+                    SELECT
+                        :id, :connection_id, :kind, :state, :started_at, :finished_at, :summary,
+                        :owner_token
+                    WHERE EXISTS (
+                        SELECT 1 FROM database_runtime_owner
+                        WHERE singleton = 1 AND token = :owner_token AND released_at IS NULL
+                    )
+                    ON CONFLICT(id) DO NOTHING
+                    """,
+                arguments: [
+                    "id": summary.id.rawValue.uuidString,
+                    "connection_id": summary.connection.id.rawValue.uuidString,
+                    "kind": summary.kind.rawValue,
+                    "state": summary.state.rawValue,
+                    "started_at": summary.startedAt?.timeIntervalSince1970,
+                    "finished_at": summary.finishedAt?.timeIntervalSince1970,
+                    "summary": summaryData,
+                    "owner_token": owner.rawValue.uuidString,
+                ])
+            if database.changesCount == 1 {
+                return .reserved
+            }
+            let operationExists =
+                try Bool.fetchOne(
+                    database,
+                    sql: "SELECT EXISTS(SELECT 1 FROM database_operation_history WHERE id = ?)",
+                    arguments: [summary.id.rawValue.uuidString]) ?? false
+            if operationExists {
+                return .operationIdentifierExists
+            }
+            return .runtimeOwnerNotActive
+        }
+    }
+
     public func transitionOperation(
         _ summary: DatabaseOperationRecordSummary,
         from expectedStates: Set<DatabaseOperationState>,
