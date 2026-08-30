@@ -184,12 +184,16 @@ private enum DatabaseBrokerCommandDispatcherFixtures {
             .mutationStatus(
                 DatabaseMutationStatusRequest(
                     connectionID: DatabaseConnectionFixtures.connectionID,
-                    serverOperationIdentifier: "server-task-42",
+                    acceptedMutation: DatabaseAcceptedMutation(
+                        operationID: otherOperationID,
+                        serverOperationIdentifier: "server-task-42"),
                     operation: operation)),
             .mutationCancel(
                 DatabaseMutationCancelRequest(
                     connectionID: DatabaseConnectionFixtures.connectionID,
-                    serverOperationIdentifier: "server-task-42",
+                    acceptedMutation: DatabaseAcceptedMutation(
+                        operationID: otherOperationID,
+                        serverOperationIdentifier: "server-task-42"),
                     operation: operation)),
             .mutationOutcomeGet(
                 DatabaseMutationOutcomeGetRequest(operationID: operationID)),

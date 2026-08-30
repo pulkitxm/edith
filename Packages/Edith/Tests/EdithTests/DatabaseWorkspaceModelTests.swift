@@ -165,7 +165,40 @@ import Testing
         #expect(finalRequests.filter { $0.kind == .mutationApply }.count == 1)
     }
 
-    @Test func cancellingAnActiveApplyUsesASeparateCancelCommand() async throws {
+    @Test func postEffectUnknownResultRemainsTracked() async throws {
+        let sender = DatabaseWorkspaceSender()
+        let preview = Self.preview(token: "post-effect-unknown-token")
+        let applyID = Self.operationID(41)
+        let model = Self.model(
+            sender: sender,
+            operationIDs: [Self.operationID(40), applyID])
+
+        model.requestSafetyReview(for: Self.request)
+        await sender.waitUntilRequested(1)
+        await sender.succeed(Self.previewResponse(preview), at: 0)
+        await model.waitForPreview()
+        model.confirmSafetyReview(preview.requiredConfirmation.text)
+        await sender.waitUntilRequested(2)
+        await sender.succeed(
+            .mutationApply(
+                .success(
+                    Self.completedApplyResult(
+                        effect: .unknown,
+                        error: DatabaseErrorEnvelope(
+                            category: .internalFailure,
+                            message: "The adapter stopped after execution began.")),
+                    metadata: Self.completeMetadata)),
+            at: 1)
+        await sender.waitUntilFinished(2)
+        await Self.waitUntil { model.safetyPhase.isOutcomeUnknown }
+
+        #expect(model.unresolvedOperationID == applyID)
+        #expect(model.acceptedMutation == nil)
+        #expect(model.hasTrackedMutation)
+        #expect(model.mutationNotice == "The adapter stopped after execution began.")
+    }
+
+    @Test func cancellingAnActiveApplyWithoutAnEffectRemainsTracked() async throws {
         let sender = DatabaseWorkspaceSender()
         let previewID = Self.operationID(10)
         let applyID = Self.operationID(11)
@@ -201,10 +234,11 @@ import Testing
         await sender.succeed(Self.operationResponse(id: applyID, state: .cancelled), at: 3)
         await sender.succeed(Self.completedApplyResponse(), at: 1)
         await sender.waitUntilFinished(4)
-        await Self.waitUntil { model.safetyPhase == .failed("The mutation was cancelled.") }
+        await Self.waitUntil { model.safetyPhase.isOutcomeUnknown }
 
-        #expect(model.safetyPhase == .failed("The mutation was cancelled."))
-        #expect(!model.hasUnresolvedMutation)
+        #expect(model.safetyPhase.isOutcomeUnknown)
+        #expect(model.unresolvedOperationID == applyID)
+        #expect(model.hasUnresolvedMutation)
         let finalRequests = await sender.recordedRequests()
         #expect(finalRequests.filter { $0.kind == .mutationApply }.count == 1)
     }
@@ -212,9 +246,10 @@ import Testing
     @Test func acceptedApplyIsNotPresentedAsCompleted() async throws {
         let sender = DatabaseWorkspaceSender()
         let preview = Self.preview(token: "accepted-token")
+        let applyID = Self.operationID(13)
         let model = Self.model(
             sender: sender,
-            operationIDs: [Self.operationID(12), Self.operationID(13)])
+            operationIDs: [Self.operationID(12), applyID])
 
         model.requestSafetyReview(for: Self.request)
         await sender.waitUntilRequested(1)
@@ -222,14 +257,14 @@ import Testing
         await model.waitForPreview()
         model.confirmSafetyReview(preview.requiredConfirmation.text)
         await sender.waitUntilRequested(2)
-        await sender.succeed(Self.acceptedApplyResponse(), at: 1)
+        await sender.succeed(Self.acceptedApplyResponse(operationID: applyID), at: 1)
         await sender.waitUntilFinished(2)
         await Self.waitUntil { model.safetyPhase.isAccepted }
 
         #expect(model.safetyPhase.isAccepted)
         #expect(!model.safetyPhase.isSucceeded)
         #expect(model.hasTrackedMutation)
-        #expect(model.acceptedMutation?.connectionID == Self.connectionID)
+        #expect(model.acceptedMutation?.operationID == applyID)
         #expect(model.acceptedMutation?.serverOperationIdentifier == "server-job-42")
         #expect(
             model.mutationNotice
@@ -240,12 +275,14 @@ import Testing
     @Test func acceptedMutationStatusRemainsTrackedUntilACompleteOutcomeArrives() async throws {
         let sender = DatabaseWorkspaceSender()
         let preview = Self.preview(token: "status-token")
+        let applyID = Self.operationID(16)
+        let acceptedMutation = Self.acceptedMutation(operationID: applyID)
         let firstStatusID = Self.operationID(17)
         let secondStatusID = Self.operationID(18)
         let model = Self.model(
             sender: sender,
             operationIDs: [
-                Self.operationID(15), Self.operationID(16), firstStatusID, secondStatusID,
+                Self.operationID(15), applyID, firstStatusID, secondStatusID,
             ])
 
         model.requestSafetyReview(for: Self.request)
@@ -254,7 +291,7 @@ import Testing
         await model.waitForPreview()
         model.confirmSafetyReview(preview.requiredConfirmation.text)
         await sender.waitUntilRequested(2)
-        await sender.succeed(Self.acceptedApplyResponse(), at: 1)
+        await sender.succeed(Self.acceptedApplyResponse(operationID: applyID), at: 1)
         await sender.waitUntilFinished(2)
         await Self.waitUntil { model.safetyPhase.isAccepted }
 
@@ -265,11 +302,12 @@ import Testing
         var requests = await sender.recordedRequests()
         let firstStatusRequest = try #require(requests[2].mutationStatusRequest)
         #expect(firstStatusRequest.connectionID == Self.connectionID)
-        #expect(firstStatusRequest.serverOperationIdentifier == "server-job-42")
+        #expect(firstStatusRequest.acceptedMutation == acceptedMutation)
         #expect(firstStatusRequest.operation.operationID == firstStatusID)
+        #expect(firstStatusRequest.operation.operationID != applyID)
         await sender.succeed(
             Self.mutationStatusResponse(
-                identifier: "server-job-42",
+                acceptedMutation: acceptedMutation,
                 state: .running),
             at: 2)
         await runningStatus.value
@@ -287,9 +325,9 @@ import Testing
         #expect(secondStatusRequest.operation.operationID == secondStatusID)
         await sender.succeed(
             Self.mutationStatusResponse(
-                identifier: "server-job-42",
+                acceptedMutation: acceptedMutation,
                 state: .completed,
-                outcome: Self.completedApplyResult()),
+                outcome: Self.completedApplyResult(acceptedMutation: acceptedMutation)),
             at: 3)
         await completedStatus.value
 
@@ -300,13 +338,15 @@ import Testing
         #expect(requests.filter { $0.kind == .mutationStatus }.count == 2)
     }
 
-    @Test func acceptedMutationCancellationPublishesItsReturnedStatus() async throws {
+    @Test func failedAcceptedMutationWithNotAppliedEffectClearsTracking() async throws {
         let sender = DatabaseWorkspaceSender()
-        let preview = Self.preview(token: "accepted-cancel-token")
-        let cancelID = Self.operationID(21)
+        let preview = Self.preview(token: "failed-not-applied-token")
+        let applyID = Self.operationID(43)
+        let acceptedMutation = Self.acceptedMutation(operationID: applyID)
+        let statusID = Self.operationID(44)
         let model = Self.model(
             sender: sender,
-            operationIDs: [Self.operationID(19), Self.operationID(20), cancelID])
+            operationIDs: [Self.operationID(42), applyID, statusID])
 
         model.requestSafetyReview(for: Self.request)
         await sender.waitUntilRequested(1)
@@ -314,7 +354,116 @@ import Testing
         await model.waitForPreview()
         model.confirmSafetyReview(preview.requiredConfirmation.text)
         await sender.waitUntilRequested(2)
-        await sender.succeed(Self.acceptedApplyResponse(), at: 1)
+        await sender.succeed(Self.acceptedApplyResponse(operationID: applyID), at: 1)
+        await sender.waitUntilFinished(2)
+        await Self.waitUntil { model.safetyPhase.isAccepted }
+
+        let error = DatabaseErrorEnvelope(
+            category: .conflict,
+            message: "The database rejected the mutation before applying changes.")
+        let reconciliation = Task { @MainActor in
+            await model.reconcileSafetyOperation()
+        }
+        await sender.waitUntilRequested(3)
+        await sender.succeed(
+            Self.mutationStatusResponse(
+                acceptedMutation: acceptedMutation,
+                state: .failed,
+                outcome: Self.completedApplyResult(
+                    effect: .notApplied,
+                    acceptedMutation: acceptedMutation,
+                    error: error),
+                error: error),
+            at: 2)
+        await reconciliation.value
+
+        #expect(model.safetyPhase == .failed(error.message))
+        #expect(model.acceptedMutation == nil)
+        #expect(model.unresolvedOperationID == nil)
+        #expect(!model.hasTrackedMutation)
+    }
+
+    @Test func terminalPartialEffectBlocksUntilExplicitAcknowledgement() async throws {
+        let sender = DatabaseWorkspaceSender()
+        let preview = Self.preview(token: "terminal-partial-token")
+        let applyID = Self.operationID(46)
+        let acceptedMutation = Self.acceptedMutation(operationID: applyID)
+        let model = Self.model(
+            sender: sender,
+            operationIDs: [
+                Self.operationID(45), applyID, Self.operationID(47), Self.operationID(48),
+            ])
+
+        model.requestSafetyReview(for: Self.request)
+        await sender.waitUntilRequested(1)
+        await sender.succeed(Self.previewResponse(preview), at: 0)
+        await model.waitForPreview()
+        model.confirmSafetyReview(preview.requiredConfirmation.text)
+        await sender.waitUntilRequested(2)
+        await sender.succeed(Self.acceptedApplyResponse(operationID: applyID), at: 1)
+        await sender.waitUntilFinished(2)
+        await Self.waitUntil { model.safetyPhase.isAccepted }
+
+        let error = DatabaseErrorEnvelope(
+            category: .partialFailure,
+            message: "Some records could not be changed.")
+        let partialFailure = DatabasePartialFailure(itemIndex: 4, error: error)
+        let reconciliation = Task { @MainActor in
+            await model.reconcileSafetyOperation()
+        }
+        await sender.waitUntilRequested(3)
+        await sender.succeed(
+            Self.mutationStatusResponse(
+                acceptedMutation: acceptedMutation,
+                state: .completed,
+                outcome: Self.completedApplyResult(
+                    effect: .partiallyApplied,
+                    acceptedMutation: acceptedMutation,
+                    partialFailures: [partialFailure],
+                    error: error),
+                error: error),
+            at: 2)
+        await reconciliation.value
+        await Self.waitUntil { model.safetyPhase.isPartiallyApplied }
+
+        #expect(model.hasTrackedMutation)
+        #expect(model.acceptedMutation == acceptedMutation)
+        model.requestSafetyReview(for: Self.otherRequest)
+        await Self.yieldMainActor()
+        var requests = await sender.recordedRequests()
+        #expect(requests.count == 3)
+        #expect(
+            model.mutationNotice
+                == "Resolve the active or uncertain mutation before starting another mutation.")
+
+        model.acknowledgePartiallyAppliedMutation()
+        #expect(!model.hasTrackedMutation)
+        #expect(model.safetyPhase == .ready)
+        model.requestSafetyReview(for: Self.otherRequest)
+        await sender.waitUntilRequested(4)
+        requests = await sender.recordedRequests()
+        #expect(requests[3].mutationPreviewRequest?.mutation == Self.otherRequest)
+        await sender.succeed(Self.previewResponse(Self.preview(token: "next-token")), at: 3)
+        await model.waitForPreview()
+    }
+
+    @Test func acceptedMutationCancellationWithoutAnEffectRemainsTracked() async throws {
+        let sender = DatabaseWorkspaceSender()
+        let preview = Self.preview(token: "accepted-cancel-token")
+        let applyID = Self.operationID(20)
+        let acceptedMutation = Self.acceptedMutation(operationID: applyID)
+        let cancelID = Self.operationID(21)
+        let model = Self.model(
+            sender: sender,
+            operationIDs: [Self.operationID(19), applyID, cancelID])
+
+        model.requestSafetyReview(for: Self.request)
+        await sender.waitUntilRequested(1)
+        await sender.succeed(Self.previewResponse(preview), at: 0)
+        await model.waitForPreview()
+        model.confirmSafetyReview(preview.requiredConfirmation.text)
+        await sender.waitUntilRequested(2)
+        await sender.succeed(Self.acceptedApplyResponse(operationID: applyID), at: 1)
         await sender.waitUntilFinished(2)
         await Self.waitUntil { model.safetyPhase.isAccepted }
 
@@ -323,22 +472,63 @@ import Testing
         let requests = await sender.recordedRequests()
         let cancellation = try #require(requests[2].mutationCancelRequest)
         #expect(cancellation.connectionID == Self.connectionID)
-        #expect(cancellation.serverOperationIdentifier == "server-job-42")
+        #expect(cancellation.acceptedMutation == acceptedMutation)
         #expect(cancellation.operation.operationID == cancelID)
+        #expect(cancellation.operation.operationID != applyID)
         #expect(requests.filter { $0.kind == .operationCancel }.isEmpty)
         await sender.succeed(
             Self.acceptedMutationCancellationResponse(
-                identifier: "server-job-42",
+                acceptedMutation: acceptedMutation,
                 state: .cancelled),
             at: 2)
         await sender.waitUntilFinished(3)
         await Self.waitUntil {
-            model.safetyPhase == .failed("The accepted mutation was cancelled.")
+            model.safetyPhase.isOutcomeUnknown
         }
 
-        #expect(model.safetyPhase == .failed("The accepted mutation was cancelled."))
+        #expect(model.safetyPhase.isOutcomeUnknown)
+        #expect(model.acceptedMutation == acceptedMutation)
+        #expect(model.hasTrackedMutation)
+    }
+
+    @Test func cancelledAcceptedMutationWithNotAppliedEffectClearsTracking() async throws {
+        let sender = DatabaseWorkspaceSender()
+        let preview = Self.preview(token: "accepted-cancel-not-applied-token")
+        let applyID = Self.operationID(50)
+        let acceptedMutation = Self.acceptedMutation(operationID: applyID)
+        let cancelID = Self.operationID(51)
+        let model = Self.model(
+            sender: sender,
+            operationIDs: [Self.operationID(49), applyID, cancelID])
+
+        model.requestSafetyReview(for: Self.request)
+        await sender.waitUntilRequested(1)
+        await sender.succeed(Self.previewResponse(preview), at: 0)
+        await model.waitForPreview()
+        model.confirmSafetyReview(preview.requiredConfirmation.text)
+        await sender.waitUntilRequested(2)
+        await sender.succeed(Self.acceptedApplyResponse(operationID: applyID), at: 1)
+        await sender.waitUntilFinished(2)
+        await Self.waitUntil { model.safetyPhase.isAccepted }
+
+        model.cancelSafetyOperation()
+        await sender.waitUntilRequested(3)
+        await sender.succeed(
+            Self.acceptedMutationCancellationResponse(
+                acceptedMutation: acceptedMutation,
+                state: .cancelled,
+                outcome: Self.completedApplyResult(
+                    effect: .notApplied,
+                    acceptedMutation: acceptedMutation)),
+            at: 2)
+        await sender.waitUntilFinished(3)
+        await Self.waitUntil { !model.hasTrackedMutation }
+
+        #expect(
+            model.safetyPhase
+                == .failed("The database mutation did not apply any changes."))
         #expect(model.acceptedMutation == nil)
-        #expect(!model.hasTrackedMutation)
+        #expect(model.unresolvedOperationID == nil)
     }
 
     @Test func malformedAndPartialApplyResultsRemainTrackedAsUncertain() async throws {
@@ -403,9 +593,10 @@ import Testing
     @Test func dismissalPreservesAcceptedAndUnknownMutationTracking() async {
         let acceptedSender = DatabaseWorkspaceSender()
         let acceptedPreview = Self.preview(token: "dismiss-accepted-token")
+        let acceptedApplyID = Self.operationID(27)
         let acceptedModel = Self.model(
             sender: acceptedSender,
-            operationIDs: [Self.operationID(26), Self.operationID(27)])
+            operationIDs: [Self.operationID(26), acceptedApplyID])
 
         acceptedModel.requestSafetyReview(for: Self.request)
         await acceptedSender.waitUntilRequested(1)
@@ -413,7 +604,8 @@ import Testing
         await acceptedModel.waitForPreview()
         acceptedModel.confirmSafetyReview(acceptedPreview.requiredConfirmation.text)
         await acceptedSender.waitUntilRequested(2)
-        await acceptedSender.succeed(Self.acceptedApplyResponse(), at: 1)
+        await acceptedSender.succeed(
+            Self.acceptedApplyResponse(operationID: acceptedApplyID), at: 1)
         await acceptedSender.waitUntilFinished(2)
         await Self.waitUntil { acceptedModel.safetyPhase.isAccepted }
         acceptedModel.dismissSafetyReview()
@@ -455,9 +647,10 @@ import Testing
     @Test func trackedMutationBlocksStartingASecondMutation() async {
         let sender = DatabaseWorkspaceSender()
         let preview = Self.preview(token: "blocking-token")
+        let applyID = Self.operationID(31)
         let model = Self.model(
             sender: sender,
-            operationIDs: [Self.operationID(30), Self.operationID(31)])
+            operationIDs: [Self.operationID(30), applyID])
 
         model.requestSafetyReview(for: Self.request)
         await sender.waitUntilRequested(1)
@@ -465,7 +658,7 @@ import Testing
         await model.waitForPreview()
         model.confirmSafetyReview(preview.requiredConfirmation.text)
         await sender.waitUntilRequested(2)
-        await sender.succeed(Self.acceptedApplyResponse(), at: 1)
+        await sender.succeed(Self.acceptedApplyResponse(operationID: applyID), at: 1)
         await sender.waitUntilFinished(2)
         await Self.waitUntil { model.safetyPhase.isAccepted }
 
@@ -686,19 +879,43 @@ import Testing
                 metadata: completeMetadata))
     }
 
-    private static func completedApplyResult() -> DatabaseMutationApplyResult {
+    private static func completedApplyResult(
+        effect: DatabaseMutationEffect = .applied,
+        acceptedMutation: DatabaseAcceptedMutation? = nil,
+        partialFailures: [DatabasePartialFailure] = [],
+        error: DatabaseErrorEnvelope? = nil
+    ) -> DatabaseMutationApplyResult {
         DatabaseMutationApplyResult(
             disposition: .completed,
-            affectedRecords: DatabaseCountMetadata(value: 12, accuracy: .exact))
+            effect: effect,
+            affectedRecords: DatabaseCountMetadata(value: 12, accuracy: .exact),
+            acceptedMutation: acceptedMutation,
+            partialFailures: partialFailures,
+            error: error)
     }
 
-    private static func acceptedApplyResponse() -> DatabaseBrokerCommandResponse {
+    private static func acceptedMutation(
+        operationID: DatabaseOperationID,
+        identifier: String = "server-job-42"
+    ) -> DatabaseAcceptedMutation {
+        DatabaseAcceptedMutation(
+            operationID: operationID,
+            serverOperationIdentifier: identifier)
+    }
+
+    private static func acceptedApplyResponse(
+        operationID: DatabaseOperationID,
+        identifier: String = "server-job-42"
+    ) -> DatabaseBrokerCommandResponse {
         .mutationApply(
             .success(
                 DatabaseMutationApplyResult(
                     disposition: .accepted,
+                    effect: .unknown,
                     affectedRecords: DatabaseCountMetadata(value: nil, accuracy: .unknown),
-                    serverOperationIdentifier: "server-job-42"),
+                    acceptedMutation: acceptedMutation(
+                        operationID: operationID,
+                        identifier: identifier)),
                 metadata: completeMetadata))
     }
 
@@ -718,31 +935,37 @@ import Testing
     }
 
     private static func mutationStatusResponse(
-        identifier: String,
+        acceptedMutation: DatabaseAcceptedMutation,
         state: DatabaseMutationOperationState,
-        outcome: DatabaseMutationApplyResult? = nil
+        outcome: DatabaseMutationApplyResult? = nil,
+        error: DatabaseErrorEnvelope? = nil
     ) -> DatabaseBrokerCommandResponse {
         .mutationStatus(
             .success(
                 DatabaseMutationStatusResult(
-                    serverOperationIdentifier: identifier,
+                    acceptedMutation: acceptedMutation,
                     state: state,
-                    outcome: outcome),
+                    outcome: outcome,
+                    error: error),
                 metadata: completeMetadata))
     }
 
     private static func acceptedMutationCancellationResponse(
-        identifier: String,
-        state: DatabaseMutationOperationState
+        acceptedMutation: DatabaseAcceptedMutation,
+        state: DatabaseMutationOperationState,
+        outcome: DatabaseMutationApplyResult? = nil,
+        error: DatabaseErrorEnvelope? = nil
     ) -> DatabaseBrokerCommandResponse {
         .mutationCancel(
             .success(
                 DatabaseMutationCancelResult(
-                    serverOperationIdentifier: identifier,
+                    acceptedMutation: acceptedMutation,
                     disposition: .accepted,
                     status: DatabaseMutationStatusResult(
-                        serverOperationIdentifier: identifier,
-                        state: state)),
+                        acceptedMutation: acceptedMutation,
+                        state: state,
+                        outcome: outcome,
+                        error: error)),
                 metadata: completeMetadata))
     }
 

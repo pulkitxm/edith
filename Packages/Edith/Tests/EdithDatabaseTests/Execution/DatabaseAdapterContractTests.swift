@@ -455,6 +455,7 @@ private enum DatabaseAdapterContractFixtures {
             count: DatabaseAdapterBounds.maximumServerOperationIdentifierBytes)
         let result = try DatabaseAdapterMutationResult(
             disposition: .accepted,
+            effect: .unknown,
             affectedRecords: DatabaseCountMetadata(value: 12, accuracy: .estimated),
             serverOperationIdentifier: acceptedIdentifier)
 
@@ -467,6 +468,7 @@ private enum DatabaseAdapterContractFixtures {
         ) {
             try DatabaseAdapterMutationResult(
                 disposition: .accepted,
+                effect: .unknown,
                 affectedRecords: DatabaseCountMetadata(value: 12, accuracy: .estimated),
                 serverOperationIdentifier: String(
                     repeating: "a",
@@ -488,8 +490,78 @@ private enum DatabaseAdapterContractFixtures {
         ) {
             try DatabaseAdapterMutationResult(
                 disposition: .completed,
+                effect: .applied,
                 affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .lowerBound),
                 returnedPage: page)
+        }
+    }
+
+    @Test func mutationResultBoundsPartialFailures() throws {
+        let error = DatabaseErrorEnvelope(
+            category: .partialFailure,
+            message: "A mutation item failed.")
+        let failure = DatabasePartialFailure(itemIndex: 1, error: error)
+
+        #expect(
+            throws: DatabaseAdapterFailure.limitExceeded(
+                limit: .partialFailures,
+                actual: DatabaseAdapterBounds.maximumPartialFailures + 1,
+                maximum: DatabaseAdapterBounds.maximumPartialFailures)
+        ) {
+            try DatabaseAdapterMutationResult(
+                disposition: .completed,
+                effect: .partiallyApplied,
+                affectedRecords: DatabaseCountMetadata(value: 1, accuracy: .lowerBound),
+                partialFailures: Array(
+                    repeating: failure,
+                    count: DatabaseAdapterBounds.maximumPartialFailures + 1),
+                error: error)
+        }
+    }
+
+    @Test func terminalFailedAndCancelledStatusesRequireEffectOutcomes() throws {
+        let error = DatabaseErrorEnvelope(
+            category: .server,
+            message: "The asynchronous mutation failed.")
+        let failedOutcome = try DatabaseAdapterMutationResult(
+            disposition: .completed,
+            effect: .notApplied,
+            affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .exact),
+            serverOperationIdentifier: "server-task-1",
+            error: error)
+        let failed = try DatabaseAdapterMutationStatus(
+            serverOperationIdentifier: "server-task-1",
+            state: .failed,
+            outcome: failedOutcome,
+            error: error)
+        let cancelledOutcome = try DatabaseAdapterMutationResult(
+            disposition: .completed,
+            effect: .notApplied,
+            affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .exact),
+            serverOperationIdentifier: "server-task-1")
+        let cancelled = try DatabaseAdapterMutationStatus(
+            serverOperationIdentifier: "server-task-1",
+            state: .cancelled,
+            outcome: cancelledOutcome)
+
+        #expect(failed.outcome?.effect == .notApplied)
+        #expect(cancelled.outcome?.effect == .notApplied)
+        #expect(
+            throws: DatabaseAdapterFailure.contractViolation(
+                .invalidMutationReconciliationResult)
+        ) {
+            try DatabaseAdapterMutationStatus(
+                serverOperationIdentifier: "server-task-1",
+                state: .failed,
+                error: error)
+        }
+        #expect(
+            throws: DatabaseAdapterFailure.contractViolation(
+                .invalidMutationReconciliationResult)
+        ) {
+            try DatabaseAdapterMutationStatus(
+                serverOperationIdentifier: "server-task-1",
+                state: .cancelled)
         }
     }
 
@@ -500,6 +572,7 @@ private enum DatabaseAdapterContractFixtures {
         ) {
             try DatabaseAdapterMutationResult(
                 disposition: .accepted,
+                effect: .unknown,
                 affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .unknown))
         }
 
@@ -514,6 +587,7 @@ private enum DatabaseAdapterContractFixtures {
         ) {
             try DatabaseAdapterMutationResult(
                 disposition: .accepted,
+                effect: .unknown,
                 affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .unknown),
                 returnedPage: page,
                 serverOperationIdentifier: "server-task-1")

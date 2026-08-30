@@ -227,7 +227,7 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
         #expect(!remainder.hasMore)
     }
 
-    @Test func persistsMutationOutcomesOnceAgainstOwnedApplyOperations() async throws {
+    @Test func mutationOutcomeTransitionsAreAtomicDurableAndTerminal() async throws {
         let (directory, path) = try DatabasePersistenceFixtures.temporaryStorePath()
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = try SQLiteDatabaseMetadataStore(path: path)
@@ -250,49 +250,73 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
             try await store.reserveOperation(running, for: connection, owner: owner)
                 == .reserved)
 
-        let returnedRecords = DatabasePage(
-            records: [
-                DatabaseRecord(
-                    identity: DatabaseRecordIdentity(
-                        kind: .primaryKey,
-                        components: [
-                            DatabaseIdentityComponent(name: "id", value: .signedInteger(42))
-                        ]),
-                    fields: [
-                        DatabaseObjectField(name: "id", value: .signedInteger(42)),
-                        DatabaseObjectField(name: "state", value: .string("deleted")),
-                    ])
-            ],
-            fields: [
-                DatabaseFieldDescriptor(
-                    path: DatabaseFieldPath("id"),
-                    displayName: "id",
-                    typeName: "int8",
-                    isNullable: false,
-                    isSortable: true,
-                    isFilterable: true)
-            ],
-            metadata: DatabasePageMetadata(
-                completeness: DatabaseResultCompleteness(state: .complete),
-                count: DatabaseCountMetadata(value: 1, accuracy: .exact)))
-        let outcome = DatabaseMutationApplyResult(
+        let unresolved = DatabaseMutationApplyResult(
             disposition: .completed,
-            affectedRecords: DatabaseCountMetadata(value: 1, accuracy: .exact),
-            returnedRecords: returnedRecords,
-            serverOperationIdentifier: "server-task-42")
+            effect: .unknown,
+            affectedRecords: DatabaseCountMetadata(accuracy: .unknown))
         try await store.recordMutationOutcome(
-            outcome,
+            unresolved,
             operationID: running.id,
             owner: owner)
+        let acceptedMutation = DatabaseAcceptedMutation(
+            operationID: running.id,
+            serverOperationIdentifier: "server-task-42")
+        let accepted = DatabaseMutationApplyResult(
+            disposition: .accepted,
+            effect: .unknown,
+            affectedRecords: DatabaseCountMetadata(accuracy: .unknown),
+            acceptedMutation: acceptedMutation)
+        #expect(
+            try await store.transitionMutationOutcome(
+                accepted,
+                operationID: running.id,
+                from: [.unknown],
+                owner: owner) == .transitioned)
+        let partialError = DatabaseErrorEnvelope(
+            category: .partialFailure,
+            message: "One mutation item failed.",
+            partialResult: DatabaseResultCompleteness(state: .partial))
+        let partial = DatabaseMutationApplyResult(
+            disposition: .completed,
+            effect: .partiallyApplied,
+            affectedRecords: DatabaseCountMetadata(value: 1, accuracy: .lowerBound),
+            acceptedMutation: acceptedMutation,
+            partialFailures: [
+                DatabasePartialFailure(itemIndex: 1, error: partialError)
+            ],
+            error: partialError)
+        #expect(
+            try await store.transitionMutationOutcome(
+                partial,
+                operationID: running.id,
+                from: [.accepted],
+                owner: owner) == .transitioned)
 
         let reopened = try SQLiteDatabaseMetadataStore(path: path)
-        #expect(try await reopened.mutationOutcome(operationID: running.id) == outcome)
+        #expect(try await reopened.mutationOutcome(operationID: running.id) == partial)
+        #expect(
+            try await reopened.transitionMutationOutcome(
+                partial,
+                operationID: running.id,
+                from: [.accepted],
+                owner: owner) == .unchanged)
+        let applied = DatabaseMutationApplyResult(
+            disposition: .completed,
+            effect: .applied,
+            affectedRecords: DatabaseCountMetadata(value: 2, accuracy: .exact),
+            acceptedMutation: acceptedMutation)
+        #expect(
+            try await reopened.transitionMutationOutcome(
+                applied,
+                operationID: running.id,
+                from: [.accepted, .partiallyApplied],
+                owner: owner) == .invalidTransition)
         await #expect(
             throws: DatabaseMetadataStoreError.invalidValue(
                 name: "mutation outcome already recorded")
         ) {
             try await reopened.recordMutationOutcome(
-                outcome,
+                unresolved,
                 operationID: running.id,
                 owner: owner)
         }
@@ -312,10 +336,69 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
                 name: "mutation outcome operation")
         ) {
             try await store.recordMutationOutcome(
-                outcome,
+                unresolved,
                 operationID: unrelated.id,
                 owner: owner)
         }
+    }
+
+    @Test func unresolvedMutationOutcomeSurvivesRuntimeOwnerRecovery() async throws {
+        let (directory, path) = try DatabasePersistenceFixtures.temporaryStorePath()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try SQLiteDatabaseMetadataStore(path: path)
+        let owner = try await DatabaseRuntimeOwnerFactory.claimReadyOwner(
+            from: store,
+            claimedAt: Date(timeIntervalSince1970: 1)
+        ).owner.token
+        let connection = try DatabasePersistenceFixtures.connection(
+            id: UUID(uuidString: "DD536F59-32B4-4A28-807E-EC862E4AF34E")!,
+            name: "Recovered mutation")
+        try await store.seedConnection(connection)
+        let running = DatabasePersistenceFixtures.operation(
+            id: UUID(uuidString: "EA4AB159-A43B-450B-B250-969213F9CD26")!,
+            connection: connection,
+            kind: .databaseMutationApply,
+            state: .running,
+            startedAt: Date(timeIntervalSince1970: 10),
+            finishedAt: nil)
+        #expect(
+            try await store.reserveOperation(running, for: connection, owner: owner)
+                == .reserved)
+        let unresolved = DatabaseMutationApplyResult(
+            disposition: .completed,
+            effect: .unknown,
+            affectedRecords: DatabaseCountMetadata(accuracy: .unknown))
+        try await store.recordMutationOutcome(
+            unresolved,
+            operationID: running.id,
+            owner: owner)
+
+        let recoveredStore = try SQLiteDatabaseMetadataStore(path: path)
+        let recoveredOwner = try await DatabaseRuntimeOwnerFactory.claimReadyOwner(
+            from: recoveredStore,
+            claimedAt: Date(timeIntervalSince1970: 20)
+        ).owner.token
+        let recoveredOperation = try #require(
+            try await recoveredStore.operation(id: running.id))
+        let recoveryError = DatabaseErrorEnvelope(
+            category: .server,
+            message: "The recovered server confirmed no mutation effect.")
+        let notApplied = DatabaseMutationApplyResult(
+            disposition: .completed,
+            effect: .notApplied,
+            affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .exact),
+            error: recoveryError)
+
+        #expect(recoveredOperation.state == .failed)
+        #expect(
+            try await recoveredStore.transitionMutationOutcome(
+                notApplied,
+                operationID: running.id,
+                from: [.unknown],
+                owner: recoveredOwner) == .transitioned)
+        #expect(
+            try await recoveredStore.mutationOutcome(operationID: running.id)
+                == notApplied)
     }
 
     @Test func atomicallyConsumesCrossInstanceConfirmationReceiptsOnce() async throws {

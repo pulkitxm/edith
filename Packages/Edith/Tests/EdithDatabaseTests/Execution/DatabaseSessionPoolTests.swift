@@ -159,6 +159,7 @@ private enum DatabaseSessionPoolFixtures {
             executionMode: .synchronous)
         let mutationResult = try DatabaseAdapterMutationResult(
             disposition: .completed,
+            effect: .applied,
             affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .exact))
         return DatabaseExecutorRecordingSession(
             id: DatabaseAdapterSessionID(),
