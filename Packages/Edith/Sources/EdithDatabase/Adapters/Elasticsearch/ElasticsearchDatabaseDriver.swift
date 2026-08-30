@@ -100,6 +100,7 @@ typealias ElasticsearchDatabaseClientConnector =
     @Sendable (ElasticsearchDatabaseConnectionPlan) async throws -> any ElasticsearchDatabaseClient
 
 actor URLSessionElasticsearchDatabaseClient: ElasticsearchDatabaseClient {
+    private static let maximumOpenPointInTimes = 8
     private let plan: ElasticsearchDatabaseConnectionPlan
     private var session: URLSession?
     private var identity: DatabaseProductIdentity?
@@ -162,13 +163,18 @@ actor URLSessionElasticsearchDatabaseClient: ElasticsearchDatabaseClient {
         let response = try await send(
             path: "/\(segment)/_mapping",
             queryItems: [URLQueryItem(name: "filter_path", value: "*.mappings")])
-        return try decode(ElasticsearchDatabaseMappingResponse.self, from: response.body)
+        let decoded = try decode(ElasticsearchDatabaseMappingResponse.self, from: response.body)
+        try ElasticsearchDatabaseDriverSupport.validate(decoded)
+        return decoded
     }
 
     func openPointInTime(
         target: String,
         keepAlive: String
     ) async throws -> String {
+        guard openPointInTimeIdentifiers.count < Self.maximumOpenPointInTimes else {
+            throw ElasticsearchDatabaseDriverFailure.responseTooLarge
+        }
         let segment = try ElasticsearchDatabaseDriverSupport.pathSegment(target)
         guard ElasticsearchDatabaseDriverSupport.validKeepAlive(keepAlive) else {
             throw ElasticsearchDatabaseDriverFailure.invalidConfiguration
@@ -266,7 +272,7 @@ actor URLSessionElasticsearchDatabaseClient: ElasticsearchDatabaseClient {
         let identifiers = openPointInTimeIdentifiers
         openPointInTimeIdentifiers.removeAll()
         if let session {
-            for identifier in identifiers.prefix(8) {
+            for identifier in identifiers {
                 await Self.closePointInTime(
                     identifier,
                     session: session,
@@ -680,6 +686,9 @@ enum ElasticsearchDatabaseDriverSupport {
     private static let maximumNodeRoles = 64
     private static let maximumExtensions = 128
     private static let maximumResolvedObjects = 10_000
+    private static let maximumMappingIndices = 256
+    private static let maximumMappingFields = DatabaseAdapterBounds.maximumPageFields
+    private static let maximumMappingDepth = 32
     private static let maximumSearchHits = DatabasePageSize.range.upperBound + 1
     private static let maximumSearchShards = 100_000
     private static let maximumShardFailures = DatabaseAdapterBounds.maximumPartialFailures
@@ -865,6 +874,26 @@ enum ElasticsearchDatabaseDriverSupport {
         }
     }
 
+    static func validate(
+        _ response: ElasticsearchDatabaseMappingResponse
+    ) throws(ElasticsearchDatabaseDriverFailure) {
+        guard response.indices.count <= maximumMappingIndices else {
+            throw .responseTooLarge
+        }
+        var fieldCount = 0
+        for (index, value) in response.indices {
+            guard validTargetName(index) else { throw .invalidResponse }
+            try validateMappingFields(
+                value.mappings.properties ?? [:],
+                depth: 0,
+                fieldCount: &fieldCount)
+            try validateMappingFields(
+                value.mappings.runtime ?? [:],
+                depth: 0,
+                fieldCount: &fieldCount)
+        }
+    }
+
     static func pathSegment(
         _ value: String
     ) throws(ElasticsearchDatabaseDriverFailure) -> String {
@@ -897,6 +926,34 @@ enum ElasticsearchDatabaseDriverSupport {
             && !value.unicodeScalars.contains(where: {
                 CharacterSet.controlCharacters.contains($0)
             })
+    }
+
+    private static func validateMappingFields(
+        _ fields: [String: ElasticsearchDatabaseMappingResponse.Field],
+        depth: Int,
+        fieldCount: inout Int
+    ) throws(ElasticsearchDatabaseDriverFailure) {
+        guard depth <= maximumMappingDepth else { throw .responseTooLarge }
+        for (name, field) in fields {
+            fieldCount += 1
+            guard fieldCount <= maximumMappingFields else { throw .responseTooLarge }
+            guard valid(name, maximumBytes: 4_096),
+                !name.unicodeScalars.contains(where: {
+                    CharacterSet.controlCharacters.contains($0)
+                }),
+                field.type.map({ valid($0, maximumBytes: 128) }) ?? true
+            else {
+                throw .invalidResponse
+            }
+            try validateMappingFields(
+                field.properties ?? [:],
+                depth: depth + 1,
+                fieldCount: &fieldCount)
+            try validateMappingFields(
+                field.fields ?? [:],
+                depth: depth + 1,
+                fieldCount: &fieldCount)
+        }
     }
 
     static func validKeepAlive(_ value: String) -> Bool {

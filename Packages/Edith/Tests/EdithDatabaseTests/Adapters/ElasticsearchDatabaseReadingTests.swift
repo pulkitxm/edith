@@ -867,6 +867,151 @@ private func elasticsearchReadingSession(
     #expect(await driftClient.snapshot().disconnects == 1)
 }
 
+private final class ElasticsearchDatabaseReadingPITStubState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var nextIdentifier = 0
+    private var opened = 0
+    private var closed = 0
+
+    func reset() {
+        lock.withLock {
+            nextIdentifier = 0
+            opened = 0
+            closed = 0
+        }
+    }
+
+    func response(for request: URLRequest) -> (Int, Data) {
+        lock.withLock {
+            switch (request.httpMethod, request.url?.path) {
+            case ("GET", "/"):
+                return (
+                    200,
+                    Data(
+                        """
+                        {"name":"node-a","cluster_name":"edith-search","cluster_uuid":"cluster-pit","version":{"number":"9.5.2","build_flavor":"default","build_type":"docker","build_hash":"abc"},"tagline":"You Know, for Search"}
+                        """.utf8)
+                )
+            case ("GET", "/_nodes/_all/plugins"):
+                return (
+                    200,
+                    Data(
+                        """
+                        {"_nodes":{"total":1,"successful":1,"failed":0},"cluster_name":"edith-search","nodes":{"node-a":{"name":"node-a","version":"9.5.2","roles":["data"],"plugins":[],"modules":[]}}}
+                        """.utf8)
+                )
+            case ("POST", "/edith-documents-v1/_pit"):
+                nextIdentifier += 1
+                opened += 1
+                return (200, Data("{\"id\":\"pit-\(nextIdentifier)\"}".utf8))
+            case ("DELETE", "/_pit"):
+                closed += 1
+                return (200, Data("{\"succeeded\":true,\"num_freed\":1}".utf8))
+            default:
+                return (404, Data("{}".utf8))
+            }
+        }
+    }
+
+    func snapshot() -> (opened: Int, closed: Int) {
+        lock.withLock { (opened, closed) }
+    }
+}
+
+private final class ElasticsearchDatabaseReadingPITURLProtocol: URLProtocol,
+    @unchecked Sendable
+{
+    static let state = ElasticsearchDatabaseReadingPITStubState()
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        let result = Self.state.response(for: request)
+        guard let url = request.url,
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: result.0,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["X-Elastic-Product": "Elasticsearch"])
+        else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: result.1)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+@Test func elasticsearchReadingBoundsOutstandingPITsAndMappingFields() async throws {
+    ElasticsearchDatabaseReadingPITURLProtocol.state.reset()
+    let plan = ElasticsearchDatabaseConnectionPlan(
+        endpoint: try #require(URL(string: "https://search.example.test")),
+        authorization: .none,
+        connectTimeoutMilliseconds: 2_000,
+        requestTimeoutMilliseconds: 2_000,
+        maximumResponseBytes: 1_048_576)
+    let connected = try await URLSessionElasticsearchDatabaseClient.connect(
+        plan,
+        sessionFactory: { _ in
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [ElasticsearchDatabaseReadingPITURLProtocol.self]
+            return URLSession(
+                configuration: configuration,
+                delegate: ElasticsearchDatabaseURLSessionDelegate(),
+                delegateQueue: nil)
+        })
+    let client = try #require(connected as? URLSessionElasticsearchDatabaseClient)
+    for _ in 0..<8 {
+        _ = try await client.openPointInTime(
+            target: "edith-documents-v1",
+            keepAlive: "60s")
+    }
+    #expect(await client.outstandingPointInTimeCount() == 8)
+    await #expect(throws: ElasticsearchDatabaseDriverFailure.responseTooLarge) {
+        _ = try await client.openPointInTime(
+            target: "edith-documents-v1",
+            keepAlive: "60s")
+    }
+    await client.disconnect()
+    let snapshot = ElasticsearchDatabaseReadingPITURLProtocol.state.snapshot()
+    #expect(snapshot.opened == 8)
+    #expect(snapshot.closed == 8)
+
+    let fields = Dictionary(
+        uniqueKeysWithValues: (0...DatabaseAdapterBounds.maximumPageFields).map {
+            (
+                "field-\($0)",
+                ElasticsearchDatabaseMappingResponse.Field(
+                    type: "keyword",
+                    index: true,
+                    enabled: true,
+                    docValues: true,
+                    properties: nil,
+                    fields: nil)
+            )
+        })
+    let mapping = ElasticsearchDatabaseMappingResponse(
+        indices: [
+            "edith-documents-v1": ElasticsearchDatabaseMappingResponse.Index(
+                mappings: ElasticsearchDatabaseMappingResponse.Mapping(
+                    dynamic: nil,
+                    properties: fields,
+                    runtime: nil))
+        ])
+    #expect(throws: ElasticsearchDatabaseDriverFailure.responseTooLarge) {
+        try ElasticsearchDatabaseDriverSupport.validate(mapping)
+    }
+}
+
 private enum ElasticsearchDatabaseReadingLiveEnvironment {
     static let values = ProcessInfo.processInfo.environment
     static let requiredKeys = [
