@@ -5,6 +5,7 @@ enum DatabaseExecutionValidationError: Error, Equatable, Sendable {
     case deadlineExceeded
     case operationIdentifierAlreadyExists(DatabaseOperationID)
     case connectionDefinitionChanged(DatabaseConnectionID)
+    case runtimeOwnerNotActive
     case invalidTarget(String)
     case emptyCommand
     case queryLanguageMismatch(language: DatabaseQueryLanguage, product: DatabaseProduct)
@@ -32,6 +33,7 @@ struct DatabaseExecutionValidator: Sendable {
     static let maximumPartialFailureCount = 100
     static let maximumPageBytes = 16_777_216
     static let maximumContinuationTokenBytes = 131_072
+    static let maximumOperationHistoryCount = 1_000
 
     private let currentDate: @Sendable () -> Date
 
@@ -73,6 +75,36 @@ struct DatabaseExecutionValidator: Sendable {
             contract: "capabilities request")
         try validate(request.operation)
         try Self.validateEncodedSize(request, name: "capabilities request")
+    }
+
+    func validate(_ request: DatabaseOperationGetRequest) throws {
+        try Self.validateVersion(
+            request.version,
+            expected: DatabaseOperationGetRequest.schemaVersion,
+            contract: "operation get request")
+        try Self.validateEncodedSize(request, name: "operation get request")
+    }
+
+    func validate(_ request: DatabaseOperationListRequest) throws {
+        try Self.validateVersion(
+            request.version,
+            expected: DatabaseOperationListRequest.schemaVersion,
+            contract: "operation list request")
+        guard (1...Self.maximumOperationHistoryCount).contains(request.search.limit) else {
+            throw DatabaseExecutionValidationError.limitExceeded(
+                name: "operation history results",
+                actual: request.search.limit,
+                maximum: Self.maximumOperationHistoryCount)
+        }
+        try Self.validateEncodedSize(request, name: "operation list request")
+    }
+
+    func validate(_ request: DatabaseOperationCancelRequest) throws {
+        try Self.validateVersion(
+            request.version,
+            expected: DatabaseOperationCancelRequest.schemaVersion,
+            contract: "operation cancel request")
+        try Self.validateEncodedSize(request, name: "operation cancel request")
     }
 
     func validate(_ request: DatabaseBrowseRequest) throws {

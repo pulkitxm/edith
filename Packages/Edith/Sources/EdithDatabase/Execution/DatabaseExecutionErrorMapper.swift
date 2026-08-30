@@ -141,6 +141,14 @@ struct DatabaseExecutionErrorMapper: Sendable {
                     .reconnect,
                     "Reconnect using the current saved connection before retrying."),
                 target: target)
+        case .runtimeOwnerNotActive:
+            envelope(
+                category: .conflict,
+                message: "The database runtime owner is no longer active.",
+                retry: retry(
+                    .reconnect,
+                    "Restart the database runtime before retrying."),
+                target: target)
         case .invalidTarget:
             envelope(
                 category: .invalidRequest,
