@@ -680,6 +680,7 @@ final class SettingsBackup {
         AppStorageKeys.Tabs.attentionEnabled, AppStorageKeys.Tabs.usageEnabled,
         AppStorageKeys.Tabs.musicEnabled, "usageMachines",
         AppStorageKeys.Tabs.herdrEnabled, AppStorageKeys.Tabs.quinjetEnabled,
+        AppStorageKeys.Tabs.homebrewEnabled, AppStorageKeys.Homebrew.defaultKind,
         AppStorageKeys.Herdr.ghosttyTerminal,
         AppStorageKeys.Quinjet.terminal, AppStorageKeys.Quinjet.theme,
         AppStorageKeys.General.hotKeyCode, AppStorageKeys.General.hotKeyMods,
@@ -771,7 +772,13 @@ final class SettingsBackup {
         "SUAutomaticallyUpdate", "SUEnableAutomaticChecks", "SUScheduledCheckInterval",
         AppStorageKeys.General.mainWindowSection, AppStorageKeys.General.settingsTab,
         AppStorageKeys.General.mainSidebarOpen, AppStorageKeys.General.mainSidebarWidth,
-        AppStorageKeys.General.settingsCategoriesExpanded,
+        AppStorageKeys.General.settingsCategoriesExpanded, AppStorageKeys.AppMaintenance.enabled,
+        AppStorageKeys.AppMaintenance.installDestination,
+        AppStorageKeys.AppMaintenance.updateAutoRefresh,
+        AppStorageKeys.AppMaintenance.updateRefreshInterval,
+        AppStorageKeys.AppMaintenance.updateNotifications,
+        AppStorageKeys.AppMaintenance.updateConcurrency,
+        AppStorageKeys.AppMaintenance.updateRetries,
     ]
 
     nonisolated static let sharedKeys: Set<String> = [
@@ -788,6 +795,7 @@ final class SettingsBackup {
         AppStorageKeys.Tabs.attentionEnabled, AppStorageKeys.Tabs.usageEnabled,
         AppStorageKeys.Tabs.musicEnabled,
         AppStorageKeys.Tabs.herdrEnabled, AppStorageKeys.Tabs.quinjetEnabled,
+        AppStorageKeys.Tabs.homebrewEnabled, AppStorageKeys.Homebrew.defaultKind,
         AppStorageKeys.Herdr.ghosttyTerminal,
         AppStorageKeys.Quinjet.terminal, AppStorageKeys.Quinjet.theme,
         AppStorageKeys.Tabs.systemEnabled, AppStorageKeys.Tabs.calendarEnabled,
@@ -875,6 +883,12 @@ final class SettingsBackup {
         AppStorageKeys.General.showDockIcon,
         AppStorageKeys.Music.gridView, "musicFavourites",
         AppStorageKeys.General.mainWindowSection, AppStorageKeys.General.settingsTab,
+        AppStorageKeys.AppMaintenance.enabled, AppStorageKeys.AppMaintenance.installDestination,
+        AppStorageKeys.AppMaintenance.updateAutoRefresh,
+        AppStorageKeys.AppMaintenance.updateRefreshInterval,
+        AppStorageKeys.AppMaintenance.updateNotifications,
+        AppStorageKeys.AppMaintenance.updateConcurrency,
+        AppStorageKeys.AppMaintenance.updateRetries,
         AppStorageKeys.General.mainSidebarOpen, AppStorageKeys.General.mainSidebarWidth,
         AppStorageKeys.General.settingsCategoriesExpanded,
     ]

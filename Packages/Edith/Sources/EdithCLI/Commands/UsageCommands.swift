@@ -14,7 +14,7 @@ struct UsageCommand: AsyncParsableCommand {
         subcommands: [
             UsageLimitsCommand.self, UsageSummaryCommand.self, UsageDailyCommand.self,
             UsageModelsCommand.self, UsageProjectsCommand.self, UsageSourcesCommand.self,
-            UsageMachinesCommand.self, UsageRefreshCommand.self,
+            UsageMachinesCommand.self, UsageExportCommand.self, UsageRefreshCommand.self,
         ],
         defaultSubcommand: UsageSummaryCommand.self)
 }

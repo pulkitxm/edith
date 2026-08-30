@@ -78,6 +78,10 @@ public enum CLIEnvironment {
         CLIToolEnvironment.executable(named: $0)
     }
 
+    nonisolated(unsafe) public static var homebrewClient: @Sendable () -> HomebrewClient = {
+        HomebrewClient()
+    }
+
     nonisolated(unsafe) public static var extensionToolReadiness:
         @Sendable (String) async -> ExtensionToolReadiness = { id in
             await ExtensionLifecycleProbeEnvironment.toolReadiness(
@@ -144,14 +148,23 @@ public enum CLIEnvironment {
         }
 
     private static func detectedInstalledAppURL() -> URL? {
-        let bundled = Bundle.main.bundleURL
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        if bundled.pathExtension == "app",
-            FileManager.default.fileExists(atPath: bundled.path)
-        {
-            return bundled
+        let starts = [
+            Bundle.main.bundleURL,
+            Bundle.main.executableURL,
+            CommandLine.arguments.first.map { URL(fileURLWithPath: $0) },
+        ].compactMap { $0 }
+        for start in starts {
+            var candidate: URL? = start.resolvingSymlinksInPath()
+            for _ in 0..<6 {
+                guard let current = candidate else { break }
+                if current.pathExtension == "app",
+                    FileManager.default.fileExists(atPath: current.path)
+                {
+                    return current
+                }
+                candidate =
+                    current.pathComponents.count > 1 ? current.deletingLastPathComponent() : nil
+            }
         }
         let standard = URL(fileURLWithPath: "/Applications/Edith.app")
         return FileManager.default.fileExists(atPath: standard.path) ? standard : nil
@@ -206,6 +219,7 @@ public enum CLIEnvironment {
         usageRefresh = UsageRefreshDriver.live
         installTool = { try await ToolInstaller().install($0, log: $1) }
         executableNamed = { CLIToolEnvironment.executable(named: $0) }
+        homebrewClient = { HomebrewClient() }
         extensionToolReadiness = { id in
             await ExtensionLifecycleProbeEnvironment.toolReadiness(
                 id, executableNamed: CLIEnvironment.executableNamed)

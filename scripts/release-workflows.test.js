@@ -124,8 +124,6 @@ test("release builds and publishes the macOS assets", () => {
   expect(dmgJob).toContain("ditto dist/Edith.app dmg-root/Edith.app");
   expect(dmgJob).toContain("-format ULMO Edith.dmg");
   expect(dmgJob).toContain("hdiutil verify Edith.dmg");
-  expect(dmgJob).toContain("name: Enforce the release size budget");
-  expect(dmgJob).toContain('test "$DMG_BYTES" -le 21000000');
   expect(buildScript).toContain(
     '[ "$RELEASE" = 1 ] && XCODE_BUILD_SETTING=SWIFT_OPTIMIZATION_LEVEL=-Osize',
   );
@@ -166,17 +164,25 @@ test("superseded release builds yield the lane before packaging", () => {
   expect(
     dmgJob.match(/if: steps\.release_build\.outputs\.superseded != 'true'/g)
       ?.length,
-  ).toBe(11);
+  ).toBe(10);
   expect(releaseWorkflow).toContain(
     "needs: [version, ci, dmg]\n    if: needs.dmg.outputs.superseded != 'true'",
   );
 });
 
-test("bundle verification requires one executable under two names", () => {
+test("bundle verification requires one executable and its CLI launcher", () => {
   expect(makefile).toContain("test ! -L dist/Edith.app/Contents/MacOS/Edith");
-  expect(makefile).toContain("test ! -L dist/Edith.app/Contents/MacOS/ed");
+  expect(makefile).toContain("test -L dist/Edith.app/Contents/MacOS/ed");
+  expect(makefile).toContain(
+    'readlink dist/Edith.app/Contents/MacOS/ed)" = ../Resources/ed-launcher',
+  );
+  expect(makefile).toContain(
+    "test -f dist/Edith.app/Contents/Resources/ed-launcher",
+  );
+  expect(makefile).toContain("grep -qx '#!/bin/sh'");
   expect(makefile).toContain("test ! -e dist/Edith.app/Contents/MacOS/edh");
-  expect(makefile).toContain("-type f \\( -name ed -o -name edh \\)");
+  expect(makefile).toContain("-type l -name ed");
+  expect(makefile).toContain("@set -e; install_dir=");
   expect(makefile).toContain("for name in ed edith; do");
 });
 

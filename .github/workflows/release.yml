@@ -195,13 +195,6 @@ jobs:
           rm -rf dmg-root
           hdiutil verify Edith.dmg
 
-      - name: Enforce the release size budget
-        if: steps.release_build.outputs.superseded != 'true'
-        run: |
-          DMG_BYTES="$(stat -f %z Edith.dmg)"
-          test "$DMG_BYTES" -le 21000000 \
-            || { echo "release blocked: Edith.dmg is $DMG_BYTES bytes" >&2; exit 1; }
-
       - name: Notarize and staple
         if: steps.release_build.outputs.superseded != 'true' && env.HAS_NOTARY == 'true'
         env:

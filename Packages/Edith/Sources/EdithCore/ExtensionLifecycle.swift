@@ -336,6 +336,95 @@ public enum ExtensionLifecycleCatalog {
                     "ed apps ls --json")
             ]),
         descriptor(
+            "homebrew", "Search and manage installed and available Homebrew packages safely.",
+            workflows: [
+                instruction(
+                    "browse", "Review packages",
+                    "Browse installed formulae and casks, including available updates."),
+                instruction(
+                    "search", "Find packages",
+                    "Search Homebrew metadata before choosing an exact package."),
+                instruction(
+                    "manage", "Manage packages",
+                    "Install, upgrade, or confirm an uninstall from the native manager."),
+            ],
+            prerequisites: [
+                instruction(
+                    "tool", "Install Homebrew",
+                    "Install Homebrew from brew.sh and ensure the brew executable is on Edith's PATH.",
+                    "ed brew status --json")
+            ],
+            examples: [
+                "ed extensions enable homebrew", "ed brew ls --outdated --json",
+                "ed brew search ripgrep --kind formula --json",
+            ],
+            docs: [documentation("guide", "Homebrew Manager guide", "docs/homebrew-manager.md")],
+            recovery: [
+                instruction(
+                    "status", "Check Homebrew", "Confirm Homebrew is installed and callable.",
+                    "ed brew status --json")
+            ],
+            verification: [
+                instruction(
+                    "inventory", "Read installed packages",
+                    "Confirm Homebrew metadata is available without changing packages.",
+                    "ed brew ls --json")
+            ]),
+        descriptor(
+            "appMaintenance",
+            "Review installed applications, available Homebrew updates and exact support files.",
+            workflows: [
+                instruction(
+                    "updates", "Review updates",
+                    "Compare managed, store, and app-native updates before running a batch."),
+                instruction(
+                    "inventory", "Review installed apps",
+                    "See versions and Homebrew update status for regular Applications folders."),
+                instruction(
+                    "remove", "Remove an app safely",
+                    "Choose exact bundle-identifier matches and move only the selection to Trash."),
+                instruction(
+                    "install", "Install a disk image safely",
+                    "Verify the single app in a disk image, stage it, install it and clean up recoverably."
+                ),
+            ],
+            prerequisites: [
+                instruction(
+                    "access", "Use regular Applications folders",
+                    "User-owned apps need no extra access. macOS may refuse protected or administrator-owned items."
+                )
+            ],
+            examples: [
+                "ed extensions enable appMaintenance", "ed maintenance inventory --json",
+                "ed maintenance updates --json", "ed maintenance update",
+                "ed maintenance scan /Applications/Example.app --json",
+                "ed maintenance install ~/Downloads/Example.dmg --json",
+            ],
+            docs: [
+                documentation(
+                    "guide", "App Maintenance guide", "docs/app-maintenance.md")
+            ],
+            recovery: [
+                instruction(
+                    "rescan", "Rescan a changed app",
+                    "Build a fresh removal plan when an app changes after review.",
+                    "ed maintenance scan /Applications/Example.app"),
+                instruction(
+                    "image", "Retry a changed disk image",
+                    "Choose the download again, review it and explicitly retry installation.",
+                    "ed maintenance install ~/Downloads/Example.dmg --yes"),
+            ],
+            verification: [
+                instruction(
+                    "inventory", "List installed apps",
+                    "Confirm the Applications folders and optional Homebrew status are readable.",
+                    "ed maintenance inventory --json"),
+                instruction(
+                    "installer", "Review an installer",
+                    "Mount, verify, preview and eject a single-app disk image without installing it.",
+                    "ed maintenance install ~/Downloads/Example.dmg --json"),
+            ]),
+        descriptor(
             "machines", "Operate SSH computers, files, services and containers from Edith.",
             workflows: [
                 instruction(

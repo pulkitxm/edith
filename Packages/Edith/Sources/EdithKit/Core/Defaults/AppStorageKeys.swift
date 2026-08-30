@@ -1,6 +1,16 @@
 import Foundation
 
 public enum AppStorageKeys {
+    public enum AppMaintenance {
+        public static let enabled = "appMaintenanceEnabled"
+        public static let installDestination = "appMaintenanceInstallDestination"
+        public static let updateAutoRefresh = "appUpdateAutoRefresh"
+        public static let updateConcurrency = "appUpdateConcurrency"
+        public static let updateNotifications = "appUpdateNotifications"
+        public static let updateRefreshInterval = "appUpdateRefreshInterval"
+        public static let updateRetries = "appUpdateRetries"
+    }
+
     public enum Update {
         public static let automaticChecks = "SUEnableAutomaticChecks"
         public static let checkInterval = "SUScheduledCheckInterval"
@@ -102,9 +112,20 @@ public enum AppStorageKeys {
         public static let ghosttyTerminal = "herdrGhosttyTerminal"
         public static let splitFraction = "herdrSplitFraction"
         public static let railOpen = "herdrRailOpen"
+        public static let railWidth = "herdrRailWidth"
         public static let detailOpen = "herdrDetailOpen"
+        public static let detailWidth = "herdrDetailWidth"
         public static let agentsCollapsed = "herdrAgentsCollapsed"
+        public static let agentsCollapsedCount = "herdrAgentsCollapsedCount"
         public static let terminalsCollapsed = "herdrTerminalsCollapsed"
+        public static let terminalsCollapsedCount = "herdrTerminalsCollapsedCount"
+        public static let spaceGroupingEnabled = "herdrSpaceGroupingEnabled"
+        public static let collapsedSpaces = "herdrCollapsedSpaces"
+        public static let collapsedSpaceCounts = "herdrCollapsedSpaceCounts"
+    }
+
+    public enum Homebrew {
+        public static let defaultKind = "homebrewDefaultKind"
     }
 
     public enum Limits {
@@ -227,6 +248,7 @@ public enum AppStorageKeys {
         public static let calendarEnabled = "tabCalendarEnabled"
         public static let companionEnabled = "tabCompanionEnabled"
         public static let herdrEnabled = "tabHerdrEnabled"
+        public static let homebrewEnabled = "tabHomebrewEnabled"
         public static let machinesEnabled = "tabMachinesEnabled"
         public static let musicEnabled = "tabMusicEnabled"
         public static let order = "tabOrder"

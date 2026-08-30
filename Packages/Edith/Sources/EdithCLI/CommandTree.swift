@@ -9,6 +9,7 @@ public enum ArgumentKind: Equatable, Sendable {
     case appLink
     case guideTopic
     case cleanerCategory
+    case homebrewKind
     case colorFormat
     case colorIndex
     case emojiTone
@@ -30,6 +31,7 @@ public enum ArgumentKind: Equatable, Sendable {
     case shell
     case group
     case usageRange
+    case usageShareCard
     case attentionRange
     case attentionEntity
     case attentionCategory
@@ -322,6 +324,15 @@ public enum CommandTree {
                     CommandNode(
                         "sources", "The agents that produced the history.",
                         options: common),
+                    CommandNode(
+                        "export", "Render branded usage cards as PNG images.",
+                        options: [
+                            "--json", "--help", "--range", "--source", "--machine", "--card",
+                            "-o", "--output",
+                        ],
+                        optionValues: usageValues.merging([
+                            "--card": .usageShareCard, "-o": .localPath, "--output": .localPath,
+                        ]) { current, _ in current }),
                     CommandNode(
                         "machines", "Machines counted with this Mac.",
                         children: [
@@ -688,6 +699,63 @@ public enum CommandTree {
                         optionValues: ["--category": .cleanerCategory],
                         destructivePolicy: .previewThenYes),
                     CommandNode("drives", "The volumes the cleaner can scan.", options: common),
+                ]),
+            CommandNode(
+                "brew", "Search and manage Homebrew formulae and casks.",
+                children: [
+                    CommandNode(
+                        "status", "Inspect the local Homebrew installation.", options: common),
+                    CommandNode(
+                        "ls", "List installed Homebrew packages.", aliases: ["list"],
+                        options: ["--json", "--help", "--kind", "--outdated"],
+                        optionValues: ["--kind": .homebrewKind]),
+                    CommandNode(
+                        "search", "Search available Homebrew packages.",
+                        options: ["--json", "--help", "--kind"],
+                        optionValues: ["--kind": .homebrewKind], arguments: [.free]),
+                    CommandNode(
+                        "install", "Install a Homebrew package.",
+                        options: ["--json", "--help", "--kind"],
+                        optionValues: ["--kind": .homebrewKind], arguments: [.free]),
+                    CommandNode(
+                        "upgrade", "Upgrade a Homebrew package.",
+                        options: ["--json", "--help", "--kind"],
+                        optionValues: ["--kind": .homebrewKind], arguments: [.free]),
+                    CommandNode(
+                        "uninstall", "Uninstall a Homebrew package.",
+                        options: ["--json", "--help", "--kind", "--yes"],
+                        optionValues: ["--kind": .homebrewKind], arguments: [.free],
+                        destructivePolicy: .previewThenYes),
+                ]),
+            CommandNode(
+                "maintenance", "Installed app inventory, updates, and review-first removal.",
+                children: [
+                    CommandNode(
+                        "inventory", "List installed applications and Homebrew updates.",
+                        aliases: ["ls", "list"],
+                        options: ["--json", "--help", "--no-updates"]),
+                    CommandNode(
+                        "scan", "Preview an app and its exact support files.",
+                        options: common, arguments: [.localPath]),
+                    CommandNode(
+                        "remove", "Move a reviewed app selection to the Trash.",
+                        options: ["--json", "--help", "--only-app", "--yes"],
+                        arguments: [.localPath], destructivePolicy: .previewThenYes),
+                    CommandNode(
+                        "install", "Verify and install one app from a disk image.",
+                        options: [
+                            "--json", "--help", "--system", "--replace", "--keep-image", "--yes",
+                        ], arguments: [.localPath], destructivePolicy: .previewThenYes),
+                    CommandNode(
+                        "updates", "Discover updates from every available source.", options: common),
+                    CommandNode(
+                        "update", "Review and run selected updates.",
+                        options: ["--json", "--help", "--yes", "--concurrency", "--retries"],
+                        repeatingArgument: .free, destructivePolicy: .previewThenYes),
+                    CommandNode("history", "Show recent update results.", options: common),
+                    CommandNode(
+                        "backup-updates", "Back up update policy and history.", options: common,
+                        arguments: [.localPath]),
                 ]),
             CommandNode(
                 "quinjet", "Discover and open Quinjet review workspaces.",

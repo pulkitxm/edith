@@ -3,7 +3,7 @@ import GhosttyTerminal
 import SwiftTerm
 import SwiftUI
 
-private struct SplitResizeCursor: NSViewRepresentable {
+private struct HerdrResizeCursor: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView { CursorView() }
 
     func updateNSView(_ nsView: NSView, context: Context) {}
@@ -35,14 +35,56 @@ private struct SplitResizeCursor: NSViewRepresentable {
     }
 }
 
+struct HerdrHorizontalResizeHandle: View {
+    let label: String
+    let onChanged: (CGFloat) -> Void
+    let onEnded: () -> Void
+    let onReset: () -> Void
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovered = false
+    @State private var dragging = false
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        let active = hovered || dragging
+        ZStack {
+            Rectangle()
+                .fill(active ? DashSkin.accent(dark) : DashSkin.lineStrong(dark).opacity(0.35))
+                .frame(width: active ? UIScale.pt(3) : 1)
+        }
+        .frame(width: UIScale.pt(9))
+        .frame(maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .background(HerdrResizeCursor())
+        .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: active)
+        .gesture(
+            DragGesture(coordinateSpace: .global)
+                .onChanged { value in
+                    dragging = true
+                    onChanged(value.translation.width)
+                }
+                .onEnded { _ in
+                    dragging = false
+                    onEnded()
+                }
+        )
+        .onTapGesture(count: 2) { onReset() }
+        .onHover { hovered = $0 }
+        .accessibilityLabel(label)
+    }
+}
+
 struct HerdrSessionView: View {
     var store: HerdrStore
     let tab: HerdrOpenTab
     let launchEnabled: Bool
     var hideAgents = false
     var presented = true
+    var wantsFocus = true
+    var onSetView: ((HerdrAgentView) -> Void)?
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(AppStorageKeys.Quinjet.theme, store: SharedDefaults.store)
     private var quinjetThemeName = QuinjetThemePreference.app
@@ -54,6 +96,11 @@ struct HerdrSessionView: View {
     @State private var handleHovered = false
     @State private var transferringDrop = false
     @State private var dropError: String?
+    @State private var detailDragBaseWidth: Double?
+    @State private var liveDetailWidth: Double?
+    @State private var confirmingAgentClose = false
+    @State private var closingAgent = false
+    @State private var agentCloseError: String?
 
     private var dark: Bool { scheme == .dark }
     private var agent: HerdrAgent { tab.agent }
@@ -64,13 +111,40 @@ struct HerdrSessionView: View {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             if store.detailOpen {
-                Divider().opacity(0.35)
+                HerdrHorizontalResizeHandle(
+                    label: "Resize the agent details",
+                    onChanged: resizeDetail,
+                    onEnded: finishDetailResize,
+                    onReset: resetDetailWidth)
                 sidebar
-                    .frame(width: UIScale.pt(compact ? 220 : 260))
+                    .frame(width: detailDisplayWidth)
             }
         }
         .task(id: tab.id) { await startIfNeeded() }
         .task(id: diffRequest) { await prepareDiffIfNeeded() }
+    }
+
+    private var detailDisplayWidth: Double {
+        UIScale.pt(HerdrPaneSizing.detail(liveDetailWidth ?? store.detailWidth))
+    }
+
+    private func resizeDetail(_ translation: CGFloat) {
+        let base = detailDragBaseWidth ?? detailDisplayWidth
+        detailDragBaseWidth = base
+        liveDetailWidth = HerdrPaneSizing.detail(
+            (base - translation) / UIScale.current)
+    }
+
+    private func finishDetailResize() {
+        if let liveDetailWidth { store.detailWidth = liveDetailWidth }
+        liveDetailWidth = nil
+        detailDragBaseWidth = nil
+    }
+
+    private func resetDetailWidth() {
+        liveDetailWidth = nil
+        detailDragBaseWidth = nil
+        store.detailWidth = HerdrPaneSizing.detailDefault
     }
 
     @ViewBuilder
@@ -144,7 +218,7 @@ struct HerdrSessionView: View {
         .frame(width: handleWidth)
         .frame(maxHeight: .infinity)
         .contentShape(Rectangle())
-        .background(SplitResizeCursor())
+        .background(HerdrResizeCursor())
         .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: active)
         .gesture(
             DragGesture(minimumDistance: 0)
@@ -177,6 +251,7 @@ struct HerdrSessionView: View {
             TerminalPane(
                 holder: tab.holder, palette: .edith(dark: dark),
                 active: presented && tab.view.showsAgent,
+                wantsFocus: wantsFocus,
                 onDropFiles: agent.machineIsLocal ? nil : handleRemoteDrop
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -234,7 +309,8 @@ struct HerdrSessionView: View {
             Color(nsColor: palette.background)
             TerminalPane(
                 holder: tab.quinjet.holder, palette: palette,
-                active: presented && tab.view.showsDiff && tab.quinjet.live
+                active: presented && tab.view.showsDiff && tab.quinjet.live,
+                wantsFocus: wantsFocus
             )
             .id(tab.quinjet.holder.generation)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -310,50 +386,119 @@ struct HerdrSessionView: View {
     }
 
     private var sidebar: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-                Text(agent.title)
-                    .font(DashSkin.serif(20))
-                    .foregroundStyle(DashSkin.ink(dark))
-                    .padding(.trailing, UIScale.pt(36))
-                    .presenterTextBlur(hideAgents, fontSize: 20)
-                if !agent.isTerminal { viewSection }
-                kindRow
-                if !agent.isTerminal { metaRow("Status", agent.status.title) }
-                metaRow("Machine", agent.machineName)
-                if !agent.session.isEmpty { metaRow("Session", agent.session, blur: hideAgents) }
-                if !agent.pane.isEmpty { metaRow("Pane", agent.pane, blur: hideAgents) }
-                if !agent.workspace.isEmpty {
-                    metaRow("Workspace", agent.workspace, blur: hideAgents)
-                }
-                if !agent.cwd.isEmpty { metaRow("Directory", agent.cwd, blur: hideAgents) }
-                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                    Text("Attach")
-                        .font(.system(size: UIScale.pt(11), weight: .semibold))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                    Text(command)
-                        .font(DashSkin.mono(10))
-                        .foregroundStyle(DashSkin.inkSoft(dark))
-                        .textSelection(.enabled)
-                        .presenterTextBlur(hideAgents, fontSize: 10)
-                    Button {
-                        store.copyAttachCommand(for: agent)
-                    } label: {
-                        Label(
-                            store.copiedID == agent.id
-                                ? "Copied"
-                                : (agent.machineIsLocal || agent.isTerminal
-                                    ? "Copy command" : "Copy SSH"),
-                            systemImage: store.copiedID == agent.id
-                                ? "checkmark" : "doc.on.doc")
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+                    Text(agent.title)
+                        .font(DashSkin.serif(20))
+                        .foregroundStyle(DashSkin.ink(dark))
+                        .padding(.trailing, UIScale.pt(36))
+                        .presenterTextBlur(hideAgents, fontSize: 20)
+                    if !agent.isTerminal { viewSection }
+                    kindRow
+                    if !agent.isTerminal { metaRow("Status", agent.status.title) }
+                    metaRow("Machine", agent.machineName)
+                    if !agent.session.isEmpty {
+                        metaRow("Session", agent.session, blur: hideAgents)
                     }
-                    .buttonStyle(.edith(.toolbar))
+                    if !agent.pane.isEmpty { metaRow("Pane", agent.pane, blur: hideAgents) }
+                    if !agent.workspace.isEmpty {
+                        metaRow("Workspace", agent.workspace, blur: hideAgents)
+                    }
+                    if !agent.cwd.isEmpty { metaRow("Directory", agent.cwd, blur: hideAgents) }
+                    VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                        Text("Attach")
+                            .font(.system(size: UIScale.pt(11), weight: .semibold))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                        Text(command)
+                            .font(DashSkin.mono(10))
+                            .foregroundStyle(DashSkin.inkSoft(dark))
+                            .textSelection(.enabled)
+                            .presenterTextBlur(hideAgents, fontSize: 10)
+                        Button {
+                            store.copyAttachCommand(for: agent)
+                        } label: {
+                            Label(
+                                store.copiedID == agent.id
+                                    ? "Copied"
+                                    : (agent.machineIsLocal || agent.isTerminal
+                                        ? "Copy command" : "Copy SSH"),
+                                systemImage: store.copiedID == agent.id
+                                    ? "checkmark" : "doc.on.doc")
+                        }
+                        .buttonStyle(.edith(.toolbar))
+                    }
                 }
+                .padding(UIScale.pt(16))
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(UIScale.pt(16))
-            .frame(maxWidth: .infinity, alignment: .leading)
+            if !agent.isTerminal { closeAgentFooter }
         }
         .background(DashSkin.paper(dark))
+        .confirmationDialog(
+            "Close this agent?", isPresented: $confirmingAgentClose,
+            titleVisibility: .visible
+        ) {
+            Button("Close Agent", role: .destructive) {
+                Task { await closeAgent() }
+            }
+        } message: {
+            Text("The agent process will exit. Its terminal pane will remain open.")
+        }
+        .alert("Could not close agent", isPresented: agentCloseFailed) {
+            Button("OK") { agentCloseError = nil }
+        } message: {
+            Text(agentCloseError ?? "Herdr could not close the agent.")
+        }
+    }
+
+    private var closeAgentFooter: some View {
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(DashSkin.lineStrong(dark))
+                .frame(height: 1)
+            Button {
+                confirmingAgentClose = true
+            } label: {
+                HStack(spacing: UIScale.pt(6)) {
+                    if closingAgent {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    Text(closingAgent ? "Closing Agent" : "Close Agent")
+                }
+                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, UIScale.pt(9))
+                .background(Color.red.opacity(dark ? 0.78 : 0.86))
+                .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(8)))
+            }
+            .buttonStyle(.edith(.borderless))
+            .disabled(closingAgent)
+            .help("Close the agent and keep its terminal pane open")
+            .padding(UIScale.pt(12))
+        }
+        .background(DashSkin.paper2(dark))
+    }
+
+    private var agentCloseFailed: Binding<Bool> {
+        Binding(
+            get: { agentCloseError != nil },
+            set: { if !$0 { agentCloseError = nil } })
+    }
+
+    private func closeAgent() async {
+        closingAgent = true
+        defer { closingAgent = false }
+        do {
+            try await store.closeAgent(agent)
+        } catch {
+            agentCloseError = error.localizedDescription
+        }
     }
 
     private var viewSection: some View {
@@ -362,7 +507,11 @@ struct HerdrSessionView: View {
                 .font(.system(size: UIScale.pt(10.5), weight: .semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             HerdrAgentViewToggle(selection: tab.view) { option in
-                store.setView(option, for: tab.id)
+                if let onSetView {
+                    onSetView(option)
+                } else {
+                    store.setView(option, for: tab.id)
+                }
             }
             if tab.view.showsDiff, let branch = tab.quinjet.branch {
                 Text(branch)

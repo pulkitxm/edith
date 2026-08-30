@@ -20,6 +20,7 @@ public enum CLIToolPresenceStrategy: Equatable, Sendable {
 }
 
 public enum CLIToolInstallStrategy: Equatable, Sendable {
+    case manual(instruction: String)
     case standaloneBinary(url: URL, destinationName: String, instruction: String)
     case homebrew(arguments: [String], instruction: String)
     case packageManagers(
@@ -28,6 +29,8 @@ public enum CLIToolInstallStrategy: Equatable, Sendable {
 
     public var instruction: String {
         switch self {
+        case let .manual(instruction):
+            return instruction
         case let .standaloneBinary(_, _, instruction):
             return instruction
         case let .homebrew(_, instruction):
@@ -109,6 +112,13 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
         installStrategy: .homebrew(
             arguments: ["install", "pulkitxm/tap/quinjet"],
             instruction: "Install with `brew install pulkitxm/tap/quinjet`."))
+
+    public static let homebrew = CLIToolSpec(
+        id: "homebrew", displayName: "Homebrew",
+        why: "Provides the formula and cask catalog managed by this extension.",
+        presenceStrategy: .executable(name: "brew", versionArguments: ["--version"]),
+        installStrategy: .manual(
+            instruction: "Install Homebrew from https://brew.sh, then check again."))
 }
 
 public enum CLIToolEnvironment {

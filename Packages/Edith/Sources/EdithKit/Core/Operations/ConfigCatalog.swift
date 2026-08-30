@@ -47,7 +47,8 @@ public enum ConfigCatalog {
     public static let groups = [
         "appearance", "panel", "attention", "usage", "limits", "menubar", "alerts", "budget",
         "dashboard",
-        "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
+        "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
+        "music",
         "calendar",
         "clipboard",
         "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
@@ -57,9 +58,8 @@ public enum ConfigCatalog {
     public static let settings: [SettingDefinition] =
         appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
-        + system + cleaner
-        + music + calendar + clipboard + notch + focusDim + presenter + colorPicker
-        + emoji
+        + system + homebrew + cleaner
+        + music + calendar + clipboard + notch + focusDim + presenter + colorPicker + emoji
         + micMute
         + backup + permissions + terminal
 
@@ -469,6 +469,31 @@ public enum ConfigCatalog {
             summary: "System extension: running apps, prevent sleep and the cleaning lock.",
             fallback: .bool(false)),
         SettingDefinition(
+            AppStorageKeys.AppMaintenance.enabled, .bool, group: "system",
+            summary: "App Maintenance extension: inventory, installation and safe removal.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.installDestination, .string, group: "system",
+            summary: "Default disk image installation destination.",
+            allowed: AppMaintenanceInstallDestination.allCases.map(\.rawValue),
+            fallback: .string(AppMaintenanceInstallDestination.user.rawValue)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateAutoRefresh, .bool, group: "system",
+            summary: "Refresh App Update Center automatically.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateRefreshInterval, .number, group: "system",
+            summary: "Seconds between enabled App Update Center refreshes.",
+            fallback: .double(86_400)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateNotifications, .bool, group: "system",
+            summary: "Notify after automatic refreshes find new updates.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateConcurrency, .int, group: "system",
+            summary: "Maximum updates running together.", fallback: .int(2)),
+        SettingDefinition(
+            AppStorageKeys.AppMaintenance.updateRetries, .int, group: "system",
+            summary: "Retries after an update fails.", fallback: .int(1)),
+        SettingDefinition(
             AppStorageKeys.General.preventSleep, .bool, group: "system",
             summary: "Keep the Mac awake (Keep Awake).", fallback: .bool(false)),
         SettingDefinition(
@@ -511,6 +536,18 @@ public enum ConfigCatalog {
         SettingDefinition(
             "cleanerSelectionOverrides", .map, group: "cleaner",
             summary: "Per-path cleaner selection overrides."),
+    ]
+
+    private static let homebrew: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Tabs.homebrewEnabled, .bool, group: "homebrew",
+            summary: "Homebrew Manager extension: formula and cask management.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Homebrew.defaultKind, .string, group: "homebrew",
+            summary: "Package kind selected when Homebrew Manager opens.",
+            allowed: HomebrewPackageKind.allCases.map(\.rawValue),
+            fallback: .string(HomebrewPackageKind.formula.rawValue)),
     ]
 
     private static let music: [SettingDefinition] = [

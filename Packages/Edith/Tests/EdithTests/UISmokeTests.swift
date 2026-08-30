@@ -63,6 +63,25 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(renders(HomePage()))
     }
 
+    @Test func homebrewManagerRendersInstalledPackagesAndUpdates() {
+        let model = HomebrewPageModel()
+        model.status = HomebrewStatus(
+            available: true, executable: "/opt/homebrew/bin/brew", version: "Homebrew 5.0.0")
+        model.loaded = true
+        model.packages = [
+            HomebrewPackage(
+                kind: .formula, name: "ripgrep", displayName: "ripgrep",
+                description: "Search text quickly", installedVersions: ["14.1.0"],
+                currentVersion: "14.1.1", outdated: true),
+            HomebrewPackage(
+                kind: .formula, name: "jq", displayName: "jq",
+                description: "Process JSON", installedVersions: ["1.7.1"],
+                currentVersion: "1.7.1"),
+        ]
+
+        #expect(renders(HomebrewPage(model: model)))
+    }
+
     @Test func mainWindowRendersEveryDestination() {
         let saved = SharedDefaults.store.string(forKey: "mainWindowSection")
         let savedSettingsTab = SharedDefaults.store.string(forKey: "settingsTab")
@@ -200,6 +219,26 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(!holder.started)
     }
 
+    @Test func spaceTerminalWindowRendersWithoutStartingSessions() {
+        let defaults = UserDefaults(
+            suiteName: "space-terminal-smoke-\(UUID().uuidString)")!
+        let store = HerdrStore(defaults: defaults, liveWatcher: { _ in })
+        let agent = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true,
+            sshTarget: nil, session: "main", pane: "p1", kind: "Codex", status: .working,
+            title: "Build checkout", workspace: "edith", cwd: "/tmp")
+        let model = HerdrSpaceWindowModel(
+            space: HerdrAgentSpace(id: "edith", title: "edith", agents: [agent]),
+            store: store)
+
+        #expect(
+            renders(
+                HerdrSpaceView(model: model, store: store, launchEnabled: false),
+                width: 1180, height: 760))
+        #expect(model.tabs.flatMap(\.holders).allSatisfy { !$0.started })
+        model.stopAll()
+    }
+
     @Test func finderSmokeRenderDoesNotStartConnection() async throws {
         let session = MachineSession(
             machine: Machine(name: "Remote", host: "203.0.113.1"), local: false,
@@ -277,6 +316,22 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(renders(HerdrPage(store: HerdrStore())))
     }
 
+    @Test func herdrBoardWithAgentSpacesRenders() {
+        let name = "herdr-board-smoke-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = HerdrStore(defaults: defaults, liveWatcher: { _ in })
+        let agent = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true,
+            sshTarget: nil, session: "main", pane: "p1", kind: "Codex",
+            status: .working, title: "Build checkout", workspace: "edith", cwd: "/tmp")
+        store.apply([.local(herdrPresent: true, agents: [agent])])
+        store.spaceGroupingEnabled = true
+        store.selectBoard()
+
+        #expect(renders(HerdrPage(store: store), width: 1180, height: 760))
+    }
+
     @Test func musicPageRenders() {
         #expect(renders(MusicPage()))
     }
@@ -289,7 +344,26 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(
             renders(
                 HerdrTitlebarViewPicker(store: HerdrStore(), agentID: "agent"),
-                width: 240, height: 40))
+                width: 280, height: 40))
+    }
+
+    @Test func herdrTitlebarViewPickerReflectsDetailVisibility() throws {
+        let name = "UISmokeTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = HerdrStore(defaults: defaults, liveWatcher: { _ in })
+        let visible = try #require(
+            renderedBitmap(
+                HerdrTitlebarViewPicker(store: store, agentID: "agent"),
+                width: 280, height: 40)
+        ).representation(using: .png, properties: [:])
+        store.detailOpen = false
+        let hidden = try #require(
+            renderedBitmap(
+                HerdrTitlebarViewPicker(store: store, agentID: "agent"),
+                width: 280, height: 40)
+        ).representation(using: .png, properties: [:])
+        #expect(visible != hidden)
     }
 
     @Test func herdrTitlebarViewPickerRendersEveryThemeDistinctly() throws {
@@ -308,7 +382,7 @@ private func descendantViews(of view: NSView) -> [NSView] {
             let bitmap = try #require(
                 renderedBitmap(
                     HerdrTitlebarViewPicker(store: HerdrStore(), agentID: "agent"),
-                    width: 240, height: 40))
+                    width: 280, height: 40))
             appearances.insert(try #require(bitmap.representation(using: .png, properties: [:])))
         }
         #expect(appearances.count == AppTheme.allCases.count)
@@ -327,9 +401,10 @@ private func descendantViews(of view: NSView) -> [NSView] {
         let accessory = try #require(window.titlebarAccessoryViewControllers.first)
         #expect(window.titlebarAccessoryViewControllers.count == 1)
         #expect(accessory.layoutAttribute == .right)
-        #expect(accessory.view.frame.width == 236)
+        #expect(
+            abs(accessory.view.frame.width - HerdrAgentWindow.viewControlsWidth) < 0.5)
         #expect(accessory.view.frame.height >= 28)
-        #expect(accessory.view.fittingSize.width >= 228)
+        #expect(accessory.view.fittingSize.width >= HerdrAgentWindow.viewControlsContentWidth)
         #expect(accessory.view.fittingSize.height <= 36)
     }
 

@@ -40,6 +40,7 @@ public enum Guide {
         ed color copy 1 --format hex
         ed emoji pick               open Edith's emoji picker
         ed usage sources            the agents that produced your usage history
+        ed usage export             branded PNG cards for sharing your activity
         ed schema                   JSON Schema for the config document
         ed version                  the CLI version, and whether the app is up
         ed status                   command-line links and shell completions
@@ -296,6 +297,7 @@ public enum Guide {
         ed usage projects copy-link edith
         ed usage projects copy-chat <chat-id>
         ed usage sources
+        ed usage export --card activity --output ./shares
         ed usage machines               machines counted with this Mac
         ed usage machines collect tuf   run the collector there, bring it back
         ed usage refresh                re-collect from every agent, live progress
@@ -400,6 +402,14 @@ public enum Guide {
         ed machines terminal broadcast box -- uptime one line, every open tab for box
         ed apps ls                      what is running here
         ed apps quit Safari --yes | --all --yes
+        ed brew ls --outdated           installed Homebrew packages with updates
+        ed brew search firefox          available casks matching a query
+        ed brew install ripgrep         install one exact formula
+        ed brew uninstall ripgrep       preview before removing anything
+        ed maintenance inventory        installed apps and Homebrew updates
+        ed maintenance scan <app>       exact app and support-file Trash plan
+        ed maintenance remove <app>     preview the reviewed selection
+        ed maintenance remove <app> --yes
         ed download ls                  the yt-dlp queue
         ed download status              lifecycle totals for the queue
         ed download add <url> --kind audio

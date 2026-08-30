@@ -138,6 +138,12 @@ public enum UserOperationCatalog {
         + CleanerOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + HomebrewOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + AppMaintenanceOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + WorkspaceOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -1215,6 +1221,61 @@ private extension CleanerOperation {
                     surface: "Cleaner card", action: "clean one category",
                     exampleArguments: ["--category", "npm", "--yes"]),
             ])
+        }
+    }
+}
+
+private extension HomebrewOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .status:
+            userInterface("Homebrew manager", "inspect Homebrew availability")
+        case .list:
+            userInterface("Homebrew manager", "browse installed packages")
+        case .search:
+            userInterface(
+                "Homebrew manager", "search available formulae and casks",
+                ["ripgrep", "--kind", "formula"])
+        case .install:
+            userInterface(
+                "Homebrew manager", "install a package",
+                ["ripgrep", "--kind", "formula"])
+        case .upgrade:
+            userInterface(
+                "Homebrew manager", "upgrade a package",
+                ["ripgrep", "--kind", "formula"])
+        case .uninstall:
+            userInterface(
+                "Homebrew manager", "uninstall a package",
+                ["ripgrep", "--kind", "formula", "--yes"])
+        }
+    }
+}
+private extension AppMaintenanceOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .inventory:
+            userInterface("App Maintenance", "list installed applications and updates")
+        case .scan:
+            userInterface(
+                "App Maintenance", "review exact support files",
+                ["/Applications/Example.app"])
+        case .remove:
+            userInterface(
+                "App Maintenance", "move selected reviewed items to the Trash",
+                ["/Applications/Example.app", "--yes"])
+        case .install:
+            userInterface(
+                "App Maintenance", "verify and install one app from a disk image",
+                ["~/Downloads/Example.dmg", "--yes"])
+        case .updates:
+            userInterface("App Update Center", "discover available updates")
+        case .update:
+            userInterface("App Update Center", "review and run selected updates", ["--yes"])
+        case .history:
+            userInterface("App Update Center", "review update history")
+        case .backupUpdates:
+            .commandLineOnly(reason: "Backups require an explicit destination path.")
         }
     }
 }
