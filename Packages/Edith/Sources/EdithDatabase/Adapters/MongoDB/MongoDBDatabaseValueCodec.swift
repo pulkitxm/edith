@@ -292,8 +292,10 @@ enum MongoDBDatabaseValueCodec {
         case let value as Double:
             return (.floatingPoint(value), false)
         case let value as String:
-            let preview = preview(
-                value, byteLimit: min(max(0, budget.remainingBytes), maximumScalarPreviewBytes))
+            let preview = try await preview(
+                value,
+                byteLimit: min(max(0, budget.remainingBytes), maximumScalarPreviewBytes),
+                cancellationCheck: cancellationCheck)
             guard budget.consume(bytes: preview.text.utf8.count) else {
                 throw MongoDBDatabaseValueCodecFailure.resourceLimit
             }
@@ -391,9 +393,10 @@ enum MongoDBDatabaseValueCodec {
                 false
             )
         case let value as RegularExpression:
-            let pattern = preview(
+            let pattern = try await preview(
                 value.pattern,
-                byteLimit: min(max(0, budget.remainingBytes), maximumScalarPreviewBytes))
+                byteLimit: min(max(0, budget.remainingBytes), maximumScalarPreviewBytes),
+                cancellationCheck: cancellationCheck)
             guard budget.consume(bytes: pattern.text.utf8.count + value.options.utf8.count) else {
                 throw MongoDBDatabaseValueCodecFailure.resourceLimit
             }
@@ -412,12 +415,17 @@ enum MongoDBDatabaseValueCodec {
                 pattern.truncated
             )
         case let value as JavaScriptCode:
-            return try outputCode(value.code, typeName: "javascript", budget: &budget)
+            return try await outputCode(
+                value.code,
+                typeName: "javascript",
+                budget: &budget,
+                cancellationCheck: cancellationCheck)
         case let value as JavaScriptCodeWithScope:
-            let output = try outputCode(
+            let output = try await outputCode(
                 value.code,
                 typeName: "javascriptWithScope",
-                budget: &budget)
+                budget: &budget,
+                cancellationCheck: cancellationCheck)
             return (output.value, true)
         case is MinKey:
             return (
@@ -526,11 +534,13 @@ enum MongoDBDatabaseValueCodec {
     private static func outputCode(
         _ code: String,
         typeName: String,
-        budget: inout MongoDBDatabaseValueCodecBudget
-    ) throws -> (value: DatabaseValue, truncated: Bool) {
-        let preview = preview(
+        budget: inout MongoDBDatabaseValueCodecBudget,
+        cancellationCheck: @escaping @Sendable () async throws -> Void
+    ) async throws -> (value: DatabaseValue, truncated: Bool) {
+        let preview = try await preview(
             code,
-            byteLimit: min(max(0, budget.remainingBytes), maximumScalarPreviewBytes))
+            byteLimit: min(max(0, budget.remainingBytes), maximumScalarPreviewBytes),
+            cancellationCheck: cancellationCheck)
         guard budget.consume(bytes: preview.text.utf8.count) else {
             throw MongoDBDatabaseValueCodecFailure.resourceLimit
         }
@@ -552,14 +562,18 @@ enum MongoDBDatabaseValueCodec {
 
     private static func preview(
         _ value: String,
-        byteLimit: Int
-    ) -> (text: String, truncated: Bool) {
+        byteLimit: Int,
+        cancellationCheck: @escaping @Sendable () async throws -> Void
+    ) async throws -> (text: String, truncated: Bool) {
         guard value.utf8.count > byteLimit else { return (value, false) }
         guard byteLimit > 0 else { return ("", true) }
         var result = ""
         result.reserveCapacity(byteLimit)
         var used = 0
-        for character in value {
+        for (index, character) in value.enumerated() {
+            if index.isMultiple(of: 256) {
+                try await cancellationCheck()
+            }
             let count = String(character).utf8.count
             guard used + count <= byteLimit else { break }
             result.append(character)

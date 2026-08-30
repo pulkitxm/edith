@@ -76,17 +76,20 @@ actor MongoDBDatabaseOwnedEventLoop {
 actor MongoDBDatabaseConnectedTransport {
     private var connection: MongoConnection?
     private let channel: any Channel
+    private let context: MongoClientContext
     private let eventLoop: MongoDBDatabaseOwnedEventLoop
     nonisolated let identity: DatabaseProductIdentity
 
     init(
         connection: MongoConnection,
         channel: any Channel,
+        context: MongoClientContext,
         eventLoop: MongoDBDatabaseOwnedEventLoop,
         identity: DatabaseProductIdentity
     ) {
         self.connection = connection
         self.channel = channel
+        self.context = context
         self.eventLoop = eventLoop
         self.identity = identity
     }
@@ -109,6 +112,7 @@ actor MongoDBDatabaseConnectedTransport {
     private func closeChannelAndReleaseConnection() async -> Error? {
         let connection = self.connection
         self.connection = nil
+        await context.cancelQueries(MongoDBDatabaseTransportFailure.cancelled)
         channel.close(mode: .all, promise: nil)
         let closeError: Error?
         do {
@@ -319,6 +323,7 @@ enum MongoDBDatabaseTransport {
         return MongoDBDatabaseConnectedTransport(
             connection: connection,
             channel: channel,
+            context: mongoContext,
             eventLoop: eventLoop,
             identity: identity)
     }
@@ -944,16 +949,20 @@ private enum MongoDBDatabaseSCRAMSHA256 {
         let serverFirst = try reply.payload.decodedString()
         let challenge = try challenge(serverFirst, nonce: nonce)
         var passwordBytes = Data(password.utf8)
+        defer {
+            passwordBytes.resetBytes(in: 0..<passwordBytes.count)
+        }
         var saltedPassword = try await pbkdf2(
             password: passwordBytes,
             salt: challenge.salt,
             iterations: challenge.iterations,
             cancellationCheck: cancellationCheck)
+        defer {
+            saltedPassword.resetBytes(in: 0..<saltedPassword.count)
+        }
         var clientKey = hmac(key: saltedPassword, message: Data("Client Key".utf8))
         var serverKey = hmac(key: saltedPassword, message: Data("Server Key".utf8))
         defer {
-            passwordBytes.resetBytes(in: 0..<passwordBytes.count)
-            saltedPassword.resetBytes(in: 0..<saltedPassword.count)
             clientKey.resetBytes(in: 0..<clientKey.count)
             serverKey.resetBytes(in: 0..<serverKey.count)
         }
@@ -1064,6 +1073,10 @@ private enum MongoDBDatabaseSCRAMSHA256 {
         firstInput.append(contentsOf: [0, 0, 0, 1])
         var current = hmac(key: password, message: firstInput)
         var result = current
+        defer {
+            current.resetBytes(in: 0..<current.count)
+            result.resetBytes(in: 0..<result.count)
+        }
         if iterations > 1 {
             for iteration in 1..<iterations {
                 if iteration.isMultiple(of: 128) {
@@ -1074,8 +1087,7 @@ private enum MongoDBDatabaseSCRAMSHA256 {
             }
         }
         try await cancellationCheck()
-        current.resetBytes(in: 0..<current.count)
-        return result
+        return Data([UInt8](result))
     }
 
     private static func hmac(key: Data, message: Data) -> Data {
