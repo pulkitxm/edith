@@ -335,12 +335,16 @@ struct TerminalPane: View {
             if let launch = holder.ghosttyLaunch {
                 GhosttyPane(
                     holder: holder, launch: launch, theme: GhosttyTheme(palette: palette),
-                    active: active, wantsFocus: wantsFocus, onDropFiles: onDropFiles)
+                    active: active, wantsFocus: wantsFocus, onDropFiles: onDropFiles
+                )
+                .id(holder.generation)
             }
         } else {
             SwiftTermPane(
                 holder: holder, palette: palette, active: active, wantsFocus: wantsFocus,
-                onDropFiles: onDropFiles)
+                onDropFiles: onDropFiles
+            )
+            .id(holder.generation)
         }
     }
 }
