@@ -742,6 +742,7 @@ private final class OpenSearchDatabaseLiveURLSessionDelegate: NSObject, URLSessi
 {
     func urlSession(
         _ session: URLSession,
+        task: URLSessionTask,
         didReceive challenge: URLAuthenticationChallenge,
         completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
