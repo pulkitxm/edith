@@ -235,15 +235,15 @@ struct MachinesMetricsCommand: AsyncParsableCommand {
             let processes = try ArgumentChecks.nonNegative(self.processes, "--processes")
             let runner = try await MachineResolver.runner(machine)
             guard let platform = await runner.ssh.remotePlatform,
-                let script = MachineCollector.script(
+                let invocation = MachineCollector.invocation(
                     for: platform, follow: follow, interval: interval)
             else {
                 throw CLIFailure("the metrics collector is missing from this build")
             }
-            let command = MachineCollector.command(
-                for: platform, follow: follow, interval: interval)
             let sink = MetricsSink(json: json, processes: processes, follow: follow)
-            let stream = try runner.stream(command: command, stdin: script) { line, isStderr in
+            let stream = try runner.stream(
+                command: invocation.command, stdin: invocation.stdinData
+            ) { line, isStderr in
                 guard !isStderr else { return }
                 sink.receive(line)
             }

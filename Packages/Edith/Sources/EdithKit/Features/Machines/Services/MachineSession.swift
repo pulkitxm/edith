@@ -286,12 +286,11 @@ public final class MachineSession {
 
     private func startMetricsStream() {
         guard let connection, let remotePlatform,
-            let script = MachineCollector.script(for: remotePlatform)
+            let invocation = MachineCollector.invocation(for: remotePlatform, follow: true)
         else { return }
-        let process = connection.streamProcess(
-            command: MachineCollector.command(for: remotePlatform, follow: true))
+        let process = connection.streamProcess(command: invocation.command)
         let stream = SSHLineStream(
-            process: process, stdinData: script,
+            process: process, stdinData: invocation.stdinData,
             onLine: { [weak self] line, isStderr in
                 guard !isStderr, let record = MachineMetricsDecoder.decode(line: line) else {
                     return

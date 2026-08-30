@@ -449,12 +449,36 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
         #expect(text.contains("@EDITH@"))
     }
 
+    @Test func decodesWindowsCollectorHelloWithCarriageReturn() {
+        let line =
+            "@EDITH@{\"t\":\"hello\",\"v\":1,\"os\":\"Microsoft Windows 11 Home Single Language\","
+            + "\"osID\":\"windows\",\"kernel\":\"10.0.26200\",\"arch\":\"AMD64\","
+            + "\"host\":\"PULKIT-TUF\",\"cpuModel\":\"12th Gen Intel(R) Core(TM) i7-12700H\","
+            + "\"cores\":20,\"memTotalKB\":66720300,\"virtual\":false}\r"
+        guard case let .hello(hello)? = MachineMetricsDecoder.decode(line: line) else {
+            Issue.record("expected Windows hello record")
+            return
+        }
+        #expect(hello.host == "PULKIT-TUF")
+    }
+
     @Test func collectorSelectsShellForEachPlatform() {
-        #expect(MachineCollector.command(for: .linux, follow: true) == "sh -s -- --stream -i 2")
-        #expect(MachineCollector.command(for: .darwin, follow: false) == "sh -s -- --once")
-        let windows = MachineCollector.command(for: .windows, follow: true)
-        #expect(windows.contains("powershell.exe"))
-        #expect(decodedMachinePowerShell(windows)?.contains("[Console]::In.ReadToEnd()") == true)
+        let linux = MachineCollector.invocation(for: .linux, follow: true)
+        let mac = MachineCollector.invocation(for: .darwin, follow: false)
+        let windows = MachineCollector.invocation(for: .windows, follow: true)
+        let windowsInput = String(decoding: windows?.stdinData ?? Data(), as: UTF8.self)
+        #expect(linux?.command == "sh -s -- --stream -i 2")
+        #expect(linux?.stdinData != nil)
+        #expect(mac?.command == "sh -s -- --once")
+        #expect(mac?.stdinData != nil)
+        #expect(windows?.command.contains("powershell.exe") == true)
+        #expect(windowsInput.hasSuffix("\n\(MachineCollector.windowsScriptTerminator)\n"))
+        #expect(decodedMachinePowerShell(windows?.command ?? "")?.contains("In.ReadLine") == true)
+        #expect(
+            decodedMachinePowerShell(windows?.command ?? "")?.contains(
+                MachineCollector.windowsScriptTerminator)
+                == true)
+        #expect(decodedMachinePowerShell(windows?.command ?? "")?.contains("In.ReadToEnd") == false)
     }
 
     @Test func collectorReadsFansAndPlatformProfilesFromSysfs() {
