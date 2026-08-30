@@ -19,6 +19,34 @@ public protocol DatabaseBrokerCommandHandler: Sendable {
         _ request: DatabaseConnectionTestRequest
     ) async throws -> DatabaseCommandResult<DatabaseConnectionTestResult>
 
+    func connectionList(
+        _ request: DatabaseConnectionListRequest
+    ) async throws -> DatabaseCommandResult<DatabaseConnectionListResult>
+
+    func connectionGet(
+        _ request: DatabaseConnectionGetRequest
+    ) async throws -> DatabaseCommandResult<DatabaseConnectionGetResult>
+
+    func connectionSave(
+        _ request: DatabaseConnectionSaveRequest
+    ) async throws -> DatabaseCommandResult<DatabaseConnectionSaveResult>
+
+    func connectionEdit(
+        _ request: DatabaseConnectionEditRequest
+    ) async throws -> DatabaseCommandResult<DatabaseConnectionEditResult>
+
+    func connectionDuplicate(
+        _ request: DatabaseConnectionDuplicateRequest
+    ) async throws -> DatabaseCommandResult<DatabaseConnectionDuplicateResult>
+
+    func connectionRename(
+        _ request: DatabaseConnectionRenameRequest
+    ) async throws -> DatabaseCommandResult<DatabaseConnectionRenameResult>
+
+    func connectionDelete(
+        _ request: DatabaseConnectionDeleteRequest
+    ) async throws -> DatabaseCommandResult<DatabaseConnectionDeleteResult>
+
     func capabilities(
         _ request: DatabaseCapabilitiesRequest
     ) async throws -> DatabaseCommandResult<DatabaseCapabilitiesResult>
@@ -38,6 +66,30 @@ public protocol DatabaseBrokerCommandHandler: Sendable {
     func mutationApply(
         _ request: DatabaseMutationApplyRequest
     ) async throws -> DatabaseCommandResult<DatabaseMutationApplyResult>
+
+    func savedQueryList(
+        _ request: DatabaseSavedQueryListRequest
+    ) async throws -> DatabaseCommandResult<DatabaseSavedQueryListResult>
+
+    func savedQueryGet(
+        _ request: DatabaseSavedQueryGetRequest
+    ) async throws -> DatabaseCommandResult<DatabaseSavedQueryGetResult>
+
+    func savedQuerySave(
+        _ request: DatabaseSavedQuerySaveRequest
+    ) async throws -> DatabaseCommandResult<DatabaseSavedQuerySaveResult>
+
+    func savedQueryDuplicate(
+        _ request: DatabaseSavedQueryDuplicateRequest
+    ) async throws -> DatabaseCommandResult<DatabaseSavedQueryDuplicateResult>
+
+    func savedQueryRename(
+        _ request: DatabaseSavedQueryRenameRequest
+    ) async throws -> DatabaseCommandResult<DatabaseSavedQueryRenameResult>
+
+    func savedQueryDelete(
+        _ request: DatabaseSavedQueryDeleteRequest
+    ) async throws -> DatabaseCommandResult<DatabaseSavedQueryDeleteResult>
 
     func operationGet(
         _ request: DatabaseOperationGetRequest
@@ -116,6 +168,20 @@ public actor DatabaseBrokerCommandDispatcher {
             .disconnect(try await handler.disconnect(command))
         case .connectionTest(let command):
             .connectionTest(try await handler.connectionTest(command))
+        case .connectionList(let command):
+            .connectionList(try await handler.connectionList(command))
+        case .connectionGet(let command):
+            .connectionGet(try await handler.connectionGet(command))
+        case .connectionSave(let command):
+            .connectionSave(try await handler.connectionSave(command))
+        case .connectionEdit(let command):
+            .connectionEdit(try await handler.connectionEdit(command))
+        case .connectionDuplicate(let command):
+            .connectionDuplicate(try await handler.connectionDuplicate(command))
+        case .connectionRename(let command):
+            .connectionRename(try await handler.connectionRename(command))
+        case .connectionDelete(let command):
+            .connectionDelete(try await handler.connectionDelete(command))
         case .capabilities(let command):
             .capabilities(try await handler.capabilities(command))
         case .browse(let command):
@@ -126,6 +192,18 @@ public actor DatabaseBrokerCommandDispatcher {
             .mutationPreview(try await handler.mutationPreview(command))
         case .mutationApply(let command):
             .mutationApply(try await handler.mutationApply(command))
+        case .savedQueryList(let command):
+            .savedQueryList(try await handler.savedQueryList(command))
+        case .savedQueryGet(let command):
+            .savedQueryGet(try await handler.savedQueryGet(command))
+        case .savedQuerySave(let command):
+            .savedQuerySave(try await handler.savedQuerySave(command))
+        case .savedQueryDuplicate(let command):
+            .savedQueryDuplicate(try await handler.savedQueryDuplicate(command))
+        case .savedQueryRename(let command):
+            .savedQueryRename(try await handler.savedQueryRename(command))
+        case .savedQueryDelete(let command):
+            .savedQueryDelete(try await handler.savedQueryDelete(command))
         case .operationGet(let command):
             .operationGet(try await handler.operationGet(command))
         case .operationList(let command):

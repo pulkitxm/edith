@@ -4,11 +4,24 @@ public enum DatabaseBrokerCommandKind: String, CaseIterable, Codable, Hashable, 
     case connect = "database.connection.connect"
     case disconnect = "database.connection.disconnect"
     case connectionTest = "database.connection.test"
+    case connectionList = "database.connection.list"
+    case connectionGet = "database.connection.get"
+    case connectionSave = "database.connection.save"
+    case connectionEdit = "database.connection.edit"
+    case connectionDuplicate = "database.connection.duplicate"
+    case connectionRename = "database.connection.rename"
+    case connectionDelete = "database.connection.delete"
     case capabilities = "database.capabilities"
     case browse = "database.browse"
     case query = "database.query"
     case mutationPreview = "database.mutation.preview"
     case mutationApply = "database.mutation.apply"
+    case savedQueryList = "database.saved-query.list"
+    case savedQueryGet = "database.saved-query.get"
+    case savedQuerySave = "database.saved-query.save"
+    case savedQueryDuplicate = "database.saved-query.duplicate"
+    case savedQueryRename = "database.saved-query.rename"
+    case savedQueryDelete = "database.saved-query.delete"
     case operationGet = "database.operation.get"
     case operationList = "database.operation.list"
     case operationCancel = "database.operation.cancel"
@@ -37,11 +50,24 @@ public enum DatabaseBrokerCommandRequest: Hashable, Sendable {
     case connect(DatabaseConnectRequest)
     case disconnect(DatabaseDisconnectRequest)
     case connectionTest(DatabaseConnectionTestRequest)
+    case connectionList(DatabaseConnectionListRequest)
+    case connectionGet(DatabaseConnectionGetRequest)
+    case connectionSave(DatabaseConnectionSaveRequest)
+    case connectionEdit(DatabaseConnectionEditRequest)
+    case connectionDuplicate(DatabaseConnectionDuplicateRequest)
+    case connectionRename(DatabaseConnectionRenameRequest)
+    case connectionDelete(DatabaseConnectionDeleteRequest)
     case capabilities(DatabaseCapabilitiesRequest)
     case browse(DatabaseBrowseRequest)
     case query(DatabaseQueryRequest)
     case mutationPreview(DatabaseMutationPreviewRequest)
     case mutationApply(DatabaseMutationApplyRequest)
+    case savedQueryList(DatabaseSavedQueryListRequest)
+    case savedQueryGet(DatabaseSavedQueryGetRequest)
+    case savedQuerySave(DatabaseSavedQuerySaveRequest)
+    case savedQueryDuplicate(DatabaseSavedQueryDuplicateRequest)
+    case savedQueryRename(DatabaseSavedQueryRenameRequest)
+    case savedQueryDelete(DatabaseSavedQueryDeleteRequest)
     case operationGet(DatabaseOperationGetRequest)
     case operationList(DatabaseOperationListRequest)
     case operationCancel(DatabaseOperationCancelRequest)
@@ -54,6 +80,20 @@ public enum DatabaseBrokerCommandRequest: Hashable, Sendable {
             .disconnect
         case .connectionTest:
             .connectionTest
+        case .connectionList:
+            .connectionList
+        case .connectionGet:
+            .connectionGet
+        case .connectionSave:
+            .connectionSave
+        case .connectionEdit:
+            .connectionEdit
+        case .connectionDuplicate:
+            .connectionDuplicate
+        case .connectionRename:
+            .connectionRename
+        case .connectionDelete:
+            .connectionDelete
         case .capabilities:
             .capabilities
         case .browse:
@@ -64,6 +104,18 @@ public enum DatabaseBrokerCommandRequest: Hashable, Sendable {
             .mutationPreview
         case .mutationApply:
             .mutationApply
+        case .savedQueryList:
+            .savedQueryList
+        case .savedQueryGet:
+            .savedQueryGet
+        case .savedQuerySave:
+            .savedQuerySave
+        case .savedQueryDuplicate:
+            .savedQueryDuplicate
+        case .savedQueryRename:
+            .savedQueryRename
+        case .savedQueryDelete:
+            .savedQueryDelete
         case .operationGet:
             .operationGet
         case .operationList:
@@ -81,6 +133,9 @@ public enum DatabaseBrokerCommandRequest: Hashable, Sendable {
             request.operation.operationID
         case .connectionTest(let request):
             request.operation.operationID
+        case .connectionList, .connectionGet, .connectionSave, .connectionEdit,
+            .connectionDuplicate, .connectionRename, .connectionDelete:
+            nil
         case .capabilities(let request):
             request.operation.operationID
         case .browse(let request):
@@ -91,6 +146,9 @@ public enum DatabaseBrokerCommandRequest: Hashable, Sendable {
             request.operation.operationID
         case .mutationApply(let request):
             request.operation.operationID
+        case .savedQueryList, .savedQueryGet, .savedQuerySave, .savedQueryDuplicate,
+            .savedQueryRename, .savedQueryDelete:
+            nil
         case .operationGet(let request):
             request.operationID
         case .operationList:
@@ -112,6 +170,41 @@ public enum DatabaseBrokerCommandRequest: Hashable, Sendable {
 
     public var connectionTestRequest: DatabaseConnectionTestRequest? {
         guard case .connectionTest(let request) = self else { return nil }
+        return request
+    }
+
+    public var connectionListRequest: DatabaseConnectionListRequest? {
+        guard case .connectionList(let request) = self else { return nil }
+        return request
+    }
+
+    public var connectionGetRequest: DatabaseConnectionGetRequest? {
+        guard case .connectionGet(let request) = self else { return nil }
+        return request
+    }
+
+    public var connectionSaveRequest: DatabaseConnectionSaveRequest? {
+        guard case .connectionSave(let request) = self else { return nil }
+        return request
+    }
+
+    public var connectionEditRequest: DatabaseConnectionEditRequest? {
+        guard case .connectionEdit(let request) = self else { return nil }
+        return request
+    }
+
+    public var connectionDuplicateRequest: DatabaseConnectionDuplicateRequest? {
+        guard case .connectionDuplicate(let request) = self else { return nil }
+        return request
+    }
+
+    public var connectionRenameRequest: DatabaseConnectionRenameRequest? {
+        guard case .connectionRename(let request) = self else { return nil }
+        return request
+    }
+
+    public var connectionDeleteRequest: DatabaseConnectionDeleteRequest? {
+        guard case .connectionDelete(let request) = self else { return nil }
         return request
     }
 
@@ -137,6 +230,36 @@ public enum DatabaseBrokerCommandRequest: Hashable, Sendable {
 
     public var mutationApplyRequest: DatabaseMutationApplyRequest? {
         guard case .mutationApply(let request) = self else { return nil }
+        return request
+    }
+
+    public var savedQueryListRequest: DatabaseSavedQueryListRequest? {
+        guard case .savedQueryList(let request) = self else { return nil }
+        return request
+    }
+
+    public var savedQueryGetRequest: DatabaseSavedQueryGetRequest? {
+        guard case .savedQueryGet(let request) = self else { return nil }
+        return request
+    }
+
+    public var savedQuerySaveRequest: DatabaseSavedQuerySaveRequest? {
+        guard case .savedQuerySave(let request) = self else { return nil }
+        return request
+    }
+
+    public var savedQueryDuplicateRequest: DatabaseSavedQueryDuplicateRequest? {
+        guard case .savedQueryDuplicate(let request) = self else { return nil }
+        return request
+    }
+
+    public var savedQueryRenameRequest: DatabaseSavedQueryRenameRequest? {
+        guard case .savedQueryRename(let request) = self else { return nil }
+        return request
+    }
+
+    public var savedQueryDeleteRequest: DatabaseSavedQueryDeleteRequest? {
+        guard case .savedQueryDelete(let request) = self else { return nil }
         return request
     }
 
@@ -189,6 +312,55 @@ public enum DatabaseBrokerCommandRequest: Hashable, Sendable {
     }
 
     public func response(
+        _ result: DatabaseCommandResult<DatabaseConnectionListResult>
+    ) throws -> DatabaseBrokerCommandResponse {
+        try require(.connectionList)
+        return .connectionList(result)
+    }
+
+    public func response(
+        _ result: DatabaseCommandResult<DatabaseConnectionGetResult>
+    ) throws -> DatabaseBrokerCommandResponse {
+        try require(.connectionGet)
+        return .connectionGet(result)
+    }
+
+    public func response(
+        _ result: DatabaseCommandResult<DatabaseConnectionSaveResult>
+    ) throws -> DatabaseBrokerCommandResponse {
+        try require(.connectionSave)
+        return .connectionSave(result)
+    }
+
+    public func response(
+        _ result: DatabaseCommandResult<DatabaseConnectionEditResult>
+    ) throws -> DatabaseBrokerCommandResponse {
+        try require(.connectionEdit)
+        return .connectionEdit(result)
+    }
+
+    public func response(
+        _ result: DatabaseCommandResult<DatabaseConnectionDuplicateResult>
+    ) throws -> DatabaseBrokerCommandResponse {
+        try require(.connectionDuplicate)
+        return .connectionDuplicate(result)
+    }
+
+    public func response(
+        _ result: DatabaseCommandResult<DatabaseConnectionRenameResult>
+    ) throws -> DatabaseBrokerCommandResponse {
+        try require(.connectionRename)
+        return .connectionRename(result)
+    }
+
+    public func response(
+        _ result: DatabaseCommandResult<DatabaseConnectionDeleteResult>
+    ) throws -> DatabaseBrokerCommandResponse {
+        try require(.connectionDelete)
+        return .connectionDelete(result)
+    }
+
+    public func response(
         _ result: DatabaseCommandResult<DatabaseCapabilitiesResult>
     ) throws -> DatabaseBrokerCommandResponse {
         try require(.capabilities)
@@ -221,6 +393,48 @@ public enum DatabaseBrokerCommandRequest: Hashable, Sendable {
     ) throws -> DatabaseBrokerCommandResponse {
         try require(.mutationApply)
         return .mutationApply(result)
+    }
+
+    public func response(
+        _ result: DatabaseCommandResult<DatabaseSavedQueryListResult>
+    ) throws -> DatabaseBrokerCommandResponse {
+        try require(.savedQueryList)
+        return .savedQueryList(result)
+    }
+
+    public func response(
+        _ result: DatabaseCommandResult<DatabaseSavedQueryGetResult>
+    ) throws -> DatabaseBrokerCommandResponse {
+        try require(.savedQueryGet)
+        return .savedQueryGet(result)
+    }
+
+    public func response(
+        _ result: DatabaseCommandResult<DatabaseSavedQuerySaveResult>
+    ) throws -> DatabaseBrokerCommandResponse {
+        try require(.savedQuerySave)
+        return .savedQuerySave(result)
+    }
+
+    public func response(
+        _ result: DatabaseCommandResult<DatabaseSavedQueryDuplicateResult>
+    ) throws -> DatabaseBrokerCommandResponse {
+        try require(.savedQueryDuplicate)
+        return .savedQueryDuplicate(result)
+    }
+
+    public func response(
+        _ result: DatabaseCommandResult<DatabaseSavedQueryRenameResult>
+    ) throws -> DatabaseBrokerCommandResponse {
+        try require(.savedQueryRename)
+        return .savedQueryRename(result)
+    }
+
+    public func response(
+        _ result: DatabaseCommandResult<DatabaseSavedQueryDeleteResult>
+    ) throws -> DatabaseBrokerCommandResponse {
+        try require(.savedQueryDelete)
+        return .savedQueryDelete(result)
     }
 
     public func response(
@@ -257,6 +471,27 @@ public enum DatabaseBrokerCommandRequest: Hashable, Sendable {
         case .connectionTest(let request):
             version = request.version
             supportedVersion = DatabaseConnectionTestRequest.schemaVersion
+        case .connectionList(let request):
+            version = request.version
+            supportedVersion = DatabaseConnectionListRequest.schemaVersion
+        case .connectionGet(let request):
+            version = request.version
+            supportedVersion = DatabaseConnectionGetRequest.schemaVersion
+        case .connectionSave(let request):
+            version = request.version
+            supportedVersion = DatabaseConnectionSaveRequest.schemaVersion
+        case .connectionEdit(let request):
+            version = request.version
+            supportedVersion = DatabaseConnectionEditRequest.schemaVersion
+        case .connectionDuplicate(let request):
+            version = request.version
+            supportedVersion = DatabaseConnectionDuplicateRequest.schemaVersion
+        case .connectionRename(let request):
+            version = request.version
+            supportedVersion = DatabaseConnectionRenameRequest.schemaVersion
+        case .connectionDelete(let request):
+            version = request.version
+            supportedVersion = DatabaseConnectionDeleteRequest.schemaVersion
         case .capabilities(let request):
             version = request.version
             supportedVersion = DatabaseCapabilitiesRequest.schemaVersion
@@ -272,6 +507,24 @@ public enum DatabaseBrokerCommandRequest: Hashable, Sendable {
         case .mutationApply(let request):
             version = request.version
             supportedVersion = DatabaseMutationApplyRequest.schemaVersion
+        case .savedQueryList(let request):
+            version = request.version
+            supportedVersion = DatabaseSavedQueryListRequest.schemaVersion
+        case .savedQueryGet(let request):
+            version = request.version
+            supportedVersion = DatabaseSavedQueryGetRequest.schemaVersion
+        case .savedQuerySave(let request):
+            version = request.version
+            supportedVersion = DatabaseSavedQuerySaveRequest.schemaVersion
+        case .savedQueryDuplicate(let request):
+            version = request.version
+            supportedVersion = DatabaseSavedQueryDuplicateRequest.schemaVersion
+        case .savedQueryRename(let request):
+            version = request.version
+            supportedVersion = DatabaseSavedQueryRenameRequest.schemaVersion
+        case .savedQueryDelete(let request):
+            version = request.version
+            supportedVersion = DatabaseSavedQueryDeleteRequest.schemaVersion
         case .operationGet(let request):
             version = request.version
             supportedVersion = DatabaseOperationGetRequest.schemaVersion
@@ -325,6 +578,29 @@ extension DatabaseBrokerCommandRequest: Codable {
         case .connectionTest:
             self = .connectionTest(
                 try container.decode(DatabaseConnectionTestRequest.self, forKey: .request))
+        case .connectionList:
+            self = .connectionList(
+                try container.decode(DatabaseConnectionListRequest.self, forKey: .request))
+        case .connectionGet:
+            self = .connectionGet(
+                try container.decode(DatabaseConnectionGetRequest.self, forKey: .request))
+        case .connectionSave:
+            self = .connectionSave(
+                try container.decode(DatabaseConnectionSaveRequest.self, forKey: .request))
+        case .connectionEdit:
+            self = .connectionEdit(
+                try container.decode(DatabaseConnectionEditRequest.self, forKey: .request))
+        case .connectionDuplicate:
+            self = .connectionDuplicate(
+                try container.decode(
+                    DatabaseConnectionDuplicateRequest.self,
+                    forKey: .request))
+        case .connectionRename:
+            self = .connectionRename(
+                try container.decode(DatabaseConnectionRenameRequest.self, forKey: .request))
+        case .connectionDelete:
+            self = .connectionDelete(
+                try container.decode(DatabaseConnectionDeleteRequest.self, forKey: .request))
         case .capabilities:
             self = .capabilities(
                 try container.decode(DatabaseCapabilitiesRequest.self, forKey: .request))
@@ -340,6 +616,24 @@ extension DatabaseBrokerCommandRequest: Codable {
         case .mutationApply:
             self = .mutationApply(
                 try container.decode(DatabaseMutationApplyRequest.self, forKey: .request))
+        case .savedQueryList:
+            self = .savedQueryList(
+                try container.decode(DatabaseSavedQueryListRequest.self, forKey: .request))
+        case .savedQueryGet:
+            self = .savedQueryGet(
+                try container.decode(DatabaseSavedQueryGetRequest.self, forKey: .request))
+        case .savedQuerySave:
+            self = .savedQuerySave(
+                try container.decode(DatabaseSavedQuerySaveRequest.self, forKey: .request))
+        case .savedQueryDuplicate:
+            self = .savedQueryDuplicate(
+                try container.decode(DatabaseSavedQueryDuplicateRequest.self, forKey: .request))
+        case .savedQueryRename:
+            self = .savedQueryRename(
+                try container.decode(DatabaseSavedQueryRenameRequest.self, forKey: .request))
+        case .savedQueryDelete:
+            self = .savedQueryDelete(
+                try container.decode(DatabaseSavedQueryDeleteRequest.self, forKey: .request))
         case .operationGet:
             self = .operationGet(
                 try container.decode(DatabaseOperationGetRequest.self, forKey: .request))
@@ -365,6 +659,20 @@ extension DatabaseBrokerCommandRequest: Codable {
             try container.encode(request, forKey: .request)
         case .connectionTest(let request):
             try container.encode(request, forKey: .request)
+        case .connectionList(let request):
+            try container.encode(request, forKey: .request)
+        case .connectionGet(let request):
+            try container.encode(request, forKey: .request)
+        case .connectionSave(let request):
+            try container.encode(request, forKey: .request)
+        case .connectionEdit(let request):
+            try container.encode(request, forKey: .request)
+        case .connectionDuplicate(let request):
+            try container.encode(request, forKey: .request)
+        case .connectionRename(let request):
+            try container.encode(request, forKey: .request)
+        case .connectionDelete(let request):
+            try container.encode(request, forKey: .request)
         case .capabilities(let request):
             try container.encode(request, forKey: .request)
         case .browse(let request):
@@ -374,6 +682,18 @@ extension DatabaseBrokerCommandRequest: Codable {
         case .mutationPreview(let request):
             try container.encode(request, forKey: .request)
         case .mutationApply(let request):
+            try container.encode(request, forKey: .request)
+        case .savedQueryList(let request):
+            try container.encode(request, forKey: .request)
+        case .savedQueryGet(let request):
+            try container.encode(request, forKey: .request)
+        case .savedQuerySave(let request):
+            try container.encode(request, forKey: .request)
+        case .savedQueryDuplicate(let request):
+            try container.encode(request, forKey: .request)
+        case .savedQueryRename(let request):
+            try container.encode(request, forKey: .request)
+        case .savedQueryDelete(let request):
             try container.encode(request, forKey: .request)
         case .operationGet(let request):
             try container.encode(request, forKey: .request)
@@ -391,11 +711,24 @@ public enum DatabaseBrokerCommandResponse: Hashable, Sendable {
     case connect(DatabaseCommandResult<DatabaseConnectResult>)
     case disconnect(DatabaseCommandResult<DatabaseDisconnectResult>)
     case connectionTest(DatabaseCommandResult<DatabaseConnectionTestResult>)
+    case connectionList(DatabaseCommandResult<DatabaseConnectionListResult>)
+    case connectionGet(DatabaseCommandResult<DatabaseConnectionGetResult>)
+    case connectionSave(DatabaseCommandResult<DatabaseConnectionSaveResult>)
+    case connectionEdit(DatabaseCommandResult<DatabaseConnectionEditResult>)
+    case connectionDuplicate(DatabaseCommandResult<DatabaseConnectionDuplicateResult>)
+    case connectionRename(DatabaseCommandResult<DatabaseConnectionRenameResult>)
+    case connectionDelete(DatabaseCommandResult<DatabaseConnectionDeleteResult>)
     case capabilities(DatabaseCommandResult<DatabaseCapabilitiesResult>)
     case browse(DatabaseCommandResult<DatabaseBrowseResult>)
     case query(DatabaseCommandResult<DatabaseQueryResult>)
     case mutationPreview(DatabaseCommandResult<DatabaseMutationPreviewResult>)
     case mutationApply(DatabaseCommandResult<DatabaseMutationApplyResult>)
+    case savedQueryList(DatabaseCommandResult<DatabaseSavedQueryListResult>)
+    case savedQueryGet(DatabaseCommandResult<DatabaseSavedQueryGetResult>)
+    case savedQuerySave(DatabaseCommandResult<DatabaseSavedQuerySaveResult>)
+    case savedQueryDuplicate(DatabaseCommandResult<DatabaseSavedQueryDuplicateResult>)
+    case savedQueryRename(DatabaseCommandResult<DatabaseSavedQueryRenameResult>)
+    case savedQueryDelete(DatabaseCommandResult<DatabaseSavedQueryDeleteResult>)
     case operationGet(DatabaseCommandResult<DatabaseOperationGetResult>)
     case operationList(DatabaseCommandResult<DatabaseOperationListResult>)
     case operationCancel(DatabaseCommandResult<DatabaseOperationCancelResult>)
@@ -408,6 +741,20 @@ public enum DatabaseBrokerCommandResponse: Hashable, Sendable {
             .disconnect
         case .connectionTest:
             .connectionTest
+        case .connectionList:
+            .connectionList
+        case .connectionGet:
+            .connectionGet
+        case .connectionSave:
+            .connectionSave
+        case .connectionEdit:
+            .connectionEdit
+        case .connectionDuplicate:
+            .connectionDuplicate
+        case .connectionRename:
+            .connectionRename
+        case .connectionDelete:
+            .connectionDelete
         case .capabilities:
             .capabilities
         case .browse:
@@ -418,6 +765,18 @@ public enum DatabaseBrokerCommandResponse: Hashable, Sendable {
             .mutationPreview
         case .mutationApply:
             .mutationApply
+        case .savedQueryList:
+            .savedQueryList
+        case .savedQueryGet:
+            .savedQueryGet
+        case .savedQuerySave:
+            .savedQuerySave
+        case .savedQueryDuplicate:
+            .savedQueryDuplicate
+        case .savedQueryRename:
+            .savedQueryRename
+        case .savedQueryDelete:
+            .savedQueryDelete
         case .operationGet:
             .operationGet
         case .operationList:
@@ -439,6 +798,42 @@ public enum DatabaseBrokerCommandResponse: Hashable, Sendable {
 
     public var connectionTestResult: DatabaseCommandResult<DatabaseConnectionTestResult>? {
         guard case .connectionTest(let result) = self else { return nil }
+        return result
+    }
+
+    public var connectionListResult: DatabaseCommandResult<DatabaseConnectionListResult>? {
+        guard case .connectionList(let result) = self else { return nil }
+        return result
+    }
+
+    public var connectionGetResult: DatabaseCommandResult<DatabaseConnectionGetResult>? {
+        guard case .connectionGet(let result) = self else { return nil }
+        return result
+    }
+
+    public var connectionSaveResult: DatabaseCommandResult<DatabaseConnectionSaveResult>? {
+        guard case .connectionSave(let result) = self else { return nil }
+        return result
+    }
+
+    public var connectionEditResult: DatabaseCommandResult<DatabaseConnectionEditResult>? {
+        guard case .connectionEdit(let result) = self else { return nil }
+        return result
+    }
+
+    public var connectionDuplicateResult: DatabaseCommandResult<DatabaseConnectionDuplicateResult>?
+    {
+        guard case .connectionDuplicate(let result) = self else { return nil }
+        return result
+    }
+
+    public var connectionRenameResult: DatabaseCommandResult<DatabaseConnectionRenameResult>? {
+        guard case .connectionRename(let result) = self else { return nil }
+        return result
+    }
+
+    public var connectionDeleteResult: DatabaseCommandResult<DatabaseConnectionDeleteResult>? {
+        guard case .connectionDelete(let result) = self else { return nil }
         return result
     }
 
@@ -464,6 +859,37 @@ public enum DatabaseBrokerCommandResponse: Hashable, Sendable {
 
     public var mutationApplyResult: DatabaseCommandResult<DatabaseMutationApplyResult>? {
         guard case .mutationApply(let result) = self else { return nil }
+        return result
+    }
+
+    public var savedQueryListResult: DatabaseCommandResult<DatabaseSavedQueryListResult>? {
+        guard case .savedQueryList(let result) = self else { return nil }
+        return result
+    }
+
+    public var savedQueryGetResult: DatabaseCommandResult<DatabaseSavedQueryGetResult>? {
+        guard case .savedQueryGet(let result) = self else { return nil }
+        return result
+    }
+
+    public var savedQuerySaveResult: DatabaseCommandResult<DatabaseSavedQuerySaveResult>? {
+        guard case .savedQuerySave(let result) = self else { return nil }
+        return result
+    }
+
+    public var savedQueryDuplicateResult: DatabaseCommandResult<DatabaseSavedQueryDuplicateResult>?
+    {
+        guard case .savedQueryDuplicate(let result) = self else { return nil }
+        return result
+    }
+
+    public var savedQueryRenameResult: DatabaseCommandResult<DatabaseSavedQueryRenameResult>? {
+        guard case .savedQueryRename(let result) = self else { return nil }
+        return result
+    }
+
+    public var savedQueryDeleteResult: DatabaseCommandResult<DatabaseSavedQueryDeleteResult>? {
+        guard case .savedQueryDelete(let result) = self else { return nil }
         return result
     }
 
@@ -538,6 +964,41 @@ extension DatabaseBrokerCommandResponse: Codable {
                 try container.decode(
                     DatabaseCommandResult<DatabaseConnectionTestResult>.self,
                     forKey: .result))
+        case .connectionList:
+            self = .connectionList(
+                try container.decode(
+                    DatabaseCommandResult<DatabaseConnectionListResult>.self,
+                    forKey: .result))
+        case .connectionGet:
+            self = .connectionGet(
+                try container.decode(
+                    DatabaseCommandResult<DatabaseConnectionGetResult>.self,
+                    forKey: .result))
+        case .connectionSave:
+            self = .connectionSave(
+                try container.decode(
+                    DatabaseCommandResult<DatabaseConnectionSaveResult>.self,
+                    forKey: .result))
+        case .connectionEdit:
+            self = .connectionEdit(
+                try container.decode(
+                    DatabaseCommandResult<DatabaseConnectionEditResult>.self,
+                    forKey: .result))
+        case .connectionDuplicate:
+            self = .connectionDuplicate(
+                try container.decode(
+                    DatabaseCommandResult<DatabaseConnectionDuplicateResult>.self,
+                    forKey: .result))
+        case .connectionRename:
+            self = .connectionRename(
+                try container.decode(
+                    DatabaseCommandResult<DatabaseConnectionRenameResult>.self,
+                    forKey: .result))
+        case .connectionDelete:
+            self = .connectionDelete(
+                try container.decode(
+                    DatabaseCommandResult<DatabaseConnectionDeleteResult>.self,
+                    forKey: .result))
         case .capabilities:
             self = .capabilities(
                 try container.decode(
@@ -562,6 +1023,36 @@ extension DatabaseBrokerCommandResponse: Codable {
             self = .mutationApply(
                 try container.decode(
                     DatabaseCommandResult<DatabaseMutationApplyResult>.self,
+                    forKey: .result))
+        case .savedQueryList:
+            self = .savedQueryList(
+                try container.decode(
+                    DatabaseCommandResult<DatabaseSavedQueryListResult>.self,
+                    forKey: .result))
+        case .savedQueryGet:
+            self = .savedQueryGet(
+                try container.decode(
+                    DatabaseCommandResult<DatabaseSavedQueryGetResult>.self,
+                    forKey: .result))
+        case .savedQuerySave:
+            self = .savedQuerySave(
+                try container.decode(
+                    DatabaseCommandResult<DatabaseSavedQuerySaveResult>.self,
+                    forKey: .result))
+        case .savedQueryDuplicate:
+            self = .savedQueryDuplicate(
+                try container.decode(
+                    DatabaseCommandResult<DatabaseSavedQueryDuplicateResult>.self,
+                    forKey: .result))
+        case .savedQueryRename:
+            self = .savedQueryRename(
+                try container.decode(
+                    DatabaseCommandResult<DatabaseSavedQueryRenameResult>.self,
+                    forKey: .result))
+        case .savedQueryDelete:
+            self = .savedQueryDelete(
+                try container.decode(
+                    DatabaseCommandResult<DatabaseSavedQueryDeleteResult>.self,
                     forKey: .result))
         case .operationGet:
             self = .operationGet(
@@ -592,6 +1083,20 @@ extension DatabaseBrokerCommandResponse: Codable {
             try container.encode(result, forKey: .result)
         case .connectionTest(let result):
             try container.encode(result, forKey: .result)
+        case .connectionList(let result):
+            try container.encode(result, forKey: .result)
+        case .connectionGet(let result):
+            try container.encode(result, forKey: .result)
+        case .connectionSave(let result):
+            try container.encode(result, forKey: .result)
+        case .connectionEdit(let result):
+            try container.encode(result, forKey: .result)
+        case .connectionDuplicate(let result):
+            try container.encode(result, forKey: .result)
+        case .connectionRename(let result):
+            try container.encode(result, forKey: .result)
+        case .connectionDelete(let result):
+            try container.encode(result, forKey: .result)
         case .capabilities(let result):
             try container.encode(result, forKey: .result)
         case .browse(let result):
@@ -601,6 +1106,18 @@ extension DatabaseBrokerCommandResponse: Codable {
         case .mutationPreview(let result):
             try container.encode(result, forKey: .result)
         case .mutationApply(let result):
+            try container.encode(result, forKey: .result)
+        case .savedQueryList(let result):
+            try container.encode(result, forKey: .result)
+        case .savedQueryGet(let result):
+            try container.encode(result, forKey: .result)
+        case .savedQuerySave(let result):
+            try container.encode(result, forKey: .result)
+        case .savedQueryDuplicate(let result):
+            try container.encode(result, forKey: .result)
+        case .savedQueryRename(let result):
+            try container.encode(result, forKey: .result)
+        case .savedQueryDelete(let result):
             try container.encode(result, forKey: .result)
         case .operationGet(let result):
             try container.encode(result, forKey: .result)
