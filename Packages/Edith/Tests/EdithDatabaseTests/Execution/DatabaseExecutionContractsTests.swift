@@ -396,23 +396,29 @@ private enum DatabaseExecutionContractFixtures {
 
         let result = DatabaseMutationApplyResult(
             disposition: .accepted,
+            effect: .unknown,
             affectedRecords: DatabaseCountMetadata(value: 12, accuracy: .estimated),
-            returnedRecords: DatabaseExecutionContractFixtures.page,
-            serverOperationIdentifier: "server-task-42")
+            acceptedMutation: DatabaseAcceptedMutation(
+                operationID: DatabaseExecutionContractFixtures.operationID,
+                serverOperationIdentifier: "server-task-42"))
         let decodedResult = try DatabaseExecutionContractFixtures.roundTrip(result)
 
         #expect(decodedResult == result)
         #expect(decodedResult.disposition == .accepted)
+        #expect(decodedResult.effect == .unknown)
         #expect(decodedResult.affectedRecords.value == 12)
-        #expect(decodedResult.returnedRecords?.records.count == 1)
-        #expect(decodedResult.serverOperationIdentifier == "server-task-42")
+        #expect(decodedResult.returnedRecords == nil)
+        #expect(
+            decodedResult.acceptedMutation?.serverOperationIdentifier == "server-task-42")
     }
 
     @Test func mutationReconciliationContractsPreserveServerAndClientCorrelation() throws {
         let serverOperationIdentifier = "server-task-42"
         let statusRequest = DatabaseMutationStatusRequest(
             connectionID: DatabaseConnectionFixtures.connectionID,
-            serverOperationIdentifier: serverOperationIdentifier,
+            acceptedMutation: DatabaseAcceptedMutation(
+                operationID: DatabaseExecutionContractFixtures.operationID,
+                serverOperationIdentifier: serverOperationIdentifier),
             operation: DatabaseExecutionContractFixtures.operation)
         #expect(try DatabaseExecutionContractFixtures.roundTrip(statusRequest) == statusRequest)
 
@@ -422,22 +428,23 @@ private enum DatabaseExecutionContractFixtures {
             metadata: DatabaseExecutionContractFixtures.page.metadata)
         let outcome = DatabaseMutationApplyResult(
             disposition: .completed,
+            effect: .applied,
             affectedRecords: DatabaseCountMetadata(value: 12, accuracy: .exact),
             returnedRecords: returnedRecords,
-            serverOperationIdentifier: serverOperationIdentifier)
+            acceptedMutation: statusRequest.acceptedMutation)
         let status = DatabaseMutationStatusResult(
-            serverOperationIdentifier: serverOperationIdentifier,
+            acceptedMutation: statusRequest.acceptedMutation,
             state: .completed,
             outcome: outcome)
         #expect(try DatabaseExecutionContractFixtures.roundTrip(status) == status)
 
         let cancelRequest = DatabaseMutationCancelRequest(
             connectionID: DatabaseConnectionFixtures.connectionID,
-            serverOperationIdentifier: serverOperationIdentifier,
+            acceptedMutation: statusRequest.acceptedMutation,
             operation: DatabaseExecutionContractFixtures.operation)
         #expect(try DatabaseExecutionContractFixtures.roundTrip(cancelRequest) == cancelRequest)
         let cancellation = DatabaseMutationCancelResult(
-            serverOperationIdentifier: serverOperationIdentifier,
+            acceptedMutation: statusRequest.acceptedMutation,
             disposition: .alreadyFinished,
             status: status)
         #expect(try DatabaseExecutionContractFixtures.roundTrip(cancellation) == cancellation)

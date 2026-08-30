@@ -230,6 +230,7 @@ private enum DatabaseManagementFixtures {
             mutationPlan: plan,
             mutationResult: try DatabaseAdapterMutationResult(
                 disposition: .completed,
+                effect: .applied,
                 affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .exact)),
             gates: gates)
         return (

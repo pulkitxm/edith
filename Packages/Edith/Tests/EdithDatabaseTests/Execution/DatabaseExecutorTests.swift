@@ -204,6 +204,7 @@ private enum DatabaseExecutorFixtures {
             mutationPlan: mutationPlan(connection: connection),
             mutationResult: try DatabaseAdapterMutationResult(
                 disposition: .completed,
+                effect: .applied,
                 affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .exact)),
             gates: gates)
     }
@@ -411,6 +412,15 @@ private struct DatabaseExecutorUnexpectedMetadataStore: DatabaseMetadataStore {
         throw failure()
     }
 
+    func transitionMutationOutcome(
+        _ outcome: DatabaseMutationApplyResult,
+        operationID: DatabaseOperationID,
+        from expectedStates: Set<DatabaseMutationOutcomeState>,
+        owner: DatabaseRuntimeOwnerToken
+    ) throws -> DatabaseMutationOutcomeTransitionResult {
+        throw failure()
+    }
+
     func mutationOutcome(
         operationID: DatabaseOperationID
     ) throws -> DatabaseMutationApplyResult? {
@@ -607,6 +617,19 @@ private actor DatabaseExecutorGatedMetadataStore: DatabaseMetadataStore {
         try await base.recordMutationOutcome(
             outcome,
             operationID: operationID,
+            owner: owner)
+    }
+
+    func transitionMutationOutcome(
+        _ outcome: DatabaseMutationApplyResult,
+        operationID: DatabaseOperationID,
+        from expectedStates: Set<DatabaseMutationOutcomeState>,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> DatabaseMutationOutcomeTransitionResult {
+        try await base.transitionMutationOutcome(
+            outcome,
+            operationID: operationID,
+            from: expectedStates,
             owner: owner)
     }
 
@@ -821,6 +844,7 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
 
         #expect(applied.status == .succeeded)
         #expect(applied.payload?.disposition == .completed)
+        #expect(applied.payload?.effect == .applied)
         #expect(applied.metadata.operation?.kind == .databaseMutationApply)
         #expect(applied.metadata.operation?.retryClassification == .requiresNewPreview)
         #expect(recovered.status == .succeeded)
@@ -887,6 +911,97 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
         #expect(snapshot.cancelledOperationIDs.contains(applyOperation.operationID))
     }
 
+    @Test func mutationApplyPersistsUnknownBeforeCallingTheAdapter() async throws {
+        let executeGate = DatabaseExecutorTestGate()
+        let report = DatabaseExecutorFixtures.report(
+            identity: DatabaseExecutorFixtures.identity(),
+            includesMutation: true)
+        let fixture = try await DatabaseExecutorFixtures.make(
+            report: report,
+            sessionGates: DatabaseExecutorTestSessionGates(
+                executeMutation: executeGate))
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let mutation = DatabaseExecutorFixtures.mutationRequest(
+            connection: fixture.connection)
+        let preview = await fixture.executor.previewMutation(
+            DatabaseMutationPreviewRequest(
+                mutation: mutation,
+                operation: DatabaseExecutorFixtures.operation(94)))
+        let issued = try #require(preview.payload?.preview)
+        await executeGate.block()
+        let applyOperation = DatabaseExecutorFixtures.operation(95)
+        let task = Task {
+            await fixture.executor.applyMutation(
+                DatabaseMutationApplyRequest(
+                    mutation: mutation,
+                    token: issued.token,
+                    confirmationText: issued.requiredConfirmation.text,
+                    operation: applyOperation))
+        }
+        await executeGate.waitForEntries()
+
+        let reopened = try SQLiteDatabaseMetadataStore(path: fixture.path)
+        let unresolved = try #require(
+            try await reopened.mutationOutcome(operationID: applyOperation.operationID))
+
+        #expect(unresolved.effect == .unknown)
+        #expect(unresolved.acceptedMutation == nil)
+        #expect(unresolved.error == nil)
+
+        task.cancel()
+        await executeGate.releaseAll()
+        let result = await task.value
+        let persisted = try await reopened.mutationOutcome(
+            operationID: applyOperation.operationID)
+
+        #expect(result.status == .succeeded)
+        #expect(result.payload?.effect == .unknown)
+        #expect(result.payload?.error?.category == .cancelled)
+        #expect(persisted == result.payload)
+    }
+
+    @Test func adapterThrowAfterMutationBoundaryReturnsDurableUnknown() async throws {
+        let report = DatabaseExecutorFixtures.report(
+            identity: DatabaseExecutorFixtures.identity(),
+            includesMutation: true)
+        let fixture = try await DatabaseExecutorFixtures.make(report: report)
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let unsafeMessage = "private adapter effect marker"
+        await fixture.session.enqueueMutationResult(
+            .failure(
+                .reported(
+                    DatabaseErrorEnvelope(
+                        category: .server,
+                        message: unsafeMessage))))
+        let mutation = DatabaseExecutorFixtures.mutationRequest(
+            connection: fixture.connection)
+        let preview = await fixture.executor.previewMutation(
+            DatabaseMutationPreviewRequest(
+                mutation: mutation,
+                operation: DatabaseExecutorFixtures.operation(96)))
+        let issued = try #require(preview.payload?.preview)
+        let applyOperation = DatabaseExecutorFixtures.operation(97)
+
+        let result = await fixture.executor.applyMutation(
+            DatabaseMutationApplyRequest(
+                mutation: mutation,
+                token: issued.token,
+                confirmationText: issued.requiredConfirmation.text,
+                operation: applyOperation))
+        let persisted = try await fixture.store.mutationOutcome(
+            operationID: applyOperation.operationID)
+
+        #expect(result.status == .succeeded)
+        #expect(result.payload?.disposition == .completed)
+        #expect(result.payload?.effect == .unknown)
+        #expect(result.payload?.error?.category == .server)
+        #expect(result.payload?.error?.message.contains(unsafeMessage) == false)
+        #expect(persisted == result.payload)
+        #expect(
+            DatabaseExecutorFixtures.mutationExecutionCount(
+                await fixture.session.snapshot()) == 1)
+    }
+
     @Test func brokerDispatcherRoutesMutationPreviewAndApplyThroughTheExecutor() async throws {
         let report = DatabaseExecutorFixtures.report(
             identity: DatabaseExecutorFixtures.identity(),
@@ -901,6 +1016,7 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
         await fixture.session.setMutationResult(
             try DatabaseAdapterMutationResult(
                 disposition: .accepted,
+                effect: .unknown,
                 affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .unknown),
                 serverOperationIdentifier: serverOperationIdentifier))
         let previewOperation = DatabaseExecutorFixtures.operation(75)
@@ -939,13 +1055,16 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
         #expect(applyResponse.operationID == applyOperation.operationID)
         #expect(applyResult.status == .succeeded)
         #expect(applyResult.payload?.disposition == .accepted)
-        #expect(applyResult.payload?.serverOperationIdentifier == serverOperationIdentifier)
+        let acceptedMutation = try #require(applyResult.payload?.acceptedMutation)
+        #expect(acceptedMutation.operationID == applyOperation.operationID)
+        #expect(acceptedMutation.serverOperationIdentifier == serverOperationIdentifier)
         #expect(
             DatabaseExecutorFixtures.mutationExecutionCount(
                 await fixture.session.snapshot()) == 1)
 
         let terminalOutcome = try DatabaseAdapterMutationResult(
             disposition: .completed,
+            effect: .applied,
             affectedRecords: DatabaseCountMetadata(value: 12, accuracy: .exact),
             serverOperationIdentifier: serverOperationIdentifier)
         let terminalStatus = try DatabaseAdapterMutationStatus(
@@ -964,7 +1083,7 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
         let statusEnvelope = DatabaseBrokerCommandRequest.mutationStatus(
             DatabaseMutationStatusRequest(
                 connectionID: fixture.connection.id,
-                serverOperationIdentifier: serverOperationIdentifier,
+                acceptedMutation: acceptedMutation,
                 operation: statusOperation)
         ).envelope(requestID: DatabaseExecutorFixtures.uuid(84), sequence: 14)
         let statusResponse = try await dispatcher.dispatch(
@@ -975,13 +1094,14 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
         #expect(statusResponse.operationID == statusOperation.operationID)
         #expect(statusResult.status == .succeeded)
         #expect(statusResult.payload?.state == .completed)
+        #expect(statusResult.payload?.acceptedMutation == acceptedMutation)
         #expect(statusResult.payload?.outcome?.affectedRecords.value == 12)
 
         let cancelOperation = DatabaseExecutorFixtures.operation(85)
         let cancelEnvelope = DatabaseBrokerCommandRequest.mutationCancel(
             DatabaseMutationCancelRequest(
                 connectionID: fixture.connection.id,
-                serverOperationIdentifier: serverOperationIdentifier,
+                acceptedMutation: acceptedMutation,
                 operation: cancelOperation)
         ).envelope(requestID: DatabaseExecutorFixtures.uuid(86), sequence: 16)
         let cancelResponse = try await dispatcher.dispatch(
@@ -992,6 +1112,7 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
         #expect(cancelResponse.operationID == cancelOperation.operationID)
         #expect(cancelResult.status == .succeeded)
         #expect(cancelResult.payload?.disposition == .alreadyFinished)
+        #expect(cancelResult.payload?.acceptedMutation == acceptedMutation)
         #expect(cancelResult.payload?.status?.state == .completed)
 
         let outcomeEnvelope = DatabaseBrokerCommandRequest.mutationOutcomeGet(
@@ -1005,7 +1126,120 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
         #expect(outcomeResponse.operationID == applyOperation.operationID)
         #expect(outcomeResult.status == .succeeded)
         #expect(outcomeResult.payload?.operation?.id == applyOperation.operationID)
-        #expect(outcomeResult.payload?.outcome == applyResult.payload)
+        #expect(outcomeResult.payload?.outcome == statusResult.payload?.outcome)
+    }
+
+    @Test func terminalFailedAndCancelledStatusesUpdateOriginalApplyOutcomes() async throws {
+        let report = DatabaseExecutorFixtures.report(
+            identity: DatabaseExecutorFixtures.identity(),
+            includesMutation: true)
+        let failedFixture = try await DatabaseExecutorFixtures.make(report: report)
+        defer { try? FileManager.default.removeItem(at: failedFixture.directory) }
+        let failedMutation = DatabaseExecutorFixtures.mutationRequest(
+            connection: failedFixture.connection)
+        await failedFixture.session.setMutationResult(
+            try DatabaseAdapterMutationResult(
+                disposition: .accepted,
+                effect: .unknown,
+                affectedRecords: DatabaseCountMetadata(accuracy: .unknown),
+                serverOperationIdentifier: "failed-server-task"))
+        let failedPreview = await failedFixture.executor.previewMutation(
+            DatabaseMutationPreviewRequest(
+                mutation: failedMutation,
+                operation: DatabaseExecutorFixtures.operation(98)))
+        let failedIssued = try #require(failedPreview.payload?.preview)
+        let failedApply = await failedFixture.executor.applyMutation(
+            DatabaseMutationApplyRequest(
+                mutation: failedMutation,
+                token: failedIssued.token,
+                confirmationText: failedIssued.requiredConfirmation.text,
+                operation: DatabaseExecutorFixtures.operation(99)))
+        let failedAccepted = try #require(failedApply.payload?.acceptedMutation)
+        let partialError = DatabaseErrorEnvelope(
+            category: .partialFailure,
+            message: "A bounded mutation item failed.",
+            partialResult: DatabaseResultCompleteness(state: .partial))
+        let partialOutcome = try DatabaseAdapterMutationResult(
+            disposition: .completed,
+            effect: .partiallyApplied,
+            affectedRecords: DatabaseCountMetadata(value: 4, accuracy: .lowerBound),
+            serverOperationIdentifier: failedAccepted.serverOperationIdentifier,
+            partialFailures: [
+                DatabasePartialFailure(itemIndex: 4, error: partialError)
+            ],
+            error: partialError)
+        await failedFixture.session.enqueueMutationStatus(
+            .success(
+                try DatabaseAdapterMutationStatus(
+                    serverOperationIdentifier: failedAccepted.serverOperationIdentifier,
+                    state: .failed,
+                    outcome: partialOutcome,
+                    error: partialError)))
+
+        let failedStatus = await failedFixture.executor.mutationStatus(
+            DatabaseMutationStatusRequest(
+                connectionID: failedFixture.connection.id,
+                acceptedMutation: failedAccepted,
+                operation: DatabaseExecutorFixtures.operation(100)))
+        let failedPersisted = try await failedFixture.store.mutationOutcome(
+            operationID: failedAccepted.operationID)
+
+        #expect(failedStatus.status == .succeeded)
+        #expect(failedStatus.payload?.state == .failed)
+        #expect(failedStatus.payload?.outcome?.effect == .partiallyApplied)
+        #expect(failedStatus.payload?.outcome?.partialFailures.count == 1)
+        #expect(failedPersisted == failedStatus.payload?.outcome)
+
+        let cancelledFixture = try await DatabaseExecutorFixtures.make(report: report)
+        defer { try? FileManager.default.removeItem(at: cancelledFixture.directory) }
+        let cancelledMutation = DatabaseExecutorFixtures.mutationRequest(
+            connection: cancelledFixture.connection)
+        await cancelledFixture.session.setMutationResult(
+            try DatabaseAdapterMutationResult(
+                disposition: .accepted,
+                effect: .unknown,
+                affectedRecords: DatabaseCountMetadata(accuracy: .unknown),
+                serverOperationIdentifier: "cancelled-server-task"))
+        let cancelledPreview = await cancelledFixture.executor.previewMutation(
+            DatabaseMutationPreviewRequest(
+                mutation: cancelledMutation,
+                operation: DatabaseExecutorFixtures.operation(101)))
+        let cancelledIssued = try #require(cancelledPreview.payload?.preview)
+        let cancelledApply = await cancelledFixture.executor.applyMutation(
+            DatabaseMutationApplyRequest(
+                mutation: cancelledMutation,
+                token: cancelledIssued.token,
+                confirmationText: cancelledIssued.requiredConfirmation.text,
+                operation: DatabaseExecutorFixtures.operation(102)))
+        let cancelledAccepted = try #require(cancelledApply.payload?.acceptedMutation)
+        let notApplied = try DatabaseAdapterMutationResult(
+            disposition: .completed,
+            effect: .notApplied,
+            affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .exact),
+            serverOperationIdentifier: cancelledAccepted.serverOperationIdentifier)
+        let cancelledStatus = try DatabaseAdapterMutationStatus(
+            serverOperationIdentifier: cancelledAccepted.serverOperationIdentifier,
+            state: .cancelled,
+            outcome: notApplied)
+        await cancelledFixture.session.enqueueMutationCancellation(
+            .success(
+                try DatabaseAdapterMutationCancellationResult(
+                    serverOperationIdentifier: cancelledAccepted.serverOperationIdentifier,
+                    disposition: .alreadyFinished,
+                    status: cancelledStatus)))
+
+        let cancellation = await cancelledFixture.executor.cancelMutation(
+            DatabaseMutationCancelRequest(
+                connectionID: cancelledFixture.connection.id,
+                acceptedMutation: cancelledAccepted,
+                operation: DatabaseExecutorFixtures.operation(103)))
+        let cancelledPersisted = try await cancelledFixture.store.mutationOutcome(
+            operationID: cancelledAccepted.operationID)
+
+        #expect(cancellation.status == .succeeded)
+        #expect(cancellation.payload?.status?.state == .cancelled)
+        #expect(cancellation.payload?.status?.outcome?.effect == .notApplied)
+        #expect(cancelledPersisted == cancellation.payload?.status?.outcome)
     }
 
     @Test func mutationReconciliationRequiresCapabilitiesAndExactServerIdentifiers() async throws {
@@ -1014,7 +1248,9 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
         let unsupportedResult = await unsupported.executor.mutationStatus(
             DatabaseMutationStatusRequest(
                 connectionID: unsupported.connection.id,
-                serverOperationIdentifier: "server-task-42",
+                acceptedMutation: DatabaseAcceptedMutation(
+                    operationID: DatabaseExecutorFixtures.operation(91).operationID,
+                    serverOperationIdentifier: "server-task-42"),
                 operation: DatabaseExecutorFixtures.operation(88)))
 
         #expect(unsupportedResult.status == .failed)
@@ -1030,6 +1266,45 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
             includesMutation: true)
         let fixture = try await DatabaseExecutorFixtures.make(report: report)
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let mutation = DatabaseExecutorFixtures.mutationRequest(
+            connection: fixture.connection)
+        await fixture.session.setMutationResult(
+            try DatabaseAdapterMutationResult(
+                disposition: .accepted,
+                effect: .unknown,
+                affectedRecords: DatabaseCountMetadata(accuracy: .unknown),
+                serverOperationIdentifier: "server-task-42"))
+        let preview = await fixture.executor.previewMutation(
+            DatabaseMutationPreviewRequest(
+                mutation: mutation,
+                operation: DatabaseExecutorFixtures.operation(92)))
+        let issued = try #require(preview.payload?.preview)
+        let apply = await fixture.executor.applyMutation(
+            DatabaseMutationApplyRequest(
+                mutation: mutation,
+                token: issued.token,
+                confirmationText: issued.requiredConfirmation.text,
+                operation: DatabaseExecutorFixtures.operation(93)))
+        let acceptedMutation = try #require(apply.payload?.acceptedMutation)
+        let wrongOperation = await fixture.executor.mutationStatus(
+            DatabaseMutationStatusRequest(
+                connectionID: fixture.connection.id,
+                acceptedMutation: DatabaseAcceptedMutation(
+                    operationID: DatabaseExecutorFixtures.operation(104).operationID,
+                    serverOperationIdentifier: acceptedMutation.serverOperationIdentifier),
+                operation: DatabaseExecutorFixtures.operation(105)))
+        let wrongServer = await fixture.executor.mutationStatus(
+            DatabaseMutationStatusRequest(
+                connectionID: fixture.connection.id,
+                acceptedMutation: DatabaseAcceptedMutation(
+                    operationID: acceptedMutation.operationID,
+                    serverOperationIdentifier: "different-client-server-task"),
+                operation: DatabaseExecutorFixtures.operation(106)))
+
+        #expect(wrongOperation.status == .failed)
+        #expect(wrongOperation.error?.category == .conflict)
+        #expect(wrongServer.status == .failed)
+        #expect(wrongServer.error?.category == .conflict)
         await fixture.session.enqueueMutationStatus(
             .success(
                 try DatabaseAdapterMutationStatus(
@@ -1044,12 +1319,12 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
         let status = await fixture.executor.mutationStatus(
             DatabaseMutationStatusRequest(
                 connectionID: fixture.connection.id,
-                serverOperationIdentifier: "server-task-42",
+                acceptedMutation: acceptedMutation,
                 operation: DatabaseExecutorFixtures.operation(89)))
         let cancellation = await fixture.executor.cancelMutation(
             DatabaseMutationCancelRequest(
                 connectionID: fixture.connection.id,
-                serverOperationIdentifier: "server-task-42",
+                acceptedMutation: acceptedMutation,
                 operation: DatabaseExecutorFixtures.operation(90)))
 
         #expect(status.status == .failed)
@@ -1112,9 +1387,20 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
         await fixture.session.setMutationResult(
             try DatabaseAdapterMutationResult(
                 disposition: .completed,
+                effect: .partiallyApplied,
                 affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .exact),
                 returnedPage: returnedPage,
-                serverOperationIdentifier: "job-\(secret)"))
+                serverOperationIdentifier: "job-\(secret)",
+                partialFailures: [
+                    DatabasePartialFailure(
+                        itemIdentifier: "item-\(secret)",
+                        error: DatabaseErrorEnvelope(
+                            category: .partialFailure,
+                            message: "Partial failure \(secret)"))
+                ],
+                error: DatabaseErrorEnvelope(
+                    category: .partialFailure,
+                    message: "Mutation result \(secret)")))
         let mutation = DatabaseExecutorFixtures.mutationRequest(connection: connection)
         let preview = await fixture.executor.previewMutation(
             DatabaseMutationPreviewRequest(
@@ -1145,6 +1431,9 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
         #expect(applied.status == .succeeded)
         #expect(recovered.status == .succeeded)
         #expect(recovered.payload?.outcome == applied.payload)
+        #expect(applied.payload?.effect == .partiallyApplied)
+        #expect(applied.payload?.partialFailures.count == 1)
+        #expect(applied.payload?.error?.category == .partialFailure)
         #expect(!encodedPreview.contains(secret))
         #expect(!encodedApply.contains(secret))
         #expect(!encodedRecovery.contains(secret))

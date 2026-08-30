@@ -78,8 +78,17 @@ import Testing
                 input: correct, now: active, phase: .failed("rejected")) == .failed)
         #expect(
             presentation.confirmationState(
+                input: correct, now: active, phase: .partiallyApplied("review changes"))
+                == .partiallyApplied)
+        #expect(
+            presentation.confirmationState(
                 input: correct, now: active, phase: .succeeded("done")) == .completed)
         #expect(!presentation.canConfirm(input: correct, now: active, phase: .failed("rejected")))
+        let partialPhase = DatabaseSafetyReviewPhase.partiallyApplied("review changes")
+        #expect(partialPhase.preservesUnresolvedOperation)
+        #expect(partialPhase.blocksInteractiveDismissal)
+        #expect(!partialPhase.allowsOperationCancellation)
+        #expect(!partialPhase.allowsReconciliation)
     }
 
     @Test func freshTokenClearsConfirmationEvenWhenDisplayDigestMatches() throws {
@@ -267,6 +276,21 @@ import Testing
         #expect(bitmap.pixelsWide == bitmap.pixelsHigh)
         #expect(scrollViews.count >= 3)
         #expect(controls.count >= 3)
+    }
+
+    @Test func partiallyAppliedSheetExposesTheAcknowledgementActionPresentation() throws {
+        let partialPhase = DatabaseSafetyReviewPhase.partiallyApplied(
+            "Review the changed records.")
+        let acknowledgement = try #require(
+            DatabaseSafetyReviewSheet.acknowledgementAction(for: partialPhase))
+
+        #expect(acknowledgement.title == "Acknowledge partial result")
+        #expect(
+            acknowledgement.accessibilityHint
+                == "Clears mutation tracking only after you have reviewed the partially applied database changes"
+        )
+        #expect(acknowledgement.isEnabled)
+        #expect(DatabaseSafetyReviewSheet.acknowledgementAction(for: .ready) == nil)
     }
 
     @MainActor

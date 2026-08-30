@@ -799,6 +799,19 @@ actor DatabaseExecutorMetadataStoreProxy: DatabaseMetadataStore {
             owner: owner)
     }
 
+    func transitionMutationOutcome(
+        _ outcome: DatabaseMutationApplyResult,
+        operationID: DatabaseOperationID,
+        from expectedStates: Set<DatabaseMutationOutcomeState>,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> DatabaseMutationOutcomeTransitionResult {
+        try await base.transitionMutationOutcome(
+            outcome,
+            operationID: operationID,
+            from: expectedStates,
+            owner: owner)
+    }
+
     func mutationOutcome(
         operationID: DatabaseOperationID
     ) async throws -> DatabaseMutationApplyResult? {
