@@ -659,29 +659,35 @@ struct AppMaintenanceView: View {
                         )
                         .labelsHidden()
                         .toggleStyle(.checkbox)
-                        if let path = item.applicationPath {
-                            Image(nsImage: NSWorkspace.shared.icon(forFile: path))
-                                .resizable()
-                                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-                        } else {
-                            Image(systemName: "shippingbox")
-                                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+                        Button {
+                            model.focusedUpdateID = item.id
+                        } label: {
+                            HStack(spacing: UIScale.pt(9)) {
+                                if let path = item.applicationPath {
+                                    Image(nsImage: NSWorkspace.shared.icon(forFile: path))
+                                        .resizable()
+                                        .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+                                } else {
+                                    Image(systemName: "shippingbox")
+                                        .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+                                }
+                                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                                    Text(item.name).lineLimit(1)
+                                    Text("\(item.currentVersion) → \(item.availableVersion)")
+                                        .settingsCaption()
+                                }
+                                Spacer(minLength: 0)
+                                Text(item.source.title).settingsCaption().lineLimit(1)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
-                        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                            Text(item.name).lineLimit(1)
-                            Text("\(item.currentVersion) → \(item.availableVersion)")
-                                .settingsCaption()
-                        }
-                        Spacer(minLength: 0)
-                        Text(item.source.title).settingsCaption().lineLimit(1)
+                        .buttonStyle(
+                            EdithButtonStyle(
+                                .borderless, selected: model.focusedUpdateID == item.id,
+                                tint: theme))
                     }
                     .padding(.vertical, UIScale.pt(3))
-                    .contentShape(Rectangle())
-                    .onTapGesture { model.focusedUpdateID = item.id }
-                    .accessibilityAddTraits(
-                        model.focusedUpdateID == item.id ? .isSelected : []
-                    )
-                    .accessibilityAction { model.focusedUpdateID = item.id }
                     .listRowBackground(
                         model.focusedUpdateID == item.id ? theme.opacity(0.2) : Color.clear)
                 }

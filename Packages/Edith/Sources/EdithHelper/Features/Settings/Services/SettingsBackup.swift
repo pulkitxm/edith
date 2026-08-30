@@ -772,7 +772,8 @@ final class SettingsBackup {
         "SUAutomaticallyUpdate", "SUEnableAutomaticChecks", "SUScheduledCheckInterval",
         AppStorageKeys.General.mainWindowSection, AppStorageKeys.General.settingsTab,
         AppStorageKeys.General.mainSidebarOpen, AppStorageKeys.General.mainSidebarWidth,
-        AppStorageKeys.General.settingsCategoriesExpanded, AppStorageKeys.AppMaintenance.enabled,
+        AppStorageKeys.General.settingsCategoriesExpanded,
+        AppStorageKeys.AppMaintenance.categoriesExpanded, AppStorageKeys.AppMaintenance.enabled,
         AppStorageKeys.AppMaintenance.installDestination,
         AppStorageKeys.AppMaintenance.updateAutoRefresh,
         AppStorageKeys.AppMaintenance.updateRefreshInterval,
@@ -891,6 +892,7 @@ final class SettingsBackup {
         AppStorageKeys.AppMaintenance.updateRetries,
         AppStorageKeys.General.mainSidebarOpen, AppStorageKeys.General.mainSidebarWidth,
         AppStorageKeys.General.settingsCategoriesExpanded,
+        AppStorageKeys.AppMaintenance.categoriesExpanded,
     ]
 
     nonisolated static let deviceLocalKeys: Set<String> = [
