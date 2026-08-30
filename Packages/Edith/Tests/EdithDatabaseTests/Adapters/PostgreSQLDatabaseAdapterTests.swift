@@ -288,6 +288,14 @@ private func postgresqlAdapterWaitForDiscoveries(
             resolved,
             context: PostgreSQLDatabaseAdapterFixtures.context(cancellation: cancellation))
     }
+    let deadlineCancellation = DatabaseAdapterCancellationSignal()
+    await deadlineCancellation.cancel(.deadlineExceeded)
+    await #expect(throws: PostgreSQLDatabaseAdapterSupport.deadlineExceeded) {
+        _ = try await adapter.connect(
+            resolved,
+            context: PostgreSQLDatabaseAdapterFixtures.context(
+                cancellation: deadlineCancellation))
+    }
     await #expect(throws: DatabaseAdapterFailure.self) {
         _ = try await adapter.connect(
             resolved,
@@ -387,6 +395,38 @@ private func postgresqlAdapterWaitForDiscoveries(
             context: PostgreSQLDatabaseAdapterFixtures.context())
     }
     #expect(await session.lifecycleState() == .failed)
+    #expect(await client.disconnects() == 1)
+}
+
+@Test func postgresqlAdapterAcceptsTopologyChurnOnSameServer() async throws {
+    let original = PostgreSQLDatabaseAdapterFixtures.identity
+    let changed = DatabaseProductIdentity(
+        product: original.product,
+        version: original.version,
+        distribution: original.distribution,
+        topology: DatabaseTopology(
+            kind: .primaryReplica,
+            localRole: "primary",
+            nodeCount: 3,
+            replicaCount: 2,
+            attributes: original.topology.attributes),
+        serverIdentifier: original.serverIdentifier,
+        modules: original.modules,
+        plugins: original.plugins,
+        compatibilityNotes: original.compatibilityNotes)
+    let client = PostgreSQLDatabaseAdapterTestClient(
+        identities: [original, changed])
+    let adapter = PostgreSQLDatabaseAdapter { _ in client }
+    let definition = try PostgreSQLDatabaseAdapterFixtures.definition()
+    let session = try await adapter.connect(
+        PostgreSQLDatabaseAdapterFixtures.resolved(definition),
+        context: PostgreSQLDatabaseAdapterFixtures.context())
+    let report = try await session.discoverCapabilities(
+        context: PostgreSQLDatabaseAdapterFixtures.context())
+    #expect(report.productIdentity == original)
+    #expect(await session.lifecycleState() == .connected)
+    #expect(await client.disconnects() == 0)
+    await session.disconnect()
     #expect(await client.disconnects() == 1)
 }
 
