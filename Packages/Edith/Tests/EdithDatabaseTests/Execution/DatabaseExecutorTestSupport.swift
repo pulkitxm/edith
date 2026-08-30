@@ -573,3 +573,153 @@ actor DatabaseExecutorRecordingAdapter: DatabaseAdapter {
         invocations
     }
 }
+
+actor DatabaseExecutorMetadataStoreProxy: DatabaseMetadataStore {
+    private let base: any DatabaseMetadataStore
+    private let connectionGate: DatabaseExecutorTestGate?
+    private var connectionReads = 0
+
+    init(
+        base: any DatabaseMetadataStore,
+        connectionGate: DatabaseExecutorTestGate? = nil
+    ) {
+        self.base = base
+        self.connectionGate = connectionGate
+    }
+
+    func connectionReadCount() -> Int {
+        connectionReads
+    }
+
+    func saveConnection(_ definition: DatabaseConnectionDefinition) async throws {
+        try await base.saveConnection(definition)
+    }
+
+    func connection(id: DatabaseConnectionID) async throws -> DatabaseConnectionDefinition? {
+        connectionReads += 1
+        let connection = try await base.connection(id: id)
+        if let connectionGate {
+            await connectionGate.enter()
+        }
+        return connection
+    }
+
+    func connections(matching search: DatabaseConnectionSearch) async throws
+        -> [DatabaseConnectionDefinition]
+    {
+        try await base.connections(matching: search)
+    }
+
+    func deleteConnection(id: DatabaseConnectionID) async throws -> Bool {
+        try await base.deleteConnection(id: id)
+    }
+
+    func saveQuery(_ query: DatabaseSavedQuery) async throws {
+        try await base.saveQuery(query)
+    }
+
+    func savedQuery(id: DatabaseSavedQueryID) async throws -> DatabaseSavedQuery? {
+        try await base.savedQuery(id: id)
+    }
+
+    func savedQueries(matching search: DatabaseSavedQuerySearch) async throws
+        -> [DatabaseSavedQuery]
+    {
+        try await base.savedQueries(matching: search)
+    }
+
+    func deleteSavedQuery(id: DatabaseSavedQueryID) async throws -> Bool {
+        try await base.deleteSavedQuery(id: id)
+    }
+
+    func runtimeOwner() async throws -> DatabaseRuntimeOwnerRecord? {
+        try await base.runtimeOwner()
+    }
+
+    func claimRuntimeOwner(
+        _ token: DatabaseRuntimeOwnerToken,
+        claimedAt: Date
+    ) async throws -> DatabaseRuntimeOwnerClaimResult {
+        try await base.claimRuntimeOwner(token, claimedAt: claimedAt)
+    }
+
+    func releaseRuntimeOwner(
+        _ token: DatabaseRuntimeOwnerToken,
+        releasedAt: Date
+    ) async throws -> Bool {
+        try await base.releaseRuntimeOwner(token, releasedAt: releasedAt)
+    }
+
+    func createOperationIfAbsent(_ summary: DatabaseOperationRecordSummary) async throws -> Bool {
+        try await base.createOperationIfAbsent(summary)
+    }
+
+    func reserveOperation(
+        _ summary: DatabaseOperationRecordSummary,
+        for connection: DatabaseConnectionDefinition
+    ) async throws -> DatabaseOperationReservationResult {
+        try await base.reserveOperation(summary, for: connection)
+    }
+
+    func reserveOperation(
+        _ summary: DatabaseOperationRecordSummary,
+        for connection: DatabaseConnectionDefinition,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> DatabaseOwnedOperationReservationResult {
+        try await base.reserveOperation(summary, for: connection, owner: owner)
+    }
+
+    func reserveEphemeralOperation(
+        _ summary: DatabaseOperationRecordSummary,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> DatabaseOwnedOperationReservationResult {
+        try await base.reserveEphemeralOperation(summary, owner: owner)
+    }
+
+    func transitionOperation(
+        _ summary: DatabaseOperationRecordSummary,
+        from expectedStates: Set<DatabaseOperationState>,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> Bool {
+        try await base.transitionOperation(summary, from: expectedStates, owner: owner)
+    }
+
+    func recordOperation(_ summary: DatabaseOperationRecordSummary) async throws {
+        try await base.recordOperation(summary)
+    }
+
+    func operation(id: DatabaseOperationID) async throws -> DatabaseOperationRecordSummary? {
+        try await base.operation(id: id)
+    }
+
+    func operations(matching search: DatabaseOperationHistorySearch) async throws
+        -> [DatabaseOperationRecordSummary]
+    {
+        try await base.operations(matching: search)
+    }
+
+    func pruneOperations(finishedBefore date: Date) async throws -> Int {
+        try await base.pruneOperations(finishedBefore: date)
+    }
+
+    func registerConfirmation(_ receipt: DatabaseConfirmationReceipt) async throws {
+        try await base.registerConfirmation(receipt)
+    }
+
+    func consumeConfirmation(
+        identifier: UUID,
+        effectDigest: String,
+        connection: DatabaseConnectionDefinition,
+        consumedAt: Date
+    ) async throws -> Bool {
+        try await base.consumeConfirmation(
+            identifier: identifier,
+            effectDigest: effectDigest,
+            connection: connection,
+            consumedAt: consumedAt)
+    }
+
+    func removeExpiredConfirmations(before date: Date) async throws -> Int {
+        try await base.removeExpiredConfirmations(before: date)
+    }
+}

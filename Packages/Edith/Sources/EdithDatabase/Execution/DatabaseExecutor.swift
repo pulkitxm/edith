@@ -10,20 +10,24 @@ public actor DatabaseExecutor {
         severity: .caution)
 
     private let metadataStore: any DatabaseMetadataStore
+    private let executorID = UUID()
     private let secretStore: any DatabaseSecretStore
     private let runtimeOwner: DatabaseRuntimeOwnerToken
     private let sessionPool: DatabaseSessionPool
     private let validator: DatabaseExecutionValidator
     private let currentDate: @Sendable () -> Date
+    private let makeUUID: @Sendable () -> UUID
     private var activeOperations: [DatabaseOperationID: DatabaseExecutorActiveOperation] = [:]
     private var backgroundTasks: [UUID: Task<Void, Never>] = [:]
+    private var deletingConnectionIDs: Set<DatabaseConnectionID> = []
 
     init(
         metadataStore: any DatabaseMetadataStore,
         secretStore: any DatabaseSecretStore,
         runtimeOwner: DatabaseRuntimeOwnerToken,
         adapters: [any DatabaseAdapter],
-        currentDate: @escaping @Sendable () -> Date = { Date() }
+        currentDate: @escaping @Sendable () -> Date = { Date() },
+        makeUUID: @escaping @Sendable () -> UUID = { UUID() }
     ) throws(DatabaseAdapterFailure) {
         let registry = try DatabaseAdapterRegistry(adapters: adapters)
         self.metadataStore = metadataStore
@@ -35,6 +39,7 @@ public actor DatabaseExecutor {
             currentDate: currentDate)
         validator = DatabaseExecutionValidator(currentDate: currentDate)
         self.currentDate = currentDate
+        self.makeUUID = makeUUID
     }
 
     public func connect(
@@ -172,6 +177,325 @@ public actor DatabaseExecutor {
         }
     }
 
+    public func connections(
+        _ request: DatabaseConnectionListRequest
+    ) async -> DatabaseCommandResult<DatabaseConnectionListResult> {
+        do {
+            try validator.validate(request)
+            try await requireActiveOwner()
+            let connections = try await metadataStore.connections(matching: request.search)
+            try validator.validate(connections: connections, limit: request.search.limit)
+            return .success(
+                DatabaseConnectionListResult(connections: connections),
+                metadata: completeMetadata())
+        } catch {
+            return failure(error)
+        }
+    }
+
+    public func connection(
+        _ request: DatabaseConnectionGetRequest
+    ) async -> DatabaseCommandResult<DatabaseConnectionGetResult> {
+        do {
+            try validator.validate(request)
+            try await requireActiveOwner()
+            let connection = try await metadataStore.connection(id: request.connectionID)
+            if let connection {
+                try validator.validateStored(connection)
+            }
+            return .success(
+                DatabaseConnectionGetResult(connection: connection),
+                metadata: completeMetadata())
+        } catch {
+            return failure(error)
+        }
+    }
+
+    public func saveConnection(
+        _ request: DatabaseConnectionSaveRequest
+    ) async -> DatabaseCommandResult<DatabaseConnectionSaveResult> {
+        do {
+            try validator.validate(request)
+        } catch {
+            return failure(error)
+        }
+        return await performManagementMutation {
+            guard try await metadataStore.connection(id: request.connection.id) == nil else {
+                throw DatabaseExecutionValidationError.identifierAlreadyExists(
+                    "connection identifier")
+            }
+            let now = currentDate()
+            let connection = managementConnection(
+                from: request.connection,
+                createdAt: now,
+                updatedAt: now,
+                lastTestedAt: nil,
+                lastUsedAt: nil)
+            try validator.validate(connection)
+            try await requireActiveOwner()
+            try await metadataStore.saveConnection(connection)
+            return DatabaseConnectionSaveResult(connection: connection)
+        }
+    }
+
+    public func editConnection(
+        _ request: DatabaseConnectionEditRequest
+    ) async -> DatabaseCommandResult<DatabaseConnectionEditResult> {
+        do {
+            try validator.validate(request)
+        } catch {
+            return failure(error)
+        }
+        return await performManagementMutation {
+            guard let stored = try await metadataStore.connection(id: request.connectionID) else {
+                throw DatabaseMetadataStoreError.connectionNotFound(request.connectionID)
+            }
+            try validator.validateStored(stored)
+            let connection = managementConnection(
+                from: request.connection,
+                createdAt: stored.createdAt,
+                updatedAt: currentDate(),
+                lastTestedAt: stored.lastTestedAt,
+                lastUsedAt: stored.lastUsedAt)
+            try validator.validate(connection)
+            try await requireActiveOwner()
+            try await metadataStore.saveConnection(connection)
+            _ = await sessionPool.disconnect(connectionID: request.connectionID)
+            return DatabaseConnectionEditResult(connection: connection)
+        }
+    }
+
+    public func duplicateConnection(
+        _ request: DatabaseConnectionDuplicateRequest
+    ) async -> DatabaseCommandResult<DatabaseConnectionDuplicateResult> {
+        do {
+            try validator.validate(request)
+        } catch {
+            return failure(error)
+        }
+        return await performManagementMutation {
+            guard let source = try await metadataStore.connection(id: request.connectionID) else {
+                throw DatabaseMetadataStoreError.connectionNotFound(request.connectionID)
+            }
+            try validator.validateStored(source)
+            let now = currentDate()
+            let connection = managementConnection(
+                from: source,
+                id: try await unusedConnectionID(),
+                displayName: request.displayName,
+                createdAt: now,
+                updatedAt: now,
+                lastTestedAt: nil,
+                lastUsedAt: nil)
+            try validator.validate(connection)
+            try await requireActiveOwner()
+            try await metadataStore.saveConnection(connection)
+            let references = credentialReferences(in: connection)
+            return DatabaseConnectionDuplicateResult(
+                sourceConnectionID: source.id,
+                connection: connection,
+                sharesCredentials: !references.isEmpty,
+                sharedCredentialReferences: references)
+        }
+    }
+
+    public func renameConnection(
+        _ request: DatabaseConnectionRenameRequest
+    ) async -> DatabaseCommandResult<DatabaseConnectionRenameResult> {
+        do {
+            try validator.validate(request)
+        } catch {
+            return failure(error)
+        }
+        return await performManagementMutation {
+            guard let stored = try await metadataStore.connection(id: request.connectionID) else {
+                throw DatabaseMetadataStoreError.connectionNotFound(request.connectionID)
+            }
+            try validator.validateStored(stored)
+            let connection = managementConnection(
+                from: stored,
+                displayName: request.displayName,
+                createdAt: stored.createdAt,
+                updatedAt: currentDate(),
+                lastTestedAt: stored.lastTestedAt,
+                lastUsedAt: stored.lastUsedAt)
+            try validator.validate(connection)
+            try await requireActiveOwner()
+            try await metadataStore.saveConnection(connection)
+            return DatabaseConnectionRenameResult(connection: connection)
+        }
+    }
+
+    public func deleteConnection(
+        _ request: DatabaseConnectionDeleteRequest
+    ) async -> DatabaseCommandResult<DatabaseConnectionDeleteResult> {
+        do {
+            try validator.validate(request)
+        } catch {
+            return failure(error)
+        }
+        return await performManagementMutation {
+            guard deletingConnectionIDs.insert(request.connectionID).inserted else {
+                throw DatabaseExecutionValidationError.connectionDefinitionChanged(
+                    request.connectionID)
+            }
+            let coordinatedDisconnect = await DatabaseManagementMutationCoordinator.shared
+                .beginDeletion(
+                    owner: runtimeOwner,
+                    connectionID: request.connectionID)
+            do {
+                await cancelOperations(connectionID: request.connectionID)
+                let localDisconnect = await sessionPool.disconnect(
+                    connectionID: request.connectionID)
+                try await requireActiveOwner()
+                let deleted = try await metadataStore.deleteConnection(id: request.connectionID)
+                deletingConnectionIDs.remove(request.connectionID)
+                await DatabaseManagementMutationCoordinator.shared.endDeletion(
+                    owner: runtimeOwner,
+                    connectionID: request.connectionID)
+                return DatabaseConnectionDeleteResult(
+                    connectionID: request.connectionID,
+                    deleted: deleted,
+                    disconnected: coordinatedDisconnect || localDisconnect)
+            } catch {
+                deletingConnectionIDs.remove(request.connectionID)
+                await DatabaseManagementMutationCoordinator.shared.endDeletion(
+                    owner: runtimeOwner,
+                    connectionID: request.connectionID)
+                throw error
+            }
+        }
+    }
+
+    public func savedQueries(
+        _ request: DatabaseSavedQueryListRequest
+    ) async -> DatabaseCommandResult<DatabaseSavedQueryListResult> {
+        do {
+            try validator.validate(request)
+            try await requireActiveOwner()
+            let queries = try await metadataStore.savedQueries(matching: request.search)
+            try validator.validate(queries: queries, limit: request.search.limit)
+            try await validateStoredSavedQueries(queries)
+            return .success(
+                DatabaseSavedQueryListResult(queries: queries),
+                metadata: completeMetadata())
+        } catch {
+            return failure(error)
+        }
+    }
+
+    public func savedQuery(
+        _ request: DatabaseSavedQueryGetRequest
+    ) async -> DatabaseCommandResult<DatabaseSavedQueryGetResult> {
+        do {
+            try validator.validate(request)
+            try await requireActiveOwner()
+            let query = try await metadataStore.savedQuery(id: request.queryID)
+            if let query {
+                try await validateStoredSavedQueries([query])
+            }
+            return .success(
+                DatabaseSavedQueryGetResult(query: query),
+                metadata: completeMetadata())
+        } catch {
+            return failure(error)
+        }
+    }
+
+    public func saveSavedQuery(
+        _ request: DatabaseSavedQuerySaveRequest
+    ) async -> DatabaseCommandResult<DatabaseSavedQuerySaveResult> {
+        do {
+            try validator.validate(request)
+        } catch {
+            return failure(error)
+        }
+        return await performManagementMutation {
+            let stored = try await metadataStore.savedQuery(id: request.query.id)
+            if let stored {
+                try await validateStoredSavedQueries([stored])
+            }
+            let now = currentDate()
+            let query = managementSavedQuery(
+                from: request.query,
+                createdAt: stored?.createdAt ?? now,
+                updatedAt: now)
+            try await validateSavedQueryConnection(query, requiresConnection: true)
+            try await requireActiveOwner()
+            try await metadataStore.saveQuery(query)
+            return DatabaseSavedQuerySaveResult(query: query, created: stored == nil)
+        }
+    }
+
+    public func duplicateSavedQuery(
+        _ request: DatabaseSavedQueryDuplicateRequest
+    ) async -> DatabaseCommandResult<DatabaseSavedQueryDuplicateResult> {
+        do {
+            try validator.validate(request)
+        } catch {
+            return failure(error)
+        }
+        return await performManagementMutation {
+            guard let source = try await metadataStore.savedQuery(id: request.queryID) else {
+                throw DatabaseMetadataStoreError.savedQueryNotFound(request.queryID)
+            }
+            try await validateStoredSavedQueries([source])
+            let now = currentDate()
+            let query = managementSavedQuery(
+                from: source,
+                id: try await unusedSavedQueryID(),
+                name: request.name,
+                createdAt: now,
+                updatedAt: now)
+            try await validateSavedQueryConnection(query, requiresConnection: true)
+            try await requireActiveOwner()
+            try await metadataStore.saveQuery(query)
+            return DatabaseSavedQueryDuplicateResult(
+                sourceQueryID: source.id,
+                query: query)
+        }
+    }
+
+    public func renameSavedQuery(
+        _ request: DatabaseSavedQueryRenameRequest
+    ) async -> DatabaseCommandResult<DatabaseSavedQueryRenameResult> {
+        do {
+            try validator.validate(request)
+        } catch {
+            return failure(error)
+        }
+        return await performManagementMutation {
+            guard let stored = try await metadataStore.savedQuery(id: request.queryID) else {
+                throw DatabaseMetadataStoreError.savedQueryNotFound(request.queryID)
+            }
+            try await validateStoredSavedQueries([stored])
+            let query = managementSavedQuery(
+                from: stored,
+                name: request.name,
+                createdAt: stored.createdAt,
+                updatedAt: currentDate())
+            try await validateSavedQueryConnection(query, requiresConnection: true)
+            try await requireActiveOwner()
+            try await metadataStore.saveQuery(query)
+            return DatabaseSavedQueryRenameResult(query: query)
+        }
+    }
+
+    public func deleteSavedQuery(
+        _ request: DatabaseSavedQueryDeleteRequest
+    ) async -> DatabaseCommandResult<DatabaseSavedQueryDeleteResult> {
+        do {
+            try validator.validate(request)
+        } catch {
+            return failure(error)
+        }
+        return await performManagementMutation {
+            try await requireActiveOwner()
+            let deleted = try await metadataStore.deleteSavedQuery(id: request.queryID)
+            return DatabaseSavedQueryDeleteResult(queryID: request.queryID, deleted: deleted)
+        }
+    }
+
     public func operation(
         _ request: DatabaseOperationGetRequest
     ) async -> DatabaseCommandResult<DatabaseOperationGetResult> {
@@ -276,11 +600,158 @@ public actor DatabaseExecutor {
     private func connection(
         id: DatabaseConnectionID
     ) async throws -> DatabaseConnectionDefinition {
+        let globallyDeleting = await DatabaseManagementMutationCoordinator.shared.isDeleting(
+            owner: runtimeOwner,
+            connectionID: id)
+        guard !deletingConnectionIDs.contains(id), !globallyDeleting else {
+            throw DatabaseExecutionValidationError.connectionDefinitionChanged(id)
+        }
         guard let definition = try await metadataStore.connection(id: id) else {
             _ = await sessionPool.disconnect(connectionID: id)
             throw DatabaseMetadataStoreError.connectionNotFound(id)
         }
         return definition
+    }
+
+    private func disconnectConnectionSession(
+        _ connectionID: DatabaseConnectionID
+    ) async -> Bool {
+        await sessionPool.disconnect(connectionID: connectionID)
+    }
+
+    private func performManagementMutation<Payload: Sendable>(
+        _ body: () async throws -> Payload
+    ) async -> DatabaseCommandResult<Payload> {
+        await DatabaseManagementMutationCoordinator.shared.acquire(runtimeOwner)
+        do {
+            try await requireActiveOwner()
+            let payload = try await body()
+            await DatabaseManagementMutationCoordinator.shared.release(runtimeOwner)
+            return .success(payload, metadata: completeMetadata())
+        } catch {
+            await DatabaseManagementMutationCoordinator.shared.release(runtimeOwner)
+            return failure(error)
+        }
+    }
+
+    private func validateSavedQueryConnection(
+        _ query: DatabaseSavedQuery,
+        requiresConnection: Bool
+    ) async throws {
+        guard let connectionID = query.connectionID else {
+            try validator.validate(query, connection: nil)
+            return
+        }
+        let connection = try await metadataStore.connection(id: connectionID)
+        if requiresConnection, connection == nil {
+            throw DatabaseMetadataStoreError.connectionNotFound(connectionID)
+        }
+        try validator.validate(query, connection: connection)
+    }
+
+    private func validateStoredSavedQueries(
+        _ queries: [DatabaseSavedQuery]
+    ) async throws {
+        let connectionIDs = Set(queries.compactMap(\.connectionID))
+        var connections: [DatabaseConnectionID: DatabaseConnectionDefinition] = [:]
+        for connectionID in connectionIDs {
+            if let connection = try await metadataStore.connection(id: connectionID) {
+                try validator.validateStored(connection)
+                connections[connectionID] = connection
+            }
+        }
+        for query in queries {
+            try validator.validateStored(
+                query,
+                connection: query.connectionID.flatMap { connections[$0] })
+        }
+    }
+
+    private func unusedConnectionID() async throws -> DatabaseConnectionID {
+        for _ in 0..<16 {
+            let identifier = DatabaseConnectionID(rawValue: makeUUID())
+            if identifier.rawValue != Self.zeroUUID,
+                try await metadataStore.connection(id: identifier) == nil
+            {
+                return identifier
+            }
+        }
+        throw DatabaseExecutionValidationError.identifierAlreadyExists(
+            "connection identifier")
+    }
+
+    private func unusedSavedQueryID() async throws -> DatabaseSavedQueryID {
+        for _ in 0..<16 {
+            let identifier = DatabaseSavedQueryID(rawValue: makeUUID())
+            if identifier.rawValue != Self.zeroUUID,
+                try await metadataStore.savedQuery(id: identifier) == nil
+            {
+                return identifier
+            }
+        }
+        throw DatabaseExecutionValidationError.identifierAlreadyExists(
+            "saved query identifier")
+    }
+
+    private func managementConnection(
+        from source: DatabaseConnectionDefinition,
+        id: DatabaseConnectionID? = nil,
+        displayName: String? = nil,
+        createdAt: Date,
+        updatedAt: Date,
+        lastTestedAt: Date?,
+        lastUsedAt: Date?
+    ) -> DatabaseConnectionDefinition {
+        DatabaseConnectionDefinition(
+            id: id ?? source.id,
+            displayName: displayName ?? source.displayName,
+            productHint: source.productHint,
+            location: source.location,
+            username: source.username,
+            namespaces: source.namespaces,
+            deploymentMode: source.deploymentMode,
+            authentication: source.authentication,
+            tls: source.tls,
+            tunnel: source.tunnel,
+            limits: source.limits,
+            readOnlyPolicy: source.readOnlyPolicy,
+            productionPolicy: source.productionPolicy,
+            environment: source.environment,
+            group: source.group,
+            tags: source.tags,
+            color: source.color,
+            isFavorite: source.isFavorite,
+            options: source.options,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            lastTestedAt: lastTestedAt,
+            lastUsedAt: lastUsedAt)
+    }
+
+    private func managementSavedQuery(
+        from source: DatabaseSavedQuery,
+        id: DatabaseSavedQueryID? = nil,
+        name: String? = nil,
+        createdAt: Date,
+        updatedAt: Date
+    ) -> DatabaseSavedQuery {
+        DatabaseSavedQuery(
+            id: id ?? source.id,
+            connectionID: source.connectionID,
+            name: name ?? source.name,
+            language: source.language,
+            text: source.text,
+            tags: source.tags,
+            isFavorite: source.isFavorite,
+            createdAt: createdAt,
+            updatedAt: updatedAt)
+    }
+
+    private func credentialReferences(
+        in connection: DatabaseConnectionDefinition
+    ) -> [DatabaseSecretReference] {
+        connection.authentication.secretReferences
+            + [connection.tls.clientPrivateKey].compactMap { $0 }
     }
 
     private func execute<Payload: Sendable>(
@@ -293,6 +764,61 @@ public actor DatabaseExecutor {
         cancellationSupport: DatabaseCancellationSupport,
         retryClassification: DatabaseRetryClassification,
         terminalProgress: DatabaseOperationProgress?,
+        body:
+            @escaping @Sendable (
+                DatabaseAdapterOperationContext,
+                DatabaseExecutionErrorMapper
+            ) async throws -> Payload
+    ) async -> DatabaseCommandResult<Payload> {
+        let reservationMapper = DatabaseExecutionErrorMapper()
+        let permitID = UUID()
+        let admission = DatabaseExecutorOperationAdmission()
+        let admitted = await DatabaseManagementMutationCoordinator.shared.reserveOperation(
+            owner: runtimeOwner,
+            connectionID: definition.id,
+            permitID: permitID,
+            executorID: executorID,
+            cancel: { await admission.cancel() },
+            disconnect: { [weak self] in
+                await self?.disconnectConnectionSession(definition.id) ?? false
+            })
+        guard admitted else {
+            return .failure(
+                reservationMapper.map(
+                    DatabaseExecutionValidationError.connectionDefinitionChanged(definition.id),
+                    target: target),
+                metadata: completeMetadata())
+        }
+        let result = await executeAdmitted(
+            operation: operation,
+            kind: kind,
+            definition: definition,
+            target: target,
+            requiresSavedConnection: requiresSavedConnection,
+            timeout: timeout,
+            cancellationSupport: cancellationSupport,
+            retryClassification: retryClassification,
+            terminalProgress: terminalProgress,
+            admission: admission,
+            body: body)
+        await DatabaseManagementMutationCoordinator.shared.releaseOperation(
+            owner: runtimeOwner,
+            connectionID: definition.id,
+            permitID: permitID)
+        return result
+    }
+
+    private func executeAdmitted<Payload: Sendable>(
+        operation: DatabaseOperationContext,
+        kind: DatabaseOperationKind,
+        definition: DatabaseConnectionDefinition,
+        target: DatabaseTargetIdentifier?,
+        requiresSavedConnection: Bool,
+        timeout: DatabaseTimeout,
+        cancellationSupport: DatabaseCancellationSupport,
+        retryClassification: DatabaseRetryClassification,
+        terminalProgress: DatabaseOperationProgress?,
+        admission: DatabaseExecutorOperationAdmission,
         body:
             @escaping @Sendable (
                 DatabaseAdapterOperationContext,
@@ -325,6 +851,11 @@ public actor DatabaseExecutor {
             return .failure(
                 reservationMapper.map(error, target: target),
                 metadata: completeMetadata())
+        }
+        await admission.attach { [weak self] in
+            _ = await self?.cancelActiveOperation(
+                effectiveOperation.operationID,
+                reason: .sessionDisconnected)
         }
         do {
             let reservation =
@@ -621,6 +1152,15 @@ public actor DatabaseExecutor {
         connectionID: DatabaseConnectionID,
         excluding excludedOperationID: DatabaseOperationID
     ) async {
+        await cancelOperations(
+            connectionID: connectionID,
+            excluding: excludedOperationID)
+    }
+
+    private func cancelOperations(
+        connectionID: DatabaseConnectionID,
+        excluding excludedOperationID: DatabaseOperationID? = nil
+    ) async {
         let operationIDs = activeOperations.values.compactMap { active in
             active.running.id != excludedOperationID
                 && active.running.connection.id == connectionID
@@ -902,7 +1442,10 @@ public actor DatabaseExecutor {
         if let privateKey = definition.tls.clientPrivateKey {
             references.append(privateKey)
         }
-        references = references.filter { $0.purpose != .confirmationSigningKey }
+        references = references.filter {
+            $0.purpose != .confirmationSigningKey
+                && $0.purpose != .continuationSigningKey
+        }
         guard
             let redactor = try? await DatabaseSecretRedactor(
                 store: secretStore,
@@ -969,6 +1512,9 @@ public actor DatabaseExecutor {
             false
         }
     }
+
+    private static let zeroUUID = UUID(
+        uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
 }
 
 private struct DatabaseExecutorActiveOperation: Sendable {
@@ -1023,6 +1569,135 @@ private struct DatabaseExecutorControlFailure: Error, Sendable {
 private enum DatabaseExecutorMapperOutcome: Sendable {
     case resolved(DatabaseExecutionErrorMapper)
     case cancelled(DatabaseAdapterCancellationReason)
+}
+
+private actor DatabaseManagementMutationCoordinator {
+    static let shared = DatabaseManagementMutationCoordinator()
+
+    private struct ConnectionKey: Hashable, Sendable {
+        let owner: DatabaseRuntimeOwnerToken
+        let connectionID: DatabaseConnectionID
+    }
+
+    typealias Cancellation = @Sendable () async -> Void
+    typealias Disconnection = @Sendable () async -> Bool
+
+    private var activeOwners: Set<DatabaseRuntimeOwnerToken> = []
+    private var waiters: [DatabaseRuntimeOwnerToken: [CheckedContinuation<Void, Never>]] = [:]
+    private var deletingConnections: Set<ConnectionKey> = []
+    private var operationPermits: [ConnectionKey: [UUID: Cancellation]] = [:]
+    private var disconnectors: [ConnectionKey: [UUID: Disconnection]] = [:]
+    private var drainWaiters: [ConnectionKey: [CheckedContinuation<Void, Never>]] = [:]
+
+    func acquire(_ owner: DatabaseRuntimeOwnerToken) async {
+        guard activeOwners.contains(owner) else {
+            activeOwners.insert(owner)
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waiters[owner, default: []].append(continuation)
+        }
+    }
+
+    func release(_ owner: DatabaseRuntimeOwnerToken) {
+        guard var ownerWaiters = waiters[owner], !ownerWaiters.isEmpty else {
+            activeOwners.remove(owner)
+            waiters.removeValue(forKey: owner)
+            return
+        }
+        ownerWaiters.removeFirst().resume()
+        waiters[owner] = ownerWaiters.isEmpty ? nil : ownerWaiters
+    }
+
+    func reserveOperation(
+        owner: DatabaseRuntimeOwnerToken,
+        connectionID: DatabaseConnectionID,
+        permitID: UUID,
+        executorID: UUID,
+        cancel: @escaping Cancellation,
+        disconnect: @escaping Disconnection
+    ) -> Bool {
+        let key = ConnectionKey(owner: owner, connectionID: connectionID)
+        guard !deletingConnections.contains(key) else { return false }
+        operationPermits[key, default: [:]][permitID] = cancel
+        disconnectors[key, default: [:]][executorID] = disconnect
+        return true
+    }
+
+    func releaseOperation(
+        owner: DatabaseRuntimeOwnerToken,
+        connectionID: DatabaseConnectionID,
+        permitID: UUID
+    ) {
+        let key = ConnectionKey(owner: owner, connectionID: connectionID)
+        operationPermits[key]?.removeValue(forKey: permitID)
+        guard operationPermits[key]?.isEmpty == true else { return }
+        operationPermits.removeValue(forKey: key)
+        let pending = drainWaiters.removeValue(forKey: key) ?? []
+        for continuation in pending {
+            continuation.resume()
+        }
+    }
+
+    func beginDeletion(
+        owner: DatabaseRuntimeOwnerToken,
+        connectionID: DatabaseConnectionID
+    ) async -> Bool {
+        let key = ConnectionKey(owner: owner, connectionID: connectionID)
+        deletingConnections.insert(key)
+        let cancellations = operationPermits[key].map { Array($0.values) } ?? []
+        let connectionDisconnectors = disconnectors[key].map { Array($0.values) } ?? []
+        for cancel in cancellations {
+            await cancel()
+        }
+        var disconnected = false
+        for disconnect in connectionDisconnectors {
+            disconnected = await disconnect() || disconnected
+        }
+        if operationPermits[key]?.isEmpty == false {
+            await withCheckedContinuation { continuation in
+                drainWaiters[key, default: []].append(continuation)
+            }
+        }
+        return disconnected
+    }
+
+    func endDeletion(
+        owner: DatabaseRuntimeOwnerToken,
+        connectionID: DatabaseConnectionID
+    ) {
+        let key = ConnectionKey(owner: owner, connectionID: connectionID)
+        deletingConnections.remove(key)
+        disconnectors.removeValue(forKey: key)
+        operationPermits.removeValue(forKey: key)
+        drainWaiters.removeValue(forKey: key)
+    }
+
+    func isDeleting(
+        owner: DatabaseRuntimeOwnerToken,
+        connectionID: DatabaseConnectionID
+    ) -> Bool {
+        deletingConnections.contains(ConnectionKey(owner: owner, connectionID: connectionID))
+    }
+}
+
+private actor DatabaseExecutorOperationAdmission {
+    private var cancellation: (@Sendable () async -> Void)?
+    private var isCancelled = false
+
+    func attach(_ cancellation: @escaping @Sendable () async -> Void) async {
+        guard !isCancelled else {
+            await cancellation()
+            return
+        }
+        self.cancellation = cancellation
+    }
+
+    func cancel() async {
+        guard !isCancelled else { return }
+        isCancelled = true
+        await cancellation?()
+    }
 }
 
 private actor DatabaseExecutorCompletion<Value: Sendable> {
