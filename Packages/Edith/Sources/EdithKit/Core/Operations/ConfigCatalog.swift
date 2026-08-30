@@ -540,14 +540,10 @@ public enum ConfigCatalog {
 
     private static let homebrew: [SettingDefinition] = [
         SettingDefinition(
-            AppStorageKeys.Tabs.homebrewEnabled, .bool, group: "homebrew",
-            summary: "Homebrew Manager extension: formula and cask management.",
-            fallback: .bool(false)),
-        SettingDefinition(
             AppStorageKeys.Homebrew.defaultKind, .string, group: "homebrew",
-            summary: "Package kind selected when Homebrew Manager opens.",
+            summary: "Package kind selected when App Maintenance opens Packages.",
             allowed: HomebrewPackageKind.allCases.map(\.rawValue),
-            fallback: .string(HomebrewPackageKind.formula.rawValue)),
+            fallback: .string(HomebrewPackageKind.formula.rawValue))
     ]
 
     private static let music: [SettingDefinition] = [

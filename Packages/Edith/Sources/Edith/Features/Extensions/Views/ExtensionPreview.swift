@@ -27,7 +27,7 @@ struct ExtensionPreview: View {
         case "herdr": herdrPreview(phase: phase)
         case "quinjet": quinjetPreview(phase: phase)
         case "system": systemPreview(phase: phase)
-        case "homebrew": homebrewPreview(phase: phase)
+        case "appMaintenance": maintenancePreview(phase: phase)
         case "machines": machinesPreview(phase: phase)
         case "systemStats": systemStatsPreview(phase: phase)
         case "micMute": micMutePreview(phase: phase)
@@ -155,7 +155,7 @@ struct ExtensionPreview: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func homebrewPreview(phase: Double) -> some View {
+    private func maintenancePreview(phase: Double) -> some View {
         let active = Int(phase * 1.7) % 3
         return VStack(spacing: UIScale.pt(5)) {
             ForEach(0..<3) { index in

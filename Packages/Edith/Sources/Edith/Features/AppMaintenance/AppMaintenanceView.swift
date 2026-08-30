@@ -352,6 +352,7 @@ final class AppMaintenanceModel {
 
 private enum AppMaintenanceSection: String, CaseIterable, Identifiable {
     case updates = "Updates"
+    case packages = "Packages"
     case removal = "Remove"
     case history = "History"
 
@@ -407,15 +408,7 @@ struct AppMaintenanceView: View {
         VStack(spacing: 0) {
             header
             Divider()
-            HSplitView {
-                sectionInventory
-                    .frame(
-                        minWidth: 280, idealWidth: 320, maxWidth: 380,
-                        maxHeight: .infinity)
-                detail
-                    .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            content
         }
         .frame(width: UIScale.pt(900), height: UIScale.pt(640))
         .task { model.refresh() }
@@ -476,7 +469,7 @@ struct AppMaintenanceView: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text("App Maintenance")
                         .font(.system(size: UIScale.pt(17), weight: .semibold))
-                    Text("Install verified disk images, review updates, and remove apps safely.")
+                    Text("Manage packages, verified apps, updates, and safe removal.")
                         .settingsCaption()
                 }
                 Spacer()
@@ -491,37 +484,39 @@ struct AppMaintenanceView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: UIScale.pt(240))
+                .frame(width: UIScale.pt(340))
                 Spacer()
-                Button {
-                    showingUpdateSettings.toggle()
-                } label: {
-                    Image(systemName: "gearshape")
-                }
-                .help("Update settings")
-                .popover(isPresented: $showingUpdateSettings) { updateSettings }
-                Menu {
-                    Picker("Destination", selection: $installDestinationRaw) {
-                        ForEach(AppMaintenanceInstallDestination.allCases, id: \.rawValue) {
-                            destination in
-                            Text(destination.title).tag(destination.rawValue)
-                        }
+                if section != .packages {
+                    Button {
+                        showingUpdateSettings.toggle()
+                    } label: {
+                        Image(systemName: "gearshape")
                     }
-                } label: {
-                    Label(installDestination.title, systemImage: "folder")
+                    .help("Update settings")
+                    .popover(isPresented: $showingUpdateSettings) { updateSettings }
+                    Menu {
+                        Picker("Destination", selection: $installDestinationRaw) {
+                            ForEach(AppMaintenanceInstallDestination.allCases, id: \.rawValue) {
+                                destination in
+                                Text(destination.title).tag(destination.rawValue)
+                            }
+                        }
+                    } label: {
+                        Label(installDestination.title, systemImage: "folder")
+                    }
+                    Button {
+                        showingDiskImagePicker = true
+                    } label: {
+                        Label("Install Disk Image", systemImage: "externaldrive.badge.plus")
+                    }
+                    .disabled(model.phase != .ready)
+                    Button {
+                        model.refresh()
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                    .disabled(model.phase != .ready)
                 }
-                Button {
-                    showingDiskImagePicker = true
-                } label: {
-                    Label("Install Disk Image", systemImage: "externaldrive.badge.plus")
-                }
-                .disabled(model.phase != .ready)
-                Button {
-                    model.refresh()
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                }
-                .disabled(model.phase != .ready)
             }
         }
         .padding(.horizontal, UIScale.pt(20))
@@ -529,9 +524,28 @@ struct AppMaintenanceView: View {
     }
 
     @ViewBuilder
+    private var content: some View {
+        if section == .packages {
+            HomebrewMaintenanceView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            HSplitView {
+                sectionInventory
+                    .frame(
+                        minWidth: 280, idealWidth: 320, maxWidth: 380,
+                        maxHeight: .infinity)
+                detail
+                    .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    @ViewBuilder
     private var sectionInventory: some View {
         switch section {
         case .updates: updateInventory
+        case .packages: EmptyView()
         case .removal: removalInventory
         case .history: historyInventory
         }
@@ -689,6 +703,7 @@ struct AppMaintenanceView: View {
     private var detail: some View {
         switch section {
         case .updates: updateDetail
+        case .packages: EmptyView()
         case .removal: removalDetail
         case .history: historyDetail
         }

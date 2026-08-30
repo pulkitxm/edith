@@ -1,7 +1,7 @@
 import EdithKit
 import SwiftUI
 
-struct HomebrewPage: View {
+struct HomebrewMaintenanceView: View {
     @State private var model: HomebrewPageModel
     @State private var query = ""
     @State private var pendingUninstall: HomebrewPackage?
@@ -30,14 +30,16 @@ struct HomebrewPage: View {
     private var theme: Color { themeColor(themeName) }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                PageHeader(
-                    title: { Text("Homebrew Manager") },
-                    trailing: { kindPicker },
-                    accessory: { controls })
-
-                VStack(alignment: .leading, spacing: 16) {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                kindPicker
+                controls
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            Divider()
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 16) {
                     if model.status?.available == false {
                         unavailableCard
                     } else {
@@ -46,7 +48,7 @@ struct HomebrewPage: View {
                         packageCard
                     }
                 }
-                .pageContent(compact)
+                .padding(16)
             }
         }
         .background(DashSkin.paper(scheme == .dark))
@@ -97,7 +99,7 @@ struct HomebrewPage: View {
         }
         .labelsHidden()
         .pickerStyle(.segmented)
-        .frame(width: compact ? 180 : 220)
+        .frame(width: compact ? 170 : 200)
         .disabled(model.isBusy)
     }
 

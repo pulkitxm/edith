@@ -928,7 +928,6 @@ private struct ExtensionDetailRows: View {
             case .herdr: HerdrRows()
             case .quinjet: QuinjetRows()
             case .system: SystemRows()
-            case .homebrew: HomebrewRows()
             case .appMaintenance: AppMaintenanceRows()
             case .machines: MachinesRows()
             case .companion: CompanionRows()
@@ -1892,16 +1891,19 @@ private struct SystemRows: View {
     }
 }
 
-private struct HomebrewRows: View {
-    @AppStorage(AppStorageKeys.Tabs.homebrewEnabled, store: SharedDefaults.store) private
+private struct AppMaintenanceRows: View {
+    @AppStorage(AppStorageKeys.AppMaintenance.enabled, store: SharedDefaults.store) private
         var enabled = false
+    @AppStorage(AppStorageKeys.AppMaintenance.installDestination, store: SharedDefaults.store)
+    private var installDestination = AppMaintenanceInstallDestination.user.rawValue
     @AppStorage(AppStorageKeys.Homebrew.defaultKind, store: SharedDefaults.store) private
         var defaultKind = HomebrewPackageKind.formula.rawValue
+    @State private var showingMaintenance = false
 
     var body: some View {
         CLIToolStatusSection(tools: [.homebrew], extensionEnabled: enabled)
 
-        Section("Packages") {
+        Section("Maintenance") {
             Picker(
                 "Default package kind",
                 selection: $defaultKind.configured(AppStorageKeys.Homebrew.defaultKind)
@@ -1910,29 +1912,9 @@ private struct HomebrewRows: View {
                     Text(kind.pluralTitle).tag(kind.rawValue)
                 }
             }
-            LabeledContent("Safety", value: "Bounded, noninteractive Homebrew processes")
-            Text(
-                "Automatic updates and analytics stay off. Uninstalls require confirmation, and active operations can be cancelled."
-            )
-            .settingsCaption()
-            Button("Open Homebrew Manager") { SectionWindow.open(.homebrew) }
-        }
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.5)
-    }
-}
-private struct AppMaintenanceRows: View {
-    @AppStorage(AppStorageKeys.AppMaintenance.enabled, store: SharedDefaults.store) private
-        var enabled = false
-    @AppStorage(AppStorageKeys.AppMaintenance.installDestination, store: SharedDefaults.store)
-    private var installDestination = AppMaintenanceInstallDestination.user.rawValue
-    @State private var showingMaintenance = false
-
-    var body: some View {
-        Section("Maintenance") {
             LabeledContent("Removal", value: "Review first, then move to Trash")
             Text(
-                "Inventory regular Applications folders, verify single-app disk images and select exact support files before removal."
+                "Manage Homebrew packages, verify single-app disk images, and select exact support files before removal."
             )
             .settingsCaption()
             Picker("Disk image destination", selection: $installDestination) {
