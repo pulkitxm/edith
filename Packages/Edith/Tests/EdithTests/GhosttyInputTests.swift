@@ -18,6 +18,7 @@ import Testing
         let window = NSWindow(
             contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = view
+        #expect(window.acceptsMouseMovedEvents)
         defer {
             window.contentView = nil
             view.shutdown()
