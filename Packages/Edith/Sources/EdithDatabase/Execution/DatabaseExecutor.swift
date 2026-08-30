@@ -627,12 +627,10 @@ public actor DatabaseExecutor {
         guard !isShuttingDown else { return }
         isShuttingDown = true
         let operationIDs = Array(activeOperations.keys)
-        let cancellationTasks = operationIDs.map { operationID in
-            Task { [weak self] in
-                _ = await self?.cancelActiveOperation(
-                    operationID,
-                    reason: .sessionDisconnected)
-            }
+        for operationID in operationIDs {
+            _ = beginActiveCancellation(
+                operationID,
+                reason: .sessionDisconnected)
         }
         let deadline = Self.deadline(
             after: managementDrainTimeoutNanoseconds)
@@ -648,9 +646,6 @@ public actor DatabaseExecutor {
         await DatabaseManagementMutationCoordinator.shared.unregisterExecutor(
             owner: runtimeOwner,
             executorID: executorID)
-        for task in cancellationTasks {
-            task.cancel()
-        }
         disconnectionTask.cancel()
         for task in backgroundTasks.values {
             task.cancel()
@@ -697,10 +692,16 @@ public actor DatabaseExecutor {
             connectionID: connectionID)
     }
 
+    static func retireRuntimeOwnerCoordination(
+        _ owner: DatabaseRuntimeOwnerToken
+    ) async {
+        await DatabaseManagementMutationCoordinator.shared.retireOwner(owner)
+    }
+
     private func requireActiveOwner() async throws {
         guard let owner = try await metadataStore.runtimeOwner(),
             owner.token == runtimeOwner,
-            owner.isActive
+            owner.isReady
         else {
             throw DatabaseExecutionValidationError.runtimeOwnerNotActive
         }
@@ -733,6 +734,7 @@ public actor DatabaseExecutor {
         _ body: () async throws -> Payload
     ) async -> DatabaseCommandResult<Payload> {
         do {
+            try await requireActiveOwner()
             try await DatabaseManagementMutationCoordinator.shared.acquire(runtimeOwner)
         } catch {
             return failure(error)
@@ -1435,21 +1437,41 @@ public actor DatabaseExecutor {
         _ operationID: DatabaseOperationID,
         reason: DatabaseAdapterCancellationReason
     ) async -> DatabaseExecutorActiveCancellation? {
-        guard var active = activeOperations[operationID] else { return nil }
+        switch beginActiveCancellation(operationID, reason: reason) {
+        case let .owned(task):
+            return await task.value
+        case let .pending(task):
+            await task.value
+            return nil
+        case .unavailable:
+            return nil
+        }
+    }
+
+    private func beginActiveCancellation(
+        _ operationID: DatabaseOperationID,
+        reason: DatabaseAdapterCancellationReason
+    ) -> DatabaseExecutorCancellationWork {
+        guard var active = activeOperations[operationID] else { return .unavailable }
         if let cancellationTask = active.cancellationTask {
-            return await cancellationTask.value
+            return .owned(cancellationTask)
         }
         if active.cancellationReason != nil {
-            return nil
+            if active.reservationState == .owned {
+                _ = acceptCancellationAndSchedule(operationID)
+            }
+            return .unavailable
         }
         active.cancellationReason = reason
         let cancellationSignal = active.cancellation
         let executionCancellation = active.executionCancellation
         activeOperations[operationID] = active
         guard active.reservationState == .owned else {
-            await cancellationSignal.cancel(reason)
-            executionCancellation?()
-            return nil
+            return .pending(
+                Task {
+                    await cancellationSignal.cancel(reason)
+                    executionCancellation?()
+                })
         }
         let support = acceptCancellationAndSchedule(operationID)
         let metadataStore = metadataStore
@@ -1506,7 +1528,7 @@ public actor DatabaseExecutor {
             scheduled.cancellationTask = cancellationWork
             activeOperations[operationID] = scheduled
         }
-        return await cancellationWork.value
+        return .owned(cancellationWork)
     }
 
     private func scheduleServerCancellation(
@@ -1520,8 +1542,11 @@ public actor DatabaseExecutor {
         guard !active.serverCancellationInvoked else { return .cooperative }
         active.serverCancellationInvoked = true
         activeOperations[operationID] = active
+        let invocation = Task {
+            await session.cancel(operationID)
+        }
         let task = Task { [weak self] in
-            _ = await session.cancel(operationID)
+            _ = await invocation.value
             await self?.finishServerCancellation(operationID)
         }
         serverCancellationTasks[operationID] = task
@@ -1893,6 +1918,12 @@ private struct DatabaseExecutorActiveCancellation: Sendable {
     let historyFinalized: Bool
 }
 
+private enum DatabaseExecutorCancellationWork: Sendable {
+    case owned(Task<DatabaseExecutorActiveCancellation, Never>)
+    case pending(Task<Void, Never>)
+    case unavailable
+}
+
 private enum DatabaseExecutorReservationState: Sendable {
     case pending
     case owned
@@ -1918,6 +1949,7 @@ private actor DatabaseManagementMutationCoordinator {
     private static let maximumRetainedCancellationCallbacks = 4_096
     private static let maximumConnectionDisconnectionCallbacks = 64
     private static let maximumRetainedDisconnectionCallbacks = 1_024
+    private static let maximumCompletedDisconnections = 128
 
     private struct ConnectionKey: Hashable, Sendable {
         let owner: DatabaseRuntimeOwnerToken
@@ -1937,6 +1969,7 @@ private actor DatabaseManagementMutationCoordinator {
     }
 
     private struct ConnectionCoordination {
+        let id: UUID
         let cancellationCompletion: DatabaseExecutorCompletion<Bool>
         let disconnectionCompletion: DatabaseExecutorCompletion<Bool>
         let cancellationCount: Int
@@ -1951,7 +1984,8 @@ private actor DatabaseManagementMutationCoordinator {
     private var disconnectors: [ConnectionKey: [UUID: Disconnection]] = [:]
     private var coordinations: [ConnectionKey: ConnectionCoordination] = [:]
     private var drainWaiters: [ConnectionKey: [UUID: DatabaseExecutorCompletion<Bool>]] = [:]
-
+    private var completedDisconnections: [ConnectionKey: Bool] = [:]
+    private var completedDisconnectionOrder: [ConnectionKey] = []
     func acquire(_ owner: DatabaseRuntimeOwnerToken) async throws {
         try Task.checkCancellation()
         guard activeOwners.contains(owner) else {
@@ -2008,7 +2042,7 @@ private actor DatabaseManagementMutationCoordinator {
         executorID: UUID,
         cancel: @escaping Cancellation,
         disconnect: @escaping Disconnection
-    ) -> Bool {
+    ) async -> Bool {
         let key = ConnectionKey(owner: owner, connectionID: connectionID)
         guard !exclusiveConnections.contains(key), coordinations[key] == nil else {
             return false
@@ -2050,6 +2084,7 @@ private actor DatabaseManagementMutationCoordinator {
         for completion in pending {
             await completion.resolve(true)
         }
+        await reapCoordinationIfFinished(key)
     }
 
     func beginExclusiveConnectionMutation(
@@ -2063,17 +2098,27 @@ private actor DatabaseManagementMutationCoordinator {
             throw DatabaseExecutionValidationError.connectionDefinitionChanged(connectionID)
         }
         let deadline = Self.deadline(after: timeoutNanoseconds)
-        let coordination = try createCoordinationIfNeeded(key: key)
+        let coordination = try await createCoordinationIfNeeded(key: key)
         _ = try await waitForCompletion(
             coordination.cancellationCompletion,
             until: deadline)
+        guard exclusiveConnections.contains(key),
+            coordinations[key]?.id == coordination.id
+        else {
+            throw DatabaseExecutionValidationError.runtimeOwnerNotActive
+        }
         startDisconnectionsIfNeeded(key: key)
-        guard let current = coordinations[key] else {
+        guard let current = coordinations[key], current.id == coordination.id else {
             throw DatabaseExecutionValidationError.connectionDefinitionChanged(connectionID)
         }
         let disconnected = try await waitForCompletion(
             current.disconnectionCompletion,
             until: deadline)
+        guard exclusiveConnections.contains(key),
+            coordinations[key]?.id == coordination.id
+        else {
+            throw DatabaseExecutionValidationError.runtimeOwnerNotActive
+        }
         if operationPermits[key]?.isEmpty == false {
             let id = UUID()
             let completion = DatabaseExecutorCompletion<Bool>()
@@ -2083,6 +2128,11 @@ private actor DatabaseManagementMutationCoordinator {
                 drainWaiters[key]?.removeValue(forKey: id)
                 if drainWaiters[key]?.isEmpty == true {
                     drainWaiters.removeValue(forKey: key)
+                }
+                guard exclusiveConnections.contains(key),
+                    coordinations[key]?.id == coordination.id
+                else {
+                    throw DatabaseExecutionValidationError.runtimeOwnerNotActive
                 }
             } catch {
                 drainWaiters[key]?.removeValue(forKey: id)
@@ -2100,12 +2150,14 @@ private actor DatabaseManagementMutationCoordinator {
         owner: DatabaseRuntimeOwnerToken,
         connectionID: DatabaseConnectionID,
         discardCoordination: Bool
-    ) {
+    ) async {
         let key = ConnectionKey(owner: owner, connectionID: connectionID)
         exclusiveConnections.remove(key)
         if discardCoordination {
             coordinations.removeValue(forKey: key)
             disconnectors.removeValue(forKey: key)
+        } else {
+            await reapCoordinationIfFinished(key)
         }
     }
 
@@ -2117,7 +2169,7 @@ private actor DatabaseManagementMutationCoordinator {
     }
 
     func retainedCoordinationCount(_ owner: DatabaseRuntimeOwnerToken) -> Int {
-        coordinations.keys.filter { $0.owner == owner }.count
+        return coordinations.keys.filter { $0.owner == owner }.count
     }
 
     func retainedCallbackCount(
@@ -2134,7 +2186,9 @@ private actor DatabaseManagementMutationCoordinator {
         connectionID: DatabaseConnectionID
     ) async -> Bool {
         let key = ConnectionKey(owner: owner, connectionID: connectionID)
-        guard let coordination = coordinations[key] else { return false }
+        guard let coordination = coordinations[key] else {
+            return completedDisconnections[key] != nil
+        }
         return await coordination.disconnectionCompletion.isResolved()
     }
 
@@ -2153,8 +2207,28 @@ private actor DatabaseManagementMutationCoordinator {
 
     private func createCoordinationIfNeeded(
         key: ConnectionKey
-    ) throws -> ConnectionCoordination {
+    ) async throws -> ConnectionCoordination {
+        await reapFinishedCoordinations()
+        guard exclusiveConnections.contains(key) else {
+            throw DatabaseExecutionValidationError.runtimeOwnerNotActive
+        }
         if let coordination = coordinations[key] {
+            return coordination
+        }
+        if let disconnected = completedDisconnections.removeValue(forKey: key) {
+            completedDisconnectionOrder.removeAll { $0 == key }
+            let cancellationCompletion = DatabaseExecutorCompletion<Bool>()
+            let disconnectionCompletion = DatabaseExecutorCompletion<Bool>()
+            await cancellationCompletion.resolve(true)
+            await disconnectionCompletion.resolve(disconnected)
+            let coordination = ConnectionCoordination(
+                id: UUID(),
+                cancellationCompletion: cancellationCompletion,
+                disconnectionCompletion: disconnectionCompletion,
+                cancellationCount: 0,
+                disconnections: [],
+                disconnectionStarted: true)
+            coordinations[key] = coordination
             return coordination
         }
         let cancellations =
@@ -2183,6 +2257,7 @@ private actor DatabaseManagementMutationCoordinator {
         }
         let cancellationCompletion = DatabaseExecutorCompletion<Bool>()
         let coordination = ConnectionCoordination(
+            id: UUID(),
             cancellationCompletion: cancellationCompletion,
             disconnectionCompletion: DatabaseExecutorCompletion<Bool>(),
             cancellationCount: cancellations.count,
@@ -2200,6 +2275,7 @@ private actor DatabaseManagementMutationCoordinator {
                 }
             }
             await cancellationCompletion.resolve(true)
+            await self.finishCancellations(key)
         }
         return coordination
     }
@@ -2228,6 +2304,70 @@ private actor DatabaseManagementMutationCoordinator {
                 return result
             }
             await completion.resolve(disconnected)
+            await self.finishDisconnections(key)
+        }
+    }
+
+    private func finishCancellations(_ key: ConnectionKey) async {
+        startDisconnectionsIfNeeded(key: key)
+        await reapCoordinationIfFinished(key)
+    }
+
+    private func finishDisconnections(_ key: ConnectionKey) async {
+        await reapCoordinationIfFinished(key)
+    }
+
+    private func reapFinishedCoordinations() async {
+        for key in Array(coordinations.keys) {
+            await reapCoordinationIfFinished(key)
+        }
+    }
+
+    private func reapCoordinationIfFinished(_ key: ConnectionKey) async {
+        guard !exclusiveConnections.contains(key),
+            operationPermits[key]?.isEmpty != false,
+            let coordination = coordinations[key]
+        else {
+            return
+        }
+        guard await coordination.cancellationCompletion.isResolved(),
+            let disconnected = await coordination.disconnectionCompletion.resolvedValue(),
+            !exclusiveConnections.contains(key),
+            operationPermits[key]?.isEmpty != false,
+            coordinations[key]?.id == coordination.id
+        else {
+            return
+        }
+        coordinations.removeValue(forKey: key)
+        disconnectors.removeValue(forKey: key)
+        completedDisconnections[key] = disconnected
+        completedDisconnectionOrder.removeAll { $0 == key }
+        completedDisconnectionOrder.append(key)
+        if completedDisconnectionOrder.count > Self.maximumCompletedDisconnections {
+            let evicted = completedDisconnectionOrder.removeFirst()
+            completedDisconnections.removeValue(forKey: evicted)
+        }
+    }
+
+    func retireOwner(_ owner: DatabaseRuntimeOwnerToken) async {
+        let staleWaiters = waiters.removeValue(forKey: owner) ?? []
+        for waiter in staleWaiters {
+            waiter.continuation.resume(
+                throwing: DatabaseExecutionValidationError.runtimeOwnerNotActive)
+        }
+        activeOwners.remove(owner)
+        exclusiveConnections = exclusiveConnections.filter { $0.owner != owner }
+        operationPermits = operationPermits.filter { $0.key.owner != owner }
+        disconnectors = disconnectors.filter { $0.key.owner != owner }
+        coordinations = coordinations.filter { $0.key.owner != owner }
+        completedDisconnections = completedDisconnections.filter { $0.key.owner != owner }
+        completedDisconnectionOrder.removeAll { $0.owner == owner }
+        let staleDrainWaiters = drainWaiters.filter { $0.key.owner == owner }.flatMap {
+            $0.value.values
+        }
+        drainWaiters = drainWaiters.filter { $0.key.owner != owner }
+        for completion in staleDrainWaiters {
+            await completion.resolve(false)
         }
     }
 
@@ -2348,6 +2488,10 @@ private actor DatabaseExecutorCompletion<Value: Sendable> {
 
     func isResolved() -> Bool {
         value != nil
+    }
+
+    func resolvedValue() -> Value? {
+        value
     }
 
     private func removeContinuation(_ identifier: UUID) {

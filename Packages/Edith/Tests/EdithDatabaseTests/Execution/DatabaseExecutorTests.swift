@@ -195,7 +195,8 @@ private enum DatabaseExecutorFixtures {
         if saveConnection {
             try await store.seedConnection(connection)
         }
-        let runtimeOwner = try await store.claimRuntimeOwner(
+        let runtimeOwner = try await DatabaseRuntimeOwnerFactory.claimReadyOwner(
+            from: store,
             claimedAt: now.addingTimeInterval(-1)
         ).owner.token
         let secretStore = try InMemoryDatabaseSecretStore(initialValues: secretValues)
@@ -297,7 +298,17 @@ private struct DatabaseExecutorUnexpectedMetadataStore: DatabaseMetadataStore {
         throw failure()
     }
 
-    func claimRuntimeOwner(claimedAt: Date) throws -> DatabaseRuntimeOwnerClaimResult {
+    func claimRuntimeOwner(
+        claimedAt: Date,
+        recoveryLimit: Int
+    ) throws -> DatabaseRuntimeOwnerClaimResult {
+        throw failure()
+    }
+
+    func recoverRuntimeOwner(
+        _ owner: DatabaseRuntimeOwnerToken,
+        limit: Int
+    ) throws -> DatabaseRuntimeRecoveryResult {
         throw failure()
     }
 
@@ -343,8 +354,9 @@ private struct DatabaseExecutorUnexpectedMetadataStore: DatabaseMetadataStore {
 
     func pruneOperations(
         finishedBefore date: Date,
+        limit: Int,
         owner: DatabaseRuntimeOwnerToken
-    ) throws -> Int {
+    ) throws -> DatabaseMetadataCleanupResult {
         throw failure()
     }
 
@@ -367,8 +379,9 @@ private struct DatabaseExecutorUnexpectedMetadataStore: DatabaseMetadataStore {
 
     func removeExpiredConfirmations(
         before date: Date,
+        limit: Int,
         owner: DatabaseRuntimeOwnerToken
-    ) throws -> Int {
+    ) throws -> DatabaseMetadataCleanupResult {
         throw failure()
     }
 }
@@ -453,8 +466,20 @@ private actor DatabaseExecutorGatedMetadataStore: DatabaseMetadataStore {
         try await base.runtimeOwner()
     }
 
-    func claimRuntimeOwner(claimedAt: Date) async throws -> DatabaseRuntimeOwnerClaimResult {
-        try await base.claimRuntimeOwner(claimedAt: claimedAt)
+    func claimRuntimeOwner(
+        claimedAt: Date,
+        recoveryLimit: Int
+    ) async throws -> DatabaseRuntimeOwnerClaimResult {
+        try await base.claimRuntimeOwner(
+            claimedAt: claimedAt,
+            recoveryLimit: recoveryLimit)
+    }
+
+    func recoverRuntimeOwner(
+        _ owner: DatabaseRuntimeOwnerToken,
+        limit: Int
+    ) async throws -> DatabaseRuntimeRecoveryResult {
+        try await base.recoverRuntimeOwner(owner, limit: limit)
     }
 
     func releaseRuntimeOwner(
@@ -511,9 +536,13 @@ private actor DatabaseExecutorGatedMetadataStore: DatabaseMetadataStore {
 
     func pruneOperations(
         finishedBefore date: Date,
+        limit: Int,
         owner: DatabaseRuntimeOwnerToken
-    ) async throws -> Int {
-        try await base.pruneOperations(finishedBefore: date, owner: owner)
+    ) async throws -> DatabaseMetadataCleanupResult {
+        try await base.pruneOperations(
+            finishedBefore: date,
+            limit: limit,
+            owner: owner)
     }
 
     func registerConfirmation(
@@ -540,9 +569,13 @@ private actor DatabaseExecutorGatedMetadataStore: DatabaseMetadataStore {
 
     func removeExpiredConfirmations(
         before date: Date,
+        limit: Int,
         owner: DatabaseRuntimeOwnerToken
-    ) async throws -> Int {
-        try await base.removeExpiredConfirmations(before: date, owner: owner)
+    ) async throws -> DatabaseMetadataCleanupResult {
+        try await base.removeExpiredConfirmations(
+            before: date,
+            limit: limit,
+            owner: owner)
     }
 }
 
@@ -1487,6 +1520,41 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
                 connectionID: fixture.connection.id,
                 operation: DatabaseExecutorFixtures.operation(45)))
         #expect(admitted.status == .succeeded)
+    }
+
+    @Test func shutdownSchedulesFreshServerCancellationBeforeDisconnect() async throws {
+        let successGate = DatabaseExecutorTestGate(open: false)
+        let fixture = try await DatabaseExecutorFixtures.make()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let store = DatabaseExecutorGatedMetadataStore(
+            base: fixture.store,
+            blockedTransitionStates: [.succeeded],
+            transitionGate: successGate)
+        let executor = try DatabaseExecutor(
+            metadataStore: store,
+            secretStore: fixture.secretStore,
+            runtimeOwner: fixture.runtimeOwner,
+            adapters: [fixture.adapter],
+            currentDate: { DatabaseExecutorFixtures.now },
+            managementDrainTimeoutNanoseconds: 1)
+        await fixture.session.gates.cancel.block()
+        let operation = DatabaseExecutorFixtures.operation(46)
+        let task = Task {
+            await executor.connect(
+                DatabaseConnectRequest(
+                    connectionID: fixture.connection.id,
+                    operation: operation))
+        }
+        await successGate.waitForEntries()
+        await executor.disconnectAll()
+        let invocations = await fixture.session.snapshot().invocations
+        let cancellationIndex = try #require(
+            invocations.firstIndex(of: .cancel(operation.operationID)))
+        let disconnectionIndex = try #require(invocations.firstIndex(of: .disconnect))
+        #expect(cancellationIndex < disconnectionIndex)
+        await fixture.session.gates.cancel.releaseAll()
+        await successGate.releaseAll()
+        _ = await task.value
     }
 
     @Test func acceptedCancellationReplacesAConcurrentFailureTerminal() async throws {
