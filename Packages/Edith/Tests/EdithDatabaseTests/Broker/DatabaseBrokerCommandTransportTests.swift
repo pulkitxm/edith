@@ -11,7 +11,9 @@ import Testing
         Darwin.close(sockets.client)
         Darwin.close(sockets.server)
     }
-    let transport = DatabaseBrokerCommandTransport(
+    let clientTransport = DatabaseBrokerCommandTransport(
+        dependencies: databaseBrokerCommandTransportDependencies())
+    let serverTransport = DatabaseBrokerRuntimeRequestTransport(
         dependencies: databaseBrokerCommandTransportDependencies())
     let requestID = UUID(uuidString: "482C3E8D-949F-4A2F-BC29-58063B8F9B21")!
     let command = DatabaseBrokerCommandRequest.connectionList(
@@ -19,23 +21,32 @@ import Testing
             search: DatabaseConnectionSearch(limit: 5)))
     let deadline = DispatchTime.now().uptimeNanoseconds + 5_000_000_000
     let server = Task.detached {
-        let request = try transport.receiveRequest(
+        let runtimeRequest = try serverTransport.receiveRequest(
             socketDescriptor: sockets.server,
             deadlineNanoseconds: deadline)
+        guard case .command(let payload) = runtimeRequest.payload else {
+            throw DatabaseBrokerSocketError.unavailable
+        }
+        let request = DatabaseBrokerEnvelope(
+            requestID: runtimeRequest.requestID,
+            operationID: runtimeRequest.operationID,
+            sequence: runtimeRequest.sequence,
+            kind: runtimeRequest.kind,
+            payload: payload)
         let result = DatabaseCommandResult.success(
             DatabaseConnectionListResult(connections: []),
             metadata: DatabaseResultMetadata(
                 completeness: DatabaseResultCompleteness(state: .complete),
                 count: DatabaseCountMetadata(value: 0, accuracy: .exact)))
-        let payload = try request.payload.response(result)
-        let response = try payload.envelope(matching: request, sequence: 0)
-        return try transport.sendResponse(
+        let responsePayload = try request.payload.response(result)
+        let response = try responsePayload.envelope(matching: request, sequence: 0)
+        return try serverTransport.sendCommandResponse(
             response,
-            matching: request,
+            matching: runtimeRequest,
             socketDescriptor: sockets.server,
             deadlineNanoseconds: deadline)
     }
-    let response = try transport.request(
+    let response = try clientTransport.request(
         command,
         requestID: requestID,
         socketDescriptor: sockets.client,
@@ -45,6 +56,42 @@ import Testing
     #expect(response.payload.connectionListResult?.payload?.connections == [])
     #expect(response.payload.connectionListResult?.metadata.count?.value == 0)
     #expect(serverResult.requestID == requestID)
+    #expect(serverResult.disposition == .sent)
+    #expect(serverResult.responseBytesWritten > 0)
+}
+
+@Test func databaseBrokerRuntimeRequestTransportRoutesHealth() async throws {
+    let sockets = try databaseBrokerCommandTransportSocketPair()
+    defer {
+        Darwin.close(sockets.client)
+        Darwin.close(sockets.server)
+    }
+    let dependencies = databaseBrokerCommandTransportDependencies()
+    let clientTransport = DatabaseBrokerHealthTransport(dependencies: dependencies)
+    let serverTransport = DatabaseBrokerRuntimeRequestTransport(dependencies: dependencies)
+    let brokerInstanceID = UUID(uuidString: "45CE8283-C3DF-4F61-96D9-D2A1B874931D")!
+    let deadline = DispatchTime.now().uptimeNanoseconds + 5_000_000_000
+    let server = Task.detached {
+        let request = try serverTransport.receiveRequest(
+            socketDescriptor: sockets.server,
+            deadlineNanoseconds: deadline)
+        guard case .health = request.payload else {
+            throw DatabaseBrokerSocketError.unavailable
+        }
+        return try serverTransport.sendHealthResponse(
+            DatabaseBrokerHealthResponse(
+                brokerInstanceID: brokerInstanceID,
+                isReady: true),
+            matching: request,
+            socketDescriptor: sockets.server,
+            deadlineNanoseconds: deadline)
+    }
+    let response = try clientTransport.requestHealth(
+        socketDescriptor: sockets.client,
+        deadlineNanoseconds: deadline)
+    let serverResult = try await server.value
+    #expect(response.brokerInstanceID == brokerInstanceID)
+    #expect(response.isReady)
     #expect(serverResult.disposition == .sent)
     #expect(serverResult.responseBytesWritten > 0)
 }
