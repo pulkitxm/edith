@@ -57,6 +57,22 @@ import Testing
         #expect(source.contains("tab.wrappedValue.summary"))
     }
 
+    @Test func appMaintenanceUsesTheSameSidebarNavigationPattern() throws {
+        let navigationURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Edith/Core/Navigation/MainNavigationView.swift")
+        let navigation = try String(contentsOf: navigationURL, encoding: .utf8)
+
+        #expect(navigation.contains("ForEach(AppMaintenanceSection.allCases"))
+        #expect(navigation.contains("AppMaintenanceSidebarRow"))
+        #expect(navigation.contains("appMaintenanceCategoriesExpanded.toggle()"))
+        #expect(navigation.contains("disclosureTitle: item == .appMaintenance"))
+        #expect(navigation.contains("selectAppMaintenance(section)"))
+        #expect(navigation.contains("detachAppMaintenance(section)"))
+    }
+
     @Test func permissionCardsUseTheAvailableWidthAdaptively() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

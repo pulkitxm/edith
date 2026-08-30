@@ -357,6 +357,24 @@ enum AppMaintenanceSection: String, CaseIterable, Identifiable {
     case history = "History"
 
     var id: Self { self }
+
+    var symbol: String {
+        switch self {
+        case .updates: "arrow.up.circle"
+        case .packages: "shippingbox"
+        case .removal: "trash"
+        case .history: "clock.arrow.circlepath"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .updates: "Review and run available application updates."
+        case .packages: "Manage installed and discoverable Homebrew packages."
+        case .removal: "Review applications and their related files before removal."
+        case .history: "Review completed maintenance operations."
+        }
+    }
 }
 
 struct AppMaintenanceView: View {
