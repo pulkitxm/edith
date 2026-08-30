@@ -1,3 +1,4 @@
+import Dispatch
 import Foundation
 import MySQLNIO
 import NIOCore
@@ -156,8 +157,7 @@ final class MySQLNIODatabaseClient: MySQLDatabaseClient, @unchecked Sendable {
             ) AS group_replica_count,
             (
                 SELECT COUNT(*)
-                FROM performance_schema.replication_connection_status
-                WHERE SERVICE_STATE = 'ON'
+                FROM performance_schema.replication_connection_configuration
             ) AS replica_channel_count
         """
 
@@ -199,7 +199,7 @@ final class MySQLNIODatabaseClient: MySQLDatabaseClient, @unchecked Sendable {
                 resource: resource)
             let values = try MySQLDatabaseDriverSupport.identityValues(identityRows)
             let identity = try MySQLDatabaseDriverSupport.identity(values)
-            if resource.plan.tls.requiresEncryption && values.tlsCipher.isEmpty {
+            if resource.requiresEncryption && values.tlsCipher.isEmpty {
                 throw MySQLDatabaseDriverFailure.tls
             }
             return identity
@@ -249,7 +249,7 @@ struct MySQLDatabaseResource: @unchecked Sendable {
     let connection: MySQLConnection
     let eventLoopGroup: MultiThreadedEventLoopGroup
     let responseGuard: MySQLDatabaseInboundResponseGuard
-    let plan: MySQLDatabaseConnectionPlan
+    let requiresEncryption: Bool
 }
 
 enum MySQLDatabaseTransport {
@@ -258,19 +258,27 @@ enum MySQLDatabaseTransport {
     ) async throws -> MySQLDatabaseResource {
         let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         let eventLoop = eventLoopGroup.next()
-        let race = MySQLDatabaseConnectionRace()
-        let promise = eventLoop.makePromise(of: MySQLConnection.self)
-        let timeout = eventLoop.scheduleTask(
-            in: .milliseconds(Int64(clamping: plan.connectTimeoutMilliseconds))
-        ) {
-            if race.claim() {
-                promise.fail(MySQLDatabaseDriverFailure.timeout)
-            }
-        }
+        let budget = MySQLDatabaseConnectBudget(
+            milliseconds: plan.connectTimeoutMilliseconds)
         do {
             let address = try SocketAddress.makeAddressResolvingHost(
                 plan.host,
                 port: plan.port)
+            if plan.tls.requiresEncryption {
+                try await MySQLDatabaseTLSCapabilityProbe.requireSupport(
+                    address: address,
+                    eventLoopGroup: eventLoopGroup,
+                    timeoutMilliseconds: try budget.remainingMilliseconds())
+            }
+            let race = MySQLDatabaseConnectionRace()
+            let promise = eventLoop.makePromise(of: MySQLConnection.self)
+            let timeout = eventLoop.scheduleTask(
+                in: .milliseconds(Int64(clamping: try budget.remainingMilliseconds()))
+            ) {
+                if race.claim() {
+                    promise.fail(MySQLDatabaseDriverFailure.timeout)
+                }
+            }
             let connectionFuture = MySQLConnection.connect(
                 to: address,
                 username: plan.username,
@@ -286,32 +294,227 @@ enum MySQLDatabaseTransport {
                     connection.close().whenFailure { _ in }
                 }
             }
-            let connection = try await withTaskCancellationHandler {
-                try await promise.futureResult.get()
-            } onCancel: {
-                if race.claim() {
-                    promise.fail(CancellationError())
+            do {
+                let connection = try await withTaskCancellationHandler {
+                    try await promise.futureResult.get()
+                } onCancel: {
+                    if race.claim() {
+                        promise.fail(CancellationError())
+                    }
                 }
+                timeout.cancel()
+                let responseGuard = MySQLDatabaseInboundResponseGuard()
+                try await connection.channel.pipeline.addHandler(
+                    responseGuard,
+                    position: .first
+                ).get()
+                return MySQLDatabaseResource(
+                    connection: connection,
+                    eventLoopGroup: eventLoopGroup,
+                    responseGuard: responseGuard,
+                    requiresEncryption: plan.tls.requiresEncryption)
+            } catch {
+                timeout.cancel()
+                throw error
             }
-            timeout.cancel()
-            let responseGuard = MySQLDatabaseInboundResponseGuard()
-            try await connection.channel.pipeline.addHandler(
-                responseGuard,
-                position: .first
-            ).get()
-            return MySQLDatabaseResource(
-                connection: connection,
-                eventLoopGroup: eventLoopGroup,
-                responseGuard: responseGuard,
-                plan: plan)
         } catch {
-            timeout.cancel()
             try? await eventLoopGroup.shutdownGracefully()
             if error is CancellationError || Task.isCancelled {
                 throw CancellationError()
             }
             throw error
         }
+    }
+}
+
+private struct MySQLDatabaseConnectBudget: Sendable {
+    private let startedAt: UInt64
+    private let durationNanoseconds: UInt64
+
+    init(milliseconds: UInt64) {
+        startedAt = DispatchTime.now().uptimeNanoseconds
+        durationNanoseconds = milliseconds * 1_000_000
+    }
+
+    func remainingMilliseconds() throws -> UInt64 {
+        let now = DispatchTime.now().uptimeNanoseconds
+        let elapsed = now >= startedAt ? now - startedAt : 0
+        guard elapsed < durationNanoseconds else {
+            throw MySQLDatabaseDriverFailure.timeout
+        }
+        return max(1, (durationNanoseconds - elapsed + 999_999) / 1_000_000)
+    }
+}
+
+enum MySQLDatabaseTLSCapabilityProbe {
+    static let maximumHandshakeBytes = 16_384
+
+    static func requireSupport(
+        address: SocketAddress,
+        eventLoopGroup: MultiThreadedEventLoopGroup,
+        timeoutMilliseconds: UInt64
+    ) async throws {
+        let eventLoop = eventLoopGroup.next()
+        let race = MySQLDatabaseConnectionRace()
+        let promise = eventLoop.makePromise(of: Void.self)
+        let pendingChannel = MySQLDatabasePendingChannel()
+        let complete: @Sendable (MySQLDatabaseTLSCapabilityResult) -> Void = { result in
+            guard race.claim() else { return }
+            switch result {
+            case .supported:
+                promise.succeed(())
+            case let .failed(failure):
+                promise.fail(failure)
+            case .cancelled:
+                promise.fail(CancellationError())
+            }
+        }
+        let timeout = eventLoop.scheduleTask(
+            in: .milliseconds(Int64(clamping: timeoutMilliseconds))
+        ) {
+            complete(.failed(.timeout))
+            pendingChannel.cancel()
+        }
+        let connect = ClientBootstrap(group: eventLoopGroup)
+            .channelInitializer { channel in
+                pendingChannel.register(channel)
+                do {
+                    try channel.pipeline.syncOperations.addHandler(
+                        MySQLDatabaseHandshakeLimitHandler(
+                            maximumBytes: maximumHandshakeBytes))
+                    try channel.pipeline.syncOperations.addHandler(
+                        ByteToMessageHandler(
+                            MySQLPacketDecoder(
+                                sequence: MySQLPacketSequence(),
+                                logger: Logger(
+                                    label: "com.edith.database.mysql.tls-preflight"))))
+                    try channel.pipeline.syncOperations.addHandler(
+                        MySQLDatabaseTLSCapabilityHandler(complete: complete))
+                    return channel.eventLoop.makeSucceededVoidFuture()
+                } catch {
+                    return channel.eventLoop.makeFailedFuture(error)
+                }
+            }
+            .connect(to: address)
+        connect.whenFailure { _ in
+            complete(.failed(.connection))
+            pendingChannel.cancel()
+        }
+        do {
+            try await withTaskCancellationHandler {
+                try await promise.futureResult.get()
+            } onCancel: {
+                complete(.cancelled)
+                pendingChannel.cancel()
+            }
+            timeout.cancel()
+            pendingChannel.cancel()
+        } catch {
+            timeout.cancel()
+            pendingChannel.cancel()
+            throw error
+        }
+    }
+}
+
+private enum MySQLDatabaseTLSCapabilityResult: Sendable {
+    case supported
+    case failed(MySQLDatabaseDriverFailure)
+    case cancelled
+}
+
+private final class MySQLDatabasePendingChannel: @unchecked Sendable {
+    private let lock = NSLock()
+    private var channel: (any Channel)?
+    private var cancelled = false
+
+    func register(_ channel: any Channel) {
+        let closeImmediately = lock.withLock {
+            guard !cancelled else { return true }
+            self.channel = channel
+            return false
+        }
+        if closeImmediately {
+            channel.close(promise: nil)
+        }
+    }
+
+    func cancel() {
+        let channel = lock.withLock {
+            cancelled = true
+            let channel = self.channel
+            self.channel = nil
+            return channel
+        }
+        channel?.close(promise: nil)
+    }
+}
+
+private final class MySQLDatabaseHandshakeLimitHandler: ChannelInboundHandler {
+    typealias InboundIn = ByteBuffer
+    typealias InboundOut = ByteBuffer
+
+    private let maximumBytes: Int
+    private var receivedBytes = 0
+
+    init(maximumBytes: Int) {
+        self.maximumBytes = maximumBytes
+    }
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        let buffer = unwrapInboundIn(data)
+        let next = receivedBytes.addingReportingOverflow(buffer.readableBytes)
+        guard !next.overflow, next.partialValue <= maximumBytes else {
+            context.fireErrorCaught(MySQLDatabaseDriverFailure.resourceLimit)
+            context.close(promise: nil)
+            return
+        }
+        receivedBytes = next.partialValue
+        context.fireChannelRead(wrapInboundOut(buffer))
+    }
+}
+
+private final class MySQLDatabaseTLSCapabilityHandler: ChannelInboundHandler {
+    typealias InboundIn = MySQLPacket
+
+    private let complete: @Sendable (MySQLDatabaseTLSCapabilityResult) -> Void
+
+    init(
+        complete: @escaping @Sendable (MySQLDatabaseTLSCapabilityResult) -> Void
+    ) {
+        self.complete = complete
+    }
+
+    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        var packet = unwrapInboundIn(data)
+        do {
+            guard !packet.isError else {
+                throw MySQLDatabaseDriverFailure.connection
+            }
+            let handshake = try packet.decode(
+                MySQLProtocol.HandshakeV10.self,
+                capabilities: [])
+            complete(
+                handshake.capabilities.contains(.CLIENT_SSL)
+                    ? .supported : .failed(.tls))
+        } catch let failure as MySQLDatabaseDriverFailure {
+            complete(.failed(failure))
+        } catch {
+            complete(.failed(.connection))
+        }
+        context.close(promise: nil)
+    }
+
+    func errorCaught(context: ChannelHandlerContext, error: Error) {
+        complete(
+            .failed(
+                (error as? MySQLDatabaseDriverFailure) ?? .connection))
+        context.close(promise: nil)
+    }
+
+    func channelInactive(context: ChannelHandlerContext) {
+        complete(.failed(.connection))
+        context.fireChannelInactive()
     }
 }
 
@@ -542,8 +745,15 @@ enum MySQLDatabaseDriverSupport {
                 maximumBytes: 128),
             values.groupMemberCount <= 1_000_000,
             values.groupReplicaCount <= values.groupMemberCount,
-            values.replicaChannelCount <= 1_000_000,
-            values.groupMemberCount > 0 || values.localMemberRole.isEmpty
+            values.replicaChannelCount <= 1_000_000
+        else {
+            throw MySQLDatabaseDriverFailure.server(nil)
+        }
+        let memberRole = values.localMemberRole.uppercased()
+        guard
+            (values.groupMemberCount == 0 && memberRole.isEmpty)
+                || (values.groupMemberCount > 0
+                    && ["PRIMARY", "SECONDARY"].contains(memberRole))
         else {
             throw MySQLDatabaseDriverFailure.server(nil)
         }
@@ -553,7 +763,7 @@ enum MySQLDatabaseDriverSupport {
         if values.groupMemberCount > 0 {
             topology = DatabaseTopology(
                 kind: .cluster,
-                localRole: values.localMemberRole.lowercased(),
+                localRole: memberRole.lowercased(),
                 nodeCount: Int(values.groupMemberCount),
                 replicaCount: Int(values.groupReplicaCount),
                 attributes: attributes(values))
