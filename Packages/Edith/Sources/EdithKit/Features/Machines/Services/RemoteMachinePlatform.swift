@@ -24,6 +24,14 @@ public enum PowerShell {
         executable(arguments: ["-NonInteractive"], script: script)
     }
 
+    public static func standardInputCommand(byteCount: Int) -> String {
+        command(
+            "$b=New-Object byte[] \(max(0, byteCount));$i=[Console]::OpenStandardInput();"
+                + "$o=0;while($o-lt $b.Length){$n=$i.Read($b,$o,$b.Length-$o);"
+                + "if($n-le 0){break};$o+=$n};"
+                + "&([ScriptBlock]::Create([Text.Encoding]::UTF8.GetString($b,0,$o)))")
+    }
+
     public static func interactiveCommand(_ script: String, keepOpen: Bool = false) -> String {
         executable(arguments: keepOpen ? ["-NoExit"] : [], script: script)
     }

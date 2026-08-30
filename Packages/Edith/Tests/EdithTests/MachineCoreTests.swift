@@ -632,30 +632,36 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
     }
 
     @Test func buildsNativeWindowsStatusAndMutations() throws {
-        let status = try #require(decodedMachinePowerShell(WindowsMachineControlCommands.status))
-        let brightness = try #require(
-            decodedMachinePowerShell(
-                MachineControlCenterCommands.command(
-                    for: .setBrightness(140), withSudoPassword: false,
-                    platform: .windows)))
-        let volume = try #require(
-            decodedMachinePowerShell(
-                MachineControlCenterCommands.command(
-                    for: .setVolume(-10), withSudoPassword: false,
-                    platform: .windows)))
-        let airplane = try #require(
-            decodedMachinePowerShell(
-                MachineControlCenterCommands.command(
-                    for: .setAirplaneMode(true), withSudoPassword: false,
-                    platform: .windows)))
+        let status = String(decoding: WindowsMachineControlCommands.statusInput, as: UTF8.self)
+        let brightness = String(
+            decoding: WindowsMachineControlCommands.input(
+                for: .setBrightness(140),
+                disruptiveMarker: MachineControlCenterCommands.disruptiveMarker),
+            as: UTF8.self)
+        let volume = String(
+            decoding: WindowsMachineControlCommands.input(
+                for: .setVolume(-10),
+                disruptiveMarker: MachineControlCenterCommands.disruptiveMarker),
+            as: UTF8.self)
+        let airplane = String(
+            decoding: WindowsMachineControlCommands.input(
+                for: .setAirplaneMode(true),
+                disruptiveMarker: MachineControlCenterCommands.disruptiveMarker),
+            as: UTF8.self)
 
         #expect(status.contains("EDITH_CONTROL_PLATFORM=windows"))
         #expect(status.contains("WmiMonitorBrightness"))
         #expect(status.contains("Get-NetAdapter"))
         #expect(status.contains("Get-PnpDevice -Class Bluetooth"))
         #expect(status.contains("IAudioEndpointVolume"))
+        #expect(
+            status.contains(
+                "Add-Type -TypeDefinition $audioSource -ErrorAction SilentlyContinue\n[Console]"))
         #expect(brightness.contains("Brightness = [byte]100"))
         #expect(volume.contains("[EdithAudio]::Level = 0"))
+        #expect(
+            volume.contains(
+                "Add-Type -TypeDefinition $audioSource -ErrorAction SilentlyContinue\n[EdithAudio]"))
         #expect(airplane.contains(MachineControlCenterCommands.disruptiveMarker))
         #expect(airplane.contains("Disable-NetAdapter"))
         #expect(airplane.contains("Disable-PnpDevice"))
@@ -983,16 +989,42 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
 
     @Test func windowsStatusUsesTheNativeCommand() async throws {
         var command = ""
+        var input = Data()
         let result = await MachineControlOperationExecution.status(platform: .windows) {
-            next, _, _ in
+            next, stdin, _ in
             command = next
+            input = stdin ?? Data()
             return .success("EDITH_CONTROL_PLATFORM=windows\nEDITH_CONTROL_VOLUME=37\n")
         }
 
         let snapshot = try result.get()
         #expect(command == WindowsMachineControlCommands.status)
+        #expect(command == PowerShell.standardInputCommand(byteCount: input.count))
+        let launcher = try #require(decodedMachinePowerShell(command))
+        #expect(launcher.contains("while($o-lt $b.Length)"))
+        #expect(!launcher.contains("ReadToEnd"))
+        #expect(input == WindowsMachineControlCommands.statusInput)
+        #expect(command.count < 1_000)
+        #expect(input.count > 5_000)
         #expect(snapshot.platform == .windows)
         #expect(snapshot.volume == 37)
+    }
+
+    @Test func windowsMutationsUseStandardInput() async throws {
+        var command = ""
+        var input = Data()
+        let result = await MachineControlOperationExecution.perform(
+            .setVolume(41), machineID: Machine.localID, isLocal: false,
+            platform: .windows
+        ) { next, stdin, _ in
+            command = next
+            input = stdin ?? Data()
+            return .success("")
+        }
+
+        _ = try result.get()
+        #expect(command == PowerShell.standardInputCommand(byteCount: input.count))
+        #expect(String(decoding: input, as: UTF8.self).contains("[EdithAudio]::Level = 41"))
     }
 
     @Test func mutationsUseTheSharedBuilderAndTimeout() async throws {

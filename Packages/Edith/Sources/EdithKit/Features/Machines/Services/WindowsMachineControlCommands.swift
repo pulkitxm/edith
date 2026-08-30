@@ -1,8 +1,8 @@
 import Foundation
 
 public enum WindowsMachineControlCommands {
-    public static let status = PowerShell.command(
-        audioSupport
+    public static let statusInput = Data(
+        (audioSupport
             + """
             [Console]::Out.WriteLine('EDITH_CONTROL_PLATFORM=windows')
             $battery = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue |
@@ -44,18 +44,19 @@ public enum WindowsMachineControlCommands {
                 $airplane = if ($wifiEnabled -eq 0 -and $bluetoothEnabled -eq 0) { 1 } else { 0 }
                 [Console]::Out.WriteLine("EDITH_CONTROL_AIRPLANE_MODE=$airplane")
             }
-            $notifications = Get-ItemPropertyValue `
+            $notificationSettings = Get-ItemProperty `
                 -Path 'HKCU:/Software/Microsoft/Windows/CurrentVersion/Notifications/Settings' `
-                -Name NOC_GLOBAL_SETTING_TOASTS_ENABLED -ErrorAction SilentlyContinue
-            if ($null -ne $notifications) {
-                $dnd = if ([int]$notifications -eq 0) { 1 } else { 0 }
-                [Console]::Out.WriteLine("EDITH_CONTROL_DO_NOT_DISTURB=$dnd")
-            }
-            """)
+                -ErrorAction SilentlyContinue
+            $dnd = if ($null -ne $notificationSettings -and
+                [int]$notificationSettings.NOC_GLOBAL_SETTING_TOASTS_ENABLED -eq 0) { 1 } else { 0 }
+            [Console]::Out.WriteLine("EDITH_CONTROL_DO_NOT_DISTURB=$dnd")
+            """).utf8)
 
-    public static func command(
+    public static let status = PowerShell.standardInputCommand(byteCount: statusInput.count)
+
+    public static func input(
         for action: MachineControlAction, disruptiveMarker: String
-    ) -> String {
+    ) -> Data {
         let script: String
         switch action {
         case .setBrightness(let requested):
@@ -121,7 +122,14 @@ public enum WindowsMachineControlCommands {
         case .setKeyboardBacklight:
             script = "exit 4"
         }
-        return PowerShell.command(script)
+        return Data(script.utf8)
+    }
+
+    public static func execution(
+        for action: MachineControlAction, disruptiveMarker: String
+    ) -> (command: String, input: Data) {
+        let input = input(for: action, disruptiveMarker: disruptiveMarker)
+        return (PowerShell.standardInputCommand(byteCount: input.count), input)
     }
 
     private static func radioCommand(enabled: Bool) -> String {
@@ -233,5 +241,6 @@ public enum WindowsMachineControlCommands {
         }
         '@
         Add-Type -TypeDefinition $audioSource -ErrorAction SilentlyContinue
+
         """
 }
