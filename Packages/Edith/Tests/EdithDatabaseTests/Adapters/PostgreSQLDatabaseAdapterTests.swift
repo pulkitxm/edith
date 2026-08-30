@@ -122,6 +122,7 @@ private enum PostgreSQLDatabaseAdapterFixtures {
 private actor PostgreSQLDatabaseAdapterTestClient: PostgreSQLDatabaseClient {
     private var identities: [DatabaseProductIdentity]
     private var delaysNanoseconds: [UInt64]
+    private var discoveryCount = 0
     private var disconnectCount = 0
 
     init(
@@ -133,6 +134,7 @@ private actor PostgreSQLDatabaseAdapterTestClient: PostgreSQLDatabaseClient {
     }
 
     func discoverIdentity() async throws -> DatabaseProductIdentity {
+        discoveryCount += 1
         guard !identities.isEmpty else {
             throw PostgreSQLDatabaseDriverFailure.connection
         }
@@ -168,6 +170,10 @@ private actor PostgreSQLDatabaseAdapterTestClient: PostgreSQLDatabaseClient {
     func disconnects() -> Int {
         disconnectCount
     }
+
+    func discoveries() -> Int {
+        discoveryCount
+    }
 }
 
 private actor PostgreSQLDatabaseAdapterConnectorCapture {
@@ -180,6 +186,20 @@ private actor PostgreSQLDatabaseAdapterConnectorCapture {
     func latest() -> PostgreSQLDatabaseConnectionPlan? {
         plans.last
     }
+}
+
+private func postgresqlAdapterWaitForDiscoveries(
+    _ count: Int,
+    client: PostgreSQLDatabaseAdapterTestClient
+) async -> Bool {
+    let deadline = Date().addingTimeInterval(1)
+    while Date() < deadline {
+        if await client.discoveries() >= count {
+            return true
+        }
+        try? await Task.sleep(nanoseconds: 1_000_000)
+    }
+    return await client.discoveries() >= count
 }
 
 @Test func postgresqlAdapterBuildsTypedBoundedConnectionPlan() async throws {
@@ -357,6 +377,75 @@ private actor PostgreSQLDatabaseAdapterConnectorCapture {
         _ = try await session.discoverCapabilities(
             context: PostgreSQLDatabaseAdapterFixtures.context(
                 deadline: Date().addingTimeInterval(0.05)))
+    }
+    #expect(Date().timeIntervalSince(startedAt) < 1)
+    #expect(await session.lifecycleState() == .failed)
+    #expect(await client.disconnects() == 1)
+}
+
+@Test func postgresqlAdapterCancelsActiveCapabilityDiscovery() async throws {
+    let operationID = DatabaseOperationID()
+    let cancellation = DatabaseAdapterCancellationSignal()
+    let client = PostgreSQLDatabaseAdapterTestClient(
+        identities: [
+            PostgreSQLDatabaseAdapterFixtures.identity,
+            PostgreSQLDatabaseAdapterFixtures.identity,
+        ],
+        delaysNanoseconds: [0, 5_000_000_000])
+    let adapter = PostgreSQLDatabaseAdapter { _ in client }
+    let definition = try PostgreSQLDatabaseAdapterFixtures.definition()
+    let session = try await adapter.connect(
+        PostgreSQLDatabaseAdapterFixtures.resolved(definition),
+        context: PostgreSQLDatabaseAdapterFixtures.context())
+    let discovery = Task {
+        try await session.discoverCapabilities(
+            context: PostgreSQLDatabaseAdapterFixtures.context(
+                operationID: operationID,
+                cancellation: cancellation))
+    }
+    guard await postgresqlAdapterWaitForDiscoveries(2, client: client) else {
+        discovery.cancel()
+        _ = try? await discovery.value
+        Issue.record("capability discovery did not start")
+        return
+    }
+    let startedAt = Date()
+    let result = await session.cancel(operationID)
+    #expect(result.disposition == .accepted)
+    await #expect(throws: DatabaseAdapterFailure.cancelled) {
+        _ = try await discovery.value
+    }
+    #expect(Date().timeIntervalSince(startedAt) < 1)
+    #expect(await session.lifecycleState() == .failed)
+    #expect(await client.disconnects() == 1)
+}
+
+@Test func postgresqlAdapterTaskCancellationClosesActiveClient() async throws {
+    let client = PostgreSQLDatabaseAdapterTestClient(
+        identities: [
+            PostgreSQLDatabaseAdapterFixtures.identity,
+            PostgreSQLDatabaseAdapterFixtures.identity,
+        ],
+        delaysNanoseconds: [0, 5_000_000_000])
+    let adapter = PostgreSQLDatabaseAdapter { _ in client }
+    let definition = try PostgreSQLDatabaseAdapterFixtures.definition()
+    let session = try await adapter.connect(
+        PostgreSQLDatabaseAdapterFixtures.resolved(definition),
+        context: PostgreSQLDatabaseAdapterFixtures.context())
+    let discovery = Task {
+        try await session.discoverCapabilities(
+            context: PostgreSQLDatabaseAdapterFixtures.context())
+    }
+    guard await postgresqlAdapterWaitForDiscoveries(2, client: client) else {
+        discovery.cancel()
+        _ = try? await discovery.value
+        Issue.record("capability discovery did not start")
+        return
+    }
+    let startedAt = Date()
+    discovery.cancel()
+    await #expect(throws: DatabaseAdapterFailure.cancelled) {
+        _ = try await discovery.value
     }
     #expect(Date().timeIntervalSince(startedAt) < 1)
     #expect(await session.lifecycleState() == .failed)
