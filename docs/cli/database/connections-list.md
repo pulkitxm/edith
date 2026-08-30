@@ -42,8 +42,8 @@ ed database connections list --product postgresql --environment production
 ed database connections list --tag reporting --favorites-only --order name
 ```
 
-Invalid product, environment, order, limit, or offset values exit 2 before a
-broker request is sent.
+Invalid limits and offsets exit 2. Unknown product, environment, or order names
+exit 3. Neither failure sends a broker request.
 
 ## Where to go next
 

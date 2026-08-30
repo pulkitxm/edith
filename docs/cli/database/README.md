@@ -30,14 +30,19 @@ peer before sending a request. A broker timeout, unavailable runtime, unsafe
 peer, or interrupted response exits 4 and writes diagnostics only to stderr.
 Commands are not replayed automatically.
 
+The CLI prints payloads only when the broker marks them complete. Partial,
+sampled, estimated, truncated, or stale results exit 1 with an empty stdout so
+automation cannot mistake incomplete data for a complete result. Warnings for
+an otherwise complete result remain visible on stderr.
+
 ## Exit codes
 
 | Code | Meaning |
 | --- | --- |
 | 0 | The requested connection or capability data printed. |
 | 1 | The broker returned an invalid response or an internal database failure. |
-| 2 | A UUID, list bound, enum value, or other request argument was invalid. |
-| 3 | The requested connection was not found. |
+| 2 | A UUID, list bound, or other structural request argument was invalid. |
+| 3 | A requested connection, product, environment, or order name was not found. |
 | 4 | The broker or requested database capability was unavailable. |
 
 ## Where to go next

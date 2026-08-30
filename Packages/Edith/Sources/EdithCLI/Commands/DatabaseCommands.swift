@@ -66,19 +66,45 @@ enum DatabaseCLI {
     ) throws -> Payload {
         guard response.kind == expected, let result else {
             throw CLIFailure(
-                "database broker returned (response.kind.rawValue) for (expected.rawValue)")
+                "database broker returned \(response.kind.rawValue) for \(expected.rawValue)")
         }
         switch result.status {
-        case .succeeded, .partiallySucceeded:
+        case .succeeded:
+            try requireComplete(result.metadata, expected: expected)
             guard let payload = result.payload else {
-                throw CLIFailure("database broker returned no payload for (expected.rawValue)")
+                throw CLIFailure("database broker returned no payload for \(expected.rawValue)")
             }
             return payload
+        case .partiallySucceeded:
+            let detail = result.metadata.completeness.reason ?? result.error?.message
+            throw CLIFailure(
+                "database broker returned partial results for \(expected.rawValue)",
+                hint: detail.map(TextTable.oneLine))
         case .failed:
             guard let error = result.error else {
-                throw CLIFailure("database broker returned no error for (expected.rawValue)")
+                throw CLIFailure("database broker returned no error for \(expected.rawValue)")
             }
             throw commandFailure(error)
+        }
+    }
+
+    private static func requireComplete(
+        _ metadata: DatabaseResultMetadata,
+        expected: DatabaseBrokerCommandKind
+    ) throws {
+        guard metadata.completeness.state == .complete else {
+            throw CLIFailure(
+                "database broker returned \(metadata.completeness.state.rawValue) results for \(expected.rawValue)",
+                hint: metadata.completeness.reason.map(TextTable.oneLine))
+        }
+        guard metadata.partialFailures.isEmpty else {
+            throw CLIFailure(
+                "database broker returned incomplete results for \(expected.rawValue)")
+        }
+        for warning in metadata.warnings {
+            CLIOut.note(
+                "warning [\(warning.severity.rawValue)] \(TextTable.oneLine(warning.code)): \(TextTable.oneLine(warning.message))"
+            )
         }
     }
 
@@ -440,7 +466,7 @@ enum DatabaseCLI {
         let needle = normalized(value)
         guard let resolved = supported.first(where: { normalized(rawValue($0)) == needle }) else {
             throw CLIFailure.notFound(
-                "no (name) named (value)",
+                "no \(name) named \(value)",
                 hint: "values: " + supported.map(rawValue).joined(separator: ", "))
         }
         return resolved
@@ -564,7 +590,7 @@ struct DatabaseConnectionsGetCommand: AsyncParsableCommand {
                 expected: .connectionGet)
             guard let connection = payload.connection else {
                 throw CLIFailure.notFound(
-                    "no saved database connection with id (connectionID)",
+                    "no saved database connection with id \(connectionID)",
                     hint: "run `ed database connections list --json` to see connection IDs")
             }
             guard !json else {
@@ -624,7 +650,7 @@ struct DatabaseCapabilitiesCommand: AsyncParsableCommand {
                 return
             }
             let identity = payload.report.productIdentity
-            let version = identity.version?.string ?? "unknown"
+            let version = TextTable.oneLine(identity.version?.string ?? "unknown")
             CLIOut.out("product: \(identity.product.displayName) \(version)")
             CLIOut.out("topology: \(identity.topology.kind.rawValue)")
             CLIOut.out("source: \(payload.source.rawValue)")
