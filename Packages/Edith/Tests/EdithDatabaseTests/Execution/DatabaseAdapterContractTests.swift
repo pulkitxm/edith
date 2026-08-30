@@ -473,4 +473,23 @@ private enum DatabaseAdapterContractFixtures {
                     count: DatabaseAdapterBounds.maximumServerOperationIdentifierBytes + 1))
         }
     }
+
+    @Test func mutationResultRejectsIncompleteReturnedPages() throws {
+        let page = try DatabaseAdapterPage(
+            records: [],
+            metadata: DatabasePageMetadata(
+                completeness: DatabaseResultCompleteness(
+                    state: .partial,
+                    reason: "A shard did not respond."),
+                count: DatabaseCountMetadata(value: 0, accuracy: .lowerBound)))
+
+        #expect(
+            throws: DatabaseAdapterFailure.contractViolation(.partialMutationResult)
+        ) {
+            try DatabaseAdapterMutationResult(
+                disposition: .completed,
+                affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .lowerBound),
+                returnedPage: page)
+        }
+    }
 }

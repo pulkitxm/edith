@@ -98,7 +98,8 @@ private enum DatabaseExecutorFixtures {
     static func report(
         identity: DatabaseProductIdentity,
         discoveredAt: Date = now.addingTimeInterval(-10),
-        includesQuery: Bool = false
+        includesQuery: Bool = false,
+        includesMutation: Bool = false
     ) -> DatabaseCapabilityReport {
         var capabilities = [
             DatabaseCapabilityStatus(
@@ -117,9 +118,17 @@ private enum DatabaseExecutorFixtures {
                     requirement: .sharedRequired,
                     availability: .available))
         }
+        if includesMutation {
+            capabilities.append(
+                DatabaseCapabilityStatus(
+                    id: .administration,
+                    requirement: .sharedRequired,
+                    availability: .available))
+        }
         return DatabaseCapabilityReport(
             productIdentity: identity,
             capabilities: capabilities,
+            mutationModes: includesMutation ? [.boundedBatch] : [],
             discoveredAt: discoveredAt,
             expiresAt: now.addingTimeInterval(600))
     }
@@ -138,23 +147,32 @@ private enum DatabaseExecutorFixtures {
                 count: DatabaseCountMetadata(value: 0, accuracy: .exact)))
     }
 
+    static func mutationRequest(
+        connection: DatabaseConnectionDefinition,
+        command: String = "maintenance"
+    ) -> DatabaseDestructiveRequest {
+        DatabaseDestructiveRequest(
+            target: target(connection.id),
+            payload: .administrative(
+                product: connection.productHint,
+                command: command,
+                parameters: [],
+                body: nil))
+    }
+
     static func mutationPlan(
-        connection: DatabaseConnectionDefinition
+        connection: DatabaseConnectionDefinition,
+        request: DatabaseDestructiveRequest? = nil,
+        impactDescription: String = "No records"
     ) -> DatabaseDestructivePlan {
-        let target = target(connection.id)
+        let request = request ?? mutationRequest(connection: connection)
         return DatabaseDestructivePlan(
-            request: DatabaseDestructiveRequest(
-                target: target,
-                payload: .administrative(
-                    product: connection.productHint,
-                    command: "maintenance",
-                    parameters: [],
-                    body: nil)),
+            request: request,
             action: .maintenance,
             scope: .entireObject,
             impact: DatabaseMutationImpact(
                 count: DatabaseCountMetadata(value: 0, accuracy: .exact),
-                description: "No records"),
+                description: impactDescription),
             transactionBehavior: .productDependent,
             rollbackAvailability: .unavailable,
             executionMode: .synchronous)
@@ -186,7 +204,8 @@ private enum DatabaseExecutorFixtures {
         report: DatabaseCapabilityReport? = nil,
         secretValues: [DatabaseSecretReference: Data] = [:],
         saveConnection: Bool = true,
-        adapterGates: DatabaseExecutorTestAdapterGates = DatabaseExecutorTestAdapterGates()
+        adapterGates: DatabaseExecutorTestAdapterGates = DatabaseExecutorTestAdapterGates(),
+        sessionGates: DatabaseExecutorTestSessionGates = DatabaseExecutorTestSessionGates()
     ) async throws -> DatabaseExecutorTestFixture {
         let connection = try connection ?? self.connection()
         let report = report ?? self.report(identity: identity(product: connection.productHint))
@@ -200,7 +219,10 @@ private enum DatabaseExecutorFixtures {
             claimedAt: now.addingTimeInterval(-1)
         ).owner.token
         let secretStore = try InMemoryDatabaseSecretStore(initialValues: secretValues)
-        let session = try self.session(connection: connection, report: report)
+        let session = try self.session(
+            connection: connection,
+            report: report,
+            gates: sessionGates)
         let adapter = DatabaseExecutorRecordingAdapter(
             id: DatabaseAdapterID(rawValue: "recording-\(connection.productHint.rawValue)"),
             products: [connection.productHint],
@@ -228,6 +250,26 @@ private enum DatabaseExecutorFixtures {
     static func discoveryCount(_ snapshot: DatabaseExecutorTestSessionSnapshot) -> Int {
         snapshot.invocations.reduce(into: 0) { count, invocation in
             if case .discoverCapabilities = invocation {
+                count += 1
+            }
+        }
+    }
+
+    static func mutationNormalizationCount(
+        _ snapshot: DatabaseExecutorTestSessionSnapshot
+    ) -> Int {
+        snapshot.invocations.reduce(into: 0) { count, invocation in
+            if case .normalizeMutation = invocation {
+                count += 1
+            }
+        }
+    }
+
+    static func mutationExecutionCount(
+        _ snapshot: DatabaseExecutorTestSessionSnapshot
+    ) -> Int {
+        snapshot.invocations.reduce(into: 0) { count, invocation in
+            if case .executeMutation = invocation {
                 count += 1
             }
         }
@@ -620,6 +662,235 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
 }
 
 @Suite struct DatabaseExecutorTests {
+    @Test func mutationPreviewNormalizesWithoutExecuting() async throws {
+        let report = DatabaseExecutorFixtures.report(
+            identity: DatabaseExecutorFixtures.identity(),
+            includesMutation: true)
+        let fixture = try await DatabaseExecutorFixtures.make(report: report)
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let mutation = DatabaseExecutorFixtures.mutationRequest(
+            connection: fixture.connection)
+        let operation = DatabaseExecutorFixtures.operation(66)
+
+        let result = await fixture.executor.previewMutation(
+            DatabaseMutationPreviewRequest(
+                mutation: mutation,
+                operation: operation))
+
+        #expect(result.status == .succeeded)
+        #expect(result.payload?.preview.effect.target == mutation.target)
+        #expect(result.metadata.operation?.id == operation.operationID)
+        #expect(result.metadata.operation?.kind == .databaseMutationPreview)
+        let snapshot = await fixture.session.snapshot()
+        #expect(DatabaseExecutorFixtures.mutationNormalizationCount(snapshot) == 1)
+        #expect(DatabaseExecutorFixtures.mutationExecutionCount(snapshot) == 0)
+    }
+
+    @Test func mutationPreviewRejectsAPlanForADifferentRequest() async throws {
+        let report = DatabaseExecutorFixtures.report(
+            identity: DatabaseExecutorFixtures.identity(),
+            includesMutation: true)
+        let fixture = try await DatabaseExecutorFixtures.make(report: report)
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let mutation = DatabaseExecutorFixtures.mutationRequest(
+            connection: fixture.connection)
+        let different = DatabaseExecutorFixtures.mutationRequest(
+            connection: fixture.connection,
+            command: "different maintenance")
+        await fixture.session.setMutationPlan(
+            DatabaseExecutorFixtures.mutationPlan(
+                connection: fixture.connection,
+                request: different))
+
+        let result = await fixture.executor.previewMutation(
+            DatabaseMutationPreviewRequest(
+                mutation: mutation,
+                operation: DatabaseExecutorFixtures.operation(67)))
+
+        #expect(result.status == .failed)
+        #expect(result.error?.category == .internalFailure)
+        let snapshot = await fixture.session.snapshot()
+        #expect(DatabaseExecutorFixtures.mutationNormalizationCount(snapshot) == 1)
+        #expect(DatabaseExecutorFixtures.mutationExecutionCount(snapshot) == 0)
+    }
+
+    @Test func mutationApplyRejectsChangedPlansAndConsumesSuccessfulTokensOnce() async throws {
+        let report = DatabaseExecutorFixtures.report(
+            identity: DatabaseExecutorFixtures.identity(),
+            includesMutation: true)
+        let fixture = try await DatabaseExecutorFixtures.make(report: report)
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let mutation = DatabaseExecutorFixtures.mutationRequest(
+            connection: fixture.connection)
+        let preview = await fixture.executor.previewMutation(
+            DatabaseMutationPreviewRequest(
+                mutation: mutation,
+                operation: DatabaseExecutorFixtures.operation(68)))
+        let issued = try #require(preview.payload?.preview)
+        await fixture.session.setMutationPlan(
+            DatabaseExecutorFixtures.mutationPlan(
+                connection: fixture.connection,
+                request: mutation,
+                impactDescription: "Changed impact"))
+
+        let mismatch = await fixture.executor.applyMutation(
+            DatabaseMutationApplyRequest(
+                mutation: mutation,
+                token: issued.token,
+                confirmationText: issued.requiredConfirmation.text,
+                operation: DatabaseExecutorFixtures.operation(69)))
+
+        #expect(mismatch.status == .failed)
+        #expect(mismatch.error?.category == .confirmationInvalid)
+        #expect(
+            DatabaseExecutorFixtures.mutationExecutionCount(
+                await fixture.session.snapshot()) == 0)
+
+        await fixture.session.setMutationPlan(
+            DatabaseExecutorFixtures.mutationPlan(
+                connection: fixture.connection,
+                request: mutation))
+        let wrongConfirmation = await fixture.executor.applyMutation(
+            DatabaseMutationApplyRequest(
+                mutation: mutation,
+                token: issued.token,
+                confirmationText: issued.requiredConfirmation.text + "x",
+                operation: DatabaseExecutorFixtures.operation(70)))
+
+        #expect(wrongConfirmation.status == .failed)
+        #expect(wrongConfirmation.error?.category == .confirmationInvalid)
+        #expect(
+            DatabaseExecutorFixtures.mutationExecutionCount(
+                await fixture.session.snapshot()) == 0)
+
+        let applied = await fixture.executor.applyMutation(
+            DatabaseMutationApplyRequest(
+                mutation: mutation,
+                token: issued.token,
+                confirmationText: issued.requiredConfirmation.text,
+                operation: DatabaseExecutorFixtures.operation(71)))
+        let replayed = await fixture.executor.applyMutation(
+            DatabaseMutationApplyRequest(
+                mutation: mutation,
+                token: issued.token,
+                confirmationText: issued.requiredConfirmation.text,
+                operation: DatabaseExecutorFixtures.operation(79)))
+
+        #expect(applied.status == .succeeded)
+        #expect(applied.payload?.disposition == .completed)
+        #expect(applied.metadata.operation?.kind == .databaseMutationApply)
+        #expect(applied.metadata.operation?.retryClassification == .requiresNewPreview)
+        #expect(replayed.status == .failed)
+        #expect(replayed.error?.category == .confirmationInvalid)
+        #expect(
+            DatabaseExecutorFixtures.mutationExecutionCount(
+                await fixture.session.snapshot()) == 1)
+    }
+
+    @Test func cancelledMutationApplyDoesNotExecuteOrConsumeItsToken() async throws {
+        let normalizationGate = DatabaseExecutorTestGate()
+        let report = DatabaseExecutorFixtures.report(
+            identity: DatabaseExecutorFixtures.identity(),
+            includesMutation: true)
+        let fixture = try await DatabaseExecutorFixtures.make(
+            report: report,
+            sessionGates: DatabaseExecutorTestSessionGates(
+                normalizeMutation: normalizationGate))
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let mutation = DatabaseExecutorFixtures.mutationRequest(
+            connection: fixture.connection)
+        let preview = await fixture.executor.previewMutation(
+            DatabaseMutationPreviewRequest(
+                mutation: mutation,
+                operation: DatabaseExecutorFixtures.operation(72)))
+        let issued = try #require(preview.payload?.preview)
+        await normalizationGate.block()
+        let applyOperation = DatabaseExecutorFixtures.operation(73)
+        let applyTask = Task {
+            await fixture.executor.applyMutation(
+                DatabaseMutationApplyRequest(
+                    mutation: mutation,
+                    token: issued.token,
+                    confirmationText: issued.requiredConfirmation.text,
+                    operation: applyOperation))
+        }
+        await normalizationGate.waitForEntries(2)
+
+        let cancellation = await fixture.executor.cancel(
+            DatabaseOperationCancelRequest(operationID: applyOperation.operationID))
+        await normalizationGate.releaseAll()
+        let cancelled = await applyTask.value
+
+        #expect(cancellation.payload?.disposition == .accepted)
+        #expect(cancelled.status == .failed)
+        #expect(cancelled.error?.category == .cancelled)
+        #expect(
+            DatabaseExecutorFixtures.mutationExecutionCount(
+                await fixture.session.snapshot()) == 0)
+
+        let retried = await fixture.executor.applyMutation(
+            DatabaseMutationApplyRequest(
+                mutation: mutation,
+                token: issued.token,
+                confirmationText: issued.requiredConfirmation.text,
+                operation: DatabaseExecutorFixtures.operation(74)))
+
+        #expect(retried.status == .succeeded)
+        let snapshot = await fixture.session.snapshot()
+        #expect(DatabaseExecutorFixtures.mutationExecutionCount(snapshot) == 1)
+        #expect(snapshot.cancelledOperationIDs.contains(applyOperation.operationID))
+    }
+
+    @Test func brokerDispatcherRoutesMutationPreviewAndApplyThroughTheExecutor() async throws {
+        let report = DatabaseExecutorFixtures.report(
+            identity: DatabaseExecutorFixtures.identity(),
+            includesMutation: true)
+        let fixture = try await DatabaseExecutorFixtures.make(report: report)
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let dispatcher = try DatabaseBrokerCommandDispatcher(
+            handler: DatabaseBrokerExecutorHandler(executor: fixture.executor))
+        let mutation = DatabaseExecutorFixtures.mutationRequest(
+            connection: fixture.connection)
+        let previewOperation = DatabaseExecutorFixtures.operation(75)
+        let previewRequestID = DatabaseExecutorFixtures.uuid(76)
+        let previewEnvelope = DatabaseBrokerCommandRequest.mutationPreview(
+            DatabaseMutationPreviewRequest(
+                mutation: mutation,
+                operation: previewOperation)
+        ).envelope(requestID: previewRequestID, sequence: 10)
+
+        let previewResponse = try await dispatcher.dispatch(
+            previewEnvelope,
+            responseSequence: 11)
+        let previewResult = try #require(previewResponse.payload.mutationPreviewResult)
+        let issued = try #require(previewResult.payload?.preview)
+
+        #expect(previewResponse.requestID == previewRequestID)
+        #expect(previewResponse.operationID == previewOperation.operationID)
+        #expect(previewResult.status == .succeeded)
+
+        let applyOperation = DatabaseExecutorFixtures.operation(77)
+        let applyRequestID = DatabaseExecutorFixtures.uuid(78)
+        let applyEnvelope = DatabaseBrokerCommandRequest.mutationApply(
+            DatabaseMutationApplyRequest(
+                mutation: mutation,
+                token: issued.token,
+                confirmationText: issued.requiredConfirmation.text,
+                operation: applyOperation)
+        ).envelope(requestID: applyRequestID, sequence: 12)
+        let applyResponse = try await dispatcher.dispatch(
+            applyEnvelope,
+            responseSequence: 13)
+        let applyResult = try #require(applyResponse.payload.mutationApplyResult)
+
+        #expect(applyResponse.requestID == applyRequestID)
+        #expect(applyResponse.operationID == applyOperation.operationID)
+        #expect(applyResult.status == .succeeded)
+        #expect(
+            DatabaseExecutorFixtures.mutationExecutionCount(
+                await fixture.session.snapshot()) == 1)
+    }
+
     @Test func connectAndDisconnectReturnTypedResultsAndPersistTerminalHistory() async throws {
         let fixture = try await DatabaseExecutorFixtures.make()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
