@@ -362,7 +362,9 @@ struct DatabaseBrokerRuntimeDependencies: Sendable {
         ) throws -> DatabaseBrokerRuntimeAcceptSource
     let observeShutdownRequest: @Sendable (DatabaseBrokerRuntimeShutdownReason) -> Void
 
-    static func live() -> DatabaseBrokerRuntimeDependencies {
+    static func live(
+        commandDispatcher: DatabaseBrokerCommandDispatcher? = nil
+    ) -> DatabaseBrokerRuntimeDependencies {
         DatabaseBrokerRuntimeDependencies(
             acquireOwnership: { paths in
                 DatabaseBrokerLiveRuntimeOwnership(
@@ -370,7 +372,8 @@ struct DatabaseBrokerRuntimeDependencies: Sendable {
                         paths: paths))
             },
             makeTransport: {
-                try DatabaseBrokerRuntimeTransport.live()
+                try DatabaseBrokerRuntimeTransport.live(
+                    commandDispatcher: commandDispatcher)
             },
             makeAcceptSource: { socketDescriptor, onReadable in
                 DatabaseBrokerRuntimeAcceptSource.live(
