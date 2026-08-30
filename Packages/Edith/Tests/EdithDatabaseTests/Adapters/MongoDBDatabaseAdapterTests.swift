@@ -362,7 +362,7 @@ private actor MongoDBDatabaseConversionCancellationProbe {
     let definition = try MongoDBDatabaseAdapterFixtures.definition(
         location: .network([
             DatabaseNetworkEndpoint(
-                host: "127.0.0.1",
+                host: "localhost",
                 port: try DatabasePort(port),
                 role: .seed)
         ]),
@@ -398,6 +398,18 @@ private actor MongoDBDatabaseConversionCancellationProbe {
                     port: try DatabasePort(27_017))
             ])),
         try MongoDBDatabaseAdapterFixtures.definition(
+            location: .network([
+                DatabaseNetworkEndpoint(
+                    host: String(repeating: "a", count: 64) + ".test",
+                    port: try DatabasePort(27_017))
+            ])),
+        try MongoDBDatabaseAdapterFixtures.definition(
+            location: .network([
+                DatabaseNetworkEndpoint(
+                    host: "mongo.exámple.test",
+                    port: try DatabasePort(27_017))
+            ])),
+        try MongoDBDatabaseAdapterFixtures.definition(
             deploymentMode: .cluster),
         try MongoDBDatabaseAdapterFixtures.definition(
             tls: DatabaseTLSConfiguration(mode: .preferred, verification: .full)),
@@ -409,6 +421,21 @@ private actor MongoDBDatabaseConversionCancellationProbe {
         #expect(throws: DatabaseAdapterFailure.self) {
             try MongoDBDatabaseAdapterSupport.connectionPlan(resolved)
         }
+    }
+}
+
+@Test func mongoReadingConnectionRejectsUnsupportedSCRAMPasswordsBeforeNetwork() throws {
+    let reference = DatabaseSecretReference(identifier: UUID(), purpose: .password)
+    let definition = try MongoDBDatabaseAdapterFixtures.definition(
+        username: "reader",
+        authentication: DatabaseAuthentication(
+            kind: .scram,
+            secretReferences: [reference]))
+    #expect(throws: DatabaseAdapterFailure.self) {
+        try MongoDBDatabaseAdapterSupport.connectionPlan(
+            try MongoDBDatabaseAdapterFixtures.resolved(
+                definition,
+                secrets: [reference: Data("password\u{00AD}".utf8)]))
     }
 }
 
