@@ -50,7 +50,77 @@ struct DatabaseBrokerProcessRuntime: Sendable {
         observeShutdownRequest:
             @escaping @Sendable (DatabaseBrokerRuntimeShutdownReason) -> Void
     ) -> DatabaseBrokerProcessRuntime {
-        let liveDependencies = DatabaseBrokerRuntimeDependencies.live()
+        let controller = DatabaseBrokerLiveProcessRuntimeController(
+            paths: paths,
+            observeShutdownRequest: observeShutdownRequest)
+        return DatabaseBrokerProcessRuntime(
+            start: {
+                try await controller.start()
+            },
+            shutdown: {
+                await controller.shutdown()
+            },
+            waitUntilStopped: {
+                await controller.waitUntilStopped()
+            },
+            shutdownReason: {
+                await controller.shutdownReason()
+            })
+    }
+}
+
+private actor DatabaseBrokerLiveProcessRuntimeController {
+    private struct Resources: Sendable {
+        let id: UUID
+        let runtime: DatabaseBrokerRuntime
+        let metadataStore: SQLiteDatabaseMetadataStore
+        let executor: DatabaseExecutor
+        let owner: DatabaseRuntimeOwnerToken
+    }
+
+    private let paths: DatabaseBrokerPaths
+    private let observeShutdownRequest: @Sendable (DatabaseBrokerRuntimeShutdownReason) -> Void
+    private var resources: Resources?
+    private var lastShutdownReason: DatabaseBrokerRuntimeShutdownReason?
+
+    init(
+        paths: DatabaseBrokerPaths,
+        observeShutdownRequest:
+            @escaping @Sendable (DatabaseBrokerRuntimeShutdownReason) -> Void
+    ) {
+        self.paths = paths
+        self.observeShutdownRequest = observeShutdownRequest
+    }
+
+    func start() async throws {
+        guard resources == nil else {
+            throw DatabaseBrokerRuntimeError.invalidPhase
+        }
+        let metadataStore = try SQLiteDatabaseMetadataStore(
+            path: paths.metadataFile.path)
+        let secretStore = try DatabaseKeychainSecretStore()
+        let claim = try await DatabaseRuntimeOwnerFactory.claimReadyOwner(
+            from: metadataStore,
+            claimedAt: Date())
+        let owner = claim.owner.token
+        let executor: DatabaseExecutor
+        let dispatcher: DatabaseBrokerCommandDispatcher
+        do {
+            executor = try DatabaseExecutor(
+                metadataStore: metadataStore,
+                secretStore: secretStore,
+                runtimeOwner: owner,
+                adapters: DatabaseBrokerLiveAdapterFactory.make())
+            dispatcher = try DatabaseBrokerCommandDispatcher(
+                handler: DatabaseBrokerExecutorHandler(executor: executor))
+        } catch {
+            _ = try? await metadataStore.releaseRuntimeOwner(
+                owner,
+                releasedAt: Date())
+            throw error
+        }
+        let liveDependencies = DatabaseBrokerRuntimeDependencies.live(
+            commandDispatcher: dispatcher)
         let runtime = DatabaseBrokerRuntime(
             paths: paths,
             dependencies: DatabaseBrokerRuntimeDependencies(
@@ -58,19 +128,63 @@ struct DatabaseBrokerProcessRuntime: Sendable {
                 makeTransport: liveDependencies.makeTransport,
                 makeAcceptSource: liveDependencies.makeAcceptSource,
                 observeShutdownRequest: observeShutdownRequest))
-        return DatabaseBrokerProcessRuntime(
-            start: {
-                try await runtime.start()
-            },
-            shutdown: {
-                await runtime.shutdown()
-            },
-            waitUntilStopped: {
-                await runtime.waitUntilStopped()
-            },
-            shutdownReason: {
-                await runtime.snapshot().shutdownReason
-            })
+        let resources = Resources(
+            id: UUID(),
+            runtime: runtime,
+            metadataStore: metadataStore,
+            executor: executor,
+            owner: owner)
+        self.resources = resources
+        do {
+            try await runtime.start()
+        } catch {
+            if self.resources?.id == resources.id {
+                self.resources = nil
+                await cleanup(resources)
+            }
+            throw error
+        }
+    }
+
+    func shutdown() async {
+        guard let resources else { return }
+        self.resources = nil
+        await resources.runtime.shutdown()
+        await cleanup(resources)
+    }
+
+    func waitUntilStopped() async {
+        guard let resources else { return }
+        await resources.runtime.waitUntilStopped()
+        guard self.resources?.id == resources.id else { return }
+        self.resources = nil
+        await cleanup(resources)
+    }
+
+    func shutdownReason() async -> DatabaseBrokerRuntimeShutdownReason? {
+        if let resources {
+            return await resources.runtime.snapshot().shutdownReason
+        }
+        return lastShutdownReason
+    }
+
+    private func cleanup(_ resources: Resources) async {
+        lastShutdownReason = await resources.runtime.snapshot().shutdownReason
+        await resources.executor.disconnectAll()
+        _ = try? await resources.metadataStore.releaseRuntimeOwner(
+            resources.owner,
+            releasedAt: Date())
+    }
+}
+
+private enum DatabaseBrokerLiveAdapterFactory {
+    static func make() -> [any DatabaseAdapter] {
+        [
+            SQLiteDatabaseAdapter(),
+            RedisValkeyDatabaseAdapter(),
+            MongoDBDatabaseAdapter(),
+            PostgreSQLDatabaseAdapter(),
+        ]
     }
 }
 
