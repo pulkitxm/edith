@@ -123,7 +123,7 @@ let targets: [Target] = [
     ),
     .executableTarget(
         name: "EdithMain",
-        dependencies: ["Edith", "EdithCLI"],
+        dependencies: ["Edith", "EdithCLI", "EdithDatabase"],
         swiftSettings: [.swiftLanguageMode(.v5)],
         linkerSettings: [
             .unsafeFlags([
