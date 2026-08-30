@@ -133,4 +133,18 @@ private final class StreamLines: @unchecked Sendable {
         stream.cancel()
         #expect(await stream.waitForExit() == 130)
     }
+
+    @Test func releasingAStreamTerminatesItsProcess() async throws {
+        let child = process("sleep 30")
+        var stream: SSHLineStream? = SSHLineStream(
+            process: child, onLine: { _, _ in }, onExit: { _ in })
+        try stream?.start()
+        #expect(child.isRunning)
+        stream = nil
+        for _ in 0..<40 {
+            if !child.isRunning { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        #expect(!child.isRunning)
+    }
 }

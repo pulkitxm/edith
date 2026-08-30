@@ -81,6 +81,10 @@ public final class SSHLineStream: @unchecked Sendable {
         self.onExit = onExit
     }
 
+    deinit {
+        cancel()
+    }
+
     public func start() throws {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe

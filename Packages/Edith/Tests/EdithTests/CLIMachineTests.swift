@@ -11,6 +11,12 @@ import Testing
     static let manual = Machine(name: "Builder", host: "10.0.0.9", port: 2222, username: "root")
     static let all = [alias, manual]
 
+    @Test func remoteCommandsReuseTheAppConnection() {
+        let runner = RemoteRunner(machine: Self.alias)
+        #expect(
+            runner.ssh.controlSocketPath == MachinePaths.socketFile(for: Self.alias.id).path)
+    }
+
     @Test func namesIncludeBothTheLabelAndTheSSHAlias() {
         #expect(MachineDirectory.names(from: Self.all) == ["Asus TUF 7", "tuf", "Builder"])
     }

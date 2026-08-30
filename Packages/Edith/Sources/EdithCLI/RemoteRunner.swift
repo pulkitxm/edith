@@ -7,7 +7,7 @@ public struct RemoteRunner {
 
     public init(machine: Machine) {
         self.machine = machine
-        connection = SSHConnection(machine: machine)
+        connection = SSHConnection(machine: machine, controlSocketMode: .shared)
     }
 
     public var ssh: SSHConnection { connection }
