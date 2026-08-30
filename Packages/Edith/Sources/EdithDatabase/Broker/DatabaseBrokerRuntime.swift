@@ -211,9 +211,66 @@ struct DatabaseBrokerRuntimeAcceptSource: Sendable {
     }
 }
 
+protocol DatabaseBrokerRuntimeOwnership: Sendable {
+    func release()
+    func consumeIntoListener(
+        paths: DatabaseBrokerPaths
+    ) throws -> DatabaseBrokerRuntimeListener
+}
+
+private final class DatabaseBrokerLiveRuntimeOwnership:
+    DatabaseBrokerRuntimeOwnership, @unchecked Sendable
+{
+    private enum State {
+        case owned
+        case consumed
+        case released
+    }
+
+    private let stateLock = NSLock()
+    private let runtimeLock: DatabaseRuntimeLock
+    private var state = State.owned
+
+    init(runtimeLock: DatabaseRuntimeLock) {
+        self.runtimeLock = runtimeLock
+    }
+
+    func release() {
+        stateLock.lock()
+        guard case .owned = state else {
+            stateLock.unlock()
+            return
+        }
+        state = .released
+        stateLock.unlock()
+        runtimeLock.release()
+    }
+
+    func consumeIntoListener(
+        paths: DatabaseBrokerPaths
+    ) throws -> DatabaseBrokerRuntimeListener {
+        stateLock.lock()
+        guard case .owned = state else {
+            stateLock.unlock()
+            throw DatabaseRuntimeLockError.notHeld
+        }
+        state = .consumed
+        stateLock.unlock()
+        return DatabaseBrokerRuntimeListener(
+            socketListener: try DatabaseBrokerSocketListener.listen(
+                paths: paths,
+                runtimeLock: runtimeLock))
+    }
+
+    deinit {
+        release()
+    }
+}
+
 struct DatabaseBrokerRuntimeDependencies: Sendable {
+    let acquireOwnership:
+        @Sendable (DatabaseBrokerPaths) throws -> any DatabaseBrokerRuntimeOwnership
     let makeTransport: @Sendable () throws -> DatabaseBrokerRuntimeTransport
-    let makeListener: @Sendable (DatabaseBrokerPaths) throws -> DatabaseBrokerRuntimeListener
     let makeAcceptSource:
         @Sendable (
             Int32,
@@ -223,12 +280,13 @@ struct DatabaseBrokerRuntimeDependencies: Sendable {
 
     static func live() -> DatabaseBrokerRuntimeDependencies {
         DatabaseBrokerRuntimeDependencies(
+            acquireOwnership: { paths in
+                DatabaseBrokerLiveRuntimeOwnership(
+                    runtimeLock: try DatabaseBrokerSocketListener.acquireOwnership(
+                        paths: paths))
+            },
             makeTransport: {
                 try DatabaseBrokerRuntimeTransport.live()
-            },
-            makeListener: { paths in
-                DatabaseBrokerRuntimeListener(
-                    socketListener: try DatabaseBrokerSocketListener.listen(paths: paths))
             },
             makeAcceptSource: { socketDescriptor, onReadable in
                 DatabaseBrokerRuntimeAcceptSource.live(
@@ -293,9 +351,25 @@ actor DatabaseBrokerRuntime {
         let paths = paths
         let dependencies = dependencies
         let startupTask = Task.detached(priority: .userInitiated) {
-            let transport = try dependencies.makeTransport()
-            let listener = try dependencies.makeListener(paths)
+            let ownership = try dependencies.acquireOwnership(paths)
+            let transport: DatabaseBrokerRuntimeTransport
             do {
+                try Task.checkCancellation()
+                transport = try dependencies.makeTransport()
+                try Task.checkCancellation()
+            } catch {
+                ownership.release()
+                throw error
+            }
+            let listener: DatabaseBrokerRuntimeListener
+            do {
+                listener = try ownership.consumeIntoListener(paths: paths)
+            } catch {
+                ownership.release()
+                throw error
+            }
+            do {
+                try Task.checkCancellation()
                 return StartupResources(
                     transport: transport,
                     listener: listener,

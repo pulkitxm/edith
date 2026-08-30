@@ -159,6 +159,12 @@ private final class DatabaseBrokerRuntimeTestListener: @unchecked Sendable {
             })
     }
 
+    func runtimeOwnership() -> DatabaseBrokerRuntimeTestOwnership {
+        DatabaseBrokerRuntimeTestOwnership(eventLog: eventLog) {
+            self.runtimeListener()
+        }
+    }
+
     func waitForAcceptCount(_ target: Int) async {
         await withCheckedContinuation { continuation in
             let shouldResume = state.update { state in
@@ -210,6 +216,102 @@ private final class DatabaseBrokerRuntimeTestListener: @unchecked Sendable {
             return nil
         case .failure:
             throw DatabaseBrokerRuntimeTestError.fixtureFailure
+        }
+    }
+}
+
+private final class DatabaseBrokerRuntimeTestOwnership:
+    DatabaseBrokerRuntimeOwnership, @unchecked Sendable
+{
+    private enum Phase {
+        case owned
+        case consumed
+        case released
+    }
+
+    private struct State {
+        var phase = Phase.owned
+        var consumeCount = 0
+        var releaseCount = 0
+    }
+
+    private let eventLog: DatabaseBrokerRuntimeTestEventLog
+    private let makeListener: @Sendable () throws -> DatabaseBrokerRuntimeListener
+    private let state = DatabaseBrokerRuntimeTestLockedValue(State())
+
+    init(
+        eventLog: DatabaseBrokerRuntimeTestEventLog,
+        makeListener: @escaping @Sendable () throws -> DatabaseBrokerRuntimeListener
+    ) {
+        self.eventLog = eventLog
+        self.makeListener = makeListener
+    }
+
+    var consumeCount: Int {
+        state.value.consumeCount
+    }
+
+    var releaseCount: Int {
+        state.value.releaseCount
+    }
+
+    func release() {
+        let didRelease = state.update { state in
+            guard case .owned = state.phase else { return false }
+            state.phase = .released
+            state.releaseCount += 1
+            return true
+        }
+        if didRelease {
+            eventLog.append("ownership-released")
+        }
+    }
+
+    func consumeIntoListener(
+        paths _: DatabaseBrokerPaths
+    ) throws -> DatabaseBrokerRuntimeListener {
+        let didConsume = state.update { state in
+            guard case .owned = state.phase else { return false }
+            state.phase = .consumed
+            state.consumeCount += 1
+            return true
+        }
+        guard didConsume else {
+            throw DatabaseRuntimeLockError.notHeld
+        }
+        eventLog.append("listener-construction-started")
+        let listener: DatabaseBrokerRuntimeListener
+        do {
+            listener = try makeListener()
+        } catch {
+            releaseConsumedOwnership()
+            throw error
+        }
+        eventLog.append("listener-created")
+        return DatabaseBrokerRuntimeListener(
+            socketDescriptor: {
+                let descriptor = try listener.socketDescriptor()
+                self.eventLog.append("descriptor-obtained")
+                return descriptor
+            },
+            accept: {
+                try listener.accept()
+            },
+            close: {
+                listener.close()
+                self.releaseConsumedOwnership()
+            })
+    }
+
+    private func releaseConsumedOwnership() {
+        let didRelease = state.update { state in
+            guard case .consumed = state.phase else { return false }
+            state.phase = .released
+            state.releaseCount += 1
+            return true
+        }
+        if didRelease {
+            eventLog.append("ownership-released")
         }
     }
 }
@@ -406,13 +508,18 @@ private final class DatabaseBrokerRuntimeTestShutdownRecorder: @unchecked Sendab
 private final class DatabaseBrokerRuntimeTestStartupGate: @unchecked Sendable {
     private let semaphore = DispatchSemaphore(value: 0)
     private let eventLog: DatabaseBrokerRuntimeTestEventLog
+    private let blockedEvent: String
 
-    init(eventLog: DatabaseBrokerRuntimeTestEventLog) {
+    init(
+        eventLog: DatabaseBrokerRuntimeTestEventLog,
+        blockedEvent: String = "startup-blocked"
+    ) {
         self.eventLog = eventLog
+        self.blockedEvent = blockedEvent
     }
 
     func wait() {
-        eventLog.append("startup-blocked")
+        eventLog.append(blockedEvent)
         semaphore.wait()
     }
 
@@ -428,8 +535,8 @@ private func databaseBrokerRuntimeTestDependencies(
     shutdownRecorder: DatabaseBrokerRuntimeTestShutdownRecorder
 ) -> DatabaseBrokerRuntimeDependencies {
     DatabaseBrokerRuntimeDependencies(
+        acquireOwnership: { _ in listener.runtimeOwnership() },
         makeTransport: { transport },
-        makeListener: { _ in listener.runtimeListener() },
         makeAcceptSource: { _, onReadable in
             source.runtimeSource(onReadable: onReadable)
         },
@@ -751,6 +858,280 @@ struct DatabaseBrokerRuntimeTests {
     }
 
     @Test
+    func startupAcquiresOwnershipBeforeTransportAndListenerConstruction() async throws {
+        let eventLog = DatabaseBrokerRuntimeTestEventLog()
+        let listener = DatabaseBrokerRuntimeTestListener(eventLog: eventLog)
+        let ownership = DatabaseBrokerRuntimeTestOwnership(eventLog: eventLog) {
+            listener.runtimeListener()
+        }
+        let source = DatabaseBrokerRuntimeTestAcceptSource(eventLog: eventLog)
+        let shutdownRecorder = DatabaseBrokerRuntimeTestShutdownRecorder()
+        let dependencies = DatabaseBrokerRuntimeDependencies(
+            acquireOwnership: { _ in
+                eventLog.append("ownership-acquired")
+                return ownership
+            },
+            makeTransport: {
+                eventLog.append("transport-created")
+                return DatabaseBrokerRuntimeTransport { _, _ in
+                    .unexpectedFailure
+                }
+            },
+            makeAcceptSource: { _, onReadable in
+                source.runtimeSource(onReadable: onReadable)
+            },
+            observeShutdownRequest: { reason in
+                shutdownRecorder.record(reason)
+            })
+        let runtime = DatabaseBrokerRuntime(dependencies: dependencies)
+
+        try await runtime.start()
+
+        #expect(
+            Array(eventLog.events.prefix(6)) == [
+                "ownership-acquired",
+                "transport-created",
+                "listener-construction-started",
+                "listener-created",
+                "descriptor-obtained",
+                "source-activated",
+            ])
+        #expect(ownership.consumeCount == 1)
+        #expect(ownership.releaseCount == 0)
+
+        await runtime.shutdown()
+
+        #expect(listener.closeCount == 1)
+        #expect(ownership.releaseCount == 1)
+    }
+
+    @Test
+    func ownershipLoserSkipsTransportAndListenerConstruction() async {
+        let eventLog = DatabaseBrokerRuntimeTestEventLog()
+        let transportConstructionCount = DatabaseBrokerRuntimeTestLockedValue(0)
+        let source = DatabaseBrokerRuntimeTestAcceptSource(eventLog: eventLog)
+        let shutdownRecorder = DatabaseBrokerRuntimeTestShutdownRecorder()
+        let dependencies = DatabaseBrokerRuntimeDependencies(
+            acquireOwnership: { _ in
+                eventLog.append("ownership-acquisition-attempted")
+                throw DatabaseBrokerSocketError.listenerAlreadyRunning
+            },
+            makeTransport: {
+                transportConstructionCount.update { $0 += 1 }
+                eventLog.append("transport-created")
+                return DatabaseBrokerRuntimeTransport { _, _ in
+                    .unexpectedFailure
+                }
+            },
+            makeAcceptSource: { _, onReadable in
+                source.runtimeSource(onReadable: onReadable)
+            },
+            observeShutdownRequest: { reason in
+                shutdownRecorder.record(reason)
+            })
+        let runtime = DatabaseBrokerRuntime(dependencies: dependencies)
+
+        await #expect(throws: DatabaseBrokerSocketError.listenerAlreadyRunning) {
+            try await runtime.start()
+        }
+
+        #expect(eventLog.events == ["ownership-acquisition-attempted"])
+        #expect(transportConstructionCount.value == 0)
+        #expect(!source.isActivated)
+        #expect(await runtime.snapshot().shutdownReason == .startupFailure)
+        #expect(shutdownRecorder.reasons == [.startupFailure])
+    }
+
+    @Test
+    func transportFailureReleasesOwnershipBeforeListenerConstruction() async {
+        let eventLog = DatabaseBrokerRuntimeTestEventLog()
+        let listener = DatabaseBrokerRuntimeTestListener(eventLog: eventLog)
+        let ownership = DatabaseBrokerRuntimeTestOwnership(eventLog: eventLog) {
+            listener.runtimeListener()
+        }
+        let shutdownRecorder = DatabaseBrokerRuntimeTestShutdownRecorder()
+        let dependencies = DatabaseBrokerRuntimeDependencies(
+            acquireOwnership: { _ in
+                eventLog.append("ownership-acquired")
+                return ownership
+            },
+            makeTransport: {
+                eventLog.append("transport-construction-failed")
+                throw DatabaseBrokerRuntimeTestError.fixtureFailure
+            },
+            makeAcceptSource: { _, _ in
+                throw DatabaseBrokerRuntimeTestError.fixtureFailure
+            },
+            observeShutdownRequest: { reason in
+                shutdownRecorder.record(reason)
+            })
+        let runtime = DatabaseBrokerRuntime(dependencies: dependencies)
+
+        await #expect(throws: DatabaseBrokerRuntimeTestError.fixtureFailure) {
+            try await runtime.start()
+        }
+
+        #expect(
+            eventLog.events == [
+                "ownership-acquired",
+                "transport-construction-failed",
+                "ownership-released",
+            ])
+        #expect(ownership.consumeCount == 0)
+        #expect(ownership.releaseCount == 1)
+        #expect(listener.closeCount == 0)
+        #expect(shutdownRecorder.reasons == [.startupFailure])
+    }
+
+    @Test
+    func listenerFailureReleasesConsumedOwnershipExactlyOnce() async {
+        let eventLog = DatabaseBrokerRuntimeTestEventLog()
+        let ownership = DatabaseBrokerRuntimeTestOwnership(eventLog: eventLog) {
+            throw DatabaseBrokerRuntimeTestError.fixtureFailure
+        }
+        let shutdownRecorder = DatabaseBrokerRuntimeTestShutdownRecorder()
+        let dependencies = DatabaseBrokerRuntimeDependencies(
+            acquireOwnership: { _ in
+                eventLog.append("ownership-acquired")
+                return ownership
+            },
+            makeTransport: {
+                eventLog.append("transport-created")
+                return DatabaseBrokerRuntimeTransport { _, _ in
+                    .unexpectedFailure
+                }
+            },
+            makeAcceptSource: { _, _ in
+                throw DatabaseBrokerRuntimeTestError.fixtureFailure
+            },
+            observeShutdownRequest: { reason in
+                shutdownRecorder.record(reason)
+            })
+        let runtime = DatabaseBrokerRuntime(dependencies: dependencies)
+
+        await #expect(throws: DatabaseBrokerRuntimeTestError.fixtureFailure) {
+            try await runtime.start()
+        }
+
+        #expect(
+            eventLog.events == [
+                "ownership-acquired",
+                "transport-created",
+                "listener-construction-started",
+                "ownership-released",
+            ])
+        #expect(ownership.consumeCount == 1)
+        #expect(ownership.releaseCount == 1)
+        #expect(shutdownRecorder.reasons == [.startupFailure])
+    }
+
+    @Test
+    func shutdownDuringBlockedOwnershipAcquisitionSkipsStartupSideEffects() async {
+        let eventLog = DatabaseBrokerRuntimeTestEventLog()
+        let startupGate = DatabaseBrokerRuntimeTestStartupGate(
+            eventLog: eventLog,
+            blockedEvent: "ownership-acquisition-blocked")
+        let listener = DatabaseBrokerRuntimeTestListener(eventLog: eventLog)
+        let ownership = DatabaseBrokerRuntimeTestOwnership(eventLog: eventLog) {
+            listener.runtimeListener()
+        }
+        let source = DatabaseBrokerRuntimeTestAcceptSource(eventLog: eventLog)
+        let transportConstructionCount = DatabaseBrokerRuntimeTestLockedValue(0)
+        let dependencies = DatabaseBrokerRuntimeDependencies(
+            acquireOwnership: { _ in
+                startupGate.wait()
+                eventLog.append("ownership-acquired")
+                return ownership
+            },
+            makeTransport: {
+                transportConstructionCount.update { $0 += 1 }
+                return DatabaseBrokerRuntimeTransport { _, _ in
+                    .unexpectedFailure
+                }
+            },
+            makeAcceptSource: { _, onReadable in
+                source.runtimeSource(onReadable: onReadable)
+            },
+            observeShutdownRequest: { _ in
+                eventLog.append("shutdown-requested")
+            })
+        let runtime = DatabaseBrokerRuntime(dependencies: dependencies)
+        let startTask = Task {
+            try await runtime.start()
+        }
+
+        await eventLog.wait(for: "ownership-acquisition-blocked")
+        let shutdownTask = Task {
+            await runtime.shutdown()
+        }
+        await eventLog.wait(for: "shutdown-requested")
+        #expect(await runtime.snapshot().phase == .draining)
+        startupGate.release()
+
+        await #expect(throws: CancellationError.self) {
+            try await startTask.value
+        }
+        await shutdownTask.value
+
+        #expect(transportConstructionCount.value == 0)
+        #expect(ownership.consumeCount == 0)
+        #expect(ownership.releaseCount == 1)
+        #expect(listener.closeCount == 0)
+        #expect(!source.isActivated)
+        #expect(await runtime.snapshot().phase == .stopped)
+    }
+
+    @Test
+    func shutdownDuringBlockedTransportSkipsListenerConstruction() async {
+        let eventLog = DatabaseBrokerRuntimeTestEventLog()
+        let startupGate = DatabaseBrokerRuntimeTestStartupGate(
+            eventLog: eventLog,
+            blockedEvent: "transport-construction-blocked")
+        let listener = DatabaseBrokerRuntimeTestListener(eventLog: eventLog)
+        let ownership = DatabaseBrokerRuntimeTestOwnership(eventLog: eventLog) {
+            listener.runtimeListener()
+        }
+        let source = DatabaseBrokerRuntimeTestAcceptSource(eventLog: eventLog)
+        let dependencies = DatabaseBrokerRuntimeDependencies(
+            acquireOwnership: { _ in ownership },
+            makeTransport: {
+                startupGate.wait()
+                return DatabaseBrokerRuntimeTransport { _, _ in
+                    .unexpectedFailure
+                }
+            },
+            makeAcceptSource: { _, onReadable in
+                source.runtimeSource(onReadable: onReadable)
+            },
+            observeShutdownRequest: { _ in
+                eventLog.append("shutdown-requested")
+            })
+        let runtime = DatabaseBrokerRuntime(dependencies: dependencies)
+        let startTask = Task {
+            try await runtime.start()
+        }
+
+        await eventLog.wait(for: "transport-construction-blocked")
+        let shutdownTask = Task {
+            await runtime.shutdown()
+        }
+        await eventLog.wait(for: "shutdown-requested")
+        #expect(await runtime.snapshot().phase == .draining)
+        startupGate.release()
+
+        await #expect(throws: CancellationError.self) {
+            try await startTask.value
+        }
+        await shutdownTask.value
+
+        #expect(ownership.consumeCount == 0)
+        #expect(ownership.releaseCount == 1)
+        #expect(listener.closeCount == 0)
+        #expect(!source.isActivated)
+        #expect(await runtime.snapshot().phase == .stopped)
+    }
+
+    @Test
     func blockingStartupWorkDoesNotOccupyTheActor() async throws {
         let eventLog = DatabaseBrokerRuntimeTestEventLog()
         let startupGate = DatabaseBrokerRuntimeTestStartupGate(eventLog: eventLog)
@@ -761,11 +1142,11 @@ struct DatabaseBrokerRuntimeTests {
             .unexpectedFailure
         }
         let dependencies = DatabaseBrokerRuntimeDependencies(
+            acquireOwnership: { _ in listener.runtimeOwnership() },
             makeTransport: {
                 startupGate.wait()
                 return transport
             },
-            makeListener: { _ in listener.runtimeListener() },
             makeAcceptSource: { _, onReadable in
                 source.runtimeSource(onReadable: onReadable)
             },
@@ -794,21 +1175,23 @@ struct DatabaseBrokerRuntimeTests {
         let shutdownRecorder = DatabaseBrokerRuntimeTestShutdownRecorder()
         let listenerClosed = DatabaseBrokerRuntimeTestLockedValue(false)
         let dependencies = DatabaseBrokerRuntimeDependencies(
+            acquireOwnership: { _ in
+                DatabaseBrokerRuntimeTestOwnership(eventLog: eventLog) {
+                    DatabaseBrokerRuntimeListener(
+                        socketDescriptor: {
+                            throw DatabaseBrokerRuntimeTestError.fixtureFailure
+                        },
+                        accept: { nil },
+                        close: {
+                            listenerClosed.update { $0 = true }
+                            eventLog.append("listener-closed")
+                        })
+                }
+            },
             makeTransport: {
                 DatabaseBrokerRuntimeTransport { _, _ in
                     .unexpectedFailure
                 }
-            },
-            makeListener: { _ in
-                DatabaseBrokerRuntimeListener(
-                    socketDescriptor: {
-                        throw DatabaseBrokerRuntimeTestError.fixtureFailure
-                    },
-                    accept: { nil },
-                    close: {
-                        listenerClosed.update { $0 = true }
-                        eventLog.append("listener-closed")
-                    })
             },
             makeAcceptSource: { _, _ in
                 throw DatabaseBrokerRuntimeTestError.fixtureFailure
