@@ -477,6 +477,21 @@ import Testing
         #expect(command.contains("_completion_loader"))
     }
 
+    @Test func remoteCompletionUsesPowerShellOnWindows() {
+        let commands = RemoteCompletion.commandNamesCommand(prefix: "doc", platform: .windows)
+        let directories = RemoteCompletion.directoriesCommand(
+            prefix: "C:\\Us", platform: .windows)
+        let arguments = RemoteCompletion.harnessCommand(
+            words: ["docker", "ps", ""], cursor: 2, platform: .windows)
+
+        #expect(commands.contains("Get-Command"))
+        #expect(commands.contains("'doc*'"))
+        #expect(directories.contains("Get-ChildItem -Directory"))
+        #expect(directories.contains("[WildcardPattern]::Escape"))
+        #expect(arguments.contains("CommandCompletion]::CompleteInput"))
+        #expect(!commands.contains("compgen"))
+    }
+
     @Test func everyCompletionTreeNodeExistsInTheParser() throws {
         var missing: [String] = []
         check(node: CommandTree.root, command: EdRoot.self, path: [], missing: &missing)

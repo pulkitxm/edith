@@ -51,6 +51,71 @@ public enum MachineFacts {
         esac
         """
 
+    public static func systemCommand(for platform: RemoteMachinePlatform) -> String {
+        switch platform {
+        case .darwin, .linux:
+            "uname -srm 2>/dev/null"
+        case .windows:
+            PowerShell.command(
+                "$os=Get-CimInstance Win32_OperatingSystem; "
+                    + "[Console]::Out.Write("
+                    + "$os.Caption+' '+$os.Version+' '+$os.OSArchitecture)")
+        }
+    }
+
+    public static func uptimeCommand(for platform: RemoteMachinePlatform) -> String {
+        switch platform {
+        case .darwin, .linux:
+            "uptime 2>/dev/null"
+        case .windows:
+            PowerShell.command(
+                "$os=Get-CimInstance Win32_OperatingSystem; "
+                    + "$span=[DateTime]::Now-$os.LastBootUpTime; "
+                    + "[Console]::Out.Write("
+                    + "('{0} days, {1:00}:{2:00}' -f [int]$span.TotalDays,$span.Hours,$span.Minutes))"
+            )
+        }
+    }
+
+    public static func whoCommand(for platform: RemoteMachinePlatform) -> String {
+        switch platform {
+        case .darwin, .linux:
+            whoCommand
+        case .windows:
+            PowerShell.command(
+                "$users=@(Get-CimInstance Win32_LoggedOnUser | ForEach-Object { "
+                    + "if ($_.Antecedent -match 'Name=\"([^\"]+)\"') { $matches[1] } "
+                    + "} | Sort-Object -Unique); "
+                    + "if ($users.Count -eq 0) { $users=@($env:USERNAME) }; "
+                    + "$users | ForEach-Object { [Console]::Out.WriteLine($_+' on Windows') }")
+        }
+    }
+
+    public static func macAddressCommand(for platform: RemoteMachinePlatform) -> String {
+        switch platform {
+        case .darwin, .linux:
+            macAddressCommand
+        case .windows:
+            PowerShell.command(
+                "$adapter=Get-CimInstance Win32_NetworkAdapterConfiguration | "
+                    + "Where-Object { $_.IPEnabled -and $_.MACAddress } | Select-Object -First 1; "
+                    + "if ($adapter) { [Console]::Out.Write($adapter.MACAddress.ToLower()) }")
+        }
+    }
+
+    public static func updatesCommand(for platform: RemoteMachinePlatform) -> String {
+        switch platform {
+        case .darwin, .linux:
+            updatesCommand
+        case .windows:
+            PowerShell.command(
+                "$session=New-Object -ComObject Microsoft.Update.Session; "
+                    + "$searcher=$session.CreateUpdateSearcher(); "
+                    + "$result=$searcher.Search(\"IsInstalled=0 and Type='Software'\"); "
+                    + "[Console]::Out.Write($result.Updates.Count)")
+        }
+    }
+
     public static func parseWho(_ output: String) -> [String] {
         output.split(separator: "\n").compactMap { line in
             let parts = line.split(separator: " ", omittingEmptySubsequences: true)
@@ -59,6 +124,19 @@ public enum MachineFacts {
             let tty = String(parts[1])
             let rest = parts.dropFirst(2).joined(separator: " ")
             return "\(user) on \(tty) since \(rest)"
+        }
+    }
+
+    public static func parseWho(
+        _ output: String, platform: RemoteMachinePlatform
+    ) -> [String] {
+        switch platform {
+        case .darwin, .linux:
+            parseWho(output)
+        case .windows:
+            output.split(separator: "\n").map {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            }.filter { !$0.isEmpty }
         }
     }
 
@@ -77,14 +155,20 @@ public enum MachineFacts {
 }
 
 public enum PowerCommands {
-    public static func reboot(withSudoPassword: Bool = false) -> String {
-        withSudoPassword
+    public static func reboot(
+        withSudoPassword: Bool = false, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        if platform == .windows { return WindowsSystemCommands.reboot() }
+        return withSudoPassword
             ? "sudo -S -p '' shutdown -r now 2>&1"
             : "sudo -n shutdown -r now 2>&1"
     }
 
-    public static func shutdown(withSudoPassword: Bool = false) -> String {
-        withSudoPassword
+    public static func shutdown(
+        withSudoPassword: Bool = false, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        if platform == .windows { return WindowsSystemCommands.shutdown() }
+        return withSudoPassword
             ? "sudo -S -p '' shutdown -h now 2>&1"
             : "sudo -n shutdown -h now 2>&1"
     }
@@ -93,15 +177,23 @@ public enum PowerCommands {
 public enum ServiceCommands {
     public static let actions = ["start", "stop", "restart"]
 
-    public static func list() -> String {
-        "systemctl list-units --type=service --all --no-pager --no-legend --plain 2>/dev/null"
+    public static func list(platform: RemoteMachinePlatform = .linux) -> String {
+        if platform == .windows { return WindowsSystemCommands.listServices() }
+        return
+            "systemctl list-units --type=service --all --no-pager --no-legend --plain 2>/dev/null"
             + " | head -200"
     }
 
-    public static func action(_ action: String, unit: String, withSudoPassword: Bool = false)
+    public static func action(
+        _ action: String, unit: String, withSudoPassword: Bool = false,
+        platform: RemoteMachinePlatform = .linux
+    )
         -> String
     {
         guard actions.contains(action) else { return "false" }
+        if platform == .windows {
+            return WindowsSystemCommands.serviceAction(action, name: unit)
+        }
         guard withSudoPassword else {
             return "systemctl \(action) \(ShellQuote.quote(unit)) 2>&1 || "
                 + "sudo -n systemctl \(action) \(ShellQuote.quote(unit)) 2>&1"
@@ -109,7 +201,13 @@ public enum ServiceCommands {
         return "sudo -S -p '' systemctl \(action) \(ShellQuote.quote(unit)) 2>&1"
     }
 
-    public static func journal(unit: String, lines: Int, follow: Bool) -> String {
+    public static func journal(
+        unit: String, lines: Int, follow: Bool,
+        platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        if platform == .windows {
+            return WindowsSystemCommands.serviceJournal(name: unit, lines: lines)
+        }
         var command = "journalctl -u \(ShellQuote.quote(unit)) -n \(lines) --no-pager"
         if follow { command += " -f" }
         return command + " 2>&1"
@@ -124,6 +222,14 @@ public enum ProcessCommands {
     public static func kill(pid: Int, signal: String) -> String {
         "if kill -0 \(pid) 2>/dev/null; then "
             + "kill -\(signal) \(pid) 2>&1; else echo \(goneMarker); fi"
+    }
+
+    public static func kill(
+        pid: Int, signal: String, platform: RemoteMachinePlatform
+    ) -> String {
+        platform == .windows
+            ? WindowsSystemCommands.kill(pid: pid, force: signal == "KILL")
+            : kill(pid: pid, signal: signal)
     }
 
     public static func hadAlreadyExited(_ output: String) -> Bool {
@@ -175,6 +281,21 @@ extension ServiceCommands {
                 unit: String(parts[0]), load: String(parts[1]), active: String(parts[2]),
                 sub: String(parts[3]),
                 describes: parts.count > 4 ? String(parts[4]) : "")
+        }
+    }
+
+    public static func parse(
+        _ output: String, platform: RemoteMachinePlatform
+    ) -> [SystemdService] {
+        guard platform == .windows else { return parse(output) }
+        return output.split(separator: "\n").compactMap { line in
+            let fields = line.components(separatedBy: WindowsSystemCommands.serviceSeparator)
+            guard fields.count == 4 else { return nil }
+            let state = fields[1].lowercased()
+            return SystemdService(
+                unit: fields[0], load: fields[2].lowercased(),
+                active: state == "running" ? "active" : "inactive",
+                sub: state, describes: fields[3])
         }
     }
 }

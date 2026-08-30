@@ -419,7 +419,7 @@ struct DockerConsoleView: View {
         error = nil
         Task {
             let result = await DockerLifecycleOperationExecution.perform(
-                operation, target: target,
+                operation, target: target, platform: session.remotePlatform ?? .linux,
                 using: { command, timeout in
                     await session.runDocker(command, timeout: timeout)
                 })
@@ -441,14 +441,16 @@ struct DockerConsoleView: View {
         }
         guard let operation = MachineDockerPauseOperation(rawValue: action) else {
             performCommand(
-                DockerCommands.lifecycle(action, ids: ids), on: id, describing: describing)
+                DockerCommands.lifecycle(
+                    action, ids: ids, platform: session.remotePlatform ?? .linux),
+                on: id, describing: describing)
             return
         }
         busyIDs.insert(id)
         error = nil
         Task {
             let result = await MachineDockerPauseOperationExecution.perform(
-                operation, containerIDs: ids,
+                operation, containerIDs: ids, platform: session.remotePlatform ?? .linux,
                 using: { command, _ in await session.runDocker(command) })
             busyIDs.remove(id)
             if case let .failure(failure) = result {

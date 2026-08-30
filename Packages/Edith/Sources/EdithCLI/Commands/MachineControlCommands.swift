@@ -32,6 +32,10 @@ final class MachineControlTarget {
     let isLocal: Bool
     private let connection: SSHConnection?
 
+    var remotePlatform: RemoteMachinePlatform? {
+        get async { await connection?.remotePlatform }
+    }
+
     init(query: String) async throws {
         if ["local", "this-mac", "thismac"].contains(query.lowercased()) {
             machine = .local
@@ -78,7 +82,9 @@ final class MachineControlTarget {
 enum MachineControlCLI {
     static func status(machine query: String, json: Bool) async throws {
         let target = try await MachineControlTarget(query: query)
-        let result = await MachineControlOperationExecution.status { command, stdin, timeout in
+        let platform = await controlPlatform(target)
+        let result = await MachineControlOperationExecution.status(platform: platform) {
+            command, stdin, timeout in
             await target.run(command, stdin: stdin, timeout: timeout)
         }
         let snapshot = try resolved(result, target: target)
@@ -99,11 +105,13 @@ enum MachineControlCLI {
         confirmed: Bool = true
     ) async throws {
         let target = try await MachineControlTarget(query: query)
+        let platform = await controlPlatform(target)
         if action.isDisruptive, !confirmed {
             renderPreview(action, target: target, json: json)
             return
         }
-        let status = await MachineControlOperationExecution.status { command, stdin, timeout in
+        let status = await MachineControlOperationExecution.status(platform: platform) {
+            command, stdin, timeout in
             await target.run(command, stdin: stdin, timeout: timeout)
         }
         let snapshot = try resolved(status, target: target)
@@ -139,6 +147,13 @@ enum MachineControlCLI {
                 "could not read controls from \(target.machine.name)",
                 hint: PowerOutcome.explain(error))
         }
+    }
+
+    private static func controlPlatform(_ target: MachineControlTarget) async
+        -> MachineControlPlatform
+    {
+        guard !target.isLocal else { return .darwin }
+        return MachineControlPlatform(await target.remotePlatform ?? .linux)
     }
 
     private static func statusRows(_ snapshot: MachineControlSnapshot) -> [[String]] {

@@ -57,11 +57,18 @@ public enum MachineThermalOperationExecution {
     public typealias SudoPasswordLookup = (UUID) -> Data?
 
     public static func status(
-        timeout: TimeInterval = 15, using run: Run
+        timeout: TimeInterval = 15, platform: RemoteMachinePlatform = .linux, using run: Run
     ) async -> Result<MachinePlatformProfile, Error> {
-        switch await run(MachineThermalControls.statusCommand, nil, timeout) {
+        let command =
+            platform == .windows
+            ? WindowsPowerProfileCommands.status : MachineThermalControls.statusCommand
+        switch await run(command, nil, timeout) {
         case let .success(output):
-            guard let profile = MachineThermalControls.parseStatus(output) else {
+            let profile =
+                platform == .windows
+                ? WindowsPowerProfileCommands.parseStatus(output)
+                : MachineThermalControls.parseStatus(output)
+            guard let profile else {
                 return .failure(MachineThermalOperationError.unavailable)
             }
             return .success(profile)
@@ -72,17 +79,21 @@ public enum MachineThermalOperationExecution {
 
     public static func set(
         profile: String, durationSeconds: Int, machineID: UUID,
+        platform: RemoteMachinePlatform = .linux,
         sudoPassword: SudoPasswordLookup = { SudoPassword.stdin(machineID: $0) },
         using run: Run
     ) async -> Result<MachineThermalSetResult, Error> {
         guard (0...604_800).contains(durationSeconds) else {
             return .failure(MachineThermalOperationError.invalidDuration(durationSeconds))
         }
-        let stdin = sudoPassword(machineID)
-        guard
-            let command = MachineThermalControls.setProfile(
+        let stdin = platform == .windows ? nil : sudoPassword(machineID)
+        let command =
+            platform == .windows
+            ? WindowsPowerProfileCommands.setProfile(
+                profile, durationSeconds: durationSeconds)
+            : MachineThermalControls.setProfile(
                 profile, durationSeconds: durationSeconds, withSudoPassword: stdin != nil)
-        else {
+        guard let command else {
             return .failure(MachineThermalOperationError.invalidProfile(profile))
         }
         switch await run(command, stdin, 30) {
@@ -120,8 +131,10 @@ public struct MachineDockerShellLaunch: Equatable, Sendable {
 }
 
 public enum MachineExecOperationExecution {
-    public static func dockerShellCommand(containerID: String) -> String {
-        DockerCommands.execShell(containerID: containerID)
+    public static func dockerShellCommand(
+        containerID: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        DockerCommands.execShell(containerID: containerID, platform: platform)
     }
 
     public static func dockerShellLaunch(
@@ -135,12 +148,15 @@ public enum MachineExecOperationExecution {
     }
 
     public static func interactiveCommand(
-        words: [String], workingDirectory: String?
+        words: [String], workingDirectory: String?, platform: RemoteMachinePlatform = .linux
     ) -> String? {
         guard !words.isEmpty else { return nil }
-        let command = words.joined(separator: " ")
+        let command =
+            platform == .windows
+            ? PowerShell.invocation(words)!
+            : words.joined(separator: " ")
         return MachineWorkingDirectory.prefixed(
-            command, directory: workingDirectory)
+            command, directory: workingDirectory, platform: platform, interactive: true)
     }
 }
 
@@ -194,7 +210,8 @@ public enum MachineMountOperationExecution {
 
     public static func perform(
         _ operation: MachineMountOperation, machine: Machine, remotePath: String = "/",
-        mountPoint: URL? = nil, readOnly: Bool = false, restoreDefault: Bool = false,
+        platform: RemoteMachinePlatform = .linux, mountPoint: URL? = nil,
+        readOnly: Bool = false, restoreDefault: Bool = false,
         restore: Restore = { await MachineMounts.restore(machine: $0) },
         mount: Mount = {
             try await MachineMounts.mount(
@@ -220,7 +237,8 @@ public enum MachineMountOperationExecution {
                         break
                     }
                 }
-                let mounted = try await mount(machine, remotePath, mountPoint, readOnly)
+                let normalized = MachineMounts.remotePath(remotePath, platform: platform)
+                let mounted = try await mount(machine, normalized, mountPoint, readOnly)
                 return .success(
                     MachineMountOperationResult(operation: operation, mount: mounted))
             case .unmount:

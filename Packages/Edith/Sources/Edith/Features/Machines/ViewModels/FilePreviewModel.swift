@@ -157,7 +157,8 @@ final class FilePreviewModel {
                 preview.text, language: entry.fileExtension, truncated: preview.truncated)
             return
         }
-        let command = RemoteFileOperationExecution.previewCommand(path: entry.path)
+        let command = RemoteFileOperationExecution.previewCommand(
+            path: entry.path, platform: session.remotePlatform ?? .linux)
         let result = await session.runCommand(command, timeout: 45)
         guard !Task.isCancelled else { return }
         switch result {

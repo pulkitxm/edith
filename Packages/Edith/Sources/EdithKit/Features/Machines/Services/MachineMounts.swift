@@ -134,6 +134,20 @@ public enum MachineMounts {
         root.appendingPathComponent(folderName(for: machine))
     }
 
+    public static func remotePath(
+        _ path: String, platform: RemoteMachinePlatform
+    ) -> String {
+        guard platform == .windows else { return path }
+        let normalized = path.replacingOccurrences(of: "\\", with: "/")
+        let withoutRoot = normalized.hasPrefix("/") ? String(normalized.dropFirst()) : normalized
+        guard withoutRoot.count >= 2 else { return normalized }
+        let drive = withoutRoot[withoutRoot.startIndex]
+        let colon = withoutRoot.index(after: withoutRoot.startIndex)
+        guard drive.isLetter, withoutRoot[colon] == ":" else { return normalized }
+        let suffix = String(withoutRoot[withoutRoot.index(after: colon)...])
+        return "/\(drive.uppercased()):" + (suffix.hasPrefix("/") ? suffix : "/" + suffix)
+    }
+
     public static func executable() -> URL? {
         CLIToolEnvironment.executable(named: toolName)
     }

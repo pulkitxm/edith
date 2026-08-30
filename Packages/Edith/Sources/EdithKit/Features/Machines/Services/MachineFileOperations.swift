@@ -142,13 +142,15 @@ public enum MachineFileOperationExecution {
     public typealias Trash = ([String]) async -> Result<Void, Error>
 
     public static func search(
-        path: String, query: String, limit: Int = 300, localSearch: LocalSearch? = nil,
+        path: String, query: String, limit: Int = 300,
+        platform: RemoteMachinePlatform = .linux, localSearch: LocalSearch? = nil,
         using run: Run
     ) async -> Result<[MachineFileSearchItem], Error> {
         guard limit > 0 else { return .failure(MachineFileOperationError.invalidLimit) }
         if let localSearch { return await localSearch(path, query, limit) }
         let result = await run(
-            FileOperations.searchCommand(path: path, query: query, limit: limit), 120)
+            FileOperations.searchCommand(
+                path: path, query: query, limit: limit, platform: platform), 120)
         return result.map { output in
             output.split(separator: "\n").map {
                 MachineFileSearchItem(path: String($0))
@@ -157,9 +159,10 @@ public enum MachineFileOperationExecution {
     }
 
     public static func info(
-        path: String, using run: Run
+        path: String, platform: RemoteMachinePlatform = .linux, using run: Run
     ) async -> Result<Int64, Error> {
-        let result = await run(FileOperations.directorySizeCommand(path: path), 120)
+        let result = await run(
+            FileOperations.directorySizeCommand(path: path, platform: platform), 120)
         return result.flatMap { output in
             let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
             guard let kilobytes = Int64(trimmed) else {
@@ -170,10 +173,12 @@ public enum MachineFileOperationExecution {
     }
 
     public static func duplicate(
-        path: String, destination: String? = nil, using run: Run
+        path: String, destination: String? = nil,
+        platform: RemoteMachinePlatform = .linux, using run: Run
     ) async -> Result<String, Error> {
         let result = await run(
-            FileOperations.duplicateCommand(path: path, destination: destination), 300)
+            FileOperations.duplicateCommand(
+                path: path, destination: destination, platform: platform), 300)
         return result.flatMap { output in
             let created = output.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !created.isEmpty else {
@@ -184,7 +189,8 @@ public enum MachineFileOperationExecution {
     }
 
     public static func rename(
-        path: String, name: String, viaTemporary: Bool = false, using run: Run
+        path: String, name: String, viaTemporary: Bool = false,
+        platform: RemoteMachinePlatform = .linux, using run: Run
     ) async -> Result<String, Error> {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard RenameSelection.isValid(trimmed) else {
@@ -194,21 +200,25 @@ public enum MachineFileOperationExecution {
         let destination =
             parent.isEmpty ? trimmed : FileListing.join(parent: parent, name: trimmed)
         return await rename(
-            path: path, destination: destination, viaTemporary: viaTemporary, using: run)
+            path: path, destination: destination, viaTemporary: viaTemporary,
+            platform: platform, using: run)
     }
 
     public static func rename(
-        path: String, destination: String, viaTemporary: Bool = false, using run: Run
+        path: String, destination: String, viaTemporary: Bool = false,
+        platform: RemoteMachinePlatform = .linux, using run: Run
     ) async -> Result<String, Error> {
         let result = await run(
             FileOperations.renameCommand(
-                path: path, to: destination, viaTemporary: viaTemporary),
+                path: path, to: destination, viaTemporary: viaTemporary,
+                platform: platform),
             300)
         return result.map { _ in destination }
     }
 
     public static func remove(
-        _ plan: MachineFileRemovalPlan, confirmed: Bool, trash: Trash? = nil,
+        _ plan: MachineFileRemovalPlan, confirmed: Bool,
+        platform: RemoteMachinePlatform = .linux, trash: Trash? = nil,
         using run: Run
     ) async -> Result<MachineFileRemovalOutcome, Error> {
         guard !plan.paths.isEmpty else {
@@ -220,17 +230,19 @@ public enum MachineFileOperationExecution {
         }
         let command =
             plan.permanently
-            ? FileOperations.deleteCommand(paths: plan.paths)
-            : FileOperations.trashCommand(paths: plan.paths)
+            ? FileOperations.deleteCommand(paths: plan.paths, platform: platform)
+            : FileOperations.trashCommand(paths: plan.paths, platform: platform)
         return await run(command, 300).map { _ in .applied(plan) }
     }
 
     public static func undo(
-        _ step: FinderUndoStep, using run: Run
+        _ step: FinderUndoStep, platform: RemoteMachinePlatform = .linux,
+        using run: Run
     ) async -> Result<[String], Error> {
         for move in step.moves.reversed() {
             let result = await run(
-                FileOperations.renameCommand(path: move.to, to: move.from), 300)
+                FileOperations.renameCommand(
+                    path: move.to, to: move.from, platform: platform), 300)
             if case let .failure(error) = result { return .failure(error) }
         }
         return .success(step.moves.map(\.from))

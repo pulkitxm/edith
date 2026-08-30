@@ -11,6 +11,8 @@ Everything here is the Tools tab of a machine window as a command, plus the
 terminal's broadcast bar. Nothing here needs the Edith app to be running:
 `status` reads the machine file on disk, `wake` opens a UDP socket, and the rest
 go out over `/usr/bin/ssh` on the ControlMaster socket Edith and `ed` share.
+Linux uses systemd and POSIX signals. Windows uses PowerShell service cmdlets,
+`Stop-Process`, `Restart-Computer` and `Stop-Computer`.
 
 Most of this page is disruptive. Read the next table before you type anything.
 
@@ -20,7 +22,7 @@ Most of this page is disruptive. Read the next table before you type anything.
 | `ed machines power reboot` | Yes, and it takes the machine down. Refuses to act without `--yes`. |
 | `ed machines power shutdown` | Yes, and the machine will not come back without `wake` or a physical power button. Refuses to act without `--yes`. |
 | `ed machines power wake` | Mildly. It puts one broadcast packet on the local network and nothing else. |
-| `ed machines services ls` | No. Reads `systemctl list-units`. |
+| `ed machines services ls` | No. Reads systemd units or Windows services. |
 | `ed machines services start` | Yes, it changes a unit's state. No confirmation flag. |
 | `ed machines services stop` | Yes, it changes a unit's state. No confirmation flag. |
 | `ed machines services restart` | Yes, it changes a unit's state. No confirmation flag. |
@@ -35,14 +37,14 @@ signals, catchable process signals, and `broadcast` act immediately.
 | Command | What it does |
 | --- | --- |
 | `ed machines power status` | Reports whether a shared connection is open, the stored MAC address, and which power verbs are possible right now. Runs when you type `ed machines power <machine>` with no verb. |
-| `ed machines power reboot` | Restarts the machine through systemd. Does nothing without `--yes`. Aliased as `restart`. |
-| `ed machines power shutdown` | Powers the machine off through systemd. Does nothing without `--yes`. Aliased as `poweroff`. |
+| `ed machines power reboot` | Restarts the machine through the native operating system command. Does nothing without `--yes`. Aliased as `restart`. |
+| `ed machines power shutdown` | Powers the machine off through the native operating system command. Does nothing without `--yes`. Aliased as `poweroff`. |
 | `ed machines power wake` | Sends a wake-on-LAN magic packet to the machine's stored MAC address. The one verb that works while the machine is off. |
-| `ed machines services ls` | Lists systemd service units, with `--failed` to narrow to broken ones. Runs when you type `ed machines services <machine>` with no verb. |
+| `ed machines services ls` | Lists systemd units or Windows services, with `--failed` to narrow to broken ones. Runs when you type `ed machines services <machine>` with no verb. |
 | `ed machines services start` | Starts one unit. |
 | `ed machines services stop` | Stops one unit. |
 | `ed machines services restart` | Restarts one unit. |
-| `ed machines kill` | Sends a signal to one process id, `TERM` unless you name another. |
+| `ed machines kill` | Sends a signal to one process id on POSIX systems, or stops the process on Windows. `KILL` forces the Windows operation. |
 | `ed machines broadcast` | Runs one command on every configured machine, labels each machine's output, and exits 1 if any of them failed. |
 
 ## Two ways to name the machine

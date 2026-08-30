@@ -4,6 +4,13 @@ import Testing
 @testable import EdithCore
 @testable import EdithKit
 
+private func decodedMachinePowerShell(_ command: String) -> String? {
+    guard let encoded = command.split(separator: " ").last,
+        let data = Data(base64Encoded: String(encoded))
+    else { return nil }
+    return String(data: data, encoding: .utf16LittleEndian)
+}
+
 @Suite struct ShellQuoteTests {
     @Test func passesSafeStringsThrough() {
         #expect(ShellQuote.quote("docker") == "docker")
@@ -104,14 +111,28 @@ import Testing
 }
 
 @Suite struct SSHConnectionPlatformTests {
-    @Test func supportsMacOSAndLinux() {
+    @Test func supportsMacOSLinuxAndWindows() {
         #expect(SSHConnection.supportsPlatform("Darwin"))
         #expect(SSHConnection.supportsPlatform("Linux"))
+        #expect(SSHConnection.supportsPlatform("Windows_NT"))
     }
 
     @Test func rejectsUnknownRemotePlatforms() {
         #expect(!SSHConnection.supportsPlatform("FreeBSD"))
         #expect(!SSHConnection.supportsPlatform(""))
+    }
+}
+
+@Suite struct PowerShellTests {
+    @Test func quotesLiteralValues() {
+        #expect(PowerShell.literal("C:\\Users\\O'Brien") == "'C:\\Users\\O''Brien'")
+    }
+
+    @Test func encodesCommandsAsUTF16LE() throws {
+        let command = PowerShell.command("Write-Output 'hello'")
+        let encoded = try #require(command.split(separator: " ").last)
+        let data = try #require(Data(base64Encoded: String(encoded)))
+        #expect(String(data: data, encoding: .utf16LittleEndian) == "Write-Output 'hello'")
     }
 }
 
@@ -418,6 +439,48 @@ import Testing
         #expect(text.contains("@EDITH@"))
     }
 
+    @Test func windowsCollectorUsesCIMMetrics() {
+        let script = MachineCollector.script(for: .windows, follow: false, interval: 5)
+        let text = String(decoding: script ?? Data(), as: UTF8.self)
+        #expect(text.hasPrefix("$EdithMode = 'once'\n$EdithInterval = 5"))
+        #expect(text.contains("Win32_OperatingSystem"))
+        #expect(text.contains("Win32_PerfFormattedData_PerfOS_Processor"))
+        #expect(text.contains("Win32_PerfFormattedData_Tcpip_NetworkInterface"))
+        #expect(text.contains("@EDITH@"))
+    }
+
+    @Test func decodesWindowsCollectorHelloWithCarriageReturn() {
+        let line =
+            "@EDITH@{\"t\":\"hello\",\"v\":1,\"os\":\"Microsoft Windows 11 Home Single Language\","
+            + "\"osID\":\"windows\",\"kernel\":\"10.0.26200\",\"arch\":\"AMD64\","
+            + "\"host\":\"PULKIT-TUF\",\"cpuModel\":\"12th Gen Intel(R) Core(TM) i7-12700H\","
+            + "\"cores\":20,\"memTotalKB\":66720300,\"virtual\":false}\r"
+        guard case let .hello(hello)? = MachineMetricsDecoder.decode(line: line) else {
+            Issue.record("expected Windows hello record")
+            return
+        }
+        #expect(hello.host == "PULKIT-TUF")
+    }
+
+    @Test func collectorSelectsShellForEachPlatform() {
+        let linux = MachineCollector.invocation(for: .linux, follow: true)
+        let mac = MachineCollector.invocation(for: .darwin, follow: false)
+        let windows = MachineCollector.invocation(for: .windows, follow: true)
+        let windowsInput = String(decoding: windows?.stdinData ?? Data(), as: UTF8.self)
+        #expect(linux?.command == "sh -s -- --stream -i 2")
+        #expect(linux?.stdinData != nil)
+        #expect(mac?.command == "sh -s -- --once")
+        #expect(mac?.stdinData != nil)
+        #expect(windows?.command.contains("powershell.exe") == true)
+        #expect(windowsInput.hasSuffix("\n\(MachineCollector.windowsScriptTerminator)\n"))
+        #expect(decodedMachinePowerShell(windows?.command ?? "")?.contains("In.ReadLine") == true)
+        #expect(
+            decodedMachinePowerShell(windows?.command ?? "")?.contains(
+                MachineCollector.windowsScriptTerminator)
+                == true)
+        #expect(decodedMachinePowerShell(windows?.command ?? "")?.contains("In.ReadToEnd") == false)
+    }
+
     @Test func collectorReadsFansAndPlatformProfilesFromSysfs() {
         let text = String(decoding: MachineCollector.script() ?? Data(), as: UTF8.self)
         #expect(text.contains("/fan\" j \"_input"))
@@ -460,9 +523,43 @@ import Testing
         #expect(command.contains("/run/edith-platform-profile-original"))
         #expect(!command.contains("performance;"))
     }
+
+    @Test func parsesWindowsPowerSchemesWithSpaces() {
+        let profile = WindowsPowerProfileCommands.parseStatus(
+            "Balanced\nPower saver\nBalanced\nHigh performance\n")
+
+        #expect(profile?.current == "Balanced")
+        #expect(profile?.choices == ["Power saver", "Balanced", "High performance"])
+        #expect(WindowsPowerProfileCommands.parseStatus("Balanced\nPower saver\n") == nil)
+    }
+
+    @Test func buildsWindowsPowerSchemeCommandsAndReversion() throws {
+        let status = try #require(decodedMachinePowerShell(WindowsPowerProfileCommands.status))
+        let permanent = try #require(
+            WindowsPowerProfileCommands.setProfile("Power saver", durationSeconds: 0))
+        let timed = try #require(
+            WindowsPowerProfileCommands.setProfile("High performance", durationSeconds: 1_800))
+        let permanentScript = try #require(decodedMachinePowerShell(permanent))
+        let timedScript = try #require(decodedMachinePowerShell(timed))
+
+        #expect(status.contains("powercfg.exe /getactivescheme"))
+        #expect(status.contains("powercfg.exe /list"))
+        #expect(permanentScript.contains("$requested = 'Power saver'"))
+        #expect(permanentScript.contains("powercfg.exe /setactive $selectedGuid"))
+        #expect(!permanentScript.contains("Start-Sleep"))
+        #expect(timedScript.contains("Start-Sleep -Seconds 1800"))
+        #expect(timedScript.contains("power-profile-revert.json"))
+        #expect(WindowsPowerProfileCommands.setProfile("\n", durationSeconds: 0) == nil)
+    }
 }
 
 @Suite struct MachineControlCenterCommandsTests {
+    @Test func mapsRemotePlatformsToControlPlatforms() {
+        #expect(MachineControlPlatform(.darwin) == .darwin)
+        #expect(MachineControlPlatform(.linux) == .linux)
+        #expect(MachineControlPlatform(.windows) == .windows)
+    }
+
     @Test func parsesACompleteSnapshot() {
         let snapshot = MachineControlCenterCommands.parseStatus(
             """
@@ -507,6 +604,61 @@ import Testing
         #expect(snapshot.volume == nil)
         #expect(!snapshot.isEmpty)
         #expect(MachineControlCenterCommands.parseStatus("banner text").isEmpty)
+    }
+
+    @Test func parsesWindowsSnapshots() {
+        let snapshot = MachineControlCenterCommands.parseStatus(
+            """
+            EDITH_CONTROL_PLATFORM=windows
+            EDITH_CONTROL_BATTERY_LEVEL=81
+            EDITH_CONTROL_BRIGHTNESS=55
+            EDITH_CONTROL_VOLUME=34
+            EDITH_CONTROL_MUTED=0
+            EDITH_CONTROL_WIFI_ENABLED=1
+            EDITH_CONTROL_BLUETOOTH_ENABLED=0
+            EDITH_CONTROL_AIRPLANE_MODE=0
+            EDITH_CONTROL_DO_NOT_DISTURB=1
+            """)
+
+        #expect(snapshot.platform == .windows)
+        #expect(snapshot.batteryLevel == 81)
+        #expect(snapshot.brightness == 55)
+        #expect(snapshot.volume == 34)
+        #expect(snapshot.muted == false)
+        #expect(snapshot.wifiEnabled == true)
+        #expect(snapshot.bluetoothEnabled == false)
+        #expect(snapshot.airplaneMode == false)
+        #expect(snapshot.doNotDisturb == true)
+    }
+
+    @Test func buildsNativeWindowsStatusAndMutations() throws {
+        let status = try #require(decodedMachinePowerShell(WindowsMachineControlCommands.status))
+        let brightness = try #require(
+            decodedMachinePowerShell(
+                MachineControlCenterCommands.command(
+                    for: .setBrightness(140), withSudoPassword: false,
+                    platform: .windows)))
+        let volume = try #require(
+            decodedMachinePowerShell(
+                MachineControlCenterCommands.command(
+                    for: .setVolume(-10), withSudoPassword: false,
+                    platform: .windows)))
+        let airplane = try #require(
+            decodedMachinePowerShell(
+                MachineControlCenterCommands.command(
+                    for: .setAirplaneMode(true), withSudoPassword: false,
+                    platform: .windows)))
+
+        #expect(status.contains("EDITH_CONTROL_PLATFORM=windows"))
+        #expect(status.contains("WmiMonitorBrightness"))
+        #expect(status.contains("Get-NetAdapter"))
+        #expect(status.contains("Get-PnpDevice -Class Bluetooth"))
+        #expect(status.contains("IAudioEndpointVolume"))
+        #expect(brightness.contains("Brightness = [byte]100"))
+        #expect(volume.contains("[EdithAudio]::Level = 0"))
+        #expect(airplane.contains(MachineControlCenterCommands.disruptiveMarker))
+        #expect(airplane.contains("Disable-NetAdapter"))
+        #expect(airplane.contains("Disable-PnpDevice"))
     }
 
     @Test func parsesBatteryOnlySnapshots() {
@@ -633,6 +785,9 @@ import Testing
         #expect(
             !MachineControlCenterCommands.shouldAttachSudoPassword(
                 for: .setAirplaneMode(true), platform: nil))
+        #expect(
+            !MachineControlCenterCommands.shouldAttachSudoPassword(
+                for: .setWiFiEnabled(false), platform: .windows))
     }
 
     @Test func protectsSudoInputFromUnprivilegedFallbacks() {
@@ -823,6 +978,20 @@ import Testing
         #expect(command == MachineControlCenterCommands.statusCommand)
         #expect(timeout == 20)
         #expect(snapshot.platform == .linux)
+        #expect(snapshot.volume == 37)
+    }
+
+    @Test func windowsStatusUsesTheNativeCommand() async throws {
+        var command = ""
+        let result = await MachineControlOperationExecution.status(platform: .windows) {
+            next, _, _ in
+            command = next
+            return .success("EDITH_CONTROL_PLATFORM=windows\nEDITH_CONTROL_VOLUME=37\n")
+        }
+
+        let snapshot = try result.get()
+        #expect(command == WindowsMachineControlCommands.status)
+        #expect(snapshot.platform == .windows)
         #expect(snapshot.volume == 37)
     }
 

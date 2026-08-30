@@ -4,151 +4,227 @@ public enum DockerCommands {
     public static let jsonFormat = "{{json .}}"
     public static let listSeparator = "@EDITHSPLIT@"
 
-    public static func version() -> String {
-        "docker version --format \(ShellQuote.quote(jsonFormat)) 2>&1"
+    public static func version(platform: RemoteMachinePlatform = .linux) -> String {
+        host("docker version --format \(quote(jsonFormat, platform: platform)) 2>&1", platform)
     }
 
-    public static func composeVersion() -> String {
-        "docker compose version --short"
+    public static func composeVersion(platform: RemoteMachinePlatform = .linux) -> String {
+        host("docker compose version --short", platform)
     }
 
-    public static func containersWithStats() -> String {
-        let ps = "docker ps -a --no-trunc --format \(ShellQuote.quote(jsonFormat))"
+    public static func containersWithStats(
+        platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        let ps = "docker ps -a --no-trunc --format \(quote(jsonFormat, platform: platform))"
         let stats =
-            "docker stats --no-stream --format \(ShellQuote.quote(jsonFormat)) 2>/dev/null"
-        return "\(ps); echo \(ShellQuote.quote(listSeparator)); \(stats)"
+            "docker stats --no-stream --format \(quote(jsonFormat, platform: platform)) "
+            + nullRedirect(platform)
+        let separator =
+            platform == .windows
+            ? "Write-Output \(PowerShell.literal(listSeparator))"
+            : "echo \(ShellQuote.quote(listSeparator))"
+        return host("\(ps); \(separator); \(stats)", platform)
     }
 
-    public static func images() -> String {
-        "docker images --no-trunc --format \(ShellQuote.quote(jsonFormat))"
+    public static func images(platform: RemoteMachinePlatform = .linux) -> String {
+        host("docker images --no-trunc --format \(quote(jsonFormat, platform: platform))", platform)
     }
 
-    public static func volumes() -> String {
-        "docker volume ls --format \(ShellQuote.quote(jsonFormat))"
+    public static func volumes(platform: RemoteMachinePlatform = .linux) -> String {
+        host("docker volume ls --format \(quote(jsonFormat, platform: platform))", platform)
     }
 
-    public static func networks() -> String {
-        "docker network ls --format \(ShellQuote.quote(jsonFormat))"
+    public static func networks(platform: RemoteMachinePlatform = .linux) -> String {
+        host("docker network ls --format \(quote(jsonFormat, platform: platform))", platform)
     }
 
-    public static func diskUsage() -> String {
-        "docker system df --format \(ShellQuote.quote(jsonFormat))"
+    public static func diskUsage(platform: RemoteMachinePlatform = .linux) -> String {
+        host("docker system df --format \(quote(jsonFormat, platform: platform))", platform)
     }
 
-    public static func diskUsageVerbose() -> String {
-        "docker system df -v --format \(ShellQuote.quote(jsonFormat))"
+    public static func diskUsageVerbose(platform: RemoteMachinePlatform = .linux) -> String {
+        host("docker system df -v --format \(quote(jsonFormat, platform: platform))", platform)
     }
 
-    public static func inspect(_ id: String) -> String {
-        "docker inspect --format \(ShellQuote.quote(jsonFormat)) \(ShellQuote.quote(id))"
+    public static func inspect(
+        _ id: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        host(
+            "docker inspect --format \(quote(jsonFormat, platform: platform)) "
+                + quote(id, platform: platform), platform)
     }
 
-    public static func logs(_ id: String, tail: Int, follow: Bool) -> String {
+    public static func logs(
+        _ id: String, tail: Int, follow: Bool,
+        platform: RemoteMachinePlatform = .linux
+    ) -> String {
         var command = "docker logs --timestamps --tail \(tail)"
         if follow { command += " --follow" }
-        return command + " " + ShellQuote.quote(id)
+        return host(command + " " + quote(id, platform: platform), platform)
     }
 
-    public static func lifecycle(_ action: String, id: String) -> String {
-        lifecycle(action, ids: [id])
+    public static func lifecycle(
+        _ action: String, id: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        lifecycle(action, ids: [id], platform: platform)
     }
 
-    public static func lifecycle(_ action: String, ids: [String]) -> String {
-        let targets = ids.map(ShellQuote.quote).joined(separator: " ")
+    public static func lifecycle(
+        _ action: String, ids: [String], platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        let targets = ids.map { quote($0, platform: platform) }.joined(separator: " ")
+        let command: String
         switch action {
         case "stop", "restart":
-            return "docker \(action) -t 10 \(targets)"
+            command = "docker \(action) -t 10 \(targets)"
         case "rm":
-            return "docker rm -f \(targets)"
+            command = "docker rm -f \(targets)"
         default:
-            return "docker \(action) \(targets)"
+            command = "docker \(action) \(targets)"
         }
+        return host(command, platform)
     }
 
-    public static func removeImage(_ id: String, force: Bool) -> String {
-        "docker image rm \(force ? "-f " : "")\(ShellQuote.quote(id))"
+    public static func removeImage(
+        _ id: String, force: Bool, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        host(
+            "docker image rm \(force ? "-f " : "")\(quote(id, platform: platform))",
+            platform)
     }
 
-    public static func pullImage(_ reference: String) -> String {
-        "docker pull \(ShellQuote.quote(reference))"
+    public static func pullImage(
+        _ reference: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        host("docker pull \(quote(reference, platform: platform))", platform)
     }
 
-    public static func pruneImages() -> String {
-        "docker image prune -f"
+    public static func pruneImages(platform: RemoteMachinePlatform = .linux) -> String {
+        host("docker image prune -f", platform)
     }
 
-    public static func removeVolume(_ name: String) -> String {
-        "docker volume rm \(ShellQuote.quote(name))"
+    public static func removeVolume(
+        _ name: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        host("docker volume rm \(quote(name, platform: platform))", platform)
     }
 
-    public static func pruneVolumes() -> String {
-        "docker volume prune -f"
+    public static func pruneVolumes(platform: RemoteMachinePlatform = .linux) -> String {
+        host("docker volume prune -f", platform)
     }
 
-    public static func composeAction(_ action: String, project: String) -> String {
-        "docker compose -p \(ShellQuote.quote(project)) \(action)"
+    public static func composeAction(
+        _ action: String, project: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        host("docker compose -p \(quote(project, platform: platform)) \(action)", platform)
     }
 
-    public static func execShell(containerID: String) -> String {
+    public static func execShell(
+        containerID: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
         let inner =
             "command -v bash >/dev/null 2>&1 && exec bash || exec sh"
-        return "docker exec -it \(ShellQuote.quote(containerID)) sh -c \(ShellQuote.quote(inner))"
+        return host(
+            "docker exec -it \(quote(containerID, platform: platform)) sh -c "
+                + quote(inner, platform: platform), platform)
+    }
+
+    private static func host(_ script: String, _ platform: RemoteMachinePlatform) -> String {
+        platform == .windows ? PowerShell.command(script) : script
+    }
+
+    private static func quote(_ value: String, platform: RemoteMachinePlatform) -> String {
+        platform == .windows ? PowerShell.literal(value) : ShellQuote.quote(value)
+    }
+
+    private static func nullRedirect(_ platform: RemoteMachinePlatform) -> String {
+        platform == .windows ? "2>$null" : "2>/dev/null"
     }
 }
 
 extension DockerCommands {
-    public static func inspectRaw(_ id: String) -> String {
-        "docker inspect \(ShellQuote.quote(id)) 2>/dev/null"
+    public static func inspectRaw(
+        _ id: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        host(
+            "docker inspect \(quote(id, platform: platform)) \(nullRedirect(platform))",
+            platform)
     }
 
-    public static func top(_ id: String) -> String {
-        "docker top \(ShellQuote.quote(id)) -eo pid,user,pcpu,pmem,rss,args 2>/dev/null"
-            + " || docker top \(ShellQuote.quote(id))"
+    public static func top(
+        _ id: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        let target = quote(id, platform: platform)
+        let first = "docker top \(target) -eo pid,user,pcpu,pmem,rss,args \(nullRedirect(platform))"
+        let fallback =
+            platform == .windows
+            ? "; if ($LASTEXITCODE -ne 0) { docker top \(target) }"
+            : " || docker top \(target)"
+        return host(first + fallback, platform)
     }
 
-    public static func statsStream() -> String {
-        "docker stats --format \(ShellQuote.quote(jsonFormat))"
+    public static func statsStream(platform: RemoteMachinePlatform = .linux) -> String {
+        host("docker stats --format \(quote(jsonFormat, platform: platform))", platform)
     }
 
-    public static func listFiles(containerID: String, path: String) -> String {
+    public static func listFiles(
+        containerID: String, path: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
         let inner =
             "ls -lA --time-style=+%s \(ShellQuote.quote(path)) 2>/dev/null || ls -lA "
             + ShellQuote.quote(path)
-        return "docker exec \(ShellQuote.quote(containerID)) sh -c \(ShellQuote.quote(inner))"
+        return host(
+            "docker exec \(quote(containerID, platform: platform)) sh -c "
+                + quote(inner, platform: platform), platform)
     }
 
-    public static func readFile(containerID: String, path: String, limit: Int) -> String {
+    public static func readFile(
+        containerID: String, path: String, limit: Int,
+        platform: RemoteMachinePlatform = .linux
+    ) -> String {
         let inner = "head -c \(limit) \(ShellQuote.quote(path))"
-        return "docker exec \(ShellQuote.quote(containerID)) sh -c \(ShellQuote.quote(inner))"
+        return host(
+            "docker exec \(quote(containerID, platform: platform)) sh -c "
+                + quote(inner, platform: platform), platform)
     }
 
-    public static func imageHistory(_ id: String) -> String {
-        "docker image history --no-trunc --format \(ShellQuote.quote(jsonFormat)) "
-            + ShellQuote.quote(id)
+    public static func imageHistory(
+        _ id: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        host(
+            "docker image history --no-trunc --format \(quote(jsonFormat, platform: platform)) "
+                + quote(id, platform: platform), platform)
     }
 
-    public static func composeProjects() -> String {
-        "docker compose ls --format json 2>/dev/null"
+    public static func composeProjects(platform: RemoteMachinePlatform = .linux) -> String {
+        host("docker compose ls --format json \(nullRedirect(platform))", platform)
     }
 
-    public static func composeAction(_ action: String, project: String, directory: String?)
+    public static func composeAction(
+        _ action: String, project: String, directory: String?,
+        platform: RemoteMachinePlatform = .linux
+    )
         -> String
     {
-        var command = "docker compose -p \(ShellQuote.quote(project))"
+        var command = "docker compose -p \(quote(project, platform: platform))"
         if let directory, !directory.isEmpty {
-            command += " --project-directory \(ShellQuote.quote(directory))"
+            command += " --project-directory \(quote(directory, platform: platform))"
         }
-        return command + " " + action
+        return host(command + " " + action, platform)
     }
 
-    public static func prune(_ what: String) -> String {
+    public static func prune(
+        _ what: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        let command: String
         switch what {
-        case "images": return "docker image prune -af"
-        case "volumes": return "docker volume prune -f"
-        case "networks": return "docker network prune -f"
-        case "builder": return "docker builder prune -af"
-        default: return "docker system prune -f"
+        case "images": command = "docker image prune -af"
+        case "volumes": command = "docker volume prune -f"
+        case "networks": command = "docker network prune -f"
+        case "builder": command = "docker builder prune -af"
+        default: command = "docker system prune -f"
         }
+        return host(command, platform)
     }
 }
 

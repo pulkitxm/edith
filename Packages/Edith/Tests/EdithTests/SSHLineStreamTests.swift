@@ -97,4 +97,24 @@ private final class StreamLines: @unchecked Sendable {
         #expect(values.contains { value in value.0 == "out" && !value.1 })
         #expect(values.contains { value in value.0 == "err" && value.1 })
     }
+
+    @Test func standardInputIsDeliveredBeforeTheStreamCompletes() async throws {
+        let lines = StreamLines()
+        let stream = SSHLineStream(
+            process: process("cat"), stdinData: Data("payload".utf8),
+            onLine: { lines.append($0, $1) }, onExit: { _ in })
+        try stream.start()
+        #expect(await stream.waitForExit() == 0)
+        #expect(lines.read().map(\.0) == ["payload"])
+    }
+
+    @Test func windowsNewlinesSplitIntoIndividualRecords() async throws {
+        let lines = StreamLines()
+        let stream = SSHLineStream(
+            process: process("printf 'hello\\r\\nworld\\r\\n'"),
+            onLine: { lines.append($0, $1) }, onExit: { _ in })
+        try stream.start()
+        #expect(await stream.waitForExit() == 0)
+        #expect(lines.read().map(\.0) == ["hello", "world"])
+    }
 }

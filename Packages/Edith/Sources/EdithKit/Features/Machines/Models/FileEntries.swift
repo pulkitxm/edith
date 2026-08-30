@@ -41,7 +41,7 @@ public struct RemoteFileEntry: Identifiable, Equatable, Sendable {
     }
 
     public var isDirectory: Bool { kind == .directory }
-    public var isHidden: Bool { name.hasPrefix(".") }
+    public var isHidden: Bool { name.hasPrefix(".") || mode.contains("Hidden") }
 
     public var fileExtension: String {
         let standard = (name as NSString).pathExtension.lowercased()
@@ -62,6 +62,14 @@ public enum FileListing {
         return "\(find) 2>/dev/null || \(fallback) 2>/dev/null"
     }
 
+    public static func command(
+        path: String, showHidden: Bool, platform: RemoteMachinePlatform
+    ) -> String {
+        platform == .windows
+            ? WindowsFileCommands.list(path)
+            : command(path: path, showHidden: showHidden)
+    }
+
     public static func parse(output: String, parent: String) -> [RemoteFileEntry] {
         let lines = output.split(separator: "\n").map(String.init)
         let findEntries = lines.compactMap { parseFindLine($0, parent: parent) }
@@ -70,11 +78,21 @@ public enum FileListing {
     }
 
     public static func join(parent: String, name: String) -> String {
+        if isWindowsPath(parent) {
+            return parent.hasSuffix("\\") ? parent + name : parent + "\\" + name
+        }
         if parent == "/" { return "/" + name }
         return parent.hasSuffix("/") ? parent + name : parent + "/" + name
     }
 
     public static func parentPath(of path: String) -> String? {
+        if isWindowsPath(path) {
+            let normalized = path.hasSuffix("\\") ? String(path.dropLast()) : path
+            guard let slash = normalized.lastIndex(of: "\\") else { return nil }
+            let parent = String(normalized[..<slash])
+            if parent.count == 2, parent.last == ":" { return parent + "\\" }
+            return parent.isEmpty ? nil : parent
+        }
         guard path != "/" else { return nil }
         let trimmed = path.hasSuffix("/") ? String(path.dropLast()) : path
         guard let slash = trimmed.lastIndex(of: "/") else { return nil }
@@ -83,6 +101,17 @@ public enum FileListing {
     }
 
     public static func breadcrumbs(for path: String) -> [(name: String, path: String)] {
+        if isWindowsPath(path) {
+            let parts = path.split(separator: "\\", omittingEmptySubsequences: true)
+            guard let root = parts.first else { return [] }
+            var current = String(root) + "\\"
+            var crumbs = [(String(root), current)]
+            for component in parts.dropFirst() {
+                current = join(parent: current, name: String(component))
+                crumbs.append((String(component), current))
+            }
+            return crumbs
+        }
         guard path.hasPrefix("/") else { return [] }
         var crumbs: [(String, String)] = [("/", "/")]
         var current = ""
@@ -91,6 +120,11 @@ public enum FileListing {
             crumbs.append((String(component), current))
         }
         return crumbs
+    }
+
+    public static func isWindowsPath(_ path: String) -> Bool {
+        path.range(of: "^[A-Za-z]:\\\\", options: .regularExpression) != nil
+            || path.hasPrefix("\\\\")
     }
 
     static func parseFindLine(_ line: String, parent: String) -> RemoteFileEntry? {

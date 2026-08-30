@@ -77,6 +77,20 @@ import Testing
         #expect(request.environment.contains("TERM=xterm-256color"))
     }
 
+    @Test func WindowsMachineTerminalRunsHerdrOnTheRemoteHost() {
+        let machine = Machine(name: "Box", host: "box.example", username: "dev")
+        let connection = SSHConnection(machine: machine)
+        let request = HerdrMachineTerminal.windowsLaunchRequest(
+            connection: connection, environment: ["TERM=xterm-256color", "HERDR_ENV=1"])
+
+        #expect(request.executable == SSHConnection.executable.path)
+        #expect(request.arguments.contains("-tt"))
+        #expect(request.arguments.last?.hasPrefix("powershell.exe ") == true)
+        #expect(request.arguments.last?.contains("--remote") == false)
+        #expect(request.environment.contains("HERDR_ENV="))
+        #expect(!request.environment.contains("HERDR_ENV=1"))
+    }
+
     @Test func anAgentStillAttachesToItsOwnPane() {
         let agent = HerdrAgent.make(
             machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,

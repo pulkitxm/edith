@@ -19,6 +19,7 @@ public final class MachineSession {
     public nonisolated var id: UUID { machine.id }
 
     public private(set) var state: MachineConnectionState = .disconnected
+    public private(set) var remotePlatform: RemoteMachinePlatform?
     public private(set) var hello: MachineHello?
     public private(set) var slow: MachineSlow?
     private var liveMetrics = MachineLiveMetrics()
@@ -168,6 +169,7 @@ public final class MachineSession {
                 do {
                     try await connection.connect()
                     guard !Task.isCancelled else { return }
+                    remotePlatform = await connection.remotePlatform
                     await replayForwards(on: connection)
                     guard !Task.isCancelled else { return }
                     state = .connected(latencyMillis: nil)
@@ -239,6 +241,7 @@ public final class MachineSession {
 
     private func startLocal() {
         state = .connected(latencyMillis: 0)
+        remotePlatform = .darwin
         hello = localSampler?.hello()
         localTask = Task { [weak self] in
             var tick = 0
@@ -282,10 +285,12 @@ public final class MachineSession {
     }
 
     private func startMetricsStream() {
-        guard let connection, let script = MachineCollector.script() else { return }
-        let process = connection.streamProcess(command: MachineCollector.streamCommand)
+        guard let connection, let remotePlatform,
+            let invocation = MachineCollector.invocation(for: remotePlatform, follow: true)
+        else { return }
+        let process = connection.streamProcess(command: invocation.command)
         let stream = SSHLineStream(
-            process: process, stdinData: script,
+            process: process, stdinData: invocation.stdinData,
             onLine: { [weak self] line, isStderr in
                 guard !isStderr, let record = MachineMetricsDecoder.decode(line: line) else {
                     return
@@ -397,14 +402,15 @@ public final class MachineSession {
     private func startDockerPolling() {
         dockerTask = Task { [weak self] in
             guard let self, let connection else { return }
-            let version = try? await connection.run(DockerCommands.version(), timeout: 20)
+            let version = try? await connection.run(
+                DockerCommands.version(platform: remotePlatform ?? .linux), timeout: 20)
             guard !Task.isCancelled else { return }
             var availability = DockerParsing.availability(
                 versionOutput: version?.stdoutText ?? "", versionStderr: version?.stderrText ?? "",
                 status: version?.status ?? 1)
             if case let .available(serverVersion, _) = availability.status {
                 let compose = try? await connection.run(
-                    DockerCommands.composeVersion(), timeout: 15)
+                    DockerCommands.composeVersion(platform: remotePlatform ?? .linux), timeout: 15)
                 availability = DockerAvailability(
                     status: .available(
                         serverVersion: serverVersion, hasCompose: compose?.succeeded == true))
@@ -429,7 +435,8 @@ public final class MachineSession {
         defer { dockerRefreshRunning = false }
         guard
             let result = try? await connection.run(
-                DockerCommands.containersWithStats(), timeout: 30), result.succeeded
+                DockerCommands.containersWithStats(platform: remotePlatform ?? .linux), timeout: 30),
+            result.succeeded
         else { return }
         let sections = result.stdoutText.components(separatedBy: DockerCommands.listSeparator)
         let parsed = DockerParsing.containers(psOutput: sections.first ?? "")
@@ -443,16 +450,21 @@ public final class MachineSession {
         guard let connection, docker.isAvailable, !dockerInventoryRefreshRunning else { return }
         dockerInventoryRefreshRunning = true
         defer { dockerInventoryRefreshRunning = false }
-        async let imagesResult = try? connection.run(DockerCommands.images(), timeout: 30)
-        async let volumesResult = try? connection.run(DockerCommands.volumes(), timeout: 30)
-        async let usageResult = try? connection.run(DockerCommands.diskUsage(), timeout: 30)
+        async let imagesResult = try? connection.run(
+            DockerCommands.images(platform: remotePlatform ?? .linux), timeout: 30)
+        async let volumesResult = try? connection.run(
+            DockerCommands.volumes(platform: remotePlatform ?? .linux), timeout: 30)
+        async let usageResult = try? connection.run(
+            DockerCommands.diskUsage(platform: remotePlatform ?? .linux), timeout: 30)
         async let verboseResult = try? connection.run(
-            DockerCommands.diskUsageVerbose(), timeout: 60)
+            DockerCommands.diskUsageVerbose(platform: remotePlatform ?? .linux), timeout: 60)
         let (imagesOut, volumesOut, usageOut, verboseOut) = await (
             imagesResult, volumesResult, usageResult, verboseResult
         )
         images = DockerParsing.images(imagesOut?.stdoutText ?? "")
-        if let networksOut = try? await connection.run(DockerCommands.networks(), timeout: 20) {
+        if let networksOut = try? await connection.run(
+            DockerCommands.networks(platform: remotePlatform ?? .linux), timeout: 20)
+        {
             networks = DockerParsing.networks(networksOut.stdoutText)
         }
         let details = DockerParsing.volumeDetails(
@@ -518,7 +530,8 @@ public final class MachineSession {
         isApplyingPlatformProfile = true
         defer { isApplyingPlatformProfile = false }
         let result = await MachineThermalOperationExecution.set(
-            profile: profile, durationSeconds: duration.rawValue, machineID: machine.id
+            profile: profile, durationSeconds: duration.rawValue, machineID: machine.id,
+            platform: remotePlatform ?? .linux
         ) { [weak self] command, stdin, timeout in
             guard let self else {
                 return .failure(
@@ -552,7 +565,9 @@ public final class MachineSession {
     }
 
     public func refreshPlatformProfile() async {
-        let result = await MachineThermalOperationExecution.status(timeout: 10) {
+        let result = await MachineThermalOperationExecution.status(
+            timeout: 10, platform: remotePlatform ?? .linux
+        ) {
             [weak self] command, stdin, timeout in
             guard let self else {
                 return .failure(
@@ -581,21 +596,28 @@ public final class MachineSession {
     }
 
     public func refreshServices() async {
-        guard !isLocal, let connection else { return }
-        guard let result = try? await connection.run(ServiceCommands.list(), timeout: 30) else {
+        guard !isLocal, let connection, let remotePlatform else { return }
+        guard
+            let result = try? await connection.run(
+                ServiceCommands.list(platform: remotePlatform), timeout: 30)
+        else {
             return
         }
-        services = ServiceCommands.parse(result.stdoutText)
+        services = ServiceCommands.parse(result.stdoutText, platform: remotePlatform)
     }
 
     private func loadFacts() async {
-        guard let connection else { return }
-        async let whoResult = try? connection.run(MachineFacts.whoCommand, timeout: 15)
-        async let macResult = try? connection.run(MachineFacts.macAddressCommand, timeout: 15)
-        async let updatesResult = try? connection.run(MachineFacts.updatesCommand, timeout: 45)
+        guard let connection, let remotePlatform else { return }
+        async let whoResult = try? connection.run(
+            MachineFacts.whoCommand(for: remotePlatform), timeout: 15)
+        async let macResult = try? connection.run(
+            MachineFacts.macAddressCommand(for: remotePlatform), timeout: 15)
+        async let updatesResult = try? connection.run(
+            MachineFacts.updatesCommand(for: remotePlatform), timeout: 45)
         let (who, mac, updates) = await (whoResult, macResult, updatesResult)
         facts = MachineSessionSummary(
-            who: MachineFacts.parseWho(who?.stdoutText ?? ""),
+            who: MachineFacts.parseWho(
+                who?.stdoutText ?? "", platform: remotePlatform),
             updatesAvailable: MachineFacts.parseUpdates(updates?.stdoutText ?? ""),
             macAddress: MachineFacts.parseMACAddress(mac?.stdoutText ?? ""))
     }

@@ -105,6 +105,7 @@ public actor SSHConnection {
         label: "com.pulkit.edith.process-timeout", qos: .userInitiated)
 
     public let machine: Machine
+    public private(set) var remotePlatform: RemoteMachinePlatform?
 
     private var masterProcess: Process?
     private let socketPath: String
@@ -179,25 +180,37 @@ public actor SSHConnection {
     }
 
     private func validatePlatform() async throws {
-        let result = try await run("uname -s", timeout: 10)
-        let name = result.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard result.succeeded, Self.supportsPlatform(name) else {
+        let unixResult = try await run("uname -s", timeout: 10)
+        var platform =
+            unixResult.succeeded
+            ? RemoteMachinePlatform.unixName(unixResult.stdoutText) : nil
+        if platform == nil {
+            let windowsResult = try await run(
+                PowerShell.command("[Console]::Out.Write($env:OS)"), timeout: 10)
+            if windowsResult.succeeded {
+                platform = RemoteMachinePlatform.windowsName(windowsResult.stdoutText)
+            }
+        }
+        guard let platform else {
             await disconnect()
             throw SSHConnectionError.connectFailed(
                 SSHConnectFailure(
-                    message: "Edith supports remote macOS and Linux machines.",
+                    message: "Edith supports remote macOS, Linux and Windows machines.",
                     isRecoverable: false))
         }
+        remotePlatform = platform
     }
 
     nonisolated static func supportsPlatform(_ name: String) -> Bool {
-        name == "Darwin" || name == "Linux"
+        RemoteMachinePlatform.unixName(name) != nil
+            || RemoteMachinePlatform.windowsName(name) != nil
     }
 
     public func disconnect() async {
         _ = try? await runControl(["-O", "exit"])
         masterProcess?.terminate()
         masterProcess = nil
+        remotePlatform = nil
         try? FileManager.default.removeItem(atPath: socketPath)
     }
 
@@ -275,7 +288,13 @@ public actor SSHConnection {
     public func download(
         remotePath: String, to localURL: URL, progress: (@Sendable (Int64) -> Void)? = nil
     ) async throws {
-        let command = "cat \(ShellQuote.quote(remotePath))"
+        let command =
+            remotePlatform == .windows
+            ? PowerShell.command(
+                "$bytes=[IO.File]::ReadAllBytes(\(PowerShell.literal(remotePath))); "
+                    + "$output=[Console]::OpenStandardOutput(); "
+                    + "$output.Write($bytes,0,$bytes.Length); $output.Flush()")
+            : "cat \(ShellQuote.quote(remotePath))"
         let process = execProcess(command: command)
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
@@ -353,7 +372,12 @@ public actor SSHConnection {
         let expected =
             (try? FileManager.default.attributesOfItem(atPath: localURL.path)[.size]) as? Int64
             ?? -1
-        let command = "cat > \(ShellQuote.quote(remotePath))"
+        let command =
+            remotePlatform == .windows
+            ? PowerShell.command(
+                "$output=[IO.File]::Create(\(PowerShell.literal(remotePath))); "
+                    + "[Console]::OpenStandardInput().CopyTo($output); $output.Dispose()")
+            : "cat > \(ShellQuote.quote(remotePath))"
         let process = execProcess(command: command)
         let stdinPipe = Pipe()
         let stderrPipe = Pipe()
@@ -446,8 +470,15 @@ public actor SSHConnection {
     }
 
     private func remoteSize(_ path: String) async -> Int64? {
-        let quoted = ShellQuote.quote(path)
-        let command = "stat -c%s \(quoted) 2>/dev/null || stat -f%z \(quoted) 2>/dev/null"
+        let command: String
+        if remotePlatform == .windows {
+            command = PowerShell.command(
+                "[Console]::Out.Write((Get-Item -LiteralPath "
+                    + "\(PowerShell.literal(path))).Length)")
+        } else {
+            let quoted = ShellQuote.quote(path)
+            command = "stat -c%s \(quoted) 2>/dev/null || stat -f%z \(quoted) 2>/dev/null"
+        }
         guard let result = try? await run(command, timeout: 30), result.succeeded else {
             return nil
         }
@@ -455,7 +486,13 @@ public actor SSHConnection {
     }
 
     private func discard(_ path: String) async {
-        _ = try? await run("rm -f \(ShellQuote.quote(path))", timeout: 30)
+        let command =
+            remotePlatform == .windows
+            ? PowerShell.command(
+                "Remove-Item -LiteralPath \(PowerShell.literal(path)) -Force "
+                    + "-ErrorAction SilentlyContinue")
+            : "rm -f \(ShellQuote.quote(path))"
+        _ = try? await run(command, timeout: 30)
     }
 
     public func addForward(_ forward: PortForward) async throws {

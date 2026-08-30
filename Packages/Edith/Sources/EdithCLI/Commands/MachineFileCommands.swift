@@ -164,8 +164,10 @@ struct MachineFilesPreviewCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let runner = try await MachineResolver.runner(machine)
+            let platform = await runner.ssh.remotePlatform ?? .linux
             let result = try await runner.run(
-                RemoteFileOperationExecution.previewCommand(path: path), timeout: 45)
+                RemoteFileOperationExecution.previewCommand(
+                    path: path, platform: platform), timeout: 45)
             guard result.succeeded else {
                 throw CLIFailure(
                     "could not preview \(path) on \(runner.machine.name)",

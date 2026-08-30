@@ -46,7 +46,9 @@ struct DockerOpenCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let runner = try await DockerBridge.runner(machine)
-            let output = try await runner.text(DockerCommands.containersWithStats(), timeout: 45)
+            let platform = await runner.ssh.remotePlatform ?? .linux
+            let output = try await runner.text(
+                DockerCommands.containersWithStats(platform: platform), timeout: 45)
             let containers = DockerParsing.containers(
                 psOutput: output.components(separatedBy: DockerCommands.listSeparator).first ?? "")
             let found: DockerContainer
@@ -123,7 +125,7 @@ struct DockerShellCommand: AsyncParsableCommand {
             let runner = try await DockerBridge.runner(machine)
             try Task.checkCancellation()
             let command = MachineExecOperationExecution.dockerShellCommand(
-                containerID: container)
+                containerID: container, platform: await runner.ssh.remotePlatform ?? .linux)
             throw ExitCode(runner.interactive(command))
         }
     }
@@ -132,7 +134,9 @@ struct DockerShellCommand: AsyncParsableCommand {
 enum DockerBridge {
     static func runner(_ machine: String) async throws -> RemoteRunner {
         let runner = try await MachineResolver.runner(machine)
-        let version = try await runner.run(DockerCommands.version(), timeout: 25)
+        let version = try await runner.run(
+            DockerCommands.version(platform: await runner.ssh.remotePlatform ?? .linux),
+            timeout: 25)
         let availability = DockerParsing.availability(
             versionOutput: version.stdoutText, versionStderr: version.stderrText,
             status: version.status)
@@ -157,8 +161,9 @@ enum DockerBridge {
         _ operation: DockerLifecycleOperation, target: DockerLifecycleTarget,
         runner: RemoteRunner, failure: String
     ) async throws -> DockerLifecycleOperationResult {
+        let platform = await runner.ssh.remotePlatform ?? .linux
         let result = await DockerLifecycleOperationExecution.perform(
-            operation, target: target,
+            operation, target: target, platform: platform,
             using: { command, timeout in
                 do {
                     let output = try await runner.run(command, timeout: timeout)
@@ -197,7 +202,9 @@ struct DockerPsCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let runner = try await DockerBridge.runner(machine)
-            let output = try await runner.text(DockerCommands.containersWithStats(), timeout: 45)
+            let platform = await runner.ssh.remotePlatform ?? .linux
+            let output = try await runner.text(
+                DockerCommands.containersWithStats(platform: platform), timeout: 45)
             let sections = output.components(separatedBy: DockerCommands.listSeparator)
             let parsed = DockerParsing.containers(psOutput: sections.first ?? "")
             var containers =
@@ -236,7 +243,9 @@ struct DockerImagesCommand: AsyncParsableCommand {
         try await execute {
             let runner = try await DockerBridge.runner(machine)
             let images = DockerParsing.images(
-                try await runner.text(DockerCommands.images(), timeout: 45))
+                try await runner.text(
+                    DockerCommands.images(platform: await runner.ssh.remotePlatform ?? .linux),
+                    timeout: 45))
             guard !json else {
                 CLIOut.json(.array(images.map(MachineReports.image)))
                 return
@@ -263,7 +272,9 @@ struct DockerVolumesCommand: AsyncParsableCommand {
         try await execute {
             let runner = try await DockerBridge.runner(machine)
             let volumes = DockerParsing.volumes(
-                try await runner.text(DockerCommands.volumes(), timeout: 45))
+                try await runner.text(
+                    DockerCommands.volumes(platform: await runner.ssh.remotePlatform ?? .linux),
+                    timeout: 45))
             guard !json else {
                 CLIOut.json(.array(volumes.map(MachineReports.volume)))
                 return
@@ -288,7 +299,9 @@ struct DockerNetworksCommand: AsyncParsableCommand {
         try await execute {
             let runner = try await DockerBridge.runner(machine)
             let networks = DockerParsing.networks(
-                try await runner.text(DockerCommands.networks(), timeout: 30))
+                try await runner.text(
+                    DockerCommands.networks(platform: await runner.ssh.remotePlatform ?? .linux),
+                    timeout: 30))
             guard !json else {
                 CLIOut.json(.array(networks.map(MachineReports.network)))
                 return
@@ -313,7 +326,9 @@ struct DockerDiskUsageCommand: AsyncParsableCommand {
         try await execute {
             let runner = try await DockerBridge.runner(machine)
             let usage = DockerParsing.diskUsage(
-                try await runner.text(DockerCommands.diskUsage(), timeout: 45))
+                try await runner.text(
+                    DockerCommands.diskUsage(platform: await runner.ssh.remotePlatform ?? .linux),
+                    timeout: 45))
             guard !json else {
                 CLIOut.json(
                     .array(
@@ -363,7 +378,9 @@ struct DockerLogsCommand: AsyncParsableCommand {
             let tail = try ArgumentChecks.nonNegative(self.tail, "--tail")
             let runner = try await DockerBridge.runner(machine)
             let status = await runner.passthrough(
-                DockerCommands.logs(container, tail: tail, follow: follow))
+                DockerCommands.logs(
+                    container, tail: tail, follow: follow,
+                    platform: await runner.ssh.remotePlatform ?? .linux))
             guard status == 0 else { throw ExitCode(status) }
         }
     }
@@ -385,8 +402,9 @@ struct DockerInspectCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let runner = try await DockerBridge.runner(machine)
-            let result = await DockerDetailOperationExecution.inspect(containerID: container) {
-                command, timeout in
+            let result = await DockerDetailOperationExecution.inspect(
+                containerID: container, platform: await runner.ssh.remotePlatform ?? .linux
+            ) { command, timeout in
                 do {
                     return .success(try await runner.text(command, timeout: timeout))
                 } catch {
@@ -421,8 +439,9 @@ struct DockerTopCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let runner = try await DockerBridge.runner(machine)
-            let result = await DockerDetailOperationExecution.processes(containerID: container) {
-                command, timeout in
+            let result = await DockerDetailOperationExecution.processes(
+                containerID: container, platform: await runner.ssh.remotePlatform ?? .linux
+            ) { command, timeout in
                 do {
                     return .success(try await runner.text(command, timeout: timeout))
                 } catch {
@@ -478,13 +497,14 @@ extension DockerLifecycleCommand {
                 : nil
             guard plan?.shouldApply() ?? true else { return }
             let runner = try await DockerBridge.runner(machine)
+            let platform = await runner.ssh.remotePlatform ?? .linux
             if let operation = Self.operation {
                 _ = try await DockerBridge.perform(
                     operation, target: .containers(containers), runner: runner,
                     failure: "docker \(action) failed on \(runner.machine.name)")
             } else if let operation = MachineDockerPauseOperation(rawValue: action) {
                 let outcome = await MachineDockerPauseOperationExecution.perform(
-                    operation, containerIDs: containers,
+                    operation, containerIDs: containers, platform: platform,
                     using: { command, timeout in
                         do {
                             let result = try await runner.run(command, timeout: timeout)
@@ -505,7 +525,8 @@ extension DockerLifecycleCommand {
                 }
             } else {
                 let result = try await runner.run(
-                    DockerCommands.lifecycle(action, ids: containers), timeout: 120)
+                    DockerCommands.lifecycle(
+                        action, ids: containers, platform: platform), timeout: 120)
                 guard result.succeeded else {
                     throw CLIFailure(
                         "docker \(action) failed on \(runner.machine.name)",
@@ -766,6 +787,7 @@ struct DockerPruneCommand: AsyncParsableCommand {
                     hint: "try: " + Self.targets.joined(separator: ", "))
             }
             let runner = try await DockerBridge.runner(machine)
+            let platform = await runner.ssh.remotePlatform ?? .linux
             guard yes else {
                 guard !json else {
                     CLIOut.json(
@@ -773,11 +795,13 @@ struct DockerPruneCommand: AsyncParsableCommand {
                             "machine": .string(runner.machine.name),
                             "target": .string(what),
                             "applied": .bool(false),
-                            "command": .string(DockerCommands.prune(what)),
+                            "command": .string(
+                                DockerCommands.prune(what, platform: platform)),
                         ]))
                     return
                 }
-                CLIOut.out("would run: \(DockerCommands.prune(what))")
+                CLIOut.out(
+                    "would run: \(DockerCommands.prune(what, platform: platform))")
                 CLIOut.note("pass --yes to do it")
                 return
             }
@@ -814,7 +838,9 @@ struct DockerComposeCommand: AsyncParsableCommand {
 enum ComposeBridge {
     static func projects(_ runner: RemoteRunner) async throws -> [String] {
         DockerParsing.composeProjects(
-            try await runner.text(DockerCommands.composeProjects(), timeout: 30))
+            try await runner.text(
+                DockerCommands.composeProjects(
+                    platform: await runner.ssh.remotePlatform ?? .linux), timeout: 30))
     }
 
     static func require(_ runner: RemoteRunner, project: String) async throws {
@@ -870,7 +896,9 @@ extension ComposeLifecycleCommand {
             let runner = try await DockerBridge.runner(machine)
             try await ComposeBridge.require(runner, project: project)
             let result = try await runner.run(
-                DockerCommands.composeAction(action, project: project, directory: nil),
+                DockerCommands.composeAction(
+                    action, project: project, directory: nil,
+                    platform: await runner.ssh.remotePlatform ?? .linux),
                 timeout: timeout)
             guard result.succeeded else {
                 throw CLIFailure(
@@ -982,7 +1010,9 @@ struct ComposeLogsCommand: AsyncParsableCommand {
             try await ComposeBridge.require(runner, project: project)
             let action = "logs --tail \(tail)" + (follow ? " -f" : "")
             let status = await runner.passthrough(
-                DockerCommands.composeAction(action, project: project, directory: nil))
+                DockerCommands.composeAction(
+                    action, project: project, directory: nil,
+                    platform: await runner.ssh.remotePlatform ?? .linux))
             guard status == 0 else { throw ExitCode(status) }
         }
     }

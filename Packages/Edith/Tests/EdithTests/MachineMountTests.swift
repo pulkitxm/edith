@@ -67,6 +67,15 @@ import Testing
         #expect(MachineMounts.folderName(for: awkward) == "web-prod")
     }
 
+    @Test func windowsDrivePathsUseOpenSSHSFTPForm() {
+        #expect(
+            MachineMounts.remotePath("C:\\Users\\kpulk", platform: .windows) == "/C:/Users/kpulk")
+        #expect(MachineMounts.remotePath("d:/work", platform: .windows) == "/D:/work")
+        #expect(MachineMounts.remotePath("/E:/Media", platform: .windows) == "/E:/Media")
+        #expect(MachineMounts.remotePath("/", platform: .windows) == "/")
+        #expect(MachineMounts.remotePath("/srv", platform: .linux) == "/srv")
+    }
+
     @Test func theMountRidesTheSharedControlSocket() {
         let arguments = MachineMounts.mountArguments(
             machine: machine, remotePath: "/srv", mountPoint: "/Users/pulkit/Edith/tuf",

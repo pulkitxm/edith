@@ -86,7 +86,9 @@ final class DockerDetailModel {
     ) {
         guard let connection = session.connectionRef else { return }
         let process = connection.streamProcess(
-            command: DockerCommands.logs(container.id, tail: 400, follow: true))
+            command: DockerCommands.logs(
+                container.id, tail: 400, follow: true,
+                platform: session.remotePlatform ?? .linux))
         let stream = SSHLineStream(
             process: process,
             onLine: { [weak self] text, isStderr in
@@ -155,20 +157,23 @@ final class DockerDetailModel {
     }
 
     func loadInspect(session: MachineSession, container: DockerContainer) async {
-        await loadInspect(container: container) { command, timeout in
+        await loadInspect(
+            container: container, platform: session.remotePlatform ?? .linux
+        ) { command, timeout in
             await session.runCommand(command, timeout: timeout)
         }
     }
 
     func loadInspect(
-        container: DockerContainer, using run: DockerDetailOperationExecution.Run
+        container: DockerContainer, platform: RemoteMachinePlatform = .linux,
+        using run: DockerDetailOperationExecution.Run
     ) async {
         guard detailContainerID == container.id else { return }
         inspectRequest &+= 1
         let request = inspectRequest
         inspectFailed = false
         let result = await DockerDetailOperationExecution.inspect(
-            containerID: container.id, using: run)
+            containerID: container.id, platform: platform, using: run)
         guard
             !Task.isCancelled, detailContainerID == container.id, inspectRequest == request
         else { return }
@@ -181,20 +186,23 @@ final class DockerDetailModel {
     }
 
     func loadProcesses(session: MachineSession, container: DockerContainer) async {
-        await loadProcesses(container: container) { command, timeout in
+        await loadProcesses(
+            container: container, platform: session.remotePlatform ?? .linux
+        ) { command, timeout in
             await session.runCommand(command, timeout: timeout)
         }
     }
 
     func loadProcesses(
-        container: DockerContainer, using run: DockerDetailOperationExecution.Run
+        container: DockerContainer, platform: RemoteMachinePlatform = .linux,
+        using run: DockerDetailOperationExecution.Run
     ) async {
         guard detailContainerID == container.id else { return }
         processesRequest &+= 1
         let request = processesRequest
         processesFailed = false
         let result = await DockerDetailOperationExecution.processes(
-            containerID: container.id, using: run)
+            containerID: container.id, platform: platform, using: run)
         guard
             !Task.isCancelled, detailContainerID == container.id, processesRequest == request
         else { return }
@@ -207,20 +215,26 @@ final class DockerDetailModel {
     }
 
     func loadFiles(session: MachineSession, container: DockerContainer, path: String) async {
-        await loadFiles(container: container, path: path) { command, timeout in
+        await loadFiles(
+            container: container, path: path,
+            platform: session.remotePlatform ?? .linux
+        ) { command, timeout in
             await session.runCommand(command, timeout: timeout)
         }
     }
 
     func loadFiles(
-        container: DockerContainer, path: String, using run: DockerDetailOperationExecution.Run
+        container: DockerContainer, path: String,
+        platform: RemoteMachinePlatform = .linux,
+        using run: DockerDetailOperationExecution.Run
     ) async {
         guard detailContainerID == container.id else { return }
         fileToken &+= 1
         let token = fileToken
         filePath = path
         let result = await run(
-            DockerCommands.listFiles(containerID: container.id, path: path), 30)
+            DockerCommands.listFiles(
+                containerID: container.id, path: path, platform: platform), 30)
         guard !Task.isCancelled, detailContainerID == container.id, token == fileToken else {
             return
         }

@@ -174,7 +174,8 @@ struct MachineToolsTab: View {
         message = nil
         Task {
             let result = await MachineMountOperationExecution.perform(
-                .mount, machine: session.machine)
+                .mount, machine: session.machine,
+                platform: session.remotePlatform ?? .linux)
             switch result {
             case let .success(outcome):
                 message = "Mounted at \(outcome.mount.mountPoint)."
@@ -331,7 +332,7 @@ struct MachineToolsTab: View {
 
     private var servicesCard: some View {
         SkinCard(
-            title: "Services", note: session.services.isEmpty ? "systemd not detected" : nil,
+            title: "Services", note: session.services.isEmpty ? "no services reported" : nil,
             dark: dark
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
@@ -480,9 +481,11 @@ struct MachineToolsTab: View {
         guard let operation = MachineServiceOperation(rawValue: action) else { return }
         Task {
             let machineID = session.machine.id
-            let stdin = SudoPassword.stdin(machineID: machineID)
+            let platform = session.remotePlatform ?? .linux
+            let stdin = platform == .windows ? nil : SudoPassword.stdin(machineID: machineID)
             let result = await MachineServiceOperationExecution.perform(
                 operation, unit: unit, sudoPassword: stdin,
+                platform: platform,
                 using: { command, stdin, timeout in
                     await session.runCommand(command, stdin: stdin, timeout: timeout)
                 })

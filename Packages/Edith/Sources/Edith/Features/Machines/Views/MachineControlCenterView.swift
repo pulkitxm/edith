@@ -108,7 +108,8 @@ final class MachineControlCenterModel {
                 }
             }
         }
-        let result = await MachineControlOperationExecution.status {
+        let platform = MachineControlPlatform(session.remotePlatform ?? .darwin)
+        let result = await MachineControlOperationExecution.status(platform: platform) {
             [session] command, stdin, timeout in
             await session.runCommand(command, stdin: stdin, timeout: timeout)
         }

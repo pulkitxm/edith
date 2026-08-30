@@ -72,11 +72,12 @@ struct MachinesMountCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let runner = try await MachineResolver.runner(machine)
+            let platform = await runner.ssh.remotePlatform ?? .linux
             let remote = path.flatMap { $0.isEmpty ? nil : $0 } ?? "/"
             let destination = at.map { URL(fileURLWithPath: $0.expandingTilde()) }
             switch await MachineMountOperationExecution.perform(
                 .mount, machine: runner.machine, remotePath: remote,
-                mountPoint: destination, readOnly: readOnly,
+                platform: platform, mountPoint: destination, readOnly: readOnly,
                 restoreDefault: path == nil && at == nil)
             {
             case let .success(outcome):

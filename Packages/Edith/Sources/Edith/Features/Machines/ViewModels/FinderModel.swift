@@ -112,8 +112,9 @@ final class FinderModel {
                         forKeys: [.volumeAvailableCapacityForImportantUsageKey])
                     return (values?.volumeAvailableCapacityForImportantUsage).map { $0 / 1024 }
                 }
+                let platform = session.remotePlatform ?? .linux
                 let result = await session.runCommand(
-                    FileOperations.freeSpaceCommand(path: path), timeout: 20)
+                    FileOperations.freeSpaceCommand(path: path, platform: platform), timeout: 20)
                 guard case let .success(output) = result else { return nil }
                 return Int64(output.trimmingCharacters(in: .whitespacesAndNewlines))
             }
@@ -191,10 +192,13 @@ final class FinderModel {
             places = FilePlaces.localSections(volumes: external)
             return
         }
-        let result = await session.runCommand(FilePlaces.homeDirectoryCommand(), timeout: 20)
+        let platform = session.remotePlatform ?? .linux
+        let result = await session.runCommand(
+            FilePlaces.homeDirectoryCommand(platform: platform), timeout: 20)
         let home =
             (try? result.get())?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "~"
-        places = FilePlaces.remoteSections(home: home.isEmpty ? "~" : home)
+        places = FilePlaces.remoteSections(
+            home: home.isEmpty ? "~" : home, platform: platform)
     }
 
     func copySelection(operation: FileClipboardOperation) {
@@ -296,11 +300,13 @@ final class FinderModel {
     private func loadDirectory(_ requestedPath: String) async -> LoadOutcome? {
         var resolvedPath = requestedPath
         if !session.isLocal, requestedPath == "~" || requestedPath.isEmpty {
-            let result = await session.runCommand(FilePlaces.homeDirectoryCommand(), timeout: 20)
+            let platform = session.remotePlatform ?? .linux
+            let result = await session.runCommand(
+                FilePlaces.homeDirectoryCommand(platform: platform), timeout: 20)
             guard !Task.isCancelled else { return nil }
             if case let .success(output) = result {
                 let home = output.trimmingCharacters(in: .whitespacesAndNewlines)
-                if home.hasPrefix("/") { resolvedPath = home }
+                if home.hasPrefix("/") || FileListing.isWindowsPath(home) { resolvedPath = home }
             }
         }
         let result = await directoryLoader(resolvedPath)
@@ -469,7 +475,9 @@ final class FinderModel {
             guard !Task.isCancelled else { return }
             folderCounts[entry.path] = count ?? 0
         }
-        let result = await MachineFileOperationExecution.info(path: entry.path) {
+        let result = await MachineFileOperationExecution.info(
+            path: entry.path, platform: session.remotePlatform ?? .linux
+        ) {
             [session] command, timeout in
             await session.runCommand(command, timeout: timeout)
         }
@@ -594,7 +602,9 @@ final class FinderModel {
             flash("Nothing to undo")
             return
         }
-        let result = await MachineFileOperationExecution.undo(step) {
+        let result = await MachineFileOperationExecution.undo(
+            step, platform: session.remotePlatform ?? .linux
+        ) {
             [session] command, timeout in
             await session.runCommand(command, timeout: timeout)
         }
@@ -644,7 +654,8 @@ final class FinderModel {
         self.renaming = nil
         let target = FileListing.join(parent: parent, name: trimmed)
         let result = await MachineFileOperationExecution.rename(
-            path: entry.path, destination: target, viaTemporary: sameNameDifferentCase
+            path: entry.path, destination: target, viaTemporary: sameNameDifferentCase,
+            platform: session.remotePlatform ?? .linux
         ) { [session] command, timeout in
             await session.runCommand(command, timeout: timeout)
         }
@@ -692,7 +703,8 @@ final class FinderModel {
             taken.append(
                 RemoteFileEntry(name: name, path: target, kind: .file, sizeBytes: 0))
             let result = await MachineFileOperationExecution.duplicate(
-                path: source, destination: target
+                path: source, destination: target,
+                platform: session.remotePlatform ?? .linux
             ) { [session] command, timeout in
                 await session.runCommand(command, timeout: timeout)
             }
@@ -722,7 +734,8 @@ final class FinderModel {
                 }
             } : nil
         let result = await MachineFileOperationExecution.remove(
-            plan, confirmed: true, trash: nativeTrash
+            plan, confirmed: true, platform: session.remotePlatform ?? .linux,
+            trash: nativeTrash
         ) { [session] command, timeout in
             await session.runCommand(command, timeout: timeout)
         }
@@ -857,7 +870,8 @@ final class FinderModel {
                     })
             } : nil
         let result = await MachineFileOperationExecution.search(
-            path: path, query: query, localSearch: localAdapter
+            path: path, query: query, platform: session.remotePlatform ?? .linux,
+            localSearch: localAdapter
         ) { [session] command, timeout in
             await session.runCommand(command, timeout: timeout)
         }
@@ -964,7 +978,8 @@ final class FinderModel {
                 resolutions: resolutions)
             guard
                 let command = RemoteTransferOperationExecution.withinMachineCommand(
-                    plan, moving: intent.isMove)
+                    plan, moving: intent.isMove,
+                    platform: session.remotePlatform ?? .linux)
             else { return }
             progress = FileOperationProgress(
                 title: intent.isMove ? "Moving" : "Copying", total: plan.items.count)

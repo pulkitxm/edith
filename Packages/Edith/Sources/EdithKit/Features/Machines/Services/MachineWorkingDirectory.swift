@@ -86,12 +86,46 @@ public enum MachineWorkingDirectory {
         try? fileManager.removeItem(at: file(for: machineID, session: session, in: root))
     }
 
-    public static func prefixed(_ command: String, directory: String?) -> String {
+    public static func prefixed(
+        _ command: String, directory: String?, platform: RemoteMachinePlatform = .linux,
+        interactive: Bool = false
+    ) -> String {
+        if platform == .windows {
+            let location = directory.flatMap { $0.isEmpty ? nil : $0 }
+            let prefix =
+                location.map {
+                    "$location = \(PowerShell.literal($0)); "
+                        + "if (Test-Path -LiteralPath $location -PathType Container) "
+                        + "{ Set-Location -LiteralPath $location } else { Set-Location }; "
+                } ?? ""
+            let script = prefix + command
+            return interactive
+                ? PowerShell.interactiveCommand(script)
+                : PowerShell.command(script)
+        }
         guard let directory, !directory.isEmpty else { return command }
         return "cd " + ShellQuote.quote(directory) + " 2>/dev/null || cd; " + command
     }
 
-    public static func resolveCommand(target: String?, from directory: String?) -> String {
+    public static func resolveCommand(
+        target: String?, from directory: String?, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        if platform == .windows {
+            let base =
+                directory.map {
+                    "$origin = \(PowerShell.literal($0)); "
+                        + "if (Test-Path -LiteralPath $origin -PathType Container) "
+                        + "{ Set-Location -LiteralPath $origin }; "
+                } ?? ""
+            let destination =
+                target.map {
+                    "Set-Location -LiteralPath \(PowerShell.literal($0)); "
+                } ?? "Set-Location; "
+            return PowerShell.command(
+                "$ErrorActionPreference = 'Stop'; " + base
+                    + "[Console]::Out.WriteLine((Get-Location).Path); " + destination
+                    + "[Console]::Out.WriteLine((Get-Location).Path)")
+        }
         let base = directory.map { "cd " + ShellQuote.quote($0) + " 2>/dev/null; " } ?? ""
         guard let target, !target.isEmpty else { return base + "pwd; cd && pwd" }
         return base + "pwd; cd -- " + ShellQuote.quote(target) + " && pwd"

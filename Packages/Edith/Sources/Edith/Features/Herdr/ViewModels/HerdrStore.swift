@@ -677,6 +677,16 @@ final class HerdrStore {
         bridgeExecutable: URL? = HerdrTerminalBridge.executable()
     ) async throws -> TerminalLaunchRequest {
         if tab.agent.isTerminal {
+            if !tab.agent.machineIsLocal {
+                guard let machine = tab.machine else {
+                    throw HerdrQuinjetError.machineUnavailable
+                }
+                let connection = try await connection(for: machine)
+                if await connection.remotePlatform == .windows {
+                    return HerdrMachineTerminal.windowsLaunchRequest(
+                        connection: connection, environment: environment)
+                }
+            }
             return HerdrMachineTerminal.launchRequest(
                 for: tab.agent, environment: environment, executable: localExecutable)
         }
@@ -692,8 +702,10 @@ final class HerdrStore {
                 throw HerdrQuinjetError.machineUnavailable
             }
             let connection = try await connection(for: machine)
+            let platform = await connection.remotePlatform ?? .linux
             controller = HerdrOperationExecution.remoteControlRequest(
-                for: tab.agent, connection: connection, environment: environment)
+                for: tab.agent, connection: connection, environment: environment,
+                platform: platform)
         }
         return try HerdrTerminalBridge.launchRequest(
             bridgeExecutable: bridgeExecutable, controller: controller)

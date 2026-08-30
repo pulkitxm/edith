@@ -131,6 +131,7 @@ struct MachineProcessesTab: View {
         Task {
             let result = await MachineProcessOperationExecution.perform(
                 pid: process.pid, signal: signal,
+                platform: session.remotePlatform ?? .linux,
                 using: { command, timeout in
                     await session.runCommand(command, timeout: timeout)
                 })
