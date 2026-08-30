@@ -6,6 +6,21 @@ struct ElasticsearchDatabaseHTTPResponse: Sendable {
     let body: Data
 }
 
+final class ElasticsearchDatabaseURLSessionDelegate: NSObject, URLSessionTaskDelegate,
+    @unchecked Sendable
+{
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        task.cancel()
+        completionHandler(nil)
+    }
+}
+
 enum ElasticsearchDatabaseTransport {
     static let minimumResponseBytes = 1_024
     static let maximumResponseBytes = 16_777_216
@@ -23,7 +38,10 @@ enum ElasticsearchDatabaseTransport {
         configuration.httpMaximumConnectionsPerHost = 2
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.urlCache = nil
-        return URLSession(configuration: configuration)
+        return URLSession(
+            configuration: configuration,
+            delegate: ElasticsearchDatabaseURLSessionDelegate(),
+            delegateQueue: nil)
     }
 
     static func validate(

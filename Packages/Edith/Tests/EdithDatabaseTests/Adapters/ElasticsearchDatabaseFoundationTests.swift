@@ -7,6 +7,7 @@ private struct ElasticsearchDatabaseFoundationUnknownFailure: Error {}
 
 private enum ElasticsearchDatabaseFoundationScenario: Sendable {
     case response(status: Int, headers: [String: String], body: Data)
+    case redirect(status: Int, target: URL)
     case stalled
 }
 
@@ -100,6 +101,25 @@ private final class ElasticsearchDatabaseFoundationURLProtocol: URLProtocol, @un
                 cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: body)
             client?.urlProtocolDidFinishLoading(self)
+        case let .redirect(status, target):
+            guard let url = request.url,
+                let response = HTTPURLResponse(
+                    url: url,
+                    statusCode: status,
+                    httpVersion: "HTTP/1.1",
+                    headerFields: ["Location": target.absoluteString])
+            else {
+                client?.urlProtocol(
+                    self,
+                    didFailWithError: URLError(.badServerResponse))
+                return
+            }
+            var redirectedRequest = request
+            redirectedRequest.url = target
+            client?.urlProtocol(
+                self,
+                wasRedirectedTo: redirectedRequest,
+                redirectResponse: response)
         case .stalled:
             return
         }
@@ -120,7 +140,10 @@ private func elasticsearchFoundationSession(
     configuration.timeoutIntervalForResource =
         TimeInterval(plan.requestTimeoutMilliseconds) / 1_000
     configuration.urlCache = nil
-    return URLSession(configuration: configuration)
+    return URLSession(
+        configuration: configuration,
+        delegate: ElasticsearchDatabaseURLSessionDelegate(),
+        delegateQueue: nil)
 }
 
 private func elasticsearchFoundationPlan(
@@ -291,6 +314,33 @@ struct ElasticsearchDatabaseFoundationTransportTests {
             _ = try await URLSessionElasticsearchDatabaseClient.connect(
                 plan,
                 sessionFactory: { elasticsearchFoundationSession($0) })
+        }
+    }
+
+    @Test func rejectsRedirectsWithoutReplayingCredentials() async throws {
+        for target in [
+            "https://search.example.test/redirected",
+            "https://redirect-target.example.test/capture",
+        ] {
+            let targetURL = try #require(URL(string: target))
+            ElasticsearchDatabaseFoundationURLProtocol.state.configure([
+                .redirect(status: 307, target: targetURL),
+                .response(
+                    status: 200,
+                    headers: ["X-Elastic-Product": "Elasticsearch"],
+                    body: elasticsearchFoundationRootBody),
+            ])
+            let plan = try elasticsearchFoundationPlan()
+            await #expect(throws: ElasticsearchDatabaseDriverFailure.connection) {
+                _ = try await URLSessionElasticsearchDatabaseClient.connect(
+                    plan,
+                    sessionFactory: { elasticsearchFoundationSession($0) })
+            }
+            let requests = ElasticsearchDatabaseFoundationURLProtocol.state.snapshot().requests
+            #expect(requests.count == 1)
+            #expect(requests[0].url == "https://search.example.test/base/")
+            #expect(requests[0].authorization == plan.authorization.headerValue)
+            #expect(requests.allSatisfy { !$0.url.contains("redirect") })
         }
     }
 
