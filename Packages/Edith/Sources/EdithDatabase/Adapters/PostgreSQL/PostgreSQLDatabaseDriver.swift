@@ -58,7 +58,7 @@ struct PostgreSQLDatabaseConnectionPlan: Sendable {
     ) {
         configuration.options.connectTimeout = .milliseconds(
             Int64(clamping: connectTimeoutMilliseconds))
-        configuration.options.tlsServerName = tlsServerName
+        configuration.options.tlsServerName = effectiveTLSServerName
         configuration.options.additionalStartupParameters = [
             ("application_name", "Edith"),
             ("statement_timeout", String(statementTimeoutMilliseconds)),
@@ -67,6 +67,24 @@ struct PostgreSQLDatabaseConnectionPlan: Sendable {
             configuration.options.additionalStartupParameters.append(
                 ("default_transaction_read_only", "on"))
         }
+    }
+
+    private var effectiveTLSServerName: String? {
+        if let tlsServerName {
+            return tlsServerName
+        }
+        guard tls.verifiesCertificate, !hostIsIPAddress else { return nil }
+        return host
+    }
+
+    private var hostIsIPAddress: Bool {
+        let candidate: String
+        if host.hasPrefix("["), host.hasSuffix("]") {
+            candidate = String(host.dropFirst().dropLast())
+        } else {
+            candidate = host
+        }
+        return (try? SocketAddress(ipAddress: candidate, port: port)) != nil
     }
 }
 
@@ -327,6 +345,15 @@ enum PostgreSQLDatabaseDriverSupport {
 }
 
 extension PostgreSQLDatabaseTLSPlan {
+    var verifiesCertificate: Bool {
+        switch self {
+        case .disabled:
+            return false
+        case let .preferred(verifyCertificate), let .required(verifyCertificate):
+            return verifyCertificate
+        }
+    }
+
     func configuration() throws -> PostgresConnection.Configuration.TLS {
         switch self {
         case .disabled:

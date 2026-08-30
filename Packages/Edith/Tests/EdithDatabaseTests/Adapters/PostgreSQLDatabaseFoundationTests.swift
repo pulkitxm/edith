@@ -1,5 +1,6 @@
 import Foundation
 import NIOCore
+import NIOEmbedded
 import NIOPosix
 import PostgresNIO
 import Testing
@@ -36,6 +37,59 @@ private struct PostgreSQLDatabaseFoundationUnknownFailure: Error {}
     #expect(
         configuration.options.additionalStartupParameters.map(\.1)
             == ["Edith", "3000", "on"])
+}
+
+@Test func postgresqlFoundationDerivesEstablishedChannelTLSServerName() throws {
+    let channel = EmbeddedChannel()
+    let dnsPlan = postgresqlFoundationTLSPlan(
+        host: "db.example.test",
+        tls: .required(verifyCertificate: true))
+    let derived = try dnsPlan.configuration(establishedChannel: channel)
+    #expect(derived.options.tlsServerName == "db.example.test")
+
+    let overridePlan = postgresqlFoundationTLSPlan(
+        host: "db.example.test",
+        tls: .required(verifyCertificate: true),
+        tlsServerName: "certificate.example.test")
+    let overridden = try overridePlan.configuration(establishedChannel: channel)
+    #expect(overridden.options.tlsServerName == "certificate.example.test")
+
+    let ipv4Plan = postgresqlFoundationTLSPlan(
+        host: "192.0.2.1",
+        tls: .required(verifyCertificate: true))
+    let ipv4 = try ipv4Plan.configuration(establishedChannel: channel)
+    #expect(ipv4.options.tlsServerName == nil)
+
+    let ipv6Plan = postgresqlFoundationTLSPlan(
+        host: "2001:db8::1",
+        tls: .required(verifyCertificate: true))
+    let ipv6 = try ipv6Plan.configuration(establishedChannel: channel)
+    #expect(ipv6.options.tlsServerName == nil)
+
+    let disabledPlan = postgresqlFoundationTLSPlan(
+        host: "db.example.test",
+        tls: .disabled)
+    let disabled = try disabledPlan.configuration(establishedChannel: channel)
+    #expect(disabled.options.tlsServerName == nil)
+    _ = try channel.finish()
+}
+
+private func postgresqlFoundationTLSPlan(
+    host: String,
+    tls: PostgreSQLDatabaseTLSPlan,
+    tlsServerName: String? = nil
+) -> PostgreSQLDatabaseConnectionPlan {
+    PostgreSQLDatabaseConnectionPlan(
+        host: host,
+        port: 5_432,
+        username: "reader",
+        password: "fixture-password",
+        database: "edith_lab",
+        tls: tls,
+        tlsServerName: tlsServerName,
+        connectTimeoutMilliseconds: 2_000,
+        statementTimeoutMilliseconds: 3_000,
+        readOnly: true)
 }
 
 @Test func postgresqlFoundationIdentityMapsStandaloneServer() throws {
