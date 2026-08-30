@@ -2065,6 +2065,8 @@ private actor DatabaseManagementMutationCoordinator {
                 return false
             }
         }
+        completedDisconnections[key] = nil
+        completedDisconnectionOrder.removeAll { $0 == key }
         operationPermits[key, default: [:]][permitID] = OperationPermit(
             cancellation: cancel)
         disconnectors[key, default: [:]][executorID] = disconnect
