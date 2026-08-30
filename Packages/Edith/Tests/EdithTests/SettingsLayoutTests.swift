@@ -77,6 +77,7 @@ import EdithKit
         #expect(maintenance.contains("ForEach(AppMaintenanceSection.allCases"))
         #expect(maintenance.contains(".pickerStyle(.menu)"))
         #expect(maintenance.contains("App Maintenance section"))
+        #expect(maintenance.contains("theme.opacity(0.2)"))
         #expect(!maintenance.contains(".pickerStyle(.segmented)"))
     }
 

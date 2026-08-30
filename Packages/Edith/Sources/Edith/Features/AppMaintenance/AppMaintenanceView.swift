@@ -450,12 +450,6 @@ struct AppMaintenanceView: View {
             set: { sectionRaw = $0.rawValue })
     }
 
-    private var focusedUpdateBinding: Binding<String?> {
-        Binding(
-            get: { model.focusedUpdateID },
-            set: { model.focusedUpdateID = $0 })
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -655,7 +649,7 @@ struct AppMaintenanceView: View {
                     "No updates", systemImage: "checkmark.circle",
                     description: Text("Everything visible is current, ignored, or snoozed."))
             } else {
-                List(filteredUpdates, selection: focusedUpdateBinding) { item in
+                List(filteredUpdates) { item in
                     HStack(spacing: UIScale.pt(9)) {
                         Toggle(
                             "",
@@ -682,7 +676,14 @@ struct AppMaintenanceView: View {
                         Text(item.source.title).settingsCaption().lineLimit(1)
                     }
                     .padding(.vertical, UIScale.pt(3))
-                    .tag(item.id)
+                    .contentShape(Rectangle())
+                    .onTapGesture { model.focusedUpdateID = item.id }
+                    .accessibilityAddTraits(
+                        model.focusedUpdateID == item.id ? .isSelected : []
+                    )
+                    .accessibilityAction { model.focusedUpdateID = item.id }
+                    .listRowBackground(
+                        model.focusedUpdateID == item.id ? theme.opacity(0.2) : Color.clear)
                 }
                 .listStyle(.sidebar)
             }
