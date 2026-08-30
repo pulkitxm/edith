@@ -4,6 +4,7 @@ import MongoCore
 import MongoKitten
 import NIOCore
 import NIOPosix
+import NIOTransportServices
 import Testing
 
 @testable import EdithDatabase
@@ -93,6 +94,17 @@ private enum MongoDBDatabaseFoundationFixtures {
     }
     #expect(username == "reader")
     #expect(password == "fixture-password")
+}
+
+@Test func mongoFoundationHostValidationProtectsTheResolverBoundary() {
+    #expect(MongoDBDatabaseTransport.validHost("127.0.0.1"))
+    #expect(MongoDBDatabaseTransport.validHost("::1"))
+    #expect(MongoDBDatabaseTransport.validHost("mongo.example.test"))
+    #expect(MongoDBDatabaseTransport.validHost("mongo.example.test."))
+    #expect(!MongoDBDatabaseTransport.validHost(String(repeating: "a", count: 64) + ".test"))
+    #expect(!MongoDBDatabaseTransport.validHost("-mongo.example.test"))
+    #expect(!MongoDBDatabaseTransport.validHost("mongo..example.test"))
+    #expect(!MongoDBDatabaseTransport.validHost("mongo.exámple.test"))
 }
 
 @Test func mongoFoundationReadPlanRetainsBoundedCommandInputs() {
@@ -293,7 +305,7 @@ private enum MongoDBDatabaseFoundationFixtures {
 @Test func mongoFoundationOwnedEventLoopShutsDownExactlyOnce() async throws {
     let counter = MongoDBDatabaseFoundationShutdownCounter()
     let eventLoop = MongoDBDatabaseOwnedEventLoop(
-        group: MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        group: NIOTSEventLoopGroup(loopCount: 1)
     ) { group in
         await counter.increment()
         try await Task.sleep(nanoseconds: 10_000_000)
@@ -308,6 +320,120 @@ private enum MongoDBDatabaseFoundationFixtures {
     #expect(await counter.count() == 1)
 }
 
+@Test func mongoFoundationStalledHandshakeHonorsTheConfiguredWallTime() async throws {
+    let serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+    let server = try await ServerBootstrap(group: serverGroup)
+        .childChannelInitializer { channel in
+            channel.eventLoop.makeSucceededVoidFuture()
+        }
+        .bind(host: "127.0.0.1", port: 0)
+        .get()
+    guard let port = server.localAddress?.port else {
+        try await server.close().get()
+        try await serverGroup.shutdownGracefully()
+        Issue.record("Expected a bound server port")
+        return
+    }
+    let settings = ConnectionSettings(
+        authentication: .unauthenticated,
+        authenticationSource: nil,
+        hosts: [ConnectionSettings.Host(hostname: "localhost", port: port)],
+        targetDatabase: "admin",
+        useSSL: false,
+        verifySSLCertificates: true,
+        maximumNumberOfConnections: 1,
+        connectTimeout: 0.2,
+        socketTimeout: 1,
+        applicationName: "Edith")
+    let context = DatabaseAdapterOperationContext(
+        operation: DatabaseOperationContext(
+            operationID: DatabaseOperationID(),
+            deadline: Date().addingTimeInterval(3)),
+        cancellation: DatabaseAdapterCancellationSignal())
+    let started = ContinuousClock.now
+    var observedFailure: MongoDBDatabaseDriverFailure?
+    do {
+        let transport = try await MongoDBDatabaseTransport.connect(
+            MongoDBDatabaseConnectionPlan(settings: settings),
+            context: context)
+        try await transport.close()
+        Issue.record("Expected the stalled handshake to time out")
+    } catch let failure as MongoDBDatabaseDriverFailure {
+        observedFailure = failure
+    }
+    let elapsed = started.duration(to: .now)
+    try await server.close().get()
+    try await serverGroup.shutdownGracefully()
+    #expect(observedFailure == .timeout)
+    #expect(elapsed < .seconds(2))
+}
+
+@Test func mongoFoundationStalledHandshakeHonorsCancellation() async throws {
+    let serverGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+    let server = try await ServerBootstrap(group: serverGroup)
+        .childChannelInitializer { channel in
+            channel.eventLoop.makeSucceededVoidFuture()
+        }
+        .bind(host: "127.0.0.1", port: 0)
+        .get()
+    guard let port = server.localAddress?.port else {
+        try await server.close().get()
+        try await serverGroup.shutdownGracefully()
+        Issue.record("Expected a bound server port")
+        return
+    }
+    let cancellation = DatabaseAdapterCancellationSignal()
+    let settings = ConnectionSettings(
+        authentication: .unauthenticated,
+        authenticationSource: nil,
+        hosts: [ConnectionSettings.Host(hostname: "localhost", port: port)],
+        targetDatabase: "admin",
+        useSSL: false,
+        verifySSLCertificates: true,
+        maximumNumberOfConnections: 1,
+        connectTimeout: 3,
+        socketTimeout: 3,
+        applicationName: "Edith")
+    let context = DatabaseAdapterOperationContext(
+        operation: DatabaseOperationContext(
+            operationID: DatabaseOperationID(),
+            deadline: Date().addingTimeInterval(3)),
+        cancellation: cancellation)
+    let started = ContinuousClock.now
+    let connection = Task {
+        try await MongoDBDatabaseTransport.connect(
+            MongoDBDatabaseConnectionPlan(settings: settings),
+            context: context)
+    }
+    try await Task.sleep(nanoseconds: 50_000_000)
+    await cancellation.cancel(.userRequested)
+    var wasCancelled = false
+    do {
+        let transport = try await connection.value
+        try await transport.close()
+        Issue.record("Expected the stalled handshake to be cancelled")
+    } catch is CancellationError {
+        wasCancelled = true
+    }
+    let elapsed = started.duration(to: .now)
+    try await server.close().get()
+    try await serverGroup.shutdownGracefully()
+    #expect(wasCancelled)
+    #expect(elapsed < .seconds(2))
+}
+
+@Test func mongoFoundationSCRAMPasswordPreparationFailsClosed() throws {
+    #expect(
+        try MongoDBDatabaseSCRAMSHA256.preparedPassword("printable password")
+            == Data("printable password".utf8))
+    #expect(throws: MongoDBDatabaseTransportFailure.authentication) {
+        _ = try MongoDBDatabaseSCRAMSHA256.preparedPassword("password\u{00AD}")
+    }
+    #expect(throws: MongoDBDatabaseTransportFailure.authentication) {
+        _ = try MongoDBDatabaseSCRAMSHA256.preparedPassword("password\n")
+    }
+}
+
 @Test func mongoFoundationDriverErrorsAreClassifiedWithoutLosingCancellation() throws {
     #expect(
         try MongoDBDatabaseDriverErrorClassifier.classify(
@@ -318,6 +444,9 @@ private enum MongoDBDatabaseFoundationFixtures {
     #expect(
         try MongoDBDatabaseDriverErrorClassifier.classify(
             MongoError(.cannotConnect, reason: nil)) == .connection)
+    #expect(
+        try MongoDBDatabaseDriverErrorClassifier.classify(
+            ChannelError.connectTimeout(.milliseconds(100))) == .timeout)
     #expect(
         try MongoDBDatabaseDriverErrorClassifier.classify(
             MongoDBDatabaseFoundationFixtures.genericError(code: 13)) == .permission(13))

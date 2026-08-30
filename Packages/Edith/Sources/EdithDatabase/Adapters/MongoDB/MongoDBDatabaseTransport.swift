@@ -5,8 +5,8 @@ import MongoClient
 import MongoCore
 import MongoKitten
 import NIOCore
-import NIOPosix
 import NIOSSL
+import NIOTransportServices
 
 enum MongoDBDatabaseTransportFailure: Error, Equatable, Sendable {
     case cancelled
@@ -18,9 +18,9 @@ enum MongoDBDatabaseTransportFailure: Error, Equatable, Sendable {
     case authentication
 }
 
-typealias MongoDBDatabaseEventLoopFactory = @Sendable () -> MultiThreadedEventLoopGroup
+typealias MongoDBDatabaseEventLoopFactory = @Sendable () -> NIOTSEventLoopGroup
 typealias MongoDBDatabaseEventLoopShutdown =
-    @Sendable (MultiThreadedEventLoopGroup) async throws -> Void
+    @Sendable (NIOTSEventLoopGroup) async throws -> Void
 
 actor MongoDBDatabaseOwnedEventLoop {
     private enum State {
@@ -29,12 +29,12 @@ actor MongoDBDatabaseOwnedEventLoop {
         case shutDown
     }
 
-    nonisolated let group: MultiThreadedEventLoopGroup
+    nonisolated let group: NIOTSEventLoopGroup
     private let shutdownOperation: MongoDBDatabaseEventLoopShutdown
     private var state = State.active
 
     init(
-        group: MultiThreadedEventLoopGroup,
+        group: NIOTSEventLoopGroup,
         shutdownOperation: @escaping MongoDBDatabaseEventLoopShutdown
     ) {
         self.group = group
@@ -134,7 +134,7 @@ enum MongoDBDatabaseTransport {
         _ plan: MongoDBDatabaseConnectionPlan,
         context: DatabaseAdapterConnectionContext,
         eventLoopFactory: MongoDBDatabaseEventLoopFactory = {
-            MultiThreadedEventLoopGroup(numberOfThreads: 1)
+            NIOTSEventLoopGroup(loopCount: 1)
         },
         eventLoopShutdown: @escaping MongoDBDatabaseEventLoopShutdown = { group in
             try await group.shutdownGracefully()
@@ -178,12 +178,22 @@ enum MongoDBDatabaseTransport {
             }
             cancellationTask.cancel()
             deadlineTask.cancel()
-            attempt.finish()
+            let termination = attempt.finish()
+            do {
+                try await check(context: context, deadline: deadline, attempt: attempt)
+            } catch {
+                try? await transport.close()
+                throw error
+            }
+            if let termination {
+                try? await transport.close()
+                throw termination
+            }
             return transport
         } catch {
             cancellationTask.cancel()
             deadlineTask.cancel()
-            await attempt.closeCurrentChannel()
+            await attempt.closeCurrentResources()
             do {
                 try await eventLoop.shutdown()
             } catch {
@@ -248,7 +258,7 @@ enum MongoDBDatabaseTransport {
             } catch {
                 lastError = error
             }
-            await attempt.closeCurrentChannel()
+            await attempt.closeCurrentResources()
         }
         throw lastError
     }
@@ -268,12 +278,11 @@ enum MongoDBDatabaseTransport {
             try plan.settings.useSSL
             ? NIOSSLContext(configuration: TLSConfiguration.makeClientConfiguration())
             : nil
-        let bootstrap = ClientBootstrap(group: eventLoop.group)
+        guard validHost(host.hostname) else {
+            throw MongoDBDatabaseDriverFailure.connection
+        }
+        let bootstrap = NIOTSConnectionBootstrap(group: eventLoop.group)
             .connectTimeout(timeout)
-            .channelOption(
-                ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR),
-                value: 1
-            )
             .channelInitializer { channel in
                 if let termination = attempt.install(channel) {
                     channel.close(mode: .all, promise: nil)
@@ -313,12 +322,14 @@ enum MongoDBDatabaseTransport {
             })
         try await check(context: context, deadline: deadline, attempt: attempt)
         try await connection.ping()
+        try await check(context: context, deadline: deadline, attempt: attempt)
         let build = try await connection.executeCodable(
             MongoDBBuildInfoCommand(),
             decodeAs: MongoDBBuildInfoResponse.self,
             namespace: .administrativeCommand,
             sessionId: connection.implicitSessionId,
             traceLabel: "DatabaseIdentity")
+        try await check(context: context, deadline: deadline, attempt: attempt)
         let identity = MongoDBDatabaseDriverSupport.identity(handshake: handshake, build: build)
         return MongoDBDatabaseConnectedTransport(
             connection: connection,
@@ -380,6 +391,31 @@ enum MongoDBDatabaseTransport {
         return min(configuredDeadline, contextDeadline)
     }
 
+    static func validHost(_ host: String) -> Bool {
+        guard !host.isEmpty, host.utf8.count <= 253 else { return false }
+        if (try? SocketAddress(ipAddress: host, port: 0)) != nil {
+            return true
+        }
+        let value = host.hasSuffix(".") ? String(host.dropLast()) : host
+        guard !value.isEmpty else { return false }
+        let labels = value.split(separator: ".", omittingEmptySubsequences: false)
+        return labels.allSatisfy { label in
+            guard !label.isEmpty,
+                label.utf8.count <= 63,
+                label.first != "-",
+                label.last != "-"
+            else {
+                return false
+            }
+            return label.utf8.allSatisfy { byte in
+                (48...57).contains(byte)
+                    || (65...90).contains(byte)
+                    || (97...122).contains(byte)
+                    || byte == 45
+            }
+        }
+    }
+
     private static func remainingTime(_ deadline: Date) throws -> TimeAmount {
         let remaining = deadline.timeIntervalSinceNow
         guard remaining.isFinite, remaining > 0 else {
@@ -423,6 +459,7 @@ private final class MongoDBDatabaseConnectionAttempt: @unchecked Sendable {
     private let lock = NSLock()
     private var currentChannel: (any Channel)?
     private var storedTermination: MongoDBDatabaseTransportFailure?
+    private var finished = false
 
     var termination: MongoDBDatabaseTransportFailure? {
         lock.withLock { storedTermination }
@@ -430,6 +467,7 @@ private final class MongoDBDatabaseConnectionAttempt: @unchecked Sendable {
 
     func install(_ channel: any Channel) -> MongoDBDatabaseTransportFailure? {
         lock.withLock {
+            guard !finished else { return .cancelled }
             currentChannel = channel
             return storedTermination
         }
@@ -437,6 +475,7 @@ private final class MongoDBDatabaseConnectionAttempt: @unchecked Sendable {
 
     func terminate(_ termination: MongoDBDatabaseTransportFailure) {
         let channel: (any Channel)? = lock.withLock {
+            guard !finished else { return nil }
             if storedTermination == nil {
                 storedTermination = termination
             }
@@ -445,13 +484,15 @@ private final class MongoDBDatabaseConnectionAttempt: @unchecked Sendable {
         channel?.close(mode: .all, promise: nil)
     }
 
-    func finish() {
+    func finish() -> MongoDBDatabaseTransportFailure? {
         lock.withLock {
+            finished = true
             currentChannel = nil
+            return storedTermination
         }
     }
 
-    func closeCurrentChannel() async {
+    func closeCurrentResources() async {
         let channel: (any Channel)? = lock.withLock {
             defer { currentChannel = nil }
             return currentChannel
@@ -905,6 +946,11 @@ private struct MongoDBDatabaseSASLStart: Encodable {
     let saslStart: Int32 = 1
     let mechanism = "SCRAM-SHA-256"
     let payload: MongoDBDatabaseSASLPayload
+    let options = MongoDBDatabaseSASLStartOptions()
+}
+
+private struct MongoDBDatabaseSASLStartOptions: Encodable {
+    let skipEmptyExchange = true
 }
 
 private struct MongoDBDatabaseSASLContinue: Encodable {
@@ -919,7 +965,7 @@ private struct MongoDBDatabaseSASLReply: Decodable {
     let payload: MongoDBDatabaseSASLPayload
 }
 
-private enum MongoDBDatabaseSCRAMSHA256 {
+enum MongoDBDatabaseSCRAMSHA256 {
     static func authenticate(
         _ connection: MongoConnection,
         username: String,
@@ -928,6 +974,7 @@ private enum MongoDBDatabaseSCRAMSHA256 {
         cancellationCheck: @escaping @Sendable () async throws -> Void
     ) async throws {
         try await cancellationCheck()
+        try validatePassword(password)
         let escapedUsername =
             username
             .replacingOccurrences(of: "=", with: "=3D")
@@ -948,7 +995,7 @@ private enum MongoDBDatabaseSCRAMSHA256 {
         }
         let serverFirst = try reply.payload.decodedString()
         let challenge = try challenge(serverFirst, nonce: nonce)
-        var passwordBytes = Data(password.utf8)
+        var passwordBytes = try preparedPassword(password)
         defer {
             passwordBytes.resetBytes(in: 0..<passwordBytes.count)
         }
@@ -1003,6 +1050,20 @@ private enum MongoDBDatabaseSCRAMSHA256 {
         }
         guard reply.done else {
             throw MongoDBDatabaseDriverFailure.authentication
+        }
+    }
+
+    static func preparedPassword(_ password: String) throws -> Data {
+        try validatePassword(password)
+        return Data(password.utf8)
+    }
+
+    private static func validatePassword(_ password: String) throws {
+        guard !password.isEmpty,
+            password.utf8.count <= 16_384,
+            password.unicodeScalars.allSatisfy({ (0x20...0x7E).contains($0.value) })
+        else {
+            throw MongoDBDatabaseTransportFailure.authentication
         }
     }
 
