@@ -461,6 +461,7 @@ actor DatabaseBrokerRuntime {
         let clients = Array(activeClients.values)
         let listener = listener
         let startupTask = startupTask
+        startupTask?.cancel()
         let runtime = self
         let task = Task.detached(priority: .userInitiated) {
             await source?.cancelAndWait()
