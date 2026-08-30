@@ -202,13 +202,13 @@ actor PostgreSQLDatabaseAdapterSession: DatabaseAdapterSession {
             }
             try await PostgreSQLDatabaseAdapterSupport.check(context)
             return output
-        } catch let failure as DatabaseAdapterFailure {
-            throw failure
         } catch {
             switch await context.cancellation.reason() {
             case .deadlineExceeded:
+                await interrupt(operationID: context.operationID)
                 throw PostgreSQLDatabaseAdapterSupport.deadlineExceeded
             case .userRequested, .sessionDisconnected:
+                await interrupt(operationID: context.operationID)
                 throw .cancelled
             case nil:
                 break
@@ -217,6 +217,9 @@ actor PostgreSQLDatabaseAdapterSession: DatabaseAdapterSession {
                 await context.cancellation.cancel(.userRequested)
                 await interrupt(operationID: context.operationID)
                 throw .cancelled
+            }
+            if let failure = error as? DatabaseAdapterFailure {
+                throw failure
             }
             if let driverFailure = error as? PostgreSQLDatabaseDriverFailure {
                 if case .connection = driverFailure {
@@ -363,8 +366,6 @@ enum PostgreSQLDatabaseAdapterSupport {
                 throw error
             }
             return established
-        } catch let failure as DatabaseAdapterFailure {
-            throw failure
         } catch {
             switch await context.cancellation.reason() {
             case .deadlineExceeded:
@@ -376,6 +377,9 @@ enum PostgreSQLDatabaseAdapterSupport {
             }
             if error is CancellationError || Task.isCancelled {
                 throw .cancelled
+            }
+            if let failure = error as? DatabaseAdapterFailure {
+                throw failure
             }
             if let driverFailure = error as? PostgreSQLDatabaseDriverFailure {
                 throw map(driverFailure, fallback: connectionFailed)
