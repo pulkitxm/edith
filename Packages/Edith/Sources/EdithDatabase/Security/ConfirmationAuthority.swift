@@ -276,6 +276,7 @@ public struct DatabaseDestructiveEffect: Codable, Hashable, Sendable {
     public let connection: DatabaseConnectionIdentity
     public let target: DatabaseTargetIdentifier
     public let selectedRecords: [DatabaseRecordIdentity]
+    public let predicate: DatabaseFilter?
     public let scope: DatabaseMutationScope
     public let impact: DatabaseMutationImpact
     public let transactionBehavior: DatabaseTransactionBehavior
@@ -289,6 +290,7 @@ public struct DatabaseDestructiveEffect: Codable, Hashable, Sendable {
         connection: DatabaseConnectionIdentity,
         target: DatabaseTargetIdentifier,
         selectedRecords: [DatabaseRecordIdentity],
+        predicate: DatabaseFilter?,
         scope: DatabaseMutationScope,
         impact: DatabaseMutationImpact,
         transactionBehavior: DatabaseTransactionBehavior,
@@ -301,6 +303,7 @@ public struct DatabaseDestructiveEffect: Codable, Hashable, Sendable {
         self.connection = connection
         self.target = target
         self.selectedRecords = selectedRecords
+        self.predicate = predicate
         self.scope = scope
         self.impact = impact
         self.transactionBehavior = transactionBehavior
@@ -595,6 +598,9 @@ actor DatabaseConfirmationAuthority {
         let redactedSelectedRecords = plan.request.selectedRecords.map {
             Self.redact($0, with: redactor)
         }
+        let redactedPredicate = plan.request.predicate.map {
+            Self.redact($0, with: redactor)
+        }
         let redactedImpact = DatabaseMutationImpact(
             count: plan.impact.count,
             description: redactor.redact(plan.impact.description))
@@ -616,6 +622,7 @@ actor DatabaseConfirmationAuthority {
             connection: redactedConnection,
             target: redactedTarget,
             selectedRecords: redactedSelectedRecords,
+            predicate: redactedPredicate,
             scope: plan.scope,
             impact: redactedImpact,
             transactionBehavior: plan.transactionBehavior,
@@ -641,6 +648,7 @@ actor DatabaseConfirmationAuthority {
             connection: effectSnapshot.connection,
             target: effectSnapshot.target,
             selectedRecords: effectSnapshot.selectedRecords,
+            predicate: effectSnapshot.predicate,
             scope: effectSnapshot.scope,
             impact: effectSnapshot.impact,
             transactionBehavior: effectSnapshot.transactionBehavior,
@@ -768,6 +776,7 @@ private struct DatabaseDestructiveEffectSnapshot: Codable, Hashable, Sendable {
     let connection: DatabaseConnectionIdentity
     let target: DatabaseTargetIdentifier
     let selectedRecords: [DatabaseRecordIdentity]
+    let predicate: DatabaseFilter?
     let scope: DatabaseMutationScope
     let impact: DatabaseMutationImpact
     let transactionBehavior: DatabaseTransactionBehavior
@@ -1370,6 +1379,28 @@ extension DatabaseConfirmationAuthority {
                     name: redactor.redact($0.name),
                     value: redactor.redact($0.value))
             })
+    }
+
+    private static func redact(
+        _ filter: DatabaseFilter,
+        with redactor: DatabaseSecretRedactor
+    ) -> DatabaseFilter {
+        switch filter {
+        case let .predicate(predicate):
+            return .predicate(
+                DatabaseFilterPredicate(
+                    field: DatabaseFieldPath(
+                        predicate.field.segments.map { redactor.redact($0) }),
+                    operation: predicate.operation,
+                    values: predicate.values.map { redactor.redact($0) },
+                    caseSensitivity: predicate.caseSensitivity))
+        case let .all(children):
+            return .all(children.map { redact($0, with: redactor) })
+        case let .any(children):
+            return .any(children.map { redact($0, with: redactor) })
+        case let .not(child):
+            return .not(redact(child, with: redactor))
+        }
     }
 
     private static func redact(

@@ -137,6 +137,7 @@ private enum DatabaseExecutionContractFixtures {
             connection: DatabaseConnectionFixtures.connectionIdentity,
             target: target,
             selectedRecords: [],
+            predicate: mutation.predicate,
             scope: .predicate,
             impact: impact,
             transactionBehavior: .transactional,
