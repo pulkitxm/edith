@@ -503,6 +503,70 @@ import Testing
                 owner: owner) == false)
     }
 
+    @Test func ephemeralReservationsBindOwnerWithoutRequiringSavedConnection() async throws {
+        let (directory, path) = try DatabasePersistenceFixtures.temporaryStorePath()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let firstStore = try SQLiteDatabaseMetadataStore(path: path)
+        let secondStore = try SQLiteDatabaseMetadataStore(path: path)
+        let owner = DatabaseRuntimeOwnerToken(
+            rawValue: UUID(uuidString: "F74B01FB-79E4-4EC8-8127-95DA191AFA70")!)
+        _ = try await firstStore.claimRuntimeOwner(
+            owner,
+            claimedAt: Date(timeIntervalSince1970: 500))
+        let unsaved = try DatabasePersistenceFixtures.connection(
+            id: UUID(uuidString: "B615D149-D119-4269-8FE1-4DFB58D7FA84")!,
+            name: "Unsaved test connection",
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 200))
+        #expect(try await firstStore.connection(id: unsaved.id) == nil)
+        let running = DatabasePersistenceFixtures.operation(
+            id: UUID(uuidString: "9534CD10-69AC-4645-B7AC-A663F69DE944")!,
+            connection: unsaved,
+            kind: .databaseConnectionTest,
+            state: .running,
+            startedAt: Date(timeIntervalSince1970: 600),
+            finishedAt: nil)
+
+        async let firstReservation = firstStore.reserveEphemeralOperation(
+            running,
+            owner: owner)
+        async let secondReservation = secondStore.reserveEphemeralOperation(
+            running,
+            owner: owner)
+        let reservations = try await [firstReservation, secondReservation]
+        #expect(reservations.filter { $0 == .reserved }.count == 1)
+        #expect(reservations.filter { $0 == .operationIdentifierExists }.count == 1)
+        #expect(try await firstStore.operation(id: running.id) == running)
+
+        let legacyOverwrite = DatabaseOperationRecordSummary(
+            id: running.id,
+            kind: running.kind,
+            state: .failed,
+            connection: running.connection,
+            startedAt: running.startedAt,
+            finishedAt: Date(timeIntervalSince1970: 700),
+            cancellationSupport: running.cancellationSupport,
+            retryClassification: running.retryClassification)
+        try await secondStore.recordOperation(legacyOverwrite)
+        #expect(try await firstStore.operation(id: running.id) == running)
+
+        #expect(
+            try await firstStore.releaseRuntimeOwner(
+                owner,
+                releasedAt: Date(timeIntervalSince1970: 800)))
+        let inactive = DatabasePersistenceFixtures.operation(
+            id: UUID(uuidString: "371C5D43-C7CD-4BA9-B208-52A80E15C0C6")!,
+            connection: unsaved,
+            kind: .databaseConnectionTest,
+            state: .running,
+            startedAt: Date(timeIntervalSince1970: 801),
+            finishedAt: nil)
+        #expect(
+            try await firstStore.reserveEphemeralOperation(inactive, owner: owner)
+                == .runtimeOwnerNotActive)
+        #expect(try await firstStore.operation(id: inactive.id) == nil)
+    }
+
     @Test func claimingNewOwnerAtomicallyRecoversInterruptedOperations() async throws {
         let (directory, path) = try DatabasePersistenceFixtures.temporaryStorePath()
         defer { try? FileManager.default.removeItem(at: directory) }
