@@ -4,6 +4,7 @@ enum DatabaseExecutionValidationError: Error, Equatable, Sendable {
     case unsupportedVersion(contract: String, expected: Int, actual: Int)
     case deadlineExceeded
     case operationIdentifierAlreadyExists(DatabaseOperationID)
+    case connectionDefinitionChanged(DatabaseConnectionID)
     case invalidTarget(String)
     case emptyCommand
     case queryLanguageMismatch(language: DatabaseQueryLanguage, product: DatabaseProduct)

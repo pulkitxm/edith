@@ -183,6 +183,12 @@ public enum DatabaseMetadataStoreError: Error, Equatable, Sendable {
     case corruptedRecord(kind: String, identifier: String)
 }
 
+public enum DatabaseOperationReservationResult: String, Codable, Hashable, Sendable {
+    case reserved
+    case operationIdentifierExists
+    case connectionChangedOrMissing
+}
+
 public protocol DatabaseMetadataStore: Sendable {
     func saveConnection(_ definition: DatabaseConnectionDefinition) async throws
     func connection(id: DatabaseConnectionID) async throws -> DatabaseConnectionDefinition?
@@ -195,6 +201,10 @@ public protocol DatabaseMetadataStore: Sendable {
         -> [DatabaseSavedQuery]
     func deleteSavedQuery(id: DatabaseSavedQueryID) async throws -> Bool
     func createOperationIfAbsent(_ summary: DatabaseOperationRecordSummary) async throws -> Bool
+    func reserveOperation(
+        _ summary: DatabaseOperationRecordSummary,
+        for connection: DatabaseConnectionDefinition
+    ) async throws -> DatabaseOperationReservationResult
     func recordOperation(_ summary: DatabaseOperationRecordSummary) async throws
     func operation(id: DatabaseOperationID) async throws -> DatabaseOperationRecordSummary?
     func operations(matching search: DatabaseOperationHistorySearch) async throws
