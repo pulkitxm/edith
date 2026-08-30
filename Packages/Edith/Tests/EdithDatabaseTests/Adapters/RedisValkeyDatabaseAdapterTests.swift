@@ -1512,6 +1512,13 @@ private enum RedisValkeyLiveEnvironment {
         "EDITH_DATABASE_VALKEY_PORT",
         "EDITH_DATABASE_VALKEY_PASSWORD",
     ].allSatisfy { ProcessInfo.processInfo.environment[$0] != nil }
+    static let minimumKeyCount = max(
+        1,
+        min(
+            UInt64(
+                ProcessInfo.processInfo.environment["EDITH_DATABASE_LIVE_MINIMUM_KEYS"] ?? "")
+                ?? 1,
+            2_000_000))
 
     static func configuration(
         product: DatabaseProduct
@@ -1549,7 +1556,7 @@ private enum RedisValkeyLiveEnvironment {
 @Suite("Redis and Valkey adapter live")
 struct RedisValkeyDatabaseAdapterIntegrationTests {
     @Test(
-        "reads live Redis and Valkey through bounded authenticated sessions",
+        "traverses live Redis and Valkey through bounded authenticated sessions",
         .enabled(if: RedisValkeyLiveEnvironment.isConfigured))
     func liveRead() async throws {
         for product in [DatabaseProduct.redis, .valkey] {
@@ -1572,7 +1579,9 @@ struct RedisValkeyDatabaseAdapterIntegrationTests {
             var continuation: DatabaseAdapterContinuation?
             var firstKey: DatabaseValue?
             var observedTypes = Set<String>()
-            for _ in 0..<5 {
+            var uniqueKeys = Set<DatabaseValue>()
+            var pageCount = 0
+            repeat {
                 let page = try await session.readPage(
                     try RedisValkeyAdapterFixtures.pageRequest(
                         configuration.definition.id,
@@ -1582,8 +1591,13 @@ struct RedisValkeyDatabaseAdapterIntegrationTests {
                         deadline: Date(timeIntervalSinceNow: 10)))
                 #expect(!page.records.isEmpty)
                 #expect(page.records.count <= 100)
+                #expect(page.metadata.completeness.state == .sampled)
+                #expect(page.metadata.count.accuracy == .unknown)
                 firstKey = firstKey ?? page.records.first?.identity?.components.first?.value
                 for record in page.records {
+                    if let key = record.identity?.components.first?.value {
+                        uniqueKeys.insert(key)
+                    }
                     if case let .string(type) = RedisValkeyAdapterFixtures.field(
                         "type",
                         in: record)
@@ -1592,15 +1606,19 @@ struct RedisValkeyDatabaseAdapterIntegrationTests {
                     }
                 }
                 continuation = page.nextContinuation
-                if observedTypes.isSuperset(
-                    of: ["string", "hash", "list", "set", "zset", "stream"])
-                {
+                if let continuation {
+                    #expect(continuation.payload.count <= 65_536)
+                }
+                pageCount += 1
+                if pageCount >= 20_000 {
+                    Issue.record("The live SCAN traversal exceeded the bounded page gate.")
                     break
                 }
-                if continuation == nil {
-                    break
-                }
-            }
+            } while continuation != nil
+            #expect(uniqueKeys.count >= RedisValkeyLiveEnvironment.minimumKeyCount)
+            #expect(
+                pageCount
+                    >= Int((RedisValkeyLiveEnvironment.minimumKeyCount + 99) / 100))
             #expect(
                 observedTypes.isSuperset(
                     of: ["string", "hash", "list", "set", "zset", "stream"]))
