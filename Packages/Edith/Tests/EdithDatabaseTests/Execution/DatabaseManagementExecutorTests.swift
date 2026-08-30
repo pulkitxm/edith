@@ -992,7 +992,7 @@ private enum DatabaseManagementFixtures {
         let clock = DatabaseManagementClock(DatabaseManagementFixtures.initialDate)
         let connection = try DatabaseManagementFixtures.connection(id: 16)
         let disconnectGate = DatabaseExecutorTestGate(open: false)
-        let (adapter, session) = try DatabaseManagementFixtures.adapter(
+        let (adapter, _) = try DatabaseManagementFixtures.adapter(
             connection: connection,
             gates: DatabaseExecutorTestSessionGates(disconnect: disconnectGate))
         let fixture = try await DatabaseManagementFixtures.make(
@@ -1033,15 +1033,21 @@ private enum DatabaseManagementFixtures {
         {
             await Task.yield()
         }
-        #expect(await executor.managementDisconnectionCompleted(connectionID: connection.id))
-        #expect(await session.snapshot().disconnectCount == 1)
         #expect(await executor.managementRetainedCoordinationCount() == 0)
+        let freshSession = try DatabaseManagementFixtures.adapter(connection: connection).1
+        await adapter.enqueueSession(freshSession)
+        #expect(
+            await executor.connect(
+                DatabaseConnectRequest(
+                    connectionID: connection.id,
+                    operation: DatabaseManagementFixtures.operation(142))
+            ).status == .succeeded)
         let completedRetry = await executor.deleteConnection(
             DatabaseConnectionDeleteRequest(connectionID: connection.id))
         #expect(completedRetry.payload?.deleted == true)
         #expect(completedRetry.payload?.disconnected == true)
+        #expect(await freshSession.snapshot().disconnectCount == 1)
         #expect(try await fixture.store.connection(id: connection.id) == nil)
-        #expect(await executor.managementRetainedCoordinationCount() == 0)
     }
     @Test func neverCompletingDisconnectCannotAccumulateCoordinationIdentifiers() async throws {
         let clock = DatabaseManagementClock(DatabaseManagementFixtures.initialDate)
