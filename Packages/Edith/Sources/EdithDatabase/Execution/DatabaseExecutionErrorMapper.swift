@@ -39,6 +39,9 @@ struct DatabaseExecutionErrorMapper: Sendable {
         if let confirmation = error as? DatabaseConfirmationError {
             return map(confirmation, target: target)
         }
+        if let continuation = error as? DatabaseContinuationAuthorityError {
+            return map(continuation, target: target)
+        }
         if let metadata = error as? DatabaseMetadataStoreError {
             return map(metadata, target: target)
         }
@@ -322,6 +325,40 @@ struct DatabaseExecutionErrorMapper: Sendable {
                 message: "The mutation confirmation is invalid or expired.",
                 retry: newPreviewRetry(),
                 target: target)
+        }
+    }
+
+    private func map(
+        _ error: DatabaseContinuationAuthorityError,
+        target: DatabaseTargetIdentifier?
+    ) -> DatabaseErrorEnvelope {
+        switch error {
+        case .invalidSigningKeyBytes:
+            envelope(
+                category: .internalFailure,
+                message: "Database continuation security is unavailable.",
+                target: target)
+        case .invalidLifetimeSeconds, .invalidRequest:
+            envelope(
+                category: .invalidRequest,
+                message: "The database continuation request is invalid.",
+                target: target)
+        case .malformedToken, .unsupportedVersion, .invalidAudience,
+            .invalidSignature, .issuedInFuture, .expired, .lifetimeExceeded,
+            .contextMismatch, .malformedPayload:
+            envelope(
+                category: .invalidRequest,
+                message: "The database continuation is invalid or expired.",
+                retry: retry(
+                    .retry,
+                    "Restart the read without a continuation."),
+                target: target)
+        case let .payloadLimitExceeded(actual, maximum):
+            envelope(
+                category: .resourceLimit,
+                message: "The database continuation exceeds a safety limit.",
+                target: target,
+                details: countDetails(actual: actual, maximum: maximum))
         }
     }
 

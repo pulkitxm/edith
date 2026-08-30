@@ -21,6 +21,7 @@ public actor DatabaseExecutor {
     private let makeUUID: @Sendable () -> UUID
     private let managementDrainTimeoutNanoseconds: UInt64
     private let maximumRetainedServerCancellations: Int
+    private var continuationAuthority: DatabaseContinuationAuthority?
     private var activeOperations: [DatabaseOperationID: DatabaseExecutorActiveOperation] = [:]
     private var backgroundTasks: [UUID: Task<Void, Never>] = [:]
     private var serverCancellationTasks: [DatabaseOperationID: Task<Void, Never>] = [:]
@@ -193,6 +194,105 @@ public actor DatabaseExecutor {
             }
         } catch {
             return failure(error)
+        }
+    }
+
+    public func browse(
+        _ request: DatabaseBrowseRequest
+    ) async -> DatabaseCommandResult<DatabaseBrowseResult> {
+        do {
+            try validator.validate(request)
+            try await requireActiveOwner()
+            let definition = try await connection(id: request.target.connectionID)
+            return await execute(
+                operation: request.operation,
+                kind: .databaseBrowse,
+                definition: definition,
+                target: request.target,
+                timeout: definition.limits.operationTimeout,
+                cancellationSupport: .serverSide,
+                retryClassification: .safeIdempotent,
+                terminalProgress: .determinate(completed: 1, total: 1, unit: .pages)
+            ) { [self, sessionPool] context, _ in
+                let authority = try await continuationAuthorityForUse()
+                let continuation = try request.page.continuation.map {
+                    try authority.open($0, for: request)
+                }
+                let adapterRequest = try DatabaseAdapterPageRequest(
+                    target: request.target,
+                    page: request.page,
+                    continuation: continuation)
+                let lease = try await sessionPool.lease(
+                    for: definition,
+                    context: context)
+                await attachSession(lease.session, to: context.operationID)
+                try await context.checkCancellation()
+                let adapterPage = try await lease.session.readPage(
+                    adapterRequest,
+                    context: context)
+                try adapterPage.validate(for: adapterRequest)
+                try await context.checkCancellation()
+                let nextContinuation = try adapterPage.nextContinuation.map {
+                    try authority.issue($0, for: request)
+                }
+                return DatabaseBrowseResult(
+                    page: DatabasePage(
+                        records: adapterPage.records,
+                        fields: adapterPage.fields,
+                        nextContinuation: nextContinuation,
+                        metadata: adapterPage.metadata))
+            }
+        } catch {
+            return failure(error, target: request.target)
+        }
+    }
+
+    public func query(
+        _ request: DatabaseQueryRequest
+    ) async -> DatabaseCommandResult<DatabaseQueryResult> {
+        do {
+            try validator.validate(request)
+            try await requireActiveOwner()
+            let definition = try await connection(id: request.target.connectionID)
+            return await execute(
+                operation: request.operation,
+                kind: .databaseQuery,
+                definition: definition,
+                target: request.target,
+                timeout: definition.limits.operationTimeout,
+                cancellationSupport: .serverSide,
+                retryClassification: .safeIdempotent,
+                terminalProgress: .determinate(completed: 1, total: 1, unit: .pages)
+            ) { [self, sessionPool] context, _ in
+                let authority = try await continuationAuthorityForUse()
+                let continuation = try request.page.continuation.map {
+                    try authority.open($0, for: request)
+                }
+                let adapterRequest = try DatabaseAdapterQueryRequest(
+                    request: request,
+                    continuation: continuation)
+                let lease = try await sessionPool.lease(
+                    for: definition,
+                    context: context)
+                await attachSession(lease.session, to: context.operationID)
+                try await context.checkCancellation()
+                let adapterPage = try await lease.session.query(
+                    adapterRequest,
+                    context: context)
+                try adapterPage.validate(for: adapterRequest.source)
+                try await context.checkCancellation()
+                let nextContinuation = try adapterPage.nextContinuation.map {
+                    try authority.issue($0, for: request)
+                }
+                return DatabaseQueryResult(
+                    page: DatabasePage(
+                        records: adapterPage.records,
+                        fields: adapterPage.fields,
+                        nextContinuation: nextContinuation,
+                        metadata: adapterPage.metadata))
+            }
+        } catch {
+            return failure(error, target: request.target)
         }
     }
 
@@ -992,6 +1092,18 @@ public actor DatabaseExecutor {
     ) -> [DatabaseSecretReference] {
         connection.authentication.secretReferences
             + [connection.tls.clientPrivateKey].compactMap { $0 }
+    }
+
+    private func continuationAuthorityForUse() async throws
+        -> DatabaseContinuationAuthority
+    {
+        if let continuationAuthority {
+            return continuationAuthority
+        }
+        let authority = try await DatabaseContinuationAuthority.create(
+            secretStore: secretStore)
+        continuationAuthority = authority
+        return authority
     }
 
     private func execute<Payload: Sendable>(
@@ -1851,10 +1963,11 @@ public actor DatabaseExecutor {
     }
 
     private func failure<Payload: Sendable>(
-        _ error: any Error
+        _ error: any Error,
+        target: DatabaseTargetIdentifier? = nil
     ) -> DatabaseCommandResult<Payload> {
         .failure(
-            DatabaseExecutionErrorMapper().map(error),
+            DatabaseExecutionErrorMapper().map(error, target: target),
             metadata: completeMetadata())
     }
 
