@@ -10,28 +10,28 @@ public enum DatabaseMutationOperationState: String, CaseIterable, Codable, Hasha
 }
 
 public struct DatabaseMutationStatusRequest: Codable, Hashable, Sendable {
-    public static let schemaVersion = 1
+    public static let schemaVersion = 2
 
     public let version: Int
     public let connectionID: DatabaseConnectionID
-    public let serverOperationIdentifier: String
+    public let acceptedMutation: DatabaseAcceptedMutation
     public let operation: DatabaseOperationContext
 
     public init(
         version: Int = DatabaseMutationStatusRequest.schemaVersion,
         connectionID: DatabaseConnectionID,
-        serverOperationIdentifier: String,
+        acceptedMutation: DatabaseAcceptedMutation,
         operation: DatabaseOperationContext = DatabaseOperationContext()
     ) {
         self.version = version
         self.connectionID = connectionID
-        self.serverOperationIdentifier = serverOperationIdentifier
+        self.acceptedMutation = acceptedMutation
         self.operation = operation
     }
 }
 
 public struct DatabaseMutationStatusResult: Codable, Hashable, Sendable {
-    public let serverOperationIdentifier: String
+    public let acceptedMutation: DatabaseAcceptedMutation
     public let state: DatabaseMutationOperationState
     public let progress: DatabaseOperationProgress?
     public let outcome: DatabaseMutationApplyResult?
@@ -39,14 +39,14 @@ public struct DatabaseMutationStatusResult: Codable, Hashable, Sendable {
     public let warnings: [DatabaseWarning]
 
     public init(
-        serverOperationIdentifier: String,
+        acceptedMutation: DatabaseAcceptedMutation,
         state: DatabaseMutationOperationState,
         progress: DatabaseOperationProgress? = nil,
         outcome: DatabaseMutationApplyResult? = nil,
         error: DatabaseErrorEnvelope? = nil,
         warnings: [DatabaseWarning] = []
     ) {
-        self.serverOperationIdentifier = serverOperationIdentifier
+        self.acceptedMutation = acceptedMutation
         self.state = state
         self.progress = progress
         self.outcome = outcome
@@ -65,37 +65,37 @@ public enum DatabaseMutationCancellationDisposition: String, CaseIterable, Codab
 }
 
 public struct DatabaseMutationCancelRequest: Codable, Hashable, Sendable {
-    public static let schemaVersion = 1
+    public static let schemaVersion = 2
 
     public let version: Int
     public let connectionID: DatabaseConnectionID
-    public let serverOperationIdentifier: String
+    public let acceptedMutation: DatabaseAcceptedMutation
     public let operation: DatabaseOperationContext
 
     public init(
         version: Int = DatabaseMutationCancelRequest.schemaVersion,
         connectionID: DatabaseConnectionID,
-        serverOperationIdentifier: String,
+        acceptedMutation: DatabaseAcceptedMutation,
         operation: DatabaseOperationContext = DatabaseOperationContext()
     ) {
         self.version = version
         self.connectionID = connectionID
-        self.serverOperationIdentifier = serverOperationIdentifier
+        self.acceptedMutation = acceptedMutation
         self.operation = operation
     }
 }
 
 public struct DatabaseMutationCancelResult: Codable, Hashable, Sendable {
-    public let serverOperationIdentifier: String
+    public let acceptedMutation: DatabaseAcceptedMutation
     public let disposition: DatabaseMutationCancellationDisposition
     public let status: DatabaseMutationStatusResult?
 
     public init(
-        serverOperationIdentifier: String,
+        acceptedMutation: DatabaseAcceptedMutation,
         disposition: DatabaseMutationCancellationDisposition,
         status: DatabaseMutationStatusResult? = nil
     ) {
-        self.serverOperationIdentifier = serverOperationIdentifier
+        self.acceptedMutation = acceptedMutation
         self.disposition = disposition
         self.status = status
     }

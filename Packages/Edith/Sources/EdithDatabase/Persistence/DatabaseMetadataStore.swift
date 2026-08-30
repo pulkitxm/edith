@@ -292,6 +292,22 @@ public enum DatabaseOwnedMetadataDeleteResult: String, Codable, Hashable, Sendab
     case runtimeOwnerNotActive
 }
 
+public enum DatabaseMutationOutcomeState: String, CaseIterable, Codable, Hashable, Sendable {
+    case unknown
+    case accepted
+    case applied
+    case notApplied
+    case partiallyApplied
+}
+
+public enum DatabaseMutationOutcomeTransitionResult: String, Codable, Hashable, Sendable {
+    case transitioned
+    case unchanged
+    case outcomeNotFound
+    case invalidTransition
+    case runtimeOwnerNotActive
+}
+
 public protocol DatabaseMetadataStore: Sendable {
     func saveConnection(
         _ definition: DatabaseConnectionDefinition,
@@ -353,6 +369,12 @@ public protocol DatabaseMetadataStore: Sendable {
         operationID: DatabaseOperationID,
         owner: DatabaseRuntimeOwnerToken
     ) async throws
+    func transitionMutationOutcome(
+        _ outcome: DatabaseMutationApplyResult,
+        operationID: DatabaseOperationID,
+        from expectedStates: Set<DatabaseMutationOutcomeState>,
+        owner: DatabaseRuntimeOwnerToken
+    ) async throws -> DatabaseMutationOutcomeTransitionResult
     func mutationOutcome(
         operationID: DatabaseOperationID
     ) async throws -> DatabaseMutationApplyResult?
@@ -377,6 +399,24 @@ public protocol DatabaseMetadataStore: Sendable {
         limit: Int,
         owner: DatabaseRuntimeOwnerToken
     ) async throws -> DatabaseMetadataCleanupResult
+}
+
+extension DatabaseMutationApplyResult {
+    var outcomeState: DatabaseMutationOutcomeState {
+        if disposition == .accepted {
+            return .accepted
+        }
+        switch effect {
+        case .applied:
+            return .applied
+        case .notApplied:
+            return .notApplied
+        case .partiallyApplied:
+            return .partiallyApplied
+        case .unknown:
+            return .unknown
+        }
+    }
 }
 
 enum DatabaseRuntimeOwnerFactory {

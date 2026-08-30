@@ -21,6 +21,7 @@ enum DatabaseExecutionValidationError: Error, Equatable, Sendable {
     case encodedSizeExceeded(name: String, actual: Int, maximum: Int)
     case productMismatch(expected: DatabaseProduct, actual: DatabaseProduct)
     case capabilityUnavailable(DatabaseCapabilityID, DatabaseCapabilityUnavailableReason?)
+    case mutationCorrelationMismatch
     case invalidAdapterResult(String)
 }
 
@@ -382,9 +383,13 @@ struct DatabaseExecutionValidator: Sendable {
         try validate(request.operation)
         try Self.validate(request.connectionID, name: "connection identifier")
         try Self.validateRequiredText(
-            request.serverOperationIdentifier,
+            request.acceptedMutation.serverOperationIdentifier,
             name: "server operation identifier",
             maximum: DatabaseAdapterBounds.maximumServerOperationIdentifierBytes)
+        guard request.operation.operationID != request.acceptedMutation.operationID else {
+            throw DatabaseExecutionValidationError.invalidIdentifier(
+                "mutation status operation identifier")
+        }
         try Self.validateEncodedSize(request, name: "mutation status request")
     }
 
@@ -396,9 +401,13 @@ struct DatabaseExecutionValidator: Sendable {
         try validate(request.operation)
         try Self.validate(request.connectionID, name: "connection identifier")
         try Self.validateRequiredText(
-            request.serverOperationIdentifier,
+            request.acceptedMutation.serverOperationIdentifier,
             name: "server operation identifier",
             maximum: DatabaseAdapterBounds.maximumServerOperationIdentifierBytes)
+        guard request.operation.operationID != request.acceptedMutation.operationID else {
+            throw DatabaseExecutionValidationError.invalidIdentifier(
+                "mutation cancel operation identifier")
+        }
         try Self.validateEncodedSize(request, name: "mutation cancel request")
     }
 

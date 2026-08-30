@@ -354,6 +354,7 @@ public actor DatabaseExecutor {
                 timeout: definition.limits.operationTimeout,
                 cancellationSupport: .serverSide,
                 retryClassification: .requiresNewPreview,
+                preservesSuccessfulBodyOnCancellation: true,
                 terminalProgress: .determinate(completed: 1, total: 1, unit: .steps)
             ) { [self, sessionPool, validator] context, mapper in
                 let lease = try await sessionPool.lease(
@@ -372,7 +373,7 @@ public actor DatabaseExecutor {
                     in: lease.report)
                 try await context.checkCancellation()
                 let authority = try await confirmationAuthorityForUse()
-                let adapterResult = try await authority.authorizeAndExecute(
+                return try await authority.authorizeAndExecute(
                     token: request.token,
                     plan: plan,
                     confirmationText: request.confirmationText
@@ -383,23 +384,40 @@ public actor DatabaseExecutor {
                         throw DatabaseAdapterFailure.contractViolation(.staleSession)
                     }
                     try await context.checkCancellation()
-                    return try await lease.session.executeMutation(
-                        authorizedPlan,
-                        context: context)
+                    let unresolved = DatabaseMutationApplyResult(
+                        disposition: .completed,
+                        effect: .unknown,
+                        affectedRecords: DatabaseCountMetadata(accuracy: .unknown))
+                    try await metadataStore.recordMutationOutcome(
+                        unresolved,
+                        operationID: context.operationID,
+                        owner: runtimeOwner)
+                    do {
+                        let adapterResult = try await lease.session.executeMutation(
+                            authorizedPlan,
+                            context: context)
+                        let outcome = mapper.sanitize(
+                            adapterResult,
+                            operationID: context.operationID)
+                        try await requireMutationOutcomeTransition(
+                            outcome,
+                            operationID: context.operationID,
+                            from: [.unknown])
+                        return outcome
+                    } catch {
+                        let outcome = DatabaseMutationApplyResult(
+                            disposition: .completed,
+                            effect: .unknown,
+                            affectedRecords: DatabaseCountMetadata(accuracy: .unknown),
+                            error: mapper.map(error, target: request.mutation.target))
+                        _ = try? await metadataStore.transitionMutationOutcome(
+                            outcome,
+                            operationID: context.operationID,
+                            from: [.unknown],
+                            owner: runtimeOwner)
+                        return outcome
+                    }
                 }
-                let outcome = mapper.sanitize(adapterResult)
-                if outcome.disposition == .accepted,
-                    outcome.serverOperationIdentifier?.isEmpty != false
-                {
-                    throw DatabaseExecutionValidationError.invalidAdapterResult(
-                        "The accepted mutation result has no usable server operation identifier.")
-                }
-                try await metadataStore.recordMutationOutcome(
-                    outcome,
-                    operationID: context.operationID,
-                    owner: runtimeOwner)
-                try await context.checkCancellation()
-                return outcome
             }
         } catch {
             return failure(error, target: request.mutation.target)
@@ -427,16 +445,26 @@ public actor DatabaseExecutor {
                     context: context)
                 await attachSession(lease.session, to: context.operationID)
                 try validator.require(.mutationStatus, in: lease.report)
+                try await requireAcceptedMutation(
+                    request.acceptedMutation,
+                    connectionID: request.connectionID)
                 try await context.checkCancellation()
                 let status = try await lease.session.mutationStatus(
-                    request.serverOperationIdentifier,
+                    request.acceptedMutation.serverOperationIdentifier,
                     context: context)
-                guard status.serverOperationIdentifier == request.serverOperationIdentifier else {
+                guard
+                    status.serverOperationIdentifier
+                        == request.acceptedMutation.serverOperationIdentifier
+                else {
                     throw DatabaseAdapterFailure.contractViolation(
                         .invalidMutationReconciliationResult)
                 }
-                try await context.checkCancellation()
-                return try Self.mutationStatusResult(status, mapper: mapper)
+                let result = try Self.mutationStatusResult(
+                    status,
+                    acceptedMutation: request.acceptedMutation,
+                    mapper: mapper)
+                try await persistTerminalMutationStatus(result)
+                return result
             }
         } catch {
             return failure(error)
@@ -464,18 +492,20 @@ public actor DatabaseExecutor {
                     context: context)
                 await attachSession(lease.session, to: context.operationID)
                 try validator.require(.mutationCancellation, in: lease.report)
+                try await requireAcceptedMutation(
+                    request.acceptedMutation,
+                    connectionID: request.connectionID)
                 try await context.checkCancellation()
                 let cancellation = try await lease.session.cancelMutation(
-                    request.serverOperationIdentifier,
+                    request.acceptedMutation.serverOperationIdentifier,
                     context: context)
                 guard
                     cancellation.serverOperationIdentifier
-                        == request.serverOperationIdentifier
+                        == request.acceptedMutation.serverOperationIdentifier
                 else {
                     throw DatabaseAdapterFailure.contractViolation(
                         .invalidMutationReconciliationResult)
                 }
-                try await context.checkCancellation()
                 guard
                     let identifier = mapper.sanitizeServerOperationIdentifier(
                         cancellation.serverOperationIdentifier),
@@ -485,12 +515,21 @@ public actor DatabaseExecutor {
                         "The mutation cancellation result has no usable server operation identifier."
                     )
                 }
+                let status = try cancellation.status.map {
+                    try Self.mutationStatusResult(
+                        $0,
+                        acceptedMutation: request.acceptedMutation,
+                        mapper: mapper)
+                }
+                if let status {
+                    try await persistTerminalMutationStatus(status)
+                }
                 return DatabaseMutationCancelResult(
-                    serverOperationIdentifier: identifier,
+                    acceptedMutation: DatabaseAcceptedMutation(
+                        operationID: request.acceptedMutation.operationID,
+                        serverOperationIdentifier: identifier),
                     disposition: cancellation.disposition,
-                    status: try cancellation.status.map {
-                        try Self.mutationStatusResult($0, mapper: mapper)
-                    })
+                    status: status)
             }
         } catch {
             return failure(error)
@@ -1349,8 +1388,66 @@ public actor DatabaseExecutor {
         return authority
     }
 
+    private func requireAcceptedMutation(
+        _ acceptedMutation: DatabaseAcceptedMutation,
+        connectionID: DatabaseConnectionID
+    ) async throws {
+        guard
+            let operation = try await metadataStore.operation(
+                id: acceptedMutation.operationID),
+            operation.kind == .databaseMutationApply,
+            operation.connection.id == connectionID,
+            let outcome = try await metadataStore.mutationOutcome(
+                operationID: acceptedMutation.operationID),
+            outcome.acceptedMutation == acceptedMutation
+        else {
+            throw DatabaseExecutionValidationError.mutationCorrelationMismatch
+        }
+    }
+
+    private func requireMutationOutcomeTransition(
+        _ outcome: DatabaseMutationApplyResult,
+        operationID: DatabaseOperationID,
+        from expectedStates: Set<DatabaseMutationOutcomeState>
+    ) async throws {
+        switch try await metadataStore.transitionMutationOutcome(
+            outcome,
+            operationID: operationID,
+            from: expectedStates,
+            owner: runtimeOwner)
+        {
+        case .transitioned, .unchanged:
+            return
+        case .outcomeNotFound, .invalidTransition:
+            throw DatabaseExecutionValidationError.mutationCorrelationMismatch
+        case .runtimeOwnerNotActive:
+            throw DatabaseExecutionValidationError.runtimeOwnerNotActive
+        }
+    }
+
+    private func persistTerminalMutationStatus(
+        _ status: DatabaseMutationStatusResult
+    ) async throws {
+        switch status.state {
+        case .accepted, .running, .cancelling:
+            return
+        case .completed, .failed, .cancelled:
+            guard let outcome = status.outcome,
+                outcome.acceptedMutation == status.acceptedMutation
+            else {
+                throw DatabaseExecutionValidationError.invalidAdapterResult(
+                    "The terminal mutation status has no correlated outcome.")
+            }
+            try await requireMutationOutcomeTransition(
+                outcome,
+                operationID: status.acceptedMutation.operationID,
+                from: [.accepted, .unknown])
+        }
+    }
+
     nonisolated private static func mutationStatusResult(
         _ status: DatabaseAdapterMutationStatus,
+        acceptedMutation: DatabaseAcceptedMutation,
         mapper: DatabaseExecutionErrorMapper
     ) throws -> DatabaseMutationStatusResult {
         guard
@@ -1361,11 +1458,20 @@ public actor DatabaseExecutor {
             throw DatabaseExecutionValidationError.invalidAdapterResult(
                 "The mutation status result has no usable server operation identifier.")
         }
+        guard identifier == acceptedMutation.serverOperationIdentifier else {
+            throw DatabaseExecutionValidationError.invalidAdapterResult(
+                "The mutation status result does not match its accepted operation.")
+        }
+        let outcome = status.outcome.map {
+            mapper.sanitize(
+                $0,
+                operationID: acceptedMutation.operationID)
+        }
         return DatabaseMutationStatusResult(
-            serverOperationIdentifier: identifier,
+            acceptedMutation: acceptedMutation,
             state: status.state,
             progress: status.progress,
-            outcome: status.outcome.map(mapper.sanitize),
+            outcome: outcome,
             error: status.error.map(mapper.sanitize),
             warnings: status.warnings.map(mapper.sanitize))
     }
@@ -1379,6 +1485,7 @@ public actor DatabaseExecutor {
         timeout: DatabaseTimeout,
         cancellationSupport: DatabaseCancellationSupport,
         retryClassification: DatabaseRetryClassification,
+        preservesSuccessfulBodyOnCancellation: Bool = false,
         terminalProgress: DatabaseOperationProgress?,
         body:
             @escaping @Sendable (
@@ -1414,6 +1521,7 @@ public actor DatabaseExecutor {
             timeout: timeout,
             cancellationSupport: cancellationSupport,
             retryClassification: retryClassification,
+            preservesSuccessfulBodyOnCancellation: preservesSuccessfulBodyOnCancellation,
             terminalProgress: terminalProgress,
             admission: admission,
             body: body)
@@ -1433,6 +1541,7 @@ public actor DatabaseExecutor {
         timeout: DatabaseTimeout,
         cancellationSupport: DatabaseCancellationSupport,
         retryClassification: DatabaseRetryClassification,
+        preservesSuccessfulBodyOnCancellation: Bool,
         terminalProgress: DatabaseOperationProgress?,
         admission: DatabaseExecutorOperationAdmission,
         body:
@@ -1571,14 +1680,22 @@ public actor DatabaseExecutor {
                         reason: .userRequested)
                 }
             }
-            try await checkControl(context)
+            if !preservesSuccessfulBodyOnCancellation {
+                try await checkControl(context)
+            }
             let terminal = terminalSummary(
                 from: running,
                 state: .succeeded,
                 progress: terminalProgress,
                 error: nil)
-            let finalized = await finalizeOperation(terminal, from: [.running])
-            if !finalized, let reason = await cancellation.reason() {
+            let finalized = await finalizeOperation(
+                terminal,
+                from: preservesSuccessfulBodyOnCancellation
+                    ? [.running, .cancelling]
+                    : [.running])
+            if !finalized, !preservesSuccessfulBodyOnCancellation,
+                let reason = await cancellation.reason()
+            {
                 throw DatabaseExecutorControlFailure(reason)
             }
             await finishActiveOperation(effectiveOperation.operationID)

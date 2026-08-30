@@ -135,13 +135,37 @@ struct DatabaseExecutionErrorMapper: Sendable {
         }
     }
 
-    func sanitize(_ result: DatabaseAdapterMutationResult) -> DatabaseMutationApplyResult {
-        DatabaseMutationApplyResult(
+    func sanitize(
+        _ result: DatabaseAdapterMutationResult,
+        operationID: DatabaseOperationID
+    ) -> DatabaseMutationApplyResult {
+        let acceptedMutation = sanitizeServerOperationIdentifier(
+            result.serverOperationIdentifier
+        ).map {
+            DatabaseAcceptedMutation(
+                operationID: operationID,
+                serverOperationIdentifier: $0)
+        }
+        return DatabaseMutationApplyResult(
             disposition: result.disposition,
+            effect: result.effect,
             affectedRecords: result.affectedRecords,
             returnedRecords: result.returnedPage.map(sanitizeMutationPage),
-            serverOperationIdentifier: sanitizeServerOperationIdentifier(
-                result.serverOperationIdentifier))
+            acceptedMutation: acceptedMutation,
+            partialFailures: result.partialFailures.prefix(
+                DatabaseAdapterBounds.maximumPartialFailures
+            ).map(sanitize),
+            error: result.error.map(sanitize))
+    }
+
+    func sanitize(_ failure: DatabasePartialFailure) -> DatabasePartialFailure {
+        DatabasePartialFailure(
+            itemIndex: failure.itemIndex,
+            itemIdentifier: failure.itemIdentifier.map {
+                redactText($0, maximumBytes: Self.maximumTargetSegmentBytes)
+            },
+            target: failure.target.flatMap(sanitizeTarget),
+            error: sanitize(failure.error))
     }
 
     private func map(
@@ -251,6 +275,16 @@ struct DatabaseExecutionErrorMapper: Sendable {
                 ])
         case let .capabilityUnavailable(_, reason):
             capabilityUnavailable(reason: reason, target: target)
+        case .mutationCorrelationMismatch:
+            envelope(
+                category: .conflict,
+                message:
+                    "The mutation reconciliation reference no longer matches "
+                    + "its apply operation.",
+                retry: retry(
+                    .userDecision,
+                    "Reconcile the original mutation outcome before taking another action."),
+                target: target)
         case .invalidAdapterResult:
             envelope(
                 category: .internalFailure,
