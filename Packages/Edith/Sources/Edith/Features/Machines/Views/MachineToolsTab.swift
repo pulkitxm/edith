@@ -45,7 +45,7 @@ struct MachineToolsTab: View {
             }
             .pageContent(compact)
         }
-        .task {
+        .task(id: session.remotePlatform) {
             guard connectionsEnabled else { return }
             await session.refreshServices()
             await session.restoreMount()
