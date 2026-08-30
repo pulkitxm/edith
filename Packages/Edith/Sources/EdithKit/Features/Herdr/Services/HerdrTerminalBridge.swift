@@ -26,7 +26,9 @@ public struct HerdrTerminalBridgeSpecification: Codable, Equatable, Sendable {
     }
 
     public func encoded() throws -> String {
-        try JSONEncoder().encode(self).base64EncodedString()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(self).base64EncodedString()
     }
 
     public func request(columns: UInt16, rows: UInt16) -> TerminalLaunchRequest {
