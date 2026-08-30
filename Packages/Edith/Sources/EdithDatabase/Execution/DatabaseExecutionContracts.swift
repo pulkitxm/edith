@@ -34,17 +34,20 @@ public struct DatabaseConnectionTestRequest: Codable, Hashable, Sendable {
 public struct DatabaseConnectionTestResult: Codable, Hashable, Sendable {
     public let connection: DatabaseConnectionIdentity
     public let productIdentity: DatabaseProductIdentity
+    public let capabilities: DatabaseCapabilityReport
     public let latencyMilliseconds: UInt64
     public let testedAt: Date
 
     public init(
         connection: DatabaseConnectionIdentity,
         productIdentity: DatabaseProductIdentity,
+        capabilities: DatabaseCapabilityReport,
         latencyMilliseconds: UInt64,
         testedAt: Date
     ) {
         self.connection = connection
         self.productIdentity = productIdentity
+        self.capabilities = capabilities
         self.latencyMilliseconds = latencyMilliseconds
         self.testedAt = testedAt
     }
