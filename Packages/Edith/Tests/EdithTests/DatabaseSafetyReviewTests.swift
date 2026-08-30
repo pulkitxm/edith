@@ -241,8 +241,10 @@ import Testing
             preview: preview,
             phase: .ready,
             refreshPreview: {},
-            confirm: { _, _ in },
-            cancel: {})
+            reconcile: {},
+            confirm: { _ in },
+            cancelOperation: {},
+            dismiss: {})
         let host = NSHostingView(rootView: sheet)
         host.frame = NSRect(x: 0, y: 0, width: 320, height: 320)
         let window = NSWindow(
