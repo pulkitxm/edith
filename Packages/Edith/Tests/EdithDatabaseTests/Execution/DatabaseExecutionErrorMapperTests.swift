@@ -152,6 +152,11 @@ private enum DatabaseExecutionErrorMapperFixtures {
                 .none
             ),
             (
+                DatabaseExecutionValidationError.runtimeOwnerNotActive,
+                .conflict,
+                .reconnect
+            ),
+            (
                 DatabaseExecutionValidationError.limitExceeded(
                     name: "rows",
                     actual: 2_001,
