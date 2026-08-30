@@ -110,6 +110,60 @@ import Testing
     }
 }
 
+@Test func databaseBrokerCommandTransportRetainsWriteCountForInvalidResponse() async throws {
+    let sockets = try databaseBrokerCommandTransportSocketPair()
+    defer {
+        Darwin.close(sockets.client)
+        Darwin.close(sockets.server)
+    }
+    let dependencies = databaseBrokerCommandTransportDependencies()
+    let clientTransport = DatabaseBrokerCommandTransport(dependencies: dependencies)
+    let serverTransport = DatabaseBrokerRuntimeRequestTransport(dependencies: dependencies)
+    let responseTransport = DatabaseBrokerHealthTransport(dependencies: dependencies)
+    let request = DatabaseBrokerCommandRequest.connectionList(
+        DatabaseConnectionListRequest())
+    let deadline = DispatchTime.now().uptimeNanoseconds + 5_000_000_000
+    let server = Task.detached {
+        _ = try serverTransport.receiveRequest(
+            socketDescriptor: sockets.server,
+            deadlineNanoseconds: deadline)
+        let response = DatabaseBrokerEnvelope(
+            requestID: UUID(uuidString: "75839C48-4DCF-4079-A66B-93FE4E63AD93")!,
+            sequence: 0,
+            kind: DatabaseBrokerEnvelopeKind.response,
+            payload: DatabaseBrokerCommandResponse.connectionList(
+                .success(
+                    DatabaseConnectionListResult(connections: []),
+                    metadata: DatabaseResultMetadata(
+                        completeness: DatabaseResultCompleteness(
+                            state: .complete)))))
+        let frame = try DatabaseBrokerFrameCodec.encode(
+            response,
+            stream: .responses)
+        return try responseTransport.writeFrame(
+            frame,
+            socketDescriptor: sockets.server,
+            sinkClosureIsResult: false,
+            absoluteDeadline: deadline)
+    }
+
+    do {
+        _ = try clientTransport.request(
+            request,
+            socketDescriptor: sockets.client,
+            deadlineNanoseconds: deadline)
+        Issue.record("Expected an invalid response")
+    } catch let error as DatabaseBrokerCommandTransportError {
+        #expect(error.failure == .invalidResponse)
+        #expect(error.bytesWritten > 0)
+        #expect(!error.isReplaySafe)
+    } catch {
+        Issue.record("Unexpected error type")
+    }
+    let writeOutcome = try await server.value
+    #expect(writeOutcome.bytesWritten > 0)
+}
+
 private func databaseBrokerCommandTransportSocketPair() throws -> (
     client: Int32,
     server: Int32
