@@ -1,12 +1,12 @@
 import Foundation
 import NIOCore
-import NIOPosix
 import NIOSSL
+import NIOTransportServices
 import PostgresNIO
 
 struct PostgreSQLDatabaseTransportResource: @unchecked Sendable {
     let connection: PostgresConnection
-    let eventLoopGroup: MultiThreadedEventLoopGroup
+    let eventLoopGroup: NIOTSEventLoopGroup
 }
 
 enum PostgreSQLDatabaseTransport {
@@ -18,7 +18,8 @@ enum PostgreSQLDatabaseTransport {
         _ plan: PostgreSQLDatabaseConnectionPlan,
         connectionID: Int
     ) async throws -> PostgreSQLDatabaseTransportResource {
-        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        let eventLoopGroup = NIOTSEventLoopGroup(loopCount: 1)
+        let pendingChannels = PostgreSQLDatabasePendingChannels()
         var channel: (any Channel)?
         do {
             let guardMode: PostgreSQLDatabaseWireGuard.Mode
@@ -28,22 +29,23 @@ enum PostgreSQLDatabaseTransport {
             case .preferred, .required:
                 guardMode = .sslNegotiation
             }
-            let bootstrap = ClientBootstrap(group: eventLoopGroup)
-                .channelOption(
-                    ChannelOptions.connectTimeout,
-                    value: .milliseconds(Int64(clamping: plan.connectTimeoutMilliseconds))
+            let bootstrap = NIOTSConnectionBootstrap(group: eventLoopGroup)
+                .connectTimeout(
+                    .milliseconds(Int64(clamping: plan.connectTimeoutMilliseconds))
                 )
                 .channelInitializer { channel in
-                    channel.pipeline.addHandler(
+                    pendingChannels.register(channel)
+                    return channel.pipeline.addHandler(
                         PostgreSQLDatabaseWireGuard(
                             mode: guardMode,
                             maximumFrameBytes: maximumInboundFrameBytes),
                         name: wireGuardName)
                 }
-            let connectedChannel = try await bootstrap.connect(
-                host: plan.host,
-                port: plan.port
-            ).get()
+            let connectedChannel = try await awaitConnectedChannel(
+                bootstrap.connect(
+                    host: plan.host,
+                    port: plan.port),
+                pendingChannels: pendingChannels)
             channel = connectedChannel
             let configuration = try plan.configuration(
                 establishedChannel: connectedChannel)
@@ -56,9 +58,57 @@ enum PostgreSQLDatabaseTransport {
                 connection: connection,
                 eventLoopGroup: eventLoopGroup)
         } catch {
+            pendingChannels.cancel()
             try? await channel?.close()
             try? await eventLoopGroup.shutdownGracefully()
             throw error
+        }
+    }
+
+    static func awaitConnectedChannel(
+        _ future: EventLoopFuture<any Channel>,
+        pendingChannels: PostgreSQLDatabasePendingChannels
+    ) async throws -> any Channel {
+        do {
+            return try await withTaskCancellationHandler {
+                try await future.get()
+            } onCancel: {
+                pendingChannels.cancel()
+            }
+        } catch {
+            if Task.isCancelled {
+                throw CancellationError()
+            }
+            throw error
+        }
+    }
+}
+
+final class PostgreSQLDatabasePendingChannels: @unchecked Sendable {
+    private let lock = NSLock()
+    private var channels: [any Channel] = []
+    private var cancelled = false
+
+    func register(_ channel: any Channel) {
+        let closeImmediately = lock.withLock {
+            guard !cancelled else { return true }
+            channels.append(channel)
+            return false
+        }
+        if closeImmediately {
+            channel.close(promise: nil)
+        }
+    }
+
+    func cancel() {
+        let channels = lock.withLock {
+            cancelled = true
+            let channels = self.channels
+            self.channels.removeAll(keepingCapacity: false)
+            return channels
+        }
+        for channel in channels {
+            channel.close(promise: nil)
         }
     }
 }
