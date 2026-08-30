@@ -1,6 +1,10 @@
 import Foundation
 import Testing
 
+#if canImport(Darwin)
+import Darwin
+#endif
+
 @testable import EdithDatabase
 
 private enum ElasticsearchDatabaseReadingFixtures {
@@ -861,4 +865,370 @@ private func elasticsearchReadingSession(
     }
     #expect(await driftSession.lifecycleState() == .failed)
     #expect(await driftClient.snapshot().disconnects == 1)
+}
+
+private enum ElasticsearchDatabaseReadingLiveEnvironment {
+    static let values = ProcessInfo.processInfo.environment
+    static let requiredKeys = [
+        "EDITH_DATABASE_ELASTICSEARCH_URL",
+        "EDITH_DATABASE_ELASTICSEARCH_USERNAME",
+        "EDITH_DATABASE_ELASTICSEARCH_PASSWORD",
+    ]
+    static let isEnabled = requiredKeys.allSatisfy { values[$0]?.isEmpty == false }
+
+    static func resolved() throws -> DatabaseResolvedConnection {
+        let endpoint = try #require(values["EDITH_DATABASE_ELASTICSEARCH_URL"])
+        let url = try #require(URL(string: endpoint))
+        let host = try #require(url.host)
+        let username = try #require(values["EDITH_DATABASE_ELASTICSEARCH_USERNAME"])
+        let password = try #require(values["EDITH_DATABASE_ELASTICSEARCH_PASSWORD"])
+        let reference = DatabaseSecretReference(
+            identifier: UUID(uuidString: "AB039D5C-BD89-4DBE-A8A8-85AA187449FA")!,
+            purpose: .password)
+        let definition = DatabaseConnectionDefinition(
+            id: DatabaseConnectionID(),
+            displayName: "Elasticsearch TUF reading fixture",
+            productHint: .elasticsearch,
+            location: .network([
+                DatabaseNetworkEndpoint(
+                    host: host,
+                    port: try DatabasePort(url.port ?? (url.scheme == "https" ? 443 : 80)),
+                    role: .node)
+            ]),
+            username: username,
+            deploymentMode: .automatic,
+            authentication: DatabaseAuthentication(
+                kind: .usernameAndPassword,
+                secretReferences: [reference]),
+            tls: DatabaseTLSConfiguration(
+                mode: url.scheme == "https" ? .required : .disabled,
+                verification: url.scheme == "https" ? .full : .none),
+            limits: DatabaseConnectionLimits(
+                connectionTimeout: try DatabaseTimeout(milliseconds: 5_000),
+                operationTimeout: try DatabaseTimeout(milliseconds: 15_000),
+                poolSize: try DatabasePoolSize(1)),
+            readOnlyPolicy: .required,
+            productionPolicy: .prohibitMutations,
+            environment: DatabaseEnvironmentMetadata(
+                kind: .testing,
+                label: "TUF",
+                protection: .readOnly),
+            createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_800_000_000))
+        return try DatabaseResolvedConnection(
+            definition: definition,
+            secrets: [reference: Data(password.utf8)])
+    }
+
+    static func string(
+        _ record: DatabaseRecord,
+        field: String
+    ) -> String? {
+        guard case let .string(value)? = record.fields.first(where: { $0.name == field })?.value
+        else { return nil }
+        return value
+    }
+
+    static func residentBytes() -> UInt64? {
+        #if canImport(Darwin)
+        var information = mach_task_basic_info()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<mach_task_basic_info>.size / MemoryLayout<integer_t>.size)
+        let result = withUnsafeMutablePointer(to: &information) { pointer in
+            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { rebound in
+                task_info(
+                    mach_task_self_,
+                    task_flavor_t(MACH_TASK_BASIC_INFO),
+                    rebound,
+                    &count)
+            }
+        }
+        return result == KERN_SUCCESS ? information.resident_size : nil
+        #else
+        return nil
+        #endif
+    }
+}
+
+private actor ElasticsearchDatabaseReadingLiveCapture {
+    private var client: URLSessionElasticsearchDatabaseClient?
+
+    func set(_ client: URLSessionElasticsearchDatabaseClient) {
+        self.client = client
+    }
+
+    func value() -> URLSessionElasticsearchDatabaseClient? {
+        client
+    }
+}
+
+@Test(.enabled(if: ElasticsearchDatabaseReadingLiveEnvironment.isEnabled))
+func elasticsearchReadingLiveSearchTraversalAndLifecycle() async throws {
+    let resolved = try ElasticsearchDatabaseReadingLiveEnvironment.resolved()
+    let capture = ElasticsearchDatabaseReadingLiveCapture()
+    let adapter = ElasticsearchDatabaseAdapter { plan in
+        let connected = try await URLSessionElasticsearchDatabaseClient.connect(plan)
+        let client = try #require(connected as? URLSessionElasticsearchDatabaseClient)
+        await capture.set(client)
+        return client
+    }
+    let session = try await adapter.connect(
+        resolved,
+        context: ElasticsearchDatabaseReadingFixtures.context(
+            deadline: Date().addingTimeInterval(10)))
+    #expect(session.productIdentity.product == .elasticsearch)
+    #expect(session.productIdentity.version?.string == "9.5.2")
+    let capabilities = try await session.discoverCapabilities(
+        context: ElasticsearchDatabaseReadingFixtures.context())
+    #expect(capabilities.supports(.browse))
+    #expect(capabilities.supports(.query))
+
+    let discoveryRequest = try ElasticsearchDatabaseReadingFixtures.pageRequest(
+        target: ElasticsearchDatabaseReadingFixtures.discoveryTarget(
+            connectionID: resolved.definition.id),
+        pageSize: 100)
+    let discovery = try await session.readPage(
+        discoveryRequest,
+        context: ElasticsearchDatabaseReadingFixtures.context())
+    #expect(
+        discovery.records.contains {
+            ElasticsearchDatabaseReadingLiveEnvironment.string($0, field: "name")
+                == "edith-documents-v1"
+        })
+    #expect(
+        discovery.records.contains {
+            ElasticsearchDatabaseReadingLiveEnvironment.string($0, field: "name")
+                == "edith_documents"
+        })
+
+    let target = ElasticsearchDatabaseReadingFixtures.target(
+        connectionID: resolved.definition.id)
+    let projection = DatabaseProjection(
+        mode: .include,
+        fields: ["doc_id", "category", "status", "title"].map {
+            DatabaseProjectedField(path: DatabaseFieldPath($0))
+        })
+    let browseRequest = try ElasticsearchDatabaseReadingFixtures.pageRequest(
+        target: target,
+        pageSize: 200,
+        projection: projection)
+    let firstStartedAt = ContinuousClock.now
+    let first = try await session.readPage(
+        browseRequest,
+        context: ElasticsearchDatabaseReadingFixtures.context(
+            deadline: Date().addingTimeInterval(15)))
+    let firstLatency = ContinuousClock.now - firstStartedAt
+    let firstContinuation = try #require(first.nextContinuation)
+    #expect(first.records.count == 200)
+    #expect(first.fields.contains { $0.displayName == "doc_id" })
+    #expect(first.metadata.count.value == 10_000)
+    #expect(first.metadata.count.accuracy == .lowerBound)
+    let firstIdentifiers = Set(
+        first.records.compactMap {
+            $0.identity?.components.first(where: { $0.name == "_id" })?.value
+        })
+    let secondRequest = try ElasticsearchDatabaseReadingFixtures.pageRequest(
+        target: target,
+        pageSize: 200,
+        continuation: firstContinuation,
+        projection: projection)
+    let second = try await session.readPage(
+        secondRequest,
+        context: ElasticsearchDatabaseReadingFixtures.context(
+            deadline: Date().addingTimeInterval(15)))
+    let secondIdentifiers = Set(
+        second.records.compactMap {
+            $0.identity?.components.first(where: { $0.name == "_id" })?.value
+        })
+    #expect(firstIdentifiers.isDisjoint(with: secondIdentifiers))
+
+    let filteredRequest = try ElasticsearchDatabaseReadingFixtures.pageRequest(
+        target: target,
+        pageSize: 25,
+        projection: projection,
+        filter: .predicate(
+            DatabaseFilterPredicate(
+                field: DatabaseFieldPath("category"),
+                operation: .equal,
+                values: [.string("account")])),
+        sorts: [DatabaseSort(field: DatabaseFieldPath("doc_id"), direction: .ascending)])
+    let filtered = try await session.readPage(
+        filteredRequest,
+        context: ElasticsearchDatabaseReadingFixtures.context())
+    #expect(filtered.records.count == 25)
+    #expect(
+        filtered.records.allSatisfy {
+            ElasticsearchDatabaseReadingLiveEnvironment.string($0, field: "category") == "account"
+        })
+    #expect(
+        filtered.records.allSatisfy { record in
+            Set(record.fields.map { $0.name }).isSubset(
+                of: Set(["doc_id", "category", "status", "title"]))
+        })
+
+    let highlightBody: DatabaseValue = .object([
+        DatabaseObjectField(
+            name: "query",
+            value: .object([
+                DatabaseObjectField(
+                    name: "match",
+                    value: .object([
+                        DatabaseObjectField(name: "title", value: .string("Document"))
+                    ]))
+            ])),
+        DatabaseObjectField(
+            name: "highlight",
+            value: .object([
+                DatabaseObjectField(
+                    name: "fields",
+                    value: .object([
+                        DatabaseObjectField(name: "title", value: .object([]))
+                    ])),
+                DatabaseObjectField(name: "number_of_fragments", value: .signedInteger(1)),
+                DatabaseObjectField(name: "fragment_size", value: .signedInteger(120)),
+            ])),
+    ])
+    let highlighted = try await session.query(
+        ElasticsearchDatabaseReadingFixtures.queryRequest(
+            source: try ElasticsearchDatabaseReadingFixtures.pageRequest(
+                target: target,
+                pageSize: 5,
+                projection: projection),
+            command: "search",
+            body: highlightBody),
+        context: ElasticsearchDatabaseReadingFixtures.context())
+    #expect(highlighted.records.count == 5)
+    #expect(highlighted.records.allSatisfy { $0.fields.contains { $0.name == "_highlight" } })
+
+    let aggregationBody: DatabaseValue = .object([
+        DatabaseObjectField(
+            name: "aggs",
+            value: .object([
+                DatabaseObjectField(
+                    name: "categories",
+                    value: .object([
+                        DatabaseObjectField(
+                            name: "terms",
+                            value: .object([
+                                DatabaseObjectField(name: "field", value: .string("category")),
+                                DatabaseObjectField(name: "size", value: .signedInteger(5)),
+                            ]))
+                    ]))
+            ]))
+    ])
+    let aggregation = try await session.query(
+        ElasticsearchDatabaseReadingFixtures.queryRequest(
+            source: try ElasticsearchDatabaseReadingFixtures.pageRequest(target: target),
+            command: "aggregate",
+            body: aggregationBody),
+        context: ElasticsearchDatabaseReadingFixtures.context())
+    #expect(aggregation.records.count == 1)
+    #expect(aggregation.records[0].fields.first?.name == "categories")
+
+    let uniqueDocumentID = try #require(
+        ElasticsearchDatabaseReadingLiveEnvironment.string(filtered.records[0], field: "doc_id"))
+    let cleanupSession = try await adapter.connect(
+        resolved,
+        context: ElasticsearchDatabaseReadingFixtures.context())
+    let cleanupClient = try #require(await capture.value())
+    let cleanupPage = try await cleanupSession.readPage(
+        ElasticsearchDatabaseReadingFixtures.pageRequest(
+            target: target,
+            pageSize: 2,
+            projection: projection,
+            filter: .predicate(
+                DatabaseFilterPredicate(
+                    field: DatabaseFieldPath("doc_id"),
+                    operation: .equal,
+                    values: [.string(uniqueDocumentID)]))),
+        context: ElasticsearchDatabaseReadingFixtures.context())
+    #expect(cleanupPage.records.count == 1)
+    #expect(cleanupPage.nextContinuation == nil)
+    #expect(await cleanupClient.outstandingPointInTimeCount() == 0)
+    await cleanupSession.disconnect()
+
+    var continuation: DatabaseAdapterContinuation?
+    var previousIdentifiers: Set<DatabaseValue> = []
+    var traversed = 0
+    var warmedMemory: UInt64?
+    var peakMemory: UInt64 = 0
+    for pageIndex in 0..<150 {
+        let page = try await session.readPage(
+            ElasticsearchDatabaseReadingFixtures.pageRequest(
+                target: target,
+                pageSize: 200,
+                continuation: continuation,
+                projection: projection),
+            context: ElasticsearchDatabaseReadingFixtures.context(
+                deadline: Date().addingTimeInterval(15)))
+        let identifiers = Set(
+            page.records.compactMap {
+                $0.identity?.components.first(where: { $0.name == "_id" })?.value
+            })
+        #expect(previousIdentifiers.isDisjoint(with: identifiers))
+        previousIdentifiers = identifiers
+        traversed += page.records.count
+        continuation = page.nextContinuation
+        if let memory = ElasticsearchDatabaseReadingLiveEnvironment.residentBytes() {
+            if pageIndex == 9 { warmedMemory = memory }
+            if pageIndex >= 9 { peakMemory = max(peakMemory, memory) }
+        }
+        if continuation == nil { break }
+    }
+    #expect(traversed >= 30_000)
+    if let warmedMemory {
+        #expect(peakMemory <= warmedMemory + 100 * 1_048_576)
+    }
+
+    let cancellationOperationID = DatabaseOperationID()
+    let cancellationTask = Task {
+        try await session.readPage(
+            ElasticsearchDatabaseReadingFixtures.pageRequest(
+                target: target,
+                pageSize: 2_000),
+            context: ElasticsearchDatabaseReadingFixtures.context(
+                operationID: cancellationOperationID,
+                deadline: Date().addingTimeInterval(15)))
+    }
+    try await Task.sleep(for: .milliseconds(2))
+    let cancellationStartedAt = ContinuousClock.now
+    let cancellationResult = await session.cancel(cancellationOperationID)
+    #expect(cancellationResult.disposition == DatabaseAdapterCancellationDisposition.accepted)
+    await #expect(throws: DatabaseAdapterFailure.cancelled) {
+        _ = try await cancellationTask.value
+    }
+    let cancellationLatency = ContinuousClock.now - cancellationStartedAt
+    #expect(cancellationLatency < .seconds(2))
+    #expect(await session.lifecycleState() == .failed)
+
+    let reconnected = try await adapter.connect(
+        resolved,
+        context: ElasticsearchDatabaseReadingFixtures.context())
+    #expect(reconnected.productIdentity.version?.string == "9.5.2")
+    let deadlineStartedAt = ContinuousClock.now
+    await #expect(throws: ElasticsearchDatabaseAdapterSupport.deadlineExceeded) {
+        _ = try await reconnected.readPage(
+            ElasticsearchDatabaseReadingFixtures.pageRequest(
+                target: target,
+                pageSize: 2_000),
+            context: ElasticsearchDatabaseReadingFixtures.context(
+                deadline: Date().addingTimeInterval(0.005)))
+    }
+    let deadlineLatency = ContinuousClock.now - deadlineStartedAt
+    #expect(deadlineLatency < .seconds(2))
+    await reconnected.disconnect()
+    await session.disconnect()
+
+    let warmed = warmedMemory ?? 0
+    let resultParts = [
+        "elasticsearch reading live version=9.5.2",
+        "discovered=" + String(discovery.records.count),
+        "firstPage=" + String(describing: firstLatency),
+        "traversed=" + String(traversed),
+        "warmedRSS=" + String(warmed),
+        "peakRSS=" + String(peakMemory),
+        "cancel=" + String(describing: cancellationLatency),
+        "deadline=" + String(describing: deadlineLatency),
+    ]
+    print(resultParts.joined(separator: " "))
 }
