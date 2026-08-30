@@ -181,6 +181,18 @@ private enum DatabaseBrokerCommandDispatcherFixtures {
                     token: DatabaseConfirmationToken(rawValue: "payload.signature"),
                     confirmationText: "Orders invoices",
                     operation: operation)),
+            .mutationStatus(
+                DatabaseMutationStatusRequest(
+                    connectionID: DatabaseConnectionFixtures.connectionID,
+                    serverOperationIdentifier: "server-task-42",
+                    operation: operation)),
+            .mutationCancel(
+                DatabaseMutationCancelRequest(
+                    connectionID: DatabaseConnectionFixtures.connectionID,
+                    serverOperationIdentifier: "server-task-42",
+                    operation: operation)),
+            .mutationOutcomeGet(
+                DatabaseMutationOutcomeGetRequest(operationID: operationID)),
             .savedQueryList(DatabaseSavedQueryListRequest()),
             .savedQueryGet(
                 DatabaseSavedQueryGetRequest(queryID: savedQueryID)),
@@ -352,6 +364,27 @@ private actor DatabaseBrokerCommandDispatcherTestHandler: DatabaseBrokerCommandH
         _ request: DatabaseMutationApplyRequest
     ) async throws -> DatabaseCommandResult<DatabaseMutationApplyResult> {
         recordedRequests.append(.mutationApply(request))
+        return DatabaseBrokerCommandDispatcherFixtures.failure()
+    }
+
+    func mutationStatus(
+        _ request: DatabaseMutationStatusRequest
+    ) async throws -> DatabaseCommandResult<DatabaseMutationStatusResult> {
+        recordedRequests.append(.mutationStatus(request))
+        return DatabaseBrokerCommandDispatcherFixtures.failure()
+    }
+
+    func mutationCancel(
+        _ request: DatabaseMutationCancelRequest
+    ) async throws -> DatabaseCommandResult<DatabaseMutationCancelResult> {
+        recordedRequests.append(.mutationCancel(request))
+        return DatabaseBrokerCommandDispatcherFixtures.failure()
+    }
+
+    func mutationOutcomeGet(
+        _ request: DatabaseMutationOutcomeGetRequest
+    ) async throws -> DatabaseCommandResult<DatabaseMutationOutcomeGetResult> {
+        recordedRequests.append(.mutationOutcomeGet(request))
         return DatabaseBrokerCommandDispatcherFixtures.failure()
     }
 

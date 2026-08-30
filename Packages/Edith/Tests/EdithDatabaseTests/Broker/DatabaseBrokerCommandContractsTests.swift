@@ -145,6 +145,18 @@ private enum DatabaseBrokerCommandContractFixtures {
                     token: DatabaseConfirmationToken(rawValue: "payload.signature"),
                     confirmationText: "Orders invoices",
                     operation: operation)),
+            .mutationStatus(
+                DatabaseMutationStatusRequest(
+                    connectionID: DatabaseConnectionFixtures.connectionID,
+                    serverOperationIdentifier: "server-task-42",
+                    operation: operation)),
+            .mutationCancel(
+                DatabaseMutationCancelRequest(
+                    connectionID: DatabaseConnectionFixtures.connectionID,
+                    serverOperationIdentifier: "server-task-42",
+                    operation: operation)),
+            .mutationOutcomeGet(
+                DatabaseMutationOutcomeGetRequest(operationID: operationID)),
             .savedQueryList(
                 DatabaseSavedQueryListRequest(
                     search: DatabaseSavedQuerySearch(
@@ -255,6 +267,15 @@ private enum DatabaseBrokerCommandContractFixtures {
         case .mutationApply:
             try request.response(
                 failure() as DatabaseCommandResult<DatabaseMutationApplyResult>)
+        case .mutationStatus:
+            try request.response(
+                failure() as DatabaseCommandResult<DatabaseMutationStatusResult>)
+        case .mutationCancel:
+            try request.response(
+                failure() as DatabaseCommandResult<DatabaseMutationCancelResult>)
+        case .mutationOutcomeGet:
+            try request.response(
+                failure() as DatabaseCommandResult<DatabaseMutationOutcomeGetResult>)
         case .savedQueryList:
             try request.response(
                 .success(
@@ -501,15 +522,18 @@ struct DatabaseBrokerCommandContractsTests {
         #expect(requests[12].queryRequest != nil)
         #expect(requests[13].mutationPreviewRequest != nil)
         #expect(requests[14].mutationApplyRequest != nil)
-        #expect(requests[15].savedQueryListRequest != nil)
-        #expect(requests[16].savedQueryGetRequest != nil)
-        #expect(requests[17].savedQuerySaveRequest != nil)
-        #expect(requests[18].savedQueryDuplicateRequest != nil)
-        #expect(requests[19].savedQueryRenameRequest != nil)
-        #expect(requests[20].savedQueryDeleteRequest != nil)
-        #expect(requests[21].operationGetRequest != nil)
-        #expect(requests[22].operationListRequest != nil)
-        #expect(requests[23].operationCancelRequest != nil)
+        #expect(requests[15].mutationStatusRequest != nil)
+        #expect(requests[16].mutationCancelRequest != nil)
+        #expect(requests[17].mutationOutcomeGetRequest != nil)
+        #expect(requests[18].savedQueryListRequest != nil)
+        #expect(requests[19].savedQueryGetRequest != nil)
+        #expect(requests[20].savedQuerySaveRequest != nil)
+        #expect(requests[21].savedQueryDuplicateRequest != nil)
+        #expect(requests[22].savedQueryRenameRequest != nil)
+        #expect(requests[23].savedQueryDeleteRequest != nil)
+        #expect(requests[24].operationGetRequest != nil)
+        #expect(requests[25].operationListRequest != nil)
+        #expect(requests[26].operationCancelRequest != nil)
         #expect(responses[0].connectResult != nil)
         #expect(responses[0].disconnectResult == nil)
         #expect(responses[1].disconnectResult != nil)
@@ -526,15 +550,18 @@ struct DatabaseBrokerCommandContractsTests {
         #expect(responses[12].queryResult != nil)
         #expect(responses[13].mutationPreviewResult != nil)
         #expect(responses[14].mutationApplyResult != nil)
-        #expect(responses[15].savedQueryListResult != nil)
-        #expect(responses[16].savedQueryGetResult != nil)
-        #expect(responses[17].savedQuerySaveResult != nil)
-        #expect(responses[18].savedQueryDuplicateResult != nil)
-        #expect(responses[19].savedQueryRenameResult != nil)
-        #expect(responses[20].savedQueryDeleteResult != nil)
-        #expect(responses[21].operationGetResult != nil)
-        #expect(responses[22].operationListResult != nil)
-        #expect(responses[23].operationCancelResult != nil)
+        #expect(responses[15].mutationStatusResult != nil)
+        #expect(responses[16].mutationCancelResult != nil)
+        #expect(responses[17].mutationOutcomeGetResult != nil)
+        #expect(responses[18].savedQueryListResult != nil)
+        #expect(responses[19].savedQueryGetResult != nil)
+        #expect(responses[20].savedQuerySaveResult != nil)
+        #expect(responses[21].savedQueryDuplicateResult != nil)
+        #expect(responses[22].savedQueryRenameResult != nil)
+        #expect(responses[23].savedQueryDeleteResult != nil)
+        #expect(responses[24].operationGetResult != nil)
+        #expect(responses[25].operationListResult != nil)
+        #expect(responses[26].operationCancelResult != nil)
     }
 
     @Test func responseFactoriesAndEnvelopesRejectCommandMismatches() throws {

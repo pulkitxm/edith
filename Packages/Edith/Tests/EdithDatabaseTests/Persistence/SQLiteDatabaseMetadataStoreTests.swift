@@ -227,6 +227,97 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
         #expect(!remainder.hasMore)
     }
 
+    @Test func persistsMutationOutcomesOnceAgainstOwnedApplyOperations() async throws {
+        let (directory, path) = try DatabasePersistenceFixtures.temporaryStorePath()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try SQLiteDatabaseMetadataStore(path: path)
+        let owner = try await DatabaseRuntimeOwnerFactory.claimReadyOwner(
+            from: store,
+            claimedAt: Date(timeIntervalSince1970: 1)
+        ).owner.token
+        let connection = try DatabasePersistenceFixtures.connection(
+            id: UUID(uuidString: "33604E05-D221-488D-A4DC-3D2B3BBD0FE3")!,
+            name: "Mutation outcomes")
+        try await store.seedConnection(connection)
+        let running = DatabasePersistenceFixtures.operation(
+            id: UUID(uuidString: "7ED6C501-283C-44E0-8B57-AC7B8E48524A")!,
+            connection: connection,
+            kind: .databaseMutationApply,
+            state: .running,
+            startedAt: Date(timeIntervalSince1970: 10),
+            finishedAt: nil)
+        #expect(
+            try await store.reserveOperation(running, for: connection, owner: owner)
+                == .reserved)
+
+        let returnedRecords = DatabasePage(
+            records: [
+                DatabaseRecord(
+                    identity: DatabaseRecordIdentity(
+                        kind: .primaryKey,
+                        components: [
+                            DatabaseIdentityComponent(name: "id", value: .signedInteger(42))
+                        ]),
+                    fields: [
+                        DatabaseObjectField(name: "id", value: .signedInteger(42)),
+                        DatabaseObjectField(name: "state", value: .string("deleted")),
+                    ])
+            ],
+            fields: [
+                DatabaseFieldDescriptor(
+                    path: DatabaseFieldPath("id"),
+                    displayName: "id",
+                    typeName: "int8",
+                    isNullable: false,
+                    isSortable: true,
+                    isFilterable: true)
+            ],
+            metadata: DatabasePageMetadata(
+                completeness: DatabaseResultCompleteness(state: .complete),
+                count: DatabaseCountMetadata(value: 1, accuracy: .exact)))
+        let outcome = DatabaseMutationApplyResult(
+            disposition: .completed,
+            affectedRecords: DatabaseCountMetadata(value: 1, accuracy: .exact),
+            returnedRecords: returnedRecords,
+            serverOperationIdentifier: "server-task-42")
+        try await store.recordMutationOutcome(
+            outcome,
+            operationID: running.id,
+            owner: owner)
+
+        let reopened = try SQLiteDatabaseMetadataStore(path: path)
+        #expect(try await reopened.mutationOutcome(operationID: running.id) == outcome)
+        await #expect(
+            throws: DatabaseMetadataStoreError.invalidValue(
+                name: "mutation outcome already recorded")
+        ) {
+            try await reopened.recordMutationOutcome(
+                outcome,
+                operationID: running.id,
+                owner: owner)
+        }
+
+        let unrelated = DatabasePersistenceFixtures.operation(
+            id: UUID(uuidString: "AF638516-8FB7-4058-84B9-E18FD3E2AD2B")!,
+            connection: connection,
+            kind: .databaseBrowse,
+            state: .running,
+            startedAt: Date(timeIntervalSince1970: 11),
+            finishedAt: nil)
+        #expect(
+            try await store.reserveOperation(unrelated, for: connection, owner: owner)
+                == .reserved)
+        await #expect(
+            throws: DatabaseMetadataStoreError.invalidValue(
+                name: "mutation outcome operation")
+        ) {
+            try await store.recordMutationOutcome(
+                outcome,
+                operationID: unrelated.id,
+                owner: owner)
+        }
+    }
+
     @Test func atomicallyConsumesCrossInstanceConfirmationReceiptsOnce() async throws {
         let (directory, path) = try DatabasePersistenceFixtures.temporaryStorePath()
         defer { try? FileManager.default.removeItem(at: directory) }
