@@ -79,6 +79,40 @@ import Testing
         #expect(script.contains("$env:CHERE_INVOKING = '1'"))
     }
 
+    @Test func windowsRemoteShellLaunchesTheSelectedOption() throws {
+        let machine = Machine(
+            name: "Windows", host: "windows.example.com", username: "edith")
+        let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
+
+        for shell in WindowsTerminalShell.allCases where shell != .automatic {
+            let launch = try #require(
+                MachineTerminalLaunchPlan.make(
+                    isLocal: false, connection: connection, environment: [],
+                    platform: .windows, windowsShell: shell))
+            let command = try #require(launch.arguments.last)
+            let encoded = try #require(command.split(separator: " ").last)
+            let data = try #require(Data(base64Encoded: String(encoded)))
+            let script = try #require(String(data: data, encoding: .utf16LittleEndian))
+
+            switch shell {
+            case .automatic: Issue.record("Automatic was excluded from the test")
+            case .gitBash: #expect(script.contains("& $gitBash --login -i"))
+            case .powerShell: #expect(script.contains("& $powerShell -NoLogo"))
+            case .windowsPowerShell: #expect(script.contains("& powershell.exe -NoLogo"))
+            case .commandPrompt: #expect(script.contains("& cmd.exe /Q /K"))
+            }
+        }
+    }
+
+    @Test func windowsShellProbePreservesDisplayOrderAndIgnoresNoise() {
+        let output = "commandPrompt\r\ngitBash\r\nunknown\r\npowerShell\r\ngitBash\r\n"
+
+        #expect(
+            WindowsTerminalCommands.parseAvailableShells(output) == [
+                .gitBash, .powerShell, .commandPrompt,
+            ])
+    }
+
     private var nestedEnvironment: [String] {
         HerdrMachineTerminal.nestingVariables.map { "\($0)=nested" }
     }

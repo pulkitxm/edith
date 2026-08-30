@@ -563,7 +563,8 @@ enum MachineTerminalLaunchPlan {
     static func make(
         isLocal: Bool, connection: SSHConnection?, environment: [String],
         context: MachineTerminalContext = MachineTerminalContext(),
-        platform: RemoteMachinePlatform = .linux
+        platform: RemoteMachinePlatform = .linux,
+        windowsShell: WindowsTerminalShell = .automatic
     ) -> MachineTerminalLaunch? {
         if isLocal {
             return MachineTerminalLaunch(
@@ -575,7 +576,7 @@ enum MachineTerminalLaunchPlan {
         let command: String
         if platform == .windows {
             command = WindowsTerminalCommands.interactiveShell(
-                startingDirectory: context.startingDirectory)
+                windowsShell, startingDirectory: context.startingDirectory)
         } else {
             command = MachineWorkingDirectory.prefixed(
                 remoteLoginShell, directory: context.startingDirectory)
