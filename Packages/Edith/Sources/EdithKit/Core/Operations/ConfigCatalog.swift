@@ -47,7 +47,8 @@ public enum ConfigCatalog {
     public static let groups = [
         "appearance", "panel", "attention", "usage", "limits", "menubar", "alerts", "budget",
         "dashboard",
-        "machines", "herdr", "quinjet", "companion", "finder", "system", "cleaner", "music",
+        "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
+        "music",
         "calendar",
         "clipboard",
         "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
@@ -57,9 +58,8 @@ public enum ConfigCatalog {
     public static let settings: [SettingDefinition] =
         appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
-        + system + cleaner
-        + music + calendar + clipboard + notch + focusDim + presenter + colorPicker
-        + emoji
+        + system + homebrew + cleaner
+        + music + calendar + clipboard + notch + focusDim + presenter + colorPicker + emoji
         + micMute
         + backup + permissions + terminal
 
@@ -536,6 +536,18 @@ public enum ConfigCatalog {
         SettingDefinition(
             "cleanerSelectionOverrides", .map, group: "cleaner",
             summary: "Per-path cleaner selection overrides."),
+    ]
+
+    private static let homebrew: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Tabs.homebrewEnabled, .bool, group: "homebrew",
+            summary: "Homebrew Manager extension: formula and cask management.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Homebrew.defaultKind, .string, group: "homebrew",
+            summary: "Package kind selected when Homebrew Manager opens.",
+            allowed: HomebrewPackageKind.allCases.map(\.rawValue),
+            fallback: .string(HomebrewPackageKind.formula.rawValue)),
     ]
 
     private static let music: [SettingDefinition] = [

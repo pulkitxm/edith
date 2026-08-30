@@ -240,6 +240,7 @@ public enum CompletionEngine {
         case .appAction: return AppActions.all.map(\.name)
         case .runningApp: return runningApps
         case .cleanerCategory: return JunkCatalog.entries.map(\.id)
+        case .homebrewKind: return HomebrewPackageKind.allCases.map(\.rawValue)
         case .colorFormat: return ColorCopyFormat.allCases.map(\.rawValue)
         case .colorIndex:
             return ColorHistoryStore.load(from: CLIEnvironment.sharedDefaults).indices.map {

@@ -928,6 +928,7 @@ private struct ExtensionDetailRows: View {
             case .herdr: HerdrRows()
             case .quinjet: QuinjetRows()
             case .system: SystemRows()
+            case .homebrew: HomebrewRows()
             case .appMaintenance: AppMaintenanceRows()
             case .machines: MachinesRows()
             case .companion: CompanionRows()
@@ -1891,6 +1892,35 @@ private struct SystemRows: View {
     }
 }
 
+private struct HomebrewRows: View {
+    @AppStorage(AppStorageKeys.Tabs.homebrewEnabled, store: SharedDefaults.store) private
+        var enabled = false
+    @AppStorage(AppStorageKeys.Homebrew.defaultKind, store: SharedDefaults.store) private
+        var defaultKind = HomebrewPackageKind.formula.rawValue
+
+    var body: some View {
+        CLIToolStatusSection(tools: [.homebrew], extensionEnabled: enabled)
+
+        Section("Packages") {
+            Picker(
+                "Default package kind",
+                selection: $defaultKind.configured(AppStorageKeys.Homebrew.defaultKind)
+            ) {
+                ForEach(HomebrewPackageKind.allCases) { kind in
+                    Text(kind.pluralTitle).tag(kind.rawValue)
+                }
+            }
+            LabeledContent("Safety", value: "Bounded, noninteractive Homebrew processes")
+            Text(
+                "Automatic updates and analytics stay off. Uninstalls require confirmation, and active operations can be cancelled."
+            )
+            .settingsCaption()
+            Button("Open Homebrew Manager") { SectionWindow.open(.homebrew) }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+    }
+}
 private struct AppMaintenanceRows: View {
     @AppStorage(AppStorageKeys.AppMaintenance.enabled, store: SharedDefaults.store) private
         var enabled = false

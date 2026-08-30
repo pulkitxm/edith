@@ -133,6 +133,12 @@ public enum ExtensionRegistry {
             defaultsKey: "tabSystemEnabled", requiredCapabilities: [.runningApplications],
             optionalCapabilities: [.preventSleep, .inputSuppression]),
         ExtensionRegistryEntry(
+            id: "homebrew", title: "Homebrew Manager",
+            subtitle: "Search, install, upgrade, and remove formulae and casks safely.",
+            symbolName: "shippingbox.fill", group: .system, featured: true,
+            defaultsKey: "tabHomebrewEnabled", requiredCapabilities: [.packageManagement],
+            requiredToolIDs: ["homebrew"]),
+        ExtensionRegistryEntry(
             id: "appMaintenance", title: "App Maintenance",
             subtitle: "Verified disk image installs, app updates, and review-first removal.",
             symbolName: "shippingbox.and.arrow.backward", group: .system, featured: true,

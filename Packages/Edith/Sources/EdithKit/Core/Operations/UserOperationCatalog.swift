@@ -138,6 +138,9 @@ public enum UserOperationCatalog {
         + CleanerOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + HomebrewOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + AppMaintenanceOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -1222,6 +1225,32 @@ private extension CleanerOperation {
     }
 }
 
+private extension HomebrewOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .status:
+            userInterface("Homebrew manager", "inspect Homebrew availability")
+        case .list:
+            userInterface("Homebrew manager", "browse installed packages")
+        case .search:
+            userInterface(
+                "Homebrew manager", "search available formulae and casks",
+                ["ripgrep", "--kind", "formula"])
+        case .install:
+            userInterface(
+                "Homebrew manager", "install a package",
+                ["ripgrep", "--kind", "formula"])
+        case .upgrade:
+            userInterface(
+                "Homebrew manager", "upgrade a package",
+                ["ripgrep", "--kind", "formula"])
+        case .uninstall:
+            userInterface(
+                "Homebrew manager", "uninstall a package",
+                ["ripgrep", "--kind", "formula", "--yes"])
+        }
+    }
+}
 private extension AppMaintenanceOperation {
     var interfaceExposure: UserOperationExposure {
         switch self {
