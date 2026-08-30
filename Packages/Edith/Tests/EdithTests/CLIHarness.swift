@@ -197,6 +197,7 @@ final class CLIWorld: @unchecked Sendable {
             QuinjetClient { _ in throw QuinjetClientError.notInstalled }
         }
         DatabaseCLIEnvironment.makeSender = { CLIUnavailableDatabaseBrokerSender() }
+        DatabaseCLIEnvironment.runMCPServer = {}
         CLIEnvironment.installedAppURL = { nil }
         CLIEnvironment.appContributors = { [] }
         CLIEnvironment.appInspectionCenter = { [weak self] in

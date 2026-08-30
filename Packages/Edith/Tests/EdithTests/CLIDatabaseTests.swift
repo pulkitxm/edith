@@ -28,6 +28,18 @@ private actor CLIDatabaseScriptedSender: DatabaseBrokerCommandSending {
     }
 }
 
+private actor CLIDatabaseMCPRunRecorder {
+    private var count = 0
+
+    func record() {
+        count += 1
+    }
+
+    func recordedCount() -> Int {
+        count
+    }
+}
+
 @Suite struct CLIDatabaseTests {
     private static let connectionUUID = UUID(
         uuidString: "36FC476B-28F7-4C1A-AE54-4B10D793FD0F")!
@@ -44,6 +56,7 @@ private actor CLIDatabaseScriptedSender: DatabaseBrokerCommandSending {
         #expect(
             try EdRoot.parseAsRoot(["database", "connections", "ls"])
                 is DatabaseConnectionsListCommand)
+        #expect(try EdRoot.parseAsRoot(["database", "mcp"]) is DatabaseMCPCommand)
     }
 
     @Test func databaseCompletionRegistersRoutesFlagsAndFreeConnectionIDs() {
@@ -56,7 +69,9 @@ private actor CLIDatabaseScriptedSender: DatabaseBrokerCommandSending {
         }
 
         #expect(plan(["ed", "dat"], 1).candidates == ["database"])
-        #expect(plan(["ed", "database", ""], 2).candidates == ["connections", "capabilities"])
+        #expect(
+            plan(["ed", "database", ""], 2).candidates
+                == ["connections", "capabilities", "mcp"])
         #expect(
             plan(["ed", "database", "connections", ""], 3).candidates
                 == ["list", "ls", "get"])
@@ -65,6 +80,21 @@ private actor CLIDatabaseScriptedSender: DatabaseBrokerCommandSending {
                 == ["--favorites-only"])
         #expect(
             plan(["ed", "database", "connections", "get", "36fc"], 4).candidates.isEmpty)
+    }
+
+    @Test func databaseMCPStartsTheInjectedServerWithoutCLIOutput() async {
+        let recorder = CLIDatabaseMCPRunRecorder()
+
+        await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.runMCPServer = {
+                await recorder.record()
+            }
+            let result = await CLIProbe.capture(["database", "mcp"])
+            #expect(result.code == ExitCodes.success)
+            #expect(result.stdout.isEmpty)
+            #expect(result.stderr.isEmpty)
+            #expect(await recorder.recordedCount() == 1)
+        }
     }
 
     @Test func connectionListSendsExactSearchAndRendersSafeSummaries() async throws {
