@@ -88,7 +88,7 @@ public enum HerdrCollector {
         runner: Runner, machineID: String, machineName: String, machineIsLocal: Bool,
         sshTarget: String?
     ) async -> Listing {
-        let sessionsResult = await run(runner, herdr: "session list --json")
+        let sessionsResult = await run(runner, herdr: ["session", "list", "--json"])
         if isMissing(sessionsResult) {
             return Listing(present: false, agents: [], error: "herdr is not installed")
         }
@@ -116,8 +116,8 @@ public enum HerdrCollector {
         runner: Runner, session: String, machineID: String, machineName: String,
         machineIsLocal: Bool, sshTarget: String?
     ) async -> Listing {
-        let quoted = ShellQuote.quote(session)
-        let snapshot = await run(runner, herdr: "--session \(quoted) api snapshot")
+        let snapshot = await run(
+            runner, herdr: ["--session", session, "api", "snapshot"])
         if isMissing(snapshot) {
             return Listing(present: false, agents: [], error: "herdr is not installed")
         }
@@ -129,7 +129,8 @@ public enum HerdrCollector {
                 present: true, agents: agents,
                 error: agents.isEmpty ? jsonOrProcessError(snapshot) : nil)
         }
-        let result = await run(runner, herdr: "--session \(quoted) agent list")
+        let result = await run(
+            runner, herdr: ["--session", session, "agent", "list"])
         if isMissing(result) {
             return Listing(present: false, agents: [], error: "herdr is not installed")
         }
@@ -148,17 +149,14 @@ public enum HerdrCollector {
         var ok: Bool { status == 0 }
     }
 
-    private static func run(_ runner: Runner, herdr arguments: String) async -> CommandResult {
-        await runShell(runner, command: "herdr \(arguments)")
-    }
-
-    private static func runShell(_ runner: Runner, command body: String) async -> CommandResult {
-        let command = "export PATH=\"\(pathPrefix)\"; \(body)"
+    private static func run(_ runner: Runner, herdr arguments: [String]) async -> CommandResult {
         switch runner {
         case .local:
-            return await runLocal(command)
+            return await runLocal(remoteHerdrCommand(arguments: arguments, platform: .darwin))
         case let .ssh(connection):
             do {
+                let platform = await connection.remotePlatform ?? .linux
+                let command = remoteHerdrCommand(arguments: arguments, platform: platform)
                 let result = try await connection.run(command, timeout: commandTimeout)
                 return CommandResult(
                     status: result.status, stdout: result.stdoutText, stderr: result.stderrText)
@@ -228,6 +226,8 @@ public enum HerdrCollector {
         let text = (result.stdout + "\n" + result.stderr).lowercased()
         return text.contains("command not found") || text.contains("no such file")
             || text.contains("not found: herdr")
+            || text.contains("the term 'herdr' is not recognized")
+            || text.contains("the term &apos;herdr&apos; is not recognized")
     }
 
     private static func message(from result: CommandResult) -> String? {

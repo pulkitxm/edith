@@ -106,6 +106,7 @@ public enum HerdrLive {
     private static func remoteSockets(_ connection: SSHConnection) async -> [(
         name: String, path: String
     )] {
+        guard await connection.remotePlatform != .windows else { return [] }
         let result = try? await connection.run(
             HerdrSocketDiscovery.remoteProbeCommand(), timeout: 12)
         return HerdrSocketDiscovery.sockets(fromRemoteListing: result?.stdoutText ?? "")

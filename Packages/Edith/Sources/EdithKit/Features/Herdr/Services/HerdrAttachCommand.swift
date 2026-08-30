@@ -14,8 +14,11 @@ public enum HerdrAttachCommand {
         "herdr --session \(session) agent attach \(pane) --takeover"
     }
 
-    public static func remoteShellLine(session: String, pane: String) -> String {
-        "export PATH=\"\(HerdrCollector.pathPrefix)\"; \(herdrLine(session: session, pane: pane))"
+    public static func remoteShellLine(
+        session: String, pane: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        remoteHerdrCommand(
+            arguments: arguments(session: session, pane: pane), platform: platform)
     }
 
     public static func arguments(session: String, pane: String) -> [String] {
@@ -32,10 +35,21 @@ public enum HerdrTerminalControlCommand {
         ]
     }
 
-    public static func remoteShellLine(session: String, pane: String) -> String {
-        let command = (["herdr"] + arguments(session: session, pane: pane))
-            .map(ShellQuote.quote)
-            .joined(separator: " ")
-        return "export PATH=\"\(HerdrCollector.pathPrefix)\"; \(command)"
+    public static func remoteShellLine(
+        session: String, pane: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        remoteHerdrCommand(
+            arguments: arguments(session: session, pane: pane), platform: platform)
     }
+}
+
+public func remoteHerdrCommand(
+    arguments: [String], platform: RemoteMachinePlatform
+) -> String {
+    let words = ["herdr"] + arguments
+    if platform == .windows {
+        return PowerShell.command(PowerShell.invocation(words) ?? "herdr")
+    }
+    let command = words.map(ShellQuote.quote).joined(separator: " ")
+    return "export PATH=\"\(HerdrCollector.pathPrefix)\"; \(command)"
 }

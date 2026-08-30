@@ -56,13 +56,14 @@ public enum HerdrOperationExecution {
     }
 
     public static func remoteControlRequest(
-        for agent: HerdrAgent, connection: SSHConnection, environment: [String]
+        for agent: HerdrAgent, connection: SSHConnection, environment: [String],
+        platform: RemoteMachinePlatform = .linux
     ) -> TerminalLaunchRequest {
         TerminalLaunchRequest(
             executable: SSHConnection.executable.path,
             arguments: connection.execArguments(
                 command: HerdrTerminalControlCommand.remoteShellLine(
-                    session: agent.session, pane: agent.pane)),
+                    session: agent.session, pane: agent.pane, platform: platform)),
             environment: environment + connection.terminalEnvironment())
     }
 
@@ -86,13 +87,14 @@ public enum HerdrOperationExecution {
     }
 
     public static func remoteAttachRequest(
-        for agent: HerdrAgent, connection: SSHConnection, environment: [String]
+        for agent: HerdrAgent, connection: SSHConnection, environment: [String],
+        platform: RemoteMachinePlatform = .linux
     ) -> TerminalLaunchRequest {
         TerminalLaunchRequest(
             executable: SSHConnection.executable.path,
             arguments: connection.terminalArguments(
                 remoteCommand: HerdrAttachCommand.remoteShellLine(
-                    session: agent.session, pane: agent.pane)),
+                    session: agent.session, pane: agent.pane, platform: platform)),
             environment: environment + connection.terminalEnvironment())
     }
 }
