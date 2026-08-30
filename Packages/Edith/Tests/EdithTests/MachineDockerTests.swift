@@ -446,7 +446,8 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
             let data = try #require(Data(base64Encoded: String(encoded)))
             return try #require(String(data: data, encoding: .utf16LittleEndian))
         }
-        #expect(try script(MachineFacts.systemCommand(for: .windows)).contains("Win32_OperatingSystem"))
+        #expect(
+            try script(MachineFacts.systemCommand(for: .windows)).contains("Win32_OperatingSystem"))
         #expect(try script(MachineFacts.whoCommand(for: .windows)).contains("Win32_LoggedOnUser"))
         #expect(
             try script(MachineFacts.macAddressCommand(for: .windows))
@@ -538,8 +539,11 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
     }
 
     @Test func windowsPowerCommandsUsePowerShell() {
-        #expect(decodedPowerShell(PowerCommands.reboot(platform: .windows)) == "Restart-Computer -Force")
-        #expect(decodedPowerShell(PowerCommands.shutdown(platform: .windows)) == "Stop-Computer -Force")
+        #expect(
+            decodedPowerShell(PowerCommands.reboot(platform: .windows)) == "Restart-Computer -Force"
+        )
+        #expect(
+            decodedPowerShell(PowerCommands.shutdown(platform: .windows)) == "Stop-Computer -Force")
     }
 }
 

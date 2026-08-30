@@ -201,7 +201,9 @@ public enum FileOperations {
         paths: [String], toDirectory directory: String,
         platform: RemoteMachinePlatform = .linux
     ) -> String {
-        if platform == .windows { return WindowsFileCommands.copy(paths: paths, directory: directory) }
+        if platform == .windows {
+            return WindowsFileCommands.copy(paths: paths, directory: directory)
+        }
         return "cp -a " + paths.map(ShellQuote.quote).joined(separator: " ") + " "
             + ShellQuote.quote(directory)
     }
@@ -210,7 +212,9 @@ public enum FileOperations {
         paths: [String], toDirectory directory: String,
         platform: RemoteMachinePlatform = .linux
     ) -> String {
-        if platform == .windows { return WindowsFileCommands.move(paths: paths, directory: directory) }
+        if platform == .windows {
+            return WindowsFileCommands.move(paths: paths, directory: directory)
+        }
         return "mv " + paths.map(ShellQuote.quote).joined(separator: " ") + " "
             + ShellQuote.quote(directory)
     }

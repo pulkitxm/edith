@@ -86,7 +86,8 @@ public struct RemoteDirectoryEndpoint: Sendable {
             machineName: machine.name,
             home: {
                 let platform = await connection.remotePlatform ?? .linux
-                let command = platform == .windows
+                let command =
+                    platform == .windows
                     ? WindowsFileCommands.home() : "printf %s \"$HOME\""
                 let result = try await connection.run(command, timeout: 15)
                 guard result.succeeded else {

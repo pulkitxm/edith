@@ -181,7 +181,8 @@ public actor SSHConnection {
 
     private func validatePlatform() async throws {
         let unixResult = try await run("uname -s", timeout: 10)
-        var platform = unixResult.succeeded
+        var platform =
+            unixResult.succeeded
             ? RemoteMachinePlatform.unixName(unixResult.stdoutText) : nil
         if platform == nil {
             let windowsResult = try await run(

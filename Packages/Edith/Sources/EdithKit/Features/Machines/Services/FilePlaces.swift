@@ -55,7 +55,8 @@ public enum FilePlaces {
     }
 
     public static func remoteSections(
-        home: String, extras: [String] = [], platform: RemoteMachinePlatform = .linux)
+        home: String, extras: [String] = [], platform: RemoteMachinePlatform = .linux
+    )
         -> [FilePlaceSection]
     {
         let favorites = [
@@ -72,8 +73,10 @@ public enum FilePlaces {
         ]
         var system =
             platform == .windows
-            ? [FilePlace(
-                name: "Windows", path: String(home.prefix(3)), symbol: "internaldrive")]
+            ? [
+                FilePlace(
+                    name: "Windows", path: String(home.prefix(3)), symbol: "internaldrive")
+            ]
             : [
                 FilePlace(name: "Root", path: "/", symbol: "internaldrive"),
                 FilePlace(name: "etc", path: "/etc", symbol: "gearshape"),

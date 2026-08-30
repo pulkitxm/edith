@@ -19,7 +19,8 @@ public enum DockerCommands {
         let stats =
             "docker stats --no-stream --format \(quote(jsonFormat, platform: platform)) "
             + nullRedirect(platform)
-        let separator = platform == .windows
+        let separator =
+            platform == .windows
             ? "Write-Output \(PowerShell.literal(listSeparator))"
             : "echo \(ShellQuote.quote(listSeparator))"
         return host("\(ps); \(separator); \(stats)", platform)
@@ -155,7 +156,8 @@ extension DockerCommands {
     ) -> String {
         let target = quote(id, platform: platform)
         let first = "docker top \(target) -eo pid,user,pcpu,pmem,rss,args \(nullRedirect(platform))"
-        let fallback = platform == .windows
+        let fallback =
+            platform == .windows
             ? "; if ($LASTEXITCODE -ne 0) { docker top \(target) }"
             : " || docker top \(target)"
         return host(first + fallback, platform)

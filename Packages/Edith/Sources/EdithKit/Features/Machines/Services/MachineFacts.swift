@@ -72,7 +72,8 @@ public enum MachineFacts {
                 "$os=Get-CimInstance Win32_OperatingSystem; "
                     + "$span=[DateTime]::Now-$os.LastBootUpTime; "
                     + "[Console]::Out.Write("
-                    + "('{0} days, {1:00}:{2:00}' -f [int]$span.TotalDays,$span.Hours,$span.Minutes))")
+                    + "('{0} days, {1:00}:{2:00}' -f [int]$span.TotalDays,$span.Hours,$span.Minutes))"
+            )
         }
     }
 
@@ -178,13 +179,15 @@ public enum ServiceCommands {
 
     public static func list(platform: RemoteMachinePlatform = .linux) -> String {
         if platform == .windows { return WindowsSystemCommands.listServices() }
-        return "systemctl list-units --type=service --all --no-pager --no-legend --plain 2>/dev/null"
+        return
+            "systemctl list-units --type=service --all --no-pager --no-legend --plain 2>/dev/null"
             + " | head -200"
     }
 
     public static func action(
         _ action: String, unit: String, withSudoPassword: Bool = false,
-        platform: RemoteMachinePlatform = .linux)
+        platform: RemoteMachinePlatform = .linux
+    )
         -> String
     {
         guard actions.contains(action) else { return "false" }

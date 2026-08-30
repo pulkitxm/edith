@@ -110,7 +110,8 @@ public enum WindowsFileCommands {
         let statements = items.map { item in
             let source = PowerShell.literal(item.sourcePath)
             let destination = PowerShell.literal(item.destinationPath)
-            let replacement = item.replacesExisting
+            let replacement =
+                item.replacesExisting
                 ? "if (Test-Path -LiteralPath \(destination)) { "
                     + "Remove-Item -LiteralPath \(destination) -Recurse -Force }; " : ""
             let verb = moving ? "Move-Item" : "Copy-Item"

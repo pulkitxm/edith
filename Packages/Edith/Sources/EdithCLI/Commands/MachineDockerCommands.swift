@@ -405,12 +405,12 @@ struct DockerInspectCommand: AsyncParsableCommand {
             let result = await DockerDetailOperationExecution.inspect(
                 containerID: container, platform: await runner.ssh.remotePlatform ?? .linux
             ) { command, timeout in
-                    do {
-                        return .success(try await runner.text(command, timeout: timeout))
-                    } catch {
-                        return .failure(error)
-                    }
+                do {
+                    return .success(try await runner.text(command, timeout: timeout))
+                } catch {
+                    return .failure(error)
                 }
+            }
             let summary = try result.get()
             guard !json else {
                 CLIOut.json(MachineReports.inspect(summary))
@@ -442,12 +442,12 @@ struct DockerTopCommand: AsyncParsableCommand {
             let result = await DockerDetailOperationExecution.processes(
                 containerID: container, platform: await runner.ssh.remotePlatform ?? .linux
             ) { command, timeout in
-                    do {
-                        return .success(try await runner.text(command, timeout: timeout))
-                    } catch {
-                        return .failure(error)
-                    }
+                do {
+                    return .success(try await runner.text(command, timeout: timeout))
+                } catch {
+                    return .failure(error)
                 }
+            }
             let processes = try result.get()
             guard !json else {
                 CLIOut.json(.array(processes.map(MachineReports.process)))

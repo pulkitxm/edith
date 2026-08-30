@@ -252,7 +252,8 @@ enum ServiceBridge {
         try await execute {
             let runner = try await MachineResolver.runner(name)
             let platform = await runner.ssh.remotePlatform ?? .linux
-            let stdin = platform == .windows
+            let stdin =
+                platform == .windows
                 ? nil : SudoPassword.stdin(machineID: runner.machine.id)
             let result = await MachineServiceOperationExecution.perform(
                 operation, unit: unit, sudoPassword: stdin,

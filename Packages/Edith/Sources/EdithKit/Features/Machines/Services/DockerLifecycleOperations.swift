@@ -122,7 +122,8 @@ public enum DockerLifecycleOperationExecution {
             let (.restart, .containers(ids)), let (.removeContainer, .containers(ids)):
             guard !ids.isEmpty else { throw DockerLifecycleOperationError.missingContainer }
             return (
-                DockerCommands.lifecycle(operation.cliVerb, ids: ids, platform: platform), 120)
+                DockerCommands.lifecycle(operation.cliVerb, ids: ids, platform: platform), 120
+            )
         case let (.removeImage, .image(reference, force)):
             return (DockerCommands.removeImage(reference, force: force, platform: platform), 120)
         case let (.removeVolume, .volume(name)):
