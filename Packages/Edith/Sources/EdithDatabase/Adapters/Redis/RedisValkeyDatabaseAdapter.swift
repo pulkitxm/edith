@@ -303,7 +303,12 @@ actor RedisValkeyDatabaseAdapterSession: DatabaseAdapterSession {
             throw failure
         } catch let failure as RedisDatabaseClientFailure {
             if failure == .responseTooLarge {
+                await failAndClose()
                 throw RedisValkeyDatabaseAdapterSupport.resultTooLarge
+            }
+            if failure == .authentication {
+                await failAndClose()
+                throw RedisValkeyDatabaseAdapterSupport.authenticationFailed
             }
             if failure == .deadlineExceeded {
                 await failAndClose()
@@ -321,6 +326,9 @@ actor RedisValkeyDatabaseAdapterSession: DatabaseAdapterSession {
             if reason != nil || Task.isCancelled {
                 await failAndClose()
                 throw .cancelled
+            }
+            if failure == .permission || failure == .server || failure == .wrongType {
+                throw fallback
             }
             await failAndClose()
             throw fallback
@@ -391,8 +399,11 @@ enum RedisDatabaseClientFailure: Error, Equatable, Sendable {
     case cancelled
     case connection
     case deadlineExceeded
+    case permission
     case protocolFailure
     case responseTooLarge
+    case server
+    case wrongType
 }
 
 enum RedisDatabaseReadOperation: Equatable, Sendable {
@@ -543,6 +554,8 @@ final class RediStackDatabaseClient: RedisDatabaseClient, @unchecked Sendable {
                 : RedisDatabaseClientFailure.protocolFailure
         } catch is ByteToMessageDecoderError.PayloadTooLargeError {
             throw RedisDatabaseClientFailure.responseTooLarge
+        } catch let failure as RedisError {
+            throw clientFailure(failure)
         } catch {
             throw RedisDatabaseClientFailure.protocolFailure
         }
@@ -569,14 +582,6 @@ final class RediStackDatabaseClient: RedisDatabaseClient, @unchecked Sendable {
                 arguments: arguments,
                 context: context,
                 deadline: deadline)
-        } catch let error as RedisError {
-            let message = error.message.uppercased()
-            if message.contains("NOAUTH") || message.contains("WRONGPASS")
-                || message.contains("AUTHENTICATION") || message.contains("INVALID PASSWORD")
-            {
-                throw RedisDatabaseClientFailure.authentication
-            }
-            throw RedisDatabaseClientFailure.connection
         } catch {
             throw clientFailure(error)
         }
@@ -631,6 +636,17 @@ final class RediStackDatabaseClient: RedisDatabaseClient, @unchecked Sendable {
         }
         if error is ByteToMessageDecoderError.PayloadTooLargeError {
             return .responseTooLarge
+        }
+        if let error = error as? RedisError {
+            let message = error.message.uppercased()
+            if message.contains("NOAUTH") || message.contains("WRONGPASS")
+                || message.contains("AUTHENTICATION") || message.contains("INVALID PASSWORD")
+            {
+                return .authentication
+            }
+            if message.contains("WRONGTYPE") { return .wrongType }
+            if message.contains("NOPERM") { return .permission }
+            return .server
         }
         return .connection
     }
@@ -1215,7 +1231,7 @@ private enum RedisValkeyDatabaseAdapterSupport {
             deadlineExceeded
         case .responseTooLarge:
             resultTooLarge
-        case .connection, .protocolFailure:
+        case .connection, .permission, .protocolFailure, .server, .wrongType:
             connectionFailed
         }
     }
@@ -1393,15 +1409,26 @@ private enum RedisValkeyDatabaseAdapterSupport {
         }
         let components = versionString.split(separator: ".", maxSplits: 3)
         let role = replication["role"]
-        let replicaCount = Int(replication["connected_slaves"] ?? "0") ?? 0
+        guard let connectedReplicaCount = Int(replication["connected_slaves"] ?? "0"),
+            connectedReplicaCount >= 0
+        else {
+            throw RedisDatabaseClientFailure.protocolFailure
+        }
+        let isReplica = role == "slave" || role == "replica"
+        let (replicaCount, replicaOverflow) = connectedReplicaCount.addingReportingOverflow(
+            isReplica ? 1 : 0)
+        let (nodeCount, nodeOverflow) = replicaCount.addingReportingOverflow(1)
+        guard !replicaOverflow, !nodeOverflow else {
+            throw RedisDatabaseClientFailure.protocolFailure
+        }
         let clusterEnabled = cluster["cluster_enabled"] == "1"
-        let mode = server["redis_mode"]
+        let mode = server["server_mode"] ?? server["redis_mode"]
         let topologyKind: DatabaseTopologyKind
         if clusterEnabled {
             topologyKind = .cluster
         } else if mode == "sentinel" {
             topologyKind = .sentinel
-        } else if replicaCount > 0 || role == "slave" || role == "replica" {
+        } else if replicaCount > 0 {
             topologyKind = .primaryReplica
         } else {
             topologyKind = .standalone
@@ -1422,7 +1449,7 @@ private enum RedisValkeyDatabaseAdapterSupport {
             topology: DatabaseTopology(
                 kind: topologyKind,
                 localRole: role,
-                nodeCount: topologyKind == .primaryReplica ? replicaCount + 1 : 1,
+                nodeCount: topologyKind == .primaryReplica ? nodeCount : 1,
                 replicaCount: topologyKind == .primaryReplica ? replicaCount : 0),
             serverIdentifier: bounded(server["run_id"], maximumBytes: 256),
             compatibilityNotes: notes)
@@ -1872,7 +1899,7 @@ private enum RedisValkeyDatabaseAdapterSupport {
         default:
             throw invalidQuery
         }
-        guard !key.isEmpty, key.count <= maximumKeyBytes else {
+        guard key.count <= maximumKeyBytes else {
             throw invalidQuery
         }
         return key
@@ -2213,7 +2240,7 @@ private enum RedisValkeyDatabaseAdapterSupport {
         }
         let keys = try values.map(bytes)
         guard keys.count <= maximumReplyElements,
-            keys.allSatisfy({ !$0.isEmpty && $0.count <= maximumKeyBytes })
+            keys.allSatisfy({ $0.count <= maximumKeyBytes })
         else {
             throw resultTooLarge
         }
