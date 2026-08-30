@@ -7,8 +7,10 @@ struct DatabaseSafetyReviewSheet: View {
     let preview: DatabaseDestructivePreview
     let phase: DatabaseSafetyReviewPhase
     let refreshPreview: () async -> Void
-    let confirm: (DatabaseConfirmationToken, String) -> Void
-    let cancel: () -> Void
+    let reconcile: () async -> Void
+    let confirm: (String) -> Void
+    let cancelOperation: () -> Void
+    let dismiss: () -> Void
 
     @Environment(\.colorScheme) private var scheme
     @FocusState private var confirmationFocused: Bool
@@ -19,14 +21,18 @@ struct DatabaseSafetyReviewSheet: View {
         preview: DatabaseDestructivePreview,
         phase: DatabaseSafetyReviewPhase,
         refreshPreview: @escaping () async -> Void,
-        confirm: @escaping (DatabaseConfirmationToken, String) -> Void,
-        cancel: @escaping () -> Void
+        reconcile: @escaping () async -> Void,
+        confirm: @escaping (String) -> Void,
+        cancelOperation: @escaping () -> Void,
+        dismiss: @escaping () -> Void
     ) {
         self.preview = preview
         self.phase = phase
         self.refreshPreview = refreshPreview
+        self.reconcile = reconcile
         self.confirm = confirm
-        self.cancel = cancel
+        self.cancelOperation = cancelOperation
+        self.dismiss = dismiss
         _interaction = State(initialValue: DatabaseSafetyReviewInteractionState(preview: preview))
         _presentation = State(initialValue: DatabaseSafetyReviewPresentation(preview: preview))
     }
@@ -61,7 +67,7 @@ struct DatabaseSafetyReviewSheet: View {
             minHeight: DatabaseSafetyReviewLayout.minimumSheetHeight, idealHeight: 720
         )
         .background(DashSkin.paper(dark))
-        .interactiveDismissDisabled(activePhase == .executing)
+        .interactiveDismissDisabled(activePhase.blocksInteractiveDismissal)
         .onAppear {
             announce("Destructive database operation requires review.")
         }
@@ -74,6 +80,8 @@ struct DatabaseSafetyReviewSheet: View {
         }
         .onChange(of: phase) { _, newPhase in
             if case .failed = newPhase {
+                interaction.finishSubmission()
+            } else if case .accepted = newPhase {
                 interaction.finishSubmission()
             } else if case .succeeded = newPhase {
                 interaction.finishSubmission()
@@ -285,6 +293,16 @@ struct DatabaseSafetyReviewSheet: View {
                     text: DatabaseSafetyReviewPresentation.displayText(message, limit: 1_024),
                     symbol: "xmark.octagon.fill",
                     color: DashSkin.danger, dark: dark)
+            } else if case let .outcomeUnknown(message) = activePhase {
+                DatabaseSafetyStatusLine(
+                    text: DatabaseSafetyReviewPresentation.displayText(message, limit: 1_024),
+                    symbol: "questionmark.diamond.fill",
+                    color: DashSkin.warn, dark: dark)
+            } else if case let .accepted(message) = activePhase {
+                DatabaseSafetyStatusLine(
+                    text: DatabaseSafetyReviewPresentation.displayText(message, limit: 1_024),
+                    symbol: "clock.badge.checkmark.fill",
+                    color: DashSkin.warn, dark: dark)
             } else if case let .succeeded(message) = activePhase {
                 DatabaseSafetyStatusLine(
                     text: DatabaseSafetyReviewPresentation.displayText(message, limit: 1_024),
@@ -332,7 +350,7 @@ struct DatabaseSafetyReviewSheet: View {
                 .accessibilityValue(confirmationAccessibilityValue(state))
                 .disabled(
                     state == .expired || state == .executing || state == .failed
-                        || state == .completed)
+                        || state == .outcomeUnknown || state == .completed)
             }
             if DatabaseSafetyReviewLayout(width: Double(width), zoom: UIScale.current)
                 .usesInlineFooterActions
@@ -387,8 +405,44 @@ struct DatabaseSafetyReviewSheet: View {
         state: DatabaseSafetyConfirmationState,
         fillsWidth: Bool
     ) -> some View {
-        if state == .expired || state == .failed {
-            Button("Cancel", action: cancel)
+        if activePhase.isAccepted {
+            Button("Cancel mutation", action: cancelOperation)
+                .buttonStyle(.edith(.secondary))
+                .edithButtonTarget(.secondary)
+            Button {
+                Task { await reconcile() }
+            } label: {
+                Label("Check mutation status", systemImage: "arrow.clockwise")
+                    .frame(maxWidth: fillsWidth ? .infinity : nil)
+            }
+            .buttonStyle(.edith(.primary, tint: DashSkin.warn))
+            .edithButtonTarget(.primary)
+        } else if state == .outcomeUnknown {
+            Button("Cancel operation", action: cancelOperation)
+                .buttonStyle(.edith(.secondary))
+                .edithButtonTarget(.secondary)
+            Button {
+                Task { await reconcile() }
+            } label: {
+                Label("Check status", systemImage: "arrow.clockwise")
+                    .frame(maxWidth: fillsWidth ? .infinity : nil)
+            }
+            .buttonStyle(.edith(.primary, tint: DashSkin.warn))
+            .edithButtonTarget(.primary)
+        } else if activePhase == .cancelling || activePhase == .reconciling {
+            Button(action: {}) {
+                HStack(spacing: UIScale.pt(6)) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(activePhase == .cancelling ? "Cancelling" : "Checking status")
+                }
+                .frame(maxWidth: fillsWidth ? .infinity : nil)
+            }
+            .buttonStyle(.edith(.secondary))
+            .edithButtonTarget(.secondary)
+            .disabled(true)
+        } else if state == .expired || state == .failed {
+            Button("Cancel", action: dismiss)
                 .buttonStyle(.edith(.secondary))
                 .edithButtonTarget(.secondary)
                 .keyboardShortcut(.cancelAction)
@@ -406,15 +460,26 @@ struct DatabaseSafetyReviewSheet: View {
             .edithButtonTarget(.primary)
             .disabled(interaction.refreshLocked)
         } else if state == .completed {
-            Button("Done", action: cancel)
-                .buttonStyle(.edith(.primary, tint: DashSkin.ok))
+            Button("Done", action: dismiss)
+                .buttonStyle(
+                    .edith(
+                        .primary,
+                        tint: activePhase.isAccepted ? DashSkin.warn : DashSkin.ok)
+                )
                 .edithButtonTarget(.primary)
                 .keyboardShortcut(.defaultAction)
         } else {
-            Button(activePhase == .executing ? "Cancel operation" : "Cancel", action: cancel)
-                .buttonStyle(.edith(.secondary))
-                .edithButtonTarget(.secondary)
-                .keyboardShortcut(.cancelAction)
+            if activePhase == .executing {
+                Button("Cancel operation", action: cancelOperation)
+                    .buttonStyle(.edith(.secondary))
+                    .edithButtonTarget(.secondary)
+                    .keyboardShortcut(.cancelAction)
+            } else {
+                Button("Cancel", action: dismiss)
+                    .buttonStyle(.edith(.secondary))
+                    .edithButtonTarget(.secondary)
+                    .keyboardShortcut(.cancelAction)
+            }
             Button {
                 performConfirm(now: Date())
             } label: {
@@ -456,7 +521,7 @@ struct DatabaseSafetyReviewSheet: View {
                 phase: activePhase),
             interaction.beginSubmission()
         else { return }
-        confirm(preview.token, interaction.confirmationInput)
+        confirm(interaction.confirmationInput)
     }
 
     private func copyConfirmation() {
@@ -481,8 +546,9 @@ struct DatabaseSafetyReviewSheet: View {
         case .ready: "Confirmation matches"
         case .expired: "Preview expired. Generate a fresh preview."
         case .executing: "Operation is executing"
+        case .outcomeUnknown: "Mutation outcome is unknown"
         case .failed: "This authorization cannot be reused"
-        case .completed: "Operation completed"
+        case .completed: activePhase.isAccepted ? "Mutation accepted" : "Operation completed"
         }
     }
 
@@ -493,16 +559,20 @@ struct DatabaseSafetyReviewSheet: View {
         case .ready: "checkmark.circle.fill"
         case .expired: "clock.badge.xmark"
         case .executing: "bolt.circle.fill"
+        case .outcomeUnknown: "questionmark.diamond.fill"
         case .failed: "lock.slash.fill"
-        case .completed: "checkmark.seal.fill"
+        case .completed:
+            activePhase.isAccepted ? "clock.badge.checkmark.fill" : "checkmark.seal.fill"
         }
     }
 
     private func confirmationStatusColor(_ state: DatabaseSafetyConfirmationState) -> Color {
         switch state {
         case .empty: DashSkin.inkFaint(dark)
-        case .ready, .completed: DashSkin.ok
+        case .ready: DashSkin.ok
+        case .completed: activePhase.isAccepted ? DashSkin.warn : DashSkin.ok
         case .executing: DashSkin.accent(dark)
+        case .outcomeUnknown: DashSkin.warn
         case .mismatch, .expired, .failed: DashSkin.danger
         }
     }
@@ -516,8 +586,9 @@ struct DatabaseSafetyReviewSheet: View {
         case .ready: "Matches"
         case .expired: "Preview expired"
         case .executing: "Operation executing"
+        case .outcomeUnknown: "Mutation outcome unknown"
         case .failed: "Authorization consumed"
-        case .completed: "Operation completed"
+        case .completed: activePhase.isAccepted ? "Mutation accepted" : "Operation completed"
         }
     }
 
@@ -543,9 +614,21 @@ struct DatabaseSafetyReviewSheet: View {
             break
         case .executing:
             announce("Database operation started.")
+        case .cancelling:
+            announce("Database operation cancellation requested.")
+        case .reconciling:
+            announce("Checking database operation status.")
+        case let .outcomeUnknown(message):
+            announce(
+                "Database operation outcome is unknown. \(DatabaseSafetyReviewPresentation.displayText(message, limit: 512))"
+            )
         case let .failed(message):
             announce(
                 "Database operation failed. \(DatabaseSafetyReviewPresentation.displayText(message, limit: 512))"
+            )
+        case let .accepted(message):
+            announce(
+                "Database mutation accepted. \(DatabaseSafetyReviewPresentation.displayText(message, limit: 512))"
             )
         case let .succeeded(message):
             announce(

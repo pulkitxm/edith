@@ -1,3 +1,4 @@
+import AppKit
 import EdithDatabase
 import EdithKit
 import Observation
@@ -13,7 +14,16 @@ final class DatabasePageModel {
     }
 
     private(set) var readiness = Readiness.checking
+    private let ensureReady: @Sendable () async throws -> Void
     private var generation = UUID()
+
+    init(
+        ensureReady: @escaping @Sendable () async throws -> Void = {
+            try await DatabaseBrokerClientCoordinator.shared.ensureReady()
+        }
+    ) {
+        self.ensureReady = ensureReady
+    }
 
     var statusTitle: String {
         switch readiness {
@@ -34,8 +44,8 @@ final class DatabasePageModel {
     var statusColor: Color {
         switch readiness {
         case .checking: .secondary
-        case .ready: .green
-        case .failed: .orange
+        case .ready: DashSkin.ok
+        case .failed: DashSkin.warn
         }
     }
 
@@ -49,14 +59,26 @@ final class DatabasePageModel {
         generation = requestGeneration
         readiness = .checking
         do {
-            try await DatabaseBrokerClientCoordinator.shared.ensureReady()
+            try await ensureReady()
             guard generation == requestGeneration, !Task.isCancelled else { return }
             readiness = .ready
+            announce("Database broker ready.")
         } catch is CancellationError {
         } catch {
             guard generation == requestGeneration, !Task.isCancelled else { return }
             readiness = .failed(Self.message(for: error))
+            announce("Database broker unavailable.")
         }
+    }
+
+    private func announce(_ message: String) {
+        NSAccessibility.post(
+            element: NSApplication.shared,
+            notification: .announcementRequested,
+            userInfo: [
+                .announcement: message,
+                .priority: NSAccessibilityPriorityLevel.medium.rawValue,
+            ])
     }
 
     private static func message(for error: Error) -> String {
@@ -80,6 +102,7 @@ final class DatabasePageModel {
 
 struct DatabasePage: View {
     @State private var model = DatabasePageModel()
+    @State private var workspace = DatabaseWorkspaceModel()
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
@@ -95,8 +118,11 @@ struct DatabasePage: View {
                     ScrollView { compactContent }
                 } else {
                     HStack(spacing: 0) {
-                        connections
-                            .frame(width: UIScale.pt(250))
+                        ScrollView {
+                            connections
+                                .frame(minHeight: UIScale.pt(360))
+                        }
+                        .frame(width: UIScale.pt(250))
                         Divider().opacity(0.35)
                         ScrollView { workbench }
                     }
@@ -108,6 +134,25 @@ struct DatabasePage: View {
         .task {
             guard automaticActionsEnabled else { return }
             await model.refresh()
+        }
+        .sheet(
+            item: Binding(
+                get: { workspace.safetyReview },
+                set: { review in
+                    if review == nil {
+                        workspace.dismissSafetyReview()
+                    }
+                })
+        ) { session in
+            let current = workspace.safetyReview ?? session
+            DatabaseSafetyReviewSheet(
+                preview: current.preview,
+                phase: workspace.safetyPhase,
+                refreshPreview: { await workspace.refreshSafetyPreview() },
+                reconcile: { await workspace.reconcileSafetyOperation() },
+                confirm: { workspace.confirmSafetyReview($0) },
+                cancelOperation: { workspace.cancelSafetyOperation() },
+                dismiss: { workspace.dismissSafetyReview() })
         }
     }
 
@@ -176,6 +221,9 @@ struct DatabasePage: View {
             if let detail = model.failureDetail {
                 brokerFailure(detail)
             }
+            if let notice = workspace.mutationNotice {
+                mutationNotice(notice)
+            }
             VStack(spacing: UIScale.pt(12)) {
                 workbenchStep(
                     "1", "Connect through the broker",
@@ -198,7 +246,7 @@ struct DatabasePage: View {
     private func brokerFailure(_ detail: String) -> some View {
         HStack(alignment: .top, spacing: UIScale.pt(10)) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(DashSkin.warn)
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text("Broker unavailable")
                     .font(.system(size: UIScale.pt(13), weight: .semibold))
@@ -209,7 +257,37 @@ struct DatabasePage: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(UIScale.pt(14))
-        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+        .background(DashSkin.warn.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+    }
+
+    private func mutationNotice(_ detail: String) -> some View {
+        HStack(alignment: .top, spacing: UIScale.pt(10)) {
+            Image(
+                systemName: workspace.hasTrackedMutation
+                    ? "clock.arrow.circlepath" : "info.circle.fill"
+            )
+            .foregroundStyle(
+                workspace.hasTrackedMutation ? DashSkin.warn : DashSkin.accent(dark))
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                Text(
+                    workspace.hasTrackedMutation ? "Mutation requires tracking" : "Mutation status"
+                )
+                .font(.system(size: UIScale.pt(13), weight: .semibold))
+                Text(detail)
+                    .font(.system(size: UIScale.pt(12)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .fixedSize(horizontal: false, vertical: true)
+                if workspace.hasTrackedMutation {
+                    Button("Check mutation status") {
+                        Task { await workspace.reconcileSafetyOperation() }
+                    }
+                    .buttonStyle(.edith(.secondary))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(UIScale.pt(14))
+        .background(DashSkin.warn.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
     }
 
     private func workbenchStep(_ number: String, _ title: String, _ detail: String) -> some View {
