@@ -189,6 +189,68 @@ private enum DatabaseBrokerSocketFixtures {
         runtimeLock.release()
     }
 
+    @Test func preAcquiredOwnershipTransfersToListenerUntilClose() throws {
+        let fixture = try DatabaseBrokerSocketFixtures.make()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let runtimeLock = try DatabaseBrokerSocketListener.acquireOwnership(
+            paths: fixture.paths)
+        let listener = try DatabaseBrokerSocketListener.listen(
+            paths: fixture.paths,
+            runtimeLock: runtimeLock)
+
+        #expect(throws: DatabaseBrokerSocketError.listenerAlreadyRunning) {
+            _ = try DatabaseBrokerSocketListener.acquireOwnership(paths: fixture.paths)
+        }
+
+        listener.close()
+        let reacquired = try DatabaseBrokerSocketListener.acquireOwnership(
+            paths: fixture.paths)
+        reacquired.release()
+    }
+
+    @Test func preAcquiredOwnershipReleasesWhenAddressValidationFails() throws {
+        let fixture = try DatabaseBrokerSocketFixtures.make()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let runtimeDirectory = fixture.root.appendingPathComponent(
+            String(repeating: "r", count: 80),
+            isDirectory: true)
+        let paths = DatabaseBrokerPaths(
+            dataDirectory: fixture.paths.dataDirectory,
+            runtimeDirectory: runtimeDirectory)
+        let runtimeLock = try DatabaseBrokerSocketListener.acquireOwnership(paths: paths)
+
+        #expect(throws: DatabaseBrokerSocketError.invalidSocketPath) {
+            _ = try DatabaseBrokerSocketListener.listen(
+                paths: paths,
+                runtimeLock: runtimeLock)
+        }
+
+        let reacquired = try DatabaseBrokerSocketListener.acquireOwnership(paths: paths)
+        reacquired.release()
+    }
+
+    @Test func preAcquiredOwnershipReleasesWhenListenerConstructionFails() throws {
+        let fixture = try DatabaseBrokerSocketFixtures.make()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let runtimeLock = try DatabaseBrokerSocketListener.acquireOwnership(
+            paths: fixture.paths)
+
+        #expect(throws: DatabaseBrokerSocketTestError.fixtureFailure) {
+            _ = try DatabaseBrokerSocketListener.listen(
+                paths: fixture.paths,
+                runtimeLock: runtimeLock
+            ) { stage in
+                guard case .socketBound = stage else { return }
+                throw DatabaseBrokerSocketTestError.fixtureFailure
+            }
+        }
+
+        #expect(!FileManager.default.fileExists(atPath: fixture.paths.socketFile.path))
+        let reacquired = try DatabaseBrokerSocketListener.acquireOwnership(
+            paths: fixture.paths)
+        reacquired.release()
+    }
+
     @Test func rejectsInvalidPathsAndTimeoutsBeforeConnecting() throws {
         #expect(DatabaseBrokerSocketAddress.maximumPathBytes == 103)
         #expect(throws: DatabaseBrokerSocketError.invalidSocketPath) {

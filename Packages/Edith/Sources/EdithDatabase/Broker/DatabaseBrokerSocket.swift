@@ -175,15 +175,32 @@ final class DatabaseBrokerSocketListener: @unchecked Sendable {
         paths: DatabaseBrokerPaths,
         observe: (DatabaseBrokerSocketListenerStage) throws -> Void
     ) throws -> DatabaseBrokerSocketListener {
-        let address = try DatabaseBrokerSocketAddress(path: paths.socketFile.path)
-        let runtimeLock: DatabaseRuntimeLock
+        _ = try DatabaseBrokerSocketAddress(path: paths.socketFile.path)
+        let runtimeLock = try acquireOwnership(paths: paths)
+        return try listen(
+            paths: paths,
+            runtimeLock: runtimeLock,
+            observe: observe)
+    }
+
+    static func acquireOwnership(
+        paths: DatabaseBrokerPaths
+    ) throws -> DatabaseRuntimeLock {
         do {
-            runtimeLock = try DatabaseRuntimeLock.acquire(paths: paths)
+            return try DatabaseRuntimeLock.acquire(paths: paths)
         } catch DatabaseRuntimeLockError.alreadyHeld {
             throw DatabaseBrokerSocketError.listenerAlreadyRunning
         }
+    }
+
+    static func listen(
+        paths: DatabaseBrokerPaths,
+        runtimeLock: DatabaseRuntimeLock,
+        observe: (DatabaseBrokerSocketListenerStage) throws -> Void = { _ in }
+    ) throws -> DatabaseBrokerSocketListener {
         var pendingListener: DatabaseBrokerPendingListener?
         do {
+            let address = try DatabaseBrokerSocketAddress(path: paths.socketFile.path)
             let listener = try runtimeLock.withRuntimeDirectoryDescriptor {
                 directoryDescriptor in
                 let listener = try createListener(
