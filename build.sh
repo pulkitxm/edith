@@ -219,6 +219,10 @@ sign_tool() {
 
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
   --identifier com.pulkit.edith.lidawake "$PRIVILEGED_HELPER"
+for library in "$APP"/Contents/Frameworks/*.dylib; do
+  [ -e "$library" ] || continue
+  sign_tool "$library"
+done
 sign_tool "$APP/Contents/Frameworks/Sparkle.framework"
 sign "$HELPER"
 sign "$APP"
