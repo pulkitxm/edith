@@ -4,6 +4,15 @@ import Foundation
 public enum MachineControlPlatform: String, Equatable, Sendable {
     case linux
     case darwin
+    case windows
+
+    public init(_ platform: RemoteMachinePlatform) {
+        switch platform {
+        case .linux: self = .linux
+        case .darwin: self = .darwin
+        case .windows: self = .windows
+        }
+    }
 }
 
 public struct MachineControlSnapshot: Equatable, Sendable {
@@ -136,8 +145,14 @@ public enum MachineControlOperation: String, CaseIterable, Equatable, Sendable {
 public enum MachineControlOperationExecution {
     public typealias Run = (String, Data?, TimeInterval) async -> Result<String, Error>
 
-    public static func status(using run: Run) async -> Result<MachineControlSnapshot, Error> {
-        switch await run(MachineControlCenterCommands.statusCommand, nil, 20) {
+    public static func status(
+        platform: MachineControlPlatform? = nil, using run: Run
+    ) async -> Result<MachineControlSnapshot, Error> {
+        let command =
+            platform == .windows
+            ? WindowsMachineControlCommands.status
+            : MachineControlCenterCommands.statusCommand
+        switch await run(command, nil, 20) {
         case let .success(output):
             return .success(MachineControlCenterCommands.parseStatus(output))
         case let .failure(error):
@@ -156,7 +171,7 @@ public enum MachineControlOperationExecution {
         let stdin = shouldAttachSudoPassword ? SudoPassword.stdin(machineID: machineID) : nil
         let command = MachineControlCenterCommands.command(
             for: action, withSudoPassword: stdin != nil,
-            usingLocalAuthorization: isLocal)
+            usingLocalAuthorization: isLocal, platform: platform)
         return await run(command, stdin, 30)
     }
 }
@@ -566,6 +581,7 @@ public enum MachineControlCenterCommands {
         for action: MachineControlAction, platform: MachineControlPlatform?
     ) -> Bool {
         guard let platform else { return false }
+        if platform == .windows { return false }
         switch action {
         case .setVolume, .setMuted, .setDoNotDisturb:
             return false
@@ -582,8 +598,12 @@ public enum MachineControlCenterCommands {
 
     public static func command(
         for action: MachineControlAction, withSudoPassword: Bool,
-        usingLocalAuthorization: Bool = false
+        usingLocalAuthorization: Bool = false, platform: MachineControlPlatform? = nil
     ) -> String {
+        if platform == .windows {
+            return WindowsMachineControlCommands.command(
+                for: action, disruptiveMarker: disruptiveMarker)
+        }
         let sudoCommand = withSudoPassword ? "/usr/bin/sudo -S -p ''" : "/usr/bin/sudo -n"
         let linux: String
         let darwin: String

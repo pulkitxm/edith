@@ -4,6 +4,13 @@ import Testing
 @testable import EdithCore
 @testable import EdithKit
 
+private func decodedMachinePowerShell(_ command: String) -> String? {
+    guard let encoded = command.split(separator: " ").last,
+        let data = Data(base64Encoded: String(encoded))
+    else { return nil }
+    return String(data: data, encoding: .utf16LittleEndian)
+}
+
 @Suite struct ShellQuoteTests {
     @Test func passesSafeStringsThrough() {
         #expect(ShellQuote.quote("docker") == "docker")
@@ -493,6 +500,12 @@ import Testing
 }
 
 @Suite struct MachineControlCenterCommandsTests {
+    @Test func mapsRemotePlatformsToControlPlatforms() {
+        #expect(MachineControlPlatform(.darwin) == .darwin)
+        #expect(MachineControlPlatform(.linux) == .linux)
+        #expect(MachineControlPlatform(.windows) == .windows)
+    }
+
     @Test func parsesACompleteSnapshot() {
         let snapshot = MachineControlCenterCommands.parseStatus(
             """
@@ -537,6 +550,61 @@ import Testing
         #expect(snapshot.volume == nil)
         #expect(!snapshot.isEmpty)
         #expect(MachineControlCenterCommands.parseStatus("banner text").isEmpty)
+    }
+
+    @Test func parsesWindowsSnapshots() {
+        let snapshot = MachineControlCenterCommands.parseStatus(
+            """
+            EDITH_CONTROL_PLATFORM=windows
+            EDITH_CONTROL_BATTERY_LEVEL=81
+            EDITH_CONTROL_BRIGHTNESS=55
+            EDITH_CONTROL_VOLUME=34
+            EDITH_CONTROL_MUTED=0
+            EDITH_CONTROL_WIFI_ENABLED=1
+            EDITH_CONTROL_BLUETOOTH_ENABLED=0
+            EDITH_CONTROL_AIRPLANE_MODE=0
+            EDITH_CONTROL_DO_NOT_DISTURB=1
+            """)
+
+        #expect(snapshot.platform == .windows)
+        #expect(snapshot.batteryLevel == 81)
+        #expect(snapshot.brightness == 55)
+        #expect(snapshot.volume == 34)
+        #expect(snapshot.muted == false)
+        #expect(snapshot.wifiEnabled == true)
+        #expect(snapshot.bluetoothEnabled == false)
+        #expect(snapshot.airplaneMode == false)
+        #expect(snapshot.doNotDisturb == true)
+    }
+
+    @Test func buildsNativeWindowsStatusAndMutations() throws {
+        let status = try #require(decodedMachinePowerShell(WindowsMachineControlCommands.status))
+        let brightness = try #require(
+            decodedMachinePowerShell(
+                MachineControlCenterCommands.command(
+                    for: .setBrightness(140), withSudoPassword: false,
+                    platform: .windows)))
+        let volume = try #require(
+            decodedMachinePowerShell(
+                MachineControlCenterCommands.command(
+                    for: .setVolume(-10), withSudoPassword: false,
+                    platform: .windows)))
+        let airplane = try #require(
+            decodedMachinePowerShell(
+                MachineControlCenterCommands.command(
+                    for: .setAirplaneMode(true), withSudoPassword: false,
+                    platform: .windows)))
+
+        #expect(status.contains("EDITH_CONTROL_PLATFORM=windows"))
+        #expect(status.contains("WmiMonitorBrightness"))
+        #expect(status.contains("Get-NetAdapter"))
+        #expect(status.contains("Get-PnpDevice -Class Bluetooth"))
+        #expect(status.contains("IAudioEndpointVolume"))
+        #expect(brightness.contains("Brightness = [byte]100"))
+        #expect(volume.contains("[EdithAudio]::Level = 0"))
+        #expect(airplane.contains(MachineControlCenterCommands.disruptiveMarker))
+        #expect(airplane.contains("Disable-NetAdapter"))
+        #expect(airplane.contains("Disable-PnpDevice"))
     }
 
     @Test func parsesBatteryOnlySnapshots() {
@@ -663,6 +731,9 @@ import Testing
         #expect(
             !MachineControlCenterCommands.shouldAttachSudoPassword(
                 for: .setAirplaneMode(true), platform: nil))
+        #expect(
+            !MachineControlCenterCommands.shouldAttachSudoPassword(
+                for: .setWiFiEnabled(false), platform: .windows))
     }
 
     @Test func protectsSudoInputFromUnprivilegedFallbacks() {
@@ -853,6 +924,20 @@ import Testing
         #expect(command == MachineControlCenterCommands.statusCommand)
         #expect(timeout == 20)
         #expect(snapshot.platform == .linux)
+        #expect(snapshot.volume == 37)
+    }
+
+    @Test func windowsStatusUsesTheNativeCommand() async throws {
+        var command = ""
+        let result = await MachineControlOperationExecution.status(platform: .windows) {
+            next, _, _ in
+            command = next
+            return .success("EDITH_CONTROL_PLATFORM=windows\nEDITH_CONTROL_VOLUME=37\n")
+        }
+
+        let snapshot = try result.get()
+        #expect(command == WindowsMachineControlCommands.status)
+        #expect(snapshot.platform == .windows)
         #expect(snapshot.volume == 37)
     }
 

@@ -96,13 +96,6 @@ final class MachineControlCenterModel {
             return
         }
         requiresConnection = false
-        guard session.remotePlatform != .windows else {
-            snapshot = nil
-            resultFailed = false
-            resultMessage = "Windows live controls are not available yet."
-            hasLoaded = true
-            return
-        }
         lastRefreshStartedAt = Date()
         isRefreshing = true
         defer {
@@ -115,7 +108,8 @@ final class MachineControlCenterModel {
                 }
             }
         }
-        let result = await MachineControlOperationExecution.status {
+        let platform = MachineControlPlatform(session.remotePlatform ?? .darwin)
+        let result = await MachineControlOperationExecution.status(platform: platform) {
             [session] command, stdin, timeout in
             await session.runCommand(command, stdin: stdin, timeout: timeout)
         }

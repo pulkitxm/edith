@@ -82,8 +82,9 @@ final class MachineControlTarget {
 enum MachineControlCLI {
     static func status(machine query: String, json: Bool) async throws {
         let target = try await MachineControlTarget(query: query)
-        try await requireSupported(target)
-        let result = await MachineControlOperationExecution.status { command, stdin, timeout in
+        let platform = await controlPlatform(target)
+        let result = await MachineControlOperationExecution.status(platform: platform) {
+            command, stdin, timeout in
             await target.run(command, stdin: stdin, timeout: timeout)
         }
         let snapshot = try resolved(result, target: target)
@@ -104,12 +105,13 @@ enum MachineControlCLI {
         confirmed: Bool = true
     ) async throws {
         let target = try await MachineControlTarget(query: query)
-        try await requireSupported(target)
+        let platform = await controlPlatform(target)
         if action.isDisruptive, !confirmed {
             renderPreview(action, target: target, json: json)
             return
         }
-        let status = await MachineControlOperationExecution.status { command, stdin, timeout in
+        let status = await MachineControlOperationExecution.status(platform: platform) {
+            command, stdin, timeout in
             await target.run(command, stdin: stdin, timeout: timeout)
         }
         let snapshot = try resolved(status, target: target)
@@ -147,11 +149,11 @@ enum MachineControlCLI {
         }
     }
 
-    private static func requireSupported(_ target: MachineControlTarget) async throws {
-        guard await target.remotePlatform != .windows else {
-            throw CLIFailure.unavailable(
-                "Windows live controls are not available yet")
-        }
+    private static func controlPlatform(_ target: MachineControlTarget) async
+        -> MachineControlPlatform
+    {
+        guard !target.isLocal else { return .darwin }
+        return MachineControlPlatform(await target.remotePlatform ?? .linux)
     }
 
     private static func statusRows(_ snapshot: MachineControlSnapshot) -> [[String]] {
