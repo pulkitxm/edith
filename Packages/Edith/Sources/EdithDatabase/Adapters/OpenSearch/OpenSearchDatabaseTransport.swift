@@ -7,6 +7,12 @@ struct OpenSearchDatabaseHTTPResponse: Sendable {
     let body: Data
 }
 
+enum OpenSearchDatabaseHTTPMethod: String, Sendable {
+    case delete = "DELETE"
+    case get = "GET"
+    case post = "POST"
+}
+
 final class OpenSearchDatabaseURLSessionDelegate: NSObject, URLSessionTaskDelegate,
     @unchecked Sendable
 {
@@ -23,6 +29,7 @@ final class OpenSearchDatabaseURLSessionDelegate: NSObject, URLSessionTaskDelega
 }
 
 enum OpenSearchDatabaseTransport {
+    static let maximumRequestBytes = 1_048_576
     static let minimumResponseBytes = 1_024
     static let maximumResponseBytes = 16_777_216
     private static let maximumPathBytes = 4_096
@@ -80,12 +87,15 @@ enum OpenSearchDatabaseTransport {
     static func request(
         endpoint: URL,
         path: String,
+        method: OpenSearchDatabaseHTTPMethod = .get,
         queryItems: [URLQueryItem],
+        body: Data? = nil,
         authorization: OpenSearchDatabaseAuthorization
     ) throws(OpenSearchDatabaseDriverFailure) -> URLRequest {
-        guard path.hasPrefix("/"),
+        guard path.hasPrefix("/"), !path.contains("?"), !path.contains("#"),
             path.utf8.count <= maximumPathBytes,
             safePath(path),
+            body?.count ?? 0 <= maximumRequestBytes,
             queryItems.count <= maximumQueryItems,
             queryItems.allSatisfy({ safeQueryComponent($0.name) }),
             queryItems.allSatisfy({ $0.value.map(safeQueryComponent) ?? true }),
@@ -107,10 +117,14 @@ enum OpenSearchDatabaseTransport {
             throw .invalidConfiguration
         }
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        request.httpMethod = method.rawValue
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("edith-database", forHTTPHeaderField: "X-Opaque-Id")
+        if let body {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = body
+        }
         if let value = authorization.headerValue {
             request.setValue(value, forHTTPHeaderField: "Authorization")
         }
