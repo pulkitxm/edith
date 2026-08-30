@@ -303,6 +303,33 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
         }
     }
 
+    public func createOperationIfAbsent(
+        _ summary: DatabaseOperationRecordSummary
+    ) throws -> Bool {
+        let data = try Self.encoder().encode(summary)
+        return try pool.write { database in
+            try database.execute(
+                sql: """
+                    INSERT INTO database_operation_history (
+                        id, connection_id, kind, state, started_at, finished_at, summary
+                    ) VALUES (
+                        :id, :connection_id, :kind, :state, :started_at, :finished_at, :summary
+                    )
+                    ON CONFLICT(id) DO NOTHING
+                    """,
+                arguments: [
+                    "id": summary.id.rawValue.uuidString,
+                    "connection_id": summary.connection.id.rawValue.uuidString,
+                    "kind": summary.kind.rawValue,
+                    "state": summary.state.rawValue,
+                    "started_at": summary.startedAt?.timeIntervalSince1970,
+                    "finished_at": summary.finishedAt?.timeIntervalSince1970,
+                    "summary": data,
+                ])
+            return database.changesCount == 1
+        }
+    }
+
     public func recordOperation(_ summary: DatabaseOperationRecordSummary) throws {
         let data = try Self.encoder().encode(summary)
         try pool.write { database in

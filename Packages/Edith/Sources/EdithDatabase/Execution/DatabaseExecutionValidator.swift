@@ -37,6 +37,24 @@ struct DatabaseExecutionValidator: Sendable {
         self.currentDate = currentDate
     }
 
+    func validate(_ request: DatabaseConnectRequest) throws {
+        try Self.validateVersion(
+            request.version,
+            expected: DatabaseConnectRequest.schemaVersion,
+            contract: "connect request")
+        try validate(request.operation)
+        try Self.validateEncodedSize(request, name: "connect request")
+    }
+
+    func validate(_ request: DatabaseDisconnectRequest) throws {
+        try Self.validateVersion(
+            request.version,
+            expected: DatabaseDisconnectRequest.schemaVersion,
+            contract: "disconnect request")
+        try validate(request.operation)
+        try Self.validateEncodedSize(request, name: "disconnect request")
+    }
+
     func validate(_ request: DatabaseConnectionTestRequest) throws {
         try Self.validateVersion(
             request.version,

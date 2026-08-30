@@ -168,6 +168,14 @@ private enum DatabaseExecutionValidatorFixtures {
         let mutation = DatabaseExecutionValidatorFixtures.mutation()
 
         try validator.validate(
+            DatabaseConnectRequest(
+                connectionID: connection.id,
+                operation: DatabaseExecutionValidatorFixtures.operation))
+        try validator.validate(
+            DatabaseDisconnectRequest(
+                connectionID: connection.id,
+                operation: DatabaseExecutionValidatorFixtures.operation))
+        try validator.validate(
             DatabaseConnectionTestRequest(
                 connection: connection,
                 operation: DatabaseExecutionValidatorFixtures.operation))
@@ -213,6 +221,31 @@ private enum DatabaseExecutionValidatorFixtures {
         let target = DatabaseExecutionValidatorFixtures.target()
         let mutation = DatabaseExecutionValidatorFixtures.mutation()
         let operation = DatabaseExecutionValidatorFixtures.operation
+
+        #expect(
+            throws: DatabaseExecutionValidationError.unsupportedVersion(
+                contract: "connect request",
+                expected: 1,
+                actual: 2)
+        ) {
+            try validator.validate(
+                DatabaseConnectRequest(
+                    version: 2,
+                    connectionID: connection.id,
+                    operation: operation))
+        }
+        #expect(
+            throws: DatabaseExecutionValidationError.unsupportedVersion(
+                contract: "disconnect request",
+                expected: 1,
+                actual: 2)
+        ) {
+            try validator.validate(
+                DatabaseDisconnectRequest(
+                    version: 2,
+                    connectionID: connection.id,
+                    operation: operation))
+        }
 
         #expect(
             throws: DatabaseExecutionValidationError.unsupportedVersion(
