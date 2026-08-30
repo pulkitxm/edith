@@ -1,5 +1,8 @@
+import EdithKit
 import GhosttyTerminal
 import SwiftUI
+
+extension GhosttyTerminalView: DirectScrollHandling {}
 
 extension GhosttyTheme {
     init(palette: TerminalPalette, fontSize: Double? = nil) {

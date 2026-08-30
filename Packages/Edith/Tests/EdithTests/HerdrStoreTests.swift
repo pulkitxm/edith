@@ -236,21 +236,24 @@ private actor HerdrWatchHarness {
         #expect(store.hosts.first?.agents.first?.pane == "fresh")
     }
 
-    @Test func localTabAttachmentUsesTheSharedRequest() async throws {
+    @Test func localAgentAttachmentUsesTheRawTerminalBridge() async throws {
         let store = HerdrStore()
         let selected = agent("Codex", pane: "pane-1")
         store.open(selected)
         let tab = try #require(store.tabs.first)
         let executable = URL(fileURLWithPath: "/tmp/herdr")
+        let bridge = URL(fileURLWithPath: "/tmp/ed")
         let environment = ["TERM=xterm-256color"]
 
         let request = try await store.attachRequest(
-            for: tab, environment: environment, localExecutable: executable)
+            for: tab, environment: environment, localExecutable: executable,
+            bridgeExecutable: bridge)
+        let controller = HerdrOperationExecution.localControlRequest(
+            for: selected, environment: environment, executable: executable)
+        let expected = try HerdrTerminalBridge.launchRequest(
+            bridgeExecutable: bridge, controller: controller)
 
-        #expect(
-            request
-                == HerdrOperationExecution.localAttachRequest(
-                    for: selected, environment: environment, executable: executable))
+        #expect(request == expected)
     }
 
     @Test func openingADiffRemembersItForThatAgent() {

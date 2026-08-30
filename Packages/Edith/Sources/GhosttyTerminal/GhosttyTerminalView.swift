@@ -125,7 +125,8 @@ public final class GhosttyTerminalView: NSView {
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard window != nil else { return }
+        guard let window else { return }
+        window.acceptsMouseMovedEvents = true
         startIfNeeded()
         applyPresentationState()
     }

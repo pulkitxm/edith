@@ -1,6 +1,9 @@
 import AppKit
 
 @MainActor
+public protocol DirectScrollHandling: AnyObject {}
+
+@MainActor
 public enum ScrollForwarding {
     private static var monitor: Any?
 
@@ -11,7 +14,8 @@ public enum ScrollForwarding {
         monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
             guard let window = event.window,
                 let hit = window.contentView?.hitTest(event.locationInWindow),
-                hit.enclosingScrollView == nil
+                hit.enclosingScrollView == nil,
+                !handlesScrollDirectly(from: hit)
             else {
                 gestureTarget = nil
                 return event
@@ -33,6 +37,15 @@ public enum ScrollForwarding {
 
     public static func scrollsVertically(content: CGFloat, visible: CGFloat) -> Bool {
         content - visible > 1
+    }
+
+    public static func handlesScrollDirectly(from view: NSView) -> Bool {
+        var current: NSView? = view
+        while let candidate = current {
+            if candidate is DirectScrollHandling { return true }
+            current = candidate.superview
+        }
+        return false
     }
 
     private static func target(for event: NSEvent, in hit: NSView) -> NSScrollView? {

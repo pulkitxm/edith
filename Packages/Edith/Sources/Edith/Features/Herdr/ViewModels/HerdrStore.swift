@@ -673,22 +673,30 @@ final class HerdrStore {
 
     func attachRequest(
         for tab: HerdrOpenTab, environment: [String],
-        localExecutable: URL? = HerdrCollector.executable()
+        localExecutable: URL? = HerdrCollector.executable(),
+        bridgeExecutable: URL? = HerdrTerminalBridge.executable()
     ) async throws -> TerminalLaunchRequest {
         if tab.agent.isTerminal {
             return HerdrMachineTerminal.launchRequest(
                 for: tab.agent, environment: environment, executable: localExecutable)
         }
+        guard let bridgeExecutable else {
+            throw HerdrTerminalBridgeError.executableUnavailable
+        }
+        let controller: TerminalLaunchRequest
         if tab.agent.machineIsLocal {
-            return HerdrOperationExecution.localAttachRequest(
+            controller = HerdrOperationExecution.localControlRequest(
                 for: tab.agent, environment: environment, executable: localExecutable)
+        } else {
+            guard let machine = tab.machine else {
+                throw HerdrQuinjetError.machineUnavailable
+            }
+            let connection = try await connection(for: machine)
+            controller = HerdrOperationExecution.remoteControlRequest(
+                for: tab.agent, connection: connection, environment: environment)
         }
-        guard let machine = tab.machine else {
-            throw HerdrQuinjetError.machineUnavailable
-        }
-        let connection = try await connection(for: machine)
-        return HerdrOperationExecution.remoteAttachRequest(
-            for: tab.agent, connection: connection, environment: environment)
+        return try HerdrTerminalBridge.launchRequest(
+            bridgeExecutable: bridgeExecutable, controller: controller)
     }
 
     func copyAttachCommand(for agent: HerdrAgent) {

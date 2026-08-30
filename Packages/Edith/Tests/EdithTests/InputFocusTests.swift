@@ -4,6 +4,8 @@ import Testing
 
 @MainActor
 @Suite struct InputFocusTests {
+    private final class DirectScrollView: NSView, DirectScrollHandling {}
+
     @Test func plainLettersStartTypeAhead() {
         #expect(InputFocus.isTypeAheadKey(characters: "a", modifiers: []))
         #expect(InputFocus.isTypeAheadKey(characters: "Z", modifiers: [.shift]))
@@ -33,5 +35,15 @@ import Testing
         #expect(ScrollForwarding.carriesVerticalScroll(deltaX: 0, deltaY: 0))
         #expect(ScrollForwarding.carriesVerticalScroll(deltaX: 1, deltaY: 4))
         #expect(!ScrollForwarding.carriesVerticalScroll(deltaX: 4, deltaY: 1))
+    }
+
+    @Test func aDirectScrollHandlerAndItsDescendantsAreNeverRetargeted() {
+        let direct = DirectScrollView()
+        let child = NSView()
+        direct.addSubview(child)
+
+        #expect(ScrollForwarding.handlesScrollDirectly(from: direct))
+        #expect(ScrollForwarding.handlesScrollDirectly(from: child))
+        #expect(!ScrollForwarding.handlesScrollDirectly(from: NSView()))
     }
 }
