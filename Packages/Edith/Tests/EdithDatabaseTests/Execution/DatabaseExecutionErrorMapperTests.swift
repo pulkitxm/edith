@@ -317,12 +317,27 @@ private enum DatabaseExecutionErrorMapperFixtures {
 }
 
 @Suite struct DatabaseExecutionErrorRedactionTests {
-    @Test func reportedEnvelopeRedactsEveryStringAndTypedTargetValue() async throws {
+    @Test func adapterReportedEnvelopeRemainsOpaqueWithARedactor() async throws {
         let secret = DatabaseExecutionErrorMapperFixtures.secret
         let mapper = try await DatabaseExecutionErrorMapperFixtures.mapper(secret: secret)
         let mapped = mapper.map(
             DatabaseAdapterFailure.reported(
                 DatabaseExecutionErrorMapperFixtures.reportedEnvelope(secret: secret)))
+        let text = String(decoding: try JSONEncoder().encode(mapped), as: UTF8.self)
+
+        #expect(mapped.category == .server)
+        #expect(mapped.message == "The database server rejected the operation.")
+        #expect(mapped.productCode == nil)
+        #expect(mapped.target == nil)
+        #expect(mapped.details.isEmpty)
+        #expect(!text.contains(secret))
+    }
+
+    @Test func reportedEnvelopeRedactsEveryStringAndTypedTargetValue() async throws {
+        let secret = DatabaseExecutionErrorMapperFixtures.secret
+        let mapper = try await DatabaseExecutionErrorMapperFixtures.mapper(secret: secret)
+        let mapped = mapper.map(
+            DatabaseExecutionErrorMapperFixtures.reportedEnvelope(secret: secret))
         let encoded = try JSONEncoder().encode(mapped)
         let text = String(decoding: encoded, as: UTF8.self)
         let encodedSecret = Data(secret.utf8).base64EncodedString()
@@ -414,7 +429,7 @@ private enum DatabaseExecutionErrorMapperFixtures {
             details: (0...DatabaseExecutionErrorMapper.maximumDetailCount).map { _ in
                 DatabaseErrorDetail(name: longDetailName, value: longDetailValue)
             })
-        let mapped = mapper.map(DatabaseAdapterFailure.reported(reported))
+        let mapped = mapper.map(reported)
 
         #expect(mapped.message == DatabaseExecutionErrorMapper.truncationMarker)
         #expect(mapped.productCode == DatabaseExecutionErrorMapper.truncationMarker)

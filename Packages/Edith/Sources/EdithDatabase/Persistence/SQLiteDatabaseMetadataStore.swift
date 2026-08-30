@@ -330,6 +330,53 @@ public actor SQLiteDatabaseMetadataStore: DatabaseMetadataStore {
         }
     }
 
+    public func reserveOperation(
+        _ summary: DatabaseOperationRecordSummary,
+        for connection: DatabaseConnectionDefinition
+    ) throws -> DatabaseOperationReservationResult {
+        guard summary.connection.id == connection.id else {
+            throw DatabaseMetadataStoreError.invalidValue(name: "operation connection")
+        }
+        let summaryData = try Self.encoder().encode(summary)
+        let connectionData = try Self.encoder().encode(connection)
+        return try pool.write { database in
+            try database.execute(
+                sql: """
+                    INSERT INTO database_operation_history (
+                        id, connection_id, kind, state, started_at, finished_at, summary
+                    )
+                    SELECT
+                        :id, :connection_id, :kind, :state, :started_at, :finished_at, :summary
+                    WHERE EXISTS (
+                        SELECT 1 FROM database_connections
+                        WHERE id = :connection_id AND definition = :definition
+                    )
+                    ON CONFLICT(id) DO NOTHING
+                    """,
+                arguments: [
+                    "id": summary.id.rawValue.uuidString,
+                    "connection_id": summary.connection.id.rawValue.uuidString,
+                    "kind": summary.kind.rawValue,
+                    "state": summary.state.rawValue,
+                    "started_at": summary.startedAt?.timeIntervalSince1970,
+                    "finished_at": summary.finishedAt?.timeIntervalSince1970,
+                    "summary": summaryData,
+                    "definition": connectionData,
+                ])
+            if database.changesCount == 1 {
+                return .reserved
+            }
+            let operationExists =
+                try Bool.fetchOne(
+                    database,
+                    sql: "SELECT EXISTS(SELECT 1 FROM database_operation_history WHERE id = ?)",
+                    arguments: [summary.id.rawValue.uuidString]) ?? false
+            return operationExists
+                ? .operationIdentifierExists
+                : .connectionChangedOrMissing
+        }
+    }
+
     public func recordOperation(_ summary: DatabaseOperationRecordSummary) throws {
         let data = try Self.encoder().encode(summary)
         try pool.write { database in
