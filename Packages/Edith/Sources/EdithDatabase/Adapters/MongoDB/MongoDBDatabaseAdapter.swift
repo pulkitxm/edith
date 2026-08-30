@@ -8,8 +8,8 @@ struct MongoDBDatabaseAdapter: DatabaseAdapter {
     private let connector: MongoDBDatabaseClientConnector
 
     init(
-        connector: @escaping MongoDBDatabaseClientConnector = { plan in
-            try await MongoKittenDatabaseClient.connect(plan)
+        connector: @escaping MongoDBDatabaseClientConnector = { plan, context in
+            try await MongoKittenDatabaseClient.connect(plan, context: context)
         }
     ) {
         self.connector = connector
@@ -23,7 +23,7 @@ struct MongoDBDatabaseAdapter: DatabaseAdapter {
         let plan = try MongoDBDatabaseAdapterSupport.connectionPlan(connection)
         var client: (any MongoDBDatabaseClient)?
         do {
-            client = try await connector(plan)
+            client = try await connector(plan, context)
             guard let client else {
                 throw MongoDBDatabaseAdapterSupport.connectionFailed
             }
@@ -37,19 +37,31 @@ struct MongoDBDatabaseAdapter: DatabaseAdapter {
                 productIdentity: identity,
                 client: client)
         } catch let failure as DatabaseAdapterFailure {
-            await client?.disconnect()
-            throw failure
+            throw await Self.close(client, returning: failure)
         } catch is CancellationError {
-            await client?.disconnect()
-            throw .cancelled
+            throw await Self.close(client, returning: .cancelled)
         } catch let failure as MongoDBDatabaseDriverFailure {
-            await client?.disconnect()
-            throw MongoDBDatabaseAdapterSupport.map(
-                failure,
-                fallback: MongoDBDatabaseAdapterSupport.connectionFailed)
+            throw await Self.close(
+                client,
+                returning: MongoDBDatabaseAdapterSupport.map(
+                    failure,
+                    fallback: MongoDBDatabaseAdapterSupport.connectionFailed))
         } catch {
-            await client?.disconnect()
-            throw MongoDBDatabaseAdapterSupport.connectionFailed
+            throw await Self.close(
+                client,
+                returning: MongoDBDatabaseAdapterSupport.connectionFailed)
+        }
+    }
+
+    private static func close(
+        _ client: (any MongoDBDatabaseClient)?,
+        returning failure: DatabaseAdapterFailure
+    ) async -> DatabaseAdapterFailure {
+        do {
+            try await client?.disconnect()
+            return failure
+        } catch {
+            return MongoDBDatabaseAdapterSupport.connectionFailed
         }
     }
 }
@@ -106,17 +118,18 @@ actor MongoDBDatabaseAdapterSession: DatabaseAdapterSession {
             maximumTimeMilliseconds: try MongoDBDatabaseAdapterSupport.maximumTimeMilliseconds(
                 connection: connection,
                 context: context))
-        let result = try await perform(
+        let page = try await perform(
             context: context,
             fallback: MongoDBDatabaseAdapterSupport.readFailed
         ) { client in
-            try await client.read(prepared.plan)
+            let result = try await client.read(prepared.plan)
+            return try await MongoDBDatabaseAdapterSupport.page(
+                result,
+                prepared: prepared,
+                request: request,
+                startedAt: startedAt,
+                context: context)
         }
-        let page = try MongoDBDatabaseAdapterSupport.page(
-            result,
-            prepared: prepared,
-            request: request,
-            startedAt: startedAt)
         try page.validate(for: request)
         return page
     }
@@ -132,17 +145,18 @@ actor MongoDBDatabaseAdapterSession: DatabaseAdapterSession {
             maximumTimeMilliseconds: try MongoDBDatabaseAdapterSupport.maximumTimeMilliseconds(
                 connection: connection,
                 context: context))
-        let result = try await perform(
+        let page = try await perform(
             context: context,
             fallback: MongoDBDatabaseAdapterSupport.queryFailed
         ) { client in
-            try await client.read(prepared.plan)
+            let result = try await client.read(prepared.plan)
+            return try await MongoDBDatabaseAdapterSupport.page(
+                result,
+                prepared: prepared,
+                request: request.source,
+                startedAt: startedAt,
+                context: context)
         }
-        let page = try MongoDBDatabaseAdapterSupport.page(
-            result,
-            prepared: prepared,
-            request: request.source,
-            startedAt: startedAt)
         try page.validate(for: request.source)
         return page
     }
@@ -191,10 +205,15 @@ actor MongoDBDatabaseAdapterSession: DatabaseAdapterSession {
             await activeOperation.cancellation.cancel(.sessionDisconnected)
         }
         let client = self.client
-        self.client = nil
         activeOperation = nil
-        await client?.disconnect()
-        state = .disconnected
+        do {
+            try await client?.disconnect()
+            self.client = nil
+            state = .disconnected
+        } catch {
+            self.client = client
+            state = .failed
+        }
     }
 
     func resourceIsOpen() -> Bool {
@@ -268,17 +287,23 @@ actor MongoDBDatabaseAdapterSession: DatabaseAdapterSession {
             try await MongoDBDatabaseAdapterSupport.check(context)
             return output
         } catch let failure as DatabaseAdapterFailure {
+            if await context.cancellation.reason() != nil || Task.isCancelled {
+                await failAndClose()
+            }
             throw failure
         } catch {
             switch await context.cancellation.reason() {
             case .deadlineExceeded:
+                await failAndClose()
                 throw MongoDBDatabaseAdapterSupport.deadlineExceeded
             case .userRequested, .sessionDisconnected:
+                await failAndClose()
                 throw .cancelled
             case nil:
                 break
             }
             if error is CancellationError || Task.isCancelled {
+                await failAndClose()
                 throw .cancelled
             }
             if let driverFailure = error as? MongoDBDatabaseDriverFailure {
@@ -300,9 +325,14 @@ actor MongoDBDatabaseAdapterSession: DatabaseAdapterSession {
 
     private func failAndClose() async {
         let client = self.client
-        self.client = nil
         state = .failed
-        await client?.disconnect()
+        do {
+            try await client?.disconnect()
+            self.client = nil
+        } catch {
+            self.client = client
+            state = .failed
+        }
     }
 }
 
@@ -493,8 +523,9 @@ enum MongoDBDatabaseAdapterSupport {
         else {
             throw invalidConnection
         }
-        guard [.automatic, .standalone, .replicaSet, .shardedCluster].contains(
-            definition.deploymentMode)
+        guard
+            [.automatic, .standalone, .replicaSet, .shardedCluster].contains(
+                definition.deploymentMode)
         else {
             throw invalidConnection
         }
@@ -548,7 +579,7 @@ enum MongoDBDatabaseAdapterSupport {
             else {
                 throw invalidConnection
             }
-            authentication = .auto(username: username, password: password)
+            authentication = .scramSha256(username: username, password: password)
             authenticationSource = try optionalName(
                 definition.authentication.source ?? database ?? "admin")
         case .password, .token, .apiKey, .x509, .cloudIdentity:
@@ -637,17 +668,23 @@ enum MongoDBDatabaseAdapterSupport {
         _ result: MongoDBDatabaseReadResult,
         prepared: MongoDBDatabaseAdapterPreparedRead,
         request: DatabaseAdapterPageRequest,
-        startedAt: Date
-    ) throws(DatabaseAdapterFailure) -> DatabaseAdapterPage {
+        startedAt: Date,
+        context: DatabaseAdapterOperationContext
+    ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterPage {
         var converted: [MongoDBDatabaseConvertedRecord] = []
         converted.reserveCapacity(min(request.pageSize.value, result.documents.count))
         var encodedBytes = 0
         var stoppedForBytes = false
         do {
             for document in result.documents.prefix(request.pageSize.value) {
-                let record = try MongoDBDatabaseValueCodec.convertedRecord(
+                try await check(context)
+                let record = try await MongoDBDatabaseValueCodec.convertedRecord(
                     document,
-                    hidesObjectID: prepared.hidesObjectID)
+                    hidesObjectID: prepared.hidesObjectID,
+                    cancellationCheck: {
+                        try await check(context)
+                    })
+                try await check(context)
                 let byteCount = try JSONEncoder().encode(record.record).count
                 guard byteCount <= 12_582_912 else {
                     throw resultTooLarge
@@ -665,11 +702,14 @@ enum MongoDBDatabaseAdapterSupport {
             throw decodingFailed
         }
 
-        var hasMore = result.hasMore
+        var hasMore =
+            result.hasMore
             || result.documents.count > converted.count
             || stoppedForBytes
         while true {
+            try await check(context)
             let descriptorOutput = fieldDescriptors(converted.map(\.record))
+            try await check(context)
             let valueTruncated = converted.contains(where: \.truncated)
             var warnings: [DatabaseWarning] = []
             if valueTruncated {
@@ -718,6 +758,7 @@ enum MongoDBDatabaseAdapterSupport {
                 bytesReceived: result.bytesReceived,
                 warnings: warnings)
             do {
+                try await check(context)
                 return try DatabaseAdapterPage(
                     records: converted.map(\.record),
                     fields: descriptorOutput.fields,
@@ -725,9 +766,9 @@ enum MongoDBDatabaseAdapterSupport {
                     metadata: metadata)
             } catch let failure {
                 guard case .limitExceeded(limit: .pageBytes, actual: _, maximum: _) = failure,
-                    !converted.isEmpty
+                    converted.count > 1
                 else {
-                    throw failure
+                    throw resultTooLarge
                 }
                 converted.removeLast()
                 hasMore = true
@@ -881,6 +922,8 @@ enum MongoDBDatabaseAdapterSupport {
                     retry: DatabaseRetryGuidance(action: .none)))
         case .timeout:
             deadlineExceeded
+        case .responseTooLarge:
+            resultTooLarge
         case let .server(code):
             code == nil
                 ? fallback
