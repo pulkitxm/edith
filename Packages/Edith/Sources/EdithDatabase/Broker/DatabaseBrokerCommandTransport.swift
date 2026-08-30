@@ -11,6 +11,20 @@ struct DatabaseBrokerCommandServerResult: Equatable, Sendable {
     let responseBytesWritten: Int
 }
 
+enum DatabaseBrokerCommandTransportFailure: Equatable, Sendable {
+    case invalidRequest
+    case invalidResponse
+}
+
+struct DatabaseBrokerCommandTransportError: Error, Equatable, Sendable {
+    let failure: DatabaseBrokerCommandTransportFailure
+    let bytesWritten: Int
+
+    var isReplaySafe: Bool {
+        bytesWritten == 0
+    }
+}
+
 struct DatabaseBrokerCommandTransport: Sendable {
     private let transport: DatabaseBrokerHealthTransport
 
@@ -29,11 +43,24 @@ struct DatabaseBrokerCommandTransport: Sendable {
         deadlineNanoseconds: UInt64? = nil
     ) throws -> DatabaseBrokerEnvelope<DatabaseBrokerCommandResponse> {
         let request = command.envelope(requestID: requestID, sequence: 0)
-        try DatabaseBrokerCommandEnvelopeValidator.validate(request)
+        do {
+            try DatabaseBrokerCommandEnvelopeValidator.validate(request)
+        } catch {
+            throw DatabaseBrokerCommandTransportError(
+                failure: .invalidRequest,
+                bytesWritten: 0)
+        }
         try transport.authenticatePeer(
             socketDescriptor: socketDescriptor,
             absoluteDeadline: deadlineNanoseconds)
-        let frame = try DatabaseBrokerCommandFrameCodec.encode(request)
+        let frame: Data
+        do {
+            frame = try DatabaseBrokerCommandFrameCodec.encode(request)
+        } catch {
+            throw DatabaseBrokerCommandTransportError(
+                failure: .invalidRequest,
+                bytesWritten: 0)
+        }
         let writeOutcome = try transport.writeFrame(
             frame,
             socketDescriptor: socketDescriptor,
@@ -45,9 +72,15 @@ struct DatabaseBrokerCommandTransport: Sendable {
                 stream: .responses,
                 bytesWritten: writeOutcome.bytesWritten,
                 absoluteDeadline: deadlineNanoseconds)
-        try DatabaseBrokerCommandEnvelopeValidator.validate(
-            response,
-            matching: request)
+        do {
+            try DatabaseBrokerCommandEnvelopeValidator.validate(
+                response,
+                matching: request)
+        } catch {
+            throw DatabaseBrokerCommandTransportError(
+                failure: .invalidResponse,
+                bytesWritten: writeOutcome.bytesWritten)
+        }
         return response
     }
 
