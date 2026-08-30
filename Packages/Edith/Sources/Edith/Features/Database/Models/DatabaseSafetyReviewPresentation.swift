@@ -1,19 +1,27 @@
 import EdithDatabase
 import Foundation
 
+struct DatabaseSafetyReviewAcknowledgementAction: Equatable {
+    let title: String
+    let accessibilityHint: String
+    let isEnabled: Bool
+}
+
 enum DatabaseSafetyReviewPhase: Equatable {
     case ready
     case executing
     case cancelling
     case reconciling
     case outcomeUnknown(String)
+    case partiallyApplied(String)
     case failed(String)
     case accepted(String)
     case succeeded(String)
 
     var locksPreviewRefresh: Bool {
         switch self {
-        case .executing, .cancelling, .reconciling, .outcomeUnknown, .accepted, .succeeded:
+        case .executing, .cancelling, .reconciling, .outcomeUnknown, .partiallyApplied,
+            .accepted, .succeeded:
             true
         case .ready, .failed:
             false
@@ -24,7 +32,7 @@ enum DatabaseSafetyReviewPhase: Equatable {
         switch self {
         case .executing, .reconciling, .outcomeUnknown, .accepted:
             true
-        case .ready, .cancelling, .failed, .succeeded:
+        case .ready, .cancelling, .partiallyApplied, .failed, .succeeded:
             false
         }
     }
@@ -33,14 +41,16 @@ enum DatabaseSafetyReviewPhase: Equatable {
         switch self {
         case .outcomeUnknown, .accepted:
             true
-        case .ready, .executing, .cancelling, .reconciling, .failed, .succeeded:
+        case .ready, .executing, .cancelling, .reconciling, .partiallyApplied, .failed,
+            .succeeded:
             false
         }
     }
 
     var preservesUnresolvedOperation: Bool {
         switch self {
-        case .executing, .cancelling, .reconciling, .outcomeUnknown, .accepted:
+        case .executing, .cancelling, .reconciling, .outcomeUnknown, .partiallyApplied,
+            .accepted:
             true
         case .ready, .failed, .succeeded:
             false
@@ -49,7 +59,7 @@ enum DatabaseSafetyReviewPhase: Equatable {
 
     var blocksInteractiveDismissal: Bool {
         switch self {
-        case .executing, .cancelling, .reconciling:
+        case .executing, .cancelling, .reconciling, .partiallyApplied:
             true
         case .ready, .outcomeUnknown, .failed, .accepted, .succeeded:
             false
@@ -58,8 +68,8 @@ enum DatabaseSafetyReviewPhase: Equatable {
 
     var message: String? {
         switch self {
-        case let .outcomeUnknown(message), let .failed(message), let .accepted(message),
-            let .succeeded(message):
+        case let .outcomeUnknown(message), let .partiallyApplied(message), let .failed(message),
+            let .accepted(message), let .succeeded(message):
             message
         case .ready, .executing, .cancelling, .reconciling:
             nil
@@ -70,6 +80,20 @@ enum DatabaseSafetyReviewPhase: Equatable {
         if case .accepted = self { return true }
         return false
     }
+
+    var isPartiallyApplied: Bool {
+        if case .partiallyApplied = self { return true }
+        return false
+    }
+
+    var acknowledgementAction: DatabaseSafetyReviewAcknowledgementAction? {
+        guard case .partiallyApplied = self else { return nil }
+        return DatabaseSafetyReviewAcknowledgementAction(
+            title: "Acknowledge partial result",
+            accessibilityHint:
+                "Clears mutation tracking only after you have reviewed the partially applied database changes",
+            isEnabled: true)
+    }
 }
 
 enum DatabaseSafetyConfirmationState: Equatable {
@@ -79,6 +103,7 @@ enum DatabaseSafetyConfirmationState: Equatable {
     case expired
     case executing
     case outcomeUnknown
+    case partiallyApplied
     case failed
     case completed
 }
@@ -330,6 +355,7 @@ struct DatabaseSafetyReviewPresentation: Equatable {
         }
         if case .failed = phase { return .failed }
         if case .outcomeUnknown = phase { return .outcomeUnknown }
+        if case .partiallyApplied = phase { return .partiallyApplied }
         if case .accepted = phase { return .completed }
         if case .succeeded = phase { return .completed }
         if now >= expiresAt { return .expired }

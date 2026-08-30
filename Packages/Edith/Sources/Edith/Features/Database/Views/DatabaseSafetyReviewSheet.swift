@@ -42,6 +42,12 @@ struct DatabaseSafetyReviewSheet: View {
         interaction.submissionLocked && phase == .ready ? .executing : phase
     }
 
+    static func acknowledgementAction(
+        for phase: DatabaseSafetyReviewPhase
+    ) -> DatabaseSafetyReviewAcknowledgementAction? {
+        phase.acknowledgementAction
+    }
+
     private var previewIsCurrent: Bool {
         interaction.previewIdentity == DatabaseSafetyPreviewIdentity(preview: preview)
     }
@@ -80,6 +86,8 @@ struct DatabaseSafetyReviewSheet: View {
         }
         .onChange(of: phase) { _, newPhase in
             if case .failed = newPhase {
+                interaction.finishSubmission()
+            } else if case .partiallyApplied = newPhase {
                 interaction.finishSubmission()
             } else if case .accepted = newPhase {
                 interaction.finishSubmission()
@@ -350,7 +358,8 @@ struct DatabaseSafetyReviewSheet: View {
                 .accessibilityValue(confirmationAccessibilityValue(state))
                 .disabled(
                     state == .expired || state == .executing || state == .failed
-                        || state == .outcomeUnknown || state == .completed)
+                        || state == .outcomeUnknown || state == .partiallyApplied
+                        || state == .completed)
             }
             if DatabaseSafetyReviewLayout(width: Double(width), zoom: UIScale.current)
                 .usesInlineFooterActions
@@ -405,7 +414,14 @@ struct DatabaseSafetyReviewSheet: View {
         state: DatabaseSafetyConfirmationState,
         fillsWidth: Bool
     ) -> some View {
-        if activePhase.isAccepted {
+        if let acknowledgement = Self.acknowledgementAction(for: activePhase) {
+            Button(acknowledgement.title, action: dismiss)
+                .buttonStyle(.edith(.primary, tint: DashSkin.warn))
+                .edithButtonTarget(.primary)
+                .keyboardShortcut(.defaultAction)
+                .disabled(!acknowledgement.isEnabled)
+                .accessibilityHint(acknowledgement.accessibilityHint)
+        } else if activePhase.isAccepted {
             Button("Cancel mutation", action: cancelOperation)
                 .buttonStyle(.edith(.secondary))
                 .edithButtonTarget(.secondary)
@@ -547,6 +563,7 @@ struct DatabaseSafetyReviewSheet: View {
         case .expired: "Preview expired. Generate a fresh preview."
         case .executing: "Operation is executing"
         case .outcomeUnknown: "Mutation outcome is unknown"
+        case .partiallyApplied: "Mutation partially applied and requires acknowledgement"
         case .failed: "This authorization cannot be reused"
         case .completed: activePhase.isAccepted ? "Mutation accepted" : "Operation completed"
         }
@@ -560,6 +577,7 @@ struct DatabaseSafetyReviewSheet: View {
         case .expired: "clock.badge.xmark"
         case .executing: "bolt.circle.fill"
         case .outcomeUnknown: "questionmark.diamond.fill"
+        case .partiallyApplied: "exclamationmark.triangle.fill"
         case .failed: "lock.slash.fill"
         case .completed:
             activePhase.isAccepted ? "clock.badge.checkmark.fill" : "checkmark.seal.fill"
@@ -572,7 +590,7 @@ struct DatabaseSafetyReviewSheet: View {
         case .ready: DashSkin.ok
         case .completed: activePhase.isAccepted ? DashSkin.warn : DashSkin.ok
         case .executing: DashSkin.accent(dark)
-        case .outcomeUnknown: DashSkin.warn
+        case .outcomeUnknown, .partiallyApplied: DashSkin.warn
         case .mismatch, .expired, .failed: DashSkin.danger
         }
     }
@@ -587,6 +605,7 @@ struct DatabaseSafetyReviewSheet: View {
         case .expired: "Preview expired"
         case .executing: "Operation executing"
         case .outcomeUnknown: "Mutation outcome unknown"
+        case .partiallyApplied: "Mutation partially applied and acknowledgement required"
         case .failed: "Authorization consumed"
         case .completed: activePhase.isAccepted ? "Mutation accepted" : "Operation completed"
         }
@@ -621,6 +640,10 @@ struct DatabaseSafetyReviewSheet: View {
         case let .outcomeUnknown(message):
             announce(
                 "Database operation outcome is unknown. \(DatabaseSafetyReviewPresentation.displayText(message, limit: 512))"
+            )
+        case let .partiallyApplied(message):
+            announce(
+                "Database mutation partially applied and requires acknowledgement. \(DatabaseSafetyReviewPresentation.displayText(message, limit: 512))"
             )
         case let .failed(message):
             announce(
