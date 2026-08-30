@@ -137,12 +137,15 @@ public enum MachineExecOperationExecution {
     }
 
     public static func interactiveCommand(
-        words: [String], workingDirectory: String?
+        words: [String], workingDirectory: String?, platform: RemoteMachinePlatform = .linux
     ) -> String? {
         guard !words.isEmpty else { return nil }
-        let command = words.joined(separator: " ")
+        let command =
+            platform == .windows
+            ? PowerShell.invocation(words)!
+            : words.joined(separator: " ")
         return MachineWorkingDirectory.prefixed(
-            command, directory: workingDirectory)
+            command, directory: workingDirectory, platform: platform, interactive: true)
     }
 }
 

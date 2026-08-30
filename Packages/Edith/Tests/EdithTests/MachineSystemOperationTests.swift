@@ -107,6 +107,11 @@ import Testing
             MachineExecOperationExecution.interactiveCommand(
                 words: words, workingDirectory: nil)
                 == "echo a;pwd")
+        let windows = MachineExecOperationExecution.interactiveCommand(
+            words: ["Write-Output", "a;pwd"], workingDirectory: "C:\\srv",
+            platform: .windows)
+        #expect(windows?.contains("-NonInteractive") == false)
+        #expect(windows?.contains("-EncodedCommand") == true)
 
         let parsed =
             try? EdRoot.parseAsRoot([

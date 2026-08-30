@@ -490,7 +490,7 @@ struct MachineTerminalTab: View {
             let launch = MachineTerminalLaunchPlan.make(
                 isLocal: session.isLocal, connection: connection,
                 environment: Terminal.getEnvironmentVariables(termName: "xterm-256color"),
-                context: context)
+                context: context, platform: session.remotePlatform ?? .linux)
         else { return }
         holder.start(
             executable: launch.executable, arguments: launch.arguments,
@@ -548,7 +548,8 @@ enum MachineTerminalLaunchPlan {
 
     static func make(
         isLocal: Bool, connection: SSHConnection?, environment: [String],
-        context: MachineTerminalContext = MachineTerminalContext()
+        context: MachineTerminalContext = MachineTerminalContext(),
+        platform: RemoteMachinePlatform = .linux
     ) -> MachineTerminalLaunch? {
         if isLocal {
             return MachineTerminalLaunch(
@@ -557,8 +558,17 @@ enum MachineTerminalLaunchPlan {
                 currentDirectory: context.startingDirectory)
         }
         guard let connection else { return nil }
-        let command = MachineWorkingDirectory.prefixed(
-            remoteLoginShell, directory: context.startingDirectory)
+        let command: String
+        if platform == .windows {
+            let directoryScript =
+                context.startingDirectory.map {
+                    "Set-Location -LiteralPath \(PowerShell.literal($0))"
+                } ?? ""
+            command = PowerShell.interactiveCommand(directoryScript, keepOpen: true)
+        } else {
+            command = MachineWorkingDirectory.prefixed(
+                remoteLoginShell, directory: context.startingDirectory)
+        }
         return MachineTerminalLaunch(
             executable: SSHConnection.executable.path,
             arguments: connection.terminalArguments(remoteCommand: command),

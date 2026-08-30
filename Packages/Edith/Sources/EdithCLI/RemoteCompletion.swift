@@ -36,14 +36,34 @@ public enum RemoteCompletion {
         __ed_rc "$@"
         """
 
-    public static func commandNamesCommand(prefix: String) -> String {
-        "compgen -c -- " + ShellQuote.quote(prefix) + " 2>/dev/null | sort -u | head -2000"
+    public static func commandNamesCommand(
+        prefix: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        if platform == .windows {
+            return "Get-Command -Name \(PowerShell.literal(prefix + "*")) "
+                + "-ErrorAction SilentlyContinue | Select-Object -First 2000 "
+                + "-ExpandProperty Name | Sort-Object -Unique"
+        }
+        return "compgen -c -- " + ShellQuote.quote(prefix)
+            + " 2>/dev/null | sort -u | head -2000"
     }
 
     public static let directoryCommands: Set<String> = ["cd", "pushd", "rmdir"]
 
-    public static func directoriesCommand(prefix: String) -> String {
-        ShellQuote.command([
+    public static func directoriesCommand(
+        prefix: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        if platform == .windows {
+            let literal = PowerShell.literal(prefix)
+            return "$prefix = \(literal); "
+                + "$pattern = [WildcardPattern]::Escape($prefix) + '*'; "
+                + "$parent = [System.IO.Path]::GetDirectoryName($prefix); "
+                + "Get-ChildItem -Directory -Path $pattern -ErrorAction SilentlyContinue | "
+                + "Select-Object -First 2000 | ForEach-Object { "
+                + "if ([string]::IsNullOrEmpty($parent)) { $_.Name } "
+                + "else { [System.IO.Path]::Combine($parent, $_.Name) } }"
+        }
+        return ShellQuote.command([
             "bash", "-c",
             "compgen -d -- \"$1\" 2>/dev/null | sort -u | head -2000", "ed-complete", prefix,
         ]) + " 2>/dev/null"
@@ -54,7 +74,15 @@ public enum RemoteCompletion {
         return directoryCommands.contains(first)
     }
 
-    public static func harnessCommand(words: [String], cursor: Int) -> String {
+    public static func harnessCommand(
+        words: [String], cursor: Int, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        if platform == .windows {
+            let line = words.joined(separator: " ")
+            return "[System.Management.Automation.CommandCompletion]::CompleteInput("
+                + "\(PowerShell.literal(line)), \(line.count), $null).CompletionMatches | "
+                + "ForEach-Object { $_.CompletionText }"
+        }
         var argv = ["bash", "-c", harness, "ed-complete", String(cursor)]
         argv += words
         return ShellQuote.command(argv) + " 2>/dev/null"
@@ -69,16 +97,19 @@ public enum RemoteCompletion {
                 atPath: MachinePaths.socketFile(for: machine.id).path)
         else { return [] }
         let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
+        guard (try? await connection.connect()) != nil else { return [] }
+        let platform = await connection.remotePlatform ?? .linux
         let remote: String
         if cursor == 0 {
-            remote = commandNamesCommand(prefix: request.current)
+            remote = commandNamesCommand(prefix: request.current, platform: platform)
         } else if wantsDirectories(words: words, cursor: cursor) {
-            remote = directoriesCommand(prefix: request.current)
+            remote = directoriesCommand(prefix: request.current, platform: platform)
         } else {
-            remote = harnessCommand(words: words, cursor: cursor)
+            remote = harnessCommand(words: words, cursor: cursor, platform: platform)
         }
         let command = MachineWorkingDirectory.prefixed(
-            remote, directory: MachineWorkingDirectory.load(machineID: machine.id))
+            remote, directory: MachineWorkingDirectory.load(machineID: machine.id),
+            platform: platform)
         guard let result = try? await connection.run(command, timeout: 1), result.succeeded else {
             return []
         }

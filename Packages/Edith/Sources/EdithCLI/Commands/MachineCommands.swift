@@ -176,7 +176,8 @@ struct MachinesShowCommand: AsyncParsableCommand {
             async let whoResult = try? runner.run(
                 MachineFacts.whoCommand(for: platform), timeout: 20)
             let (helloResponse, uptimeResponse, whoResponse) = await (
-                helloResult, uptimeResult, whoResult)
+                helloResult, uptimeResult, whoResult
+            )
             let hello = helloResponse?.stdoutText ?? ""
             let uptime = uptimeResponse?.stdoutText ?? ""
             let who = whoResponse?.stdoutText ?? ""
@@ -341,27 +342,33 @@ struct MachinesExecCommand: AsyncParsableCommand {
                 throw CLIFailure("name a command to run, for example `ed \(machine) uptime`")
             }
             let runner = try await MachineResolver.runner(machine)
+            let platform = await runner.ssh.remotePlatform ?? .linux
             if tty {
                 let stored = MachineWorkingDirectory.load(machineID: runner.machine.id)
                 let command = MachineExecOperationExecution.interactiveCommand(
-                    words: words, workingDirectory: stored)
+                    words: words, workingDirectory: stored, platform: platform)
                 throw ExitCode(runner.interactive(command))
             }
             let stored = MachineWorkingDirectory.load(machineID: runner.machine.id)
             guard !MachineWorkingDirectory.isChangeDirectory(words) else {
                 try await changeDirectory(
-                    to: words.count == 2 ? words[1] : nil, from: stored, runner: runner)
+                    to: words.count == 2 ? words[1] : nil, from: stored, platform: platform,
+                    runner: runner)
                 return
             }
-            let line = words.count == 1 ? words[0] : ShellQuote.command(words)
+            let line =
+                platform == .windows
+                ? PowerShell.invocation(words)!
+                : words.count == 1 ? words[0] : ShellQuote.command(words)
             let status = await runner.passthrough(
-                MachineWorkingDirectory.prefixed(line, directory: stored))
+                MachineWorkingDirectory.prefixed(line, directory: stored, platform: platform))
             guard status == 0 else { throw ExitCode(status) }
         }
     }
 
     private func changeDirectory(
-        to target: String?, from stored: String?, runner: RemoteRunner
+        to target: String?, from stored: String?, platform: RemoteMachinePlatform,
+        runner: RemoteRunner
     ) async throws {
         var wanted = target
         if wanted == MachineWorkingDirectory.previousMarker {
@@ -373,7 +380,8 @@ struct MachinesExecCommand: AsyncParsableCommand {
             wanted = back
         }
         let result = try await runner.run(
-            MachineWorkingDirectory.resolveCommand(target: wanted, from: stored))
+            MachineWorkingDirectory.resolveCommand(
+                target: wanted, from: stored, platform: platform))
         guard result.succeeded,
             let resolved = MachineWorkingDirectory.resolvedDirectory(fromOutput: result.stdoutText)
         else {
