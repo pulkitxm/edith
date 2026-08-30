@@ -156,7 +156,6 @@ private struct SidebarNavRow: View {
     var detach: (() -> Void)?
     var disclosureExpanded: Bool? = nil
     var disclosureAction: (() -> Void)?
-    var disclosureTitle: String? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var rowHovered = false
 
@@ -220,15 +219,17 @@ private struct SidebarNavRow: View {
                 .buttonStyle(.edith(.borderless))
                 .padding(.trailing, UIScale.pt(2))
                 .zIndex(1)
-                .accessibilityLabel(disclosureText(expanded: disclosureExpanded))
-                .help(disclosureText(expanded: disclosureExpanded))
+                .accessibilityLabel(
+                    disclosureExpanded
+                        ? "Collapse settings categories" : "Expand settings categories"
+                )
+                .help(
+                    disclosureExpanded
+                        ? "Collapse settings categories" : "Expand settings categories"
+                )
             }
         }
         .onHover { rowHovered = $0 }
-    }
-
-    private func disclosureText(expanded: Bool) -> String {
-        "\(expanded ? "Collapse" : "Expand") \(disclosureTitle ?? "categories")"
     }
 
     private func disclosureIcon(expanded: Bool) -> some View {
@@ -325,41 +326,6 @@ private struct SettingsSidebarRow: View {
     }
 }
 
-private struct AppMaintenanceSidebarRow: View {
-    let section: AppMaintenanceSection
-    let selected: Bool
-    let theme: Color
-    let action: () -> Void
-    let detach: () -> Void
-
-    var body: some View {
-        Button {
-            if SectionWindowCommand.shouldDetach(NSEvent.modifierFlags.swiftUIValue) {
-                detach()
-            } else {
-                action()
-            }
-        } label: {
-            HStack(spacing: UIScale.pt(9)) {
-                Image(systemName: section.symbol)
-                    .frame(width: UIScale.pt(18))
-                Text(section.rawValue)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .font(.system(size: UIScale.pt(12.5), weight: .medium))
-            .foregroundStyle(selected ? .primary : .secondary)
-        }
-        .buttonStyle(EdithButtonStyle(.row, selected: selected, tint: theme))
-        .padding(.leading, UIScale.pt(18))
-        .accessibilityHint(section.summary)
-        .help("\(section.rawValue) (⌘-click to open in its own window)")
-        .contextMenu {
-            Button("Open in New Window", action: detach)
-        }
-    }
-}
-
 extension NSEvent.ModifierFlags {
     var swiftUIValue: EventModifiers {
         var modifiers = EventModifiers()
@@ -421,11 +387,6 @@ struct MainWindowView: View {
     @AppStorage(
         AppStorageKeys.General.settingsCategoriesExpanded, store: SharedDefaults.store
     ) private var settingsCategoriesExpanded = true
-    @AppStorage(
-        AppStorageKeys.AppMaintenance.categoriesExpanded, store: SharedDefaults.store
-    ) private var appMaintenanceCategoriesExpanded = true
-    @AppStorage(AppStorageKeys.AppMaintenance.section, store: SharedDefaults.store) private
-        var appMaintenanceSectionRaw = AppMaintenanceSection.updates.rawValue
     @AppStorage(AppStorageKeys.Tabs.attentionEnabled, store: SharedDefaults.store) private
         var attentionEnabled = false
     @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
@@ -866,41 +827,8 @@ struct MainWindowView: View {
                     SidebarNavRow(
                         item: item, selected: destination == item, theme: theme,
                         shortcutHint: shortcutHint(for: item),
-                        action: {
-                            if item == .appMaintenance, destination == .appMaintenance {
-                                appMaintenanceCategoriesExpanded.toggle()
-                            } else {
-                                select(item)
-                            }
-                        },
-                        detach: { detach(item) },
-                        disclosureExpanded: item == .appMaintenance
-                            ? appMaintenanceCategoriesExpanded : nil,
-                        disclosureAction: item == .appMaintenance
-                            ? { appMaintenanceCategoriesExpanded.toggle() } : nil,
-                        disclosureTitle: item == .appMaintenance
-                            ? "maintenance sections" : nil)
-                    if item == .appMaintenance {
-                        CollapsibleSidebarLayout(
-                            progress: appMaintenanceCategoriesExpanded ? 1 : 0
-                        ) {
-                            VStack(spacing: UIScale.pt(2)) {
-                                ForEach(AppMaintenanceSection.allCases) { section in
-                                    AppMaintenanceSidebarRow(
-                                        section: section,
-                                        selected: destination == .appMaintenance
-                                            && appMaintenanceSectionRaw == section.rawValue,
-                                        theme: theme,
-                                        action: { selectAppMaintenance(section) },
-                                        detach: { detachAppMaintenance(section) })
-                                }
-                            }
-                            .padding(.top, UIScale.pt(6))
-                        }
-                        .clipped()
-                        .allowsHitTesting(appMaintenanceCategoriesExpanded)
-                        .accessibilityHidden(!appMaintenanceCategoriesExpanded)
-                    }
+                        action: { select(item) },
+                        detach: { detach(item) })
                 }
                 Text("App")
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
@@ -923,8 +851,7 @@ struct MainWindowView: View {
                         disclosureExpanded: item == .settings
                             ? settingsCategoriesExpanded : nil,
                         disclosureAction: item == .settings
-                            ? { settingsCategoriesExpanded.toggle() } : nil,
-                        disclosureTitle: item == .settings ? "settings categories" : nil)
+                            ? { settingsCategoriesExpanded.toggle() } : nil)
                     if item == .settings {
                         CollapsibleSidebarLayout(
                             progress: settingsCategoriesExpanded ? 1 : 0
@@ -965,9 +892,6 @@ struct MainWindowView: View {
             Motion.animation(Motion.snap, reduceMotion: reduceMotion),
             value: settingsCategoriesExpanded
         )
-        .animation(
-            Motion.animation(Motion.snap, reduceMotion: reduceMotion),
-            value: appMaintenanceCategoriesExpanded)
     }
 
     private func select(_ item: MainDestination) {
@@ -982,16 +906,6 @@ struct MainWindowView: View {
     private func detachSettings(_ category: SettingsPane.Tab) {
         settingsTab = category.rawValue
         SectionWindow.open(.settings)
-    }
-
-    private func selectAppMaintenance(_ section: AppMaintenanceSection) {
-        appMaintenanceSectionRaw = section.rawValue
-        mainWindowSection = MainDestination.appMaintenance.rawValue
-    }
-
-    private func detachAppMaintenance(_ section: AppMaintenanceSection) {
-        appMaintenanceSectionRaw = section.rawValue
-        SectionWindow.open(.appMaintenance)
     }
 
     private var visibleHomeItems: [MainDestination] {
@@ -1433,7 +1347,7 @@ struct MainWindowView: View {
         case .music: MusicPage()
         case .calendar: CalendarPage()
         case .system: SystemPage()
-        case .appMaintenance: AppMaintenanceView(showsSectionPicker: false)
+        case .appMaintenance: AppMaintenanceView()
         case .machines: MachinesPage()
         case .companion: CompanionPage()
         case .extensions: ExtensionsPane()

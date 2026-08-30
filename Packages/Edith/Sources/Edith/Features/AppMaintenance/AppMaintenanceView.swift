@@ -378,7 +378,6 @@ enum AppMaintenanceSection: String, CaseIterable, Identifiable {
 }
 
 struct AppMaintenanceView: View {
-    let showsSectionPicker: Bool
     @State private var model = AppMaintenanceModel()
     @State private var query = ""
     @State private var confirmingRemoval = false
@@ -422,10 +421,6 @@ struct AppMaintenanceView: View {
     }
 
     private var theme: Color { themeColor(themeName) }
-
-    init(showsSectionPicker: Bool = true) {
-        self.showsSectionPicker = showsSectionPicker
-    }
 
     private var section: AppMaintenanceSection {
         AppMaintenanceSection(rawValue: sectionRaw) ?? .updates
@@ -495,31 +490,23 @@ struct AppMaintenanceView: View {
     }
 
     private var header: some View {
-        VStack(spacing: UIScale.pt(10)) {
-            HStack(spacing: UIScale.pt(12)) {
-                Image(systemName: "shippingbox.and.arrow.backward")
-                    .font(.system(size: UIScale.pt(18), weight: .semibold))
-                    .foregroundStyle(.tint)
-                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    Text("App Maintenance")
-                        .font(.system(size: UIScale.pt(17), weight: .semibold))
-                    Text("Manage packages, verified apps, updates, and safe removal.")
-                        .settingsCaption()
-                }
-                Spacer()
-            }
-            if showsSectionPicker || section != .packages {
-                HStack(spacing: UIScale.pt(10)) {
-                    if showsSectionPicker {
-                        Picker("Section", selection: sectionBinding) {
-                            ForEach(AppMaintenanceSection.allCases) { section in
-                                Text(section.rawValue).tag(section)
-                            }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.segmented)
-                        .frame(width: UIScale.pt(340))
+        PageHeader(
+            section.rawValue,
+            trailing: {
+                Picker("Section", selection: sectionBinding) {
+                    ForEach(AppMaintenanceSection.allCases) { section in
+                        Label(section.rawValue, systemImage: section.symbol).tag(section)
                     }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .accessibilityLabel("App Maintenance section")
+            },
+            accessory: {
+                HStack(spacing: UIScale.pt(10)) {
+                    Text(section.summary)
+                        .font(.system(size: UIScale.pt(12)))
+                        .foregroundStyle(.secondary)
                     Spacer()
                     if section != .packages {
                         Button {
@@ -554,9 +541,7 @@ struct AppMaintenanceView: View {
                     }
                 }
             }
-        }
-        .padding(.horizontal, UIScale.pt(20))
-        .padding(.vertical, UIScale.pt(12))
+        )
     }
 
     @ViewBuilder

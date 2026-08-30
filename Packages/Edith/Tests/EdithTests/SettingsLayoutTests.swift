@@ -57,20 +57,20 @@ import Testing
         #expect(source.contains("tab.wrappedValue.summary"))
     }
 
-    @Test func appMaintenanceUsesTheSameSidebarNavigationPattern() throws {
-        let navigationURL = URL(fileURLWithPath: #filePath)
+    @Test func appMaintenanceUsesTheSameMenuNavigationPattern() throws {
+        let maintenanceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Sources/Edith/Core/Navigation/MainNavigationView.swift")
-        let navigation = try String(contentsOf: navigationURL, encoding: .utf8)
+            .appendingPathComponent(
+                "Sources/Edith/Features/AppMaintenance/AppMaintenanceView.swift")
+        let maintenance = try String(contentsOf: maintenanceURL, encoding: .utf8)
 
-        #expect(navigation.contains("ForEach(AppMaintenanceSection.allCases"))
-        #expect(navigation.contains("AppMaintenanceSidebarRow"))
-        #expect(navigation.contains("appMaintenanceCategoriesExpanded.toggle()"))
-        #expect(navigation.contains("disclosureTitle: item == .appMaintenance"))
-        #expect(navigation.contains("selectAppMaintenance(section)"))
-        #expect(navigation.contains("detachAppMaintenance(section)"))
+        #expect(maintenance.contains("PageHeader("))
+        #expect(maintenance.contains("ForEach(AppMaintenanceSection.allCases"))
+        #expect(maintenance.contains(".pickerStyle(.menu)"))
+        #expect(maintenance.contains("App Maintenance section"))
+        #expect(!maintenance.contains(".pickerStyle(.segmented)"))
     }
 
     @Test func permissionCardsUseTheAvailableWidthAdaptively() throws {

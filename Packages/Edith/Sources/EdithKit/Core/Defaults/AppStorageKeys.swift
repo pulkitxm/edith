@@ -2,7 +2,6 @@ import Foundation
 
 public enum AppStorageKeys {
     public enum AppMaintenance {
-        public static let categoriesExpanded = "appMaintenanceCategoriesExpanded"
         public static let enabled = "appMaintenanceEnabled"
         public static let installDestination = "appMaintenanceInstallDestination"
         public static let section = "appMaintenanceSection"
