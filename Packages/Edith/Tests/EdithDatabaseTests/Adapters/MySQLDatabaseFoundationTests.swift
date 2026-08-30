@@ -533,6 +533,182 @@ private actor MySQLDatabaseFoundationTestClient: MySQLDatabaseClient {
     #expect(await deadlineClient.disconnects() == 1)
 }
 
+private enum MySQLDatabaseLiveEnvironment {
+    static let values = ProcessInfo.processInfo.environment
+    static let mysqlKeys = [
+        "EDITH_DATABASE_MYSQL_HOST",
+        "EDITH_DATABASE_MYSQL_PORT",
+        "EDITH_DATABASE_MYSQL_DATABASE",
+        "EDITH_DATABASE_MYSQL_USERNAME",
+        "EDITH_DATABASE_MYSQL_PASSWORD",
+    ]
+    static let mariaDBKeys = [
+        "EDITH_DATABASE_MARIADB_HOST",
+        "EDITH_DATABASE_MARIADB_PORT",
+        "EDITH_DATABASE_MARIADB_DATABASE",
+        "EDITH_DATABASE_MARIADB_USERNAME",
+        "EDITH_DATABASE_MARIADB_PASSWORD",
+    ]
+    static let mysqlEnabled = mysqlKeys.allSatisfy { values[$0]?.isEmpty == false }
+    static let mariaDBEnabled = mariaDBKeys.allSatisfy { values[$0]?.isEmpty == false }
+
+    static func plan(
+        prefix: String = "MYSQL",
+        tls: MySQLDatabaseTLSPlan = .disabled,
+        password suppliedPassword: String? = nil
+    ) throws -> MySQLDatabaseConnectionPlan {
+        let host = try #require(values["EDITH_DATABASE_" + prefix + "_HOST"])
+        let portText = try #require(values["EDITH_DATABASE_" + prefix + "_PORT"])
+        let port = try #require(Int(portText))
+        let database = try #require(values["EDITH_DATABASE_" + prefix + "_DATABASE"])
+        let username = try #require(values["EDITH_DATABASE_" + prefix + "_USERNAME"])
+        let password = try #require(
+            suppliedPassword ?? values["EDITH_DATABASE_" + prefix + "_PASSWORD"])
+        return MySQLDatabaseConnectionPlan(
+            host: host,
+            port: port,
+            username: username,
+            password: password,
+            database: database,
+            tls: tls,
+            tlsServerName: nil,
+            connectTimeoutMilliseconds: 5_000)
+    }
+}
+
+@Test(.enabled(if: MySQLDatabaseLiveEnvironment.mysqlEnabled))
+func mysqlFoundationLiveAuthenticatedIdentityAndTLSPolicy() async throws {
+    let disabledClient = try await MySQLNIODatabaseClient.connect(
+        MySQLDatabaseLiveEnvironment.plan())
+    let disabledIdentity: DatabaseProductIdentity
+    do {
+        disabledIdentity = try await disabledClient.discoverIdentity()
+    } catch {
+        await disabledClient.disconnect()
+        throw error
+    }
+    await disabledClient.disconnect()
+    #expect(disabledIdentity.product == .mysql)
+    #expect(disabledIdentity.version?.major == 8)
+    #expect(disabledIdentity.version?.minor == 4)
+    #expect(disabledIdentity.topology.kind == .standalone)
+    #expect(disabledIdentity.topology.localRole == "primary")
+    #expect(
+        disabledIdentity.topology.attributes.contains(
+            DatabaseStringAttribute(name: "tlsCipher", value: "none")))
+
+    for tls in [
+        MySQLDatabaseTLSPlan.preferred(verifyCertificate: false),
+        MySQLDatabaseTLSPlan.required(verifyCertificate: false),
+    ] {
+        let client = try await MySQLNIODatabaseClient.connect(
+            MySQLDatabaseLiveEnvironment.plan(tls: tls))
+        let identity: DatabaseProductIdentity
+        do {
+            identity = try await client.discoverIdentity()
+        } catch {
+            await client.disconnect()
+            throw error
+        }
+        await client.disconnect()
+        #expect(
+            identity.topology.attributes.first(where: { $0.name == "tlsCipher" })?.value
+                != "none")
+    }
+
+    await #expect(throws: MySQLDatabaseDriverFailure.tls) {
+        _ = try await MySQLNIODatabaseClient.connect(
+            MySQLDatabaseLiveEnvironment.plan(
+                tls: .required(verifyCertificate: true)))
+    }
+    let version = disabledIdentity.version?.string ?? "unknown"
+    print("mysql live identity verified version=" + version)
+}
+
+@Test(.enabled(if: MySQLDatabaseLiveEnvironment.mysqlEnabled))
+func mysqlFoundationLiveRejectsWrongCredentials() async throws {
+    let correct = try #require(
+        MySQLDatabaseLiveEnvironment.values["EDITH_DATABASE_MYSQL_PASSWORD"])
+    let plan = try MySQLDatabaseLiveEnvironment.plan(
+        password: correct + "-wrong")
+    await #expect(throws: MySQLDatabaseDriverFailure.authentication) {
+        _ = try await MySQLNIODatabaseClient.connect(plan)
+    }
+}
+
+@Test(.enabled(if: MySQLDatabaseLiveEnvironment.mysqlEnabled))
+func mysqlFoundationLiveRepeatedConnectionLifecycle() async throws {
+    let plan = try MySQLDatabaseLiveEnvironment.plan()
+    for _ in 0..<4 {
+        let client = try await MySQLNIODatabaseClient.connect(plan)
+        let identity = try await client.discoverIdentity()
+        #expect(identity.product == .mysql)
+        await client.disconnect()
+        await #expect(throws: MySQLDatabaseDriverFailure.connection) {
+            _ = try await client.discoverIdentity()
+        }
+    }
+}
+
+@Test(.enabled(if: MySQLDatabaseLiveEnvironment.mariaDBEnabled))
+func mysqlFoundationLiveRejectsMariaDBMasqueradingAsMySQL() async throws {
+    let client = try await MySQLNIODatabaseClient.connect(
+        MySQLDatabaseLiveEnvironment.plan(prefix: "MARIADB"))
+    do {
+        await #expect(throws: MySQLDatabaseDriverFailure.incompatibleProduct(.mariaDB)) {
+            _ = try await client.discoverIdentity()
+        }
+    }
+    await client.disconnect()
+}
+
+@Test(.enabled(if: MySQLDatabaseLiveEnvironment.mysqlEnabled))
+func mysqlFoundationLiveAdapterCapabilityDiscovery() async throws {
+    let environment = MySQLDatabaseLiveEnvironment.values
+    let host = try #require(environment["EDITH_DATABASE_MYSQL_HOST"])
+    let portText = try #require(environment["EDITH_DATABASE_MYSQL_PORT"])
+    let port = try #require(Int(portText))
+    let database = try #require(environment["EDITH_DATABASE_MYSQL_DATABASE"])
+    let username = try #require(environment["EDITH_DATABASE_MYSQL_USERNAME"])
+    let password = try #require(environment["EDITH_DATABASE_MYSQL_PASSWORD"])
+    let reference = DatabaseSecretReference(
+        identifier: UUID(uuidString: "2181070A-AFE1-448B-B046-87E7F0D85701")!,
+        purpose: .password)
+    let definition = try MySQLDatabaseFoundationFixtures.definition(
+        endpoints: [
+            DatabaseNetworkEndpoint(
+                host: host,
+                port: DatabasePort(port),
+                role: .primary)
+        ],
+        username: username,
+        namespaces: DatabaseNamespaceDefaults(database: database),
+        authentication: DatabaseAuthentication(
+            kind: .usernameAndPassword,
+            secretReferences: [reference]))
+    let resolved = try MySQLDatabaseFoundationFixtures.resolved(
+        definition,
+        secrets: [reference: Data(password.utf8)])
+    let session = try await MySQLDatabaseAdapter().connect(
+        resolved,
+        context: MySQLDatabaseFoundationFixtures.context(
+            deadline: Date().addingTimeInterval(10)))
+    let report: DatabaseCapabilityReport
+    do {
+        report = try await session.discoverCapabilities(
+            context: MySQLDatabaseFoundationFixtures.context(
+                deadline: Date().addingTimeInterval(10)))
+    } catch {
+        await session.disconnect()
+        throw error
+    }
+    await session.disconnect()
+    #expect(report.productIdentity.product == .mysql)
+    #expect(report.productIdentity.version?.major == 8)
+    #expect(report.supports(.connectionTest))
+    #expect(report.status(for: .query)?.availability == .planned)
+}
+
 private func withMySQLDatabaseStalledServer<Output: Sendable>(
     _ body: @escaping @Sendable (Int) async throws -> Output
 ) async throws -> Output {
