@@ -119,17 +119,17 @@ final class URLSessionClickHouseDatabaseClient: ClickHouseDatabaseClient, @unche
             timezone() AS timezone,
             hostName() AS host_name,
             selected_cluster AS cluster_name,
-            toUInt64((
+            toUInt32((
                 SELECT countDistinct(tuple(host_name, port))
                 FROM system.clusters
                 WHERE cluster = selected_cluster
             )) AS cluster_node_count,
-            toUInt64((
+            toUInt32((
                 SELECT countDistinct(shard_num)
                 FROM system.clusters
                 WHERE cluster = selected_cluster
             )) AS shard_count,
-            toUInt64((
+            toUInt32((
                 SELECT ifNull(max(total_replicas), 0)
                 FROM system.replicas
             )) AS total_replicas

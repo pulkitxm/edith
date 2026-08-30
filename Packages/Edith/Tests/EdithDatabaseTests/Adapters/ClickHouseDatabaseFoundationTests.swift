@@ -43,6 +43,7 @@ import Testing
 }
 
 @Test func clickHouseFoundationDecodesStandaloneIdentity() async throws {
+    #expect(URLSessionClickHouseDatabaseClient.identityQuery.contains("toUInt32"))
     let values = ClickHouseDatabaseIdentityValues(
         version: "26.7.5.10",
         database: "edith_scale",

@@ -96,8 +96,8 @@ enum ClickHouseDatabaseReadCompiler {
         try validateIdentifier(table)
         return """
             SELECT name, type, toUInt64(position) AS position,
-                toUInt8(is_in_primary_key) AS is_in_primary_key,
-                toUInt8(is_in_sorting_key) AS is_in_sorting_key
+                toUInt64(is_in_primary_key) AS is_in_primary_key,
+                toUInt64(is_in_sorting_key) AS is_in_sorting_key
             FROM system.columns
             WHERE database = {_edith_database:String}
                 AND table = {_edith_table:String}
@@ -202,8 +202,8 @@ enum ClickHouseDatabaseReadCompiler {
             base = """
                 SELECT database, table, name, type, toUInt64(position) AS position,
                     default_kind, default_expression, compression_codec,
-                    toUInt8(is_in_primary_key) AS is_in_primary_key,
-                    toUInt8(is_in_sorting_key) AS is_in_sorting_key
+                    toUInt64(is_in_primary_key) AS is_in_primary_key,
+                    toUInt64(is_in_sorting_key) AS is_in_sorting_key
                 FROM system.columns
                 WHERE database = {_edith_database:String}
                     AND table = {_edith_table:String}
@@ -342,13 +342,18 @@ enum ClickHouseDatabaseReadCompiler {
             }
             parameters.append(parameter(name, value))
         }
-        let query = """
-            SELECT * FROM (
-            \(command)
-            ) AS _edith_query
-            LIMIT \(request.source.pageSize.value + 1)
-            FORMAT JSONCompactEachRowWithNamesAndTypes
-            """
+        let query: String
+        if command.lowercased().hasPrefix("explain") {
+            query = command + "\nFORMAT JSONCompactEachRowWithNamesAndTypes"
+        } else {
+            query = """
+                SELECT * FROM (
+                \(command)
+                ) AS _edith_query
+                LIMIT \(request.source.pageSize.value + 1)
+                FORMAT JSONCompactEachRowWithNamesAndTypes
+                """
+        }
         return ClickHouseDatabaseQueryPlan(query: query, parameters: parameters)
     }
 
