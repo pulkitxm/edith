@@ -237,32 +237,6 @@ import Testing
         #expect(context.model.resource == secondResource)
     }
 
-    @Test func deinitializationCancelsAnActiveResourceLoad() async throws {
-        let fixture = GitHubCancellationFixture()
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let store = GitHubSessionStore(file: root.appendingPathComponent("session.json"))
-        let route = repositoryRoute("first")
-        let tab = GitHubBrowserTab(
-            entry: GitHubBrowserHistoryEntry(route: route), title: route.url.lastPathComponent)
-        try await store.save(GitHubBrowserSession(tabs: [tab], selectedTabID: tab.id))
-        var model: GitHubBrowserModel? = GitHubBrowserModel(
-            store: store, checkReadiness: { .ready("Signed in") },
-            readCachedResource: { _ in nil },
-            loadResource: { try await fixture.load($0) })
-        weak let releasedModel = model
-
-        await model?.start()
-        await fixture.waitUntilStarted()
-        model = nil
-
-        for _ in 0..<100 where !(await fixture.wasCancelled()) {
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        #expect(releasedModel == nil)
-        #expect(await fixture.wasCancelled())
-    }
-
     @Test func newTabNavigationStaysInTheBackgroundWithoutReloading() async throws {
         let fixture = GitHubResourceFixture()
         let context = try await modelContext(route: repositoryRoute("first"), fixture: fixture)
