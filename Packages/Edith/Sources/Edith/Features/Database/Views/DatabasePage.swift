@@ -278,10 +278,34 @@ struct DatabasePage: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .fixedSize(horizontal: false, vertical: true)
                 if workspace.hasTrackedMutation {
-                    Button("Check mutation status") {
-                        Task { await workspace.reconcileSafetyOperation() }
+                    HStack(spacing: UIScale.pt(8)) {
+                        if workspace.safetyPhase.allowsOperationCancellation {
+                            Button(
+                                workspace.acceptedMutation == nil
+                                    ? "Cancel operation" : "Cancel mutation"
+                            ) {
+                                workspace.cancelSafetyOperation()
+                            }
+                            .buttonStyle(.edith(.secondary))
+                        }
+                        if workspace.safetyPhase.allowsReconciliation {
+                            Button("Check mutation status") {
+                                Task { await workspace.reconcileSafetyOperation() }
+                            }
+                            .buttonStyle(.edith(.secondary))
+                        } else if workspace.safetyPhase == .cancelling
+                            || workspace.safetyPhase == .reconciling
+                        {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text(
+                                workspace.safetyPhase == .cancelling
+                                    ? "Cancelling" : "Checking status"
+                            )
+                            .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                        }
                     }
-                    .buttonStyle(.edith(.secondary))
                 }
             }
         }

@@ -767,6 +767,8 @@ final class DatabaseWorkspaceModel {
             switch clientError {
             case .invalidRequest:
                 return "The broker rejected the database request."
+            case .timedOut:
+                return "The local database broker request timed out."
             case .unavailable:
                 return "The local database broker is unavailable."
             case .unsafePeer:
