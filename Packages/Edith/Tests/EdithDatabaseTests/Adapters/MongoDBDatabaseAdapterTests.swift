@@ -571,7 +571,9 @@ private actor MongoDBDatabaseConnectorCapture {
                 context: MongoDBDatabaseAdapterFixtures.context())
             Issue.record("Expected invalid continuation")
         } catch let failure {
-            #expect(MongoDBDatabaseAdapterFixtures.reportedCode(failure) == "mongodb.continuation.invalid")
+            #expect(
+                MongoDBDatabaseAdapterFixtures.reportedCode(failure)
+                    == "mongodb.continuation.invalid")
         }
     }
     let mismatchedSortRequest = try DatabaseAdapterPageRequest(
@@ -589,7 +591,9 @@ private actor MongoDBDatabaseConnectorCapture {
             context: MongoDBDatabaseAdapterFixtures.context())
         Issue.record("Expected sort mismatch rejection")
     } catch let failure {
-        #expect(MongoDBDatabaseAdapterFixtures.reportedCode(failure) == "mongodb.continuation.invalid")
+        #expect(
+            MongoDBDatabaseAdapterFixtures.reportedCode(failure)
+                == "mongodb.continuation.invalid")
     }
     await session.disconnect()
 }
@@ -857,7 +861,8 @@ func mongoReadingLiveAuthenticatedBrowseAndQuery() async throws {
     #expect(report.supports(.browse))
     let target = MongoDBDatabaseAdapterFixtures.target(
         connectionID: definition.id,
-        database: database)
+        database: database,
+        collection: "records")
     let pageRequest = try DatabaseAdapterPageRequest(
         target: target,
         page: DatabasePageRequest(pageSize: try DatabasePageSize(3)),
@@ -889,7 +894,9 @@ func mongoReadingLiveAuthenticatedBrowseAndQuery() async throws {
             deadline: Date().addingTimeInterval(15)))
     #expect(!queryPage.records.isEmpty)
     #expect(queryPage.records.count <= 2)
+    let version = report.productIdentity.version?.string ?? "unknown"
     print(
-        "mongodb live verified version=\(report.productIdentity.version?.string ?? "unknown") browse=\(page.records.count) query=\(queryPage.records.count)")
+        "mongodb live verified version=\(version) "
+            + "browse=\(page.records.count) query=\(queryPage.records.count)")
     await session.disconnect()
 }
