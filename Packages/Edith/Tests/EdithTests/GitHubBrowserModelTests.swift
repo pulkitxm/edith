@@ -29,7 +29,7 @@ import Testing
         model.updateAddressDraft("not a valid URL")
         model.submitAddress()
         #expect(model.addressError != nil)
-        try await Task.sleep(for: .milliseconds(300))
+        await model.waitForPendingSave()
         let restored = try await store.restore()
         #expect(restored == model.session)
     }

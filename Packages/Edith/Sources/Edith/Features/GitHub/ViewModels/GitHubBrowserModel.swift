@@ -110,6 +110,10 @@ final class GitHubBrowserModel {
         Task { await refreshReadiness() }
     }
 
+    func waitForPendingSave() async {
+        await saveTask?.value
+    }
+
     private func mutateSelected(_ body: (inout GitHubBrowserSession, UUID) -> Void) {
         guard let id = session.selectedTabID else { return }
         mutate { body(&$0, id) }
