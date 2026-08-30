@@ -173,8 +173,8 @@ public enum MachineCollector {
         case .darwin, .linux:
             return follow ? "sh -s -- --stream -i \(max(1, interval))" : onceCommand
         case .windows:
-            return "powershell.exe -NoLogo -NoProfile -NonInteractive "
-                + "-ExecutionPolicy Bypass -Command -"
+            return PowerShell.command(
+                "$source = [Console]::In.ReadToEnd(); & ([ScriptBlock]::Create($source))")
         }
     }
 

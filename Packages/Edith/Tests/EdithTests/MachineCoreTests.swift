@@ -452,7 +452,9 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
     @Test func collectorSelectsShellForEachPlatform() {
         #expect(MachineCollector.command(for: .linux, follow: true) == "sh -s -- --stream -i 2")
         #expect(MachineCollector.command(for: .darwin, follow: false) == "sh -s -- --once")
-        #expect(MachineCollector.command(for: .windows, follow: true).contains("powershell.exe"))
+        let windows = MachineCollector.command(for: .windows, follow: true)
+        #expect(windows.contains("powershell.exe"))
+        #expect(decodedMachinePowerShell(windows)?.contains("[Console]::In.ReadToEnd()") == true)
     }
 
     @Test func collectorReadsFansAndPlatformProfilesFromSysfs() {

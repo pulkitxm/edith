@@ -86,7 +86,7 @@ do {
             usedKB = $usedKB
             buffcacheKB = 0
             swapTotalKB = [long](($operatingSystem.TotalVirtualMemorySize - $operatingSystem.TotalVisibleMemorySize))
-            swapUsedKB = [long](($operatingSystem.TotalVirtualMemorySize - $operatingSystem.FreeVirtualMemory) - $usedKB)
+            swapUsedKB = [long][Math]::Max(0, (($operatingSystem.TotalVirtualMemorySize - $operatingSystem.FreeVirtualMemory) - $usedKB))
         }
         load = @()
         tasks = [ordered]@{ runnable = [int]$system.ProcessorQueueLength; total = $processRows.Count }

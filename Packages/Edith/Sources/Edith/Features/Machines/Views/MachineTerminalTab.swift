@@ -482,6 +482,10 @@ struct MachineTerminalTab: View {
                 isLocal: session.isLocal, connected: session.state.isConnected)
         else { return }
         guard let context else {
+            if !session.isLocal, session.remotePlatform == .windows {
+                startWindowsShell()
+                return
+            }
             startStandardShell()
             return
         }
@@ -508,6 +512,16 @@ struct MachineTerminalTab: View {
         holder.start(
             executable: SSHConnection.executable.path,
             arguments: connection.terminalArguments(),
+            environment: Terminal.getEnvironmentVariables(termName: "xterm-256color")
+                + connection.terminalEnvironment())
+    }
+
+    private func startWindowsShell() {
+        guard session.state.isConnected, let connection = session.connectionRef else { return }
+        let command = WindowsTerminalCommands.interactiveShell()
+        holder.start(
+            executable: SSHConnection.executable.path,
+            arguments: connection.terminalArguments(remoteCommand: command),
             environment: Terminal.getEnvironmentVariables(termName: "xterm-256color")
                 + connection.terminalEnvironment())
     }
@@ -560,11 +574,8 @@ enum MachineTerminalLaunchPlan {
         guard let connection else { return nil }
         let command: String
         if platform == .windows {
-            let directoryScript =
-                context.startingDirectory.map {
-                    "Set-Location -LiteralPath \(PowerShell.literal($0))"
-                } ?? ""
-            command = PowerShell.interactiveCommand(directoryScript, keepOpen: true)
+            command = WindowsTerminalCommands.interactiveShell(
+                startingDirectory: context.startingDirectory)
         } else {
             command = MachineWorkingDirectory.prefixed(
                 remoteLoginShell, directory: context.startingDirectory)

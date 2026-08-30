@@ -1,4 +1,5 @@
 import EdithKit
+import Foundation
 import Testing
 
 @testable import Edith
@@ -54,6 +55,28 @@ import Testing
         #expect(
             MachineTerminalLaunchPlan.make(
                 isLocal: false, connection: nil, environment: [], context: context) == nil)
+    }
+
+    @Test func windowsRemoteShellPrefersGitBashWithPowerShellFallbacks() throws {
+        let machine = Machine(
+            name: "Windows", host: "windows.example.com", username: "edith")
+        let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
+        let launch = try #require(
+            MachineTerminalLaunchPlan.make(
+                isLocal: false, connection: connection, environment: [],
+                context: MachineTerminalContext(startingDirectory: "C:\\Projects"),
+                platform: .windows))
+        let command = try #require(launch.arguments.last)
+        let encoded = try #require(command.split(separator: " ").last)
+        let data = try #require(Data(base64Encoded: String(encoded)))
+        let script = try #require(String(data: data, encoding: .utf16LittleEndian))
+
+        #expect(script.contains("Git/bin/bash.exe"))
+        #expect(script.contains("--login -i"))
+        #expect(script.contains("Get-Command pwsh.exe"))
+        #expect(script.contains("& powershell.exe -NoLogo"))
+        #expect(script.contains("$directory = 'C:\\Projects'"))
+        #expect(script.contains("$env:CHERE_INVOKING = '1'"))
     }
 
     private var nestedEnvironment: [String] {
