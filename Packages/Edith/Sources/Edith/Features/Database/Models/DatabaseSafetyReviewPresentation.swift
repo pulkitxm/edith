@@ -4,8 +4,72 @@ import Foundation
 enum DatabaseSafetyReviewPhase: Equatable {
     case ready
     case executing
+    case cancelling
+    case reconciling
+    case outcomeUnknown(String)
     case failed(String)
+    case accepted(String)
     case succeeded(String)
+
+    var locksPreviewRefresh: Bool {
+        switch self {
+        case .executing, .cancelling, .reconciling, .outcomeUnknown, .accepted, .succeeded:
+            true
+        case .ready, .failed:
+            false
+        }
+    }
+
+    var allowsOperationCancellation: Bool {
+        switch self {
+        case .executing, .reconciling, .outcomeUnknown, .accepted:
+            true
+        case .ready, .cancelling, .failed, .succeeded:
+            false
+        }
+    }
+
+    var allowsReconciliation: Bool {
+        switch self {
+        case .outcomeUnknown, .accepted:
+            true
+        case .ready, .executing, .cancelling, .reconciling, .failed, .succeeded:
+            false
+        }
+    }
+
+    var preservesUnresolvedOperation: Bool {
+        switch self {
+        case .executing, .cancelling, .reconciling, .outcomeUnknown, .accepted:
+            true
+        case .ready, .failed, .succeeded:
+            false
+        }
+    }
+
+    var blocksInteractiveDismissal: Bool {
+        switch self {
+        case .executing, .cancelling, .reconciling:
+            true
+        case .ready, .outcomeUnknown, .failed, .accepted, .succeeded:
+            false
+        }
+    }
+
+    var message: String? {
+        switch self {
+        case let .outcomeUnknown(message), let .failed(message), let .accepted(message),
+            let .succeeded(message):
+            message
+        case .ready, .executing, .cancelling, .reconciling:
+            nil
+        }
+    }
+
+    var isAccepted: Bool {
+        if case .accepted = self { return true }
+        return false
+    }
 }
 
 enum DatabaseSafetyConfirmationState: Equatable {
@@ -14,6 +78,7 @@ enum DatabaseSafetyConfirmationState: Equatable {
     case ready
     case expired
     case executing
+    case outcomeUnknown
     case failed
     case completed
 }
@@ -260,8 +325,12 @@ struct DatabaseSafetyReviewPresentation: Equatable {
         now: Date,
         phase: DatabaseSafetyReviewPhase
     ) -> DatabaseSafetyConfirmationState {
-        if phase == .executing { return .executing }
+        if phase == .executing || phase == .cancelling || phase == .reconciling {
+            return .executing
+        }
         if case .failed = phase { return .failed }
+        if case .outcomeUnknown = phase { return .outcomeUnknown }
+        if case .accepted = phase { return .completed }
         if case .succeeded = phase { return .completed }
         if now >= expiresAt { return .expired }
         if input.isEmpty { return .empty }
