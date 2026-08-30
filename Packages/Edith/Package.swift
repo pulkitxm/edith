@@ -122,6 +122,7 @@ let targets: [Target] = [
         dependencies: [
             "EdithCore",
             "EdithDatabase",
+            "EdithDatabaseMCP",
             "EdithKit",
             "EdithLidAwakeSupport",
             .product(name: "ArgumentParser", package: "swift-argument-parser"),

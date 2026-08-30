@@ -839,6 +839,8 @@ public enum CommandTree {
                     CommandNode(
                         "capabilities", "Show detected capabilities for one saved connection.",
                         options: ["--json", "--help", "--refresh"], arguments: [.free]),
+                    CommandNode(
+                        "mcp", "Serve read-only database inspection over MCP stdio."),
                 ]),
             CommandNode(
                 "machines", "The computers Edith can reach over SSH.",

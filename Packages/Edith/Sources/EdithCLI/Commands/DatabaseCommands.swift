@@ -6,7 +6,11 @@ struct DatabaseCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "database",
         abstract: "Inspect saved database connections and their capabilities.",
-        subcommands: [DatabaseConnectionsCommand.self, DatabaseCapabilitiesCommand.self],
+        subcommands: [
+            DatabaseConnectionsCommand.self,
+            DatabaseCapabilitiesCommand.self,
+            DatabaseMCPCommand.self,
+        ],
         defaultSubcommand: DatabaseConnectionsCommand.self)
 }
 

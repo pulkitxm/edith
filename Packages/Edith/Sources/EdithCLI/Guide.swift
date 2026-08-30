@@ -36,6 +36,7 @@ public enum Guide {
         ed extensions ls            every extension and whether it is on
         ed database connections     saved database connection summaries
         ed database capabilities <id>  detected support for one connection id
+        ed database mcp             read-only database tools over MCP stdio
         ed lid-awake status          closed-lid state, session, battery and helper
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler
@@ -123,6 +124,7 @@ public enum Guide {
         ed database connections get <connection-id>
         ed database capabilities <connection-id>
         ed database capabilities <connection-id> --refresh --json
+        ed database mcp
         ```
 
         The bare `database` command defaults to `connections`, and bare `connections`
@@ -130,6 +132,11 @@ public enum Guide {
         Capability discovery uses the cached report when possible. `--refresh` asks the
         broker to reconnect and discover the current product, version, topology,
         permissions, limits, supported operations, and safety limitations.
+
+        `ed database mcp` stays in the foreground and reserves stdout for MCP
+        protocol traffic. It exposes bounded connection and capability inspection
+        through the same authenticated broker. Tool failures remain structured MCP
+        responses, while process diagnostics use stderr.
 
         ## Machines
 
