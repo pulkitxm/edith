@@ -29,6 +29,7 @@ final class AppMaintenanceModel {
     var updates: [AppUpdateItem] = []
     var updateHistory: [AppUpdateResult] = []
     var selectedUpdateIDs = Set<String>()
+    var focusedUpdateID: String?
     var lastUpdateRefresh: Date?
     private var updateState = AppUpdateCenterState()
     private let updatePersistence = AppUpdatePersistence()
@@ -49,6 +50,15 @@ final class AppMaintenanceModel {
             selected.append(item)
         }
         return selected
+    }
+
+    var focusedUpdate: AppUpdateItem? {
+        if let focusedUpdateID,
+            let update = updates.first(where: { $0.id == focusedUpdateID })
+        {
+            return update
+        }
+        return updates.first
     }
 
     var selectedBytes: Int64 { selectedItems.reduce(0) { $0 + $1.sizeBytes } }
@@ -83,6 +93,13 @@ final class AppMaintenanceModel {
             for update in updates { visibleIDs.insert(update.id) }
             selectedUpdateIDs.formIntersection(visibleIDs)
             if selectedUpdateIDs.isEmpty { selectedUpdateIDs = visibleIDs }
+            if let focusedUpdateID {
+                if !visibleIDs.contains(focusedUpdateID) {
+                    self.focusedUpdateID = updates.first?.id
+                }
+            } else {
+                focusedUpdateID = updates.first?.id
+            }
             phase = .ready
             if let selectedApplicationID,
                 !loaded.0.contains(where: { $0.id == selectedApplicationID })
@@ -168,6 +185,7 @@ final class AppMaintenanceModel {
             try updatePersistence.save(updateState)
             updates.removeAll { $0.id == item.id }
             selectedUpdateIDs.remove(item.id)
+            if focusedUpdateID == item.id { focusedUpdateID = updates.first?.id }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -432,6 +450,12 @@ struct AppMaintenanceView: View {
             set: { sectionRaw = $0.rawValue })
     }
 
+    private var focusedUpdateBinding: Binding<String?> {
+        Binding(
+            get: { model.focusedUpdateID },
+            set: { model.focusedUpdateID = $0 })
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -631,7 +655,7 @@ struct AppMaintenanceView: View {
                     "No updates", systemImage: "checkmark.circle",
                     description: Text("Everything visible is current, ignored, or snoozed."))
             } else {
-                List(filteredUpdates) { item in
+                List(filteredUpdates, selection: focusedUpdateBinding) { item in
                     HStack(spacing: UIScale.pt(9)) {
                         Toggle(
                             "",
@@ -658,6 +682,7 @@ struct AppMaintenanceView: View {
                         Text(item.source.title).settingsCaption().lineLimit(1)
                     }
                     .padding(.vertical, UIScale.pt(3))
+                    .tag(item.id)
                 }
                 .listStyle(.sidebar)
             }
@@ -776,8 +801,7 @@ struct AppMaintenanceView: View {
                 Button("Cancel") { model.cancel() }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let item = model.updates.first(where: { model.selectedUpdateIDs.contains($0.id) })
-        {
+        } else if let item = model.focusedUpdate {
             VStack(alignment: .leading, spacing: UIScale.pt(18)) {
                 HStack(spacing: UIScale.pt(14)) {
                     if let path = item.applicationPath {

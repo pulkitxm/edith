@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import Edith
+import EdithKit
 
 @Suite struct SettingsLayoutTests {
     @Test func settingsUsesPrimaryNavigationAndFullWidthContent() throws {
@@ -73,6 +74,20 @@ import Testing
         #expect(!maintenance.contains(".pickerStyle(.segmented)"))
     }
 
+    @MainActor
+    @Test func appMaintenanceFocusIsIndependentFromCheckedUpdates() {
+        let dia = updateItem(id: "dia", name: "Dia")
+        let telegram = updateItem(id: "telegram", name: "Telegram")
+        let model = AppMaintenanceModel()
+        model.updates = [dia, telegram]
+        model.selectedUpdateIDs = [dia.id, telegram.id]
+
+        model.focusedUpdateID = telegram.id
+
+        #expect(model.focusedUpdate?.id == telegram.id)
+        #expect(model.selectedUpdateIDs == [dia.id, telegram.id])
+    }
+
     @Test func permissionCardsUseTheAvailableWidthAdaptively() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -93,6 +108,13 @@ import Testing
         #expect(SidebarDisclosureGeometry.visibleHeight(contentHeight: 180, progress: 1) == 180)
         #expect(SidebarDisclosureGeometry.visibleHeight(contentHeight: 180, progress: -0.2) == 0)
         #expect(SidebarDisclosureGeometry.visibleHeight(contentHeight: 180, progress: 1.2) == 180)
+    }
+
+    private func updateItem(id: String, name: String) -> AppUpdateItem {
+        AppUpdateItem(
+            id: id, name: name, source: .sparkle, currentVersion: "1.0",
+            availableVersion: "2.0", confidence: .high, checkedAt: .distantPast,
+            action: .openUpdater, executablePath: "/usr/bin/open", arguments: [])
     }
 
 }
