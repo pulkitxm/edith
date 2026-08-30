@@ -3,7 +3,7 @@ import MongoClient
 import MongoCore
 import MongoKitten
 import NIOCore
-import NIOPosix
+import NIOTransportServices
 
 enum MongoDBDatabaseDriverFailure: Error, Equatable, Sendable {
     case authentication
@@ -60,7 +60,7 @@ actor MongoKittenDatabaseClient: MongoDBDatabaseClient {
         _ plan: MongoDBDatabaseConnectionPlan,
         context: DatabaseAdapterConnectionContext,
         eventLoopFactory: MongoDBDatabaseEventLoopFactory = {
-            MultiThreadedEventLoopGroup(numberOfThreads: 1)
+            NIOTSEventLoopGroup(loopCount: 1)
         },
         eventLoopShutdown: @escaping MongoDBDatabaseEventLoopShutdown = { group in
             try await group.shutdownGracefully()
@@ -171,6 +171,9 @@ enum MongoDBDatabaseDriverErrorClassifier {
         }
         if error is MongoAuthenticationError {
             return .authentication
+        }
+        if case .connectTimeout = error as? ChannelError {
+            return .timeout
         }
         if let error = error as? MongoError {
             switch error.kind {
