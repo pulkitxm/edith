@@ -228,6 +228,7 @@ private enum DatabaseExecutionContractFixtures {
         let result = DatabaseConnectionTestResult(
             connection: definition.identity,
             productIdentity: DatabaseExecutionContractFixtures.productIdentity,
+            capabilities: DatabaseExecutionContractFixtures.capabilityReport,
             latencyMilliseconds: 18,
             testedAt: DatabaseExecutionContractFixtures.testedAt)
 
