@@ -86,9 +86,10 @@ actor MongoKittenDatabaseClient: MongoDBDatabaseClient {
     }
 
     func read(_ plan: MongoDBDatabaseReadPlan) async throws -> MongoDBDatabaseReadResult {
-        guard let connection = transport?.connection else {
+        guard let transport else {
             throw MongoDBDatabaseDriverFailure.connection
         }
+        let connection = try await transport.activeConnection()
         do {
             await connection.setDatabaseQueryTimeout(
                 .milliseconds(Int64(plan.maximumTimeMilliseconds)))

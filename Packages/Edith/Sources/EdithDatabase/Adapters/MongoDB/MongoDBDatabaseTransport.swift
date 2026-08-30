@@ -73,13 +73,42 @@ actor MongoDBDatabaseOwnedEventLoop {
     }
 }
 
-struct MongoDBDatabaseConnectedTransport: Sendable {
-    let connection: MongoConnection
-    let channel: any Channel
-    let eventLoop: MongoDBDatabaseOwnedEventLoop
-    let identity: DatabaseProductIdentity
+actor MongoDBDatabaseConnectedTransport {
+    private var connection: MongoConnection?
+    private let channel: any Channel
+    private let eventLoop: MongoDBDatabaseOwnedEventLoop
+    nonisolated let identity: DatabaseProductIdentity
+
+    init(
+        connection: MongoConnection,
+        channel: any Channel,
+        eventLoop: MongoDBDatabaseOwnedEventLoop,
+        identity: DatabaseProductIdentity
+    ) {
+        self.connection = connection
+        self.channel = channel
+        self.eventLoop = eventLoop
+        self.identity = identity
+    }
+
+    func activeConnection() throws -> MongoConnection {
+        guard let connection else {
+            throw MongoDBDatabaseDriverFailure.connection
+        }
+        return connection
+    }
 
     func close() async throws {
+        let closeError = await closeChannelAndReleaseConnection()
+        try await eventLoop.shutdown()
+        if let closeError {
+            throw closeError
+        }
+    }
+
+    private func closeChannelAndReleaseConnection() async -> Error? {
+        let connection = self.connection
+        self.connection = nil
         channel.close(mode: .all, promise: nil)
         let closeError: Error?
         do {
@@ -88,10 +117,8 @@ struct MongoDBDatabaseConnectedTransport: Sendable {
         } catch {
             closeError = error
         }
-        try await eventLoop.shutdown()
-        if let closeError {
-            throw closeError
-        }
+        _ = connection
+        return closeError
     }
 }
 
