@@ -188,7 +188,7 @@ actor URLSessionOpenSearchDatabaseClient: OpenSearchDatabaseClient {
             queryItems: [
                 URLQueryItem(name: "flat_settings", value: "true"),
                 URLQueryItem(name: "include_defaults", value: "false"),
-                URLQueryItem(name: "filter_path", value: "*.settings.index.*"),
+                URLQueryItem(name: "filter_path", value: "*.settings.*"),
             ])
         let decoded = try decode(OpenSearchDatabaseSettingsResponse.self, from: response.body)
         try OpenSearchDatabaseDriverSupport.validate(decoded, expectedTarget: target)
@@ -458,6 +458,20 @@ struct OpenSearchDatabaseResolveResponse: Decodable, Sendable {
         let dataStream: String?
         let mode: String?
 
+        init(
+            name: String,
+            aliases: [String],
+            attributes: [String],
+            dataStream: String?,
+            mode: String?
+        ) {
+            self.name = name
+            self.aliases = aliases
+            self.attributes = attributes
+            self.dataStream = dataStream
+            self.mode = mode
+        }
+
         private enum CodingKeys: String, CodingKey {
             case name
             case aliases
@@ -544,6 +558,10 @@ struct OpenSearchDatabaseMappingResponse: Decodable, Sendable {
 struct OpenSearchDatabaseSettingsResponse: Decodable, Sendable {
     let indices: [String: Index]
 
+    init(indices: [String: Index]) {
+        self.indices = indices
+    }
+
     struct Index: Decodable, Sendable {
         let settings: [String: String]
     }
@@ -577,6 +595,22 @@ struct OpenSearchDatabaseSearchResponse: Decodable, Sendable {
     struct Hits: Decodable, Sendable {
         let total: Total?
         let hits: [Hit]
+
+        private enum CodingKeys: String, CodingKey {
+            case total
+            case hits
+        }
+
+        init(total: Total?, hits: [Hit]) {
+            self.total = total
+            self.hits = hits
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            total = try container.decodeIfPresent(Total.self, forKey: .total)
+            hits = try container.decodeIfPresent([Hit].self, forKey: .hits) ?? []
+        }
     }
 
     struct Total: Decodable, Sendable {
