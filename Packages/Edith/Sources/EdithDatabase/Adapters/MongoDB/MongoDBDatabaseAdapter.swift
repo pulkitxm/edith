@@ -205,10 +205,10 @@ actor MongoDBDatabaseAdapterSession: DatabaseAdapterSession {
             await activeOperation.cancellation.cancel(.sessionDisconnected)
         }
         let client = self.client
+        self.client = nil
         activeOperation = nil
         do {
             try await client?.disconnect()
-            self.client = nil
             state = .disconnected
         } catch {
             self.client = client
@@ -324,11 +324,11 @@ actor MongoDBDatabaseAdapterSession: DatabaseAdapterSession {
     }
 
     private func failAndClose() async {
-        let client = self.client
         state = .failed
+        guard let client else { return }
+        self.client = nil
         do {
-            try await client?.disconnect()
-            self.client = nil
+            try await client.disconnect()
         } catch {
             self.client = client
             state = .failed
