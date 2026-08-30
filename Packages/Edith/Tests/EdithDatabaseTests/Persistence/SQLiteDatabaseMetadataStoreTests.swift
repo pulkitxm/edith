@@ -199,9 +199,32 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
         #expect(
             try await store.pruneOperations(
                 finishedBefore: Date(timeIntervalSince1970: 200),
-                owner: owner) == 1)
+                owner: owner
+            ).removedCount == 1)
         #expect(try await store.operation(id: succeeded.id) == nil)
         #expect(try await store.operation(id: failed.id) == failed)
+        for index in 0...100 {
+            try await store.seedOperation(
+                DatabasePersistenceFixtures.operation(
+                    id: UUID(),
+                    connection: connection,
+                    kind: DatabaseOperationKind(rawValue: "prune-\(index)"),
+                    state: .succeeded,
+                    startedAt: Date(timeIntervalSince1970: 290),
+                    finishedAt: Date(timeIntervalSince1970: 300)))
+        }
+        let firstBatch = try await store.pruneOperations(
+            finishedBefore: Date(timeIntervalSince1970: 301),
+            limit: 100,
+            owner: owner)
+        #expect(firstBatch.removedCount == 100)
+        #expect(firstBatch.hasMore)
+        let remainder = try await store.pruneOperations(
+            finishedBefore: Date(timeIntervalSince1970: 301),
+            limit: 100,
+            owner: owner)
+        #expect(remainder.removedCount == 2)
+        #expect(!remainder.hasMore)
     }
 
     @Test func atomicallyConsumesCrossInstanceConfirmationReceiptsOnce() async throws {
@@ -264,7 +287,28 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
         #expect(
             try await secondStore.removeExpiredConfirmations(
                 before: Date(timeIntervalSince1970: 400),
-                owner: owner) == 1)
+                owner: owner
+            ).removedCount == 1)
+        for _ in 0...100 {
+            try await firstStore.registerConfirmation(
+                DatabaseConfirmationReceipt(
+                    identifier: UUID(),
+                    effectDigest: "expired",
+                    expiresAt: Date(timeIntervalSince1970: 300)),
+                owner: owner)
+        }
+        let firstCleanup = try await secondStore.removeExpiredConfirmations(
+            before: Date(timeIntervalSince1970: 400),
+            limit: 100,
+            owner: owner)
+        #expect(firstCleanup.removedCount == 100)
+        #expect(firstCleanup.hasMore)
+        let cleanupRemainder = try await secondStore.removeExpiredConfirmations(
+            before: Date(timeIntervalSince1970: 400),
+            limit: 100,
+            owner: owner)
+        #expect(cleanupRemainder.removedCount == 1)
+        #expect(!cleanupRemainder.hasMore)
         _ = try await secondStore.claimRuntimeOwner(
             claimedAt: Date(timeIntervalSince1970: 500))
         await #expect(throws: DatabaseMetadataStoreError.runtimeOwnerNotActive) {
@@ -388,7 +432,10 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
                     owner: DatabaseRuntimeOwnerRecord(
                         token: firstOwner,
                         claimedAt: firstClaimedAt),
-                    recoveredOperationCount: 0))
+                    recovery: DatabaseRuntimeRecoveryResult(
+                        inspectedOperationCount: 0,
+                        recoveredOperationCount: 0,
+                        hasMore: false)))
         #expect(try await secondStore.runtimeOwner() == firstClaim.owner)
 
         let connectionID = UUID(uuidString: "48CAEC19-E4CA-4EF9-9EA7-A17C5C2C650A")!
@@ -588,7 +635,7 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
             kind: running.kind,
             state: .failed,
             connection: running.connection,
-            startedAt: running.startedAt,
+            startedAt: Date(timeIntervalSince1970: 10),
             finishedAt: Date(timeIntervalSince1970: 700),
             cancellationSupport: running.cancellationSupport,
             retryClassification: running.retryClassification)
@@ -696,7 +743,7 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
         let claim = try await secondStore.claimRuntimeOwner(
             claimedAt: recoveredAt)
         let secondOwner = claim.owner.token
-        #expect(claim.recoveredOperationCount == 4)
+        #expect(claim.recovery.recoveredOperationCount == 4)
         #expect(
             claim.owner
                 == DatabaseRuntimeOwnerRecord(
@@ -741,7 +788,7 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
         let nextClaim = try await firstStore.claimRuntimeOwner(
             claimedAt: Date(timeIntervalSince1970: 1_000))
         #expect(nextClaim.owner.token != secondOwner)
-        #expect(nextClaim.recoveredOperationCount == 0)
+        #expect(nextClaim.recovery.recoveredOperationCount == 0)
     }
 
     @Test func recoversInterruptedOperationsAcrossBoundedBatches() async throws {
@@ -754,24 +801,43 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
             createdAt: Date(timeIntervalSince1970: 10),
             updatedAt: Date(timeIntervalSince1970: 20))
         let operationCount = 101
-        for index in 0..<operationCount {
-            try await store.seedOperation(
-                DatabasePersistenceFixtures.operation(
-                    id: UUID(),
-                    connection: connection,
-                    kind: DatabaseOperationKind(rawValue: "batch-\(index)"),
-                    state: .running,
-                    startedAt: Date(timeIntervalSince1970: Double(index)),
-                    finishedAt: nil))
+        let operations = (0..<operationCount).map { index in
+            DatabasePersistenceFixtures.operation(
+                id: UUID(),
+                connection: connection,
+                kind: DatabaseOperationKind(rawValue: "batch-\(index)"),
+                state: .running,
+                startedAt: Date(timeIntervalSince1970: Double(index)),
+                finishedAt: nil)
+        }
+        for operation in operations {
+            try await store.seedOperation(operation)
         }
 
         let claim = try await store.claimRuntimeOwner(
             claimedAt: Date(timeIntervalSince1970: 500))
-        #expect(claim.recoveredOperationCount == operationCount)
+        #expect(claim.recovery.inspectedOperationCount == 100)
+        #expect(claim.recovery.recoveredOperationCount == 100)
+        #expect(claim.recovery.hasMore)
+        #expect(claim.owner.recoveryPending)
+        let remainder = try await store.recoverRuntimeOwner(claim.owner.token, limit: 100)
+        #expect(remainder.inspectedOperationCount == 1)
+        #expect(remainder.recoveredOperationCount == 1)
+        #expect(!remainder.hasMore)
+        #expect(try await store.runtimeOwner()?.isReady == true)
         let failed = try await store.operations(
             matching: DatabaseOperationHistorySearch(states: [.failed], limit: 200))
         #expect(failed.count == operationCount)
         #expect(failed.allSatisfy { $0.error?.productCode == "database.runtime.interrupted" })
+        for operation in operations {
+            try await store.seedOperation(operation)
+        }
+        let ready = try await DatabaseRuntimeOwnerFactory.claimReadyOwner(
+            from: store,
+            claimedAt: Date(timeIntervalSince1970: 600))
+        #expect(ready.owner.isReady)
+        #expect(ready.recovery.recoveredOperationCount == operationCount)
+        #expect(!ready.recovery.hasMore)
     }
 
     @Test func rejectsUnboundedAndOversizedMetadataRequests() async throws {
@@ -783,6 +849,17 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
         }
         await #expect(throws: DatabaseMetadataStoreError.invalidOffset(-1)) {
             _ = try await store.savedQueries(matching: DatabaseSavedQuerySearch(offset: -1))
+        }
+        await #expect(throws: DatabaseMetadataStoreError.invalidLimit(0)) {
+            _ = try await store.claimRuntimeOwner(
+                claimedAt: Date(timeIntervalSince1970: 1),
+                recoveryLimit: 0)
+        }
+        await #expect(throws: DatabaseMetadataStoreError.invalidLimit(101)) {
+            _ = try await store.pruneOperations(
+                finishedBefore: Date(timeIntervalSince1970: 1),
+                limit: 101,
+                owner: DatabaseRuntimeOwnerToken())
         }
         let query = DatabasePersistenceFixtures.savedQuery(
             id: UUID(),
@@ -817,7 +894,6 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
         try await store.executeCorruptionSQLForTesting(
             "UPDATE database_connections SET definition = X'\(secondConnectionBlob)' WHERE id = '\(firstConnectionID)'"
         )
-
         await #expect(throws: DatabaseMetadataStoreError.self) {
             _ = try await store.connection(id: firstConnection.id)
         }
@@ -830,7 +906,6 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
                 replacing: firstConnection,
                 owner: owner) == .resourceChanged)
         #expect(try await store.connection(id: secondConnection.id) == secondConnection)
-
         try await store.seedConnection(firstConnection)
         let firstQuery = DatabasePersistenceFixtures.savedQuery(
             connectionID: firstConnection.id,
@@ -846,7 +921,6 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
         try await store.executeCorruptionSQLForTesting(
             "UPDATE database_saved_queries SET query = X'\(secondQueryBlob)' WHERE id = '\(firstQueryID)'"
         )
-
         await #expect(throws: DatabaseMetadataStoreError.self) {
             _ = try await store.savedQuery(id: firstQuery.id)
         }
@@ -862,7 +936,6 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
                 validatedAgainst: firstConnection,
                 owner: owner) == .resourceChanged)
         #expect(try await store.savedQuery(id: secondQuery.id) == secondQuery)
-
         try await store.seedSavedQuery(firstQuery)
         try await store.executeCorruptionSQLForTesting(
             "UPDATE database_saved_queries SET connection_id = '\(secondConnection.id.rawValue.uuidString)' WHERE id = '\(firstQueryID)'"
@@ -870,7 +943,6 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
         await #expect(throws: DatabaseMetadataStoreError.self) {
             _ = try await store.savedQueries(matching: DatabaseSavedQuerySearch(limit: 10))
         }
-
         let firstOperation = DatabasePersistenceFixtures.operation(
             id: UUID(uuidString: "1DF061F1-E797-4C72-BA47-BF8A47DF2504")!,
             connection: firstConnection,
@@ -896,7 +968,6 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
         await #expect(throws: DatabaseMetadataStoreError.self) {
             _ = try await store.operations(matching: DatabaseOperationHistorySearch(limit: 10))
         }
-
         let scalarCorruptions = [
             "connection_id = '\(secondConnection.id.rawValue.uuidString)'",
             "kind = 'export'",
@@ -915,6 +986,55 @@ private func databaseMetadataSQLiteBlob<Value: Encodable>(_ value: Value) throws
             await #expect(throws: DatabaseMetadataStoreError.self) {
                 _ = try await store.operations(matching: DatabaseOperationHistorySearch(limit: 10))
             }
+        }
+    }
+
+    @Test func recoveryRejectsEveryScalarAndPayloadStateMismatch() async throws {
+        let (directory, path) = try DatabasePersistenceFixtures.temporaryStorePath()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try SQLiteDatabaseMetadataStore(path: path)
+        let connection = try DatabasePersistenceFixtures.connection(name: "Recovery")
+        let running = DatabasePersistenceFixtures.operation(
+            id: UUID(),
+            connection: connection,
+            kind: .databaseConnect,
+            state: .running,
+            startedAt: Date(timeIntervalSince1970: 10),
+            finishedAt: nil)
+        let terminal = DatabasePersistenceFixtures.operation(
+            id: running.id.rawValue,
+            connection: connection,
+            kind: running.kind,
+            state: .succeeded,
+            startedAt: Date(timeIntervalSince1970: 10),
+            finishedAt: Date(timeIntervalSince1970: 20))
+        let other = DatabasePersistenceFixtures.operation(
+            id: UUID(),
+            connection: connection,
+            kind: running.kind,
+            state: .running,
+            startedAt: Date(timeIntervalSince1970: 10),
+            finishedAt: nil)
+        let identifier = running.id.rawValue.uuidString
+        let mutations = [
+            "connection_id = '\(UUID().uuidString)'",
+            "kind = 'databaseDisconnect'",
+            "state = 'succeeded'",
+            "started_at = 11",
+            "finished_at = 20",
+            "summary = X'\(try databaseMetadataSQLiteBlob(other))'",
+            "summary = X'\(try databaseMetadataSQLiteBlob(terminal))'",
+        ]
+        for mutation in mutations {
+            try await store.seedOperation(running)
+            try await store.executeCorruptionSQLForTesting(
+                "UPDATE database_operation_history SET \(mutation) WHERE id = '\(identifier)'")
+            await #expect(throws: DatabaseMetadataStoreError.self) {
+                _ = try await store.claimRuntimeOwner(
+                    claimedAt: Date(timeIntervalSince1970: 30),
+                    recoveryLimit: 1)
+            }
+            #expect(try await store.runtimeOwner() == nil)
         }
     }
 }

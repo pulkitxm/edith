@@ -189,30 +189,73 @@ public struct DatabaseRuntimeOwnerRecord: Codable, Hashable, Sendable {
     public let token: DatabaseRuntimeOwnerToken
     public let claimedAt: Date
     public let releasedAt: Date?
+    public let recoveryPending: Bool
 
     public var isActive: Bool {
         releasedAt == nil
     }
 
+    public var isReady: Bool {
+        isActive && !recoveryPending
+    }
+
     public init(
         token: DatabaseRuntimeOwnerToken,
         claimedAt: Date,
-        releasedAt: Date? = nil
+        releasedAt: Date? = nil,
+        recoveryPending: Bool = false
     ) {
         self.token = token
         self.claimedAt = claimedAt
         self.releasedAt = releasedAt
+        self.recoveryPending = recoveryPending
+    }
+}
+
+public struct DatabaseRuntimeRecoveryResult: Codable, Hashable, Sendable {
+    public let inspectedOperationCount: Int
+    public let recoveredOperationCount: Int
+    public let hasMore: Bool
+
+    public init(
+        inspectedOperationCount: Int,
+        recoveredOperationCount: Int,
+        hasMore: Bool
+    ) {
+        self.inspectedOperationCount = inspectedOperationCount
+        self.recoveredOperationCount = recoveredOperationCount
+        self.hasMore = hasMore
     }
 }
 
 public struct DatabaseRuntimeOwnerClaimResult: Codable, Hashable, Sendable {
     public let owner: DatabaseRuntimeOwnerRecord
-    public let recoveredOperationCount: Int
+    public let retiredOwner: DatabaseRuntimeOwnerToken?
+    public let recovery: DatabaseRuntimeRecoveryResult
 
-    public init(owner: DatabaseRuntimeOwnerRecord, recoveredOperationCount: Int) {
+    public init(
+        owner: DatabaseRuntimeOwnerRecord,
+        retiredOwner: DatabaseRuntimeOwnerToken? = nil,
+        recovery: DatabaseRuntimeRecoveryResult
+    ) {
         self.owner = owner
-        self.recoveredOperationCount = recoveredOperationCount
+        self.retiredOwner = retiredOwner
+        self.recovery = recovery
     }
+}
+
+public struct DatabaseMetadataCleanupResult: Codable, Hashable, Sendable {
+    public let removedCount: Int
+    public let hasMore: Bool
+
+    public init(removedCount: Int, hasMore: Bool) {
+        self.removedCount = removedCount
+        self.hasMore = hasMore
+    }
+}
+
+public enum DatabaseMetadataMaintenanceBounds {
+    public static let maximumBatchSize = 100
 }
 
 public enum DatabaseMetadataStoreError: Error, Equatable, Sendable {
@@ -276,7 +319,14 @@ public protocol DatabaseMetadataStore: Sendable {
         owner: DatabaseRuntimeOwnerToken
     ) async throws -> DatabaseOwnedMetadataDeleteResult
     func runtimeOwner() async throws -> DatabaseRuntimeOwnerRecord?
-    func claimRuntimeOwner(claimedAt: Date) async throws -> DatabaseRuntimeOwnerClaimResult
+    func claimRuntimeOwner(
+        claimedAt: Date,
+        recoveryLimit: Int
+    ) async throws -> DatabaseRuntimeOwnerClaimResult
+    func recoverRuntimeOwner(
+        _ owner: DatabaseRuntimeOwnerToken,
+        limit: Int
+    ) async throws -> DatabaseRuntimeRecoveryResult
     func releaseRuntimeOwner(
         _ token: DatabaseRuntimeOwnerToken,
         releasedAt: Date
@@ -300,8 +350,9 @@ public protocol DatabaseMetadataStore: Sendable {
         -> [DatabaseOperationRecordSummary]
     func pruneOperations(
         finishedBefore date: Date,
+        limit: Int,
         owner: DatabaseRuntimeOwnerToken
-    ) async throws -> Int
+    ) async throws -> DatabaseMetadataCleanupResult
     func registerConfirmation(
         _ receipt: DatabaseConfirmationReceipt,
         owner: DatabaseRuntimeOwnerToken
@@ -315,6 +366,42 @@ public protocol DatabaseMetadataStore: Sendable {
     ) async throws -> Bool
     func removeExpiredConfirmations(
         before date: Date,
+        limit: Int,
         owner: DatabaseRuntimeOwnerToken
-    ) async throws -> Int
+    ) async throws -> DatabaseMetadataCleanupResult
+}
+
+enum DatabaseRuntimeOwnerFactory {
+    static func claimReadyOwner(
+        from store: any DatabaseMetadataStore,
+        claimedAt: Date,
+        recoveryLimit: Int = DatabaseMetadataMaintenanceBounds.maximumBatchSize
+    ) async throws -> DatabaseRuntimeOwnerClaimResult {
+        var claim = try await store.claimRuntimeOwner(
+            claimedAt: claimedAt,
+            recoveryLimit: recoveryLimit)
+        if let retiredOwner = claim.retiredOwner {
+            await DatabaseExecutor.retireRuntimeOwnerCoordination(retiredOwner)
+        }
+        var inspected = claim.recovery.inspectedOperationCount
+        var recovered = claim.recovery.recoveredOperationCount
+        while claim.recovery.hasMore {
+            let recovery = try await store.recoverRuntimeOwner(
+                claim.owner.token,
+                limit: recoveryLimit)
+            inspected += recovery.inspectedOperationCount
+            recovered += recovery.recoveredOperationCount
+            claim = DatabaseRuntimeOwnerClaimResult(
+                owner: DatabaseRuntimeOwnerRecord(
+                    token: claim.owner.token,
+                    claimedAt: claim.owner.claimedAt,
+                    recoveryPending: recovery.hasMore),
+                retiredOwner: claim.retiredOwner,
+                recovery: DatabaseRuntimeRecoveryResult(
+                    inspectedOperationCount: inspected,
+                    recoveredOperationCount: recovered,
+                    hasMore: recovery.hasMore))
+        }
+        return claim
+    }
 }
