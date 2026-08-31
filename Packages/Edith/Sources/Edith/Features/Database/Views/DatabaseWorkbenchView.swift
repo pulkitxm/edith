@@ -304,17 +304,27 @@ struct DatabaseWorkbenchView: View {
 
     private func grid(_ connection: DatabaseConnectionSummary) -> some View {
         VStack(spacing: 0) {
-            ScrollView([.horizontal, .vertical]) {
-                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                    Section {
-                        ForEach(Array(data.records.enumerated()), id: \.offset) { index, record in
-                            row(record, index: index)
-                        }
-                    } header: {
-                        header(connection)
+            DatabaseNativeTableView(
+                fields: data.fields,
+                records: data.records,
+                selectedIndex: data.selectedRecordIndex,
+                sortField: data.sortField,
+                sortDirection: data.sortDirection,
+                text: { data.text(for: $0) },
+                select: { data.selectRecord(at: $0) },
+                open: { index in
+                    if data.selectedRecordIndex != index {
+                        data.selectRecord(at: index)
                     }
-                }
-            }
+                    if data.supportsRowMutations(connection) {
+                        data.beginEditingSelectedRow(connection)
+                    }
+                },
+                sort: { field, direction in
+                    data.sortField = field
+                    data.sortDirection = direction
+                    data.browse(connection)
+                })
             Divider().opacity(0.35)
             HStack(spacing: UIScale.pt(9)) {
                 if data.isLoading { ProgressView().controlSize(.small) }
@@ -342,77 +352,6 @@ struct DatabaseWorkbenchView: View {
             .background(DashSkin.paper2(dark).opacity(0.55))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func header(_ connection: DatabaseConnectionSummary) -> some View {
-        HStack(spacing: 0) {
-            Text("#")
-                .frame(width: UIScale.pt(44), alignment: .trailing)
-                .padding(.trailing, UIScale.pt(10))
-            ForEach(data.fields, id: \.path) { field in
-                Button {
-                    guard field.isSortable else { return }
-                    let name = field.path.segments.joined(separator: ".")
-                    if data.sortField == name {
-                        data.sortDirection =
-                            data.sortDirection == .ascending ? .descending : .ascending
-                    } else {
-                        data.sortField = name
-                        data.sortDirection = .ascending
-                    }
-                    data.browse(connection)
-                } label: {
-                    VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                        Text(field.displayName).foregroundStyle(DashSkin.ink(dark))
-                        Text(field.typeName)
-                            .font(.system(size: UIScale.pt(9.5)))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                    }
-                    .frame(width: UIScale.pt(176), alignment: .leading)
-                    .padding(.horizontal, UIScale.pt(10))
-                }
-                .buttonStyle(.plain)
-                .disabled(!field.isSortable)
-                Divider().opacity(0.25)
-            }
-        }
-        .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-        .frame(height: UIScale.pt(42))
-        .background(DashSkin.paper2(dark))
-        .overlay(alignment: .bottom) { Divider().opacity(0.35) }
-    }
-
-    private func row(_ record: DatabaseRecord, index: Int) -> some View {
-        Button {
-            data.selectRecord(at: index)
-        } label: {
-            HStack(spacing: 0) {
-                Text((index + 1).formatted())
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .frame(width: UIScale.pt(44), alignment: .trailing)
-                    .padding(.trailing, UIScale.pt(10))
-                ForEach(data.fields, id: \.path) { field in
-                    let name = field.path.segments.joined(separator: ".")
-                    Text(data.text(for: data.value(named: name, in: record)))
-                        .foregroundStyle(DashSkin.ink(dark))
-                        .lineLimit(1)
-                        .frame(width: UIScale.pt(176), alignment: .leading)
-                        .padding(.horizontal, UIScale.pt(10))
-                    Divider().opacity(0.18)
-                }
-            }
-            .font(DashSkin.mono(10.5))
-            .frame(height: UIScale.pt(34))
-            .background(
-                data.selectedRecordIndex == index
-                    ? DashSkin.accent(dark).opacity(0.12)
-                    : (index.isMultiple(of: 2)
-                        ? DashSkin.paper(dark) : DashSkin.paper2(dark).opacity(0.34))
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Row \(index + 1)")
     }
 
     @ViewBuilder
