@@ -27,7 +27,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         tableView.doubleAction = #selector(Coordinator.openSelectedRow)
         tableView.allowsMultipleSelection = false
         tableView.allowsEmptySelection = true
-        tableView.usesAlternatingRowBackgroundColors = true
+        tableView.usesAlternatingRowBackgroundColors = false
         tableView.rowHeight = 30
         tableView.intercellSpacing = NSSize(width: 8, height: 1)
         tableView.columnAutoresizingStyle = .noColumnAutoresizing
