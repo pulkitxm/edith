@@ -52,3 +52,9 @@ ed extensions doctor keystrokeHighlight --json
 
 After granting Input Monitoring in System Settings, restart Edith if macOS has
 not yet made the new grant available to the running process.
+
+## Where to go next
+
+- [`ed extensions`](../extensions/README.md) for enabling and checking the extension
+- [`ed permissions`](../permissions/README.md) for Input Monitoring access
+- [All `ed` commands](../README.md)
