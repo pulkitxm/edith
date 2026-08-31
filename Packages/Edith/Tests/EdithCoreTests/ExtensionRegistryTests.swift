@@ -15,7 +15,8 @@ import Testing
             ExtensionRegistry.entries.map(\.id) == [
                 "attention", "usage", "herdr", "quinjet", "system", "appMaintenance", "machines",
                 "companion", "systemStats", "micMute", "lidAwake", "music", "calendar",
-                "notchShelf", "clipboard", "focusDim", "presenter", "emoji", "colorPicker",
+                "notchShelf", "clipboard", "keystrokeHighlight", "focusDim", "presenter", "emoji",
+                "colorPicker",
             ])
     }
 

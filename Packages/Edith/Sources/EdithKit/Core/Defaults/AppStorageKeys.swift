@@ -130,6 +130,14 @@ public enum AppStorageKeys {
         public static let defaultKind = "homebrewDefaultKind"
     }
 
+    public enum KeystrokeHighlight {
+        public static let duration = "keystrokeHighlightDuration"
+        public static let enabled = "keystrokeHighlightEnabled"
+        public static let position = "keystrokeHighlightPosition"
+        public static let runtimeActive = "keystrokeHighlightRuntimeActive"
+        public static let runtimeError = "keystrokeHighlightRuntimeError"
+    }
+
     public enum Limits {
         public static let claudeEnabled = "claudeLimitsEnabled"
         public static let codexEnabled = "codexLimitsEnabled"

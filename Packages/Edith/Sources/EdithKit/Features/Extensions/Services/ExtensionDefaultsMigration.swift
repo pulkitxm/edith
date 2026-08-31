@@ -55,6 +55,7 @@ public enum ExtensionDefaultsMigration {
         AppStorageKeys.Tabs.calendarEnabled: true,
         AppStorageKeys.Notch.shelfEnabled: false,
         AppStorageKeys.Clipboard.enabled: false,
+        AppStorageKeys.KeystrokeHighlight.enabled: false,
         FocusDimState.enabledKey: false,
         AppStorageKeys.Presenter.enabled: true,
         AppStorageKeys.ColorPicker.enabled: false,

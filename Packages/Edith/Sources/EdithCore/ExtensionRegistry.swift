@@ -191,6 +191,12 @@ public enum ExtensionRegistry {
             defaultsKey: "clipboardEnabled", requiredCapabilities: [.clipboardHistory],
             optionalCapabilities: [.globalPaste, .globalShortcuts]),
         ExtensionRegistryEntry(
+            id: "keystrokeHighlight", title: "Keystroke Highlight",
+            subtitle: "Show each key press on screen for polished demos.",
+            symbolName: "keyboard.badge.ellipsis", group: .utilities, featured: true,
+            defaultsKey: "keystrokeHighlightEnabled",
+            requiredCapabilities: [.keystrokeObservation]),
+        ExtensionRegistryEntry(
             id: "focusDim", title: "Focus Dim",
             subtitle: "Dims everything behind your active app.",
             symbolName: "circle.lefthalf.filled", group: .utilities, featured: false,

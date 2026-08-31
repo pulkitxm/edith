@@ -575,7 +575,7 @@ private struct ExtensionSettingsSheet: View {
         case "machines": 420
         case "lidAwake": 400
         case "music": 460
-        case "focusDim", "colorPicker": 430
+        case "focusDim", "colorPicker", "keystrokeHighlight": 430
         case "system": 500
         case "notchShelf", "presenter": 580
         default: 620
@@ -938,6 +938,7 @@ private struct ExtensionDetailRows: View {
             case .calendar: CalendarRows()
             case .notchShelf: NotchShelfRows()
             case .clipboard: ClipboardRows()
+            case .keystrokeHighlight: KeystrokeHighlightRows()
             case .focusDim: FocusDimRows()
             case .presenter: PresenterRows()
             case .colorPicker: ColorPickerRows()
