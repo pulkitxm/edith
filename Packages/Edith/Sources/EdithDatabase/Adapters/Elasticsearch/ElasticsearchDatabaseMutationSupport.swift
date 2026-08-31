@@ -73,7 +73,7 @@ enum ElasticsearchDatabaseMutationSupport {
         guard request.target.connectionID == connectionID,
             request.selectedRecords.isEmpty,
             request.predicate == nil,
-            case let .document(product, operation, parameters, body) = request.payload,
+            case let .search(product, operation, parameters, body) = request.payload,
             product == .elasticsearch,
             parameters.isEmpty
         else {

@@ -17,7 +17,7 @@ public enum DatabaseDocumentMutationRequests {
         try validateSearchDocument(document)
         return DatabaseDestructiveRequest(
             target: target,
-            payload: .document(
+            payload: .search(
                 product: .elasticsearch,
                 operation: "create",
                 parameters: [],
@@ -32,7 +32,7 @@ public enum DatabaseDocumentMutationRequests {
         try validateSearchDocument(document)
         return DatabaseDestructiveRequest(
             target: target,
-            payload: .document(
+            payload: .search(
                 product: .elasticsearch,
                 operation: "replace",
                 parameters: [],
@@ -45,7 +45,7 @@ public enum DatabaseDocumentMutationRequests {
         _ = try searchIdentity(target, requiresConcurrency: true)
         return DatabaseDestructiveRequest(
             target: target,
-            payload: .document(
+            payload: .search(
                 product: .elasticsearch,
                 operation: "delete",
                 parameters: [],

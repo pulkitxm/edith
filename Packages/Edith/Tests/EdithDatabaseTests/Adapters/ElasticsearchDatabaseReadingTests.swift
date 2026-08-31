@@ -500,6 +500,7 @@ private func elasticsearchReadingSession(
         target: createTarget,
         document: document)
     #expect(create.payload.command == "create")
+    #expect(create.payload.kind == .search)
     #expect(create.target.record?.kind == .searchDocument)
     let replace = try DatabaseDocumentMutationRequests.elasticsearchReplace(
         target: identifiedTarget,
@@ -614,7 +615,7 @@ private func elasticsearchReadingSession(
         ]))
     let altered = DatabaseDestructiveRequest(
         target: canonical.target,
-        payload: .document(
+        payload: .search(
             product: .elasticsearch,
             operation: "replace",
             parameters: [DatabaseMutationParameter(name: "refresh", value: .string("false"))],
