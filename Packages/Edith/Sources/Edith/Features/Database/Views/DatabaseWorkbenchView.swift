@@ -12,8 +12,10 @@ struct DatabaseWorkbenchView: View {
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         AppTheme.accent.rawValue
     @Environment(\.compactLayout) private var compact
+    @Environment(\.colorScheme) private var scheme
 
     private var theme: Color { themeColor(themeName) }
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         Group {
@@ -27,7 +29,7 @@ struct DatabaseWorkbenchView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(DashSkin.paper(dark))
         .task(id: connections.selectedConnectionID) {
             data.prepare(for: connections.selectedConnection)
             explorer.prepare(for: connections.selectedConnection)
