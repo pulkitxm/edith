@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import Edith
@@ -25,6 +26,14 @@ import Testing
         let icons = MainDestination.allCases.map(\.icon)
         #expect(Set(icons).count == icons.count)
         #expect(icons.allSatisfy { !$0.isEmpty })
+    }
+
+    @Test func everySidebarIconResolvesToASystemSymbol() {
+        for destination in MainDestination.allCases where destination.logoName == nil {
+            #expect(
+                NSImage(systemSymbolName: destination.icon, accessibilityDescription: nil) != nil,
+                "\(destination.rawValue) has an invalid symbol")
+        }
     }
 
     @Test func appItemsUseInformationArchitectureOrder() {

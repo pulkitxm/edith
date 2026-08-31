@@ -65,7 +65,7 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "attention", "usage", "quinjet", "system", "appMaintenance", "machines",
+        "attention", "usage", "quinjet", "seoAudit", "system", "appMaintenance", "machines",
         "systemStats", "micMute",
         "lidAwake", "music", "calendar", "notchShelf", "clipboard", "keystrokeHighlight",
         "focusDim", "presenter", "emoji", "colorPicker",
@@ -96,6 +96,7 @@ public enum ExtensionLiveAdapters {
         case "usage": usageReadiness()
         case "quinjet":
             quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
+        case "seoAudit": siteAuditReadiness()
         case "system": await systemReadiness()
         case "appMaintenance": appMaintenanceReadiness()
         case "machines": machinesReadiness()
@@ -126,6 +127,10 @@ public enum ExtensionLiveAdapters {
             readyDetail: "Attention tracking is configured for the selected sources.",
             setupDetail: "Turn on application tracking, browser tracking, or both."
         ).readiness
+    }
+
+    static func siteAuditReadiness() -> ExtensionAdapterReadiness {
+        .ready("Site Audit is ready to store projects and run history locally.")
     }
 
     static func usageReadiness(

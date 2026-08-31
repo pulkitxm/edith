@@ -47,7 +47,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
         case .dashboard: return "chart.bar.fill"
         case .herdr: return "rectangle.split.3x1.fill"
         case .quinjet: return "arrow.triangle.branch"
-        case .seoAudit: return "checkmark.magnifyingglass"
+        case .seoAudit: return "doc.text.magnifyingglass"
         case .music: return "music.note"
         case .calendar: return "calendar"
         case .system: return "cpu"
@@ -448,6 +448,8 @@ struct MainWindowView: View {
         var herdrEnabled = false
     @AppStorage(AppStorageKeys.Tabs.quinjetEnabled, store: SharedDefaults.store) private
         var quinjetEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.seoAuditEnabled, store: SharedDefaults.store) private
+        var seoAuditEnabled = false
     @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
         var calendarEnabled =
         false
@@ -535,6 +537,7 @@ struct MainWindowView: View {
         case .dashboard: usageEnabled ? requested : .home
         case .herdr: herdrEnabled ? requested : .home
         case .quinjet: quinjetEnabled ? requested : .home
+        case .seoAudit: seoAuditEnabled ? requested : .home
         case .music: musicEnabled ? requested : .home
         case .calendar: calendarEnabled ? requested : .home
         case .system: systemEnabled ? requested : .home
@@ -1013,6 +1016,7 @@ struct MainWindowView: View {
             case .dashboard: usageEnabled
             case .herdr: herdrEnabled
             case .quinjet: quinjetEnabled
+            case .seoAudit: seoAuditEnabled
             case .music: musicEnabled
             case .calendar: calendarEnabled
             case .system: systemEnabled

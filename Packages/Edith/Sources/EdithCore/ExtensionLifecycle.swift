@@ -309,6 +309,38 @@ public enum ExtensionLifecycleCatalog {
                     "ed tools ls --json")
             ]),
         descriptor(
+            "seoAudit",
+            "Find every page in a sitemap and keep comparable search audits on this Mac.",
+            workflows: [
+                instruction(
+                    "discover", "Discover pages",
+                    "Read robots.txt and nested sitemap indexes before choosing pages."),
+                instruction(
+                    "audit", "Audit selected pages",
+                    "Inspect metadata and optionally run Lighthouse for each selected URL."),
+            ],
+            prerequisites: [
+                instruction(
+                    "site", "Choose a site", "Use a reachable HTTP or HTTPS URL.",
+                    "ed extensions enable seoAudit")
+            ],
+            examples: [
+                "ed extensions enable seoAudit", "ed extensions doctor seoAudit --json",
+            ],
+            docs: [documentation("overview", "Site Audit overview", "README.md")],
+            recovery: [
+                instruction(
+                    "doctor", "Check Site Audit readiness",
+                    "Verify the extension is enabled and supported on this Mac.",
+                    "ed extensions doctor seoAudit --json")
+            ],
+            verification: [
+                instruction(
+                    "status", "Verify Site Audit",
+                    "Confirm the local audit workspace is ready.",
+                    "ed extensions doctor seoAudit --json")
+            ]),
+        descriptor(
             "system",
             "Control running apps, sleep prevention and keyboard cleaning from one panel.",
             workflows: [

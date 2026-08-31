@@ -127,6 +127,11 @@ public enum ExtensionRegistry {
             defaultsKey: "tabQuinjetEnabled", requiredCapabilities: [.localTerminal],
             requiredToolIDs: ["quinjet"]),
         ExtensionRegistryEntry(
+            id: "seoAudit", title: "Site Audit",
+            subtitle: "Crawl sitemaps, inspect page metadata, and keep every run local.",
+            symbolName: "doc.text.magnifyingglass", group: .utilities, featured: false,
+            defaultsKey: "tabSEOAuditEnabled", requiredCapabilities: [.siteAuditing]),
+        ExtensionRegistryEntry(
             id: "system", title: "System",
             subtitle: "Running apps, prevent sleep, and the keyboard-cleaning lock.",
             symbolName: "switch.2", group: .system, featured: true,

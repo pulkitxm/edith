@@ -11,6 +11,7 @@ import Testing
         "tabUsageEnabled",
         "tabHerdrEnabled",
         "tabQuinjetEnabled",
+        "tabSEOAuditEnabled",
         "tabSystemEnabled",
         "appMaintenanceEnabled",
         "tabMachinesEnabled",
@@ -37,9 +38,10 @@ import Testing
     @Test func registryMatchesCurrentBaseline() {
         #expect(
             ExtensionRegistry.entries.map(\.id) == [
-                "attention", "usage", "herdr", "quinjet", "system", "appMaintenance", "machines",
-                "companion", "systemStats", "micMute", "lidAwake", "music", "calendar",
-                "notchShelf", "clipboard", "keystrokeHighlight", "focusDim", "presenter", "emoji",
+                "attention", "usage", "herdr", "quinjet", "seoAudit", "system",
+                "appMaintenance", "machines", "companion", "systemStats", "micMute", "lidAwake",
+                "music", "calendar", "notchShelf", "clipboard", "keystrokeHighlight", "focusDim",
+                "presenter", "emoji",
                 "colorPicker",
             ])
     }
@@ -237,6 +239,7 @@ import Testing
             "usage": [],
             "herdr": [],
             "quinjet": [],
+            "seoAudit": [],
             "system": [],
             "appMaintenance": [],
             "machines": [],
@@ -259,6 +262,7 @@ import Testing
             "usage": [.notifications],
             "herdr": [],
             "quinjet": [],
+            "seoAudit": [],
             "system": [.accessibility, .inputMonitoring],
             "appMaintenance": [],
             "machines": [.notifications],
@@ -393,6 +397,7 @@ import Testing
             "tabUsageEnabled": false,
             "tabHerdrEnabled": false,
             "tabQuinjetEnabled": false,
+            "tabSEOAuditEnabled": false,
             "tabSystemEnabled": true,
             "tabMachinesEnabled": false,
             "tabCompanionEnabled": false,
