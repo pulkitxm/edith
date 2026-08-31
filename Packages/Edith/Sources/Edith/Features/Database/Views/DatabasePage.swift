@@ -104,6 +104,7 @@ struct DatabasePage: View {
     @State private var model = DatabasePageModel()
     @State private var connectionWorkspace = DatabaseConnectionWorkspaceModel()
     @State private var connectionCreation: DatabaseConnectionCreationModel?
+    @State private var dataWorkspace = DatabaseDataWorkspaceModel()
     @State private var workspace = DatabaseWorkspaceModel()
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.colorScheme) private var scheme
@@ -117,7 +118,7 @@ struct DatabasePage: View {
             Divider().opacity(0.35)
             Group {
                 if compact {
-                    ScrollView { compactContent }
+                    compactContent
                 } else {
                     HStack(spacing: 0) {
                         ScrollView {
@@ -127,7 +128,7 @@ struct DatabasePage: View {
                         .frame(width: UIScale.pt(250))
                         .background(DashSkin.paper2(dark).opacity(0.55))
                         Divider().opacity(0.35)
-                        ScrollView { workbench }
+                        workbench
                     }
                 }
             }
@@ -175,6 +176,7 @@ struct DatabasePage: View {
                     Task {
                         await connectionWorkspace.loadConnections()
                         connectionWorkspace.selectConnection(connection.id)
+                        await connectionWorkspace.connectSelected()
                     }
                 },
                 cancel: { self.connectionCreation = nil })
@@ -203,10 +205,39 @@ struct DatabasePage: View {
 
     private var compactContent: some View {
         VStack(spacing: 0) {
-            connections
+            compactConnections
             Divider().opacity(0.35)
             workbench
         }
+    }
+
+    private var compactConnections: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            Menu {
+                ForEach(connectionWorkspace.visibleConnections) { connection in
+                    Button(connection.name) {
+                        connectionWorkspace.selectConnection(connection.id)
+                    }
+                }
+            } label: {
+                Label(
+                    connectionWorkspace.selectedConnection?.name ?? "Choose connection",
+                    systemImage: "cylinder.split.1x2"
+                )
+                .lineLimit(1)
+            }
+            .buttonStyle(.edith(.secondary))
+            Spacer(minLength: 0)
+            Button {
+                beginConnectionCreation()
+            } label: {
+                Image(systemName: "plus")
+            }
+            .buttonStyle(.edith(.primary, tint: DashSkin.accent(dark)))
+            .accessibilityLabel("Add database connection")
+        }
+        .padding(UIScale.pt(10))
+        .background(DashSkin.paper2(dark).opacity(0.55))
     }
 
     private var connections: some View {
@@ -231,9 +262,9 @@ struct DatabasePage: View {
                     .padding(.horizontal, UIScale.pt(28))
                     .padding(.top, UIScale.pt(18))
             }
-            DatabaseConnectionOverview(model: connectionWorkspace)
+            DatabaseWorkbenchView(connections: connectionWorkspace, data: dataWorkspace)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
     private func brokerFailure(_ detail: String) -> some View {

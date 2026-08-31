@@ -16,6 +16,9 @@ struct DatabaseConnectionSummary: Identifiable, Equatable, Sendable {
     let tags: [String]
     let isFavorite: Bool
     let lastUsedAt: Date?
+    let defaultDatabase: String?
+    let defaultSchema: String?
+    let logicalDatabase: String?
 
     init(definition: DatabaseConnectionDefinition) {
         id = definition.id
@@ -36,6 +39,10 @@ struct DatabaseConnectionSummary: Identifiable, Equatable, Sendable {
         }
         isFavorite = definition.isFavorite
         lastUsedAt = definition.lastUsedAt
+        defaultDatabase = DatabaseConnectionDisplayText.optional(definition.namespaces.database)
+        defaultSchema = DatabaseConnectionDisplayText.optional(definition.namespaces.schema)
+        logicalDatabase = DatabaseConnectionDisplayText.optional(
+            definition.namespaces.logicalDatabase)
     }
 
     var environmentSummary: String {
