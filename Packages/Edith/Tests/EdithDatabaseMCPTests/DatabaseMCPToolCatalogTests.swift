@@ -10,12 +10,14 @@ import Testing
                 == [
                     "database_connections", "database_capabilities", "database_browse",
                     "database_query", "database_operations", "database_cancel_operation",
+                    "database_test_connection", "database_session",
                 ])
 
         for tool in DatabaseMCPToolCatalog.tools {
             #expect(
                 tool.annotations.readOnlyHint
-                    == (tool.name == "database_cancel_operation" ? false : true))
+                    == (["database_cancel_operation", "database_session"].contains(tool.name)
+                        ? false : true))
             #expect(tool.annotations.destructiveHint == false)
             #expect(tool.annotations.idempotentHint == true)
             #expect(tool.annotations.openWorldHint == false)
@@ -54,5 +56,7 @@ import Testing
         #expect(operationProperties?["limit"]?.objectValue?["maximum"]?.intValue == 1_000)
         #expect(operationProperties?["states"]?.objectValue?["maxItems"]?.intValue == 7)
         #expect(DatabaseMCPToolCatalog.cancelOperation.annotations.readOnlyHint == false)
+        #expect(DatabaseMCPToolCatalog.testConnection.annotations.readOnlyHint == true)
+        #expect(DatabaseMCPToolCatalog.session.annotations.readOnlyHint == false)
     }
 }

@@ -408,6 +408,126 @@ import Testing
         #expect(await sender.recordedRequests().isEmpty)
     }
 
+    @Test func testsSavedConnectionWithoutExposingDefinitionSecrets() async throws {
+        let connection = try DatabaseMCPFixtures.connection()
+        let report = DatabaseMCPFixtures.capabilityReport()
+        let sender = DatabaseMCPScriptedSender([
+            .success(
+                .connectionGet(
+                    .success(
+                        DatabaseConnectionGetResult(connection: connection),
+                        metadata: DatabaseMCPFixtures.completeMetadata))),
+            .success(
+                .connectionTest(
+                    .success(
+                        DatabaseConnectionTestResult(
+                            connection: connection.identity,
+                            productIdentity: report.productIdentity,
+                            capabilities: report,
+                            latencyMilliseconds: 80,
+                            testedAt: DatabaseMCPFixtures.now),
+                        metadata: DatabaseMCPFixtures.completeMetadata))),
+        ])
+        let handler = DatabaseMCPToolHandler(
+            sender: sender,
+            makeOperationID: { DatabaseMCPFixtures.operationID })
+
+        let result = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_test_connection",
+                arguments: [
+                    "connection_id": .string(connection.id.rawValue.uuidString),
+                    "timeout_ms": 10_000,
+                ]))
+
+        #expect(result.isError == false)
+        let data = result.structuredContent?.objectValue?["data"]?.objectValue
+        #expect(data?["latency_ms"]?.intValue == 80)
+        #expect(data?["product"]?.stringValue == "postgresql")
+        #expect(!Self.text(result).contains("secret-user"))
+        #expect(!Self.text(result).contains("sensitive.internal.example"))
+
+        let requests = await sender.recordedRequests()
+        #expect(requests.count == 2)
+        #expect(requests.first?.connectionGetRequest?.connectionID == connection.id)
+        #expect(requests.last?.connectionTestRequest?.connection == connection)
+        #expect(
+            requests.last?.connectionTestRequest?.operation.operationID
+                == DatabaseMCPFixtures.operationID)
+    }
+
+    @Test func managesExplicitConnectAndDisconnectSessions() async throws {
+        let connection = try DatabaseMCPFixtures.connection()
+        let report = DatabaseMCPFixtures.capabilityReport()
+        let sender = DatabaseMCPScriptedSender([
+            .success(
+                .connect(
+                    .success(
+                        DatabaseConnectResult(
+                            connection: connection.identity,
+                            productIdentity: report.productIdentity,
+                            capabilities: report,
+                            connectedAt: DatabaseMCPFixtures.now),
+                        metadata: DatabaseMCPFixtures.completeMetadata))),
+            .success(
+                .disconnect(
+                    .success(
+                        DatabaseDisconnectResult(
+                            connection: connection.identity,
+                            disconnected: true,
+                            disconnectedAt: DatabaseMCPFixtures.now),
+                        metadata: DatabaseMCPFixtures.completeMetadata))),
+        ])
+        let handler = DatabaseMCPToolHandler(
+            sender: sender,
+            makeOperationID: { DatabaseMCPFixtures.operationID })
+        let connectionID = connection.id.rawValue.uuidString
+
+        let connect = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_session",
+                arguments: [
+                    "action": "connect",
+                    "connection_id": .string(connectionID),
+                ]))
+        let disconnect = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_session",
+                arguments: [
+                    "action": "disconnect",
+                    "connection_id": .string(connectionID),
+                ]))
+
+        #expect(connect.isError == false)
+        #expect(disconnect.isError == false)
+        #expect(
+            connect.structuredContent?.objectValue?["data"]?.objectValue?["product"]?
+                .stringValue == "postgresql")
+        #expect(
+            disconnect.structuredContent?.objectValue?["data"]?.objectValue?["disconnected"]?
+                .boolValue == true)
+        let requests = await sender.recordedRequests()
+        #expect(requests.first?.connectRequest?.connectionID == connection.id)
+        #expect(requests.last?.disconnectRequest?.connectionID == connection.id)
+    }
+
+    @Test func rejectsInvalidSessionActionBeforeCallingTheBroker() async {
+        let sender = DatabaseMCPScriptedSender([])
+        let handler = DatabaseMCPToolHandler(sender: sender)
+        let result = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_session",
+                arguments: [
+                    "action": "restart",
+                    "connection_id": .string(
+                        DatabaseMCPFixtures.connectionID.rawValue.uuidString),
+                ]))
+
+        #expect(result.isError == true)
+        #expect(Self.category(result) == "invalidRequest")
+        #expect(await sender.recordedRequests().isEmpty)
+    }
+
     @Test func rejectsInvalidAndUnknownArgumentsWithoutCallingTheBroker() async {
         let sender = DatabaseMCPScriptedSender([])
         let handler = DatabaseMCPToolHandler(sender: sender)
