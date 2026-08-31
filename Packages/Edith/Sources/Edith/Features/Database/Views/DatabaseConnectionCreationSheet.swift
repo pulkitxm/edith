@@ -55,7 +55,7 @@ struct DatabaseConnectionCreationSheet: View {
             footer
         }
         .frame(minWidth: UIScale.pt(620), minHeight: UIScale.pt(680))
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(DashSkin.paper(dark))
         .onDisappear {
             Task { await model.discardUnsavedCredential() }
         }

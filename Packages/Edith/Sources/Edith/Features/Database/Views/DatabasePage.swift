@@ -106,8 +106,10 @@ struct DatabasePage: View {
         AppTheme.accent.rawValue
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.compactLayout) private var compact
+    @Environment(\.colorScheme) private var scheme
 
     private var theme: Color { themeColor(themeName) }
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -116,7 +118,7 @@ struct DatabasePage: View {
             pageContent
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(DashSkin.paper(dark))
         .task {
             guard automaticActionsEnabled else { return }
             await model.refresh()
