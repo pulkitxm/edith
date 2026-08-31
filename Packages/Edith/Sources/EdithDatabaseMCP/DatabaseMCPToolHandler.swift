@@ -49,6 +49,8 @@ public struct DatabaseMCPToolHandler: Sendable {
                 return try await testConnection(arguments: parameters.arguments ?? [:])
             case .session:
                 return try await session(arguments: parameters.arguments ?? [:])
+            case .keyMutation:
+                return try await keyMutation(arguments: parameters.arguments ?? [:])
             }
         } catch is CancellationError {
             return Self.failure(
@@ -193,6 +195,81 @@ public struct DatabaseMCPToolHandler: Sendable {
                 "connection_id": Self.uuid(target.connectionID.rawValue),
                 "page": Self.page(payload.page),
             ])
+        }
+    }
+
+    private func keyMutation(arguments: [String: Value]) async throws -> CallTool.Result {
+        try Self.rejectUnknown(
+            arguments,
+            allowed: [
+                "mode", "connection_id", "product", "action", "logical_database", "key",
+                "value", "ttl_ms", "confirmation_token", "confirmation_text", "timeout_ms",
+            ])
+        let mutation = try Self.keyMutationRequest(in: arguments)
+        let mode = try Self.requiredString("mode", in: arguments)
+        let operation = try operationContext(arguments)
+        switch mode {
+        case "preview":
+            guard arguments["confirmation_token"] == nil,
+                arguments["confirmation_text"] == nil
+            else {
+                throw DatabaseMCPInputError(
+                    message: "preview does not accept confirmation_token or confirmation_text.")
+            }
+            let response = try await sender.send(
+                .mutationPreview(
+                    DatabaseMutationPreviewRequest(
+                        mutation: mutation,
+                        operation: operation)))
+            guard let result = response.mutationPreviewResult else {
+                return Self.responseKindFailure(expected: .mutationPreview, actual: response.kind)
+            }
+            return Self.render(result) { payload in
+                let preview = payload.preview
+                return .object([
+                    "mode": "preview",
+                    "action": .string(preview.effect.action.rawValue),
+                    "scope": .string(preview.effect.scope.rawValue),
+                    "impact": .object([
+                        "value": preview.effect.impact.count.value.map(Self.unsigned) ?? .null,
+                        "accuracy": .string(preview.effect.impact.count.accuracy.rawValue),
+                        "description": .string(Self.bounded(preview.effect.impact.description)),
+                    ]),
+                    "rollback": .string(preview.effect.rollbackAvailability.rawValue),
+                    "warnings": .array(preview.warnings.map(Self.warning)),
+                    "confirmation_token": .string(preview.token.rawValue),
+                    "confirmation_text": .string(preview.requiredConfirmation.text),
+                    "expires_at": Self.date(preview.expiresAt),
+                    "operation_id": Self.uuid(operation.operationID.rawValue),
+                ])
+            }
+        case "apply":
+            let token = try Self.requiredString("confirmation_token", in: arguments)
+            let confirmationText = try Self.requiredString("confirmation_text", in: arguments)
+            let response = try await sender.send(
+                .mutationApply(
+                    DatabaseMutationApplyRequest(
+                        mutation: mutation,
+                        token: DatabaseConfirmationToken(rawValue: token),
+                        confirmationText: confirmationText,
+                        operation: operation)))
+            guard let result = response.mutationApplyResult else {
+                return Self.responseKindFailure(expected: .mutationApply, actual: response.kind)
+            }
+            return Self.render(result) { payload in
+                .object([
+                    "mode": "apply",
+                    "disposition": .string(payload.disposition.rawValue),
+                    "effect": .string(payload.effect.rawValue),
+                    "affected_records": .object([
+                        "value": payload.affectedRecords.value.map(Self.unsigned) ?? .null,
+                        "accuracy": .string(payload.affectedRecords.accuracy.rawValue),
+                    ]),
+                    "operation_id": Self.uuid(operation.operationID.rawValue),
+                ])
+            }
+        default:
+            throw DatabaseMCPInputError(message: "mode must be preview or apply.")
         }
     }
 
@@ -965,6 +1042,105 @@ public struct DatabaseMCPToolHandler: Sendable {
         return DatabaseTargetIdentifier(
             connectionID: connectionID,
             object: DatabaseObjectIdentifier(kind: kind, path: path))
+    }
+
+    private static func keyMutationRequest(
+        in arguments: [String: Value]
+    ) throws -> DatabaseDestructiveRequest {
+        let connectionID = try connectionID(in: arguments)
+        let product: DatabaseProduct
+        switch try requiredString("product", in: arguments) {
+        case "redis": product = .redis
+        case "valkey": product = .valkey
+        default: throw DatabaseMCPInputError(message: "product must be redis or valkey.")
+        }
+        let logicalDatabase = try optionalString("logical_database", in: arguments) ?? "0"
+        guard let logicalDatabaseNumber = Int(logicalDatabase), logicalDatabaseNumber >= 0,
+            logicalDatabaseNumber.description == logicalDatabase
+        else {
+            throw DatabaseMCPInputError(
+                message: "logical_database must be a non-negative integer.")
+        }
+        let key = try requiredString("key", in: arguments)
+        guard key.utf8.count <= 4_096 else {
+            throw DatabaseMCPInputError(message: "key must not exceed 4096 UTF-8 bytes.")
+        }
+        let value: String?
+        if let provided = arguments["value"] {
+            guard let string = provided.stringValue else {
+                throw DatabaseMCPInputError(message: "value must be a string.")
+            }
+            guard string.utf8.count <= 65_536 else {
+                throw DatabaseMCPInputError(message: "value must not exceed 65536 UTF-8 bytes.")
+            }
+            value = string
+        } else {
+            value = nil
+        }
+        let ttl = try optionalInt("ttl_ms", in: arguments).map(Int64.init)
+        guard ttl.map({ $0 == -1 || $0 > 0 }) ?? true else {
+            throw DatabaseMCPInputError(
+                message: "ttl_ms must be positive or -1 for no expiry.")
+        }
+        let object = DatabaseObjectIdentifier(kind: .keyspace, path: [logicalDatabase])
+        let keyValue = DatabaseValue.string(key)
+        let record = DatabaseRecordIdentity(
+            kind: .key,
+            components: [DatabaseIdentityComponent(name: "key", value: keyValue)])
+        let action = try requiredString("action", in: arguments)
+        do {
+            switch action {
+            case "insert":
+                guard let value else {
+                    throw DatabaseMCPInputError(message: "insert requires value.")
+                }
+                return try DatabaseKeyspaceMutationRequests.insertString(
+                    target: DatabaseTargetIdentifier(
+                        connectionID: connectionID,
+                        object: object),
+                    product: product,
+                    key: keyValue,
+                    value: .string(value),
+                    ttlMilliseconds: ttl)
+            case "update":
+                let target = DatabaseTargetIdentifier(
+                    connectionID: connectionID,
+                    object: object,
+                    record: record)
+                if let value {
+                    return try DatabaseKeyspaceMutationRequests.updateString(
+                        target: target,
+                        product: product,
+                        value: .string(value),
+                        ttlMilliseconds: ttl == -1 ? nil : ttl,
+                        preservesExistingTTL: ttl == nil)
+                }
+                guard let ttl else {
+                    throw DatabaseMCPInputError(message: "update requires value or ttl_ms.")
+                }
+                return try DatabaseKeyspaceMutationRequests.updateTTL(
+                    target: target,
+                    product: product,
+                    ttlMilliseconds: ttl == -1 ? nil : ttl)
+            case "delete":
+                guard value == nil, ttl == nil else {
+                    throw DatabaseMCPInputError(
+                        message: "delete does not accept value or ttl_ms.")
+                }
+                return try DatabaseKeyspaceMutationRequests.deleteKey(
+                    target: DatabaseTargetIdentifier(
+                        connectionID: connectionID,
+                        object: object,
+                        record: record),
+                    product: product)
+            default:
+                throw DatabaseMCPInputError(message: "action must be insert, update or delete.")
+            }
+        } catch let error as DatabaseMCPInputError {
+            throw error
+        } catch {
+            throw DatabaseMCPInputError(message: "The key mutation request is invalid.")
+        }
     }
 
     private static func pageRequest(

@@ -966,6 +966,18 @@ public enum CommandTree {
                                     "--values": .free,
                                 ], arguments: [.free]),
                             CommandNode(
+                                "key-request",
+                                "Build a safe Redis or Valkey string-key mutation request.",
+                                options: [
+                                    "--help", "--action", "--product", "--logical-database",
+                                    "--key", "--value", "--ttl-milliseconds",
+                                ],
+                                optionValues: [
+                                    "--action": .free, "--product": .free,
+                                    "--logical-database": .free, "--key": .free,
+                                    "--value": .free, "--ttl-milliseconds": .free,
+                                ], arguments: [.free]),
+                            CommandNode(
                                 "preview", "Preview a destructive request without applying it.",
                                 options: [
                                     "--json", "--help", "--request", "--timeout-milliseconds",
