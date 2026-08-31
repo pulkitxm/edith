@@ -84,6 +84,7 @@ let targets: [Target] = [
         dependencies: [
             "EdithDatabase",
             .product(name: "MCP", package: "swift-sdk"),
+            .product(name: "Logging", package: "swift-log"),
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
@@ -93,6 +94,7 @@ let targets: [Target] = [
             "EdithDatabase",
             "EdithDatabaseMCP",
             .product(name: "MCP", package: "swift-sdk"),
+            .product(name: "Logging", package: "swift-log"),
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
