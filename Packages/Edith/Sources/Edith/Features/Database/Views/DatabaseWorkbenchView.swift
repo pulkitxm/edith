@@ -9,10 +9,7 @@ struct DatabaseWorkbenchView: View {
     let data: DatabaseDataWorkspaceModel
     let mutations: DatabaseWorkspaceModel
     var showsObjectNavigator = true
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
-
-    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         Group {
@@ -40,16 +37,16 @@ struct DatabaseWorkbenchView: View {
             VStack(spacing: UIScale.pt(16)) {
                 Image(systemName: productSymbol(connection.product))
                     .font(.system(size: UIScale.pt(40), weight: .light))
-                    .foregroundStyle(DashSkin.accent(dark))
+                    .foregroundStyle(Color.accentColor)
                 Text(connection.name)
                     .font(.system(size: UIScale.pt(21), weight: .semibold))
                 Text("\(connection.product.displayName) · \(connection.environmentLabel)")
                     .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .foregroundStyle(.secondary)
                 Button("Connect") {
                     Task { await connections.connectSelected() }
                 }
-                .buttonStyle(.edith(.primary, tint: DashSkin.accent(dark)))
+                .buttonStyle(.edith(.primary, tint: .accentColor))
                 .keyboardShortcut(.defaultAction)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -133,16 +130,55 @@ struct DatabaseWorkbenchView: View {
 
     private func connectionActions(_ connection: DatabaseConnectionSummary) -> some View {
         HStack(spacing: UIScale.pt(7)) {
+            if data.supportsRowMutations(connection), explorer.selectedObject?.kind == .table {
+                Button {
+                    data.beginInsert(connection)
+                } label: {
+                    if compact {
+                        Image(systemName: "plus")
+                    } else {
+                        Label("New row", systemImage: "plus")
+                    }
+                }
+                .buttonStyle(.edith(.primary, tint: .accentColor))
+                .disabled(data.fields.isEmpty || mutations.hasTrackedMutation)
+                .help("Add a row")
+            }
             if connection.environmentKind == .production {
-                Image(systemName: "exclamationmark.shield.fill")
-                    .foregroundStyle(.orange)
-                    .help("Production connection")
-                    .accessibilityLabel("Production connection")
+                Group {
+                    if compact {
+                        Image(systemName: "exclamationmark.shield.fill")
+                    } else {
+                        Label("Production", systemImage: "exclamationmark.shield.fill")
+                    }
+                }
+                .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                .foregroundStyle(.orange)
+                .help("Production connection")
+                .accessibilityLabel("Production connection")
             } else if connection.readOnlyPolicy != .disabled {
-                Image(systemName: "lock.fill")
-                    .foregroundStyle(.secondary)
-                    .help("Read-only connection")
-                    .accessibilityLabel("Read-only connection")
+                Group {
+                    if compact {
+                        Image(systemName: "lock.fill")
+                    } else {
+                        Label("Read only", systemImage: "lock.fill")
+                    }
+                }
+                .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                .foregroundStyle(.secondary)
+                .help("Read-only connection")
+                .accessibilityLabel("Read-only connection")
+            } else if !data.supportsRowMutations(connection) {
+                Group {
+                    if compact {
+                        Image(systemName: "eye")
+                    } else {
+                        Label("Browse only", systemImage: "eye")
+                    }
+                }
+                .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                .foregroundStyle(.secondary)
+                .help("Row editing is not available for this database yet")
             }
             Button {
                 data.cancel()
@@ -159,7 +195,7 @@ struct DatabaseWorkbenchView: View {
     private func objectControls(_ connection: DatabaseConnectionSummary) -> some View {
         HStack(spacing: UIScale.pt(7)) {
             Image(systemName: selectedObjectSymbol)
-                .foregroundStyle(DashSkin.accent(dark))
+                .foregroundStyle(Color.accentColor)
             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                 Text(selectedObjectTitle)
                     .font(.system(size: UIScale.pt(11.5), weight: .semibold))
@@ -167,7 +203,7 @@ struct DatabaseWorkbenchView: View {
                 if let selected = explorer.selectedObject, selected.path.count > 1 {
                     Text(selected.path.dropLast().joined(separator: " / "))
                         .font(.system(size: UIScale.pt(9.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
             }
@@ -350,17 +386,8 @@ struct DatabaseWorkbenchView: View {
                 if data.isLoading { ProgressView().controlSize(.small) }
                 Text(resultSummary)
                     .font(.system(size: UIScale.pt(10.5)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                if data.supportsRowMutations(connection) {
-                    Button {
-                        data.beginInsert(connection)
-                    } label: {
-                        Label("New row", systemImage: "plus")
-                    }
-                    .buttonStyle(.edith(.secondary))
-                    .disabled(data.fields.isEmpty || mutations.hasTrackedMutation)
-                }
                 if data.hasNextPage {
                     Button("Load more") { data.loadNextPage(connection) }
                         .buttonStyle(.edith(.secondary))
@@ -401,7 +428,7 @@ struct DatabaseWorkbenchView: View {
                         requestDelete(connection)
                     } label: {
                         Image(systemName: "trash")
-                            .foregroundStyle(DashSkin.danger)
+                            .foregroundStyle(.red)
                     }
                     .buttonStyle(.edith(.borderless))
                     .disabled(mutations.hasTrackedMutation)
@@ -422,9 +449,9 @@ struct DatabaseWorkbenchView: View {
                         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                             Text(field.name)
                                 .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                                .foregroundStyle(DashSkin.inkFaint(dark))
+                                .foregroundStyle(.secondary)
                             Text(data.text(for: field.value))
-                                .font(DashSkin.mono(11))
+                                .font(.system(size: UIScale.pt(11), design: .monospaced))
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -445,8 +472,8 @@ struct DatabaseWorkbenchView: View {
                 Button("Cancel") { data.cancelEditor() }
                     .buttonStyle(.edith(.borderless))
                 Button("Review") { requestEditorMutation(connection) }
-                    .buttonStyle(.edith(.primary, tint: DashSkin.accent(dark)))
-                    .disabled(mutations.hasTrackedMutation)
+                    .buttonStyle(.edith(.primary, tint: .accentColor))
+                    .disabled(mutations.hasTrackedMutation || !data.canSubmitEditor)
             }
             .padding(UIScale.pt(12))
             Divider().opacity(0.35)
@@ -455,7 +482,7 @@ struct DatabaseWorkbenchView: View {
                     if let error = data.editorError {
                         Label(error, systemImage: "exclamationmark.circle.fill")
                             .font(.system(size: UIScale.pt(11)))
-                            .foregroundStyle(DashSkin.danger)
+                            .foregroundStyle(.red)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     ForEach(data.editorFields) { field in
@@ -475,20 +502,30 @@ struct DatabaseWorkbenchView: View {
                     .labelsHidden()
                     .toggleStyle(.checkbox)
                     .disabled(!field.isEditable)
+                    .help("Include \(field.id) in this change")
                 Text(field.id)
                     .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
+                    .foregroundStyle(.primary)
                 Text(field.typeName)
                     .font(.system(size: UIScale.pt(9.5)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Spacer(minLength: 0)
                 if field.isIdentity {
                     Label("key", systemImage: "key.fill")
                         .labelStyle(.titleOnly)
                         .font(.system(size: UIScale.pt(9.5), weight: .medium))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .foregroundStyle(.secondary)
                 } else if field.isEditable {
+                    if field.isIncluded {
+                        Button {
+                            data.resetEditorField(field.id)
+                        } label: {
+                            Image(systemName: "arrow.uturn.backward")
+                        }
+                        .buttonStyle(.edith(.borderless))
+                        .help("Reset \(field.id)")
+                    }
                     Button("NULL") { data.setEditorFieldNull(field.id) }
                         .buttonStyle(.edith(.borderless))
                         .font(.system(size: UIScale.pt(9.5), weight: .medium))
@@ -496,7 +533,7 @@ struct DatabaseWorkbenchView: View {
             }
             TextField("Value", text: editorTextBinding(field.id))
                 .textFieldStyle(.roundedBorder)
-                .font(DashSkin.mono(10.5))
+                .font(.system(size: UIScale.pt(10.5), design: .monospaced))
                 .disabled(!field.isEditable)
         }
         .opacity(field.isEditable ? 1 : 0.62)
@@ -508,7 +545,7 @@ struct DatabaseWorkbenchView: View {
             Text(title).font(.system(size: UIScale.pt(15), weight: .semibold))
             Text(detail)
                 .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -523,16 +560,16 @@ struct DatabaseWorkbenchView: View {
         VStack(spacing: UIScale.pt(11)) {
             Image(systemName: symbol)
                 .font(.system(size: UIScale.pt(32), weight: .light))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+                .foregroundStyle(.secondary)
             Text(title).font(.system(size: UIScale.pt(17), weight: .semibold))
             Text(detail)
                 .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: UIScale.pt(410))
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
-                    .buttonStyle(.edith(.primary, tint: DashSkin.accent(dark)))
+                    .buttonStyle(.edith(.primary, tint: .accentColor))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

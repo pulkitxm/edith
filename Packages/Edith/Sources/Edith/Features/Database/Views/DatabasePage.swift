@@ -103,10 +103,7 @@ struct DatabasePage: View {
     @State private var workspace = DatabaseWorkspaceModel()
     @State private var showsServiceDetails = false
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
-
-    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -179,12 +176,12 @@ struct DatabasePage: View {
         switch model.readiness {
         case .checking:
             serviceProgress(
-                title: "Preparing database tools",
-                detail: "Starting the secure local database service.")
+                title: "Preparing Database",
+                detail: "Starting the local tools used by your connections.")
         case .repairing:
             serviceProgress(
-                title: "Repairing database tools",
-                detail: "Replacing the local service and checking it again.")
+                title: "Repairing Database",
+                detail: "Refreshing the local tools, then reopening your connections.")
         case .failed(let detail):
             serviceRecovery(detail)
         case .ready:
@@ -268,17 +265,17 @@ struct DatabasePage: View {
                 .foregroundStyle(.orange)
                 .accessibilityHidden(true)
             VStack(spacing: UIScale.pt(7)) {
-                Text("Database tools need attention")
+                Text("Database needs a quick repair")
                     .font(.system(size: UIScale.pt(20), weight: .semibold))
                 Text(
-                    "Edith can safely replace its local database service and reconnect automatically."
+                    "Edith can repair its local database tools and reopen your saved connections."
                 )
                 .font(.system(size: UIScale.pt(13)))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             }
-            Button("Repair database service") {
+            Button("Repair and continue") {
                 Task { await model.repair() }
             }
             .buttonStyle(.edith(.primary, tint: .accentColor))
@@ -355,7 +352,7 @@ struct DatabasePage: View {
             } label: {
                 Image(systemName: "plus")
             }
-            .buttonStyle(.edith(.primary, tint: DashSkin.accent(dark)))
+            .buttonStyle(.edith(.primary, tint: .accentColor))
             .accessibilityLabel("Add database connection")
         }
         .padding(UIScale.pt(10))
@@ -395,30 +392,28 @@ struct DatabasePage: View {
                 systemName: workspace.hasTrackedMutation
                     ? "clock.arrow.circlepath" : "info.circle.fill"
             )
-            .foregroundStyle(
-                workspace.hasTrackedMutation ? DashSkin.warn : DashSkin.accent(dark))
+            .foregroundStyle(workspace.hasTrackedMutation ? Color.orange : Color.accentColor)
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 Text(
-                    workspace.hasTrackedMutation ? "Mutation requires tracking" : "Mutation status"
+                    workspace.hasTrackedMutation ? "Change needs attention" : "Change status"
                 )
                 .font(.system(size: UIScale.pt(13), weight: .semibold))
                 Text(detail)
                     .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if workspace.hasTrackedMutation {
                     HStack(spacing: UIScale.pt(8)) {
                         if workspace.safetyPhase.allowsOperationCancellation {
                             Button(
-                                workspace.acceptedMutation == nil
-                                    ? "Cancel operation" : "Cancel mutation"
+                                "Cancel change"
                             ) {
                                 workspace.cancelSafetyOperation()
                             }
                             .buttonStyle(.edith(.secondary))
                         }
                         if workspace.safetyPhase.allowsReconciliation {
-                            Button("Check mutation status") {
+                            Button("Check status") {
                                 Task { await workspace.reconcileSafetyOperation() }
                             }
                             .buttonStyle(.edith(.secondary))
@@ -432,7 +427,7 @@ struct DatabasePage: View {
                                     ? "Cancelling" : "Checking status"
                             )
                             .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -440,7 +435,7 @@ struct DatabasePage: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(UIScale.pt(14))
-        .background(DashSkin.warn.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
     }
 
 }

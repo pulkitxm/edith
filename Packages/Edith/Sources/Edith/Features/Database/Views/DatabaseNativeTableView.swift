@@ -32,6 +32,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         tableView.intercellSpacing = NSSize(width: 8, height: 1)
         tableView.columnAutoresizingStyle = .noColumnAutoresizing
         tableView.gridStyleMask = [.solidHorizontalGridLineMask]
+        tableView.gridColor = .separatorColor.withAlphaComponent(0.55)
         tableView.style = .plain
         tableView.backgroundColor = .clear
         tableView.headerView?.menu = nil
@@ -87,7 +88,17 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                 textField.alignment = .right
                 textField.textColor = .secondaryLabelColor
                 textField.font = .monospacedDigitSystemFont(ofSize: 10.5, weight: .regular)
-                textField.toolTip = nil
+                cell.imageView?.image =
+                    parent.records[row].identity == nil
+                    ? nil
+                    : NSImage(
+                        systemSymbolName: "key.fill", accessibilityDescription: "Editable row")
+                cell.imageView?.contentTintColor =
+                    tableView.selectedRow == row ? .controlAccentColor : .tertiaryLabelColor
+                textField.toolTip =
+                    parent.records[row].identity == nil
+                    ? "This row has no stable key"
+                    : "This row has a stable key"
                 return cell
             }
             guard
@@ -109,7 +120,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             textField.toolTip = "\(field.displayName): \(rendered)"
             textField.tag = row
             textField.isEditable = parent.canEdit(row, identifier.rawValue)
-            textField.isSelectable = textField.isEditable
+            textField.isSelectable = true
             return cell
         }
 
@@ -158,6 +169,10 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                 let name = textField.identifier?.rawValue,
                 parent.canEdit(textField.tag, name)
             else { return }
+            let current =
+                parent.records[textField.tag].fields.first(where: { $0.name == name })?
+                .value ?? .missing
+            guard textField.stringValue != bounded(parent.text(current)) else { return }
             parent.edit(textField.tag, name, textField.stringValue)
         }
 
@@ -178,9 +193,9 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             let rowColumn = NSTableColumn(
                 identifier: NSUserInterfaceItemIdentifier(Self.rowColumnIdentifier))
             rowColumn.title = "#"
-            rowColumn.width = 46
-            rowColumn.minWidth = 40
-            rowColumn.maxWidth = 60
+            rowColumn.width = 58
+            rowColumn.minWidth = 52
+            rowColumn.maxWidth = 72
             rowColumn.resizingMask = .userResizingMask
             tableView.addTableColumn(rowColumn)
 
@@ -235,6 +250,9 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         }
 
         private func makeCell(identifier: NSUserInterfaceItemIdentifier) -> NSTableCellView {
+            if identifier.rawValue == Self.rowColumnIdentifier {
+                return makeIdentityCell(identifier: identifier)
+            }
             let cell = NSTableCellView()
             cell.identifier = identifier
             let textField = NSTextField(labelWithString: "")
@@ -248,6 +266,32 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             NSLayoutConstraint.activate([
                 textField.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
                 textField.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -4),
+                textField.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+            ])
+            return cell
+        }
+
+        private func makeIdentityCell(identifier: NSUserInterfaceItemIdentifier) -> NSTableCellView
+        {
+            let cell = NSTableCellView()
+            cell.identifier = identifier
+            let imageView = NSImageView()
+            imageView.translatesAutoresizingMaskIntoConstraints = false
+            imageView.imageScaling = .scaleProportionallyDown
+            let textField = NSTextField(labelWithString: "")
+            textField.identifier = identifier
+            textField.translatesAutoresizingMaskIntoConstraints = false
+            cell.imageView = imageView
+            cell.textField = textField
+            cell.addSubview(imageView)
+            cell.addSubview(textField)
+            NSLayoutConstraint.activate([
+                imageView.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 5),
+                imageView.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+                imageView.widthAnchor.constraint(equalToConstant: 11),
+                imageView.heightAnchor.constraint(equalToConstant: 11),
+                textField.leadingAnchor.constraint(equalTo: imageView.trailingAnchor, constant: 3),
+                textField.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -5),
                 textField.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
             ])
             return cell

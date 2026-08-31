@@ -73,6 +73,10 @@ final class DatabaseDataWorkspaceModel {
         state == .loading
     }
 
+    var canSubmitEditor: Bool {
+        editorMode != nil && editorFields.contains(where: { $0.isEditable && $0.isIncluded })
+    }
+
     func prepare(for connection: DatabaseConnectionSummary?) {
         guard activeConnectionID != connection?.id else { return }
         cancel()
@@ -248,7 +252,11 @@ final class DatabaseDataWorkspaceModel {
             editorFields[index].isEditable
         else { return }
         editorFields[index].text = text
-        editorFields[index].isIncluded = true
+        if let originalValue = editorFields[index].originalValue {
+            editorFields[index].isIncluded = text != Self.text(for: originalValue)
+        } else {
+            editorFields[index].isIncluded = true
+        }
         editorError = nil
     }
 
@@ -262,6 +270,15 @@ final class DatabaseDataWorkspaceModel {
 
     func setEditorFieldNull(_ id: String) {
         updateEditorField(id, text: "NULL")
+    }
+
+    func resetEditorField(_ id: String) {
+        guard let index = editorFields.firstIndex(where: { $0.id == id }),
+            editorFields[index].isEditable
+        else { return }
+        editorFields[index].text = editorFields[index].originalValue.map(Self.text(for:)) ?? ""
+        editorFields[index].isIncluded = false
+        editorError = nil
     }
 
     func cancelEditor() {
