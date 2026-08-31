@@ -7,46 +7,29 @@ import SwiftUI
 @MainActor
 @Observable
 final class DatabasePageModel {
-    enum Readiness: Equatable {
+    enum Readiness: Hashable {
         case checking
+        case repairing
         case ready
         case failed(String)
     }
 
     private(set) var readiness = Readiness.checking
     private let ensureReady: @Sendable () async throws -> Void
+    private let repairService: @Sendable () async throws -> Void
     private var generation = UUID()
 
     init(
         ensureReady: @escaping @Sendable () async throws -> Void = {
             try await DatabaseBrokerClientCoordinator.shared.ensureReady()
+        },
+        repairService: @escaping @Sendable () async throws -> Void = {
+            try await DatabaseBrokerServiceRepairer().repair()
+            try await DatabaseBrokerClientCoordinator.shared.ensureReady()
         }
     ) {
         self.ensureReady = ensureReady
-    }
-
-    var statusTitle: String {
-        switch readiness {
-        case .checking: "Checking broker"
-        case .ready: "Broker ready"
-        case .failed: "Broker unavailable"
-        }
-    }
-
-    var statusSymbol: String {
-        switch readiness {
-        case .checking: "arrow.triangle.2.circlepath"
-        case .ready: "checkmark.circle.fill"
-        case .failed: "exclamationmark.triangle.fill"
-        }
-    }
-
-    var statusColor: Color {
-        switch readiness {
-        case .checking: .secondary
-        case .ready: DashSkin.ok
-        case .failed: DashSkin.warn
-        }
+        self.repairService = repairService
     }
 
     var failureDetail: String? {
@@ -55,19 +38,30 @@ final class DatabasePageModel {
     }
 
     func refresh() async {
+        await run(.checking, operation: ensureReady)
+    }
+
+    func repair() async {
+        await run(.repairing, operation: repairService)
+    }
+
+    private func run(
+        _ pendingState: Readiness,
+        operation: @Sendable () async throws -> Void
+    ) async {
         let requestGeneration = UUID()
         generation = requestGeneration
-        readiness = .checking
+        readiness = pendingState
         do {
-            try await ensureReady()
+            try await operation()
             guard generation == requestGeneration, !Task.isCancelled else { return }
             readiness = .ready
-            announce("Database broker ready.")
+            announce("Database tools are ready.")
         } catch is CancellationError {
         } catch {
             guard generation == requestGeneration, !Task.isCancelled else { return }
             readiness = .failed(Self.message(for: error))
-            announce("Database broker unavailable.")
+            announce("Database tools need attention.")
         }
     }
 
@@ -107,6 +101,7 @@ struct DatabasePage: View {
     @State private var dataWorkspace = DatabaseDataWorkspaceModel()
     @State private var objectExplorer = DatabaseObjectExplorerModel()
     @State private var workspace = DatabaseWorkspaceModel()
+    @State private var showsServiceDetails = false
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
@@ -115,33 +110,22 @@ struct DatabasePage: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader("Database", trailing: { status })
+            PageHeader("Database")
             Divider().opacity(0.35)
-            Group {
-                if compact {
-                    compactContent
-                } else {
-                    HStack(spacing: 0) {
-                        ScrollView {
-                            connections
-                                .frame(minHeight: UIScale.pt(360))
-                        }
-                        .frame(width: UIScale.pt(250))
-                        .background(DashSkin.paper2(dark).opacity(0.55))
-                        Divider().opacity(0.35)
-                        workbench
-                    }
-                }
-            }
+            pageContent
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(dark))
+        .background(Color(nsColor: .windowBackgroundColor))
         .task {
             guard automaticActionsEnabled else { return }
             await model.refresh()
         }
+        .task(id: model.readiness) {
+            guard automaticActionsEnabled, model.readiness == .ready else { return }
+            await connectionWorkspace.loadConnections()
+        }
         .task(id: connectionWorkspace.searchText) {
-            guard automaticActionsEnabled else { return }
+            guard automaticActionsEnabled, model.readiness == .ready else { return }
             let search = connectionWorkspace.searchText.trimmingCharacters(
                 in: .whitespacesAndNewlines)
             if !search.isEmpty {
@@ -190,24 +174,121 @@ struct DatabasePage: View {
         }
     }
 
-    private var status: some View {
-        Button {
-            Task { await model.refresh() }
-        } label: {
-            HStack(spacing: UIScale.pt(6)) {
-                Image(systemName: model.statusSymbol)
-                    .foregroundStyle(model.statusColor)
-                Text(model.statusTitle)
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-            }
-            .font(.system(size: UIScale.pt(11.5), weight: .medium))
-            .contentShape(Rectangle())
+    @ViewBuilder
+    private var pageContent: some View {
+        switch model.readiness {
+        case .checking:
+            serviceProgress(
+                title: "Preparing database tools",
+                detail: "Starting the secure local database service.")
+        case .repairing:
+            serviceProgress(
+                title: "Repairing database tools",
+                detail: "Replacing the local service and checking it again.")
+        case .failed(let detail):
+            serviceRecovery(detail)
+        case .ready:
+            readyContent
         }
-        .buttonStyle(.edith(.borderless))
-        .help("Check the local database broker")
-        .accessibilityLabel("Database broker status")
-        .accessibilityValue(model.statusTitle)
-        .accessibilityHint("Check the authenticated local database broker")
+    }
+
+    @ViewBuilder
+    private var readyContent: some View {
+        if connectionWorkspace.listState == .empty {
+            connectionOnboarding
+        } else if compact {
+            compactContent
+        } else {
+            HStack(spacing: 0) {
+                ScrollView {
+                    connections
+                        .frame(minHeight: UIScale.pt(360))
+                }
+                .frame(width: UIScale.pt(250))
+                .background(Color(nsColor: .underPageBackgroundColor))
+                Divider().opacity(0.35)
+                workbench
+            }
+        }
+    }
+
+    private func serviceProgress(title: String, detail: String) -> some View {
+        VStack(spacing: UIScale.pt(14)) {
+            ProgressView()
+                .controlSize(.regular)
+            Text(title)
+                .font(.system(size: UIScale.pt(17), weight: .semibold))
+            Text(detail)
+                .font(.system(size: UIScale.pt(12.5)))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title). \(detail)")
+    }
+
+    private func serviceRecovery(_ detail: String) -> some View {
+        VStack(spacing: UIScale.pt(18)) {
+            Image(systemName: "wrench.and.screwdriver.fill")
+                .font(.system(size: UIScale.pt(34), weight: .medium))
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+            VStack(spacing: UIScale.pt(7)) {
+                Text("Database tools need attention")
+                    .font(.system(size: UIScale.pt(20), weight: .semibold))
+                Text(
+                    "Edith can safely replace its local database service and reconnect automatically."
+                )
+                .font(.system(size: UIScale.pt(13)))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            Button("Repair database service") {
+                Task { await model.repair() }
+            }
+            .buttonStyle(.edith(.primary, tint: .accentColor))
+            DisclosureGroup("Technical details", isExpanded: $showsServiceDetails) {
+                Text(detail)
+                    .font(.system(size: UIScale.pt(11), design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, UIScale.pt(8))
+            }
+            .font(.system(size: UIScale.pt(11.5)))
+            .frame(maxWidth: UIScale.pt(420))
+        }
+        .frame(maxWidth: UIScale.pt(560))
+        .padding(UIScale.pt(36))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var connectionOnboarding: some View {
+        VStack(spacing: UIScale.pt(20)) {
+            Image(systemName: "cylinder.split.1x2")
+                .font(.system(size: UIScale.pt(42), weight: .light))
+                .foregroundStyle(Color.accentColor)
+                .accessibilityHidden(true)
+            VStack(spacing: UIScale.pt(8)) {
+                Text("Connect your first database")
+                    .font(.system(size: UIScale.pt(22), weight: .semibold))
+                Text(
+                    "Add a saved connection to browse tables, inspect records, and edit supported data."
+                )
+                .font(.system(size: UIScale.pt(13)))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            Button("Add connection", action: beginConnectionCreation)
+                .buttonStyle(.edith(.primary, tint: .accentColor))
+        }
+        .frame(maxWidth: UIScale.pt(520))
+        .padding(UIScale.pt(36))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .contain)
     }
 
     private var compactContent: some View {
@@ -244,7 +325,7 @@ struct DatabasePage: View {
             .accessibilityLabel("Add database connection")
         }
         .padding(UIScale.pt(10))
-        .background(DashSkin.paper2(dark).opacity(0.55))
+        .background(Color(nsColor: .underPageBackgroundColor))
     }
 
     private var connections: some View {
@@ -259,11 +340,6 @@ struct DatabasePage: View {
 
     private var workbench: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let detail = model.failureDetail {
-                brokerFailure(detail)
-                    .padding(.horizontal, UIScale.pt(28))
-                    .padding(.top, UIScale.pt(28))
-            }
             if let notice = workspace.mutationNotice {
                 mutationNotice(notice)
                     .padding(.horizontal, UIScale.pt(28))
@@ -276,23 +352,6 @@ struct DatabasePage: View {
                 mutations: workspace)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-    }
-
-    private func brokerFailure(_ detail: String) -> some View {
-        HStack(alignment: .top, spacing: UIScale.pt(10)) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(DashSkin.warn)
-            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                Text("Broker unavailable")
-                    .font(.system(size: UIScale.pt(13), weight: .semibold))
-                Text(detail)
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(UIScale.pt(14))
-        .background(DashSkin.warn.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
     }
 
     private func mutationNotice(_ detail: String) -> some View {
