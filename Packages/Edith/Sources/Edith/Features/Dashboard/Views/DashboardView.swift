@@ -432,12 +432,40 @@ struct DashboardView: View {
                     sourceMenu
                 }
             }
+            regularControlsBar
             compactControlsBar
         }
         .foregroundStyle(DashSkin.inkSoft(dark))
         .pageGutter(compactLayout)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical)
+    }
+
+    private var regularControlsBar: some View {
+        VStack(spacing: UIScale.pt(10)) {
+            HStack(spacing: UIScale.pt(8)) {
+                filterSectionLabel("Range")
+                rangeButton("Today", .today)
+                rangeButton("This week", .thisWeek)
+                if let month = currentMonthOption {
+                    rangeButton("This month", .month(month))
+                }
+                rangeButton("All", .all)
+                alternateRangeMenu
+                Spacer(minLength: UIScale.pt(8))
+                customRange
+                resetButton
+            }
+            HStack(spacing: UIScale.pt(8)) {
+                filterSectionLabel("Scope")
+                if !model.machineGroups.isEmpty { machineMenu }
+                modelMenu
+                Spacer(minLength: UIScale.pt(8))
+                monthArchiveMenu
+                projectMenu
+                sourceMenu
+            }
+        }
     }
 
     private var compactControlsBar: some View {
@@ -496,6 +524,33 @@ struct DashboardView: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .disabled(model.monthOptions.isEmpty)
+    }
+
+    private var alternateRangeMenu: some View {
+        Menu {
+            Button("Yesterday") { model.range = .yesterday }
+            Button("Last week") { model.range = .lastWeek }
+            if let month = previousMonthOption {
+                Button("Last month") { model.range = .month(month) }
+            }
+        } label: {
+            Label("More", systemImage: "chevron.down")
+                .font(.system(size: UIScale.pt(11)))
+                .modifier(FilterChip(dark: dark, active: alternateRangeActive))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private var alternateRangeActive: Bool {
+        switch model.range {
+        case .yesterday, .lastWeek:
+            return true
+        case .month(let month):
+            return month == previousMonthOption
+        default:
+            return false
+        }
     }
 
     private var resetButton: some View {
