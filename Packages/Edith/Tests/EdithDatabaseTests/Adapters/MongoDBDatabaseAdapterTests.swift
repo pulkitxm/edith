@@ -577,7 +577,11 @@ private actor MongoDBDatabaseConversionCancellationProbe {
     #expect(report.supports(.browse))
     #expect(report.supports(.query))
     #expect(report.supports(.queryCancellation))
-    #expect(!report.supports(.objectDiscovery))
+    #expect(report.supports(.objectDiscovery))
+    #expect(
+        report.status(for: .objectDiscovery)?.limits.contains(where: {
+            $0.name == "collections" && $0.value == 10_000
+        }) == true)
     #expect(report.supports(.insert))
     #expect(report.supports(.update))
     #expect(report.supports(.delete))

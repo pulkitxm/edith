@@ -1032,8 +1032,17 @@ enum MongoDBDatabaseAdapterSupport {
             DatabaseCapabilityStatus(
                 id: .objectDiscovery,
                 requirement: .sharedRequired,
-                availability: .unavailable,
-                reason: unavailableReason),
+                availability: .available,
+                limits: [
+                    DatabaseCapabilityLimit(
+                        name: "collections",
+                        value: UInt64(maximumDiscoveredCollections),
+                        unit: "objects")
+                ],
+                attributes: [
+                    DatabaseStringAttribute(name: "scope", value: "database"),
+                    DatabaseStringAttribute(name: "object", value: "collection"),
+                ]),
             DatabaseCapabilityStatus(
                 id: .objectDescription,
                 requirement: .familyRequired,
@@ -1116,7 +1125,7 @@ enum MongoDBDatabaseAdapterSupport {
                 "Pagination requires an ObjectId _id and either no sort or an _id sort.",
                 "Cancelling a request closes the session and requires reconnecting.",
                 "Session, snapshot, and strong consistency are unavailable.",
-                "Bulk mutation, streaming, discovery, explain, and administration are unavailable.",
+                "Bulk mutation, streaming, field description, explain, and administration are unavailable.",
                 "Document updates and deletes require one exact _id identity.",
                 "Document mutations are synchronous and cannot be rolled back.",
                 "Custom trust stores, client certificates, tunnels, and connection options are unavailable.",
