@@ -686,8 +686,10 @@ struct MachinesSnippetsRunCommand: AsyncParsableCommand {
                 throw error
             }
             let runner = try await MachineResolver.runner(selection.machine)
-            let result = await SavedSnippetOperationExecution.run(selection.snippet) {
-                command, timeout in
+            let platform = await runner.ssh.remotePlatform ?? .linux
+            let result = await SavedSnippetOperationExecution.run(
+                selection.snippet, platform: platform
+            ) { command, timeout in
                 do {
                     let result = try await runner.run(command, timeout: timeout)
                     return .success(

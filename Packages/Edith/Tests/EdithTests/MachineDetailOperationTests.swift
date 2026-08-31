@@ -230,6 +230,25 @@ private actor SnippetCancellationGate {
         }
     }
 
+    @Test func savedWindowsSnippetRunsThroughPowerShell() async throws {
+        let snippet = CommandSnippet(title: "Status", command: "Write-Output ready")
+        var command = ""
+        let result = await SavedSnippetOperationExecution.run(
+            snippet, platform: .windows
+        ) { next, _ in
+            command = next
+            return .success("ready")
+        }
+        let encoded = try #require(command.split(separator: " ").last)
+        let data = try #require(Data(base64Encoded: String(encoded)))
+
+        #expect(try result.get() == "ready")
+        let script = try #require(String(data: data, encoding: .utf16LittleEndian))
+        #expect(script.contains("[ScriptBlock]::Create('Write-Output ready')"))
+        #expect(script.contains("$ProgressPreference='SilentlyContinue'"))
+        #expect(script.contains("exit $edithExitCode"))
+    }
+
     @Test func savedSnippetExecutionPropagatesCancellation() async {
         let gate = SnippetCancellationGate()
         let snippet = CommandSnippet(title: "Wait", command: "sleep 30")

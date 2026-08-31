@@ -36,6 +36,15 @@ public enum PowerShell {
         executable(arguments: keepOpen ? ["-NoExit"] : [], script: script)
     }
 
+    public static func userCommand(_ script: String) -> String {
+        command(
+            "$ProgressPreference='SilentlyContinue'; $ErrorActionPreference='Stop'; try { "
+                + "& ([ScriptBlock]::Create(" + literal(script) + ")); "
+                + "$edithExitCode=$LASTEXITCODE; if ($null -ne $edithExitCode) { "
+                + "exit $edithExitCode } } catch { "
+                + "[Console]::Error.WriteLine($_.Exception.Message); exit 1 }")
+    }
+
     public static func literal(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "''") + "'"
     }
