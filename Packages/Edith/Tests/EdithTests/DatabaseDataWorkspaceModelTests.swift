@@ -315,6 +315,16 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(model.editorError == "The document identifier cannot be changed while editing.")
     }
 
+    @Test("Elasticsearch editor restores its product context when opened")
+    func elasticsearchEditorRestoresProductContext() throws {
+        let model = DatabaseDataWorkspaceModel(announcement: { _ in })
+        let connection = try Self.connection(product: .elasticsearch)
+
+        model.beginInsert(connection)
+
+        #expect(model.canSubmitEditor)
+    }
+
     private static func connection(
         product: DatabaseProduct
     ) throws -> DatabaseConnectionSummary {

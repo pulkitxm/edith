@@ -190,6 +190,7 @@ final class DatabaseDataWorkspaceModel {
             editorError = mutationUnavailableMessage(connection)
             return
         }
+        activeProduct = connection.product
         editorMode = .insert
         editorError = nil
         if connection.product == .mongoDB {
@@ -234,6 +235,7 @@ final class DatabaseDataWorkspaceModel {
             editorError = mutationUnavailableMessage(connection)
             return
         }
+        activeProduct = connection.product
         let record = records[selectedRecordIndex]
         var identityNames = Set<String>()
         for component in identity.components {
