@@ -263,6 +263,57 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(insert.payload.body?.objectFields?.count == 2)
     }
 
+    @Test("Elasticsearch document editor preserves source JSON and concurrency guards")
+    func elasticsearchDocumentMutationRequests() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [Self.elasticsearchResponse()])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .elasticsearch)
+        model.prepare(for: connection)
+        model.targetText = "edith-documents-v1"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        model.selectRecord(at: 0)
+        let selectedRecord = try #require(model.selectedRecord)
+        let source = try #require(model.documentSource(selectedRecord))
+        #expect(source.contains("\"_id\" : \"doc-1\""))
+        #expect(!source.contains("_highlight"))
+        #expect(!model.canEdit(recordAt: 0, field: "title", connection: connection))
+        model.beginEditingSelectedRow(connection)
+        model.updateDocumentText(
+            """
+            {"_id":"doc-1","event":{"$date":"literal"},"title":"updated"}
+            """)
+        let update = try #require(model.editorMutationRequest(connection))
+        #expect(update.payload.command == "replace")
+        #expect(update.target.record?.kind == .searchDocument)
+        #expect(update.target.record?.concurrencyTokens.count == 2)
+        #expect(update.payload.body?.objectFields?.contains(where: { $0.name == "_id" }) == false)
+        #expect(
+            update.payload.body?.objectFields?.first(where: { $0.name == "event" })?.value
+                == .object([
+                    DatabaseObjectField(name: "$date", value: .string("literal"))
+                ]))
+
+        let deletion = try #require(model.deleteMutationRequest(connection))
+        #expect(deletion.payload.command == "delete")
+        #expect(deletion.target.record?.concurrencyTokens.count == 2)
+
+        model.beginInsert(connection)
+        model.updateDocumentText("{\"_id\":\"doc-new\",\"title\":\"created\"}")
+        let insert = try #require(model.editorMutationRequest(connection))
+        #expect(insert.payload.command == "create")
+        #expect(insert.target.record?.components.last?.value == .string("doc-new"))
+        #expect(insert.target.record?.concurrencyTokens.isEmpty == true)
+        #expect(insert.payload.body?.objectFields?.map(\.name) == ["title"])
+
+        model.cancelEditor()
+        model.beginEditingSelectedRow(connection)
+        model.updateDocumentText("{\"_id\":\"other\",\"title\":\"unsafe\"}")
+        #expect(model.editorMutationRequest(connection) == nil)
+        #expect(model.editorError == "The document identifier cannot be changed while editing.")
+    }
+
     private static func connection(
         product: DatabaseProduct
     ) throws -> DatabaseConnectionSummary {
@@ -382,6 +433,55 @@ struct DatabaseDataWorkspaceModelTests {
             metadata: DatabasePageMetadata(
                 completeness: completeness,
                 count: DatabaseCountMetadata(value: nil, accuracy: .estimated)))
+        return .browse(
+            .success(
+                DatabaseBrowseResult(page: page),
+                metadata: DatabaseResultMetadata(completeness: completeness)))
+    }
+
+    private static func elasticsearchResponse() -> DatabaseBrokerCommandResponse {
+        let record = DatabaseRecord(
+            identity: DatabaseRecordIdentity(
+                kind: .searchDocument,
+                components: [
+                    DatabaseIdentityComponent(
+                        name: "_index",
+                        value: .string("edith-documents-v1")),
+                    DatabaseIdentityComponent(name: "_id", value: .string("doc-1")),
+                ],
+                concurrencyTokens: [
+                    DatabaseIdentityComponent(name: "_seq_no", value: .signedInteger(7)),
+                    DatabaseIdentityComponent(name: "_primary_term", value: .signedInteger(2)),
+                ]),
+            fields: [
+                DatabaseObjectField(name: "title", value: .string("before")),
+                DatabaseObjectField(
+                    name: "event",
+                    value: .object([
+                        DatabaseObjectField(name: "$date", value: .string("literal"))
+                    ])),
+                DatabaseObjectField(
+                    name: "_highlight",
+                    value: .object([
+                        DatabaseObjectField(
+                            name: "title",
+                            value: .array([.string("<em>before</em>")]))
+                    ])),
+            ])
+        let completeness = DatabaseResultCompleteness(state: .sampled)
+        let page = DatabasePage(
+            records: [record],
+            fields: [
+                DatabaseFieldDescriptor(
+                    path: DatabaseFieldPath("title"), displayName: "title", typeName: "text",
+                    isNullable: true, isSortable: false, isFilterable: true),
+                DatabaseFieldDescriptor(
+                    path: DatabaseFieldPath("event"), displayName: "event", typeName: "object",
+                    isNullable: true, isSortable: false, isFilterable: false),
+            ],
+            metadata: DatabasePageMetadata(
+                completeness: completeness,
+                count: DatabaseCountMetadata(value: 1, accuracy: .exact)))
         return .browse(
             .success(
                 DatabaseBrowseResult(page: page),

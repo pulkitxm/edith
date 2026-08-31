@@ -47,4 +47,22 @@ struct DatabaseJSONDocumentCodecTests {
                 "{\"value\":\"\(String(repeating: "x", count: 1_048_576))\"}")
         }
     }
+
+    @Test("Plain document decoding preserves search engine JSON objects")
+    func plainDocument() throws {
+        let fields = try DatabaseJSONDocumentCodec.decodePlainObject(
+            """
+            {"event":{"$date":"literal"},"identifier":{"$oid":"literal"}}
+            """)
+        #expect(
+            fields.first(where: { $0.name == "event" })?.value
+                == .object([
+                    DatabaseObjectField(name: "$date", value: .string("literal"))
+                ]))
+        #expect(
+            fields.first(where: { $0.name == "identifier" })?.value
+                == .object([
+                    DatabaseObjectField(name: "$oid", value: .string("literal"))
+                ]))
+    }
 }
