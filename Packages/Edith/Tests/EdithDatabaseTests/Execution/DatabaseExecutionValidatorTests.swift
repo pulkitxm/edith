@@ -388,17 +388,12 @@ private enum DatabaseExecutionValidatorFixtures {
         }
     }
 
-    @Test func requiresBoundedNonemptyObjectPathsForBrowse() throws {
+    @Test func acceptsRootBrowseAndRequiresBoundedNonemptyObjectPaths() throws {
         let validator = DatabaseExecutionValidatorFixtures.validator
 
-        #expect(
-            throws: DatabaseExecutionValidationError.invalidTarget(
-                "The operation requires a database object target.")
-        ) {
-            try validator.validate(
-                DatabaseBrowseRequest(
-                    target: DatabaseExecutionValidatorFixtures.target(object: nil)))
-        }
+        try validator.validate(
+            DatabaseBrowseRequest(
+                target: DatabaseExecutionValidatorFixtures.target(object: nil)))
         #expect(
             throws: DatabaseExecutionValidationError.invalidTarget(
                 "The target object path is empty.")

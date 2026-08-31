@@ -270,7 +270,7 @@ struct DatabaseExecutionValidator: Sendable {
             expected: DatabaseBrowseRequest.schemaVersion,
             contract: "browse request")
         try validate(request.operation)
-        try Self.validateTarget(request.target, requiresObject: true)
+        try Self.validateTarget(request.target, requiresObject: false)
         try Self.validatePageRequest(request.page)
         try Self.validateEncodedSize(request, name: "browse request")
     }
