@@ -8,6 +8,7 @@ final class SEOAuditModel {
 
     var projects: [SEOAuditProjectSummary] = []
     var selectedProject: SEOAuditProject?
+    var projectDetailPresented = false
     var selectedRunID: UUID?
     var stage = SEOAuditStage.idle
     var input = ""
@@ -75,6 +76,7 @@ final class SEOAuditModel {
     }
 
     func beginNewProject() {
+        guard !isRunning else { return }
         guard let url = SEOAuditURLInput.normalize(input) else {
             errorMessage = "Enter a valid site URL."
             return
@@ -84,6 +86,7 @@ final class SEOAuditModel {
             name: name.isEmpty ? SEOAuditURLInput.projectName(for: url) : name,
             baseURL: url.absoluteString)
         selectedProject = project
+        projectDetailPresented = true
         selectedRunID = nil
         discoveredPageURLs = []
         selectedPageURLs = []
@@ -95,6 +98,7 @@ final class SEOAuditModel {
     }
 
     func presentNewProject() {
+        guard !isRunning else { return }
         input = ""
         projectName = ""
         newProjectPresented = true
@@ -107,9 +111,15 @@ final class SEOAuditModel {
     }
 
     func selectProject(id: UUID) {
+        if isRunning {
+            guard selectedProject?.id == id else { return }
+            projectDetailPresented = true
+            return
+        }
         do {
             let project = try repository.loadProject(id: id)
             selectedProject = project
+            projectDetailPresented = true
             selectedRunID = project.latestRun?.id
             discoveredPageURLs = Self.knownPageURLs(in: project)
             selectedPageURLs = Set(discoveredPageURLs)
@@ -121,6 +131,7 @@ final class SEOAuditModel {
     }
 
     func renameProject(id: UUID, to value: String) {
+        guard !isRunning else { return }
         let name = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
             errorMessage = "Enter a project name."
@@ -150,6 +161,7 @@ final class SEOAuditModel {
     }
 
     func closeProject() {
+        projectDetailPresented = false
         guard !isRunning else { return }
         selectedProject = nil
         selectedRunID = nil

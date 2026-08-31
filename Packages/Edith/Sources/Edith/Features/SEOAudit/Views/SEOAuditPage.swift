@@ -7,10 +7,10 @@ struct SEOAuditPage: View {
 
     var body: some View {
         Group {
-            if model.selectedProject == nil {
-                SEOAuditProjectsView(model: model)
-            } else {
+            if model.projectDetailPresented, model.selectedProject != nil {
                 SEOAuditProjectView(model: model)
+            } else {
+                SEOAuditProjectsView(model: model)
             }
         }
         .background(DashSkin.paper(scheme == .dark))
@@ -53,6 +53,7 @@ private struct SEOAuditProjectsView: View {
                             Label("New project", systemImage: "plus")
                         }
                         .buttonStyle(.borderedProminent)
+                        .disabled(model.isRunning)
                     }
                 }
                 projects
@@ -115,6 +116,9 @@ private struct SEOAuditProjectsView: View {
                     ForEach(model.projects) { project in
                         SEOAuditProjectCard(
                             project: project,
+                            canViewDetails: !model.isRunning
+                                || model.selectedProject?.id == project.id,
+                            actionsEnabled: !model.isRunning,
                             viewDetails: { model.selectProject(id: project.id) },
                             rename: { projectBeingRenamed = project },
                             delete: { projectBeingDeleted = project })
@@ -212,6 +216,8 @@ private struct SEOAuditNewProjectSheet: View {
 
 private struct SEOAuditProjectCard: View {
     let project: SEOAuditProjectSummary
+    let canViewDetails: Bool
+    let actionsEnabled: Bool
     let viewDetails: () -> Void
     let rename: () -> Void
     let delete: () -> Void
@@ -263,6 +269,7 @@ private struct SEOAuditProjectCard: View {
                     color: .black.opacity(hovered ? 0.1 : 0.04), radius: hovered ? 12 : 4, y: 3)
             }
             .buttonStyle(.edith(.borderless))
+            .disabled(!canViewDetails)
             .accessibilityLabel("View details for \(project.name)")
 
             Menu {
@@ -290,13 +297,16 @@ private struct SEOAuditProjectCard: View {
         Button(action: viewDetails) {
             Label("View details", systemImage: "doc.text.magnifyingglass")
         }
+        .disabled(!canViewDetails)
         Button(action: rename) {
             Label("Rename", systemImage: "pencil")
         }
+        .disabled(!actionsEnabled)
         Divider()
         Button(role: .destructive, action: delete) {
             Label("Delete", systemImage: "trash")
         }
+        .disabled(!actionsEnabled)
     }
 
     private var artwork: some View {

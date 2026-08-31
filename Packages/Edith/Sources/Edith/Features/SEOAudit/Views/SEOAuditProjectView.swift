@@ -71,7 +71,7 @@ struct SEOAuditProjectView: View {
             )
             .onHover { backHovered = $0 }
             .animation(.easeOut(duration: 0.14), value: backHovered)
-            .disabled(model.isRunning)
+            .help(model.isRunning ? "View projects while this audit continues" : "Back to projects")
             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                 Text(project.name)
                     .font(.system(size: UIScale.pt(16), weight: .semibold))

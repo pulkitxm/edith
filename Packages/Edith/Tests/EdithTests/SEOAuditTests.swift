@@ -210,6 +210,33 @@ import Testing
         #expect(!source.contains("State(initialValue: SEOAuditModel())"))
     }
 
+    @Test @MainActor func backNavigationKeepsTheActiveAuditAttached() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = SEOAuditRepository(root: root)
+        let active = SEOAuditProject(name: "Active", baseURL: "https://active.example")
+        let other = SEOAuditProject(name: "Other", baseURL: "https://other.example")
+        try repository.save(active)
+        try repository.save(other)
+        let model = SEOAuditModel(repository: repository)
+
+        model.selectProject(id: active.id)
+        model.stage = .auditing(current: 2, total: 55, url: "https://active.example/two")
+        model.closeProject()
+
+        #expect(!model.projectDetailPresented)
+        #expect(model.selectedProject?.id == active.id)
+        #expect(model.isRunning)
+
+        model.selectProject(id: other.id)
+        #expect(model.selectedProject?.id == active.id)
+        #expect(!model.projectDetailPresented)
+
+        model.selectProject(id: active.id)
+        #expect(model.projectDetailPresented)
+        #expect(model.selectedProject?.id == active.id)
+    }
+
     private func page(url: String, date: Date) -> SEOAuditPageResult {
         SEOAuditPageResult(
             url: url, auditedAt: date, statusCode: 200, responseMilliseconds: 20, bytes: 100,
