@@ -56,19 +56,25 @@ final class DatabaseObjectExplorerModel {
     var filteredGroups: [DatabaseExplorerGroup] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return groups }
-        return groups.compactMap { group in
-            let matchingObjects = group.objects.filter {
-                $0.title.localizedCaseInsensitiveContains(query)
-                    || $0.identifier.kind.rawValue.localizedCaseInsensitiveContains(query)
+        var results: [DatabaseExplorerGroup] = []
+        for group in groups {
+            var matchingObjects: [DatabaseExplorerObject] = []
+            for object in group.objects {
+                if object.title.localizedCaseInsensitiveContains(query)
+                    || object.identifier.kind.rawValue.localizedCaseInsensitiveContains(query)
+                {
+                    matchingObjects.append(object)
+                }
             }
             guard group.title.localizedCaseInsensitiveContains(query) || !matchingObjects.isEmpty
-            else { return nil }
+            else { continue }
             var result = group
             if !group.title.localizedCaseInsensitiveContains(query) {
                 result.objects = matchingObjects
             }
-            return result
+            results.append(result)
         }
+        return results
     }
 
     func prepare(for connection: DatabaseConnectionSummary?) {
@@ -131,7 +137,7 @@ final class DatabaseObjectExplorerModel {
         groups[index].state = .loading
         let requestGeneration = generation
         let sender = sender
-        activeTask = Task { [weak self] in
+        let task = Task { [weak self] in
             do {
                 let response = try await sender.send(
                     .browse(
@@ -152,6 +158,7 @@ final class DatabaseObjectExplorerModel {
                 self?.failGroup(identifier, error: error, generation: requestGeneration)
             }
         }
+        activeTask = task
     }
 
     func select(_ object: DatabaseObjectIdentifier?) {
@@ -173,7 +180,7 @@ final class DatabaseObjectExplorerModel {
         generation = requestGeneration
         state = .loading
         let sender = sender
-        activeTask = Task { [weak self] in
+        let task = Task { [weak self] in
             do {
                 let response = try await sender.send(
                     .browse(
@@ -194,6 +201,7 @@ final class DatabaseObjectExplorerModel {
                 self?.fail(error, generation: requestGeneration)
             }
         }
+        activeTask = task
     }
 
     private func finishPostgreSQLGroups(
