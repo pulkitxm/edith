@@ -291,12 +291,22 @@ struct DatabaseWorkbenchView: View {
                     }
                 }
             } else {
-                HStack(spacing: 0) {
-                    grid(connection)
-                    if data.editorMode != nil || data.selectedRecord != nil {
-                        Divider().opacity(0.35)
-                        inspectorRegion(connection).frame(width: UIScale.pt(320))
+                if data.editorMode != nil || data.selectedRecord != nil {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 0) {
+                            grid(connection)
+                                .frame(minWidth: UIScale.pt(480))
+                            Divider().opacity(0.35)
+                            inspectorRegion(connection).frame(width: UIScale.pt(300))
+                        }
+                        VStack(spacing: 0) {
+                            grid(connection)
+                            Divider().opacity(0.35)
+                            inspectorRegion(connection).frame(maxHeight: UIScale.pt(260))
+                        }
                     }
+                } else {
+                    grid(connection)
                 }
             }
         }
