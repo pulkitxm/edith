@@ -104,7 +104,6 @@ struct DatabasePage: View {
     @State private var model = DatabasePageModel()
     @State private var connectionWorkspace = DatabaseConnectionWorkspaceModel()
     @State private var connectionCreation: DatabaseConnectionCreationModel?
-    @State private var showsConnectionCreation = false
     @State private var workspace = DatabaseWorkspaceModel()
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.colorScheme) private var scheme
@@ -168,19 +167,17 @@ struct DatabasePage: View {
                 cancelOperation: { workspace.cancelSafetyOperation() },
                 dismiss: { workspace.dismissSafetyReview() })
         }
-        .sheet(isPresented: $showsConnectionCreation) {
-            if let connectionCreation {
-                DatabaseConnectionCreationSheet(
-                    model: connectionCreation,
-                    saved: { connection in
-                        showsConnectionCreation = false
-                        Task {
-                            await connectionWorkspace.loadConnections()
-                            connectionWorkspace.selectConnection(connection.id)
-                        }
-                    },
-                    cancel: { showsConnectionCreation = false })
-            }
+        .sheet(item: $connectionCreation) { connectionCreation in
+            DatabaseConnectionCreationSheet(
+                model: connectionCreation,
+                saved: { connection in
+                    self.connectionCreation = nil
+                    Task {
+                        await connectionWorkspace.loadConnections()
+                        connectionWorkspace.selectConnection(connection.id)
+                    }
+                },
+                cancel: { self.connectionCreation = nil })
         }
     }
 
@@ -220,7 +217,6 @@ struct DatabasePage: View {
 
     private func beginConnectionCreation() {
         connectionCreation = DatabaseConnectionCreationModel()
-        showsConnectionCreation = true
     }
 
     private var workbench: some View {
