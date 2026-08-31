@@ -181,8 +181,6 @@ public actor DatabaseKeychainSecretStore: DatabaseSecretStore {
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
             kSecAttrAccount: Self.account(for: reference),
-            kSecUseDataProtectionKeychain: true,
-            kSecUseAuthenticationUI: kSecUseAuthenticationUISkip,
         ]
     }
 
