@@ -66,10 +66,11 @@ public enum PowerShell {
             options: .dotMatchesLineSeparators)
         let body = trimmed.replacingOccurrences(of: "#< CLIXML", with: "")
         let range = NSRange(body.startIndex..<body.endIndex, in: body)
-        let parts = expression?.matches(in: body, range: range).compactMap { match -> String? in
-            guard let found = Range(match.range(at: 1), in: body) else { return nil }
-            return decodedXML(String(body[found]))
-        } ?? []
+        let parts =
+            expression?.matches(in: body, range: range).compactMap { match -> String? in
+                guard let found = Range(match.range(at: 1), in: body) else { return nil }
+                return decodedXML(String(body[found]))
+            } ?? []
         if !parts.isEmpty {
             return parts.joined().trimmingCharacters(in: .whitespacesAndNewlines)
         }
@@ -77,7 +78,8 @@ public enum PowerShell {
     }
 
     private static func decodedXML(_ value: String) -> String {
-        var result = value
+        var result =
+            value
             .replacingOccurrences(of: "&quot;", with: "\"")
             .replacingOccurrences(of: "&apos;", with: "'")
             .replacingOccurrences(of: "&lt;", with: "<")
@@ -104,7 +106,7 @@ public enum PowerShell {
         let data = script.data(using: .utf16LittleEndian) ?? Data()
         let options =
             (["-NoLogo", "-NoProfile"] + arguments
-                + ["-OutputFormat", "Text", "-ExecutionPolicy", "Bypass"])
+            + ["-OutputFormat", "Text", "-ExecutionPolicy", "Bypass"])
             .joined(separator: " ")
         return "powershell.exe \(options) -EncodedCommand \(data.base64EncodedString())"
     }
