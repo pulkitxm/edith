@@ -1,3 +1,4 @@
+import AppKit
 import EdithKit
 import SwiftUI
 
@@ -317,7 +318,9 @@ private struct SEOAuditProjectCard: View {
                 LinearGradient(
                     colors: [DashSkin.accent(dark).opacity(0.28), DashSkin.paper(dark)],
                     startPoint: .topLeading, endPoint: .bottomTrailing))
-            if let value = project.imageURL, let url = URL(string: value) {
+            if let projectSnapshotImage {
+                Image(nsImage: projectSnapshotImage).resizable().scaledToFill()
+            } else if let value = project.imageURL, let url = URL(string: value) {
                 AsyncImage(url: url) { phase in
                     if let image = phase.image {
                         image.resizable().scaledToFill()
@@ -367,6 +370,12 @@ private struct SEOAuditProjectCard: View {
                 .frame(height: UIScale.pt(3))
             }
         }
+    }
+
+    private var projectSnapshotImage: NSImage? {
+        guard let value = project.imageSnapshotURL, let url = URL(string: value), url.isFileURL
+        else { return nil }
+        return NSImage(contentsOf: url)
     }
 
     private var activityLabel: String {

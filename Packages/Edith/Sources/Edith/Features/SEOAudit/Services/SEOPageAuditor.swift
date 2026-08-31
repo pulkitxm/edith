@@ -62,6 +62,7 @@ enum HTMLMetadataParser {
                 metas, key: "property", value: "og:description"),
             openGraphImageURL: resolved(
                 metaContent(metas, key: "property", value: "og:image"), baseURL: baseURL),
+            openGraphImageSnapshotURL: nil,
             openGraphType: metaContent(metas, key: "property", value: "og:type"),
             twitterCard: metaContent(metas, key: "name", value: "twitter:card"),
             twitterTitle: metaContent(metas, key: "name", value: "twitter:title"),
@@ -69,6 +70,7 @@ enum HTMLMetadataParser {
                 metas, key: "name", value: "twitter:description"),
             twitterImageURL: resolved(
                 metaContent(metas, key: "name", value: "twitter:image"), baseURL: baseURL),
+            twitterImageSnapshotURL: nil,
             wordCount: body.split(whereSeparator: \.isWhitespace).count)
     }
 
@@ -223,6 +225,7 @@ extension SEOAuditMetadata {
     static let empty = SEOAuditMetadata(
         title: nil, description: nil, canonicalURL: nil, robots: nil, language: nil,
         heading: nil, openGraphTitle: nil, openGraphDescription: nil,
-        openGraphImageURL: nil, openGraphType: nil, twitterCard: nil, twitterTitle: nil,
-        twitterDescription: nil, twitterImageURL: nil, wordCount: 0)
+        openGraphImageURL: nil, openGraphImageSnapshotURL: nil, openGraphType: nil,
+        twitterCard: nil, twitterTitle: nil, twitterDescription: nil, twitterImageURL: nil,
+        twitterImageSnapshotURL: nil, wordCount: 0)
 }

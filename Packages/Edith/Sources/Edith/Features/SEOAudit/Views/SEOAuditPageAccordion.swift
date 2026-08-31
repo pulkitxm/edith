@@ -1,3 +1,4 @@
+import AppKit
 import EdithKit
 import SwiftUI
 
@@ -273,7 +274,9 @@ struct SEOAuditPageAccordion: View {
     private var previewImage: some View {
         ZStack {
             Rectangle().fill(DashSkin.line(dark).opacity(0.45))
-            if let previewImageURL {
+            if let previewSnapshotImage {
+                Image(nsImage: previewSnapshotImage).resizable().scaledToFill()
+            } else if let previewImageURL {
                 AsyncImage(url: previewImageURL) { phase in
                     if let image = phase.image {
                         image.resizable().scaledToFill()
@@ -325,6 +328,16 @@ struct SEOAuditPageAccordion: View {
             ? page.metadata.twitterImageURL ?? page.metadata.openGraphImageURL
             : page.metadata.openGraphImageURL
         return value.flatMap(URL.init(string:))
+    }
+
+    private var previewSnapshotImage: NSImage? {
+        let value =
+            socialPlatform == .x
+            ? page.metadata.twitterImageSnapshotURL
+                ?? page.metadata.openGraphImageSnapshotURL
+            : page.metadata.openGraphImageSnapshotURL
+        guard let value, let url = URL(string: value), url.isFileURL else { return nil }
+        return NSImage(contentsOf: url)
     }
 
     private var usesXSummaryCard: Bool {

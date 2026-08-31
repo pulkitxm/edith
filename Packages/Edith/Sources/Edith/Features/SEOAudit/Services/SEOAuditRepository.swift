@@ -38,6 +38,8 @@ struct SEOAuditRepository {
     }
 
     func delete(id: UUID) throws {
+        let assets = projectAssetsDirectory(id: id)
+        if fileManager.fileExists(atPath: assets.path) { try fileManager.removeItem(at: assets) }
         let file = projectFile(id: id)
         if fileManager.fileExists(atPath: file.path) { try fileManager.removeItem(at: file) }
         var summaries = (try? loadSummaries()) ?? []
@@ -49,6 +51,11 @@ struct SEOAuditRepository {
 
     private func projectFile(id: UUID) -> URL {
         root.appendingPathComponent("project-\(id.uuidString.lowercased()).json")
+    }
+
+    private func projectAssetsDirectory(id: UUID) -> URL {
+        root.appendingPathComponent("assets", isDirectory: true)
+            .appendingPathComponent(id.uuidString.lowercased(), isDirectory: true)
     }
 
     private var encoder: JSONEncoder {

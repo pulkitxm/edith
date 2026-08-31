@@ -43,12 +43,30 @@ struct SEOAuditMetadata: Codable, Equatable, Sendable {
     let openGraphTitle: String?
     let openGraphDescription: String?
     let openGraphImageURL: String?
+    let openGraphImageSnapshotURL: String?
     let openGraphType: String?
     let twitterCard: String?
     let twitterTitle: String?
     let twitterDescription: String?
     let twitterImageURL: String?
+    let twitterImageSnapshotURL: String?
     let wordCount: Int
+
+    func withImageSnapshots(_ snapshots: SEOAuditImageSnapshots) -> SEOAuditMetadata {
+        SEOAuditMetadata(
+            title: title, description: description, canonicalURL: canonicalURL, robots: robots,
+            language: language, heading: heading, openGraphTitle: openGraphTitle,
+            openGraphDescription: openGraphDescription, openGraphImageURL: openGraphImageURL,
+            openGraphImageSnapshotURL: snapshots.openGraphImageURL,
+            openGraphType: openGraphType, twitterCard: twitterCard, twitterTitle: twitterTitle,
+            twitterDescription: twitterDescription, twitterImageURL: twitterImageURL,
+            twitterImageSnapshotURL: snapshots.twitterImageURL, wordCount: wordCount)
+    }
+}
+
+struct SEOAuditImageSnapshots: Equatable, Sendable {
+    let openGraphImageURL: String?
+    let twitterImageURL: String?
 }
 
 enum SEOAuditSocialPlatform: String, CaseIterable, Identifiable, Sendable {
@@ -124,6 +142,13 @@ struct SEOAuditPageResult: Codable, Equatable, Identifiable, Sendable {
     var warningCount: Int { issues.count { $0.severity == .warning } }
     var hasLighthouseScores: Bool { !scores.values.isEmpty }
 
+    func with(metadata: SEOAuditMetadata) -> SEOAuditPageResult {
+        SEOAuditPageResult(
+            id: id, url: url, auditedAt: auditedAt, statusCode: statusCode,
+            responseMilliseconds: responseMilliseconds, bytes: bytes, metadata: metadata,
+            scores: scores, issues: issues, error: error)
+    }
+
     func with(scores: SEOAuditScores, lighthouseError: String?) -> SEOAuditPageResult {
         var updatedIssues = issues.filter { $0.code != "lighthouse-unavailable" }
         if let lighthouseError {
@@ -189,11 +214,13 @@ struct SEOAuditProject: Codable, Equatable, Identifiable, Sendable {
     var createdAt: Date
     var updatedAt: Date
     var imageURL: String?
+    var imageSnapshotURL: String?
     var runs: [SEOAuditRun]
 
     init(
         id: UUID = UUID(), name: String, baseURL: String, createdAt: Date = Date(),
-        updatedAt: Date = Date(), imageURL: String? = nil, runs: [SEOAuditRun] = []
+        updatedAt: Date = Date(), imageURL: String? = nil, imageSnapshotURL: String? = nil,
+        runs: [SEOAuditRun] = []
     ) {
         self.id = id
         self.name = name
@@ -201,6 +228,7 @@ struct SEOAuditProject: Codable, Equatable, Identifiable, Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.imageURL = imageURL
+        self.imageSnapshotURL = imageSnapshotURL
         self.runs = runs
     }
 
@@ -219,6 +247,7 @@ struct SEOAuditProjectSummary: Codable, Equatable, Identifiable, Sendable {
     let baseURL: String
     let updatedAt: Date
     let imageURL: String?
+    let imageSnapshotURL: String?
     let latestRun: SEOAuditRunSummary?
 
     init(project: SEOAuditProject) {
@@ -227,6 +256,7 @@ struct SEOAuditProjectSummary: Codable, Equatable, Identifiable, Sendable {
         baseURL = project.baseURL
         updatedAt = project.updatedAt
         imageURL = project.imageURL
+        imageSnapshotURL = project.imageSnapshotURL
         latestRun = project.latestRun.map(SEOAuditRunSummary.init)
     }
 }

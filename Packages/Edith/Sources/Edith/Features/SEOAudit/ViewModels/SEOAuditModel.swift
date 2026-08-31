@@ -28,18 +28,21 @@ final class SEOAuditModel {
     @ObservationIgnored private let crawler: SitemapCrawler
     @ObservationIgnored private let pageAuditor: SEOPageAuditor
     @ObservationIgnored private let lighthouse: LighthouseAuditor
+    @ObservationIgnored private let imageStore: SEOAuditImageStore
     @ObservationIgnored private var auditTask: Task<Void, Never>?
 
     init(
         repository: SEOAuditRepository = SEOAuditRepository(),
         crawler: SitemapCrawler = SitemapCrawler(),
         pageAuditor: SEOPageAuditor = SEOPageAuditor(),
-        lighthouse: LighthouseAuditor = LighthouseAuditor()
+        lighthouse: LighthouseAuditor = LighthouseAuditor(),
+        imageStore: SEOAuditImageStore? = nil
     ) {
         self.repository = repository
         self.crawler = crawler
         self.pageAuditor = pageAuditor
         self.lighthouse = lighthouse
+        self.imageStore = imageStore ?? SEOAuditImageStore(root: repository.root)
         lighthouseEnabled = lighthouse.isAvailable
         projects = (try? repository.loadSummaries()) ?? []
     }
@@ -301,19 +304,27 @@ final class SEOAuditModel {
     private func execute(projectID: UUID, urls: [URL]) async {
         updateRun { $0.discoveredPageCount = urls.count }
         saveSelectedProject()
+        guard let run = selectedRun else { return }
+        var capturedProjectArtwork = false
         do {
             for (index, url) in urls.enumerated() {
                 try Task.checkCancellation()
                 stage = .auditing(current: index + 1, total: urls.count, url: url.absoluteString)
                 var page = await pageAuditor.audit(url)
+                async let imageSnapshots = imageStore.capture(
+                    metadata: page.metadata, projectID: projectID, runID: run.id,
+                    runStartedAt: run.startedAt)
                 if lighthouseEnabled {
                     let result = await lighthouse.audit(url)
                     page = page.with(scores: result.scores, lighthouseError: result.error)
                 }
+                let snapshots = await imageSnapshots
+                page = page.with(metadata: page.metadata.withImageSnapshots(snapshots))
                 updateRun { $0.pages.append(page) }
-                if selectedProject?.imageURL == nil, let imageURL = page.metadata.openGraphImageURL
-                {
+                if !capturedProjectArtwork, let imageURL = page.metadata.openGraphImageURL {
                     selectedProject?.imageURL = imageURL
+                    selectedProject?.imageSnapshotURL = page.metadata.openGraphImageSnapshotURL
+                    capturedProjectArtwork = true
                 }
                 selectedProject?.updatedAt = Date()
                 if index.isMultiple(of: 25) { saveSelectedProject() }

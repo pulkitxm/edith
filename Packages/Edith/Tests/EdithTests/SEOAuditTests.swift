@@ -44,6 +44,8 @@ import Testing
         #expect(metadata.twitterTitle == "X title")
         #expect(metadata.twitterDescription == "X description")
         #expect(metadata.twitterImageURL == "https://example.com/x-social.png")
+        #expect(metadata.openGraphImageSnapshotURL == nil)
+        #expect(metadata.twitterImageSnapshotURL == nil)
         #expect(metadata.wordCount == 5)
     }
 
@@ -64,7 +66,9 @@ import Testing
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let repository = SEOAuditRepository(root: root)
-        var project = SEOAuditProject(name: "Example", baseURL: "https://example.com")
+        var project = SEOAuditProject(
+            name: "Example", baseURL: "https://example.com",
+            imageSnapshotURL: "file:///tmp/example.png")
         project.runs = [SEOAuditRun(state: .completed, discoveredPageCount: 1)]
 
         try repository.save(project)
@@ -76,7 +80,56 @@ import Testing
         #expect(restored.id == project.id)
         #expect(restored.name == project.name)
         #expect(restored.baseURL == project.baseURL)
+        #expect(restored.imageSnapshotURL == project.imageSnapshotURL)
         #expect(restored.runs.map(\.id) == project.runs.map(\.id))
+    }
+
+    @Test func imageSnapshotsStayAttachedToTimestampedRuns() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SEOAuditImageURLProtocol.self]
+        let store = SEOAuditImageStore(
+            root: root, session: URLSession(configuration: configuration))
+        let projectID = UUID()
+        let runID = UUID()
+        let startedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let metadata = HTMLMetadataParser.parse(
+            """
+            <meta property="og:image" content="https://example.com/social.png">
+            <meta name="twitter:image" content="https://example.com/social.png">
+            """, baseURL: URL(string: "https://example.com")!)
+
+        let snapshots = await store.capture(
+            metadata: metadata, projectID: projectID, runID: runID, runStartedAt: startedAt)
+        let openGraphURL = try #require(snapshots.openGraphImageURL.flatMap(URL.init(string:)))
+        let nextRunID = UUID()
+        let nextRunSnapshots = await store.capture(
+            metadata: metadata, projectID: projectID, runID: nextRunID,
+            runStartedAt: startedAt.addingTimeInterval(100))
+
+        #expect(openGraphURL.isFileURL)
+        #expect(FileManager.default.fileExists(atPath: openGraphURL.path))
+        #expect(openGraphURL.path.contains("1700000000-\(runID.uuidString.lowercased())"))
+        #expect(snapshots.twitterImageURL == snapshots.openGraphImageURL)
+        #expect(nextRunSnapshots.openGraphImageURL != snapshots.openGraphImageURL)
+        #expect(nextRunSnapshots.openGraphImageURL?.contains("1700000100-") == true)
+    }
+
+    @Test func deletingAProjectRemovesItsImageSnapshots() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = SEOAuditRepository(root: root)
+        let project = SEOAuditProject(name: "Example", baseURL: "https://example.com")
+        try repository.save(project)
+        let assets = root.appendingPathComponent("assets")
+            .appendingPathComponent(project.id.uuidString.lowercased())
+        try FileManager.default.createDirectory(at: assets, withIntermediateDirectories: true)
+        try Data([1]).write(to: assets.appendingPathComponent("snapshot.png"))
+
+        try repository.delete(id: project.id)
+
+        #expect(!FileManager.default.fileExists(atPath: assets.path))
     }
 
     @Test func pageHistoryExcludesTheSelectedRunAndOrdersNewestFirst() {
@@ -287,4 +340,21 @@ import Testing
             url: url, auditedAt: date, statusCode: 200, responseMilliseconds: 20, bytes: 100,
             metadata: .empty, issues: [])
     }
+}
+
+private final class SEOAuditImageURLProtocol: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let response = HTTPURLResponse(
+            url: request.url!, statusCode: 200, httpVersion: nil,
+            headerFields: ["Content-Type": "image/png"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data([0x89, 0x50, 0x4E, 0x47]))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }
