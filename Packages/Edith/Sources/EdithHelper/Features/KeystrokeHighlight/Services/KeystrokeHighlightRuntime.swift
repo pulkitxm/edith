@@ -77,11 +77,11 @@ final class KeystrokeHighlightRuntime: FeatureModule {
             guard type == .keyDown, !IsSecureEventInputEnabled() else {
                 return Unmanaged.passUnretained(event)
             }
-            let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
-            let characters = NSEvent(cgEvent: event)?.charactersIgnoringModifiers
-            let modifiers = KeystrokeHighlightRuntime.modifiers(from: event.flags)
+            guard let labels = KeystrokeHighlightRuntime.labels(from: event) else {
+                return Unmanaged.passUnretained(event)
+            }
             Task { @MainActor in
-                runtime.show(keyCode: keyCode, characters: characters, modifiers: modifiers)
+                runtime.show(labels: labels)
             }
             return Unmanaged.passUnretained(event)
         }
@@ -115,13 +115,7 @@ final class KeystrokeHighlightRuntime: FeatureModule {
         CGEvent.tapEnable(tap: eventTap, enable: true)
     }
 
-    private func show(
-        keyCode: UInt16, characters: String?, modifiers: KeystrokeModifiers
-    ) {
-        guard
-            let labels = KeystrokeLabelResolver.labels(
-                keyCode: keyCode, characters: characters, modifiers: modifiers)
-        else { return }
+    private func show(labels: [String]) {
         let duration = max(
             KeystrokeHighlightSettings.durationRange.lowerBound,
             min(
@@ -177,7 +171,16 @@ final class KeystrokeHighlightRuntime: FeatureModule {
         SharedDefaults.store.set(error, forKey: AppStorageKeys.KeystrokeHighlight.runtimeError)
     }
 
-    private static func modifiers(from flags: CGEventFlags) -> KeystrokeModifiers {
+    nonisolated static func labels(from event: CGEvent) -> [String]? {
+        let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+        let characters = NSEvent(cgEvent: event)?.charactersIgnoringModifiers
+        return KeystrokeLabelResolver.labels(
+            keyCode: keyCode, characters: characters,
+            unmodifiedCharacters: unmodifiedCharacters(keyCode: keyCode),
+            modifiers: modifiers(from: event.flags))
+    }
+
+    nonisolated static func modifiers(from flags: CGEventFlags) -> KeystrokeModifiers {
         var modifiers: KeystrokeModifiers = []
         if flags.contains(.maskControl) { modifiers.insert(.control) }
         if flags.contains(.maskAlternate) { modifiers.insert(.option) }
@@ -185,5 +188,14 @@ final class KeystrokeHighlightRuntime: FeatureModule {
         if flags.contains(.maskCommand) { modifiers.insert(.command) }
         if flags.contains(.maskSecondaryFn) { modifiers.insert(.function) }
         return modifiers
+    }
+
+    private nonisolated static func unmodifiedCharacters(keyCode: UInt16) -> String? {
+        guard
+            let event = CGEvent(
+                keyboardEventSource: nil, virtualKey: CGKeyCode(keyCode), keyDown: true)
+        else { return nil }
+        event.flags = []
+        return NSEvent(cgEvent: event)?.charactersIgnoringModifiers
     }
 }

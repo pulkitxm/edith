@@ -78,15 +78,19 @@ public struct KeystrokeHighlightQueue: Equatable, Sendable {
 
 public enum KeystrokeLabelResolver {
     public static func labels(
-        keyCode: UInt16, characters: String?, modifiers: KeystrokeModifiers
+        keyCode: UInt16, characters: String?, unmodifiedCharacters: String? = nil,
+        modifiers: KeystrokeModifiers
     ) -> [String]? {
-        guard let key = keyLabel(keyCode: keyCode, characters: characters) else { return nil }
+        let resolvedCharacters =
+            functionKeyLabel(characters) == nil
+            ? unmodifiedCharacters ?? characters : characters
+        guard let key = keyLabel(keyCode: keyCode, characters: resolvedCharacters) else {
+            return nil
+        }
         var labels: [String] = []
         if modifiers.contains(.control) { labels.append("⌃") }
         if modifiers.contains(.option) { labels.append("⌥") }
-        if modifiers.contains(.shift), !charactersCommunicateShift(characters) {
-            labels.append("⇧")
-        }
+        if modifiers.contains(.shift) { labels.append("⇧") }
         if modifiers.contains(.command) { labels.append("⌘") }
         if modifiers.contains(.function),
             shouldDisplayFunction(keyCode: keyCode, characters: characters)
@@ -109,14 +113,6 @@ public enum KeystrokeLabelResolver {
         return fallbackKeys[keyCode]
     }
 
-    private static func charactersCommunicateShift(_ value: String?) -> Bool {
-        guard let value else { return false }
-        return value.count == 1
-            && value.unicodeScalars.allSatisfy {
-                CharacterSet.uppercaseLetters.contains($0)
-            }
-    }
-
     private static func shouldDisplayFunction(keyCode: UInt16, characters: String?) -> Bool {
         functionKeyLabel(characters) == nil && !implicitFunctionKeyCodes.contains(keyCode)
     }
@@ -127,11 +123,18 @@ public enum KeystrokeLabelResolver {
     }
 
     private static let specialKeys: [UInt16: String] = [
-        36: "↩", 48: "⇥", 49: "Space", 51: "⌫", 53: "Esc", 71: "Clear", 76: "⌤",
-        96: "F5", 97: "F6", 98: "F7", 99: "F3", 100: "F8", 101: "F9", 103: "F11",
-        105: "F13", 106: "F16", 107: "F14", 109: "F10", 111: "F12", 113: "F15",
-        115: "Home", 116: "Page ↑", 117: "⌦", 118: "F4", 119: "End", 120: "F2",
-        121: "Page ↓", 122: "F1", 123: "←", 124: "→", 125: "↓", 126: "↑",
+        10: "§", 36: "↩", 48: "⇥", 49: "Space", 51: "⌫", 53: "Esc", 71: "Clear",
+        76: "⌤",
+        64: "F17", 65: ".", 67: "*", 69: "+", 72: "Volume ↑", 73: "Volume ↓",
+        74: "Mute", 75: "/", 78: "-", 79: "F18", 80: "F19", 81: "=", 82: "0",
+        83: "1", 84: "2", 85: "3", 86: "4", 87: "5", 88: "6", 89: "7", 90: "F20",
+        91: "8", 92: "9", 93: "¥", 94: "_", 95: ",", 96: "F5", 97: "F6",
+        98: "F7", 99: "F3",
+        100: "F8", 101: "F9", 102: "英数", 103: "F11", 104: "かな", 105: "F13",
+        106: "F16", 107: "F14", 109: "F10", 110: "Menu", 111: "F12", 113: "F15",
+        114: "Help", 115: "Home", 116: "Page ↑", 117: "⌦", 118: "F4", 119: "End",
+        120: "F2", 121: "Page ↓", 122: "F1", 123: "←", 124: "→", 125: "↓",
+        126: "↑",
     ]
 
     private static let fallbackKeys: [UInt16: String] = [
@@ -144,8 +147,9 @@ public enum KeystrokeLabelResolver {
     ]
 
     private static let implicitFunctionKeyCodes: Set<UInt16> = [
-        71, 96, 97, 98, 99, 100, 101, 103, 105, 106, 107, 109, 111, 113, 115, 116, 117,
-        118, 119, 120, 121, 122, 123, 124, 125, 126,
+        64, 71, 72, 73, 74, 79, 80, 90, 96, 97, 98, 99, 100, 101, 103, 105, 106,
+        107, 109, 110, 111, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123,
+        124, 125, 126,
     ]
 
     private static let functionKeyLabels: [Character: String] = {
