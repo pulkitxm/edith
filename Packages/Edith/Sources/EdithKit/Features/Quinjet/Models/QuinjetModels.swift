@@ -5,12 +5,86 @@ public struct QuinjetRemote: Equatable, Sendable {
     public let machineName: String
     public let target: String
     public let controlPath: String
+    public let platform: RemoteMachinePlatform
+    public let homeDirectory: String?
 
-    public init(machineID: UUID, machineName: String, target: String, controlPath: String) {
+    public init(
+        machineID: UUID, machineName: String, target: String, controlPath: String,
+        platform: RemoteMachinePlatform = .linux, homeDirectory: String? = nil
+    ) {
         self.machineID = machineID
         self.machineName = machineName
         self.target = target
         self.controlPath = controlPath
+        self.platform = platform
+        self.homeDirectory = homeDirectory
+    }
+
+    public func resolve(_ path: String) -> String {
+        QuinjetPath.resolve(path, homeDirectory: homeDirectory, platform: platform)
+    }
+
+    public static func connected(
+        machineID: UUID, machineName: String, target: String, connection: SSHConnection
+    ) async -> QuinjetRemote {
+        let platform = await connection.remotePlatform ?? .linux
+        let result = try? await connection.run(
+            FilePlaces.homeDirectoryCommand(platform: platform), timeout: 20)
+        let reportedHome =
+            result?.succeeded == true
+            ? result?.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines) : nil
+        let home = reportedHome.flatMap { QuinjetPath.isAbsolute($0) ? $0 : nil }
+        return QuinjetRemote(
+            machineID: machineID, machineName: machineName, target: target,
+            controlPath: connection.controlSocketPath, platform: platform,
+            homeDirectory: home)
+    }
+}
+
+public enum QuinjetPath {
+    public static func isAbsolute(_ path: String) -> Bool {
+        path.hasPrefix("/") || FileListing.isWindowsPath(path)
+    }
+
+    public static func resolve(
+        _ path: String, homeDirectory: String?, platform: RemoteMachinePlatform
+    ) -> String {
+        guard let homeDirectory, !homeDirectory.isEmpty else { return path }
+        if path == "~" { return homeDirectory }
+        guard path.hasPrefix("~/") || path.hasPrefix("~\\") else { return path }
+        let suffix = String(path.dropFirst(2))
+        return FileListing.join(
+            parent: homeDirectory,
+            name: platform == .windows
+                ? suffix.replacingOccurrences(of: "/", with: "\\") : suffix)
+    }
+
+    public static func name(_ path: String) -> String {
+        (path.replacingOccurrences(of: "\\", with: "/") as NSString).lastPathComponent
+    }
+
+    public static func equals(_ lhs: String, _ rhs: String) -> Bool {
+        if FileListing.isWindowsPath(lhs) || FileListing.isWindowsPath(rhs) {
+            return normalizedWindows(lhs).caseInsensitiveCompare(normalizedWindows(rhs))
+                == .orderedSame
+        }
+        return lhs == rhs
+    }
+
+    public static func contains(_ path: String, in directory: String) -> Bool {
+        if FileListing.isWindowsPath(path) || FileListing.isWindowsPath(directory) {
+            let candidate = normalizedWindows(path)
+            let parent = normalizedWindows(directory)
+            return candidate.caseInsensitiveCompare(parent) == .orderedSame
+                || candidate.lowercased().hasPrefix(parent.lowercased() + "\\")
+        }
+        return path == directory || path.hasPrefix(directory + "/")
+    }
+
+    private static func normalizedWindows(_ path: String) -> String {
+        var result = path.replacingOccurrences(of: "/", with: "\\")
+        while result.count > 3, result.hasSuffix("\\") { result.removeLast() }
+        return result
     }
 }
 
@@ -58,7 +132,7 @@ public struct QuinjetProject: Codable, Equatable, Identifiable, Sendable {
     }
 
     public func contains(path: String) -> Bool {
-        worktrees.contains { $0.path == path }
+        worktrees.contains { QuinjetPath.contains(path, in: $0.path) }
     }
 }
 
@@ -92,7 +166,7 @@ public struct QuinjetWorktree: Codable, Equatable, Identifiable, Sendable {
     public var displayName: String {
         if let branch, !branch.isEmpty { return branch }
         if detached { return "Detached at \(String(head.prefix(8)))" }
-        return URL(fileURLWithPath: path).lastPathComponent
+        return QuinjetPath.name(path)
     }
 }
 

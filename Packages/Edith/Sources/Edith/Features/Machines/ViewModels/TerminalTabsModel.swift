@@ -52,7 +52,7 @@ final class TerminalTabsModel {
         _ plan: MachineBroadcastPlan,
         isLive: @MainActor (TerminalSessionHolder) -> Bool = { $0.started },
         send: @MainActor (TerminalSessionHolder, String) -> Void = {
-            $0.terminalView.send(txt: $1)
+            $0.sendInput($1)
         }
     ) -> MachineTerminalBroadcastDelivery {
         var sent = 0

@@ -148,11 +148,11 @@ public enum MachineControlOperationExecution {
     public static func status(
         platform: MachineControlPlatform? = nil, using run: Run
     ) async -> Result<MachineControlSnapshot, Error> {
-        let command =
+        let execution =
             platform == .windows
-            ? WindowsMachineControlCommands.status
-            : MachineControlCenterCommands.statusCommand
-        switch await run(command, nil, 20) {
+            ? (WindowsMachineControlCommands.status, WindowsMachineControlCommands.statusInput)
+            : (MachineControlCenterCommands.statusCommand, nil)
+        switch await run(execution.0, execution.1, 20) {
         case let .success(output):
             return .success(MachineControlCenterCommands.parseStatus(output))
         case let .failure(error):
@@ -164,6 +164,13 @@ public enum MachineControlOperationExecution {
         _ action: MachineControlAction, machineID: UUID, isLocal: Bool,
         platform: MachineControlPlatform?, using run: Run
     ) async -> Result<String, Error> {
+        if platform == .windows {
+            let execution = WindowsMachineControlCommands.execution(
+                for: action,
+                disruptiveMarker: MachineControlCenterCommands.disruptiveMarker)
+            return await run(
+                execution.command, execution.input, 30)
+        }
         let shouldAttachSudoPassword =
             !isLocal
             && MachineControlCenterCommands.shouldAttachSudoPassword(
@@ -601,8 +608,9 @@ public enum MachineControlCenterCommands {
         usingLocalAuthorization: Bool = false, platform: MachineControlPlatform? = nil
     ) -> String {
         if platform == .windows {
-            return WindowsMachineControlCommands.command(
-                for: action, disruptiveMarker: disruptiveMarker)
+            return WindowsMachineControlCommands.execution(
+                for: action, disruptiveMarker: disruptiveMarker
+            ).command
         }
         let sudoCommand = withSudoPassword ? "/usr/bin/sudo -S -p ''" : "/usr/bin/sudo -n"
         let linux: String

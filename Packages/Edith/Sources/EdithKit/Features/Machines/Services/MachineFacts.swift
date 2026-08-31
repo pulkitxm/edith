@@ -117,7 +117,7 @@ public enum MachineFacts {
     }
 
     public static func parseWho(_ output: String) -> [String] {
-        output.split(separator: "\n").compactMap { line in
+        output.split(whereSeparator: \Character.isNewline).compactMap { line in
             let parts = line.split(separator: " ", omittingEmptySubsequences: true)
             guard parts.count >= 3 else { return nil }
             let user = String(parts[0])
@@ -134,7 +134,7 @@ public enum MachineFacts {
         case .darwin, .linux:
             parseWho(output)
         case .windows:
-            output.split(separator: "\n").map {
+            output.split(whereSeparator: \Character.isNewline).map {
                 $0.trimmingCharacters(in: .whitespacesAndNewlines)
             }.filter { !$0.isEmpty }
         }
@@ -271,7 +271,7 @@ public struct SystemdService: Identifiable, Equatable, Sendable {
 
 extension ServiceCommands {
     public static func parse(_ output: String) -> [SystemdService] {
-        output.split(separator: "\n").compactMap { line in
+        output.split(whereSeparator: \Character.isNewline).compactMap { line in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty, !trimmed.hasPrefix("●") else { return nil }
             let parts = trimmed.split(
@@ -288,7 +288,7 @@ extension ServiceCommands {
         _ output: String, platform: RemoteMachinePlatform
     ) -> [SystemdService] {
         guard platform == .windows else { return parse(output) }
-        return output.split(separator: "\n").compactMap { line in
+        return output.split(whereSeparator: \Character.isNewline).compactMap { line in
             let fields = line.components(separatedBy: WindowsSystemCommands.serviceSeparator)
             guard fields.count == 4 else { return nil }
             let state = fields[1].lowercased()
@@ -330,7 +330,7 @@ public enum PowerOutcome {
         let text = error.localizedDescription
         let detail =
             text
-            .split(separator: "\n")
+            .split(whereSeparator: \Character.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
             .last ?? ""

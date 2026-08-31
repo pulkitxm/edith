@@ -57,7 +57,7 @@ public struct RemoteTransferPlanItem: Equatable, Sendable {
     }
 
     public var name: String {
-        (sourcePath.replacingOccurrences(of: "\\", with: "/") as NSString).lastPathComponent
+        FileListing.name(of: sourcePath)
     }
 }
 
@@ -205,10 +205,14 @@ public struct RemoteTransferEndpoint: Sendable {
             machineID: machine.id, name: machine.name,
             isDirectory: { path in
                 try Task.checkCancellation()
-                let quoted = ShellQuote.quote(path)
+                let platform = await connection.remotePlatform ?? .linux
+                let command =
+                    platform == .windows
+                    ? WindowsFileCommands.isDirectory(path)
+                    : "if test -d \(ShellQuote.quote(path)); then printf directory; "
+                        + "else printf other; fi"
                 let result = try await connection.run(
-                    "if test -d \(quoted); then printf directory; else printf other; fi",
-                    timeout: 20)
+                    command, timeout: 20)
                 try Task.checkCancellation()
                 guard result.succeeded else {
                     let detail = result.stderrText.trimmingCharacters(
@@ -220,8 +224,10 @@ public struct RemoteTransferEndpoint: Sendable {
                 return result.stdoutText == "directory"
             },
             list: { path in
+                let platform = await connection.remotePlatform ?? .linux
                 let result = try await connection.run(
-                    FileListing.command(path: path, showHidden: true), timeout: 45)
+                    FileListing.command(path: path, showHidden: true, platform: platform),
+                    timeout: 45)
                 guard result.succeeded else {
                     let detail = result.stderrText.trimmingCharacters(
                         in: .whitespacesAndNewlines)
@@ -236,6 +242,7 @@ public struct RemoteTransferEndpoint: Sendable {
             },
             store: { source, path, replacing in
                 try Task.checkCancellation()
+                let platform = await connection.remotePlatform ?? .linux
                 let values = try source.resourceValues(forKeys: [.isDirectoryKey])
                 guard values.isDirectory != true else {
                     throw RemoteTransferError.unsupportedDirectory(source.path)
@@ -245,25 +252,39 @@ public struct RemoteTransferEndpoint: Sendable {
                     try await connection.upload(localURL: source, toRemotePath: staged)
                     try Task.checkCancellation()
                     _ = try await connection.runChecked(
-                        remoteStoreCommand(staged: staged, target: path, replacing: replacing),
+                        remoteStoreCommand(
+                            staged: staged, target: path, replacing: replacing,
+                            platform: platform),
                         timeout: 45)
                 } catch {
-                    await removeRemoteStage(staged, connection: connection)
+                    await removeRemoteStage(
+                        staged, platform: platform, connection: connection)
                     throw error
                 }
             })
     }
 
-    private static func removeRemoteStage(_ path: String, connection: SSHConnection) async {
+    private static func removeRemoteStage(
+        _ path: String, platform: RemoteMachinePlatform, connection: SSHConnection
+    ) async {
         _ = await Task.detached {
-            try? await connection.run(
-                "rm -f \(ShellQuote.quote(path))", timeout: 30)
+            let command =
+                platform == .windows
+                ? WindowsFileCommands.remove(paths: [path], permanently: true)
+                : "rm -f \(ShellQuote.quote(path))"
+            _ = try? await connection.run(
+                command, timeout: 30)
         }.value
     }
 
     static func remoteStoreCommand(
-        staged: String, target: String, replacing: Bool
+        staged: String, target: String, replacing: Bool,
+        platform: RemoteMachinePlatform = .linux
     ) -> String {
+        if platform == .windows {
+            return WindowsFileCommands.publishUpload(
+                staged: staged, target: target, replacing: replacing)
+        }
         let source = ShellQuote.quote(staged)
         let destination = ShellQuote.quote(target)
         let nestedSource = ShellQuote.quote(
@@ -474,7 +495,7 @@ public enum RemoteTransferOperationExecution {
         plan(
             paths: paths, destination: destination, existing: existing,
             resolutions: Dictionary(
-                paths.map { (($0 as NSString).lastPathComponent, resolution) },
+                paths.map { (FileListing.name(of: $0), resolution) },
                 uniquingKeysWith: { first, _ in first }),
             caseInsensitive: caseInsensitive)
     }
@@ -514,7 +535,7 @@ public enum RemoteTransferOperationExecution {
         }
 
         for path in paths {
-            let name = (path as NSString).lastPathComponent
+            let name = FileListing.name(of: path)
             let key = NameFolding.key(name, caseInsensitive: caseInsensitive)
             let collides = taken.contains(key)
             let resolution = resolutions[name] ?? .keepBoth
@@ -544,9 +565,9 @@ public enum RemoteTransferOperationExecution {
         resolution: NameConflictResolution = .keepBoth,
         caseInsensitive: Bool = true
     ) -> RemoteTransferPlan {
-        let rawParent = (destinationPath as NSString).deletingLastPathComponent
+        let rawParent = FileListing.parentPath(of: destinationPath) ?? ""
         let destination = rawParent.isEmpty ? "." : rawParent
-        let name = (destinationPath as NSString).lastPathComponent
+        let name = FileListing.name(of: destinationPath)
         var taken = Set(
             existing.map { NameFolding.key($0.name, caseInsensitive: caseInsensitive) })
         let collides = taken.contains(

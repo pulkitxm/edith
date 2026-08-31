@@ -134,6 +134,14 @@ public enum MachineMounts {
         root.appendingPathComponent(folderName(for: machine))
     }
 
+    static func canonicalMountPoint(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
+    static func sameMountPoint(_ first: String, _ second: String) -> Bool {
+        canonicalMountPoint(first) == canonicalMountPoint(second)
+    }
+
     public static func remotePath(
         _ path: String, platform: RemoteMachinePlatform
     ) -> String {
@@ -155,7 +163,7 @@ public enum MachineMounts {
     public static var isAvailable: Bool { executable() != nil }
 
     public static func parse(_ output: String) -> [MountedVolume] {
-        output.split(separator: "\n").compactMap { line in
+        output.split(whereSeparator: \Character.isNewline).compactMap { line in
             let text = String(line)
             guard let separator = text.range(of: " on ") else { return nil }
             let rest = String(text[separator.upperBound...])
@@ -370,11 +378,14 @@ public enum MachineMounts {
     static func settled(machine: Machine, at destination: URL, remotePath: String) async
         -> MachineMount?
     {
-        guard let volume = await volumes().first(where: { $0.mountPoint == destination.path })
+        guard
+            let volume = await volumes().first(where: {
+                sameMountPoint($0.mountPoint, destination.path)
+            })
         else { return nil }
         return MachineMount(
             machineID: machine.id, target: machine.sshTarget, remotePath: remotePath,
-            mountPoint: destination.path, isReadOnly: volume.isReadOnly)
+            mountPoint: volume.mountPoint, isReadOnly: volume.isReadOnly)
     }
 
     private static func attach(
@@ -486,7 +497,7 @@ public enum MachineMounts {
     private static func explain(_ output: String) -> String {
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
-        return trimmed.split(separator: "\n").last.map(String.init) ?? trimmed
+        return trimmed.split(whereSeparator: \Character.isNewline).last.map(String.init) ?? trimmed
     }
 
     private static func run(

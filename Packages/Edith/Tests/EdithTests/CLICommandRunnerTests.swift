@@ -46,6 +46,9 @@ private final class CommandLineRecorder: @unchecked Sendable {
         #expect(result.terminationStatus == 0)
         #expect(standardOutput.snapshot == ["event"])
         #expect(standardError.snapshot == ["diagnostic"])
+        #expect(result.standardOutput == "event")
+        #expect(result.standardError == "diagnostic")
+        #expect(result.output == "eventdiagnostic")
     }
 
     @Test func separatedRunnerDoesNotReturnWhileACompletedCommandCallbackIsBlocked() async throws {

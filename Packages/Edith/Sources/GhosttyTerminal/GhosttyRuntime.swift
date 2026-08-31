@@ -23,7 +23,6 @@ public struct GhosttyLaunch: Sendable {
     }
 
     private static func quote(_ value: String) -> String {
-        guard value.contains(where: { $0 == " " || $0 == "\"" || $0 == "'" }) else { return value }
         return "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }

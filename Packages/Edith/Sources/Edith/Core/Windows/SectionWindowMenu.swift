@@ -85,7 +85,7 @@ enum TerminalTabRegistry {
         _ plan: MachineBroadcastPlan, machineID: UUID,
         isLive: @MainActor (TerminalSessionHolder) -> Bool = { $0.started },
         send: @MainActor (TerminalSessionHolder, String) -> Void = {
-            $0.terminalView.send(txt: $1)
+            $0.sendInput($1)
         }
     ) -> MachineTerminalBroadcastDelivery? {
         let available = models[machineID, default: []].compactMap(\.value)

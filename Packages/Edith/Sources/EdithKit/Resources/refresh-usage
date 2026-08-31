@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+export PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/mingw64/bin:/c/Program Files/nodejs"
 
 PLATFORM="$(uname -s)"
 case "$PLATFORM" in
@@ -132,6 +132,7 @@ platform_tag() {
   case "$(uname -s)" in
     Darwin) os=macos ;;
     Linux) os=linux ;;
+    MINGW* | MSYS* | CYGWIN*) os=windows ;;
     *) os=unsupported ;;
   esac
   case "$(uname -m)" in
@@ -143,20 +144,28 @@ platform_tag() {
 }
 
 install_jq() {
-  local tag url
+  local tag asset target download url
   tag="$(platform_tag)"
   case "$tag" in
     *unsupported*) return 1 ;;
   esac
   command -v curl >/dev/null 2>&1 || return 1
-  url="https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-$tag"
-  curl -fsSL "$url" -o "$EDCACHE/bin/jq.download" || return 1
-  chmod +x "$EDCACHE/bin/jq.download"
-  "$EDCACHE/bin/jq.download" --version >/dev/null 2>&1 || {
-    rm -f "$EDCACHE/bin/jq.download"
+  asset="jq-$tag"
+  target=jq
+  if [ "$tag" = "windows-amd64" ]; then
+    asset="$asset.exe"
+    target=jq.exe
+  fi
+  download="$EDCACHE/bin/$target.download"
+  [ "$target" = "jq.exe" ] && download="$EDCACHE/bin/jq.download.exe"
+  url="https://github.com/jqlang/jq/releases/download/jq-1.7.1/$asset"
+  curl -fsSL "$url" -o "$download" || return 1
+  chmod +x "$download"
+  "$download" --version >/dev/null 2>&1 || {
+    rm -f "$download"
     return 1
   }
-  mv "$EDCACHE/bin/jq.download" "$EDCACHE/bin/jq"
+  mv "$download" "$EDCACHE/bin/$target"
 }
 
 install_bun() {
@@ -164,7 +173,7 @@ install_bun() {
   command -v unzip >/dev/null 2>&1 || return 1
   BUN_INSTALL="$EDCACHE/bun" bash -c 'curl -fsSL https://bun.sh/install | bash' >/dev/null 2>&1 \
     || return 1
-  [ -x "$EDCACHE/bun/bin/bun" ]
+  [ -x "$EDCACHE/bun/bin/bun" ] || [ -x "$EDCACHE/bun/bin/bun.exe" ]
 }
 
 label_for() {
@@ -1161,9 +1170,10 @@ fi
 
 if [ -s "$TMP/manifest.jsonl" ]; then
   _note "assembling usage.json"
+  jq -s '.' "$TMP/sessions.jsonl" >"$TMP/sessions.json"
   jq -s \
     --arg now "$NOW" \
-    --slurpfile ss <(jq -s '.' "$TMP/sessions.jsonl") \
+    --slurpfile ss "$TMP/sessions.json" \
     "$ASSEMBLE" "$TMP/manifest.jsonl" >"$TMP/usage.json"
 else
   _note "no usage on this Mac; reporting the machines only"
@@ -1833,10 +1843,11 @@ if [ -s "$TMP/manifest.jsonl" ]; then
   cp "$TMP/cwdmap.jsonl" "$CWDMAP_CACHE"
   _phase "projects" "$(wc -l <"$TMP/cwdmap.jsonl" | tr -d ' ') repos"
 
+  jq -s 'map({(.cwd): .}) | add // {}' "$TMP/cwdmap.jsonl" >"$TMP/cwdmap.json"
   if ! jq \
     --slurpfile usage "$TMP/usage.json" \
     --slurpfile titles "$TMP/titles.json" \
-    --slurpfile cm <(jq -s 'map({(.cwd): .}) | add // {}' "$TMP/cwdmap.jsonl") \
+    --slurpfile cm "$TMP/cwdmap.json" \
     "$DETAILS" "$TMP/recs.json" >"$TMP/merged.json"; then
     _error "detail assembly failed; previous data preserved"
     exit 1

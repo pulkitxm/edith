@@ -45,7 +45,7 @@ struct MachineToolsTab: View {
             }
             .pageContent(compact)
         }
-        .task {
+        .task(id: session.remotePlatform) {
             guard connectionsEnabled else { return }
             await session.refreshServices()
             await session.restoreMount()
@@ -449,7 +449,9 @@ struct MachineToolsTab: View {
         runningSnippet = true
         snippetOutput = "$ \(snippet.command)\n"
         snippetTask = Task {
-            let result = await SavedSnippetOperationExecution.run(snippet) { command, timeout in
+            let result = await SavedSnippetOperationExecution.run(
+                snippet, platform: session.remotePlatform ?? .linux
+            ) { command, timeout in
                 await session.runCommand(command, timeout: timeout)
             }
             guard !Task.isCancelled, snippetRunID == runID, session.machine.id == machineID else {

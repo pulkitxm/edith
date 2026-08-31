@@ -85,6 +85,19 @@ import Testing
         #expect(skipped.skipped == ["/in/source.txt"])
     }
 
+    @Test func windowsPlansPreserveRemoteNamesAndSeparators() {
+        let plan = RemoteTransferOperationExecution.plan(
+            paths: ["C:\\Users\\Pulkit\\report.txt"], destination: "~\\Desktop\\out",
+            existing: [])
+        let exact = RemoteTransferOperationExecution.plan(
+            sourcePath: "/tmp/report.txt",
+            destinationPath: "~\\Desktop\\out\\renamed.txt", existing: [])
+
+        #expect(plan.items.first?.destinationPath == "~\\Desktop\\out\\report.txt")
+        #expect(exact.destination == "~\\Desktop\\out")
+        #expect(exact.items.first?.destinationPath == "~\\Desktop\\out\\renamed.txt")
+    }
+
     @Test func withinMachineCommandsRejectSelfAndDescendantDestinations() {
         let selfPlan = RemoteTransferPlan(
             destination: "/a",
@@ -417,6 +430,14 @@ import Testing
             try FileManager.default.contentsOfDirectory(atPath: destinationRoot.path) == ["report"])
     }
 
+    @Test func localCommandExecutionPreservesExecutableArguments() async throws {
+        let result = await LocalMachineCommandExecution.run(
+            executable: URL(fileURLWithPath: "/usr/bin/printf"),
+            arguments: ["%s", "edith argument with spaces"], commandLabel: "printf")
+
+        #expect(try result.get() == "edith argument with spaces")
+    }
+
     @Test func withinMachineDirectoryMoveDeletesSourceOnlyAfterPublication() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-within-move-\(UUID().uuidString)")
@@ -547,6 +568,23 @@ import Testing
         #expect(!command.contains("ln "))
     }
 
+    @Test func windowsUploadPublicationUsesNativeAtomicFileOperations() throws {
+        let keep = RemoteTransferEndpoint.remoteStoreCommand(
+            staged: "~\\out\\.report.edith-stage", target: "~\\out\\report.txt",
+            replacing: false, platform: .windows)
+        let replace = RemoteTransferEndpoint.remoteStoreCommand(
+            staged: "~\\out\\.report.edith-stage", target: "~\\out\\report.txt",
+            replacing: true, platform: .windows)
+        let keepScript = try #require(decodedPowerShell(keep))
+        let replaceScript = try #require(decodedPowerShell(replace))
+
+        #expect(keepScript.contains("[IO.File]::Move($source,$target)"))
+        #expect(keepScript.contains("$replace=$false"))
+        #expect(replaceScript.contains("[IO.File]::Replace($source,$target,$backup,$true)"))
+        #expect(replaceScript.contains("$replace=$true"))
+        #expect(replaceScript.contains("GetUnresolvedProviderPathFromPSPath"))
+    }
+
     @Test func remoteReplacementUsesARollbackPathUntilPublication() throws {
         let command = RemoteTransferEndpoint.remoteStoreCommand(
             staged: "/out/.report.edith-stage", target: "/out/report", replacing: true)
@@ -630,6 +668,13 @@ import Testing
             machineID: UUID(), name: "Test", isDirectory: { _ in false }, list: { _ in [] },
             fetch: { _, _ in },
             store: { _, _, _ in })
+    }
+
+    private func decodedPowerShell(_ command: String) -> String? {
+        guard let encoded = command.split(separator: " ").last,
+            let data = Data(base64Encoded: String(encoded))
+        else { return nil }
+        return String(data: data, encoding: .utf16LittleEndian)
     }
 }
 

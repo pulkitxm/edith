@@ -137,6 +137,58 @@ import Testing
         #expect(projects[0].availableWorktrees.count == 2)
     }
 
+    @Test func hydratesWindowsFoldersEvenWhenLocalAccessibilityIsFalse() async throws {
+        let folder = #"C:\Users\kpulk\Desktop\Crowdvolt\mono-volt"#
+        let folderData = try JSONEncoder().encode(
+            QuinjetRemoteFolders(remotes: [
+                QuinjetRemoteFolder(
+                    target: "win-lan", folder: folder, accessible: false, uses: 10)
+            ]))
+        let worktreeData = try JSONEncoder().encode([
+            QuinjetWorktree(
+                path: folder, head: "1234567890abcdef", branch: "main", current: true,
+                bare: false, detached: false, locked: nil, prunable: nil)
+        ])
+        let client = QuinjetClient { arguments in
+            if arguments == ["remote", "list", "--json"] { return folderData }
+            #expect(arguments.contains(folder))
+            return worktreeData
+        }
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "win-lan", target: "win-lan",
+            controlPath: "/tmp/edith.sock", platform: .windows,
+            homeDirectory: #"C:\Users\kpulk"#)
+
+        let projects = try await client.recentProjects(remote: remote)
+
+        #expect(projects.map(\.name) == ["mono-volt"])
+        #expect(projects.first?.defaultWorktree?.path == folder)
+    }
+
+    @Test func resolvesWindowsHomeAndMatchesNestedWorktreePathsCaseInsensitively() async throws {
+        let folder = #"C:\Users\kpulk\Desktop\Crowdvolt\mono-volt"#
+        let client = QuinjetClient { arguments in
+            #expect(
+                arguments.contains(
+                    #"C:\Users\kpulk\desktop\Crowdvolt\mono-volt\Sources"#))
+            return try JSONEncoder().encode([
+                QuinjetWorktree(
+                    path: folder, head: "1234567890abcdef", branch: "main", current: true,
+                    bare: false, detached: false, locked: nil, prunable: nil)
+            ])
+        }
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "win-lan", target: "win-lan",
+            controlPath: "/tmp/edith.sock", platform: .windows,
+            homeDirectory: #"C:\Users\kpulk"#)
+
+        let selection = try await QuinjetOperationExecution.openSelection(
+            at: #"~\desktop\Crowdvolt\mono-volt\Sources"#, remote: remote, using: client)
+
+        #expect(selection.projectName == "mono-volt")
+        #expect(selection.worktree.path == folder)
+    }
+
     @Test func boundsRemoteFolderProbesAndPreservesFolderOrder() async throws {
         let folders = ["/srv/one", "/srv/two", "/srv/three"]
         let folderData = try JSONEncoder().encode(
@@ -623,6 +675,37 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
                 ])
         #expect(!request.arguments.contains("--client"))
         #expect(request.currentDirectory == "/Users/pulkit")
+    }
+
+    @Test func WindowsLaunchRunsQuinjetThroughEncodedPowerShell() throws {
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "win-lan", target: "win-lan",
+            controlPath: "/tmp/edith socket", platform: .windows,
+            homeDirectory: #"C:\Users\kpulk"#)
+        let configuration = QuinjetLaunchConfiguration(
+            terminal: .embedded, theme: .gruvbox, appearance: .dark,
+            hostTheme: .edith(appTheme: .orange))
+
+        let request = QuinjetOperationExecution.launchRequest(
+            executableURL: URL(fileURLWithPath: "/usr/local/bin/quinjet"),
+            worktreePath: #"E:\career\3. MagicAPI\noveum-app-nextjs"#, remote: remote,
+            configuration: configuration, managedByEdith: true,
+            localHomeDirectory: "/Users/pulkit")
+
+        #expect(request.executableURL.path == "/usr/bin/ssh")
+        #expect(
+            Array(request.arguments.prefix(5)) == [
+                "-tt", "-S", "/tmp/edith socket", "--", "win-lan",
+            ])
+        let command = try #require(request.arguments.last)
+        let payload = try #require(command.split(separator: " ").last)
+        let data = try #require(Data(base64Encoded: String(payload)))
+        let script = try #require(String(data: data, encoding: .utf16LittleEndian))
+        #expect(script.contains("& 'quinjet' '--client' 'edith' '-C'"))
+        #expect(script.contains(#"'E:\career\3. MagicAPI\noveum-app-nextjs'"#))
+        #expect(script.contains("'tui' '--theme' 'gruvbox' '--appearance' 'dark'"))
+        #expect(request.arguments.count == 6)
+        #expect(request.currentDirectory == nil)
     }
 
     @Test func cmuxCommandQuotesEveryArgument() {

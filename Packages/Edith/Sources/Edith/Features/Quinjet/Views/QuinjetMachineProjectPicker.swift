@@ -68,10 +68,12 @@ struct QuinjetProjectPicker: View {
     }
 
     private func remote(for machine: Machine) -> QuinjetRemote? {
-        guard let connection = machines.session(for: machine.id).connectionRef else { return nil }
+        let session = machines.session(for: machine.id)
+        guard let connection = session.connectionRef else { return nil }
         return QuinjetRemote(
             machineID: machine.id, machineName: machine.name, target: machine.sshTarget,
-            controlPath: connection.controlSocketPath)
+            controlPath: connection.controlSocketPath,
+            platform: session.remotePlatform ?? .linux)
     }
 }
 
@@ -115,7 +117,7 @@ private struct QuinjetRemoteProjectPicker: View {
                             Image(systemName: "arrow.up")
                         }
                         .buttonStyle(QuinjetToolbarButtonStyle())
-                        .disabled(picker.directory == "/" || picker.directory.isEmpty)
+                        .disabled(FileListing.parentPath(of: picker.directory) == nil)
                         .help("Parent folder")
                     }
                     Button {

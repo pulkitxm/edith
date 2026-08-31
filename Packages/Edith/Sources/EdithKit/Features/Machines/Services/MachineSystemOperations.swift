@@ -316,6 +316,10 @@ public struct MachineBroadcastPlan: Equatable, Sendable {
     }
 
     public var terminalInput: String { command + "\n" }
+
+    public func remoteCommand(for platform: RemoteMachinePlatform) -> String {
+        platform == .windows ? PowerShell.userCommand(command) : command
+    }
 }
 
 public enum MachineBroadcastOperationExecution {

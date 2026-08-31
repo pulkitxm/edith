@@ -4,6 +4,17 @@ import Testing
 @testable import GhosttyTerminal
 
 @Suite struct GhosttyThemeTests {
+    @Test func launchQuotesEveryShellArgument() {
+        let launch = GhosttyLaunch(
+            executable: "/usr/bin/ssh",
+            arguments: ["win-lan", #"C:\Users\kpulk\Desktop\mono-volt"#, "it's ready"],
+            environment: [])
+
+        #expect(
+            launch.command
+                == #"'/usr/bin/ssh' 'win-lan' 'C:\Users\kpulk\Desktop\mono-volt' 'it'\''s ready'"#)
+    }
+
     @Test func coloursBecomeHexTheConfigUnderstands() {
         let theme = GhosttyTheme(
             background: NSColor(srgbRed: 0x17 / 255, green: 0x14 / 255, blue: 0x12 / 255, alpha: 1),

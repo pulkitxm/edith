@@ -32,7 +32,10 @@ public enum MachineWorkingDirectory {
         let path = file(for: machineID, session: session, in: root)
         guard let data = fileManager.contents(atPath: path.path) else { return [] }
         return String(decoding: data, as: UTF8.self)
-            .split(separator: "\n", omittingEmptySubsequences: false)
+            .split(
+                omittingEmptySubsequences: false,
+                whereSeparator: \Character.isNewline
+            )
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
     }
@@ -54,7 +57,7 @@ public enum MachineWorkingDirectory {
     }
 
     public static func resolvedDirectory(fromOutput output: String) -> String? {
-        output.split(separator: "\n")
+        output.split(whereSeparator: \Character.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .last { !$0.isEmpty }
     }
@@ -132,7 +135,7 @@ public enum MachineWorkingDirectory {
     }
 
     public static func originDirectory(fromOutput output: String) -> String? {
-        output.split(separator: "\n")
+        output.split(whereSeparator: \Character.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .first { !$0.isEmpty }
     }

@@ -89,6 +89,14 @@ final class TerminalSessionHolder {
         started = false
     }
 
+    func sendInput(_ text: String) {
+        if ghosttyLaunch != nil {
+            _ = ghosttyView?.insertText(text)
+        } else {
+            terminalView.send(txt: text)
+        }
+    }
+
     func retainedGhosttyView(launch: GhosttyLaunch, theme: GhosttyTheme) -> GhosttyTerminalView {
         if let ghosttyView {
             ghosttyView.apply(theme: theme)

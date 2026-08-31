@@ -38,12 +38,33 @@ public struct HerdrTerminalBridgeSpecification: Codable, Equatable, Sendable {
         ]
         return TerminalLaunchRequest(
             executable: executable,
-            arguments: arguments.map { argument in
-                replacements.reduce(argument) { value, replacement in
-                    value.replacingOccurrences(of: replacement.key, with: replacement.value)
-                }
+            arguments: arguments.map {
+                Self.replacingTokens(in: $0, replacements: replacements)
             },
             environment: environment)
+    }
+
+    private static func replacingTokens(
+        in argument: String, replacements: [String: String]
+    ) -> String {
+        let replaced = replacements.reduce(argument) { value, replacement in
+            value.replacingOccurrences(of: replacement.key, with: replacement.value)
+        }
+        let marker = "-EncodedCommand "
+        guard let markerRange = argument.range(of: marker, options: .caseInsensitive) else {
+            return replaced
+        }
+        let encoded = String(argument[markerRange.upperBound...])
+        guard let data = Data(base64Encoded: encoded),
+            let script = String(data: data, encoding: .utf16LittleEndian),
+            let updated = replacements.reduce(
+                script,
+                { value, replacement in
+                    value.replacingOccurrences(of: replacement.key, with: replacement.value)
+                }
+            ).data(using: .utf16LittleEndian)
+        else { return replaced }
+        return String(argument[..<markerRange.upperBound]) + updated.base64EncodedString()
     }
 }
 

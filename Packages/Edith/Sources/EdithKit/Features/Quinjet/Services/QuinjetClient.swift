@@ -39,7 +39,7 @@ public struct QuinjetClient: Sendable {
         let folders = try decode(
             QuinjetRemoteFolders.self, from: await execute(["remote", "list", "--json"]))
         let candidates = folders.remotes.filter {
-            $0.target == remote.target && $0.accessible && $0.folder.hasPrefix("/")
+            $0.target == remote.target && QuinjetPath.isAbsolute($0.folder)
         }
         let probes = try await probeRemoteFolders(candidates, remote: remote)
         var projects: [QuinjetProject] = []
@@ -52,7 +52,7 @@ public struct QuinjetClient: Sendable {
             guard identities.insert(identity).inserted else { continue }
             projects.append(
                 QuinjetProject(
-                    name: URL(fileURLWithPath: folder.folder).lastPathComponent,
+                    name: QuinjetPath.name(folder.folder),
                     commonDir: identity, worktrees: worktrees))
         }
         return projects
@@ -113,7 +113,7 @@ public struct QuinjetClient: Sendable {
                 "--remote", remote.target, "--ssh-control-path", remote.controlPath,
             ]
         }
-        arguments += ["-C", path, "worktree", "list", "--json"]
+        arguments += ["-C", remote?.resolve(path) ?? path, "worktree", "list", "--json"]
         return try decode(
             [QuinjetWorktree].self,
             from: await execute(arguments))
@@ -144,7 +144,7 @@ public struct QuinjetClient: Sendable {
             throw QuinjetClientError.commandFailed(
                 result.output.trimmingCharacters(in: .whitespacesAndNewlines))
         }
-        return Data(result.output.utf8)
+        return result.standardOutputData
     }
 }
 

@@ -71,7 +71,7 @@ public enum FileListing {
     }
 
     public static func parse(output: String, parent: String) -> [RemoteFileEntry] {
-        let lines = output.split(separator: "\n").map(String.init)
+        let lines = output.split(whereSeparator: \Character.isNewline).map(String.init)
         let findEntries = lines.compactMap { parseFindLine($0, parent: parent) }
         if !findEntries.isEmpty { return sorted(findEntries) }
         return sorted(lines.compactMap { parseLSLine($0, parent: parent) })
@@ -100,6 +100,14 @@ public enum FileListing {
         return parent.isEmpty ? "/" : parent
     }
 
+    public static func name(of path: String) -> String {
+        if isWindowsPath(path) {
+            let normalized = path.hasSuffix("\\") ? String(path.dropLast()) : path
+            return normalized.split(separator: "\\").last.map(String.init) ?? normalized
+        }
+        return (path as NSString).lastPathComponent
+    }
+
     public static func breadcrumbs(for path: String) -> [(name: String, path: String)] {
         if isWindowsPath(path) {
             let parts = path.split(separator: "\\", omittingEmptySubsequences: true)
@@ -124,7 +132,7 @@ public enum FileListing {
 
     public static func isWindowsPath(_ path: String) -> Bool {
         path.range(of: "^[A-Za-z]:\\\\", options: .regularExpression) != nil
-            || path.hasPrefix("\\\\")
+            || path.hasPrefix("\\\\") || path.hasPrefix("~\\")
     }
 
     static func parseFindLine(_ line: String, parent: String) -> RemoteFileEntry? {

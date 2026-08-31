@@ -481,9 +481,9 @@ struct QuinjetCommandTarget: Sendable {
         }
         return QuinjetCommandTarget(
             name: machine.name, local: false,
-            remote: QuinjetRemote(
+            remote: await QuinjetRemote.connected(
                 machineID: machine.id, machineName: machine.name, target: machine.sshTarget,
-                controlPath: connection.controlSocketPath),
+                connection: connection),
             connection: connection)
     }
 }

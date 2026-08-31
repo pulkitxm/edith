@@ -21,6 +21,37 @@ public enum WindowsFileCommands {
                 + "+'\(separator)'+$target) }")
     }
 
+    public static func isDirectory(_ path: String) -> String {
+        PowerShell.command(
+            "$item=Get-Item -LiteralPath \(PowerShell.literal(path)) -ErrorAction "
+                + "SilentlyContinue; [Console]::Out.Write($(if ($item -and "
+                + "$item.PSIsContainer) {'directory'} else {'other'}))")
+    }
+
+    public static func publishUpload(
+        staged: String, target: String, replacing: Bool
+    ) -> String {
+        let source = PowerShell.literal(staged)
+        let destination = PowerShell.literal(target)
+        let replacement = replacing ? "$true" : "$false"
+        let backup = PowerShell.literal(
+            target + NameConflicts.stagingSuffix + "-backup-" + UUID().uuidString)
+        return PowerShell.command(
+            "$source=$ExecutionContext.SessionState.Path."
+                + "GetUnresolvedProviderPathFromPSPath(\(source)); "
+                + "$target=$ExecutionContext.SessionState.Path."
+                + "GetUnresolvedProviderPathFromPSPath(\(destination)); "
+                + "$replace=\(replacement); if ([IO.Directory]::Exists($target)) { "
+                + "[Console]::Error.Write('A directory cannot be replaced by a file.'); "
+                + "exit 73 }; if ([IO.File]::Exists($target)) { if (-not $replace) { "
+                + "[Console]::Error.Write('The destination changed before publication.'); "
+                + "exit 73 }; $backup=$ExecutionContext.SessionState.Path."
+                + "GetUnresolvedProviderPathFromPSPath(\(backup)); "
+                + "[IO.File]::Replace($source,$target,$backup,$true); "
+                + "Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue "
+                + "} else { [IO.File]::Move($source,$target) }")
+    }
+
     public static func makeDirectory(_ path: String) -> String {
         PowerShell.command(
             "New-Item -ItemType Directory -Path \(PowerShell.literal(path)) -Force | Out-Null")
@@ -124,7 +155,8 @@ public enum WindowsFileCommands {
 
     public static func preview(path: String, limit: Int) -> String {
         PowerShell.command(
-            "$stream=[IO.File]::OpenRead(\(PowerShell.literal(path))); "
+            "$path=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("
+                + "\(PowerShell.literal(path))); $stream=[IO.File]::OpenRead($path); "
                 + "$count=[int][Math]::Min($stream.Length,\(max(1, limit))); "
                 + "$buffer=New-Object byte[] $count; [void]$stream.Read($buffer,0,$count); "
                 + "$stream.Dispose(); $stdout=[Console]::OpenStandardOutput(); "

@@ -22,7 +22,7 @@ enum MachineTerminalBroadcastBridge {
         to info: [AnyHashable: Any],
         isLive: @MainActor (TerminalSessionHolder) -> Bool = { $0.started },
         send: @MainActor (TerminalSessionHolder, String) -> Void = {
-            $0.terminalView.send(txt: $1)
+            $0.sendInput($1)
         }
     ) -> [String: Any] {
         let requestID = info[MachineTerminalBroadcastIPC.requestIDKey] as? String ?? ""

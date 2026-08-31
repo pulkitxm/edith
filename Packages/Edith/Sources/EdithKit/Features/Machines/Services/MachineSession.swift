@@ -512,7 +512,7 @@ public final class MachineSession {
         }
         do {
             let result = try await connection.run(command, stdin: stdin, timeout: timeout)
-            let output = result.stdoutText + result.stderrText
+            let output = result.successfulCommandText
             guard result.succeeded else {
                 return .failure(
                     SSHConnectionError.commandFailed(
@@ -701,6 +701,15 @@ public final class MachineSession {
             let listing = try await RemoteDirectoryOperationExecution.list(
                 path: path, showHidden: true, using: directoryEndpoint)
             return .success(listing.entries)
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    public func homeDirectory() async -> Result<String, Error> {
+        if isLocal { return .success(FileManager.default.homeDirectoryForCurrentUser.path) }
+        do {
+            return .success(try await directoryEndpoint.homeDirectory())
         } catch {
             return .failure(error)
         }

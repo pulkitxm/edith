@@ -64,12 +64,19 @@ public enum HerdrLive {
             try? await Task.sleep(for: .seconds(5))
             return
         }
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else {
+            await connection.disconnect()
+            return
+        }
         let sockets = await remoteSockets(connection)
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else {
+            await connection.disconnect()
+            return
+        }
         if sockets.isEmpty {
             fleet.put(await HerdrCollector.collectRemote(machine, connection: connection))
             try? await Task.sleep(for: .seconds(8))
+            await connection.disconnect()
             return
         }
         await runHostLease(
@@ -80,6 +87,7 @@ public enum HerdrLive {
             machineIsLocal: false,
             sshTarget: machine.sshTarget,
             fleet: fleet)
+        await connection.disconnect()
     }
 
     private static func runHostLease(

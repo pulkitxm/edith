@@ -67,6 +67,19 @@ import Testing
         #expect(MachineMounts.folderName(for: awkward) == "web-prod")
     }
 
+    @Test func mountPointsResolveSymlinkedParents() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let real = root.appendingPathComponent("real")
+        let alias = root.appendingPathComponent("alias")
+        let child = real.appendingPathComponent("mount")
+        try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: real)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        #expect(
+            MachineMounts.sameMountPoint(alias.appendingPathComponent("mount").path, child.path))
+    }
+
     @Test func windowsDrivePathsUseOpenSSHSFTPForm() {
         #expect(
             MachineMounts.remotePath("C:\\Users\\kpulk", platform: .windows) == "/C:/Users/kpulk")

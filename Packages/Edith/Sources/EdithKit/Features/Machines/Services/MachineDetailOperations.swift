@@ -271,9 +271,11 @@ public enum SavedSnippetOperationExecution {
     }
 
     public static func run<Output: Sendable>(
-        _ snippet: CommandSnippet,
+        _ snippet: CommandSnippet, platform: RemoteMachinePlatform = .linux,
         using run: (String, TimeInterval) async -> Result<Output, Error>
     ) async -> Result<Output, Error> {
-        await run(snippet.command, 120)
+        let command =
+            platform == .windows ? PowerShell.userCommand(snippet.command) : snippet.command
+        return await run(command, 120)
     }
 }

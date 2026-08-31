@@ -4,9 +4,19 @@ public enum LocalMachineCommandExecution {
     public static func run(
         _ command: String, stdin: Data? = nil, timeout: TimeInterval = 60
     ) async -> Result<String, Error> {
+        await run(
+            executable: URL(fileURLWithPath: "/bin/zsh"), arguments: ["-lc", command],
+            commandLabel: command, stdin: stdin, timeout: timeout)
+    }
+
+    public static func run(
+        executable: URL, arguments: [String], environment: [String: String]? = nil,
+        commandLabel: String, stdin: Data? = nil, timeout: TimeInterval = 60
+    ) async -> Result<String, Error> {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-lc", command]
+        process.executableURL = executable
+        process.arguments = arguments
+        process.environment = environment
         let pipe = Pipe()
         let buffer = MachineCommandBuffer()
         process.standardOutput = pipe
@@ -44,7 +54,7 @@ public enum LocalMachineCommandExecution {
         guard status == 0 else {
             return .failure(
                 SSHConnectionError.commandFailed(
-                    command: command, status: status, stderr: text))
+                    command: commandLabel, status: status, stderr: text))
         }
         return .success(text)
     }

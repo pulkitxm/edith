@@ -257,6 +257,8 @@ import Testing
         #expect(fromCLI.command == "uptime --pretty")
         #expect(fromUI.command == "uptime")
         #expect(fromUI.terminalInput == "uptime\n")
+        #expect(fromUI.remoteCommand(for: .linux) == "uptime")
+        #expect(fromUI.remoteCommand(for: .windows).contains("-EncodedCommand"))
         #expect(
             throws: MachineBroadcastOperationError.emptyCommand,
             performing: { try MachineBroadcastOperationExecution.plan(command: "  ").get() })

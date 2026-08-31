@@ -2,6 +2,17 @@ $ErrorActionPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 if (-not $EdithMode) { $EdithMode = 'stream' }
 if (-not $EdithInterval) { $EdithInterval = 2 }
+$collectorStartedAt = [DateTimeOffset]::UtcNow
+$collectorLifetimeSeconds = 600
+$selfProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$PID"
+$transportProcess = Get-Process -Id $selfProcess.ParentProcessId -ErrorAction SilentlyContinue
+$transportProcessID = $selfProcess.ParentProcessId
+$transportStartedAt = $transportProcess.StartTime
+
+function Test-EdithTransport {
+    $current = Get-Process -Id $transportProcessID -ErrorAction SilentlyContinue
+    return $null -ne $current -and $current.StartTime -eq $transportStartedAt
+}
 
 function Send-EdithRecord {
     param($Value)
@@ -32,21 +43,28 @@ $hello = [ordered]@{
 Send-EdithRecord $hello
 
 $tick = 0
+$previousSampleAt = $null
+$previousNetwork = @{}
+$previousProcesses = @{}
 do {
     $started = [DateTimeOffset]::UtcNow
+    $sampleElapsed = if ($null -eq $previousSampleAt) {
+        [double]$EdithInterval
+    } else {
+        [Math]::Max(0.001, ($started - $previousSampleAt).TotalSeconds)
+    }
+    $previousSampleAt = $started
     $cpu = Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor | Where-Object Name -eq '_Total' | Select-Object -First 1
     $memory = Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory
     $system = Get-CimInstance Win32_PerfFormattedData_PerfOS_System
     $diskRows = @(Get-CimInstance Win32_PerfFormattedData_PerfDisk_PhysicalDisk | Where-Object Name -ne '_Total')
-    $networkRows = @(Get-CimInstance Win32_PerfFormattedData_Tcpip_NetworkInterface)
-    $processRows = @(Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | Where-Object { $_.Name -notin @('_Total', 'Idle') } | Sort-Object PercentProcessorTime -Descending | Select-Object -First 30)
+    $networkRows = @(Get-NetAdapterStatistics)
+    $processRows = @(Get-Process | Where-Object Id -ne 0)
     $availableKB = [long]$memory.AvailableKBytes
     $totalKB = [long]($computer.TotalPhysicalMemory / 1KB)
     $usedKB = [long][Math]::Max(0, $totalKB - $availableKB)
     $diskRead = [double](($diskRows | Measure-Object -Property DiskReadBytesPersec -Sum).Sum)
     $diskWrite = [double](($diskRows | Measure-Object -Property DiskWriteBytesPersec -Sum).Sum)
-    $networkReceive = [double](($networkRows | Measure-Object -Property BytesReceivedPersec -Sum).Sum)
-    $networkSend = [double](($networkRows | Measure-Object -Property BytesSentPersec -Sum).Sum)
     $diskDevices = @($diskRows | ForEach-Object {
         [ordered]@{
             n = [string]$_.Name
@@ -56,24 +74,38 @@ do {
         }
     })
     $networkInterfaces = @($networkRows | ForEach-Object {
+        $received = [double]$_.ReceivedBytes
+        $sent = [double]$_.SentBytes
+        $before = $previousNetwork[$_.Name]
+        $receivedRate = if ($null -eq $before) { 0.0 } else { [Math]::Max(0, ($received - $before.received) / $sampleElapsed) }
+        $sentRate = if ($null -eq $before) { 0.0 } else { [Math]::Max(0, ($sent - $before.sent) / $sampleElapsed) }
+        $previousNetwork[$_.Name] = @{ received = $received; sent = $sent }
         [ordered]@{
             n = [string]$_.Name
-            rxBps = [double]$_.BytesReceivedPersec
-            txBps = [double]$_.BytesSentPersec
+            rxBps = [double]$receivedRate
+            txBps = [double]$sentRate
             virtual = [bool]($_.Name -match 'Virtual|Hyper-V|Loopback|VPN|TAP')
         }
     })
     $processes = @($processRows | ForEach-Object {
+        $cpuSeconds = if ($null -eq $_.CPU) { 0.0 } else { [double]$_.CPU }
+        $before = $previousProcesses[$_.Id]
+        $cpuPercent = if ($null -eq $before) { 0.0 } else { [Math]::Max(0, ($cpuSeconds - $before) / $sampleElapsed * 100) }
+        $previousProcesses[$_.Id] = $cpuSeconds
         [ordered]@{
-            pid = [int]$_.IDProcess
+            pid = [int]$_.Id
             user = ''
-            cpu = [double]$_.PercentProcessorTime
-            mem = if ($totalKB -gt 0) { [double]($_.WorkingSetPrivate / 1KB / $totalKB * 100) } else { 0.0 }
-            rssKB = [long]($_.WorkingSetPrivate / 1KB)
-            name = [string]$_.Name
-            cmd = [string]$_.Name
+            cpu = [double]$cpuPercent
+            mem = if ($totalKB -gt 0) { [double]($_.WorkingSet64 / 1KB / $totalKB * 100) } else { 0.0 }
+            rssKB = [long]($_.WorkingSet64 / 1KB)
+            name = [string]$_.ProcessName
+            cmd = [string]$_.ProcessName
         }
-    })
+    } | Sort-Object { $_['cpu'] } -Descending | Select-Object -First 30)
+    $activeProcessIDs = @($processRows | ForEach-Object { [int]$_.Id })
+    @($previousProcesses.Keys) | Where-Object { $_ -notin $activeProcessIDs } | ForEach-Object { $previousProcesses.Remove($_) }
+    $networkReceive = [double](($networkInterfaces | ForEach-Object { $_['rxBps'] } | Measure-Object -Sum).Sum)
+    $networkSend = [double](($networkInterfaces | ForEach-Object { $_['txBps'] } | Measure-Object -Sum).Sum)
     $uptime = ([DateTime]::Now - $operatingSystem.LastBootUpTime).TotalSeconds
     $sample = [ordered]@{
         t = 'sample'
@@ -128,6 +160,8 @@ do {
 
     $tick += 1
     if ($EdithMode -eq 'once') { break }
+    if (-not (Test-EdithTransport)) { break }
+    if (([DateTimeOffset]::UtcNow - $collectorStartedAt).TotalSeconds -ge $collectorLifetimeSeconds) { break }
     $elapsed = ([DateTimeOffset]::UtcNow - $started).TotalSeconds
     Start-Sleep -Milliseconds ([int]([Math]::Max(0.1, $EdithInterval - $elapsed) * 1000))
 } while ($true)

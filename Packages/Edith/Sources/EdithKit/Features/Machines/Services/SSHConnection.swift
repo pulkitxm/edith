@@ -6,9 +6,45 @@ public struct SSHExecResult: Sendable {
     public let stderr: Data
 
     public var stdoutText: String { String(decoding: stdout, as: UTF8.self) }
-    public var stderrText: String { String(decoding: stderr, as: UTF8.self) }
+    public var stderrText: String {
+        PowerShell.decodedError(
+            SSHTransportDiagnostics.cleanStderr(String(decoding: stderr, as: UTF8.self)))
+    }
     public var combinedText: String { stdoutText + stderrText }
+    public var successfulCommandText: String { combinedText }
     public var succeeded: Bool { status == 0 }
+}
+
+enum SSHTransportDiagnostics {
+    static func isMultiplexingWarning(_ line: String) -> Bool {
+        line.trimmingCharacters(in: .whitespacesAndNewlines)
+            .hasPrefix("mux_client_request_session: session request failed:")
+    }
+
+    static func cleanStderr(_ text: String) -> String {
+        text.split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !isMultiplexingWarning(String($0)) }
+            .joined(separator: "\n")
+    }
+}
+
+enum SSHTransferCommands {
+    static func createUploadDirectory(
+        path: String, platform: RemoteMachinePlatform
+    ) -> String? {
+        guard platform == .windows else { return nil }
+        return PowerShell.userCommand(
+            "$path=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("
+                + "\(PowerShell.literal(path))); "
+                + "$parent=[IO.Path]::GetDirectoryName($path); "
+                + "if (![String]::IsNullOrWhiteSpace($parent)) { "
+                + "[IO.Directory]::CreateDirectory($parent) | Out-Null }")
+    }
+
+    static func temporaryDirectory(platform: RemoteMachinePlatform) -> String? {
+        guard platform == .windows else { return nil }
+        return PowerShell.userCommand("[Console]::Out.Write([IO.Path]::GetTempPath())")
+    }
 }
 
 public struct SSHOutputChunk: Sendable {
@@ -291,7 +327,9 @@ public actor SSHConnection {
         let command =
             remotePlatform == .windows
             ? PowerShell.command(
-                "$bytes=[IO.File]::ReadAllBytes(\(PowerShell.literal(remotePath))); "
+                "$path=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("
+                    + "\(PowerShell.literal(remotePath))); "
+                    + "$bytes=[IO.File]::ReadAllBytes($path); "
                     + "$output=[Console]::OpenStandardOutput(); "
                     + "$output.Write($bytes,0,$bytes.Length); $output.Flush()")
             : "cat \(ShellQuote.quote(remotePath))"
@@ -366,18 +404,22 @@ public actor SSHConnection {
         localURL: URL, toRemotePath remotePath: String,
         progress: (@Sendable (Int64) -> Void)? = nil
     ) async throws {
-        guard let input = try? FileHandle(forReadingFrom: localURL) else {
+        guard FileManager.default.isReadableFile(atPath: localURL.path) else {
             throw SSHConnectionError.transferFailed("Could not read the local file.")
         }
         let expected =
             (try? FileManager.default.attributesOfItem(atPath: localURL.path)[.size]) as? Int64
             ?? -1
-        let command =
-            remotePlatform == .windows
-            ? PowerShell.command(
-                "$output=[IO.File]::Create(\(PowerShell.literal(remotePath))); "
-                    + "[Console]::OpenStandardInput().CopyTo($output); $output.Dispose()")
-            : "cat > \(ShellQuote.quote(remotePath))"
+        if remotePlatform == .windows {
+            try await uploadToWindows(
+                localURL: localURL, remotePath: remotePath, expected: expected,
+                progress: progress)
+            return
+        }
+        guard let input = try? FileHandle(forReadingFrom: localURL) else {
+            throw SSHConnectionError.transferFailed("Could not read the local file.")
+        }
+        let command = "cat > \(ShellQuote.quote(remotePath))"
         let process = execProcess(command: command)
         let stdinPipe = Pipe()
         let stderrPipe = Pipe()
@@ -400,7 +442,9 @@ public actor SSHConnection {
             throw error
         }
         stderrPipe.fileHandleForReading.readabilityHandler = nil
-        let reported = String(decoding: stderrBuffer.snapshot(), as: UTF8.self)
+        let reported = SSHExecResult(
+            status: attempt.status, stdout: Data(), stderr: stderrBuffer.snapshot()
+        ).stderrText
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard attempt.writeSucceeded else {
@@ -424,6 +468,48 @@ public actor SSHConnection {
             throw SSHConnectionError.transferFailed(
                 "The machine kept a different file than the one that was sent.")
         }
+    }
+
+    private func uploadToWindows(
+        localURL: URL, remotePath: String, expected: Int64,
+        progress: (@Sendable (Int64) -> Void)?
+    ) async throws {
+        if let command = SSHTransferCommands.createUploadDirectory(
+            path: remotePath, platform: .windows)
+        {
+            try await runChecked(command, timeout: 30)
+        }
+        progress?(0)
+        let result = await LocalMachineCommandExecution.run(
+            executable: URL(fileURLWithPath: "/usr/bin/scp"),
+            arguments:
+                fileTransferArguments()
+                + [localURL.path, "\(machine.sshTarget):\(windowsSFTPPath(remotePath))"],
+            environment: environment(), commandLabel: "scp", timeout: 15 * 60)
+        if case let .failure(error) = result {
+            await discard(remotePath)
+            throw SSHConnectionError.transferFailed(error.localizedDescription)
+        }
+        guard let landed = await remoteSize(remotePath), expected < 0 || landed == expected else {
+            await discard(remotePath)
+            throw SSHConnectionError.transferFailed(
+                "The machine kept a different file than the one that was sent.")
+        }
+        if expected >= 0 { progress?(expected) }
+    }
+
+    public func temporaryDirectory() async throws -> String {
+        let platform = remotePlatform ?? .linux
+        guard let command = SSHTransferCommands.temporaryDirectory(platform: platform) else {
+            return "/tmp"
+        }
+        let result = try await runChecked(command, timeout: 15)
+        let path = result.successfulCommandText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard FileListing.isWindowsPath(path) else {
+            throw SSHConnectionError.transferFailed(
+                "The machine did not provide a usable temporary directory.")
+        }
+        return path
     }
 
     static func sendUpload(
@@ -531,6 +617,37 @@ public actor SSHConnection {
 
     public nonisolated func terminalEnvironment() -> [String] {
         environment().map { "\($0.key)=\($0.value)" }
+    }
+
+    private nonisolated func fileTransferArguments() -> [String] {
+        var arguments =
+            [
+                "-q", "-o", "ControlPath=\"\(socketPath)\"", "-o", "BatchMode=yes", "-o",
+                "LogLevel=ERROR",
+            ] + baseOptions()
+        switch machine.source {
+        case .sshConfigAlias:
+            break
+        case .manual:
+            arguments += ["-P", String(machine.port)]
+            switch machine.auth {
+            case .agent:
+                break
+            case let .keyFile(path, _):
+                arguments += ["-i", SSHConfigFile.expandTilde(path), "-o", "IdentitiesOnly=yes"]
+            case .password:
+                arguments += [
+                    "-o", "PreferredAuthentications=password,keyboard-interactive",
+                    "-o", "PubkeyAuthentication=no",
+                    "-o", "NumberOfPasswordPrompts=1",
+                ]
+            }
+        }
+        return arguments
+    }
+
+    private nonisolated func windowsSFTPPath(_ path: String) -> String {
+        "/" + path.replacingOccurrences(of: "\\", with: "/")
     }
 
     private nonisolated func execProcess(command: String) -> Process {
@@ -656,7 +773,8 @@ public actor SSHConnection {
             return SSHConnectFailure(
                 message: "Could not resolve the host name.", isRecoverable: true)
         }
-        let lastLine = text.split(separator: "\n").last.map(String.init) ?? text
+        let lastLine =
+            text.split(whereSeparator: \Character.isNewline).last.map(String.init) ?? text
         return SSHConnectFailure(
             message: lastLine.isEmpty ? "Connection failed." : lastLine, isRecoverable: true)
     }

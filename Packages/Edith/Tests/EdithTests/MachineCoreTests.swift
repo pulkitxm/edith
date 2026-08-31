@@ -130,9 +130,78 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
 
     @Test func encodesCommandsAsUTF16LE() throws {
         let command = PowerShell.command("Write-Output 'hello'")
+        #expect(command.contains("-OutputFormat Text"))
         let encoded = try #require(command.split(separator: " ").last)
         let data = try #require(Data(base64Encoded: String(encoded)))
         #expect(String(data: data, encoding: .utf16LittleEndian) == "Write-Output 'hello'")
+    }
+
+    @Test func invocationsPropagateNativeAndPowerShellFailures() throws {
+        let single = try #require(PowerShell.invocation(["Get-Date"]))
+        let native = try #require(PowerShell.invocation(["cmd.exe", "/c", "exit /b 7"]))
+
+        #expect(
+            single.hasPrefix(
+                "$ProgressPreference='SilentlyContinue'; $ErrorActionPreference='Stop'; try { "
+                    + "& 'Get-Date'"))
+        #expect(native.contains("& 'cmd.exe' '/c' 'exit /b 7'"))
+        #expect(native.contains("exit $edithExitCode"))
+        #expect(native.contains("[Console]::Error.WriteLine($_.Exception.Message); exit 1"))
+    }
+
+    @Test func decodesPowerShellErrorsAndDropsStartupProgress() {
+        let error = """
+            #< CLIXML
+            <Objs><S S="Error">Cannot find &apos;service&apos;._x000D__x000A_</S><S S="Error">Try again.</S></Objs>
+            """
+        let progress = """
+            #< CLIXML
+            <Objs><Obj S="progress"><AV>Preparing modules for first use.</AV></Obj></Objs>
+            """
+
+        #expect(PowerShell.decodedError(error) == "Cannot find 'service'.\r\nTry again.")
+        #expect(PowerShell.decodedError(progress).isEmpty)
+        #expect(PowerShell.decodedError("plain error") == "plain error")
+    }
+
+    @Test func successfulCommandsDropMultiplexingWarningsWithoutDroppingRemoteStderr() {
+        let result = SSHExecResult(
+            status: 0, stdout: Data("C:\\Users\\kpulk".utf8),
+            stderr: Data(
+                "mux_client_request_session: session request failed: Session open refused by peer\n"
+                    .utf8))
+        let remoteWarning = SSHExecResult(
+            status: 0, stdout: Data("value\n".utf8),
+            stderr: Data("remote warning\n".utf8))
+
+        #expect(result.successfulCommandText == "C:\\Users\\kpulk")
+        #expect(remoteWarning.successfulCommandText == "value\nremote warning\n")
+    }
+
+    @Test func multiplexingWarningsDoNotHidePowerShellErrors() {
+        let result = SSHExecResult(
+            status: 1, stdout: Data(),
+            stderr: Data(
+                """
+                mux_client_request_session: session request failed: Session open refused by peer
+                #< CLIXML
+                <Objs><S S="Error">Could not find the destination._x000D__x000A_</S></Objs>
+                """.utf8))
+
+        #expect(result.stderrText == "Could not find the destination.")
+    }
+
+    @Test func windowsUploadsCreateTheirDestinationDirectorySafely() throws {
+        let command = try #require(
+            SSHTransferCommands.createUploadDirectory(
+                path: "C:\\Users\\me\\AppData\\Local\\Temp\\nested\\image.png",
+                platform: .windows))
+        let encoded = try #require(command.split(separator: " ").last)
+        let data = try #require(Data(base64Encoded: String(encoded)))
+        let script = try #require(String(data: data, encoding: .utf16LittleEndian))
+
+        #expect(script.contains("[IO.Directory]::CreateDirectory($parent)"))
+        #expect(script.contains("[Console]::Error.WriteLine($_.Exception.Message)"))
     }
 }
 
@@ -439,13 +508,21 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
         #expect(text.contains("@EDITH@"))
     }
 
-    @Test func windowsCollectorUsesCIMMetrics() {
+    @Test func windowsCollectorUsesBoundedNativeMetrics() {
         let script = MachineCollector.script(for: .windows, follow: false, interval: 5)
         let text = String(decoding: script ?? Data(), as: UTF8.self)
         #expect(text.hasPrefix("$EdithMode = 'once'\n$EdithInterval = 5"))
         #expect(text.contains("Win32_OperatingSystem"))
         #expect(text.contains("Win32_PerfFormattedData_PerfOS_Processor"))
-        #expect(text.contains("Win32_PerfFormattedData_Tcpip_NetworkInterface"))
+        #expect(text.contains("Get-NetAdapterStatistics"))
+        #expect(text.contains("Get-Process"))
+        #expect(!text.contains("Win32_PerfFormattedData_Tcpip_NetworkInterface"))
+        #expect(!text.contains("Win32_PerfFormattedData_PerfProc_Process"))
+        #expect(text.contains("Test-EdithTransport"))
+        #expect(text.contains("$current.StartTime -eq $transportStartedAt"))
+        #expect(text.contains("$collectorLifetimeSeconds = 600"))
+        #expect(text.contains("$_['rxBps']"))
+        #expect(text.contains("Sort-Object { $_['cpu'] } -Descending"))
         #expect(text.contains("@EDITH@"))
     }
 
@@ -632,30 +709,37 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
     }
 
     @Test func buildsNativeWindowsStatusAndMutations() throws {
-        let status = try #require(decodedMachinePowerShell(WindowsMachineControlCommands.status))
-        let brightness = try #require(
-            decodedMachinePowerShell(
-                MachineControlCenterCommands.command(
-                    for: .setBrightness(140), withSudoPassword: false,
-                    platform: .windows)))
-        let volume = try #require(
-            decodedMachinePowerShell(
-                MachineControlCenterCommands.command(
-                    for: .setVolume(-10), withSudoPassword: false,
-                    platform: .windows)))
-        let airplane = try #require(
-            decodedMachinePowerShell(
-                MachineControlCenterCommands.command(
-                    for: .setAirplaneMode(true), withSudoPassword: false,
-                    platform: .windows)))
+        let status = String(decoding: WindowsMachineControlCommands.statusInput, as: UTF8.self)
+        let brightness = String(
+            decoding: WindowsMachineControlCommands.input(
+                for: .setBrightness(140),
+                disruptiveMarker: MachineControlCenterCommands.disruptiveMarker),
+            as: UTF8.self)
+        let volume = String(
+            decoding: WindowsMachineControlCommands.input(
+                for: .setVolume(-10),
+                disruptiveMarker: MachineControlCenterCommands.disruptiveMarker),
+            as: UTF8.self)
+        let airplane = String(
+            decoding: WindowsMachineControlCommands.input(
+                for: .setAirplaneMode(true),
+                disruptiveMarker: MachineControlCenterCommands.disruptiveMarker),
+            as: UTF8.self)
 
         #expect(status.contains("EDITH_CONTROL_PLATFORM=windows"))
         #expect(status.contains("WmiMonitorBrightness"))
         #expect(status.contains("Get-NetAdapter"))
         #expect(status.contains("Get-PnpDevice -Class Bluetooth"))
         #expect(status.contains("IAudioEndpointVolume"))
+        #expect(
+            status.contains(
+                "Add-Type -TypeDefinition $audioSource -ErrorAction SilentlyContinue\n[Console]"))
         #expect(brightness.contains("Brightness = [byte]100"))
         #expect(volume.contains("[EdithAudio]::Level = 0"))
+        #expect(
+            volume.contains(
+                "Add-Type -TypeDefinition $audioSource -ErrorAction SilentlyContinue\n[EdithAudio]")
+        )
         #expect(airplane.contains(MachineControlCenterCommands.disruptiveMarker))
         #expect(airplane.contains("Disable-NetAdapter"))
         #expect(airplane.contains("Disable-PnpDevice"))
@@ -983,16 +1067,42 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
 
     @Test func windowsStatusUsesTheNativeCommand() async throws {
         var command = ""
+        var input = Data()
         let result = await MachineControlOperationExecution.status(platform: .windows) {
-            next, _, _ in
+            next, stdin, _ in
             command = next
+            input = stdin ?? Data()
             return .success("EDITH_CONTROL_PLATFORM=windows\nEDITH_CONTROL_VOLUME=37\n")
         }
 
         let snapshot = try result.get()
         #expect(command == WindowsMachineControlCommands.status)
+        #expect(command == PowerShell.standardInputCommand(byteCount: input.count))
+        let launcher = try #require(decodedMachinePowerShell(command))
+        #expect(launcher.contains("while($o-lt $b.Length)"))
+        #expect(!launcher.contains("ReadToEnd"))
+        #expect(input == WindowsMachineControlCommands.statusInput)
+        #expect(command.count < 1_000)
+        #expect(input.count > 5_000)
         #expect(snapshot.platform == .windows)
         #expect(snapshot.volume == 37)
+    }
+
+    @Test func windowsMutationsUseStandardInput() async throws {
+        var command = ""
+        var input = Data()
+        let result = await MachineControlOperationExecution.perform(
+            .setVolume(41), machineID: Machine.localID, isLocal: false,
+            platform: .windows
+        ) { next, stdin, _ in
+            command = next
+            input = stdin ?? Data()
+            return .success("")
+        }
+
+        _ = try result.get()
+        #expect(command == PowerShell.standardInputCommand(byteCount: input.count))
+        #expect(String(decoding: input, as: UTF8.self).contains("[EdithAudio]::Level = 41"))
     }
 
     @Test func mutationsUseTheSharedBuilderAndTimeout() async throws {

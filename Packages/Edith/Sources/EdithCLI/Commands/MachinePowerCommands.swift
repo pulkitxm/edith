@@ -504,7 +504,9 @@ struct MachinesBroadcastCommand: AsyncParsableCommand {
                 var text = ""
                 do {
                     try await runner.connect()
-                    let result = try await runner.run(plan.command, timeout: 120)
+                    let platform = await runner.ssh.remotePlatform ?? .linux
+                    let result = try await runner.run(
+                        plan.remoteCommand(for: platform), timeout: 120)
                     status = result.status
                     text = result.combinedText.trimmingCharacters(in: .whitespacesAndNewlines)
                 } catch {

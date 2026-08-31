@@ -81,25 +81,37 @@ public final class SSHLineStream: @unchecked Sendable {
         self.onExit = onExit
     }
 
+    deinit {
+        cancel()
+    }
+
     public func start() throws {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
         let stdout = stdoutSplitter
         let stderr = stderrSplitter
         let deliver = onLine
+        let deliverFiltered: @Sendable (String, Bool) -> Void = { line, isStderr in
+            guard !isStderr || !SSHTransportDiagnostics.isMultiplexingWarning(line) else {
+                return
+            }
+            deliver(line, isStderr)
+        }
         let outputQueue = outputQueue
         stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+            var lines: [String] = []
+            PipeReading.consume(handle) { lines = stdout.receive($0) }
+            guard !lines.isEmpty else { return }
             outputQueue.async {
-                PipeReading.consume(handle) { data in
-                    for line in stdout.receive(data) { deliver(line, false) }
-                }
+                for line in lines { deliverFiltered(line, false) }
             }
         }
         stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+            var lines: [String] = []
+            PipeReading.consume(handle) { lines = stderr.receive($0) }
+            guard !lines.isEmpty else { return }
             outputQueue.async {
-                PipeReading.consume(handle) { data in
-                    for line in stderr.receive(data) { deliver(line, true) }
-                }
+                for line in lines { deliverFiltered(line, true) }
             }
         }
         let finish = onExit
@@ -111,15 +123,15 @@ public final class SSHLineStream: @unchecked Sendable {
                 for line in stdout.receive(
                     stdoutPipe.fileHandleForReading.readDataToEndOfFile())
                 {
-                    deliver(line, false)
+                    deliverFiltered(line, false)
                 }
-                for line in stdout.flush() { deliver(line, false) }
+                for line in stdout.flush() { deliverFiltered(line, false) }
                 for line in stderr.receive(
                     stderrPipe.fileHandleForReading.readDataToEndOfFile())
                 {
-                    deliver(line, true)
+                    deliverFiltered(line, true)
                 }
-                for line in stderr.flush() { deliver(line, true) }
+                for line in stderr.flush() { deliverFiltered(line, true) }
                 completion.finish(finished.terminationStatus)
                 finish(finished.terminationStatus)
             }

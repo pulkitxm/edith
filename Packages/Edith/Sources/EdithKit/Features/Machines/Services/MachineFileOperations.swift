@@ -152,7 +152,7 @@ public enum MachineFileOperationExecution {
             FileOperations.searchCommand(
                 path: path, query: query, limit: limit, platform: platform), 120)
         return result.map { output in
-            output.split(separator: "\n").map {
+            output.split(whereSeparator: \Character.isNewline).map {
                 MachineFileSearchItem(path: String($0))
             }
         }

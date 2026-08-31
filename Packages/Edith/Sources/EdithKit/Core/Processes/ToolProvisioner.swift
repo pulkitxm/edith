@@ -52,17 +52,29 @@ public enum ToolVersionProbe {
 
 public struct CLICommandResult: Equatable, Sendable {
     public let terminationStatus: Int32
-    public let outputData: Data
+    public let standardOutputData: Data
+    public let standardErrorData: Data
+    public var outputData: Data { standardOutputData + standardErrorData }
     public var output: String { String(decoding: outputData, as: UTF8.self) }
+    public var standardOutput: String { String(decoding: standardOutputData, as: UTF8.self) }
+    public var standardError: String { String(decoding: standardErrorData, as: UTF8.self) }
 
     public init(terminationStatus: Int32, output: String) {
         self.terminationStatus = terminationStatus
-        self.outputData = Data(output.utf8)
+        standardOutputData = Data(output.utf8)
+        standardErrorData = Data()
     }
 
     public init(terminationStatus: Int32, outputData: Data) {
         self.terminationStatus = terminationStatus
-        self.outputData = outputData
+        standardOutputData = outputData
+        standardErrorData = Data()
+    }
+
+    public init(terminationStatus: Int32, standardOutputData: Data, standardErrorData: Data) {
+        self.terminationStatus = terminationStatus
+        self.standardOutputData = standardOutputData
+        self.standardErrorData = standardErrorData
     }
 }
 
@@ -341,7 +353,8 @@ public enum CLICommandRunner {
         for line in finishedError.lines { onStandardErrorLine(line) }
         return CLICommandResult(
             terminationStatus: process.terminationStatus,
-            outputData: finishedOutput.output + finishedError.output)
+            standardOutputData: finishedOutput.output,
+            standardErrorData: finishedError.output)
     }
 
     private enum StopReason {
