@@ -134,19 +134,22 @@ struct DatabaseWorkbenchView: View {
 
     private func connectionActions(_ connection: DatabaseConnectionSummary) -> some View {
         HStack(spacing: UIScale.pt(7)) {
-            if data.supportsRowMutations(connection), explorer.selectedObject?.kind == .table {
+            if data.supportsDataMutations(connection),
+                explorer.selectedObject?.kind == .table
+                    || explorer.selectedObject?.kind == .keyspace
+            {
                 Button {
                     data.beginInsert(connection)
                 } label: {
                     if compact {
                         Image(systemName: "plus")
                     } else {
-                        Label("New row", systemImage: "plus")
+                        Label(newItemTitle(connection), systemImage: "plus")
                     }
                 }
                 .buttonStyle(.edith(.primary, tint: theme))
                 .disabled(data.fields.isEmpty || mutations.hasTrackedMutation)
-                .help("Add a row")
+                .help(newItemHelp(connection))
             }
             if connection.environmentKind == .production {
                 Group {
@@ -172,7 +175,7 @@ struct DatabaseWorkbenchView: View {
                 .foregroundStyle(.secondary)
                 .help("Read-only connection")
                 .accessibilityLabel("Read-only connection")
-            } else if !data.supportsRowMutations(connection) {
+            } else if !data.supportsDataMutations(connection) {
                 Group {
                     if compact {
                         Image(systemName: "eye")
@@ -182,7 +185,7 @@ struct DatabaseWorkbenchView: View {
                 }
                 .font(.system(size: UIScale.pt(10.5), weight: .medium))
                 .foregroundStyle(.secondary)
-                .help("Row editing is not available for this database yet")
+                .help("Data editing is not available for this database yet")
             }
             Button {
                 data.cancel()
@@ -363,7 +366,7 @@ struct DatabaseWorkbenchView: View {
                     if data.selectedRecordIndex != index {
                         data.selectRecord(at: index)
                     }
-                    if data.supportsRowMutations(connection) {
+                    if data.supportsDataMutations(connection) {
                         data.beginEditingSelectedRow(connection)
                     }
                 },
@@ -421,9 +424,10 @@ struct DatabaseWorkbenchView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Row details").font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                Text(detailTitle(connection))
+                    .font(.system(size: UIScale.pt(12.5), weight: .semibold))
                 Spacer(minLength: 0)
-                if data.supportsRowMutations(connection), record.identity != nil {
+                if data.supportsDataMutations(connection), record.identity != nil {
                     Button("Edit") {
                         data.beginEditingSelectedRow(connection)
                     }
@@ -437,7 +441,7 @@ struct DatabaseWorkbenchView: View {
                     }
                     .buttonStyle(.edith(.borderless))
                     .disabled(mutations.hasTrackedMutation)
-                    .accessibilityLabel("Delete row")
+                    .accessibilityLabel(deleteTitle(connection))
                 }
                 Button {
                     if let index = data.selectedRecordIndex { data.selectRecord(at: index) }
@@ -471,7 +475,7 @@ struct DatabaseWorkbenchView: View {
     private func editor(_ connection: DatabaseConnectionSummary) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: UIScale.pt(8)) {
-                Text(editorTitle)
+                Text(editorTitle(connection))
                     .font(.system(size: UIScale.pt(12.5), weight: .semibold))
                 Spacer(minLength: 0)
                 Button("Cancel") { data.cancelEditor() }
@@ -491,7 +495,7 @@ struct DatabaseWorkbenchView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     ForEach(data.editorFields) { field in
-                        editorField(field)
+                        editorField(field, connection: connection)
                     }
                 }
                 .padding(UIScale.pt(12))
@@ -500,7 +504,10 @@ struct DatabaseWorkbenchView: View {
         .background(Color(nsColor: .controlBackgroundColor))
     }
 
-    private func editorField(_ field: DatabaseRowFieldDraft) -> some View {
+    private func editorField(
+        _ field: DatabaseRowFieldDraft,
+        connection: DatabaseConnectionSummary
+    ) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(5)) {
             HStack(spacing: UIScale.pt(6)) {
                 Toggle("", isOn: editorIncludedBinding(field.id))
@@ -531,9 +538,19 @@ struct DatabaseWorkbenchView: View {
                         .buttonStyle(.edith(.borderless))
                         .help("Reset \(field.id)")
                     }
-                    Button("NULL") { data.setEditorFieldNull(field.id) }
-                        .buttonStyle(.edith(.borderless))
-                        .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                    if connection.product.family == .keyValue {
+                        if field.id == "ttlMilliseconds" {
+                            Button("No expiry") {
+                                data.updateEditorField(field.id, text: "-1")
+                            }
+                            .buttonStyle(.edith(.borderless))
+                            .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                        }
+                    } else {
+                        Button("NULL") { data.setEditorFieldNull(field.id) }
+                            .buttonStyle(.edith(.borderless))
+                            .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                    }
                 }
             }
             TextField("Value", text: editorTextBinding(field.id))
@@ -597,12 +614,28 @@ struct DatabaseWorkbenchView: View {
             set: { data.setEditorFieldIncluded(id, included: $0) })
     }
 
-    private var editorTitle: String {
+    private func editorTitle(_ connection: DatabaseConnectionSummary) -> String {
         switch data.editorMode {
-        case .insert: "New row"
-        case .update: "Edit row"
-        case nil: "Row"
+        case .insert: newItemTitle(connection)
+        case .update: connection.product.family == .keyValue ? "Edit key" : "Edit row"
+        case nil: connection.product.family == .keyValue ? "Key" : "Row"
         }
+    }
+
+    private func newItemTitle(_ connection: DatabaseConnectionSummary) -> String {
+        connection.product.family == .keyValue ? "New key" : "New row"
+    }
+
+    private func newItemHelp(_ connection: DatabaseConnectionSummary) -> String {
+        connection.product.family == .keyValue ? "Create a string key" : "Add a row"
+    }
+
+    private func detailTitle(_ connection: DatabaseConnectionSummary) -> String {
+        connection.product.family == .keyValue ? "Key details" : "Row details"
+    }
+
+    private func deleteTitle(_ connection: DatabaseConnectionSummary) -> String {
+        connection.product.family == .keyValue ? "Delete key" : "Delete row"
     }
 
     private func requestEditorMutation(_ connection: DatabaseConnectionSummary) {
