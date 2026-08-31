@@ -35,6 +35,12 @@ import EdithKit
             navigation.contains(
                 "if item == .appMaintenance, destination == .appMaintenance"))
         #expect(navigation.contains("rowHovered && !selected"))
+        #expect(navigation.contains("if disclosureExpanded != nil"))
+        #expect(
+            !navigation.contains(
+                "minLength: disclosureExpanded == nil"
+            )
+        )
         #expect(!navigation.contains("SidebarDisclosureInteraction"))
         #expect(navigation.contains(".zIndex(1)"))
         #expect(!navigation.contains(".move(edge: .top).combined(with: .opacity)"))
