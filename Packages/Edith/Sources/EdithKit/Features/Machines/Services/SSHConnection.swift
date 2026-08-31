@@ -7,23 +7,43 @@ public struct SSHExecResult: Sendable {
 
     public var stdoutText: String { String(decoding: stdout, as: UTF8.self) }
     public var stderrText: String {
-        PowerShell.decodedError(String(decoding: stderr, as: UTF8.self))
+        PowerShell.decodedError(
+            SSHTransportDiagnostics.cleanStderr(String(decoding: stderr, as: UTF8.self)))
     }
     public var combinedText: String { stdoutText + stderrText }
-    public var successfulCommandText: String {
-        stdoutText + SSHTransportDiagnostics.cleanSuccessfulStderr(stderrText)
-    }
+    public var successfulCommandText: String { combinedText }
     public var succeeded: Bool { status == 0 }
 }
 
 private enum SSHTransportDiagnostics {
-    static func cleanSuccessfulStderr(_ text: String) -> String {
+    static func cleanStderr(_ text: String) -> String {
         text.split(separator: "\n", omittingEmptySubsequences: false)
             .filter { line in
                 !line.trimmingCharacters(in: .whitespacesAndNewlines)
                     .hasPrefix("mux_client_request_session: session request failed:")
             }
             .joined(separator: "\n")
+    }
+}
+
+enum SSHTransferCommands {
+    static func upload(path: String, platform: RemoteMachinePlatform) -> String {
+        guard platform == .windows else { return "cat > \(ShellQuote.quote(path))" }
+        let script =
+            "$path=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("
+            + "\(PowerShell.literal(path))); "
+            + "$parent=[IO.Path]::GetDirectoryName($path); "
+            + "if (![String]::IsNullOrWhiteSpace($parent)) { "
+            + "[IO.Directory]::CreateDirectory($parent) | Out-Null }; "
+            + "$output=$null; try { $output=[IO.File]::Create($path); "
+            + "[Console]::OpenStandardInput().CopyTo($output) } finally { "
+            + "if ($null -ne $output) { $output.Dispose() } }"
+        return PowerShell.userCommand(script)
+    }
+
+    static func temporaryDirectory(platform: RemoteMachinePlatform) -> String? {
+        guard platform == .windows else { return nil }
+        return PowerShell.userCommand("[Console]::Out.Write([IO.Path]::GetTempPath())")
     }
 }
 
@@ -390,13 +410,8 @@ public actor SSHConnection {
         let expected =
             (try? FileManager.default.attributesOfItem(atPath: localURL.path)[.size]) as? Int64
             ?? -1
-        let command =
-            remotePlatform == .windows
-            ? PowerShell.command(
-                "$path=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("
-                    + "\(PowerShell.literal(remotePath))); $output=[IO.File]::Create($path); "
-                    + "[Console]::OpenStandardInput().CopyTo($output); $output.Dispose()")
-            : "cat > \(ShellQuote.quote(remotePath))"
+        let command = SSHTransferCommands.upload(
+            path: remotePath, platform: remotePlatform ?? .linux)
         let process = execProcess(command: command)
         let stdinPipe = Pipe()
         let stderrPipe = Pipe()
@@ -419,7 +434,9 @@ public actor SSHConnection {
             throw error
         }
         stderrPipe.fileHandleForReading.readabilityHandler = nil
-        let reported = String(decoding: stderrBuffer.snapshot(), as: UTF8.self)
+        let reported = SSHExecResult(
+            status: attempt.status, stdout: Data(), stderr: stderrBuffer.snapshot()
+        ).stderrText
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard attempt.writeSucceeded else {
@@ -443,6 +460,20 @@ public actor SSHConnection {
             throw SSHConnectionError.transferFailed(
                 "The machine kept a different file than the one that was sent.")
         }
+    }
+
+    public func temporaryDirectory() async throws -> String {
+        let platform = remotePlatform ?? .linux
+        guard let command = SSHTransferCommands.temporaryDirectory(platform: platform) else {
+            return "/tmp"
+        }
+        let result = try await runChecked(command, timeout: 15)
+        let path = result.successfulCommandText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard FileListing.isWindowsPath(path) else {
+            throw SSHConnectionError.transferFailed(
+                "The machine did not provide a usable temporary directory.")
+        }
+        return path
     }
 
     static func sendUpload(

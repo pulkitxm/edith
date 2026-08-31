@@ -177,6 +177,33 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
         #expect(result.successfulCommandText == "C:\\Users\\kpulk")
         #expect(remoteWarning.successfulCommandText == "value\nremote warning\n")
     }
+
+    @Test func multiplexingWarningsDoNotHidePowerShellErrors() {
+        let result = SSHExecResult(
+            status: 1, stdout: Data(),
+            stderr: Data(
+                """
+                mux_client_request_session: session request failed: Session open refused by peer
+                #< CLIXML
+                <Objs><S S="Error">Could not find the destination._x000D__x000A_</S></Objs>
+                """.utf8))
+
+        #expect(result.stderrText == "Could not find the destination.")
+    }
+
+    @Test func windowsUploadsCreateTheirDestinationDirectoryAndDisposeSafely() throws {
+        let command = SSHTransferCommands.upload(
+            path: "C:\\Users\\me\\AppData\\Local\\Temp\\nested\\image.png",
+            platform: .windows)
+        let encoded = try #require(command.split(separator: " ").last)
+        let data = try #require(Data(base64Encoded: String(encoded)))
+        let script = try #require(String(data: data, encoding: .utf16LittleEndian))
+
+        #expect(script.contains("[IO.Directory]::CreateDirectory($parent)"))
+        #expect(script.contains("$output=$null; try"))
+        #expect(script.contains("if ($null -ne $output) { $output.Dispose() }"))
+        #expect(script.contains("[Console]::Error.WriteLine($_.Exception.Message)"))
+    }
 }
 
 @Suite struct MachineModelsTests {
