@@ -246,7 +246,7 @@ public struct QuinjetLaunchRequest: Equatable, Sendable {
         var quinjetArguments: [String] = []
         if managedByEdith { quinjetArguments += ["--client", "edith"] }
         quinjetArguments += ["-C", worktreePath, "tui"]
-        if let hostTheme = configuration.hostTheme {
+        if let hostTheme = configuration.hostTheme, remote?.platform != .windows {
             quinjetArguments += ["--theme-palette", hostTheme.argument]
         } else {
             quinjetArguments += ["--theme", configuration.theme.rawValue]

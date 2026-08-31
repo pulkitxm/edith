@@ -683,7 +683,8 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
             controlPath: "/tmp/edith socket", platform: .windows,
             homeDirectory: #"C:\Users\kpulk"#)
         let configuration = QuinjetLaunchConfiguration(
-            terminal: .embedded, theme: .gruvbox, appearance: .dark)
+            terminal: .embedded, theme: .gruvbox, appearance: .dark,
+            hostTheme: .edith(appTheme: .orange))
 
         let request = QuinjetOperationExecution.launchRequest(
             executableURL: URL(fileURLWithPath: "/usr/local/bin/quinjet"),
