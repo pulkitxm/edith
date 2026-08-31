@@ -35,6 +35,7 @@ private enum PostgreSQLDatabaseAdapterFixtures {
         tunnel: DatabaseTunnelDefinition? = nil,
         readOnlyPolicy: DatabaseReadOnlyPolicy = .required,
         productionPolicy: DatabaseProductionPolicy = .prohibitMutations,
+        environmentProtection: DatabaseEnvironmentProtection = .readOnly,
         options: [DatabaseNonSecretOption] = []
     ) throws -> DatabaseConnectionDefinition {
         let effectiveEndpoints =
@@ -64,7 +65,7 @@ private enum PostgreSQLDatabaseAdapterFixtures {
             environment: DatabaseEnvironmentMetadata(
                 kind: .testing,
                 label: "Testing",
-                protection: .readOnly),
+                protection: environmentProtection),
             options: options,
             createdAt: Date(timeIntervalSince1970: 1_800_000_000),
             updatedAt: Date(timeIntervalSince1970: 1_800_000_000))
@@ -117,6 +118,30 @@ private enum PostgreSQLDatabaseAdapterFixtures {
                 kind: .table,
                 path: ["public", "orders"]))
     }
+
+    static func updateRequest(
+        connectionID: DatabaseConnectionID,
+        statement: String =
+            "UPDATE \"public\".\"orders\" SET \"status\" = $1 WHERE \"id\" IS NOT DISTINCT FROM $2 RETURNING 1"
+    ) -> DatabaseDestructiveRequest {
+        DatabaseDestructiveRequest(
+            target: DatabaseTargetIdentifier(
+                connectionID: connectionID,
+                object: DatabaseObjectIdentifier(
+                    kind: .table,
+                    path: ["public", "orders"]),
+                record: DatabaseRecordIdentity(
+                    kind: .primaryKey,
+                    components: [
+                        DatabaseIdentityComponent(name: "id", value: .signedInteger(42))
+                    ])),
+            payload: .relational(
+                product: .postgresql,
+                statement: statement,
+                parameters: [
+                    DatabaseMutationParameter(name: "status", value: .string("paid"))
+                ]))
+    }
 }
 
 private actor PostgreSQLDatabaseAdapterTestClient: PostgreSQLDatabaseClient {
@@ -127,19 +152,23 @@ private actor PostgreSQLDatabaseAdapterTestClient: PostgreSQLDatabaseClient {
     private let cancellationDiscoveryCount: Int?
     private var discoveryCount = 0
     private var disconnectCount = 0
+    private var mutationResults: [PostgreSQLDatabaseMutationResult]
+    private var mutationPlans: [PostgreSQLDatabaseMutationPlan] = []
 
     init(
         identities: [DatabaseProductIdentity] = [PostgreSQLDatabaseAdapterFixtures.identity],
         delaysNanoseconds: [UInt64] = [],
         cancellation: DatabaseAdapterCancellationSignal? = nil,
         cancellationReason: DatabaseAdapterCancellationReason = .userRequested,
-        cancellationDiscoveryCount: Int? = nil
+        cancellationDiscoveryCount: Int? = nil,
+        mutationResults: [PostgreSQLDatabaseMutationResult] = []
     ) {
         self.identities = identities
         self.delaysNanoseconds = delaysNanoseconds
         self.cancellation = cancellation
         self.cancellationReason = cancellationReason
         self.cancellationDiscoveryCount = cancellationDiscoveryCount
+        self.mutationResults = mutationResults
     }
 
     func discoverIdentity() async throws -> DatabaseProductIdentity {
@@ -179,12 +208,26 @@ private actor PostgreSQLDatabaseAdapterTestClient: PostgreSQLDatabaseClient {
         disconnectCount += 1
     }
 
+    func executeMutation(
+        _ plan: PostgreSQLDatabaseMutationPlan
+    ) throws -> PostgreSQLDatabaseMutationResult {
+        mutationPlans.append(plan)
+        guard !mutationResults.isEmpty else {
+            throw PostgreSQLDatabaseDriverFailure.invalidRequest
+        }
+        return mutationResults.removeFirst()
+    }
+
     func disconnects() -> Int {
         disconnectCount
     }
 
     func discoveries() -> Int {
         discoveryCount
+    }
+
+    func capturedMutationPlans() -> [PostgreSQLDatabaseMutationPlan] {
+        mutationPlans
     }
 }
 
@@ -375,6 +418,67 @@ private func postgresqlAdapterWaitForDiscoveries(
     #expect(await client.disconnects() == 1)
     let concrete = try #require(session as? PostgreSQLDatabaseAdapterSession)
     #expect(await !concrete.resourceIsOpen())
+}
+
+@Test func postgresqlAdapterNormalizesAndExecutesSingleRowUpdate() async throws {
+    let definition = try PostgreSQLDatabaseAdapterFixtures.definition(
+        readOnlyPolicy: .disabled,
+        productionPolicy: .standard,
+        environmentProtection: .standard)
+    let client = PostgreSQLDatabaseAdapterTestClient(
+        mutationResults: [PostgreSQLDatabaseMutationResult(affectedRows: 1)])
+    let session = PostgreSQLDatabaseAdapterSession(
+        connection: definition,
+        productIdentity: PostgreSQLDatabaseAdapterFixtures.identity,
+        client: client)
+    let report = try await session.discoverCapabilities(
+        context: PostgreSQLDatabaseAdapterFixtures.context())
+    #expect(report.status(for: .insert)?.availability == .available)
+    #expect(report.status(for: .update)?.availability == .available)
+    #expect(report.status(for: .delete)?.availability == .available)
+    #expect(report.mutationModes == [.singleRecord])
+    #expect(report.transactionModes == [.implicit])
+
+    let request = PostgreSQLDatabaseAdapterFixtures.updateRequest(
+        connectionID: definition.id)
+    let plan = try await session.normalizeMutation(
+        request,
+        context: PostgreSQLDatabaseAdapterFixtures.context())
+    #expect(plan.action == .update)
+    #expect(plan.scope == .singleRecord)
+    #expect(plan.impact.count.value == 1)
+    #expect(plan.transactionBehavior == .transactional)
+    #expect(plan.rollbackAvailability == .available)
+
+    let result = try await session.executeMutation(
+        plan,
+        context: PostgreSQLDatabaseAdapterFixtures.context())
+    #expect(result.disposition == .completed)
+    #expect(result.effect == .applied)
+    #expect(result.affectedRecords.value == 1)
+    let executed = try #require((await client.capturedMutationPlans()).first)
+    #expect(executed.sql == request.payload.command)
+    #expect(executed.parameters == [.string("paid"), .signedInteger(42)])
+}
+
+@Test func postgresqlAdapterRejectsNoncanonicalMutationStatements() async throws {
+    let definition = try PostgreSQLDatabaseAdapterFixtures.definition(
+        readOnlyPolicy: .disabled,
+        productionPolicy: .standard,
+        environmentProtection: .standard)
+    let client = PostgreSQLDatabaseAdapterTestClient()
+    let session = PostgreSQLDatabaseAdapterSession(
+        connection: definition,
+        productIdentity: PostgreSQLDatabaseAdapterFixtures.identity,
+        client: client)
+
+    await #expect(throws: PostgreSQLDatabaseAdapterSupport.invalidMutation) {
+        _ = try await session.normalizeMutation(
+            PostgreSQLDatabaseAdapterFixtures.updateRequest(
+                connectionID: definition.id,
+                statement: "UPDATE orders SET status = 'paid'"),
+            context: PostgreSQLDatabaseAdapterFixtures.context())
+    }
 }
 
 @Test func postgresqlAdapterRejectsIdentityDriftAndClosesTheClient() async throws {
