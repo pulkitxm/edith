@@ -148,6 +148,21 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
         #expect(native.contains("exit $edithExitCode"))
         #expect(native.contains("[Console]::Error.WriteLine($_.Exception.Message); exit 1"))
     }
+
+    @Test func decodesPowerShellErrorsAndDropsStartupProgress() {
+        let error = """
+            #< CLIXML
+            <Objs><S S="Error">Cannot find &apos;service&apos;._x000D__x000A_</S><S S="Error">Try again.</S></Objs>
+            """
+        let progress = """
+            #< CLIXML
+            <Objs><Obj S="progress"><AV>Preparing modules for first use.</AV></Obj></Objs>
+            """
+
+        #expect(PowerShell.decodedError(error) == "Cannot find 'service'.\r\nTry again.")
+        #expect(PowerShell.decodedError(progress).isEmpty)
+        #expect(PowerShell.decodedError("plain error") == "plain error")
+    }
 }
 
 @Suite struct MachineModelsTests {

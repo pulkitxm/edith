@@ -58,6 +58,48 @@ public enum PowerShell {
             + "[Console]::Error.WriteLine($_.Exception.Message); exit 1 }"
     }
 
+    public static func decodedError(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("#< CLIXML") else { return value }
+        let expression = try? NSRegularExpression(
+            pattern: #"<S S="Error">(.*?)</S>"#,
+            options: .dotMatchesLineSeparators)
+        let body = trimmed.replacingOccurrences(of: "#< CLIXML", with: "")
+        let range = NSRange(body.startIndex..<body.endIndex, in: body)
+        let parts = expression?.matches(in: body, range: range).compactMap { match -> String? in
+            guard let found = Range(match.range(at: 1), in: body) else { return nil }
+            return decodedXML(String(body[found]))
+        } ?? []
+        if !parts.isEmpty {
+            return parts.joined().trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return trimmed.contains("Preparing modules for first use.") ? "" : value
+    }
+
+    private static func decodedXML(_ value: String) -> String {
+        var result = value
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&apos;", with: "'")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&amp;", with: "&")
+        guard
+            let expression = try? NSRegularExpression(
+                pattern: #"_x([0-9A-Fa-f]{4})_"#)
+        else { return result }
+        let matches = expression.matches(
+            in: result, range: NSRange(result.startIndex..<result.endIndex, in: result))
+        for match in matches.reversed() {
+            guard let full = Range(match.range(at: 0), in: result),
+                let digits = Range(match.range(at: 1), in: result),
+                let value = UInt32(result[digits], radix: 16),
+                let scalar = UnicodeScalar(value)
+            else { continue }
+            result.replaceSubrange(full, with: String(Character(scalar)))
+        }
+        return result
+    }
+
     private static func executable(arguments: [String], script: String) -> String {
         let data = script.data(using: .utf16LittleEndian) ?? Data()
         let options =

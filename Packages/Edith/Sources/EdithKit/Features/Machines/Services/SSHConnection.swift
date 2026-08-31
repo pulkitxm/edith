@@ -6,7 +6,9 @@ public struct SSHExecResult: Sendable {
     public let stderr: Data
 
     public var stdoutText: String { String(decoding: stdout, as: UTF8.self) }
-    public var stderrText: String { String(decoding: stderr, as: UTF8.self) }
+    public var stderrText: String {
+        PowerShell.decodedError(String(decoding: stderr, as: UTF8.self))
+    }
     public var combinedText: String { stdoutText + stderrText }
     public var succeeded: Bool { status == 0 }
 }
