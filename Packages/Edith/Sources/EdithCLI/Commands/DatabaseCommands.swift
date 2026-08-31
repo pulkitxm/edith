@@ -9,6 +9,10 @@ struct DatabaseCommand: AsyncParsableCommand {
         subcommands: [
             DatabaseConnectionsCommand.self,
             DatabaseCapabilitiesCommand.self,
+            DatabaseConnectCommand.self,
+            DatabaseDisconnectCommand.self,
+            DatabaseBrowseCommand.self,
+            DatabaseQueryCommand.self,
             DatabaseMCPCommand.self,
         ],
         defaultSubcommand: DatabaseConnectionsCommand.self)
@@ -501,7 +505,7 @@ enum DatabaseCLI {
         Set(try values.map { try resolveOne($0, from: supported, name: name, rawValue: rawValue) })
     }
 
-    private static func resolveOne<Value>(
+    static func resolveOne<Value>(
         _ value: String,
         from supported: [Value],
         name: String,
