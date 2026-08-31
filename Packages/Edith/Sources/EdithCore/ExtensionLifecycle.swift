@@ -669,6 +669,10 @@ public enum ExtensionLifecycleCatalog {
                 instruction(
                     "position", "Place the overlay",
                     "Keep the keycaps at the top or bottom of the screen under the pointer."),
+                instruction(
+                    "toggle", "Pause between takes",
+                    "Start or pause the overlay without removing the extension.",
+                    "ed config set keystrokeHighlightActive false"),
             ],
             prerequisites: [
                 instruction(
@@ -678,6 +682,7 @@ public enum ExtensionLifecycleCatalog {
             ],
             examples: [
                 "ed extensions enable keystrokeHighlight",
+                "ed config set keystrokeHighlightActive true",
                 "ed config set keystrokeHighlightDuration 1.5",
             ],
             docs: [

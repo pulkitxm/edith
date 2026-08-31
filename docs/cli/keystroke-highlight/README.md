@@ -10,6 +10,18 @@ Turn it on with:
 ed extensions enable keystrokeHighlight
 ```
 
+Enabling the extension makes the feature and its shortcut available. Start or
+pause the overlay with `⌃⌥⌘K`. The shortcut remains available while the
+extension is enabled, even when the overlay is paused. It can be changed in the
+extension settings or the Shortcuts settings pane.
+
+The same active state is available from the command line:
+
+```bash
+ed config set keystrokeHighlightActive true
+ed config set keystrokeHighlightActive false
+```
+
 Input Monitoring is required. Edith uses a listen-only keyboard event monitor,
 so the extension observes input without changing or blocking it. Secure keyboard
 input is never shown.
@@ -34,7 +46,8 @@ The overlay can sit at the top or bottom of the screen:
 ed config set keystrokeHighlightPosition bottom
 ```
 
-Changes apply to the running menu bar app immediately.
+Changes apply to the running menu bar app immediately. Pausing removes the
+keyboard monitor and hides any visible keycaps without disabling the extension.
 
 ## Verify and recover
 
@@ -52,6 +65,10 @@ ed extensions doctor keystrokeHighlight --json
 
 After granting Input Monitoring in System Settings, restart Edith if macOS has
 not yet made the new grant available to the running process.
+
+A paused extension is reported as ready rather than failed. Start it with the
+configured shortcut or set `keystrokeHighlightActive` to `true` before checking
+for an active keyboard monitor.
 
 ## Where to go next
 
