@@ -527,6 +527,7 @@ struct DatabaseWorkbenchView: View {
                     .buttonStyle(.edith(.borderless))
                 Button("Review") { requestEditorMutation(connection) }
                     .buttonStyle(.edith(.primary, tint: theme))
+                    .keyboardShortcut(.return, modifiers: .command)
                     .disabled(mutations.hasTrackedMutation || !data.canSubmitEditor)
             }
             .padding(UIScale.pt(12))
