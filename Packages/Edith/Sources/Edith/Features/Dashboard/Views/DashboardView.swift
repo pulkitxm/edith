@@ -50,7 +50,7 @@ struct DashboardView: View {
                             }
                             if model.loaded {
                                 kpiGrid.pageGutter(compact)
-                                LazyVStack(spacing: UIScale.pt(16)) {
+                                VStack(spacing: UIScale.pt(16)) {
                                     activityRow(compact: compact)
                                     LimitsCardView(theme: acc, dark: dark)
                                     BudgetCardView(theme: acc, dark: dark)
