@@ -124,6 +124,15 @@ public enum Guide {
         ed database connections list --product postgresql --environment production
         ed database connections get <connection-id>
         ed database connections test <connection-id> --timeout-milliseconds 10000 --json
+        ed database connections edit <connection-id> --environment production --protection read-only
+        ed database connections duplicate <connection-id> "TUF PostgreSQL copy"
+        ed database connections rename <connection-id> "TUF PostgreSQL"
+        ed database connections delete <connection-id> --yes
+        printf 'select * from public.orders limit 100' | ed database saved-queries save "recent orders" --connection <connection-id>
+        ed database saved-queries list --connection <connection-id> --json
+        ed database saved-queries get <query-id>
+        ed database saved-queries rename <query-id> "recent orders by id"
+        ed database saved-queries delete <query-id> --yes
         ed database capabilities <connection-id>
         ed database capabilities <connection-id> --refresh --json
         ed database connect <connection-id> --json
@@ -140,6 +149,12 @@ public enum Guide {
         `connections add` tests the exact connection through the broker before saving it.
         Passwords are accepted only from stdin and stored in Keychain; arguments and
         output contain no credential values or Keychain identifiers.
+        Connection edits preserve endpoints and credential references while changing labels,
+        grouping, favorites, colors, and safety policies. Duplicate connections intentionally
+        share their existing Keychain credentials and report that fact without printing their
+        references. Delete commands require `--yes` and disconnect active sessions first.
+        Saved query text is accepted only from stdin or a UTF-8 file, never from process
+        arguments. Lists omit query text, while `get` and `save --json` return the bounded body.
         Capability discovery uses the cached report when possible. `--refresh` asks the
         broker to reconnect and discover the current product, version, topology,
         permissions, limits, supported operations, and safety limitations.

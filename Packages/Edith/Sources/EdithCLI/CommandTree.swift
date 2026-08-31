@@ -858,6 +858,68 @@ public enum CommandTree {
                                 options: ["--json", "--help", "--timeout-milliseconds"],
                                 optionValues: ["--timeout-milliseconds": .free],
                                 arguments: [.free]),
+                            CommandNode(
+                                "edit", "Edit saved connection metadata and safety policies.",
+                                options: [
+                                    "--json", "--help", "--environment", "--environment-label",
+                                    "--protection", "--read-only", "--production-policy", "--group",
+                                    "--clear-group", "--tag", "--clear-tags", "--color",
+                                    "--clear-color", "--favorite", "--not-favorite",
+                                ],
+                                optionValues: [
+                                    "--environment": .free, "--environment-label": .free,
+                                    "--protection": .free, "--read-only": .free,
+                                    "--production-policy": .free, "--group": .free,
+                                    "--tag": .free, "--color": .free,
+                                ], arguments: [.free]),
+                            CommandNode(
+                                "duplicate", "Duplicate a saved database connection.",
+                                options: common, arguments: [.free, .free]),
+                            CommandNode(
+                                "rename", "Rename a saved database connection.",
+                                options: common, arguments: [.free, .free]),
+                            CommandNode(
+                                "delete", "Delete a saved database connection.",
+                                options: ["--json", "--help", "--yes"], arguments: [.free],
+                                destructivePolicy: .previewThenYes),
+                        ]),
+                    CommandNode(
+                        "saved-queries", "Manage reusable database queries.",
+                        children: [
+                            CommandNode(
+                                "list", "List saved database queries.", aliases: ["ls"],
+                                options: [
+                                    "--json", "--help", "--search", "--connection", "--language",
+                                    "--tag", "--favorites-only", "--order", "--limit", "--offset",
+                                ],
+                                optionValues: [
+                                    "--search": .free, "--connection": .free,
+                                    "--language": .free, "--tag": .free, "--order": .free,
+                                    "--limit": .free, "--offset": .free,
+                                ]),
+                            CommandNode(
+                                "get", "Show one saved database query.", options: common,
+                                arguments: [.free]),
+                            CommandNode(
+                                "save", "Save query text read from stdin or a UTF-8 file.",
+                                options: [
+                                    "--json", "--help", "--id", "--connection", "--language",
+                                    "--file", "--tag", "--favorite",
+                                ],
+                                optionValues: [
+                                    "--id": .free, "--connection": .free, "--language": .free,
+                                    "--file": .free, "--tag": .free,
+                                ], arguments: [.free]),
+                            CommandNode(
+                                "duplicate", "Duplicate a saved database query.",
+                                options: common, arguments: [.free, .free]),
+                            CommandNode(
+                                "rename", "Rename a saved database query.",
+                                options: common, arguments: [.free, .free]),
+                            CommandNode(
+                                "delete", "Delete a saved database query.",
+                                options: ["--json", "--help", "--yes"], arguments: [.free],
+                                destructivePolicy: .previewThenYes),
                         ]),
                     CommandNode(
                         "capabilities", "Show detected capabilities for one saved connection.",

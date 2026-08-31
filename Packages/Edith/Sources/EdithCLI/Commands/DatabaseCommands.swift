@@ -8,6 +8,7 @@ struct DatabaseCommand: AsyncParsableCommand {
         abstract: "Inspect saved database connections and their capabilities.",
         subcommands: [
             DatabaseConnectionsCommand.self,
+            DatabaseSavedQueriesCommand.self,
             DatabaseCapabilitiesCommand.self,
             DatabaseConnectCommand.self,
             DatabaseDisconnectCommand.self,
@@ -28,6 +29,10 @@ struct DatabaseConnectionsCommand: AsyncParsableCommand {
             DatabaseConnectionsGetCommand.self,
             DatabaseConnectionsAddCommand.self,
             DatabaseConnectionsTestCommand.self,
+            DatabaseConnectionsEditCommand.self,
+            DatabaseConnectionsDuplicateCommand.self,
+            DatabaseConnectionsRenameCommand.self,
+            DatabaseConnectionsDeleteCommand.self,
         ],
         defaultSubcommand: DatabaseConnectionsListCommand.self)
 }
