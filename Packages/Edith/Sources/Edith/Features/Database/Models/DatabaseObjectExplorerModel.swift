@@ -87,7 +87,10 @@ final class DatabaseObjectExplorerModel {
         state = .idle
     }
 
-    func load(_ connection: DatabaseConnectionSummary) {
+    func load(_ connection: DatabaseConnectionSummary, force: Bool = false) {
+        if !force, activeConnectionID == connection.id, state == .loaded, !groups.isEmpty {
+            return
+        }
         prepare(for: connection)
         switch connection.product {
         case .redis, .valkey:

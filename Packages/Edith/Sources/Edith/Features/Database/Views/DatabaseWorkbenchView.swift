@@ -268,7 +268,7 @@ struct DatabaseWorkbenchView: View {
             .disabled(explorer.groups.allSatisfy { $0.objects.isEmpty })
             Spacer(minLength: 0)
             Button {
-                explorer.load(connection)
+                explorer.load(connection, force: true)
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
