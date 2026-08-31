@@ -141,6 +141,7 @@ public enum Guide {
         ed database mutations row-request <connection-id> --action update --path public --path orders --identity identity.json --values values.json > mutation.json
         ed database mutations preview --request mutation.json --json > preview.json
         ed database mutations apply --request mutation.json --confirmation preview.json --yes --json > receipt.json
+        ed database mutations preview --request mutation.json --json | ed database mutations apply --request mutation.json --confirmation - --yes --json
         ed database mutations status --receipt receipt.json --json
         ed database mutations cancel --receipt receipt.json --yes --json
         ed database mutations outcome <operation-id> --json
