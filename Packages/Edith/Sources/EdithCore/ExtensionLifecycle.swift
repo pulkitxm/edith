@@ -327,7 +327,10 @@ public enum ExtensionLifecycleCatalog {
             examples: [
                 "ed extensions enable seoAudit", "ed extensions doctor seoAudit --json",
             ],
-            docs: [documentation("overview", "Site Audit overview", "README.md")],
+            docs: [
+                documentation(
+                    "extensions", "Extensions guide", "docs/cli/extensions/README.md")
+            ],
             recovery: [
                 instruction(
                     "doctor", "Check Site Audit readiness",
