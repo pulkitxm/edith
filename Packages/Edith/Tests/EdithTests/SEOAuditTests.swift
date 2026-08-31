@@ -124,6 +124,19 @@ import Testing
         #expect(!updated.issues.contains { $0.code == "lighthouse-unavailable" })
     }
 
+    @Test func projectViewDoesNotForceUnwrapNavigationState() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent(
+                    "Sources/Edith/Features/SEOAudit/Views/SEOAuditProjectView.swift"),
+            encoding: .utf8)
+
+        #expect(!source.contains("selectedProject!"))
+    }
+
     private func page(url: String, date: Date) -> SEOAuditPageResult {
         SEOAuditPageResult(
             url: url, auditedAt: date, statusCode: 200, responseMilliseconds: 20, bytes: 100,

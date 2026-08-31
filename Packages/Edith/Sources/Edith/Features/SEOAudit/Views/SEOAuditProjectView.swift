@@ -2,6 +2,8 @@ import EdithKit
 import SwiftUI
 
 struct SEOAuditProjectView: View {
+    private static let inactiveProject = SEOAuditProject(name: "Site Audit", baseURL: "")
+
     @Bindable var model: SEOAuditModel
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
@@ -10,7 +12,9 @@ struct SEOAuditProjectView: View {
     @State private var pageSelectionPresented = false
 
     private var dark: Bool { scheme == .dark }
-    private var project: SEOAuditProject { model.selectedProject! }
+    private var project: SEOAuditProject {
+        model.selectedProject ?? Self.inactiveProject
+    }
 
     var body: some View {
         VStack(spacing: 0) {
