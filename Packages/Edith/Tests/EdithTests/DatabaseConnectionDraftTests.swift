@@ -49,12 +49,13 @@ struct DatabaseConnectionDraftTests {
             product: .mongoDB,
             username: "edith",
             database: "million_rows",
+            authenticationDatabase: "admin",
             passwordReference: reference)
 
         let definition = try draft.definition()
 
         #expect(definition.authentication.kind == .scram)
-        #expect(definition.authentication.source == "million_rows")
+        #expect(definition.authentication.source == "admin")
     }
 
     @Test("SQLite uses its path and no credentials")

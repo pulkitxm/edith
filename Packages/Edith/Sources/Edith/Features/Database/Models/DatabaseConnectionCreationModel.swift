@@ -22,6 +22,7 @@ final class DatabaseConnectionCreationModel {
     var path = ""
     var username = ""
     var database = ""
+    var authenticationDatabase = "admin"
     var password = ""
     var tlsEnabled = false
     var environmentKind = DatabaseEnvironmentKind.development
@@ -211,6 +212,7 @@ final class DatabaseConnectionCreationModel {
             path: path,
             username: username,
             database: database,
+            authenticationDatabase: authenticationDatabase,
             passwordReference: password.isEmpty ? nil : reference,
             tlsMode: tlsEnabled ? .required : .disabled,
             environmentKind: environmentKind,

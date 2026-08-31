@@ -557,6 +557,9 @@ struct DatabaseConnectionsAddCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Default database or Redis logical database.")
     var database = ""
 
+    @Option(name: .customLong("authentication-database"), help: "MongoDB authentication database. Defaults to admin.")
+    var authenticationDatabase = "admin"
+
     @Flag(name: .customLong("password-stdin"), help: "Read the database password from stdin and store it in Keychain.")
     var passwordStdin = false
 
@@ -597,6 +600,7 @@ struct DatabaseConnectionsAddCommand: AsyncParsableCommand {
                 path: path,
                 username: username,
                 database: database,
+                authenticationDatabase: authenticationDatabase,
                 passwordReference: reference,
                 tlsMode: tls ? .required : .disabled,
                 environmentKind: resolvedEnvironment,
