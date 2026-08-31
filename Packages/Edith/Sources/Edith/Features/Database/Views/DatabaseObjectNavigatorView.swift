@@ -37,7 +37,7 @@ struct DatabaseObjectNavigatorView: View {
                     .foregroundStyle(.primary)
                 Spacer(minLength: 0)
                 Button {
-                    explorer.load(connection)
+                    explorer.load(connection, force: true)
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -80,7 +80,7 @@ struct DatabaseObjectNavigatorView: View {
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                Button("Try again") { explorer.load(connection) }
+                Button("Try again") { explorer.load(connection, force: true) }
                     .buttonStyle(.edith(.secondary))
             }
             .padding(UIScale.pt(16))

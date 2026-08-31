@@ -114,7 +114,8 @@ struct DatabaseObjectExplorerModelTests {
     @Test("MongoDB discovers collections from its selected database")
     func mongoDBInitialDiscovery() async throws {
         let sender = DatabaseObjectExplorerScriptedSender(responses: [
-            Self.response(records: [Self.relation("events", kind: .collection)])
+            Self.response(records: [Self.relation("events", kind: .collection)]),
+            Self.response(records: [Self.relation("events", kind: .collection)]),
         ])
         let model = DatabaseObjectExplorerModel(sender: sender)
         let connection = try Self.connection(product: .mongoDB)
@@ -132,6 +133,16 @@ struct DatabaseObjectExplorerModelTests {
         #expect(object.identifier.kind == .collection)
         #expect(object.identifier.path == ["app", "events"])
         #expect(model.selectedObject == object.identifier)
+
+        model.load(connection)
+        #expect(await sender.recordedRequests().count == 1)
+
+        model.load(connection, force: true)
+        for _ in 0..<10_000 {
+            if await sender.recordedRequests().count == 2 { break }
+            await Task.yield()
+        }
+        #expect(await sender.recordedRequests().count == 2)
     }
 
     @Test("Discovery surfaces broker failures")
