@@ -118,6 +118,35 @@ final class SEOAuditModel {
         }
     }
 
+    func renameProject(id: UUID, to value: String) {
+        let name = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            errorMessage = "Enter a project name."
+            return
+        }
+        do {
+            var project = try repository.loadProject(id: id)
+            project.name = name
+            project.updatedAt = Date()
+            try repository.save(project)
+            if selectedProject?.id == id { selectedProject = project }
+            projects = try repository.loadSummaries()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func deleteProject(id: UUID) {
+        guard !isRunning else { return }
+        do {
+            try repository.delete(id: id)
+            projects.removeAll { $0.id == id }
+            if selectedProject?.id == id { closeProject() }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func closeProject() {
         guard !isRunning else { return }
         selectedProject = nil
@@ -215,16 +244,7 @@ final class SEOAuditModel {
 
     func deleteSelectedProject() {
         guard let project = selectedProject, !isRunning else { return }
-        do {
-            try repository.delete(id: project.id)
-            projects.removeAll { $0.id == project.id }
-            selectedProject = nil
-            selectedRunID = nil
-            discoveredPageURLs = []
-            selectedPageURLs = []
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        deleteProject(id: project.id)
     }
 
     func selectRun(_ id: UUID) {

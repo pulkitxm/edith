@@ -107,6 +107,47 @@ import Testing
         #expect(model.selectedPageCount == 0)
     }
 
+    @Test @MainActor func projectManagementRenamesAndDeletesStoredProjects() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = SEOAuditRepository(root: root)
+        let project = SEOAuditProject(name: "Before", baseURL: "https://example.com")
+        try repository.save(project)
+        let model = SEOAuditModel(repository: repository)
+
+        model.renameProject(id: project.id, to: "After")
+        #expect(model.projects.first?.name == "After")
+        #expect(try repository.loadProject(id: project.id).name == "After")
+
+        model.deleteProject(id: project.id)
+        #expect(model.projects.isEmpty)
+        #expect(try repository.loadSummaries().isEmpty)
+    }
+
+    @Test func projectCardsStayStationaryAndOfferBothActionMenus() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent(
+                    "Sources/Edith/Features/SEOAudit/Views/SEOAuditPage.swift"),
+            encoding: .utf8)
+        let start = try #require(source.range(of: "private struct SEOAuditProjectCard"))
+        let end = try #require(
+            source.range(
+                of: "private struct SEOAuditRenameProjectSheet",
+                range: start.upperBound..<source.endIndex))
+        let card = source[start.lowerBound..<end.lowerBound]
+
+        #expect(!card.contains(".scaleEffect("))
+        #expect(card.contains("Menu {"))
+        #expect(card.contains(".contextMenu { projectActions }"))
+        #expect(card.contains("Label(\"View details\""))
+        #expect(card.contains("Label(\"Rename\""))
+        #expect(card.contains("Label(\"Delete\""))
+    }
+
     @Test func lighthouseResultReplacesAnEarlierFailure() {
         let unavailable = SEOAuditIssue(
             code: "lighthouse-unavailable", severity: .notice,
