@@ -46,6 +46,7 @@ public enum HerdrCollector {
     public static func collectRemote(
         _ machine: Machine, connection existingConnection: SSHConnection? = nil
     ) async -> HerdrHostSnapshot {
+        let ownsConnection = existingConnection == nil
         let connection =
             existingConnection ?? SSHConnection(machine: machine, controlSocketMode: .isolated)
         if existingConnection == nil {
@@ -61,10 +62,12 @@ public enum HerdrCollector {
         let listed = await listAgents(
             runner: .ssh(connection), machineID: machine.id.uuidString, machineName: machine.name,
             machineIsLocal: false, sshTarget: machine.sshTarget)
-        return HerdrHostSnapshot(
+        let snapshot = HerdrHostSnapshot(
             id: machine.id.uuidString, name: machine.name, isLocal: false,
             sshTarget: machine.sshTarget, herdrPresent: listed.present, reachable: true,
             agents: listed.agents, error: listed.error)
+        if ownsConnection { await connection.disconnect() }
+        return snapshot
     }
 
     static func collectRemotes(
