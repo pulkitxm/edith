@@ -23,6 +23,8 @@ struct HomePage: View {
         false
     @AppStorage(LidAwakeState.enabledKey, store: SharedDefaults.store) private
         var lidAwakeEnabled = false
+    @AppStorage(AppStorageKeys.KeystrokeHighlight.enabled, store: SharedDefaults.store) private
+        var keystrokeHighlightEnabled = false
     @Environment(\.colorScheme) private var scheme
     @State private var usageCardHeight: CGFloat?
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
@@ -40,13 +42,17 @@ struct HomePage: View {
                         ViewThatFits(in: .horizontal) {
                             HStack(alignment: .top, spacing: UIScale.pt(16)) {
                                 WorldClocksCard(dark: dark)
-                                if systemEnabled || presenterEnabled || lidAwakeEnabled {
+                                if systemEnabled || presenterEnabled || lidAwakeEnabled
+                                    || keystrokeHighlightEnabled
+                                {
                                     QuickActionsCard(dark: dark)
                                 }
                             }
                             VStack(spacing: UIScale.pt(16)) {
                                 WorldClocksCard(dark: dark)
-                                if systemEnabled || presenterEnabled || lidAwakeEnabled {
+                                if systemEnabled || presenterEnabled || lidAwakeEnabled
+                                    || keystrokeHighlightEnabled
+                                {
                                     QuickActionsCard(dark: dark)
                                 }
                             }
@@ -527,6 +533,10 @@ private struct QuickActionsCard: View {
         var systemEnabled = false
     @AppStorage(LidAwakeState.enabledKey, store: SharedDefaults.store) private
         var lidAwakeEnabled = false
+    @AppStorage(AppStorageKeys.KeystrokeHighlight.enabled, store: SharedDefaults.store) private
+        var keystrokeHighlightEnabled = false
+    @AppStorage(AppStorageKeys.KeystrokeHighlight.active, store: SharedDefaults.store) private
+        var keystrokeHighlightActive = false
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
     @State private var lidAwakeActive = SharedDefaults.store.bool(
@@ -559,15 +569,6 @@ private struct QuickActionsCard: View {
                             .toggle()
                     }
                 }
-                if presenterEnabled {
-                    tile(
-                        icon: "person.wave.2", title: "Presenter mode",
-                        sub: "Blur sensitive values on screen", active: presenterMode
-                    ) {
-                        _ = PresenterRuntimeOperationExecution.perform(
-                            presenterMode ? .stop : .start)
-                    }
-                }
                 if lidAwakeEnabled {
                     tile(
                         icon: "laptopcomputer", title: "Lid awake",
@@ -578,6 +579,25 @@ private struct QuickActionsCard: View {
                         } else {
                             confirmingLidAwake = true
                         }
+                    }
+                }
+                if keystrokeHighlightEnabled {
+                    tile(
+                        icon: "keyboard.badge.ellipsis", title: "Keystrokes",
+                        sub: "Show keyboard input on screen", active: keystrokeHighlightActive
+                    ) {
+                        $keystrokeHighlightActive
+                            .configured(AppStorageKeys.KeystrokeHighlight.active).wrappedValue
+                            .toggle()
+                    }
+                }
+                if presenterEnabled {
+                    tile(
+                        icon: "person.wave.2", title: "Presenter mode",
+                        sub: "Blur sensitive values on screen", active: presenterMode
+                    ) {
+                        _ = PresenterRuntimeOperationExecution.perform(
+                            presenterMode ? .stop : .start)
                     }
                 }
             }

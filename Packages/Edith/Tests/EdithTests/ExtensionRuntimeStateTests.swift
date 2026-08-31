@@ -383,7 +383,7 @@ import Testing
         #expect(tools.contains("mutationCenter().install"))
     }
 
-    @Test func homeQuickActionsUseFourColumnsAndIncludeLidAwake() throws {
+    @Test func homeQuickActionsUseFourColumnsAndIncludeExtensionActions() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -393,6 +393,9 @@ import Testing
 
         #expect(source.contains("count: 4"))
         #expect(source.contains("title: \"Lid awake\""))
+        #expect(source.contains("title: \"Keystrokes\""))
+        #expect(source.contains("AppStorageKeys.KeystrokeHighlight.enabled"))
+        #expect(source.contains("AppStorageKeys.KeystrokeHighlight.active"))
         #expect(source.contains("lidAwakeOperations.perform(.on"))
         #expect(source.contains("lidAwakeOperations.perform(.off)"))
         #expect(!source.contains("IPC.Name.toggleLidAwake"))
