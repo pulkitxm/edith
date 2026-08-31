@@ -180,14 +180,14 @@ private actor FakeRedisClient: RedisDatabaseClient {
     let product: DatabaseProduct
     var values: [Data: FakeRedisValue]
     var ttls: [Data: Int64]
-    var operations: [RedisDatabaseReadOperation] = []
-    var batches: [[RedisDatabaseReadOperation]] = []
+    var operations: [RedisDatabaseOperation] = []
+    var batches: [[RedisDatabaseOperation]] = []
     var closed = false
     var pauseOnScan = false
     var scanPaused = false
     var scanContinuation: CheckedContinuation<Void, Never>?
     let scanExtraKeys: Int
-    let injectedFailureOperation: RedisDatabaseReadOperation?
+    let injectedFailureOperation: RedisDatabaseOperation?
     let injectedFailure: RedisDatabaseClientFailure?
 
     init(
@@ -195,7 +195,7 @@ private actor FakeRedisClient: RedisDatabaseClient {
         values: [Data: FakeRedisValue] = [:],
         ttls: [Data: Int64] = [:],
         scanExtraKeys: Int = 0,
-        injectedFailureOperation: RedisDatabaseReadOperation? = nil,
+        injectedFailureOperation: RedisDatabaseOperation? = nil,
         injectedFailure: RedisDatabaseClientFailure? = nil
     ) {
         self.product = product
@@ -207,7 +207,7 @@ private actor FakeRedisClient: RedisDatabaseClient {
     }
 
     func execute(
-        _ operation: RedisDatabaseReadOperation,
+        _ operation: RedisDatabaseOperation,
         context _: DatabaseAdapterOperationContext,
         deadline _: Date
     ) async throws -> RedisDatabaseReply {
@@ -298,11 +298,37 @@ private actor FakeRedisClient: RedisDatabaseClient {
                         .array(entry.1.flatMap { [.bytes($0.0), .bytes($0.1)] }),
                     ])
                 })
+        case let .set(key, value, condition, ttl):
+            if condition == .onlyIfMissing, values[key] != nil { return .null }
+            if condition == .onlyIfPresent, values[key] == nil { return .null }
+            values[key] = .string(value)
+            switch ttl {
+            case let .milliseconds(ttlMilliseconds):
+                ttls[key] = ttlMilliseconds
+            case .persistent:
+                ttls[key] = nil
+            case .preserve:
+                break
+            }
+            return .bytes(Data("OK".utf8))
+        case let .delete(key):
+            let removed = values.removeValue(forKey: key) != nil
+            ttls[key] = nil
+            return .integer(removed ? 1 : 0)
+        case let .expire(key, milliseconds):
+            guard values[key] != nil else { return .integer(0) }
+            ttls[key] = milliseconds
+            return .integer(1)
+        case let .persist(key):
+            guard values[key] != nil, ttls.removeValue(forKey: key) != nil else {
+                return .integer(0)
+            }
+            return .integer(1)
         }
     }
 
     func executeBatch(
-        _ operations: [RedisDatabaseReadOperation],
+        _ operations: [RedisDatabaseOperation],
         context: DatabaseAdapterOperationContext,
         deadline: Date
     ) async throws -> [RedisDatabaseCommandResult] {
@@ -336,11 +362,11 @@ private actor FakeRedisClient: RedisDatabaseClient {
         pauseOnScan = value
     }
 
-    func snapshot() -> [RedisDatabaseReadOperation] {
+    func snapshot() -> [RedisDatabaseOperation] {
         operations
     }
 
-    func batchSnapshot() -> [[RedisDatabaseReadOperation]] {
+    func batchSnapshot() -> [[RedisDatabaseOperation]] {
         batches
     }
 
@@ -350,6 +376,15 @@ private actor FakeRedisClient: RedisDatabaseClient {
 
     func isScanPaused() -> Bool {
         scanPaused
+    }
+
+    func stringValue(for key: Data) -> Data? {
+        guard case let .string(value) = values[key] else { return nil }
+        return value
+    }
+
+    func ttl(for key: Data) -> Int64? {
+        ttls[key]
     }
 
     private func info(_ section: String) -> Data {
@@ -1054,7 +1089,7 @@ struct RedisValkeyDatabaseAdapterTests {
         #expect(await client.isClosed())
     }
 
-    @Test("reports only implemented read capabilities")
+    @Test("reports bounded reads and single-key mutation capabilities")
     func capabilities() async throws {
         let definition = try RedisValkeyAdapterFixtures.definition(product: .valkey)
         let session = try await RedisValkeyDatabaseAdapter(
@@ -1071,11 +1106,88 @@ struct RedisValkeyDatabaseAdapterTests {
         #expect(report.supports(.browse))
         #expect(report.supports(.query))
         #expect(report.supports(.queryCancellation))
-        #expect(report.status(for: .insert)?.availability == .unavailable)
-        #expect(report.unavailableReason(for: .insert)?.category == .notImplemented)
+        #expect(report.supports(.insert))
+        #expect(report.supports(.update))
+        #expect(report.supports(.delete))
+        #expect(report.status(for: .bulkMutation)?.availability == .unavailable)
         #expect(report.pagingModes == [.scanCursor])
-        #expect(report.mutationModes == [.unsupported])
+        #expect(report.mutationModes == [.singleRecord])
         #expect(report.transactionModes == [.none])
+        await session.disconnect()
+    }
+
+    @Test("creates, edits, expires, persists, and deletes one string key")
+    func stringKeyMutations() async throws {
+        let definition = try RedisValkeyAdapterFixtures.definition()
+        let client = FakeRedisClient(product: .redis)
+        let session = try await RedisValkeyDatabaseAdapter(
+            clientFactory: FakeRedisClientFactory(client: client)
+        ).connect(
+            try RedisValkeyAdapterFixtures.resolved(definition),
+            context: RedisValkeyAdapterFixtures.context())
+        let target = RedisValkeyAdapterFixtures.target(definition.id)
+        let key = DatabaseValue.string("session:1")
+        let keyData = Data("session:1".utf8)
+        let insert = try DatabaseKeyspaceMutationRequests.insertString(
+            target: target,
+            product: .redis,
+            key: key,
+            value: .string("draft"),
+            ttlMilliseconds: 60_000)
+        let insertPlan = try await session.normalizeMutation(
+            insert,
+            context: RedisValkeyAdapterFixtures.context())
+        #expect(insertPlan.action == .insert)
+        #expect(insertPlan.transactionBehavior == .nontransactional)
+        #expect(insertPlan.rollbackAvailability == .unavailable)
+        let inserted = try await session.executeMutation(
+            insertPlan,
+            context: RedisValkeyAdapterFixtures.context())
+        #expect(inserted.effect == .applied)
+        #expect(await client.stringValue(for: keyData) == Data("draft".utf8))
+        #expect(await client.ttl(for: keyData) == 60_000)
+
+        let recordTarget = DatabaseTargetIdentifier(
+            connectionID: definition.id,
+            object: target.object,
+            record: DatabaseRecordIdentity(
+                kind: .key,
+                components: [DatabaseIdentityComponent(name: "key", value: key)]))
+        let update = try DatabaseKeyspaceMutationRequests.updateString(
+            target: recordTarget,
+            product: .redis,
+            value: .string("ready"))
+        let updated = try await session.executeMutation(
+            try await session.normalizeMutation(
+                update,
+                context: RedisValkeyAdapterFixtures.context()),
+            context: RedisValkeyAdapterFixtures.context())
+        #expect(updated.effect == .applied)
+        #expect(await client.stringValue(for: keyData) == Data("ready".utf8))
+        #expect(await client.ttl(for: keyData) == 60_000)
+
+        let persist = try DatabaseKeyspaceMutationRequests.updateTTL(
+            target: recordTarget,
+            product: .redis,
+            ttlMilliseconds: nil)
+        let persisted = try await session.executeMutation(
+            try await session.normalizeMutation(
+                persist,
+                context: RedisValkeyAdapterFixtures.context()),
+            context: RedisValkeyAdapterFixtures.context())
+        #expect(persisted.effect == .applied)
+        #expect(await client.ttl(for: keyData) == nil)
+
+        let deletion = try DatabaseKeyspaceMutationRequests.deleteKey(
+            target: recordTarget,
+            product: .redis)
+        let deleted = try await session.executeMutation(
+            try await session.normalizeMutation(
+                deletion,
+                context: RedisValkeyAdapterFixtures.context()),
+            context: RedisValkeyAdapterFixtures.context())
+        #expect(deleted.effect == .applied)
+        #expect(await client.stringValue(for: keyData) == nil)
         await session.disconnect()
     }
 

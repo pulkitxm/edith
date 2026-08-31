@@ -189,6 +189,46 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(insert.payload.parameters.map(\.value) == [.string("")])
     }
 
+    @Test("Redis key editor creates guarded string, TTL, and delete requests")
+    func redisKeyMutationRequests() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [Self.redisResponse()])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .redis)
+        model.prepare(for: connection)
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        model.beginInsert(connection)
+        model.updateEditorField("key", text: "session:2")
+        model.updateEditorField("value", text: "draft")
+        model.updateEditorField("ttlMilliseconds", text: "120000")
+        #expect(model.canSubmitEditor)
+        let insert = try #require(model.editorMutationRequest(connection))
+        #expect(insert.payload.command == "SET")
+        #expect(insert.payload.parameters.map(\.name) == ["key", "value", "ttlMilliseconds"])
+        #expect(
+            insert.payload.parameters.map(\.value)
+                == [.string("session:2"), .string("draft"), .signedInteger(120_000)])
+
+        model.cancelEditor()
+        model.selectRecord(at: 0)
+        #expect(!model.canEdit(recordAt: 0, field: "key", connection: connection))
+        #expect(!model.canEdit(recordAt: 0, field: "type", connection: connection))
+        #expect(model.canEdit(recordAt: 0, field: "value", connection: connection))
+        #expect(model.canEdit(recordAt: 0, field: "ttlMilliseconds", connection: connection))
+        model.beginEditingSelectedRow(connection)
+        model.updateEditorField("value", text: "ready")
+        model.updateEditorField("ttlMilliseconds", text: "-1")
+        let update = try #require(model.editorMutationRequest(connection))
+        #expect(update.payload.command == "SET")
+        #expect(update.payload.parameters.map(\.name) == ["key", "value", "ttlPolicy"])
+        #expect(update.payload.parameters.last?.value == .string("persistent"))
+
+        let deletion = try #require(model.deleteMutationRequest(connection))
+        #expect(deletion.payload.command == "DEL")
+        #expect(deletion.payload.parameters.map(\.value) == [.string("session:1")])
+    }
+
     private static func connection(
         product: DatabaseProduct
     ) throws -> DatabaseConnectionSummary {
@@ -227,6 +267,49 @@ struct DatabaseDataWorkspaceModelTests {
                 DatabaseObjectField(name: "id", value: .signedInteger(identifier)),
                 DatabaseObjectField(name: "name", value: .string("Customer \(identifier)")),
             ])
+    }
+
+    private static func redisResponse() -> DatabaseBrokerCommandResponse {
+        let record = DatabaseRecord(
+            identity: DatabaseRecordIdentity(
+                kind: .key,
+                components: [
+                    DatabaseIdentityComponent(name: "key", value: .string("session:1"))
+                ]),
+            fields: [
+                DatabaseObjectField(name: "key", value: .string("session:1")),
+                DatabaseObjectField(name: "type", value: .string("string")),
+                DatabaseObjectField(name: "ttlMilliseconds", value: .signedInteger(60_000)),
+                DatabaseObjectField(name: "length", value: .unsignedInteger(5)),
+                DatabaseObjectField(name: "value", value: .string("draft")),
+            ])
+        let page = DatabasePage(
+            records: [record],
+            fields: [
+                DatabaseFieldDescriptor(
+                    path: DatabaseFieldPath("key"), displayName: "Key", typeName: "bytes",
+                    isNullable: false, isSortable: false, isFilterable: false),
+                DatabaseFieldDescriptor(
+                    path: DatabaseFieldPath("type"), displayName: "Type", typeName: "string",
+                    isNullable: false, isSortable: false, isFilterable: false),
+                DatabaseFieldDescriptor(
+                    path: DatabaseFieldPath("ttlMilliseconds"), displayName: "TTL milliseconds",
+                    typeName: "int64", isNullable: false, isSortable: false,
+                    isFilterable: false),
+                DatabaseFieldDescriptor(
+                    path: DatabaseFieldPath("length"), displayName: "Length", typeName: "uint64",
+                    isNullable: true, isSortable: false, isFilterable: false),
+                DatabaseFieldDescriptor(
+                    path: DatabaseFieldPath("value"), displayName: "Value", typeName: "native",
+                    isNullable: true, isSortable: false, isFilterable: false),
+            ],
+            metadata: DatabasePageMetadata(
+                completeness: DatabaseResultCompleteness(state: .sampled),
+                count: DatabaseCountMetadata(value: nil, accuracy: .unknown)))
+        return .browse(
+            .success(
+                DatabaseBrowseResult(page: page),
+                metadata: DatabaseResultMetadata(completeness: page.metadata.completeness)))
     }
 
     private static func response(

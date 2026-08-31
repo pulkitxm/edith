@@ -171,15 +171,46 @@ actor RedisValkeyDatabaseAdapterSession: DatabaseAdapterSession {
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseDestructivePlan {
         try await requireAvailableContext(context)
-        throw RedisValkeyDatabaseAdapterSupport.capabilityUnavailable
+        return try RedisValkeyDatabaseMutationSupport.normalize(
+            request,
+            connectionID: connection.id,
+            product: productIdentity.product)
     }
 
     func executeMutation(
         _ plan: DatabaseDestructivePlan,
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterMutationResult {
-        try await requireAvailableContext(context)
-        throw RedisValkeyDatabaseAdapterSupport.capabilityUnavailable
+        let mutation = try RedisValkeyDatabaseMutationSupport.execution(
+            plan,
+            connectionID: connection.id,
+            product: productIdentity.product)
+        let reply = try await perform(
+            context: context,
+            fallback: RedisValkeyDatabaseMutationSupport.mutationFailed
+        ) { client, deadline in
+            try await client.execute(
+                mutation.operation,
+                context: context,
+                deadline: deadline)
+        }
+        let applied = try RedisValkeyDatabaseMutationSupport.wasApplied(
+            reply,
+            operation: mutation.operation)
+        if applied {
+            return try DatabaseAdapterMutationResult(
+                disposition: .completed,
+                effect: .applied,
+                affectedRecords: DatabaseCountMetadata(value: 1, accuracy: .exact))
+        }
+        return try DatabaseAdapterMutationResult(
+            disposition: .completed,
+            effect: .notApplied,
+            affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .exact),
+            error: DatabaseErrorEnvelope(
+                category: .conflict,
+                message: "The Redis-compatible key no longer matched the requested mutation.",
+                productCode: "redis.mutation.key_not_found_or_exists"))
     }
 
     func openStream(
@@ -387,12 +418,12 @@ protocol RedisDatabaseClientFactory: Sendable {
 
 protocol RedisDatabaseClient: Sendable {
     func execute(
-        _ operation: RedisDatabaseReadOperation,
+        _ operation: RedisDatabaseOperation,
         context: DatabaseAdapterOperationContext,
         deadline: Date
     ) async throws -> RedisDatabaseReply
     func executeBatch(
-        _ operations: [RedisDatabaseReadOperation],
+        _ operations: [RedisDatabaseOperation],
         context: DatabaseAdapterOperationContext,
         deadline: Date
     ) async throws -> [RedisDatabaseCommandResult]
@@ -411,7 +442,18 @@ enum RedisDatabaseClientFailure: Error, Equatable, Sendable {
     case wrongType
 }
 
-enum RedisDatabaseReadOperation: Equatable, Sendable {
+enum RedisDatabaseSetCondition: Equatable, Sendable {
+    case onlyIfMissing
+    case onlyIfPresent
+}
+
+enum RedisDatabaseSetTTL: Equatable, Sendable {
+    case persistent
+    case preserve
+    case milliseconds(Int64)
+}
+
+enum RedisDatabaseOperation: Equatable, Sendable {
     case ping
     case info(section: String)
     case scan(cursor: UInt64, count: Int)
@@ -430,6 +472,14 @@ enum RedisDatabaseReadOperation: Equatable, Sendable {
     case sortedSetRange(Data, count: Int)
     case streamLength(Data)
     case streamRange(Data, count: Int)
+    case set(
+        key: Data,
+        value: Data,
+        condition: RedisDatabaseSetCondition,
+        ttl: RedisDatabaseSetTTL)
+    case delete(Data)
+    case expire(Data, milliseconds: Int64)
+    case persist(Data)
 }
 
 enum RedisDatabaseCommandResult: Sendable {
@@ -534,7 +584,7 @@ final class RediStackDatabaseClient: RedisDatabaseClient, @unchecked Sendable {
     }
 
     func execute(
-        _ operation: RedisDatabaseReadOperation,
+        _ operation: RedisDatabaseOperation,
         context: DatabaseAdapterOperationContext,
         deadline: Date
     ) async throws -> RedisDatabaseReply {
@@ -572,7 +622,7 @@ final class RediStackDatabaseClient: RedisDatabaseClient, @unchecked Sendable {
     }
 
     func executeBatch(
-        _ operations: [RedisDatabaseReadOperation],
+        _ operations: [RedisDatabaseOperation],
         context: DatabaseAdapterOperationContext,
         deadline: Date
     ) async throws -> [RedisDatabaseCommandResult] {
@@ -1049,7 +1099,7 @@ private struct RedisDatabaseInboundFrameValidator {
     }
 }
 
-private extension RedisDatabaseReadOperation {
+private extension RedisDatabaseOperation {
     var request: (command: String, arguments: [RESPValue]) {
         switch self {
         case .ping:
@@ -1142,7 +1192,43 @@ private extension RedisDatabaseReadOperation {
                     RESPValue(from: count),
                 ]
             )
+        case let .set(key, value, condition, ttl):
+            Self.setRequest(
+                key: key,
+                value: value,
+                condition: condition,
+                ttl: ttl)
+        case let .delete(key):
+            ("DEL", [RESPValue(from: key)])
+        case let .expire(key, milliseconds):
+            (
+                "PEXPIRE",
+                [RESPValue(from: key), RESPValue(from: milliseconds)]
+            )
+        case let .persist(key):
+            ("PERSIST", [RESPValue(from: key)])
         }
+    }
+
+    private static func setRequest(
+        key: Data,
+        value: Data,
+        condition: RedisDatabaseSetCondition,
+        ttl: RedisDatabaseSetTTL
+    ) -> (command: String, arguments: [RESPValue]) {
+        var arguments = [RESPValue(from: key), RESPValue(from: value)]
+        arguments.append(
+            RESPValue(from: condition == .onlyIfMissing ? "NX" : "XX"))
+        switch ttl {
+        case let .milliseconds(ttlMilliseconds):
+            arguments.append(RESPValue(from: "PX"))
+            arguments.append(RESPValue(from: ttlMilliseconds))
+        case .preserve:
+            arguments.append(RESPValue(from: "KEEPTTL"))
+        case .persistent:
+            break
+        }
+        return ("SET", arguments)
     }
 }
 
@@ -1559,9 +1645,6 @@ private enum RedisValkeyDatabaseAdapterSupport {
         let unavailable: [(DatabaseCapabilityID, DatabaseCapabilityRequirement)] = [
             (.objectDescription, .familyRequired),
             (.explain, .familyRequired),
-            (.insert, .sharedRequired),
-            (.update, .sharedRequired),
-            (.delete, .sharedRequired),
             (.bulkMutation, .sharedRequired),
             (.importData, .sharedRequired),
             (.exportData, .sharedRequired),
@@ -1609,6 +1692,24 @@ private enum RedisValkeyDatabaseAdapterSupport {
                     id: .queryCancellation,
                     requirement: .sharedRequired,
                     availability: .available),
+                DatabaseCapabilityStatus(
+                    id: .insert,
+                    requirement: .sharedRequired,
+                    availability: .available,
+                    attributes: [
+                        DatabaseStringAttribute(name: "types", value: "string")
+                    ]),
+                DatabaseCapabilityStatus(
+                    id: .update,
+                    requirement: .sharedRequired,
+                    availability: .available,
+                    attributes: [
+                        DatabaseStringAttribute(name: "operations", value: "value,ttl")
+                    ]),
+                DatabaseCapabilityStatus(
+                    id: .delete,
+                    requirement: .sharedRequired,
+                    availability: .available),
             ]
             + unavailable.map { identifier, requirement in
                 DatabaseCapabilityStatus(
@@ -1621,14 +1722,15 @@ private enum RedisValkeyDatabaseAdapterSupport {
             productIdentity: identity,
             capabilities: capabilities,
             pagingModes: [.scanCursor],
-            mutationModes: [.unsupported],
+            mutationModes: [.singleRecord],
             transactionModes: [.none],
             cancellationModes: [.cooperative],
             safetyLimitations: [
                 "SCAN pages can contain duplicates or omit keys while the keyspace changes.",
                 "Values and collection members are returned as bounded previews.",
                 "Cancellation closes the session and requires reconnection.",
-                "Cluster, sentinel, TLS, tunnels, streaming, mutation, scripts, modules, transactions, pubsub, blocking operations, and arbitrary commands are unavailable.",
+                "String key creation, value updates, TTL changes, and single-key deletion are supported with confirmation.",
+                "Cluster, sentinel, TLS, tunnels, streaming, collection mutation, scripts, modules, transactions, pubsub, blocking operations, and arbitrary commands are unavailable.",
             ],
             discoveredAt: Date())
     }
@@ -2049,7 +2151,7 @@ private enum RedisValkeyDatabaseAdapterSupport {
     ) async throws -> [DatabaseRecord] {
         guard !keys.isEmpty else { return [] }
         let metadataOperations = keys.flatMap {
-            [RedisDatabaseReadOperation.type($0), .pttl($0)]
+            [RedisDatabaseOperation.type($0), .pttl($0)]
         }
         let metadataResults = try await client.executeBatch(
             metadataOperations,
@@ -2068,7 +2170,7 @@ private enum RedisValkeyDatabaseAdapterSupport {
                 ))
         }
         try await check(context, deadline: deadline)
-        var valueOperations: [RedisDatabaseReadOperation] = []
+        var valueOperations: [RedisDatabaseOperation] = []
         var ranges: [Range<Int>] = []
         for seed in seeds {
             let start = valueOperations.count
@@ -2117,7 +2219,7 @@ private enum RedisValkeyDatabaseAdapterSupport {
     private static func inspectionOperations(
         type: String,
         key: Data
-    ) -> [RedisDatabaseReadOperation] {
+    ) -> [RedisDatabaseOperation] {
         switch type {
         case "string":
             [.stringLength(key), .stringRange(key, maximumBytes: maximumValueBytes)]
