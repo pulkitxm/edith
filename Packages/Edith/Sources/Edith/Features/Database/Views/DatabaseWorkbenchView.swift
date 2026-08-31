@@ -1,3 +1,4 @@
+import AppKit
 import EdithDatabase
 import EdithKit
 import SwiftUI
@@ -7,6 +8,7 @@ struct DatabaseWorkbenchView: View {
     let explorer: DatabaseObjectExplorerModel
     let data: DatabaseDataWorkspaceModel
     let mutations: DatabaseWorkspaceModel
+    var showsObjectNavigator = true
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
@@ -24,7 +26,7 @@ struct DatabaseWorkbenchView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(dark))
+        .background(Color(nsColor: .windowBackgroundColor))
         .task(id: connections.selectedConnectionID) {
             data.prepare(for: connections.selectedConnection)
             explorer.prepare(for: connections.selectedConnection)
@@ -72,13 +74,11 @@ struct DatabaseWorkbenchView: View {
 
     private func workspace(_ connection: DatabaseConnectionSummary) -> some View {
         VStack(spacing: 0) {
-            contextRail(connection)
-            Divider().opacity(0.35)
             if compact {
                 compactObjectPicker(connection)
                 Divider().opacity(0.35)
                 dataRegion(connection)
-            } else {
+            } else if showsObjectNavigator {
                 HSplitView {
                     DatabaseObjectNavigatorView(
                         explorer: explorer,
@@ -91,6 +91,8 @@ struct DatabaseWorkbenchView: View {
                     dataRegion(connection)
                         .frame(minWidth: UIScale.pt(460))
                 }
+            } else {
+                dataRegion(connection)
             }
         }
         .onChange(of: explorer.selectedObject) { _, object in
@@ -107,26 +109,40 @@ struct DatabaseWorkbenchView: View {
         }
     }
 
-    private func contextRail(_ connection: DatabaseConnectionSummary) -> some View {
-        HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: productSymbol(connection.product))
-                .foregroundStyle(DashSkin.accent(dark))
-            Text(connection.name)
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
-                .lineLimit(1)
-            Text(connection.product.displayName)
-                .font(.system(size: UIScale.pt(11)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-                .lineLimit(1)
-            Spacer(minLength: UIScale.pt(8))
+    private func controls(_ connection: DatabaseConnectionSummary) -> some View {
+        Group {
+            if compact {
+                VStack(spacing: UIScale.pt(8)) {
+                    objectControls(connection)
+                    HStack(spacing: UIScale.pt(8)) {
+                        filterControls(connection)
+                        connectionActions(connection)
+                    }
+                }
+            } else {
+                HStack(spacing: UIScale.pt(8)) {
+                    objectControls(connection)
+                    Divider().frame(height: UIScale.pt(20))
+                    filterControls(connection)
+                    connectionActions(connection)
+                }
+            }
+        }
+        .padding(UIScale.pt(10))
+    }
+
+    private func connectionActions(_ connection: DatabaseConnectionSummary) -> some View {
+        HStack(spacing: UIScale.pt(7)) {
             if connection.environmentKind == .production {
-                Label("Production", systemImage: "exclamationmark.shield.fill")
-                    .foregroundStyle(DashSkin.warn)
-                    .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                Image(systemName: "exclamationmark.shield.fill")
+                    .foregroundStyle(.orange)
+                    .help("Production connection")
+                    .accessibilityLabel("Production connection")
             } else if connection.readOnlyPolicy != .disabled {
-                Label("Read only", systemImage: "lock.fill")
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                Image(systemName: "lock.fill")
+                    .foregroundStyle(.secondary)
+                    .help("Read-only connection")
+                    .accessibilityLabel("Read-only connection")
             }
             Button {
                 data.cancel()
@@ -135,29 +151,9 @@ struct DatabaseWorkbenchView: View {
                 Image(systemName: "power")
             }
             .buttonStyle(.edith(.borderless))
-            .help("Disconnect")
+            .help("Disconnect \(connection.name)")
+            .accessibilityLabel("Disconnect \(connection.name)")
         }
-        .padding(.horizontal, UIScale.pt(compact ? 10 : 14))
-        .frame(height: UIScale.pt(40))
-        .background(DashSkin.paper2(dark).opacity(0.7))
-    }
-
-    private func controls(_ connection: DatabaseConnectionSummary) -> some View {
-        Group {
-            if compact {
-                VStack(spacing: UIScale.pt(8)) {
-                    objectControls(connection)
-                    filterControls(connection)
-                }
-            } else {
-                HStack(spacing: UIScale.pt(8)) {
-                    objectControls(connection)
-                    Divider().frame(height: UIScale.pt(20))
-                    filterControls(connection)
-                }
-            }
-        }
-        .padding(UIScale.pt(10))
     }
 
     private func objectControls(_ connection: DatabaseConnectionSummary) -> some View {
@@ -219,7 +215,7 @@ struct DatabaseWorkbenchView: View {
         }
         .padding(.horizontal, UIScale.pt(10))
         .frame(height: UIScale.pt(42))
-        .background(DashSkin.paper2(dark).opacity(0.45))
+        .background(Color(nsColor: .underPageBackgroundColor))
     }
 
     private func filterControls(_ connection: DatabaseConnectionSummary) -> some View {
@@ -373,7 +369,7 @@ struct DatabaseWorkbenchView: View {
             }
             .padding(.horizontal, UIScale.pt(12))
             .frame(height: UIScale.pt(38))
-            .background(DashSkin.paper2(dark).opacity(0.55))
+            .background(Color(nsColor: .underPageBackgroundColor))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -437,7 +433,7 @@ struct DatabaseWorkbenchView: View {
                 .padding(UIScale.pt(12))
             }
         }
-        .background(DashSkin.paper2(dark).opacity(0.45))
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     private func editor(_ connection: DatabaseConnectionSummary) -> some View {
@@ -469,7 +465,7 @@ struct DatabaseWorkbenchView: View {
                 .padding(UIScale.pt(12))
             }
         }
-        .background(DashSkin.paper2(dark).opacity(0.45))
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     private func editorField(_ field: DatabaseRowFieldDraft) -> some View {
