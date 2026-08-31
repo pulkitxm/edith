@@ -112,6 +112,31 @@ actor MongoDBDatabaseAdapterSession: DatabaseAdapterSession {
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterPage {
         let startedAt = Date()
+        if MongoDBDatabaseAdapterSupport.isCollectionDiscovery(
+            request,
+            connectionID: connection.id)
+        {
+            let prepared = try MongoDBDatabaseAdapterSupport.prepareCollectionDiscovery(
+                request,
+                connectionID: connection.id,
+                maximumTimeMilliseconds: try MongoDBDatabaseAdapterSupport
+                    .maximumTimeMilliseconds(
+                        connection: connection,
+                        context: context))
+            let result = try await perform(
+                context: context,
+                fallback: MongoDBDatabaseAdapterSupport.readFailed
+            ) { client in
+                try await client.listCollections(prepared.plan)
+            }
+            let page = try MongoDBDatabaseAdapterSupport.collectionPage(
+                result,
+                prepared: prepared,
+                request: request,
+                startedAt: startedAt)
+            try page.validate(for: request)
+            return page
+        }
         let prepared = try MongoDBDatabaseAdapterSupport.prepareBrowse(
             request,
             connectionID: connection.id,
@@ -367,7 +392,19 @@ struct MongoDBDatabaseAdapterPreparedRead: Sendable {
     let hidesObjectID: Bool
 }
 
+struct MongoDBDatabaseDiscoveryContinuationPayload: Codable, Sendable {
+    let version: Int
+    let database: String
+    let offset: Int
+}
+
+struct MongoDBDatabaseAdapterPreparedDiscovery: Sendable {
+    let plan: MongoDBDatabaseCollectionPlan
+    let offset: Int
+}
+
 enum MongoDBDatabaseAdapterSupport {
+    static let maximumDiscoveredCollections = 10_000
     static let connectionFailed = DatabaseAdapterFailure.reported(
         DatabaseErrorEnvelope(
             category: .connectionFailed,
@@ -628,6 +665,160 @@ enum MongoDBDatabaseAdapterSupport {
             maximumTimeMilliseconds: maximumTimeMilliseconds,
             failure: invalidRead)
     }
+
+    static func isCollectionDiscovery(
+        _ request: DatabaseAdapterPageRequest,
+        connectionID: DatabaseConnectionID
+    ) -> Bool {
+        guard request.target.connectionID == connectionID,
+            request.target.record == nil,
+            let object = request.target.object
+        else { return false }
+        return object.kind == .database
+            && object.nativeIdentifier == nil
+            && object.path.count == 1
+    }
+
+    static func prepareCollectionDiscovery(
+        _ request: DatabaseAdapterPageRequest,
+        connectionID: DatabaseConnectionID,
+        maximumTimeMilliseconds: Int32
+    ) throws(DatabaseAdapterFailure) -> MongoDBDatabaseAdapterPreparedDiscovery {
+        try validateConsistency(request.consistency, failure: invalidRead)
+        guard isCollectionDiscovery(request, connectionID: connectionID),
+            request.projection == nil,
+            request.filter == nil,
+            request.sorts.isEmpty,
+            let database = request.target.object?.path.first,
+            validName(database)
+        else {
+            throw invalidRead
+        }
+        let offset = try discoveryOffset(
+            request.continuation,
+            database: database)
+        let requestedEnd = offset.addingReportingOverflow(request.pageSize.value + 1)
+        guard !requestedEnd.overflow,
+            requestedEnd.partialValue <= maximumDiscoveredCollections + 1
+        else {
+            throw resultTooLarge
+        }
+        return MongoDBDatabaseAdapterPreparedDiscovery(
+            plan: MongoDBDatabaseCollectionPlan(
+                database: database,
+                limit: requestedEnd.partialValue,
+                batchSize: min(requestedEnd.partialValue, 500),
+                maximumTimeMilliseconds: maximumTimeMilliseconds),
+            offset: offset)
+    }
+
+    static func collectionPage(
+        _ result: MongoDBDatabaseCollectionResult,
+        prepared: MongoDBDatabaseAdapterPreparedDiscovery,
+        request: DatabaseAdapterPageRequest,
+        startedAt: Date
+    ) throws(DatabaseAdapterFailure) -> DatabaseAdapterPage {
+        let start = min(prepared.offset, result.names.count)
+        let end = min(start + request.pageSize.value, result.names.count)
+        let names = Array(result.names[start..<end])
+        let hasMore = end < result.names.count || result.hasMore
+        let endingOffset = prepared.offset + names.count
+        let continuation: DatabaseAdapterContinuation?
+        if hasMore, !names.isEmpty, endingOffset < maximumDiscoveredCollections {
+            let payload: Data
+            do {
+                payload = try JSONEncoder().encode(
+                    MongoDBDatabaseDiscoveryContinuationPayload(
+                        version: 1,
+                        database: prepared.plan.database,
+                        offset: endingOffset))
+            } catch {
+                throw invalidContinuation
+            }
+            continuation = try DatabaseAdapterContinuation(
+                mode: .offset,
+                payload: payload,
+                expiresAt: Date().addingTimeInterval(900))
+        } else {
+            continuation = nil
+        }
+        let records = names.map { name in
+            DatabaseRecord(fields: [
+                DatabaseObjectField(name: "name", value: .string(name)),
+                DatabaseObjectField(name: "kind", value: .string("collection")),
+            ])
+        }
+        let elapsed = max(0, Date().timeIntervalSince(startedAt))
+        let completeness: DatabaseResultCompleteness
+        if hasMore, continuation == nil {
+            completeness = DatabaseResultCompleteness(
+                state: .truncated,
+                reason: "MongoDB collection discovery reached its bounded limit.")
+        } else if hasMore {
+            completeness = DatabaseResultCompleteness(
+                state: .partial,
+                reason: "More MongoDB collections are available.")
+        } else {
+            completeness = DatabaseResultCompleteness(state: .complete)
+        }
+        return try DatabaseAdapterPage(
+            records: records,
+            fields: collectionDiscoveryFields,
+            nextContinuation: continuation,
+            metadata: DatabasePageMetadata(
+                completeness: completeness,
+                count: DatabaseCountMetadata(
+                    value: UInt64(endingOffset),
+                    accuracy: hasMore ? .lowerBound : .exact),
+                timing: DatabaseQueryTiming(
+                    durationMilliseconds: UInt64(
+                        min(elapsed * 1_000, Double(UInt64.max))))))
+    }
+
+    private static func discoveryOffset(
+        _ continuation: DatabaseAdapterContinuation?,
+        database: String
+    ) throws(DatabaseAdapterFailure) -> Int {
+        guard let continuation else { return 0 }
+        guard continuation.mode == .offset,
+            continuation.expiresAt.map({ $0 > Date() }) != false
+        else {
+            throw invalidContinuation
+        }
+        let payload: MongoDBDatabaseDiscoveryContinuationPayload
+        do {
+            payload = try JSONDecoder().decode(
+                MongoDBDatabaseDiscoveryContinuationPayload.self,
+                from: continuation.payload)
+        } catch {
+            throw invalidContinuation
+        }
+        guard payload.version == 1,
+            payload.database == database,
+            payload.offset > 0,
+            payload.offset < maximumDiscoveredCollections
+        else {
+            throw invalidContinuation
+        }
+        return payload.offset
+    }
+
+    private static let collectionDiscoveryFields = [
+        DatabaseFieldDescriptor(
+            path: DatabaseFieldPath("name"),
+            displayName: "name",
+            typeName: "string",
+            isNullable: false,
+            isSortable: true,
+            isFilterable: false),
+        DatabaseFieldDescriptor(
+            path: DatabaseFieldPath("kind"),
+            displayName: "kind",
+            typeName: "string",
+            isNullable: false,
+            isSortable: false,
+            isFilterable: false),
+    ]
 
     static func prepareQuery(
         _ request: DatabaseAdapterQueryRequest,

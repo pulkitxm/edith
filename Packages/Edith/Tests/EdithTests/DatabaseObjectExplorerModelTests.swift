@@ -111,6 +111,29 @@ struct DatabaseObjectExplorerModelTests {
         #expect(model.selectedObject == objects.first?.identifier)
     }
 
+    @Test("MongoDB discovers collections from its selected database")
+    func mongoDBInitialDiscovery() async throws {
+        let sender = DatabaseObjectExplorerScriptedSender(responses: [
+            Self.response(records: [Self.relation("events", kind: .collection)]),
+        ])
+        let model = DatabaseObjectExplorerModel(sender: sender)
+        let connection = try Self.connection(product: .mongoDB)
+
+        model.load(connection)
+        await Self.waitUntil {
+            model.groups.first(where: { $0.title == "app" })?.state == .loaded
+        }
+
+        let requests = await sender.recordedRequests().compactMap(\.browseRequest)
+        #expect(requests.count == 1)
+        #expect(
+            requests[0].target.object == DatabaseObjectIdentifier(kind: .database, path: ["app"]))
+        let object = try #require(model.groups.first?.objects.first)
+        #expect(object.identifier.kind == .collection)
+        #expect(object.identifier.path == ["app", "events"])
+        #expect(model.selectedObject == object.identifier)
+    }
+
     @Test("Discovery surfaces broker failures")
     func discoveryFailure() async throws {
         let message = "The selected object kind is not supported for discovery."
