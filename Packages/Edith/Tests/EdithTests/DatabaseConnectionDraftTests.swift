@@ -105,6 +105,38 @@ struct DatabaseConnectionDraftTests {
         #expect(definition.tls.verification == .full)
     }
 
+    @Test("OpenSearch supports anonymous and authenticated connections")
+    func openSearchConnections() throws {
+        let anonymous = try DatabaseConnectionDraft(
+            displayName: "TUF OpenSearch",
+            product: .openSearch,
+            host: "127.0.0.1",
+            port: 59_201,
+            environmentKind: .testing,
+            environmentLabel: "TUF",
+            environmentProtection: .standard,
+            readOnlyPolicy: .disabled,
+            productionPolicy: .standard
+        ).definition()
+        let reference = DatabaseSecretReference(identifier: UUID(), purpose: .password)
+        let authenticated = try DatabaseConnectionDraft(
+            displayName: "OpenSearch Cloud",
+            product: .openSearch,
+            host: "search.example.com",
+            username: "edith",
+            passwordReference: reference,
+            tlsMode: .required
+        ).definition()
+
+        #expect(anonymous.productHint == .openSearch)
+        #expect(anonymous.authentication.kind == .none)
+        #expect(anonymous.tls.mode == .disabled)
+        #expect(authenticated.authentication.kind == .usernameAndPassword)
+        #expect(authenticated.authentication.secretReferences == [reference])
+        #expect(authenticated.tls.mode == .required)
+        #expect(authenticated.tls.verification == .full)
+    }
+
     @Test("SQLite uses its path and no credentials")
     func sqlite() throws {
         let draft = DatabaseConnectionDraft(

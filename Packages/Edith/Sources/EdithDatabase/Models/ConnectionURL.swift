@@ -97,10 +97,10 @@ public enum DatabaseConnectionURLParser {
         preferredProduct: DatabaseProduct?
     ) throws -> DatabaseProduct {
         if scheme == "http" || scheme == "https" {
-            guard preferredProduct == .elasticsearch else {
+            guard preferredProduct == .elasticsearch || preferredProduct == .openSearch else {
                 throw DatabaseConnectionURLError.unsupportedScheme(scheme)
             }
-            return .elasticsearch
+            return preferredProduct!
         }
         return switch scheme {
         case "postgres", "postgresql":
@@ -113,6 +113,8 @@ public enum DatabaseConnectionURLParser {
             .mongoDB
         case "elasticsearch", "elasticsearchs":
             .elasticsearch
+        case "opensearch", "opensearchs":
+            .openSearch
         case "sqlite", "sqlite3", "file":
             .sqlite
         default:
@@ -167,8 +169,8 @@ public enum DatabaseConnectionURLParser {
                 ?? queryValue(named: "ssl", in: components)
             return value?.lowercased() == "true" || value == "1"
         }
-        if product == .elasticsearch {
-            return scheme == "https" || scheme == "elasticsearchs"
+        if product == .elasticsearch || product == .openSearch {
+            return scheme == "https" || scheme == "elasticsearchs" || scheme == "opensearchs"
         }
         return scheme == "rediss" || scheme == "valkeys"
     }

@@ -77,7 +77,9 @@ final class DatabaseDataWorkspaceModel {
 
     var canSubmitEditor: Bool {
         guard let editorMode else { return false }
-        if activeProduct == .mongoDB || activeProduct == .elasticsearch {
+        if activeProduct == .mongoDB || activeProduct == .elasticsearch
+            || activeProduct == .openSearch
+        {
             return !documentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
         if editorMode == .insert, activeProduct == .redis || activeProduct == .valkey {
@@ -246,7 +248,7 @@ final class DatabaseDataWorkspaceModel {
         if Self.usesDocumentEditor(connection) {
             editorFields = []
             do {
-                if connection.product == .elasticsearch {
+                if connection.product == .elasticsearch || connection.product == .openSearch {
                     guard let source = documentSource(record) else {
                         throw DatabaseJSONDocumentCodecError.unsupportedValue
                     }

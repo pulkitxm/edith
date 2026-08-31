@@ -71,6 +71,7 @@ final class DatabaseConnectionCreationModel: Identifiable {
 
     var supportsTLS: Bool {
         product == .postgresql || product == .mongoDB || product == .elasticsearch
+            || product == .openSearch
     }
 
     var databaseLabel: String {
@@ -82,7 +83,8 @@ final class DatabaseConnectionCreationModel: Identifiable {
 
     var usernameRequired: Bool {
         product == .postgresql
-            || (product == .mongoDB || product == .elasticsearch) && !password.isEmpty
+            || (product == .mongoDB || product == .elasticsearch || product == .openSearch)
+                && !password.isEmpty
     }
 
     var canTest: Bool {
