@@ -48,6 +48,31 @@ import Testing
             == .uuid(UUID(uuidString: "123E4567-E89B-12D3-A456-426614174000")!))
 }
 
+@Test func clickHouseValueCodecPreservesNestedNumbersAndBooleans() throws {
+    let body = Data(
+        """
+        ["coordinates","flags"]
+        ["Tuple(x Int32, y Int32)","Map(String, Bool)"]
+        [{"x":0,"y":1},{"off":false,"on":true}]
+
+        """.utf8)
+
+    let result = try ClickHouseDatabaseValueCodec.decode(body)
+
+    #expect(
+        result.rows[0].cells[0].value
+            == .object([
+                DatabaseObjectField(name: "x", value: .signedInteger(0)),
+                DatabaseObjectField(name: "y", value: .signedInteger(1)),
+            ]))
+    #expect(
+        result.rows[0].cells[1].value
+            == .object([
+                DatabaseObjectField(name: "off", value: .boolean(false)),
+                DatabaseObjectField(name: "on", value: .boolean(true)),
+            ]))
+}
+
 @Test func clickHouseValueCodecBuildsBoundedRecordsAndDescriptors() throws {
     let body = Data(
         """
