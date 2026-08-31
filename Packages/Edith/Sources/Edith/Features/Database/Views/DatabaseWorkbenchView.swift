@@ -397,6 +397,15 @@ struct DatabaseWorkbenchView: View {
                         data.beginEditingSelectedRow(connection)
                     }
                 },
+                rowIsEditable: { index in
+                    !mutations.hasTrackedMutation
+                        && data.fields.contains { field in
+                            data.canEdit(
+                                recordAt: index,
+                                field: field.path.segments.joined(separator: "."),
+                                connection: connection)
+                        }
+                },
                 canEdit: { index, field in
                     !mutations.hasTrackedMutation
                         && data.canEdit(recordAt: index, field: field, connection: connection)
