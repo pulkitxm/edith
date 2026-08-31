@@ -227,6 +227,8 @@ struct DatabaseObjectExplorerModelTests {
                 Self.clickHouseDatabase("app"),
             ]),
             Self.response(records: [
+                Self.clickHouseRelation(
+                    ".inner_id.hidden-storage", engine: "SummingMergeTree", rows: 365),
                 Self.clickHouseRelation("events", engine: "MergeTree", rows: 1_000_000),
                 Self.clickHouseRelation("daily_events", engine: "MaterializedView", rows: 365),
                 Self.clickHouseRelation("active_events", engine: "View", rows: nil),

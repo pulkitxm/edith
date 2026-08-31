@@ -419,9 +419,11 @@ final class DatabaseObjectExplorerModel {
     ) -> [DatabaseExplorerObject] {
         records.compactMap { record in
             guard let name = try? string("name", in: record) else { return nil }
+            let engine = stringIfPresent("engine", in: record)
+            if engine != nil, name.hasPrefix(".inner_id.") { return nil }
             let kind =
                 stringIfPresent("kind", in: record).flatMap(DatabaseObjectKind.init(rawValue:))
-                ?? clickHouseKind(engine: stringIfPresent("engine", in: record))
+                ?? clickHouseKind(engine: engine)
                 ?? .table
             let path =
                 parent.kind == .server && [.index, .alias, .dataStream].contains(kind)
