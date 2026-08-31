@@ -1639,3 +1639,137 @@ func elasticsearchReadingLiveSearchTraversalAndLifecycle() async throws {
     ]
     print(resultParts.joined(separator: " "))
 }
+
+private enum ElasticsearchDatabaseMutationLiveEnvironment {
+    static let endpoint = ProcessInfo.processInfo.environment[
+        "EDITH_DATABASE_ELASTICSEARCH_MUTATION_URL"]
+    static let isEnabled = endpoint?.isEmpty == false
+
+    static func resolved() throws -> DatabaseResolvedConnection {
+        let endpoint = try #require(endpoint)
+        let url = try #require(URL(string: endpoint))
+        let host = try #require(url.host)
+        let definition = DatabaseConnectionDefinition(
+            id: DatabaseConnectionID(),
+            displayName: "Elasticsearch TUF mutation fixture",
+            productHint: .elasticsearch,
+            location: .network([
+                DatabaseNetworkEndpoint(
+                    host: host,
+                    port: try DatabasePort(url.port ?? 9200),
+                    role: .node)
+            ]),
+            deploymentMode: .automatic,
+            authentication: DatabaseAuthentication(kind: .none),
+            tls: DatabaseTLSConfiguration(mode: .disabled, verification: .none),
+            limits: DatabaseConnectionLimits(
+                connectionTimeout: try DatabaseTimeout(milliseconds: 5_000),
+                operationTimeout: try DatabaseTimeout(milliseconds: 15_000),
+                poolSize: try DatabasePoolSize(1)),
+            readOnlyPolicy: .disabled,
+            productionPolicy: .standard,
+            environment: DatabaseEnvironmentMetadata(
+                kind: .testing,
+                label: "TUF",
+                protection: .standard),
+            createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_800_000_000))
+        return try DatabaseResolvedConnection(definition: definition, secrets: [:])
+    }
+}
+
+@Test(.enabled(if: ElasticsearchDatabaseMutationLiveEnvironment.isEnabled))
+func elasticsearchMutationLiveCreateReplaceConflictDelete() async throws {
+    let resolved = try ElasticsearchDatabaseMutationLiveEnvironment.resolved()
+    let adapter = ElasticsearchDatabaseAdapter()
+    let session = try await adapter.connect(
+        resolved,
+        context: ElasticsearchDatabaseReadingFixtures.context(
+            deadline: Date().addingTimeInterval(10)))
+    let index = "edith-mutation-v1"
+    let identifier = "edith-live-" + UUID().uuidString.lowercased()
+    let object = DatabaseObjectIdentifier(kind: .index, path: [index])
+    let createTarget = DatabaseTargetIdentifier(
+        connectionID: resolved.definition.id,
+        object: object,
+        record: DatabaseRecordIdentity(
+            kind: .searchDocument,
+            components: [
+                DatabaseIdentityComponent(name: "_index", value: .string(index)),
+                DatabaseIdentityComponent(name: "_id", value: .string(identifier)),
+            ]))
+    let context = {
+        ElasticsearchDatabaseReadingFixtures.context(
+            deadline: Date().addingTimeInterval(15))
+    }
+    defer { Task { await session.disconnect() } }
+
+    let create = try DatabaseDocumentMutationRequests.elasticsearchCreate(
+        target: createTarget,
+        document: .object([
+            DatabaseObjectField(name: "stage", value: .string("created")),
+            DatabaseObjectField(name: "sequence", value: .signedInteger(1)),
+        ]))
+    let createPlan = try await session.normalizeMutation(create, context: context())
+    let createResult = try await session.executeMutation(createPlan, context: context())
+    #expect(createResult.effect == .applied)
+
+    let browseRequest = try ElasticsearchDatabaseReadingFixtures.pageRequest(
+        target: DatabaseTargetIdentifier(
+            connectionID: resolved.definition.id,
+            object: object),
+        pageSize: 20)
+    let createdPage = try await session.readPage(browseRequest, context: context())
+    let created = try #require(
+        createdPage.records.first(where: {
+            $0.identity?.components.contains(where: {
+                $0.name == "_id" && $0.value == .string(identifier)
+            }) == true
+        }))
+    let createdIdentity = try #require(created.identity)
+
+    let replaceTarget = DatabaseTargetIdentifier(
+        connectionID: resolved.definition.id,
+        object: object,
+        record: createdIdentity)
+    let replace = try DatabaseDocumentMutationRequests.elasticsearchReplace(
+        target: replaceTarget,
+        document: .object([
+            DatabaseObjectField(name: "stage", value: .string("updated")),
+            DatabaseObjectField(name: "sequence", value: .signedInteger(2)),
+        ]))
+    let replacePlan = try await session.normalizeMutation(replace, context: context())
+    let replaceResult = try await session.executeMutation(replacePlan, context: context())
+    #expect(replaceResult.effect == .applied)
+    await #expect(throws: ElasticsearchDatabaseAdapterSupport.mutationConflict) {
+        _ = try await session.executeMutation(replacePlan, context: context())
+    }
+
+    let updatedPage = try await session.readPage(browseRequest, context: context())
+    let updated = try #require(
+        updatedPage.records.first(where: {
+            $0.identity?.components.contains(where: {
+                $0.name == "_id" && $0.value == .string(identifier)
+            }) == true
+        }))
+    #expect(
+        updated.fields.first(where: { $0.name == "stage" })?.value == .string("updated"))
+    let deleteTarget = DatabaseTargetIdentifier(
+        connectionID: resolved.definition.id,
+        object: object,
+        record: updated.identity)
+    let delete = try DatabaseDocumentMutationRequests.elasticsearchDelete(target: deleteTarget)
+    let deletePlan = try await session.normalizeMutation(delete, context: context())
+    let deleteResult = try await session.executeMutation(deletePlan, context: context())
+    #expect(deleteResult.effect == .applied)
+
+    let cleanedPage = try await session.readPage(browseRequest, context: context())
+    #expect(
+        !cleanedPage.records.contains(where: {
+            $0.identity?.components.contains(where: {
+                $0.name == "_id" && $0.value == .string(identifier)
+            }) == true
+        }))
+    await session.disconnect()
+    print("elasticsearch mutation live verified create=1 replace=1 conflict=1 delete=1")
+}
