@@ -145,6 +145,142 @@ import Testing
         #expect(request.operation.operationID == DatabaseMCPFixtures.operationID)
     }
 
+    @Test func browseUsesExplicitTargetBoundsAndOpaqueContinuation() async throws {
+        let sender = DatabaseMCPScriptedSender([
+            .success(
+                .browse(
+                    .success(
+                        DatabaseBrowseResult(page: DatabaseMCPFixtures.page()),
+                        metadata: DatabaseMCPFixtures.completeMetadata)))
+        ])
+        let handler = DatabaseMCPToolHandler(
+            sender: sender,
+            makeOperationID: { DatabaseMCPFixtures.operationID })
+
+        let result = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_browse",
+                arguments: [
+                    "connection_id": .string(
+                        DatabaseMCPFixtures.connectionID.rawValue.uuidString),
+                    "object_kind": "table",
+                    "object_path": .array(["public", "orders"]),
+                    "page_size": 25,
+                    "continuation": "previous-page",
+                    "timeout_ms": 5_000,
+                ]))
+
+        #expect(result.isError == false)
+        let page = result.structuredContent?.objectValue?["data"]?.objectValue?["page"]?
+            .objectValue
+        #expect(page?["records"]?.arrayValue?.count == 1)
+        #expect(page?["fields"]?.arrayValue?.count == 2)
+        #expect(page?["next_continuation"]?.stringValue == "next-page")
+        #expect(
+            page?["metadata"]?.objectValue?["completeness"]?.objectValue?["state"]?
+                .stringValue == "partial")
+
+        let requests = await sender.recordedRequests()
+        guard case let .browse(request) = requests.first else {
+            Issue.record("Expected a browse request.")
+            return
+        }
+        #expect(request.target.connectionID == DatabaseMCPFixtures.connectionID)
+        #expect(request.target.object?.kind == .table)
+        #expect(request.target.object?.path == ["public", "orders"])
+        #expect(request.page.pageSize.value == 25)
+        #expect(request.page.continuation?.rawValue == "previous-page")
+        #expect(request.operation.operationID == DatabaseMCPFixtures.operationID)
+        #expect(request.operation.deadline != nil)
+    }
+
+    @Test func queryPreservesLanguageAndBoundsLargeValues() async throws {
+        let sender = DatabaseMCPScriptedSender([
+            .success(
+                .query(
+                    .success(
+                        DatabaseQueryResult(
+                            page: DatabaseMCPFixtures.page(
+                                note: String(repeating: "x", count: 3_000))),
+                        metadata: DatabaseMCPFixtures.completeMetadata)))
+        ])
+        let handler = DatabaseMCPToolHandler(
+            sender: sender,
+            makeOperationID: { DatabaseMCPFixtures.operationID })
+
+        let result = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_query",
+                arguments: [
+                    "connection_id": .string(
+                        DatabaseMCPFixtures.connectionID.rawValue.uuidString),
+                    "language": "sql",
+                    "command": "select * from public.orders",
+                    "page_size": 10,
+                ]))
+
+        #expect(result.isError == false)
+        let records = result.structuredContent?.objectValue?["data"]?.objectValue?["page"]?
+            .objectValue?["records"]?.arrayValue
+        let fields = records?.first?.objectValue?["fields"]?.arrayValue
+        let note = fields?.first(where: {
+            $0.objectValue?["name"]?.stringValue == "note"
+        })?.objectValue?["value"]?.objectValue
+        #expect(note?["truncated"]?.boolValue == true)
+        #expect(note?["characters"]?.intValue == 3_000)
+
+        let requests = await sender.recordedRequests()
+        guard case let .query(request) = requests.first else {
+            Issue.record("Expected a query request.")
+            return
+        }
+        #expect(request.target.connectionID == DatabaseMCPFixtures.connectionID)
+        #expect(request.target.object == nil)
+        #expect(request.language == .sql)
+        #expect(request.command == "select * from public.orders")
+        #expect(request.page.pageSize.value == 10)
+        #expect(request.operation.operationID == DatabaseMCPFixtures.operationID)
+    }
+
+    @Test func rejectsUnsafePageAndQueryInputsBeforeCallingTheBroker() async {
+        let sender = DatabaseMCPScriptedSender([])
+        let handler = DatabaseMCPToolHandler(sender: sender)
+        let connectionID = DatabaseMCPFixtures.connectionID.rawValue.uuidString
+
+        let missingObject = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_browse",
+                arguments: [
+                    "connection_id": .string(connectionID),
+                    "object_kind": "table",
+                ]))
+        let oversizedPage = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_browse",
+                arguments: [
+                    "connection_id": .string(connectionID),
+                    "object_kind": "table",
+                    "object_path": .array(["orders"]),
+                    "page_size": 501,
+                ]))
+        let unsupportedLanguage = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_query",
+                arguments: [
+                    "connection_id": .string(connectionID),
+                    "language": "shell",
+                    "command": "select 1",
+                ]))
+
+        #expect(missingObject.isError == true)
+        #expect(oversizedPage.isError == true)
+        #expect(unsupportedLanguage.isError == true)
+        #expect(Self.category(missingObject) == "invalidRequest")
+        #expect(Self.category(oversizedPage) == "invalidRequest")
+        #expect(Self.category(unsupportedLanguage) == "invalidRequest")
+        #expect(await sender.recordedRequests().isEmpty)
+    }
+
     @Test func rejectsInvalidAndUnknownArgumentsWithoutCallingTheBroker() async {
         let sender = DatabaseMCPScriptedSender([])
         let handler = DatabaseMCPToolHandler(sender: sender)
