@@ -194,6 +194,7 @@ struct DatabaseMutationsCommand: AsyncParsableCommand {
         subcommands: [
             DatabaseMutationRowRequestCommand.self,
             DatabaseMutationKeyRequestCommand.self,
+            DatabaseMutationDocumentRequestCommand.self,
             DatabaseMutationPreviewCommand.self,
             DatabaseMutationApplyCommand.self,
             DatabaseMutationStatusCommand.self,
@@ -201,6 +202,117 @@ struct DatabaseMutationsCommand: AsyncParsableCommand {
             DatabaseMutationOutcomeCommand.self,
         ],
         defaultSubcommand: DatabaseMutationRowRequestCommand.self)
+}
+
+struct DatabaseMutationDocumentRequestCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "document-request",
+        abstract: "Build a safe MongoDB document mutation request as JSON.")
+
+    @Option(name: .long, help: "Document action: insert, update or delete.")
+    var action: String
+
+    @Option(
+        name: .long, help: "Collection path component. Pass database and collection separately.")
+    var path: [String] = []
+
+    @Option(name: .long, help: "UTF-8 JSON document file for insert or update, or - for stdin.")
+    var document: String?
+
+    @Option(name: .long, help: "Document _id value for update or delete.")
+    var documentID: String?
+
+    @Option(name: .long, help: "Document _id type: object-id, string, integer or uuid.")
+    var idKind = "object-id"
+
+    @Flag(name: .long, help: "Emit the mutation request as JSON.")
+    var json = false
+
+    @Argument(help: "The saved MongoDB connection UUID.")
+    var connectionID: String
+
+    func run() async throws {
+        try await execute {
+            _ = json
+            guard path.count == 2,
+                path.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+            else {
+                throw CLIFailure.usage(
+                    "document mutations require exactly two --path values")
+            }
+            let target = DatabaseTargetIdentifier(
+                connectionID: try DatabaseCLI.connectionID(connectionID),
+                object: DatabaseObjectIdentifier(kind: .collection, path: path),
+                record: try documentID.map { try identity($0) })
+            let fields = try document.map { path in
+                let text = try DatabaseCLIEnvironment.readQueryText(path == "-" ? nil : path)
+                do {
+                    return try DatabaseJSONDocumentCodec.decodeObject(text)
+                } catch {
+                    throw CLIFailure.usage("database document is not valid bounded JSON")
+                }
+            }
+            let mutation: DatabaseDestructiveRequest
+            switch action.lowercased() {
+            case "insert":
+                guard documentID == nil, let fields else {
+                    throw CLIFailure.usage(
+                        "insert requires --document and does not accept --document-id")
+                }
+                mutation = try DatabaseDocumentMutationRequests.mongoDBInsert(
+                    target: target,
+                    document: .object(fields))
+            case "update":
+                guard documentID != nil, let fields else {
+                    throw CLIFailure.usage("update requires --document-id and --document")
+                }
+                mutation = try DatabaseDocumentMutationRequests.mongoDBUpdate(
+                    target: target,
+                    values: fields)
+            case "delete":
+                guard documentID != nil, document == nil else {
+                    throw CLIFailure.usage(
+                        "delete requires --document-id and does not accept --document")
+                }
+                mutation = try DatabaseDocumentMutationRequests.mongoDBDelete(target: target)
+            default:
+                throw CLIFailure.usage("--action must be insert, update or delete")
+            }
+            CLIOut.out(try DatabaseCLI.encodeDocument(mutation))
+        }
+    }
+
+    private func identity(_ value: String) throws -> DatabaseRecordIdentity {
+        let parsed: DatabaseValue
+        switch idKind.lowercased() {
+        case "object-id":
+            guard value.count == 24, value.allSatisfy(\.isHexDigit) else {
+                throw CLIFailure.usage("object-id document identifiers require 24 hex characters")
+            }
+            parsed = .productSpecific(
+                DatabaseProductValue(
+                    product: .mongoDB,
+                    typeName: "objectId",
+                    textRepresentation: value.lowercased()))
+        case "string":
+            parsed = .string(value)
+        case "integer":
+            guard let integer = Int64(value) else {
+                throw CLIFailure.usage("integer document identifiers require an Int64 value")
+            }
+            parsed = .signedInteger(integer)
+        case "uuid":
+            guard let uuid = UUID(uuidString: value) else {
+                throw CLIFailure.usage("uuid document identifiers require a UUID value")
+            }
+            parsed = .uuid(uuid)
+        default:
+            throw CLIFailure.usage("--id-kind must be object-id, string, integer or uuid")
+        }
+        return DatabaseRecordIdentity(
+            kind: .documentID,
+            components: [DatabaseIdentityComponent(name: "_id", value: parsed)])
+    }
 }
 
 struct DatabaseMutationKeyRequestCommand: AsyncParsableCommand {

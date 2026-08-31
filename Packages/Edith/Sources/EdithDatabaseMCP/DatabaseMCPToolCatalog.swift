@@ -10,12 +10,13 @@ public enum DatabaseMCPToolName: String, CaseIterable, Sendable {
     case testConnection = "database_test_connection"
     case session = "database_session"
     case keyMutation = "database_key_mutation"
+    case documentMutation = "database_document_mutation"
 }
 
 public enum DatabaseMCPToolCatalog {
     public static let tools: [Tool] = [
         connections, capabilities, browse, query, operations, cancelOperation,
-        testConnection, session, keyMutation,
+        testConnection, session, keyMutation, documentMutation,
     ]
 
     public static let connections = Tool(
@@ -226,6 +227,56 @@ public enum DatabaseMCPToolCatalog {
         ]),
         annotations: .init(
             title: "Mutate one Redis-compatible key",
+            readOnlyHint: false,
+            destructiveHint: true,
+            idempotentHint: false,
+            openWorldHint: false),
+        outputSchema: responseSchema(data: .object(["type": "object"])))
+
+    public static let documentMutation = Tool(
+        name: DatabaseMCPToolName.documentMutation.rawValue,
+        title: "Preview or apply one MongoDB document mutation",
+        description:
+            "Insert, update, or delete one explicit MongoDB document through preview-bound confirmation.",
+        inputSchema: .object([
+            "type": "object",
+            "properties": .object([
+                "mode": .object([
+                    "type": "string",
+                    "enum": .array(["preview", "apply"]),
+                ]),
+                "connection_id": uuidSchema,
+                "action": .object([
+                    "type": "string",
+                    "enum": .array(["insert", "update", "delete"]),
+                ]),
+                "database": .object(["type": "string", "maxLength": 255]),
+                "collection": .object(["type": "string", "maxLength": 255]),
+                "document": .object([
+                    "type": "object",
+                    "maxProperties": 256,
+                    "additionalProperties": true,
+                ]),
+                "document_id": .object(["type": "string", "maxLength": 1024]),
+                "id_kind": .object([
+                    "type": "string",
+                    "enum": .array(["object-id", "string", "integer", "uuid"]),
+                ]),
+                "confirmation_token": .object(["type": "string"]),
+                "confirmation_text": .object(["type": "string"]),
+                "timeout_ms": .object([
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 86400000,
+                ]),
+            ]),
+            "required": .array([
+                "mode", "connection_id", "action", "database", "collection",
+            ]),
+            "additionalProperties": false,
+        ]),
+        annotations: .init(
+            title: "Mutate one MongoDB document",
             readOnlyHint: false,
             destructiveHint: true,
             idempotentHint: false,

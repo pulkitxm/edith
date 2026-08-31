@@ -51,6 +51,8 @@ public struct DatabaseMCPToolHandler: Sendable {
                 return try await session(arguments: parameters.arguments ?? [:])
             case .keyMutation:
                 return try await keyMutation(arguments: parameters.arguments ?? [:])
+            case .documentMutation:
+                return try await documentMutation(arguments: parameters.arguments ?? [:])
             }
         } catch is CancellationError {
             return Self.failure(
@@ -205,7 +207,26 @@ public struct DatabaseMCPToolHandler: Sendable {
                 "mode", "connection_id", "product", "action", "logical_database", "key",
                 "value", "ttl_ms", "confirmation_token", "confirmation_text", "timeout_ms",
             ])
-        let mutation = try Self.keyMutationRequest(in: arguments)
+        let request = try Self.keyMutationRequest(in: arguments)
+        return try await mutation(arguments: arguments, request: request)
+    }
+
+    private func documentMutation(arguments: [String: Value]) async throws -> CallTool.Result {
+        try Self.rejectUnknown(
+            arguments,
+            allowed: [
+                "mode", "connection_id", "action", "database", "collection", "document",
+                "document_id", "id_kind", "confirmation_token", "confirmation_text",
+                "timeout_ms",
+            ])
+        let request = try Self.documentMutationRequest(in: arguments)
+        return try await mutation(arguments: arguments, request: request)
+    }
+
+    private func mutation(
+        arguments: [String: Value],
+        request mutation: DatabaseDestructiveRequest
+    ) async throws -> CallTool.Result {
         let mode = try Self.requiredString("mode", in: arguments)
         let operation = try operationContext(arguments)
         switch mode {
@@ -1140,6 +1161,171 @@ public struct DatabaseMCPToolHandler: Sendable {
             throw error
         } catch {
             throw DatabaseMCPInputError(message: "The key mutation request is invalid.")
+        }
+    }
+
+    private static func documentMutationRequest(
+        in arguments: [String: Value]
+    ) throws -> DatabaseDestructiveRequest {
+        let connectionID = try connectionID(in: arguments)
+        let database = try requiredString("database", in: arguments)
+        let collection = try requiredString("collection", in: arguments)
+        guard !database.isEmpty, !collection.isEmpty,
+            database.utf8.count <= 255, collection.utf8.count <= 255
+        else {
+            throw DatabaseMCPInputError(
+                message: "database and collection must be non-empty and at most 255 bytes.")
+        }
+        let document = try arguments["document"].map { value -> [DatabaseObjectField] in
+            guard let object = value.objectValue, object.count <= 256 else {
+                throw DatabaseMCPInputError(message: "document must be a JSON object.")
+            }
+            var remaining = 4_096
+            return try object.keys.sorted().map { name in
+                DatabaseObjectField(
+                    name: name,
+                    value: try databaseValue(
+                        object[name]!, depth: 0, remaining: &remaining))
+            }
+        }
+        let documentID = try optionalString("document_id", in: arguments)
+        let target = DatabaseTargetIdentifier(
+            connectionID: connectionID,
+            object: DatabaseObjectIdentifier(
+                kind: .collection,
+                path: [database, collection]),
+            record: try documentID.map {
+                try documentIdentity(
+                    $0,
+                    kind: try optionalString("id_kind", in: arguments) ?? "object-id")
+            })
+        do {
+            switch try requiredString("action", in: arguments) {
+            case "insert":
+                guard documentID == nil, let document else {
+                    throw DatabaseMCPInputError(
+                        message: "insert requires document and does not accept document_id.")
+                }
+                return try DatabaseDocumentMutationRequests.mongoDBInsert(
+                    target: target,
+                    document: .object(document))
+            case "update":
+                guard documentID != nil, let document else {
+                    throw DatabaseMCPInputError(
+                        message: "update requires document_id and document.")
+                }
+                return try DatabaseDocumentMutationRequests.mongoDBUpdate(
+                    target: target,
+                    values: document)
+            case "delete":
+                guard documentID != nil, document == nil else {
+                    throw DatabaseMCPInputError(
+                        message: "delete requires document_id and does not accept document.")
+                }
+                return try DatabaseDocumentMutationRequests.mongoDBDelete(target: target)
+            default:
+                throw DatabaseMCPInputError(
+                    message: "action must be insert, update or delete.")
+            }
+        } catch let error as DatabaseMCPInputError {
+            throw error
+        } catch {
+            throw DatabaseMCPInputError(message: "The document mutation request is invalid.")
+        }
+    }
+
+    private static func documentIdentity(
+        _ value: String,
+        kind: String
+    ) throws -> DatabaseRecordIdentity {
+        let parsed: DatabaseValue
+        switch kind {
+        case "object-id":
+            guard value.count == 24, value.allSatisfy(\.isHexDigit) else {
+                throw DatabaseMCPInputError(
+                    message: "object-id document identifiers require 24 hex characters.")
+            }
+            parsed = .productSpecific(
+                DatabaseProductValue(
+                    product: .mongoDB,
+                    typeName: "objectId",
+                    textRepresentation: value.lowercased()))
+        case "string":
+            parsed = .string(value)
+        case "integer":
+            guard let integer = Int64(value) else {
+                throw DatabaseMCPInputError(
+                    message: "integer document identifiers require an Int64 value.")
+            }
+            parsed = .signedInteger(integer)
+        case "uuid":
+            guard let uuid = UUID(uuidString: value) else {
+                throw DatabaseMCPInputError(
+                    message: "uuid document identifiers require a UUID value.")
+            }
+            parsed = .uuid(uuid)
+        default:
+            throw DatabaseMCPInputError(
+                message: "id_kind must be object-id, string, integer or uuid.")
+        }
+        return DatabaseRecordIdentity(
+            kind: .documentID,
+            components: [DatabaseIdentityComponent(name: "_id", value: parsed)])
+    }
+
+    private static func databaseValue(
+        _ value: Value,
+        depth: Int,
+        remaining: inout Int
+    ) throws -> DatabaseValue {
+        guard depth <= 16, remaining > 0 else {
+            throw DatabaseMCPInputError(message: "document exceeds the bounded value limit.")
+        }
+        remaining -= 1
+        switch value {
+        case .null:
+            return .null
+        case .bool(let value):
+            return .boolean(value)
+        case .int(let value):
+            return .signedInteger(Int64(value))
+        case .double(let value):
+            guard value.isFinite else {
+                throw DatabaseMCPInputError(message: "document contains a non-finite number.")
+            }
+            return .floatingPoint(value)
+        case .string(let value):
+            return .string(value)
+        case .data(_, let value):
+            return .binary(.complete(data: value, mediaType: nil, digest: nil))
+        case .array(let values):
+            return .array(
+                try values.map {
+                    try databaseValue($0, depth: depth + 1, remaining: &remaining)
+                })
+        case .object(let fields):
+            if fields.count == 1 {
+                if let raw = fields["$oid"]?.stringValue {
+                    return .productSpecific(
+                        DatabaseProductValue(
+                            product: .mongoDB,
+                            typeName: "objectId",
+                            textRepresentation: raw))
+                }
+                if let raw = fields["$date"]?.stringValue {
+                    return .timestamp(DatabaseTimestampValue(text: raw))
+                }
+                if let raw = fields["$uuid"]?.stringValue, let uuid = UUID(uuidString: raw) {
+                    return .uuid(uuid)
+                }
+            }
+            return .object(
+                try fields.keys.sorted().map { name in
+                    DatabaseObjectField(
+                        name: name,
+                        value: try databaseValue(
+                            fields[name]!, depth: depth + 1, remaining: &remaining))
+                })
         }
     }
 
