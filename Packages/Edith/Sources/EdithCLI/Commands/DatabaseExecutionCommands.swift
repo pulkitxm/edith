@@ -366,6 +366,66 @@ struct DatabaseConnectCommand: AsyncParsableCommand {
     }
 }
 
+struct DatabaseConnectionsTestCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "test",
+        abstract: "Test one saved database connection without opening a session.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Option(name: .long, help: "Bound the operation deadline in milliseconds.")
+    var timeoutMilliseconds: Int?
+
+    @Argument(help: "The saved connection UUID.")
+    var connectionID: String
+
+    func run() async throws {
+        try await execute {
+            let identifier = try DatabaseCLI.connectionID(connectionID)
+            let sender = DatabaseCLIEnvironment.makeSender()
+            let getResponse = try await sender.send(
+                .connectionGet(DatabaseConnectionGetRequest(connectionID: identifier)))
+            let getPayload = try DatabaseCLI.payload(
+                getResponse.connectionGetResult,
+                response: getResponse,
+                expected: .connectionGet)
+            guard let definition = getPayload.connection else {
+                throw CLIFailure.notFound("saved database connection was not found")
+            }
+            let operation = try DatabaseCLI.operationContext(
+                timeoutMilliseconds: timeoutMilliseconds)
+            let testResponse = try await sender.send(
+                .connectionTest(
+                    DatabaseConnectionTestRequest(
+                        connection: definition,
+                        operation: operation)))
+            let payload = try DatabaseCLI.payload(
+                testResponse.connectionTestResult,
+                response: testResponse,
+                expected: .connectionTest)
+            if json {
+                CLIOut.json(
+                    .object([
+                        "connectionID": .string(identifier.rawValue.uuidString.lowercased()),
+                        "displayName": .string(payload.connection.displayName),
+                        "product": .string(payload.productIdentity.product.rawValue),
+                        "version": .optional(payload.productIdentity.version?.string),
+                        "latencyMilliseconds": DatabaseCLI.unsignedIntegerJSON(
+                            payload.latencyMilliseconds),
+                        "testedAt": .date(payload.testedAt),
+                        "operationID": .string(
+                            operation.operationID.rawValue.uuidString.lowercased()),
+                    ]))
+            } else {
+                CLIOut.out(
+                    "tested \(payload.connection.displayName): \(payload.productIdentity.product.displayName), \(payload.latencyMilliseconds) ms"
+                )
+            }
+        }
+    }
+}
+
 struct DatabaseDisconnectCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "disconnect",
