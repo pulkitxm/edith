@@ -11,6 +11,7 @@ public struct DatabaseMCPToolHandler: Sendable {
     private static let maximumPageSize = 500
     private static let maximumContinuationCharacters = 32_768
     private static let maximumQueryCharacters = 262_144
+    private static let maximumDocumentBytes = 1_048_576
 
     private let sender: any DatabaseBrokerCommandSending
     private let makeOperationID: @Sendable () -> DatabaseOperationID
@@ -1181,11 +1182,16 @@ public struct DatabaseMCPToolHandler: Sendable {
                 throw DatabaseMCPInputError(message: "document must be a JSON object.")
             }
             var remaining = 4_096
+            var remainingBytes = maximumDocumentBytes
             return try object.keys.sorted().map { name in
-                DatabaseObjectField(
+                try consumeDocumentBytes(name.utf8.count, remaining: &remainingBytes)
+                return DatabaseObjectField(
                     name: name,
                     value: try databaseValue(
-                        object[name]!, depth: 0, remaining: &remaining))
+                        object[name]!,
+                        depth: 0,
+                        remaining: &remaining,
+                        remainingBytes: &remainingBytes))
             }
         }
         let documentID = try optionalString("document_id", in: arguments)
@@ -1276,7 +1282,8 @@ public struct DatabaseMCPToolHandler: Sendable {
     private static func databaseValue(
         _ value: Value,
         depth: Int,
-        remaining: inout Int
+        remaining: inout Int,
+        remainingBytes: inout Int
     ) throws -> DatabaseValue {
         guard depth <= 16, remaining > 0 else {
             throw DatabaseMCPInputError(message: "document exceeds the bounded value limit.")
@@ -1295,13 +1302,19 @@ public struct DatabaseMCPToolHandler: Sendable {
             }
             return .floatingPoint(value)
         case .string(let value):
+            try consumeDocumentBytes(value.utf8.count, remaining: &remainingBytes)
             return .string(value)
         case .data(_, let value):
+            try consumeDocumentBytes(value.count, remaining: &remainingBytes)
             return .binary(.complete(data: value, mediaType: nil, digest: nil))
         case .array(let values):
             return .array(
                 try values.map {
-                    try databaseValue($0, depth: depth + 1, remaining: &remaining)
+                    try databaseValue(
+                        $0,
+                        depth: depth + 1,
+                        remaining: &remaining,
+                        remainingBytes: &remainingBytes)
                 })
         case .object(let fields):
             if fields.count == 1 {
@@ -1321,12 +1334,26 @@ public struct DatabaseMCPToolHandler: Sendable {
             }
             return .object(
                 try fields.keys.sorted().map { name in
-                    DatabaseObjectField(
+                    try consumeDocumentBytes(name.utf8.count, remaining: &remainingBytes)
+                    return DatabaseObjectField(
                         name: name,
                         value: try databaseValue(
-                            fields[name]!, depth: depth + 1, remaining: &remaining))
+                            fields[name]!,
+                            depth: depth + 1,
+                            remaining: &remaining,
+                            remainingBytes: &remainingBytes))
                 })
         }
+    }
+
+    private static func consumeDocumentBytes(
+        _ count: Int,
+        remaining: inout Int
+    ) throws {
+        guard count <= remaining else {
+            throw DatabaseMCPInputError(message: "document exceeds the 1 MB value limit.")
+        }
+        remaining -= count
     }
 
     private static func pageRequest(

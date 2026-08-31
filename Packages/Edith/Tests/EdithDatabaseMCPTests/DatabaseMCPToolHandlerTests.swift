@@ -779,6 +779,29 @@ import Testing
         #expect(await sender.recordedRequests().isEmpty)
     }
 
+    @Test func rejectsOversizedDocumentMutationBeforeCallingTheBroker() async {
+        let sender = DatabaseMCPScriptedSender([])
+        let handler = DatabaseMCPToolHandler(sender: sender)
+        let result = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_document_mutation",
+                arguments: [
+                    "mode": "preview",
+                    "connection_id": .string(
+                        DatabaseMCPFixtures.connectionID.rawValue.uuidString),
+                    "action": "insert",
+                    "database": "app",
+                    "collection": "people",
+                    "document": .object([
+                        "payload": .string(String(repeating: "x", count: 1_048_576))
+                    ]),
+                ]))
+
+        #expect(result.isError == true)
+        #expect(Self.category(result) == "invalidRequest")
+        #expect(await sender.recordedRequests().isEmpty)
+    }
+
     @Test func preservesCommandFailureAndPartialResultSemantics() async {
         let error = DatabaseErrorEnvelope(
             category: .permissionDenied,
