@@ -479,35 +479,16 @@ public actor SSHConnection {
         {
             try await runChecked(command, timeout: 30)
         }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/scp")
-        process.arguments =
-            fileTransferArguments()
-            + [localURL.path, "\(machine.sshTarget):\(windowsSFTPPath(remotePath))"]
-        process.environment = environment()
-        let stderrPipe = Pipe()
-        let stderrBuffer = PipeBuffer()
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = stderrPipe
-        stderrPipe.fileHandleForReading.readabilityHandler = {
-            PipeReading.consume($0, receive: stderrBuffer.append)
-        }
         progress?(0)
-        try process.run()
-        let status = await withTaskCancellationHandler {
-            await Self.waitForExit(process, timeout: 15 * 60)
-        } onCancel: {
-            if process.isRunning { process.terminate() }
-        }
-        stderrPipe.fileHandleForReading.readabilityHandler = nil
-        stderrBuffer.append(stderrPipe.fileHandleForReading.readDataToEndOfFile())
-        let reported = SSHExecResult(
-            status: status, stdout: Data(), stderr: stderrBuffer.snapshot()
-        ).stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard status == 0 else {
+        let result = await LocalMachineCommandExecution.run(
+            executable: URL(fileURLWithPath: "/usr/bin/scp"),
+            arguments:
+            fileTransferArguments()
+                + [localURL.path, "\(machine.sshTarget):\(windowsSFTPPath(remotePath))"],
+            environment: environment(), commandLabel: "scp", timeout: 15 * 60)
+        if case let .failure(error) = result {
             await discard(remotePath)
-            throw SSHConnectionError.transferFailed(reported.isEmpty ? "Upload failed." : reported)
+            throw SSHConnectionError.transferFailed(error.localizedDescription)
         }
         guard let landed = await remoteSize(remotePath), expected < 0 || landed == expected else {
             await discard(remotePath)

@@ -430,6 +430,14 @@ import Testing
             try FileManager.default.contentsOfDirectory(atPath: destinationRoot.path) == ["report"])
     }
 
+    @Test func localCommandExecutionPreservesExecutableArguments() async throws {
+        let result = await LocalMachineCommandExecution.run(
+            executable: URL(fileURLWithPath: "/usr/bin/printf"),
+            arguments: ["%s", "edith argument with spaces"], commandLabel: "printf")
+
+        #expect(try result.get() == "edith argument with spaces")
+    }
+
     @Test func withinMachineDirectoryMoveDeletesSourceOnlyAfterPublication() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-within-move-\(UUID().uuidString)")
