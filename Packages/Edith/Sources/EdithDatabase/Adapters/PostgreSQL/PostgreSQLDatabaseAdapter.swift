@@ -73,7 +73,8 @@ actor PostgreSQLDatabaseAdapterSession: DatabaseAdapterSession {
         }
         try await PostgreSQLDatabaseAdapterSupport.check(context)
         let report = PostgreSQLDatabaseAdapterSupport.capabilityReport(
-            identity: productIdentity)
+            identity: productIdentity,
+            connection: connection)
         try DatabaseAdapterBounds.validate(report: report, identity: productIdentity)
         return report
     }
@@ -119,15 +120,38 @@ actor PostgreSQLDatabaseAdapterSession: DatabaseAdapterSession {
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseDestructivePlan {
         try await requireAvailableContext(context)
-        throw PostgreSQLDatabaseAdapterSupport.capabilityUnavailable
+        return try PostgreSQLDatabaseMutationSupport.normalize(
+            request,
+            connectionID: connection.id)
     }
 
     func executeMutation(
         _ plan: DatabaseDestructivePlan,
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterMutationResult {
-        try await requireAvailableContext(context)
-        throw PostgreSQLDatabaseAdapterSupport.capabilityUnavailable
+        let mutation = try PostgreSQLDatabaseMutationSupport.executionPlan(
+            plan,
+            connectionID: connection.id)
+        let result = try await perform(
+            context: context,
+            fallback: PostgreSQLDatabaseAdapterSupport.mutationFailed
+        ) { client in
+            try await client.executeMutation(mutation)
+        }
+        guard result.affectedRows == 1 else {
+            return try DatabaseAdapterMutationResult(
+                disposition: .completed,
+                effect: .notApplied,
+                affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .exact),
+                error: DatabaseErrorEnvelope(
+                    category: .conflict,
+                    message: "The PostgreSQL row no longer matched the requested mutation.",
+                    productCode: "postgresql.mutation.row_not_found"))
+        }
+        return try DatabaseAdapterMutationResult(
+            disposition: .completed,
+            effect: .applied,
+            affectedRecords: DatabaseCountMetadata(value: 1, accuracy: .exact))
     }
 
     func openStream(
@@ -357,6 +381,12 @@ enum PostgreSQLDatabaseAdapterSupport {
             message: "The PostgreSQL query request is invalid.",
             productCode: "postgresql.query.invalid"))
 
+    static let invalidMutation = DatabaseAdapterFailure.reported(
+        DatabaseErrorEnvelope(
+            category: .invalidRequest,
+            message: "The PostgreSQL mutation request is invalid.",
+            productCode: "postgresql.mutation.invalid"))
+
     static let invalidContinuation = DatabaseAdapterFailure.reported(
         DatabaseErrorEnvelope(
             category: .invalidRequest,
@@ -376,6 +406,12 @@ enum PostgreSQLDatabaseAdapterSupport {
             message: "PostgreSQL could not execute the requested query.",
             productCode: "postgresql.query.failed",
             retry: DatabaseRetryGuidance(action: .retry)))
+
+    static let mutationFailed = DatabaseAdapterFailure.reported(
+        DatabaseErrorEnvelope(
+            category: .server,
+            message: "PostgreSQL could not execute the requested mutation.",
+            productCode: "postgresql.mutation.failed"))
 
     static let decodingFailed = DatabaseAdapterFailure.reported(
         DatabaseErrorEnvelope(
@@ -552,7 +588,8 @@ enum PostgreSQLDatabaseAdapterSupport {
     }
 
     static func capabilityReport(
-        identity: DatabaseProductIdentity
+        identity: DatabaseProductIdentity,
+        connection: DatabaseConnectionDefinition
     ) -> DatabaseCapabilityReport {
         let pendingReason = DatabaseCapabilityUnavailableReason(
             category: .notImplemented,
@@ -590,11 +627,22 @@ enum PostgreSQLDatabaseAdapterSupport {
                 availability: .available,
                 limits: readLimits),
         ]
+        let mutationsAvailable =
+            connection.readOnlyPolicy != .required
+            && connection.environment.protection != .readOnly
+            && connection.productionPolicy != .prohibitMutations
+        let mutationReason = DatabaseCapabilityUnavailableReason(
+            category: .connectionPolicy,
+            message: "This connection policy does not allow data mutations.")
+        let mutations = [DatabaseCapabilityID.insert, .update, .delete].map { identifier in
+            DatabaseCapabilityStatus(
+                id: identifier,
+                requirement: .sharedRequired,
+                availability: mutationsAvailable ? .available : .unavailable,
+                reason: mutationsAvailable ? nil : mutationReason)
+        }
         let pending: [(DatabaseCapabilityID, DatabaseCapabilityRequirement)] = [
             (.explain, .familyRequired),
-            (.insert, .sharedRequired),
-            (.update, .sharedRequired),
-            (.delete, .sharedRequired),
             (.bulkMutation, .sharedRequired),
             (.importData, .sharedRequired),
             (.exportData, .sharedRequired),
@@ -607,6 +655,7 @@ enum PostgreSQLDatabaseAdapterSupport {
         }
         let statuses =
             available
+            + mutations
             + pending.map { identifier, requirement in
                 DatabaseCapabilityStatus(
                     id: identifier,
@@ -618,6 +667,8 @@ enum PostgreSQLDatabaseAdapterSupport {
             productIdentity: identity,
             capabilities: statuses,
             pagingModes: [.keyset, .offset],
+            mutationModes: mutationsAvailable ? [.singleRecord] : [],
+            transactionModes: mutationsAvailable ? [.implicit] : [],
             cancellationModes: [.cooperative],
             safetyLimitations: [
                 "Read pages are limited to 100 records and 8 MiB.",

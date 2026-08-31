@@ -105,6 +105,9 @@ protocol PostgreSQLDatabaseClient: Sendable {
     func executeRead(
         _ plan: PostgreSQLDatabaseReadPlan
     ) async throws -> PostgreSQLDatabaseReadResult
+    func executeMutation(
+        _ plan: PostgreSQLDatabaseMutationPlan
+    ) async throws -> PostgreSQLDatabaseMutationResult
     func disconnect() async
 }
 
@@ -112,6 +115,12 @@ extension PostgreSQLDatabaseClient {
     func executeRead(
         _ plan: PostgreSQLDatabaseReadPlan
     ) async throws -> PostgreSQLDatabaseReadResult {
+        throw PostgreSQLDatabaseDriverFailure.invalidRequest
+    }
+
+    func executeMutation(
+        _ plan: PostgreSQLDatabaseMutationPlan
+    ) async throws -> PostgreSQLDatabaseMutationResult {
         throw PostgreSQLDatabaseDriverFailure.invalidRequest
     }
 }
