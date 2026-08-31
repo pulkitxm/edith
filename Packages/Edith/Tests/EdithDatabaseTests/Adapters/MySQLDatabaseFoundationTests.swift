@@ -9,7 +9,7 @@ import Testing
 
 private struct MySQLDatabaseFoundationUnknownFailure: Error {}
 
-private enum MySQLDatabaseFoundationFixtures {
+enum MySQLDatabaseFoundationFixtures {
     static let values = MySQLDatabaseIdentityValues(
         version: "8.4.6",
         versionComment: "MySQL Community Server - GPL",

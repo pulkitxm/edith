@@ -149,8 +149,8 @@ final class DatabaseObjectExplorerModel {
             groups = [group]
             state = .loaded
             loadGroup(group.identifier, connection: connection)
-        case .clickHouse:
-            loadClickHouse(connection)
+        case .mysql, .clickHouse:
+            loadDatabaseGroups(connection)
         default:
             state = .failed(
                 "Automatic object discovery is not available for \(connection.product.displayName) yet."
@@ -243,7 +243,7 @@ final class DatabaseObjectExplorerModel {
         activeTask = task
     }
 
-    private func loadClickHouse(_ connection: DatabaseConnectionSummary) {
+    private func loadDatabaseGroups(_ connection: DatabaseConnectionSummary) {
         activeTask?.cancel()
         let requestGeneration = UUID()
         generation = requestGeneration
@@ -258,8 +258,8 @@ final class DatabaseObjectExplorerModel {
                             object: nil)))
                 try Task.checkCancellation()
                 let page = try Self.page(from: response)
-                let groups = try Self.clickHouseGroups(from: page.records)
-                self?.finishClickHouseGroups(
+                let groups = try Self.databaseGroups(from: page.records)
+                self?.finishDatabaseGroups(
                     groups,
                     connection: connection,
                     generation: requestGeneration)
@@ -289,7 +289,7 @@ final class DatabaseObjectExplorerModel {
         loadGroup(group.identifier, connection: connection)
     }
 
-    private func finishClickHouseGroups(
+    private func finishDatabaseGroups(
         _ discoveredGroups: [DatabaseExplorerGroup],
         connection: DatabaseConnectionSummary,
         generation: UUID
@@ -398,7 +398,7 @@ final class DatabaseObjectExplorerModel {
         }
     }
 
-    private static func clickHouseGroups(
+    private static func databaseGroups(
         from records: [DatabaseRecord]
     ) throws -> [DatabaseExplorerGroup] {
         try records.map { record in
