@@ -677,7 +677,7 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
         #expect(request.currentDirectory == "/Users/pulkit")
     }
 
-    @Test func WindowsLaunchRunsQuinjetDirectlyThroughSSH() {
+    @Test func WindowsLaunchRunsQuinjetThroughEncodedPowerShell() throws {
         let remote = QuinjetRemote(
             machineID: UUID(), machineName: "win-lan", target: "win-lan",
             controlPath: "/tmp/edith socket", platform: .windows,
@@ -688,18 +688,23 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
 
         let request = QuinjetOperationExecution.launchRequest(
             executableURL: URL(fileURLWithPath: "/usr/local/bin/quinjet"),
-            worktreePath: #"C:\Users\kpulk\Desktop\mono-volt"#, remote: remote,
+            worktreePath: #"E:\career\3. MagicAPI\noveum-app-nextjs"#, remote: remote,
             configuration: configuration, managedByEdith: true,
             localHomeDirectory: "/Users/pulkit")
 
         #expect(request.executableURL.path == "/usr/bin/ssh")
         #expect(
-            request.arguments
-                == [
-                    "-tt", "-S", "/tmp/edith socket", "--", "win-lan", "quinjet",
-                    "--client", "edith", "-C", #"C:\Users\kpulk\Desktop\mono-volt"#,
-                    "tui", "--theme", "gruvbox", "--appearance", "dark",
-                ])
+            Array(request.arguments.prefix(5)) == [
+                "-tt", "-S", "/tmp/edith socket", "--", "win-lan",
+            ])
+        let command = try #require(request.arguments.last)
+        let payload = try #require(command.split(separator: " ").last)
+        let data = try #require(Data(base64Encoded: String(payload)))
+        let script = try #require(String(data: data, encoding: .utf16LittleEndian))
+        #expect(script.contains("& 'quinjet' '--client' 'edith' '-C'"))
+        #expect(script.contains(#"'E:\career\3. MagicAPI\noveum-app-nextjs'"#))
+        #expect(script.contains("'tui' '--theme' 'gruvbox' '--appearance' 'dark'"))
+        #expect(request.arguments.count == 6)
         #expect(request.currentDirectory == nil)
     }
 
