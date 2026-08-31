@@ -677,6 +677,31 @@ private final class QuinjetWorkspaceRecorder: @unchecked Sendable {
         #expect(request.currentDirectory == "/Users/pulkit")
     }
 
+    @Test func WindowsLaunchRunsQuinjetDirectlyThroughSSH() {
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "win-lan", target: "win-lan",
+            controlPath: "/tmp/edith socket", platform: .windows,
+            homeDirectory: #"C:\Users\kpulk"#)
+        let configuration = QuinjetLaunchConfiguration(
+            terminal: .embedded, theme: .gruvbox, appearance: .dark)
+
+        let request = QuinjetOperationExecution.launchRequest(
+            executableURL: URL(fileURLWithPath: "/usr/local/bin/quinjet"),
+            worktreePath: #"C:\Users\kpulk\Desktop\mono-volt"#, remote: remote,
+            configuration: configuration, managedByEdith: true,
+            localHomeDirectory: "/Users/pulkit")
+
+        #expect(request.executableURL.path == "/usr/bin/ssh")
+        #expect(
+            request.arguments
+                == [
+                    "-tt", "-S", "/tmp/edith socket", "--", "win-lan", "quinjet",
+                    "--client", "edith", "-C", #"C:\Users\kpulk\Desktop\mono-volt"#,
+                    "tui", "--theme", "gruvbox", "--appearance", "dark",
+                ])
+        #expect(request.currentDirectory == nil)
+    }
+
     @Test func cmuxCommandQuotesEveryArgument() {
         let command = QuinjetShellCommand.make(
             executable: "/Applications/Quinjet Tools/quinjet",

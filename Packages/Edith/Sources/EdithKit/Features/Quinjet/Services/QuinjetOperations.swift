@@ -243,22 +243,31 @@ public struct QuinjetLaunchRequest: Equatable, Sendable {
         configuration: QuinjetLaunchConfiguration, managedByEdith: Bool,
         localHomeDirectory: String
     ) {
-        var arguments: [String] = []
-        if managedByEdith { arguments += ["--client", "edith"] }
-        if let remote {
-            arguments += [
-                "--remote", remote.target, "--ssh-control-path", remote.controlPath,
-            ]
-        }
-        arguments += ["-C", worktreePath, "tui"]
+        var quinjetArguments: [String] = []
+        if managedByEdith { quinjetArguments += ["--client", "edith"] }
+        quinjetArguments += ["-C", worktreePath, "tui"]
         if let hostTheme = configuration.hostTheme {
-            arguments += ["--theme-palette", hostTheme.argument]
+            quinjetArguments += ["--theme-palette", hostTheme.argument]
         } else {
-            arguments += ["--theme", configuration.theme.rawValue]
+            quinjetArguments += ["--theme", configuration.theme.rawValue]
         }
-        arguments += ["--appearance", configuration.appearance.rawValue]
-        self.executableURL = executableURL
-        self.arguments = arguments
+        quinjetArguments += ["--appearance", configuration.appearance.rawValue]
+        if let remote, remote.platform == .windows {
+            self.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+            self.arguments =
+                [
+                    "-tt", "-S", remote.controlPath, "--", remote.target, "quinjet",
+                ] + quinjetArguments
+        } else {
+            var arguments: [String] = []
+            if let remote {
+                arguments += [
+                    "--remote", remote.target, "--ssh-control-path", remote.controlPath,
+                ]
+            }
+            self.executableURL = executableURL
+            self.arguments = arguments + quinjetArguments
+        }
         self.terminal = configuration.terminal
         switch (configuration.terminal, remote) {
         case (.embedded, .some): currentDirectory = nil
