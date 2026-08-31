@@ -105,6 +105,7 @@ struct DatabasePage: View {
     @State private var connectionWorkspace = DatabaseConnectionWorkspaceModel()
     @State private var connectionCreation: DatabaseConnectionCreationModel?
     @State private var dataWorkspace = DatabaseDataWorkspaceModel()
+    @State private var objectExplorer = DatabaseObjectExplorerModel()
     @State private var workspace = DatabaseWorkspaceModel()
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.colorScheme) private var scheme
@@ -270,6 +271,7 @@ struct DatabasePage: View {
             }
             DatabaseWorkbenchView(
                 connections: connectionWorkspace,
+                explorer: objectExplorer,
                 data: dataWorkspace,
                 mutations: workspace)
         }
