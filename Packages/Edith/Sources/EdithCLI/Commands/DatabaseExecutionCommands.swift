@@ -241,7 +241,7 @@ extension DatabaseCLI {
         }
     }
 
-    private static func boundedTextJSON(_ text: String) -> JSONValue {
+    static func boundedTextJSON(_ text: String) -> JSONValue {
         guard text.count > maximumRenderedStringCharacters else { return .string(text) }
         return .object([
             "kind": .string("string"),
@@ -251,7 +251,7 @@ extension DatabaseCLI {
         ])
     }
 
-    private static func boundedOneLine(_ text: String) -> String {
+    static func boundedOneLine(_ text: String) -> String {
         TextTable.oneLine(String(text.prefix(512)))
     }
 
@@ -259,11 +259,11 @@ extension DatabaseCLI {
         Int(exactly: value).map(JSONValue.int) ?? .string(String(value))
     }
 
-    private static func unsignedIntegerJSON(_ value: UInt64) -> JSONValue {
+    static func unsignedIntegerJSON(_ value: UInt64) -> JSONValue {
         Int(exactly: value).map(JSONValue.int) ?? .string(String(value))
     }
 
-    private static func recordIdentityJSON(_ identity: DatabaseRecordIdentity) -> JSONValue {
+    static func recordIdentityJSON(_ identity: DatabaseRecordIdentity) -> JSONValue {
         .object([
             "kind": .string(identity.kind.rawValue),
             "components": .array(identity.components.map(identityComponentJSON)),

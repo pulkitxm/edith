@@ -887,6 +887,26 @@ public enum CommandTree {
                             "--timeout-milliseconds": .free,
                         ], arguments: [.free]),
                     CommandNode(
+                        "operations", "Inspect and cancel tracked database operations.",
+                        children: [
+                            CommandNode(
+                                "list", "List tracked database operations.", aliases: ["ls"],
+                                options: [
+                                    "--json", "--help", "--connection", "--state", "--kind",
+                                    "--before", "--limit",
+                                ],
+                                optionValues: [
+                                    "--connection": .free, "--state": .free, "--kind": .free,
+                                    "--before": .free, "--limit": .free,
+                                ]),
+                            CommandNode(
+                                "get", "Show one tracked database operation.",
+                                options: common, arguments: [.free]),
+                            CommandNode(
+                                "cancel", "Request cancellation of one database operation.",
+                                options: common, arguments: [.free]),
+                        ]),
+                    CommandNode(
                         "mcp", "Serve read-only database inspection over MCP stdio."),
                 ]),
             CommandNode(
