@@ -2,13 +2,8 @@ import EdithKit
 import SwiftUI
 
 struct SEOAuditPage: View {
-    @State private var model: SEOAuditModel
+    @State private var model = SEOAuditModel.shared
     @Environment(\.colorScheme) private var scheme
-
-    @MainActor
-    init() {
-        _model = State(initialValue: SEOAuditModel())
-    }
 
     var body: some View {
         Group {

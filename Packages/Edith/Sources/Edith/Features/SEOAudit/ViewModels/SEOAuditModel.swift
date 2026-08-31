@@ -4,6 +4,8 @@ import Observation
 @MainActor
 @Observable
 final class SEOAuditModel {
+    static let shared = SEOAuditModel()
+
     var projects: [SEOAuditProjectSummary] = []
     var selectedProject: SEOAuditProject?
     var selectedRunID: UUID?

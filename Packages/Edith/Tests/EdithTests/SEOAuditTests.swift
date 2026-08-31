@@ -194,6 +194,22 @@ import Testing
         #expect(!source.contains("backHovered ? 1."))
     }
 
+    @Test @MainActor func navigationUsesTheAppLifetimeAuditModel() throws {
+        #expect(SEOAuditModel.shared === SEOAuditModel.shared)
+
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent(
+                    "Sources/Edith/Features/SEOAudit/Views/SEOAuditPage.swift"),
+            encoding: .utf8)
+
+        #expect(source.contains("@State private var model = SEOAuditModel.shared"))
+        #expect(!source.contains("State(initialValue: SEOAuditModel())"))
+    }
+
     private func page(url: String, date: Date) -> SEOAuditPageResult {
         SEOAuditPageResult(
             url: url, auditedAt: date, statusCode: 200, responseMilliseconds: 20, bytes: 100,
