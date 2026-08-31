@@ -28,46 +28,42 @@ struct LighthouseAuditor: Sendable {
                 error:
                     "Install Lighthouse with npm install -g lighthouse, then run the audit again.")
         }
-        return await Task.detached(priority: .utility) {
-            do {
-                try FileManager.default.createDirectory(
-                    at: cacheDirectory, withIntermediateDirectories: true)
-                let output = cacheDirectory.appendingPathComponent("\(UUID().uuidString).json")
-                defer { try? FileManager.default.removeItem(at: output) }
-                let process = Process()
-                let diagnostics = Pipe()
-                process.executableURL = executable
-                process.arguments = [
-                    url.absoluteString,
-                    "--output=json",
-                    "--output-path=\(output.path)",
-                    "--only-categories=performance,accessibility,best-practices,seo",
-                    "--chrome-flags=--headless --no-sandbox --disable-gpu",
-                    "--quiet",
-                ]
-                process.environment = CLIToolEnvironment.sanitized()
-                process.standardError = diagnostics
-                process.standardOutput = FileHandle.nullDevice
-                try process.run()
-                process.waitUntilExit()
-                let errorData = diagnostics.fileHandleForReading.readDataToEndOfFile()
-                let message = String(data: errorData, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                guard process.terminationStatus == 0 else {
-                    return LighthouseAuditResult(
-                        scores: .unavailable,
-                        error: message?.isEmpty == false
-                            ? message
-                            : "Lighthouse exited with status \(process.terminationStatus).")
-                }
-                let data = try Data(contentsOf: output)
+        do {
+            try FileManager.default.createDirectory(
+                at: cacheDirectory, withIntermediateDirectories: true)
+            let output = cacheDirectory.appendingPathComponent("\(UUID().uuidString).json")
+            defer { try? FileManager.default.removeItem(at: output) }
+            let result = try await CLICommandRunner.run(
+                CLICommandRequest(
+                    executableURL: executable,
+                    arguments: [
+                        url.absoluteString,
+                        "--output=json",
+                        "--output-path=\(output.path)",
+                        "--only-categories=performance,accessibility,best-practices,seo",
+                        "--chrome-flags=--headless --no-sandbox --disable-gpu",
+                        "--quiet",
+                    ], environment: CLIToolEnvironment.sanitized(), timeout: 180,
+                    maximumOutputBytes: 1_000_000, terminatesProcessGroup: true
+                ), onLine: { _ in })
+            let message = result.standardError.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard result.terminationStatus == 0 else {
                 return LighthouseAuditResult(
-                    scores: try Self.scores(from: data), error: nil)
-            } catch {
-                return LighthouseAuditResult(
-                    scores: .unavailable, error: error.localizedDescription)
+                    scores: .unavailable,
+                    error: message.isEmpty
+                        ? "Lighthouse exited with status \(result.terminationStatus)." : message)
             }
-        }.value
+            let data = try Data(contentsOf: output)
+            return LighthouseAuditResult(scores: try Self.scores(from: data), error: nil)
+        } catch CLICommandRunnerError.timedOut {
+            return LighthouseAuditResult(
+                scores: .unavailable, error: "Lighthouse timed out after three minutes.")
+        } catch CLICommandRunnerError.outputLimitExceeded {
+            return LighthouseAuditResult(
+                scores: .unavailable, error: "Lighthouse produced too much diagnostic output.")
+        } catch {
+            return LighthouseAuditResult(scores: .unavailable, error: error.localizedDescription)
+        }
     }
 
     private static func scores(from data: Data) throws -> SEOAuditScores {
