@@ -1,0 +1,286 @@
+import EdithKit
+import SwiftUI
+
+struct SEOAuditProjectView: View {
+    @Bindable var model: SEOAuditModel
+    @Environment(\.compactLayout) private var compact
+    @Environment(\.colorScheme) private var scheme
+    @State private var expandedPages = Set<UUID>()
+    @State private var confirmsDeletion = false
+
+    private var dark: Bool { scheme == .dark }
+    private var project: SEOAuditProject { model.selectedProject! }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            toolbar
+            if model.isRunning {
+                SEOAuditProgressRail(stage: model.stage, progress: model.selectedRun?.progress ?? 0)
+                    .padding(.horizontal, PageMetrics.gutter(compact))
+                    .padding(.bottom, UIScale.pt(14))
+            }
+            Divider()
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                    summary
+                    controls
+                    pageList
+                }
+                .pageContent(compact)
+                .padding(.top, UIScale.pt(16))
+            }
+        }
+        .confirmationDialog(
+            "Delete \(project.name)?", isPresented: $confirmsDeletion,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Project", role: .destructive, action: model.deleteSelectedProject)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Every saved run and page result for this project will be removed from this Mac.")
+        }
+        .onChange(of: model.selectedRunID) { _, _ in expandedPages.removeAll() }
+    }
+
+    private var toolbar: some View {
+        HStack(spacing: UIScale.pt(12)) {
+            Button(action: model.closeProject) {
+                Image(systemName: "chevron.left")
+                    .frame(width: UIScale.pt(24), height: UIScale.pt(24))
+            }
+            .buttonStyle(.edith(.toolbar))
+            .disabled(model.isRunning)
+            VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                Text(project.name)
+                    .font(.system(size: UIScale.pt(16), weight: .semibold))
+                Text(project.baseURL)
+                    .font(DashSkin.mono(10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            if model.isRunning {
+                Button("Stop", role: .destructive, action: model.cancel)
+            } else {
+                Button(action: model.runAgain) {
+                    Label("Run audit", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            Menu {
+                Toggle("Run Lighthouse", isOn: $model.lighthouseEnabled)
+                    .disabled(!model.lighthouseAvailable)
+                Divider()
+                Button("Delete Project", role: .destructive) { confirmsDeletion = true }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .frame(width: UIScale.pt(24), height: UIScale.pt(24))
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .disabled(model.isRunning)
+        }
+        .padding(.horizontal, PageMetrics.gutter(compact))
+        .padding(.vertical, UIScale.pt(14))
+    }
+
+    private var summary: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(
+                    .adaptive(minimum: UIScale.pt(compact ? 125 : 160)), spacing: UIScale.pt(10))
+            ],
+            spacing: UIScale.pt(10)
+        ) {
+            metric(
+                "Pages", model.selectedRun.map { String($0.pages.count) } ?? "0", "in this run",
+                "doc.on.doc")
+            metric(
+                "Issues", model.selectedRun.map { String($0.issueCount) } ?? "0",
+                "across all pages", "exclamationmark.triangle")
+            metric(
+                "Average", model.selectedRun?.averageScore.map(String.init) ?? "—",
+                "Lighthouse score", "gauge.with.needle")
+            metric(
+                "Runs", String(project.runs.count), "saved locally",
+                "clock.arrow.trianglehead.counterclockwise.rotate.90")
+        }
+    }
+
+    private func metric(_ title: String, _ value: String, _ detail: String, _ icon: String)
+        -> some View
+    {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            HStack {
+                Text(title)
+                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Image(systemName: icon).foregroundStyle(DashSkin.accent(dark))
+            }
+            Text(value).font(DashSkin.mono(25, weight: .semibold))
+            Text(detail).font(.system(size: UIScale.pt(10))).foregroundStyle(.tertiary)
+        }
+        .padding(UIScale.pt(14))
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+        .overlay(
+            RoundedRectangle(cornerRadius: UIScale.pt(12))
+                .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1)))
+    }
+
+    private var controls: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: UIScale.pt(10)) {
+                runPicker; filters
+            }
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                runPicker; filters
+            }
+        }
+    }
+
+    private var runPicker: some View {
+        Picker(
+            "Run",
+            selection: Binding(
+                get: { model.selectedRunID ?? project.runs.first?.id ?? UUID() },
+                set: model.selectRun
+            )
+        ) {
+            ForEach(project.runs) { run in
+                Text(run.startedAt.formatted(date: .abbreviated, time: .shortened))
+                    .tag(run.id)
+            }
+        }
+        .frame(maxWidth: UIScale.pt(230))
+    }
+
+    private var filters: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            SearchField(placeholder: "Filter pages", text: $model.query)
+                .frame(maxWidth: .infinity)
+            Menu {
+                Button("All issues") { model.severity = nil }
+                Divider()
+                ForEach(SEOAuditSeverity.allCases, id: \.self) { severity in
+                    Button(severity.rawValue.capitalized) { model.severity = severity }
+                }
+            } label: {
+                Label(
+                    model.severity?.rawValue.capitalized ?? "All issues",
+                    systemImage: "line.3.horizontal.decrease.circle")
+            }
+            .fixedSize()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private var pageList: some View {
+        if model.selectedRun == nil {
+            emptyState("No run selected", "Choose a saved run or start a new audit.")
+        } else if model.visiblePages.isEmpty {
+            emptyState(
+                model.isRunning ? "Waiting for the first page" : "No pages match",
+                model.isRunning
+                    ? "Results appear here as the crawl advances."
+                    : "Clear the filters to see every page.")
+        } else {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                PageSectionHeader(
+                    "Pages",
+                    subtitle:
+                        "\(model.visiblePages.count) of \(model.selectedRun?.pages.count ?? 0) shown"
+                )
+                LazyVStack(spacing: UIScale.pt(8)) {
+                    ForEach(model.visiblePages) { page in
+                        SEOAuditPageAccordion(
+                            page: page, history: model.history(for: page),
+                            expanded: Binding(
+                                get: { expandedPages.contains(page.id) },
+                                set: { open in
+                                    if open {
+                                        expandedPages.insert(page.id)
+                                    } else {
+                                        expandedPages.remove(page.id)
+                                    }
+                                }))
+                    }
+                }
+            }
+        }
+    }
+
+    private func emptyState(_ title: String, _ detail: String) -> some View {
+        VStack(spacing: UIScale.pt(8)) {
+            Image(systemName: "doc.text.magnifyingglass")
+                .font(.system(size: UIScale.pt(26), weight: .light))
+                .foregroundStyle(.tertiary)
+            Text(title).font(.system(size: UIScale.pt(14), weight: .semibold))
+            Text(detail).font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, UIScale.pt(44))
+    }
+}
+
+private struct SEOAuditProgressRail: View {
+    let stage: SEOAuditStage
+    let progress: Double
+    @Environment(\.colorScheme) private var scheme
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            HStack(spacing: UIScale.pt(8)) {
+                ProgressView().controlSize(.small)
+                Text(title).font(.system(size: UIScale.pt(12), weight: .semibold))
+                Text(detail)
+                    .font(DashSkin.mono(10.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Text(progress, format: .percent.precision(.fractionLength(0)))
+                    .font(DashSkin.mono(11, weight: .semibold))
+            }
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(DashSkin.line(dark))
+                    Capsule().fill(DashSkin.accent(dark))
+                        .frame(width: max(UIScale.pt(6), geometry.size.width * progress))
+                    Circle().fill(DashSkin.paper2(dark))
+                        .overlay(
+                            Circle().strokeBorder(DashSkin.accent(dark), lineWidth: UIScale.pt(2))
+                        )
+                        .frame(width: UIScale.pt(9), height: UIScale.pt(9))
+                        .offset(x: max(0, geometry.size.width * progress - UIScale.pt(5)))
+                }
+            }
+            .frame(height: UIScale.pt(9))
+        }
+        .padding(UIScale.pt(12))
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(11)))
+        .overlay(
+            RoundedRectangle(cornerRadius: UIScale.pt(11))
+                .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1)))
+    }
+
+    private var title: String {
+        switch stage {
+        case .idle: "Ready"
+        case .discovering: "Discovering pages"
+        case .auditing: "Auditing pages"
+        case .saving: "Saving run"
+        }
+    }
+
+    private var detail: String {
+        switch stage {
+        case .idle: ""
+        case .discovering: "robots.txt → sitemap.xml"
+        case let .auditing(current, total, url): "\(current) / \(total)  \(url)"
+        case .saving: "writing local history"
+        }
+    }
+}

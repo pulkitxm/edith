@@ -31,6 +31,7 @@ final class SEOAuditModel {
         self.crawler = crawler
         self.pageAuditor = pageAuditor
         self.lighthouse = lighthouse
+        lighthouseEnabled = lighthouse.isAvailable
         projects = (try? repository.loadSummaries()) ?? []
     }
 

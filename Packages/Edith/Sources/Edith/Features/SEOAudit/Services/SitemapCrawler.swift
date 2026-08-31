@@ -34,7 +34,7 @@ struct SitemapCrawler: Sendable {
         for candidate in unique(candidates) {
             do {
                 let pages = try await crawl(candidate, visited: &visited)
-                if !pages.isEmpty { return Array(pages.prefix(maximumPages)) }
+                if !pages.isEmpty { return Array(unique(pages).prefix(maximumPages)) }
             } catch {
                 continue
             }
@@ -50,7 +50,9 @@ struct SitemapCrawler: Sendable {
         if !document.isIndex { return document.locations }
         var pages: [URL] = []
         for child in document.locations where pages.count < maximumPages {
-            pages.append(contentsOf: try await crawl(child, visited: &visited))
+            if let childPages = try? await crawl(child, visited: &visited) {
+                pages.append(contentsOf: childPages)
+            }
         }
         return unique(pages)
     }
