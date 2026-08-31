@@ -37,109 +37,54 @@ enum PostgreSQLDatabaseMutationSupport {
         connectionID: DatabaseConnectionID
     ) throws(DatabaseAdapterFailure) -> PostgreSQLDatabaseValidatedMutation {
         guard request.target.connectionID == connectionID,
-            let object = request.target.object,
-            object.kind == .table,
-            object.path.count == 2,
-            object.nativeIdentifier == nil,
-            request.selectedRecords.isEmpty,
-            request.predicate == nil,
-            case let .relational(product, statement, parameters) = request.payload,
-            product == .postgresql,
-            !parameters.isEmpty || request.target.record != nil
+            case let .relational(product, _, parameters) = request.payload,
+            product == .postgresql
         else {
             throw PostgreSQLDatabaseAdapterSupport.invalidMutation
         }
-        for segment in object.path {
-            try validateIdentifier(segment)
+        let fields = parameters.map {
+            DatabaseObjectField(name: $0.name, value: $0.value)
         }
-        let names = parameters.map(\.name)
-        guard names.count <= PostgreSQLDatabaseReadBounds.maximumParameters,
-            Set(names).count == names.count
-        else {
-            throw PostgreSQLDatabaseAdapterSupport.invalidMutation
-        }
-        for name in names {
-            try validateIdentifier(name)
-        }
-        let table = object.path.map(quote).joined(separator: ".")
+        let canonical: DatabaseDestructiveRequest
         let validated: PostgreSQLDatabaseValidatedMutation
-        if let identity = request.target.record {
-            let identityValues = try validatedIdentity(identity)
-            let identityNames = identityValues.map(\.name)
-            guard Set(names).isDisjoint(with: identityNames) else {
-                throw PostgreSQLDatabaseAdapterSupport.invalidMutation
-            }
-            let firstIdentityParameter = parameters.count + 1
-            let predicate = identityValues.enumerated().map { index, component in
-                "\(quote(component.name)) IS NOT DISTINCT FROM $\(firstIdentityParameter + index)"
-            }.joined(separator: " AND ")
-            if parameters.isEmpty {
+        do {
+            if let identity = request.target.record, parameters.isEmpty {
+                canonical = try DatabaseRowMutationRequests.postgreSQLDelete(
+                    target: request.target)
                 validated = PostgreSQLDatabaseValidatedMutation(
                     action: .delete,
                     scope: .singleRecord,
-                    statement: "DELETE FROM \(table) WHERE \(predicate) RETURNING 1",
-                    parameters: identityValues.map(\.value),
+                    statement: canonical.payload.command,
+                    parameters: identity.components.map(\.value),
                     impactDescription: "Delete one identified row")
-            } else {
-                let assignments = parameters.enumerated().map { index, parameter in
-                    "\(quote(parameter.name)) = $\(index + 1)"
-                }.joined(separator: ", ")
+            } else if let identity = request.target.record {
+                canonical = try DatabaseRowMutationRequests.postgreSQLUpdate(
+                    target: request.target,
+                    values: fields)
                 validated = PostgreSQLDatabaseValidatedMutation(
                     action: .update,
                     scope: .singleRecord,
-                    statement:
-                        "UPDATE \(table) SET \(assignments) WHERE \(predicate) RETURNING 1",
-                    parameters: parameters.map(\.value) + identityValues.map(\.value),
+                    statement: canonical.payload.command,
+                    parameters: parameters.map(\.value) + identity.components.map(\.value),
                     impactDescription: "Update one identified row")
+            } else {
+                canonical = try DatabaseRowMutationRequests.postgreSQLInsert(
+                    target: request.target,
+                    values: fields)
+                validated = PostgreSQLDatabaseValidatedMutation(
+                    action: .insert,
+                    scope: .entireObject,
+                    statement: canonical.payload.command,
+                    parameters: parameters.map(\.value),
+                    impactDescription: "Insert one row")
             }
-        } else {
-            let columns = names.map(quote).joined(separator: ", ")
-            let placeholders = parameters.indices.map { "$\($0 + 1)" }.joined(separator: ", ")
-            validated = PostgreSQLDatabaseValidatedMutation(
-                action: .insert,
-                scope: .entireObject,
-                statement: "INSERT INTO \(table) (\(columns)) VALUES (\(placeholders)) RETURNING 1",
-                parameters: parameters.map(\.value),
-                impactDescription: "Insert one row")
+        } catch {
+            throw PostgreSQLDatabaseAdapterSupport.invalidMutation
         }
-        guard statement == validated.statement else {
+        guard canonical == request else {
             throw PostgreSQLDatabaseAdapterSupport.invalidMutation
         }
         return validated
-    }
-
-    private static func validatedIdentity(
-        _ identity: DatabaseRecordIdentity
-    ) throws(DatabaseAdapterFailure) -> [DatabaseIdentityComponent] {
-        guard identity.kind == .primaryKey || identity.kind == .uniqueKey,
-            (1...16).contains(identity.components.count),
-            identity.concurrencyTokens.isEmpty
-        else {
-            throw PostgreSQLDatabaseAdapterSupport.invalidMutation
-        }
-        let names = identity.components.map(\.name)
-        guard Set(names).count == names.count else {
-            throw PostgreSQLDatabaseAdapterSupport.invalidMutation
-        }
-        for component in identity.components {
-            try validateIdentifier(component.name)
-            guard component.value != .missing, component.value != .null else {
-                throw PostgreSQLDatabaseAdapterSupport.invalidMutation
-            }
-        }
-        return identity.components
-    }
-
-    private static func validateIdentifier(
-        _ value: String
-    ) throws(DatabaseAdapterFailure) {
-        guard !value.isEmpty, value.utf8.count <= 63, !value.contains("\0") else {
-            throw PostgreSQLDatabaseAdapterSupport.invalidMutation
-        }
-    }
-
-    private static func quote(_ value: String) -> String {
-        "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
     }
 }
 

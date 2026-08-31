@@ -86,6 +86,46 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(await sender.recordedRequests().isEmpty)
     }
 
+    @Test("Row editor creates canonical update, insert, and delete requests")
+    func rowMutationRequests() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)])
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.customers"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        model.selectRecord(at: 0)
+        model.beginEditingSelectedRow(connection)
+        model.updateEditorField("name", text: "Updated")
+        let update = try #require(model.editorMutationRequest(connection))
+        #expect(
+            update.payload.command
+                == "UPDATE \"public\".\"customers\" SET \"name\" = $1 WHERE \"id\" IS NOT DISTINCT FROM $2 RETURNING 1"
+        )
+        #expect(update.payload.parameters.map(\.value) == [.string("Updated")])
+        #expect(update.target.record?.components.first?.value == .signedInteger(1))
+
+        let delete = try #require(model.deleteMutationRequest(connection))
+        #expect(
+            delete.payload.command
+                == "DELETE FROM \"public\".\"customers\" WHERE \"id\" IS NOT DISTINCT FROM $1 RETURNING 1"
+        )
+
+        model.beginInsert(connection)
+        model.updateEditorField("name", text: "Created")
+        let insert = try #require(model.editorMutationRequest(connection))
+        #expect(
+            insert.payload.command
+                == "INSERT INTO \"public\".\"customers\" (\"name\") VALUES ($1) RETURNING 1"
+        )
+        #expect(insert.payload.parameters.map(\.value) == [.string("Created")])
+        #expect(insert.target.record == nil)
+    }
+
     private static func connection(
         product: DatabaseProduct
     ) throws -> DatabaseConnectionSummary {
@@ -114,10 +154,16 @@ struct DatabaseDataWorkspaceModelTests {
     }
 
     private static func record(_ identifier: Int64) -> DatabaseRecord {
-        DatabaseRecord(fields: [
-            DatabaseObjectField(name: "id", value: .signedInteger(identifier)),
-            DatabaseObjectField(name: "name", value: .string("Customer \(identifier)")),
-        ])
+        DatabaseRecord(
+            identity: DatabaseRecordIdentity(
+                kind: .primaryKey,
+                components: [
+                    DatabaseIdentityComponent(name: "id", value: .signedInteger(identifier))
+                ]),
+            fields: [
+                DatabaseObjectField(name: "id", value: .signedInteger(identifier)),
+                DatabaseObjectField(name: "name", value: .string("Customer \(identifier)")),
+            ])
     }
 
     private static func response(

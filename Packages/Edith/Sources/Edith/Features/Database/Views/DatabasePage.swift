@@ -149,6 +149,12 @@ struct DatabasePage: View {
             }
             await connectionWorkspace.loadConnections()
         }
+        .onChange(of: workspace.safetyPhase) { _, phase in
+            guard case .succeeded = phase,
+                let connection = connectionWorkspace.selectedConnection
+            else { return }
+            dataWorkspace.finishMutation(connection)
+        }
         .sheet(
             item: Binding(
                 get: { workspace.safetyReview },
@@ -262,7 +268,10 @@ struct DatabasePage: View {
                     .padding(.horizontal, UIScale.pt(28))
                     .padding(.top, UIScale.pt(18))
             }
-            DatabaseWorkbenchView(connections: connectionWorkspace, data: dataWorkspace)
+            DatabaseWorkbenchView(
+                connections: connectionWorkspace,
+                data: dataWorkspace,
+                mutations: workspace)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
