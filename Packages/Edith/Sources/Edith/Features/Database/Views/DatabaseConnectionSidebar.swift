@@ -75,7 +75,8 @@ struct DatabaseConnectionSidebar: View {
             emptyState(
                 symbol: "cylinder.split.1x2",
                 title: "No saved connections",
-                detail: "Add a database connection here, test it through the local broker, then save it.",
+                detail:
+                    "Add a database connection here, test it through the local broker, then save it.",
                 actionTitle: "Add connection",
                 action: createConnection)
         case .filteredEmpty(let search):

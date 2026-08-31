@@ -89,10 +89,12 @@ struct DatabaseConnectionCreationSheet: View {
         HStack(alignment: .top, spacing: UIScale.pt(10)) {
             Image(systemName: "shield.lefthalf.filled")
                 .foregroundStyle(DashSkin.gold)
-            Text("Every saved connection carries its environment and mutation policy. Test the exact details before Save becomes available.")
-                .font(.system(size: UIScale.pt(11.5)))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "Every saved connection carries its environment and mutation policy. Test the exact details before Save becomes available."
+            )
+            .font(.system(size: UIScale.pt(11.5)))
+            .foregroundStyle(DashSkin.inkSoft(dark))
+            .fixedSize(horizontal: false, vertical: true)
         }
         .padding(UIScale.pt(12))
         .background(DashSkin.gold.opacity(0.08), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
@@ -160,9 +162,12 @@ struct DatabaseConnectionCreationSheet: View {
                 }
             }
             if model.supportsTLS {
-                Toggle("Require TLS with full certificate verification", isOn: boolBinding(\.tlsEnabled))
-                    .toggleStyle(.switch)
-                    .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                Toggle(
+                    "Require TLS with full certificate verification",
+                    isOn: boolBinding(\.tlsEnabled)
+                )
+                .toggleStyle(.switch)
+                .font(.system(size: UIScale.pt(11.5), weight: .medium))
             }
         }
     }
@@ -243,7 +248,9 @@ struct DatabaseConnectionCreationSheet: View {
         case .editing:
             status("Test required", symbol: "circle.dashed", color: DashSkin.inkFaint(dark))
         case .testing:
-            status("Testing through broker", symbol: "arrow.triangle.2.circlepath", color: DashSkin.accent(dark))
+            status(
+                "Testing through broker", symbol: "arrow.triangle.2.circlepath",
+                color: DashSkin.accent(dark))
         case .tested(let detail):
             status(detail, symbol: "checkmark.circle.fill", color: DashSkin.ok)
         case .saving:
@@ -319,7 +326,9 @@ struct DatabaseConnectionCreationSheet: View {
         Binding(get: { model.environmentKind }, set: model.selectEnvironment)
     }
 
-    private func textBinding(_ keyPath: ReferenceWritableKeyPath<DatabaseConnectionCreationModel, String>) -> Binding<String> {
+    private func textBinding(
+        _ keyPath: ReferenceWritableKeyPath<DatabaseConnectionCreationModel, String>
+    ) -> Binding<String> {
         Binding(
             get: { model[keyPath: keyPath] },
             set: {
@@ -328,7 +337,9 @@ struct DatabaseConnectionCreationSheet: View {
             })
     }
 
-    private func boolBinding(_ keyPath: ReferenceWritableKeyPath<DatabaseConnectionCreationModel, Bool>) -> Binding<Bool> {
+    private func boolBinding(
+        _ keyPath: ReferenceWritableKeyPath<DatabaseConnectionCreationModel, Bool>
+    ) -> Binding<Bool> {
         Binding(
             get: { model[keyPath: keyPath] },
             set: {
@@ -337,7 +348,9 @@ struct DatabaseConnectionCreationSheet: View {
             })
     }
 
-    private func enumBinding<Value>(_ keyPath: ReferenceWritableKeyPath<DatabaseConnectionCreationModel, Value>) -> Binding<Value> {
+    private func enumBinding<Value>(
+        _ keyPath: ReferenceWritableKeyPath<DatabaseConnectionCreationModel, Value>
+    ) -> Binding<Value> {
         Binding(
             get: { model[keyPath: keyPath] },
             set: {
