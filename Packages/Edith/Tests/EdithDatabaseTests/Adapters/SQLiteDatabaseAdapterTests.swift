@@ -121,10 +121,11 @@ private enum SQLiteDatabaseAdapterFixtures {
         filter: DatabaseFilter? = nil,
         sorts: [DatabaseSort] = [],
         consistency: DatabaseConsistencyPreference = .productDefault,
-        path: [String] = ["main", "items"]
+        path: [String] = ["main", "items"],
+        kind: DatabaseObjectKind = .table
     ) throws -> DatabaseAdapterPageRequest {
         try DatabaseAdapterPageRequest(
-            target: target(connectionID: connectionID, path: path),
+            target: target(connectionID: connectionID, path: path, kind: kind),
             page: DatabasePageRequest(
                 pageSize: try DatabasePageSize(pageSize),
                 projection: projection,
@@ -198,6 +199,8 @@ private enum SQLiteDatabaseAdapterFixtures {
                         "oid" TEXT
                     )
                     """)
+            try database.execute(
+                sql: "CREATE VIEW item_names AS SELECT id, name FROM items")
             try database.execute(
                 sql: """
                     INSERT INTO "quoted""table"("odd""column") VALUES (?)
@@ -534,6 +537,49 @@ private enum SQLiteDatabaseAdapterFixtures {
         #expect(identifiers.last == 1_002)
         #expect(Set(identifiers).count == identifiers.count)
         #expect(identifiers == identifiers.sorted(by: >))
+        await session.disconnect()
+    }
+
+    @Test func discoversTablesAndViewsAndBrowsesAView() async throws {
+        let directory = try SQLiteDatabaseAdapterFixtures.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("discovery.sqlite").path
+        try SQLiteDatabaseAdapterFixtures.createFixture(at: path, rowCount: 3)
+        let definition = try SQLiteDatabaseAdapterFixtures.definition(
+            location: .sqlite(DatabaseSQLiteLocation(path: path)))
+        let session = try await SQLiteDatabaseAdapterFixtures.connect(definition)
+
+        let discovery = try await session.readPage(
+            try SQLiteDatabaseAdapterFixtures.pageRequest(
+                connectionID: definition.id,
+                pageSize: 100,
+                path: ["main"],
+                kind: .schema),
+            context: SQLiteDatabaseAdapterFixtures.context())
+        let discovered: [String: String] = Dictionary(
+            uniqueKeysWithValues: discovery.records.compactMap { record in
+                guard
+                    case let .string(name)? = SQLiteDatabaseAdapterFixtures.field(
+                        "name", in: record),
+                    case let .string(kind)? = SQLiteDatabaseAdapterFixtures.field(
+                        "kind", in: record)
+                else { return nil }
+                return (name, kind)
+            })
+        #expect(discovered["items"] == DatabaseObjectKind.table.rawValue)
+        #expect(discovered["item_names"] == DatabaseObjectKind.view.rawValue)
+        #expect(discovery.nextContinuation == nil)
+
+        let view = try await session.readPage(
+            try SQLiteDatabaseAdapterFixtures.pageRequest(
+                connectionID: definition.id,
+                pageSize: 2,
+                path: ["main", "item_names"],
+                kind: .view),
+            context: SQLiteDatabaseAdapterFixtures.context())
+        #expect(view.records.count == 2)
+        #expect(view.records.allSatisfy { $0.identity == nil })
+        #expect(view.nextContinuation != nil)
         await session.disconnect()
     }
 

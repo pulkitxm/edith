@@ -112,6 +112,17 @@ final class DatabaseObjectExplorerModel {
             state = .loaded
         case .postgresql:
             loadPostgreSQL(connection)
+        case .sqlite:
+            let group = DatabaseExplorerGroup(
+                identifier: DatabaseObjectIdentifier(kind: .schema, path: ["main"]),
+                title: "main",
+                isAvailable: true,
+                objects: [],
+                state: .idle,
+                nextContinuation: nil)
+            groups = [group]
+            state = .loaded
+            loadGroup(group.identifier, connection: connection)
         default:
             state = .failed(
                 "Automatic object discovery is not available for \(connection.product.displayName) yet."
