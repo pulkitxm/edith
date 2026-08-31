@@ -49,10 +49,8 @@ final class QuinjetFolderPickerModel {
                 guard session.state.isConnected else {
                     throw QuinjetMachineError.connectionTimedOut
                 }
-                let platform = session.remotePlatform ?? .linux
-                let result = await session.runCommand(
-                    FilePlaces.homeDirectoryCommand(platform: platform), timeout: 20)
-                let home = try result.get().trimmingCharacters(in: .whitespacesAndNewlines)
+                let home = try await session.homeDirectory().get()
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
                 guard QuinjetPath.isAbsolute(home) else {
                     throw QuinjetMachineError.homeUnavailable
                 }

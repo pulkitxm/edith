@@ -706,6 +706,15 @@ public final class MachineSession {
         }
     }
 
+    public func homeDirectory() async -> Result<String, Error> {
+        if isLocal { return .success(FileManager.default.homeDirectoryForCurrentUser.path) }
+        do {
+            return .success(try await directoryEndpoint.homeDirectory())
+        } catch {
+            return .failure(error)
+        }
+    }
+
     public func createDirectory(path: String) async -> Result<RemoteDirectoryCreation, Error> {
         if isLocal {
             do {
