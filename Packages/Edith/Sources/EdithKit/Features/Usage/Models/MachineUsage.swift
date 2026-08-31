@@ -418,18 +418,53 @@ public enum MachineUsageCollector {
     public static let defaultTimeout: TimeInterval = 900
     public static let nothingToCollect: Int32 = 3
 
-    public static let probeCommand = "printf '%s\\n%s\\n' \"$HOME\" \"$(uname -n 2>/dev/null)\""
-
-    public static func outputDirectory(home: String) -> String {
-        "\(home)/.cache/edith/usage"
+    public static func probeCommand(platform: RemoteMachinePlatform) -> String {
+        if platform == .windows {
+            return PowerShell.command(
+                "[Console]::Out.WriteLine($env:USERPROFILE); "
+                    + "[Console]::Out.Write($env:COMPUTERNAME)")
+        }
+        return "printf '%s\\n%s\\n' \"$HOME\" \"$(uname -n 2>/dev/null)\""
     }
 
-    public static func runCommand(home: String) -> String {
-        "bash -s -- \(ShellQuote.quote(outputDirectory(home: home)))"
+    public static func outputDirectory(
+        home: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        let trimmed = home.trimmingCharacters(in: CharacterSet(charactersIn: "/\\"))
+        return platform == .windows
+            ? "\(trimmed)\\.cache\\edith\\usage"
+            : "\(home)/.cache/edith/usage"
     }
 
-    public static func documentPath(home: String) -> String {
-        "\(outputDirectory(home: home))/usage.json"
+    public static func runCommand(
+        home: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        guard platform == .windows else {
+            return "bash -s -- \(ShellQuote.quote(outputDirectory(home: home)))"
+        }
+        return PowerShell.command(
+            """
+            $gitCandidates = @(
+                (Join-Path $env:ProgramFiles 'Git/bin/bash.exe'),
+                (Join-Path $env:LOCALAPPDATA 'Programs/Git/bin/bash.exe')
+            )
+            $gitBash = $gitCandidates | Where-Object {
+                Test-Path -LiteralPath $_ -PathType Leaf
+            } | Select-Object -First 1
+            if ($null -eq $gitBash) {
+                [Console]::Error.Write('Git Bash is required to collect agent usage on Windows.')
+                exit 127
+            }
+            & $gitBash -lc 'bash -s -- "$HOME/.cache/edith/usage"'
+            exit $LASTEXITCODE
+            """)
+    }
+
+    public static func documentPath(
+        home: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        let separator = platform == .windows ? "\\" : "/"
+        return outputDirectory(home: home, platform: platform) + separator + "usage.json"
     }
 
     public static func collect(
@@ -437,17 +472,22 @@ public enum MachineUsageCollector {
         timeout: TimeInterval = defaultTimeout, now: Date = Date()
     ) async throws -> MachineUsageCollection {
         guard let script = UsageCollector.script() else { throw MachineUsageError.scriptMissing }
-        let probe = try await connection.run(probeCommand, timeout: 30)
+        guard let platform = await connection.remotePlatform else {
+            throw MachineUsageError.unreachableHome(machine.name)
+        }
+        let probe = try await connection.run(probeCommand(platform: platform), timeout: 30)
         let lines = probe.stdoutText.split(separator: "\n", omittingEmptySubsequences: false)
         let home = lines.first.map { String($0).trimmingCharacters(in: .whitespaces) } ?? ""
-        guard probe.succeeded, !home.isEmpty, home.hasPrefix("/") else {
+        let validHome =
+            platform == .windows ? FileListing.isWindowsPath(home) : home.hasPrefix("/")
+        guard probe.succeeded, !home.isEmpty, validHome else {
             throw MachineUsageError.unreachableHome(machine.name)
         }
         let reported = lines.count > 1 ? String(lines[1]).trimmingCharacters(in: .whitespaces) : ""
         let host = reported.isEmpty ? machine.host : reported
 
         let run = try await connection.run(
-            runCommand(home: home), stdin: script, timeout: timeout)
+            runCommand(home: home, platform: platform), stdin: script, timeout: timeout)
         guard run.status != nothingToCollect else {
             throw MachineUsageError.noUsageThere(machine.name)
         }
@@ -460,7 +500,8 @@ public enum MachineUsageCollector {
         let scratch = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-usage-\(machine.id.uuidString).json")
         defer { try? FileManager.default.removeItem(at: scratch) }
-        try await connection.download(remotePath: documentPath(home: home), to: scratch)
+        try await connection.download(
+            remotePath: documentPath(home: home, platform: platform), to: scratch)
         guard
             let document = try UsageDataFiles.readRegularFile(
                 at: scratch, maximumBytes: UsageDataFiles.maximumMachineDocumentBytes)

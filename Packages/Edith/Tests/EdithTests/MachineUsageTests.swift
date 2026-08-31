@@ -357,6 +357,14 @@ import Testing
 }
 
 @Suite struct MachineUsageCollectorTests {
+    private func decodedPowerShell(_ command: String) -> String {
+        guard let encoded = command.split(separator: " ").last,
+            let data = Data(base64Encoded: String(encoded)),
+            let script = String(data: data, encoding: .utf16LittleEndian)
+        else { return "" }
+        return script
+    }
+
     @Test func theRemoteRunWritesUnderTheMachinesOwnHome() {
         #expect(
             MachineUsageCollector.runCommand(home: "/home/pi")
@@ -372,8 +380,23 @@ import Testing
     }
 
     @Test func theProbeAsksForTheHomeAndTheHostName() {
-        #expect(MachineUsageCollector.probeCommand.contains("$HOME"))
-        #expect(MachineUsageCollector.probeCommand.contains("uname -n"))
+        let command = MachineUsageCollector.probeCommand(platform: .linux)
+        #expect(command.contains("$HOME"))
+        #expect(command.contains("uname -n"))
+    }
+
+    @Test func windowsUsesItsNativeHomeAndGitBashCollector() {
+        let probe = decodedPowerShell(MachineUsageCollector.probeCommand(platform: .windows))
+        let command = decodedPowerShell(
+            MachineUsageCollector.runCommand(
+                home: "C:\\Users\\kpulk", platform: .windows))
+        #expect(probe.contains("USERPROFILE"))
+        #expect(command.contains("Git/bin/bash.exe"))
+        #expect(command.contains("bash -s --"))
+        #expect(
+            MachineUsageCollector.documentPath(
+                home: "C:\\Users\\kpulk", platform: .windows)
+                == "C:\\Users\\kpulk\\.cache\\edith\\usage\\usage.json")
     }
 
     @Test func theReportedFailureIsTheLastThingTheCollectorSaid() {
