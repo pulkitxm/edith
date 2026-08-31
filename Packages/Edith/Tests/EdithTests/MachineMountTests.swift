@@ -76,7 +76,8 @@ import Testing
         try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: real)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        #expect(MachineMounts.sameMountPoint(alias.appendingPathComponent("mount").path, child.path))
+        #expect(
+            MachineMounts.sameMountPoint(alias.appendingPathComponent("mount").path, child.path))
     }
 
     @Test func windowsDrivePathsUseOpenSSHSFTPForm() {

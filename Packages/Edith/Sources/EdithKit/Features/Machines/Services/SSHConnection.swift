@@ -483,7 +483,7 @@ public actor SSHConnection {
         let result = await LocalMachineCommandExecution.run(
             executable: URL(fileURLWithPath: "/usr/bin/scp"),
             arguments:
-            fileTransferArguments()
+                fileTransferArguments()
                 + [localURL.path, "\(machine.sshTarget):\(windowsSFTPPath(remotePath))"],
             environment: environment(), commandLabel: "scp", timeout: 15 * 60)
         if case let .failure(error) = result {
