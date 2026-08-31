@@ -563,11 +563,12 @@ private enum SQLiteDatabaseAdapterSupport {
         }
         let target = try browseTarget(request.target, connectionID: connectionID)
         let offset = try continuationOffset(request.continuation, kind: .browse)
-        guard try objectExists(
-            database: database,
-            schema: target.schema,
-            name: target.table,
-            kind: target.kind)
+        guard
+            try objectExists(
+                database: database,
+                schema: target.schema,
+                name: target.table,
+                kind: target.kind)
         else {
             throw invalidRead
         }

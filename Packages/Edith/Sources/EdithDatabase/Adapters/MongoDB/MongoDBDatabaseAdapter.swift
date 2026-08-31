@@ -119,7 +119,8 @@ actor MongoDBDatabaseAdapterSession: DatabaseAdapterSession {
             let prepared = try MongoDBDatabaseAdapterSupport.prepareCollectionDiscovery(
                 request,
                 connectionID: connection.id,
-                maximumTimeMilliseconds: try MongoDBDatabaseAdapterSupport
+                maximumTimeMilliseconds:
+                    try MongoDBDatabaseAdapterSupport
                     .maximumTimeMilliseconds(
                         connection: connection,
                         context: context))
