@@ -26,6 +26,8 @@ import Testing
         #expect(dashboard.contains("if !compactLayout"))
         #expect(charts.contains("ViewThatFits(in: .horizontal)"))
         #expect(charts.contains(".chartLegend(.hidden)"))
+        #expect(
+            charts.components(separatedBy: "y: .fit(to: .chart)").count == 3)
         #expect(skin.contains("await Task.yield()"))
     }
 }

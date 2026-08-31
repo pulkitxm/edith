@@ -58,7 +58,8 @@ struct ComboChart: View {
                     .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [3, 3]))
                     .annotation(
                         position: .top, alignment: .center, spacing: UIScale.pt(6),
-                        overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                        overflowResolution: .init(
+                            x: .fit(to: .chart), y: .fit(to: .chart))
                     ) {
                         PointTooltip(
                             label: p.label, tokens: p.tokens, cost: p.cost, blur: blur,
@@ -249,7 +250,8 @@ struct StackedChart: View {
                     .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [3, 3]))
                     .annotation(
                         position: .top, alignment: .center, spacing: UIScale.pt(6),
-                        overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                        overflowResolution: .init(
+                            x: .fit(to: .chart), y: .fit(to: .chart))
                     ) {
                         PointTooltip(
                             label: p.label, tokens: p.tokens, cost: p.cost, blur: blur,
