@@ -103,7 +103,7 @@ private actor CLIDatabaseMCPRunRecorder {
             plan(["ed", "database", "query", "id", "--nd"], 4).candidates == ["--ndjson"])
         #expect(
             plan(["ed", "database", "mutations", ""], 3).candidates
-                == ["preview", "apply", "status", "cancel", "outcome"])
+                == ["row-request", "preview", "apply", "status", "cancel", "outcome"])
     }
 
     @Test func databaseExecutionRoutesParse() throws {
@@ -148,6 +148,12 @@ private actor CLIDatabaseMCPRunRecorder {
             try EdRoot.parseAsRoot([
                 "database", "saved-queries", "delete", Self.queryUUID.uuidString, "--yes",
             ]) is DatabaseSavedQueriesDeleteCommand)
+        #expect(
+            try EdRoot.parseAsRoot([
+                "database", "mutations", "row-request", Self.connectionUUID.uuidString,
+                "--action", "update", "--path", "public", "--path", "orders",
+                "--identity", "identity.json", "--values", "values.json",
+            ]) is DatabaseMutationRowRequestCommand)
         #expect(
             try EdRoot.parseAsRoot([
                 "database", "mutations", "preview", "--request", "mutation.json",
@@ -397,6 +403,45 @@ private actor CLIDatabaseMCPRunRecorder {
             #expect(refused.code == ExitCodes.usage)
             #expect(delete.code == ExitCodes.success)
             #expect((await sender.recordedRequests()).count == 4)
+        }
+    }
+
+    @Test func mutationRowRequestBuildsBoundPostgreSQLUpdate() async throws {
+        let identity = try #require(Self.mutation().target.record)
+        let values = [
+            DatabaseObjectField(name: "note", value: .string("verified"))
+        ]
+        let identityDocument = try Self.encoded(identity)
+        let valuesDocument = try Self.encoded(values)
+
+        try await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.readQueryText = { path in
+                switch path {
+                case "identity.json": identityDocument
+                case "values.json": valuesDocument
+                default: throw CLIFailure.usage("unexpected row mutation document")
+                }
+            }
+            let result = await CLIProbe.capture([
+                "database", "mutations", "row-request", Self.connectionUUID.uuidString,
+                "--action", "update", "--path", "public", "--path", "orders",
+                "--identity", "identity.json", "--values", "values.json",
+            ])
+
+            #expect(result.code == ExitCodes.success)
+            #expect(result.stderr.isEmpty)
+            let request = try JSONDecoder().decode(
+                DatabaseDestructiveRequest.self,
+                from: Data(result.stdout.utf8))
+            #expect(request.target.record == identity)
+            guard case .relational(let product, let statement, let parameters) = request.payload
+            else {
+                Issue.record("expected relational PostgreSQL mutation")
+                return
+            }
+            #expect(product == .postgresql)
+            #expect(statement.contains("UPDATE \"public\".\"orders\""))
+            #expect(parameters.map(\.name) == ["note"])
         }
     }
 

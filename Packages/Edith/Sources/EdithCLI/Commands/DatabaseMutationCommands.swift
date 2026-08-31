@@ -47,6 +47,22 @@ extension DatabaseCLI {
         }
     }
 
+    static func encodeDocument<Value: Encodable>(_ value: Value) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        do {
+            let data = try encoder.encode(value)
+            guard let text = String(data: data, encoding: .utf8) else {
+                throw CLIFailure("database document was not UTF-8")
+            }
+            return text
+        } catch let failure as CLIFailure {
+            throw failure
+        } catch {
+            throw CLIFailure("database document could not be encoded")
+        }
+    }
+
     static func mutationPreviewJSON(_ preview: DatabaseDestructivePreview) -> JSONValue {
         .object([
             "action": .string(preview.effect.action.rawValue),
@@ -176,12 +192,90 @@ struct DatabaseMutationsCommand: AsyncParsableCommand {
         commandName: "mutations",
         abstract: "Preview, apply, and reconcile destructive database work.",
         subcommands: [
+            DatabaseMutationRowRequestCommand.self,
             DatabaseMutationPreviewCommand.self,
             DatabaseMutationApplyCommand.self,
             DatabaseMutationStatusCommand.self,
             DatabaseMutationCancelCommand.self,
             DatabaseMutationOutcomeCommand.self,
         ])
+}
+
+struct DatabaseMutationRowRequestCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "row-request",
+        abstract: "Build a safe PostgreSQL row mutation request as JSON.")
+
+    @Option(name: .long, help: "Row action: insert, update or delete.")
+    var action: String
+
+    @Option(name: .long, help: "Table path component. Pass schema and table separately.")
+    var path: [String] = []
+
+    @Option(name: .long, help: "DatabaseRecordIdentity JSON file for update or delete.")
+    var identity: String?
+
+    @Option(name: .long, help: "DatabaseObjectField array JSON file for insert or update.")
+    var values: String?
+
+    @Argument(help: "The saved PostgreSQL connection UUID.")
+    var connectionID: String
+
+    func run() async throws {
+        try await execute {
+            guard path.count == 2,
+                path.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+            else {
+                throw CLIFailure.usage("row mutations require exactly two --path values")
+            }
+            let record = try identity.map {
+                try DatabaseCLI.decodeDocument(
+                    DatabaseRecordIdentity.self,
+                    path: $0,
+                    maximumBytes: DatabaseCLI.maximumConfirmationDocumentBytes,
+                    name: "database row identity")
+            }
+            let fields =
+                try values.map {
+                    try DatabaseCLI.decodeDocument(
+                        [DatabaseObjectField].self,
+                        path: $0,
+                        maximumBytes: DatabaseCLI.maximumMutationDocumentBytes,
+                        name: "database row values")
+                } ?? []
+            let target = DatabaseTargetIdentifier(
+                connectionID: try DatabaseCLI.connectionID(connectionID),
+                object: DatabaseObjectIdentifier(kind: .table, path: path),
+                record: record)
+            let mutation: DatabaseDestructiveRequest
+            switch action.lowercased() {
+            case "insert":
+                guard identity == nil, values != nil else {
+                    throw CLIFailure.usage(
+                        "insert requires --values and does not accept --identity")
+                }
+                mutation = try DatabaseRowMutationRequests.postgreSQLInsert(
+                    target: target,
+                    values: fields)
+            case "update":
+                guard identity != nil, values != nil else {
+                    throw CLIFailure.usage("update requires --identity and --values")
+                }
+                mutation = try DatabaseRowMutationRequests.postgreSQLUpdate(
+                    target: target,
+                    values: fields)
+            case "delete":
+                guard identity != nil, values == nil else {
+                    throw CLIFailure.usage(
+                        "delete requires --identity and does not accept --values")
+                }
+                mutation = try DatabaseRowMutationRequests.postgreSQLDelete(target: target)
+            default:
+                throw CLIFailure.usage("--action must be insert, update or delete")
+            }
+            CLIOut.out(try DatabaseCLI.encodeDocument(mutation))
+        }
+    }
 }
 
 struct DatabaseMutationPreviewCommand: AsyncParsableCommand {
