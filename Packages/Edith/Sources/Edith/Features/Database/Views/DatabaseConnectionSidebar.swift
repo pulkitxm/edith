@@ -5,6 +5,10 @@ import SwiftUI
 struct DatabaseConnectionSidebar: View {
     @Bindable var model: DatabaseConnectionWorkspaceModel
     let createConnection: () -> Void
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        AppTheme.accent.rawValue
+
+    private var theme: Color { themeColor(themeName) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
@@ -63,7 +67,7 @@ struct DatabaseConnectionSidebar: View {
                 symbol: "arrow.triangle.2.circlepath",
                 title: "Loading connections",
                 detail: "Saved connection information is being refreshed.",
-                tint: .accentColor,
+                tint: theme,
                 progress: true)
             connectionRows(connections)
         case .empty:
@@ -134,7 +138,7 @@ struct DatabaseConnectionSidebar: View {
             HStack(spacing: UIScale.pt(9)) {
                 Image(systemName: connection.product.symbolName)
                     .font(.system(size: UIScale.pt(12), weight: .semibold))
-                    .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(selected ? theme : Color.secondary)
                     .frame(width: UIScale.pt(16))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
@@ -164,13 +168,13 @@ struct DatabaseConnectionSidebar: View {
             .padding(.horizontal, UIScale.pt(9))
             .padding(.vertical, UIScale.pt(7))
             .background(
-                selected ? Color.accentColor.opacity(0.14) : Color.clear,
+                selected ? theme.opacity(0.14) : Color.clear,
                 in: RoundedRectangle(cornerRadius: UIScale.pt(7))
             )
             .overlay {
                 RoundedRectangle(cornerRadius: UIScale.pt(7))
                     .stroke(
-                        selected ? Color.accentColor.opacity(0.45) : Color.clear,
+                        selected ? theme.opacity(0.45) : Color.clear,
                         lineWidth: 1)
             }
             .contentShape(Rectangle())
@@ -276,7 +280,7 @@ struct DatabaseConnectionSidebar: View {
     private func sessionColor(_ state: DatabaseConnectionSessionState) -> Color {
         switch state {
         case .connected: .green
-        case .connecting, .disconnecting: .accentColor
+        case .connecting, .disconnecting: theme
         case .failed: .red
         case .outcomeUnknown: .orange
         case .disconnected: .secondary

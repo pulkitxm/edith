@@ -102,8 +102,12 @@ struct DatabasePage: View {
     @State private var objectExplorer = DatabaseObjectExplorerModel()
     @State private var workspace = DatabaseWorkspaceModel()
     @State private var showsServiceDetails = false
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        AppTheme.accent.rawValue
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.compactLayout) private var compact
+
+    private var theme: Color { themeColor(themeName) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -278,7 +282,7 @@ struct DatabasePage: View {
             Button("Repair and continue") {
                 Task { await model.repair() }
             }
-            .buttonStyle(.edith(.primary, tint: .accentColor))
+            .buttonStyle(.edith(.primary, tint: theme))
             DisclosureGroup("Technical details", isExpanded: $showsServiceDetails) {
                 Text(detail)
                     .font(.system(size: UIScale.pt(11), design: .monospaced))
@@ -300,7 +304,7 @@ struct DatabasePage: View {
         VStack(spacing: UIScale.pt(20)) {
             Image(systemName: "cylinder.split.1x2")
                 .font(.system(size: UIScale.pt(42), weight: .light))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(theme)
                 .accessibilityHidden(true)
             VStack(spacing: UIScale.pt(8)) {
                 Text("Connect your first database")
@@ -314,7 +318,7 @@ struct DatabasePage: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
             Button("Add connection", action: beginConnectionCreation)
-                .buttonStyle(.edith(.primary, tint: .accentColor))
+                .buttonStyle(.edith(.primary, tint: theme))
         }
         .frame(maxWidth: UIScale.pt(520))
         .padding(UIScale.pt(36))
@@ -352,7 +356,7 @@ struct DatabasePage: View {
             } label: {
                 Image(systemName: "plus")
             }
-            .buttonStyle(.edith(.primary, tint: .accentColor))
+            .buttonStyle(.edith(.primary, tint: theme))
             .accessibilityLabel("Add database connection")
         }
         .padding(UIScale.pt(10))
@@ -392,7 +396,7 @@ struct DatabasePage: View {
                 systemName: workspace.hasTrackedMutation
                     ? "clock.arrow.circlepath" : "info.circle.fill"
             )
-            .foregroundStyle(workspace.hasTrackedMutation ? Color.orange : Color.accentColor)
+            .foregroundStyle(workspace.hasTrackedMutation ? Color.orange : theme)
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 Text(
                     workspace.hasTrackedMutation ? "Change needs attention" : "Change status"

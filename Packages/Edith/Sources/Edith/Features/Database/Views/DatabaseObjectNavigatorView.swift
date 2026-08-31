@@ -8,6 +8,10 @@ struct DatabaseObjectNavigatorView: View {
     let connection: DatabaseConnectionSummary
     let open: (DatabaseObjectIdentifier) -> Void
     @State private var expandedGroups = Set<DatabaseObjectIdentifier>()
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        AppTheme.accent.rawValue
+
+    private var theme: Color { themeColor(themeName) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -162,7 +166,7 @@ struct DatabaseObjectNavigatorView: View {
             }
             .buttonStyle(.edith(.borderless))
             .font(.system(size: UIScale.pt(10.5), weight: .medium))
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(theme)
         }
     }
 
@@ -238,7 +242,7 @@ struct DatabaseObjectNavigatorView: View {
     private func objectColor(_ kind: DatabaseObjectKind) -> Color {
         switch kind {
         case .view, .materializedView: .secondary
-        default: .accentColor
+        default: theme
         }
     }
 

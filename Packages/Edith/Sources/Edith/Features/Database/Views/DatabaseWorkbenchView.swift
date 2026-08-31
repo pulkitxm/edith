@@ -9,7 +9,11 @@ struct DatabaseWorkbenchView: View {
     let data: DatabaseDataWorkspaceModel
     let mutations: DatabaseWorkspaceModel
     var showsObjectNavigator = true
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        AppTheme.accent.rawValue
     @Environment(\.compactLayout) private var compact
+
+    private var theme: Color { themeColor(themeName) }
 
     var body: some View {
         Group {
@@ -37,7 +41,7 @@ struct DatabaseWorkbenchView: View {
             VStack(spacing: UIScale.pt(16)) {
                 Image(systemName: productSymbol(connection.product))
                     .font(.system(size: UIScale.pt(40), weight: .light))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(theme)
                 Text(connection.name)
                     .font(.system(size: UIScale.pt(21), weight: .semibold))
                 Text("\(connection.product.displayName) · \(connection.environmentLabel)")
@@ -46,7 +50,7 @@ struct DatabaseWorkbenchView: View {
                 Button("Connect") {
                     Task { await connections.connectSelected() }
                 }
-                .buttonStyle(.edith(.primary, tint: .accentColor))
+                .buttonStyle(.edith(.primary, tint: theme))
                 .keyboardShortcut(.defaultAction)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -140,7 +144,7 @@ struct DatabaseWorkbenchView: View {
                         Label("New row", systemImage: "plus")
                     }
                 }
-                .buttonStyle(.edith(.primary, tint: .accentColor))
+                .buttonStyle(.edith(.primary, tint: theme))
                 .disabled(data.fields.isEmpty || mutations.hasTrackedMutation)
                 .help("Add a row")
             }
@@ -195,7 +199,7 @@ struct DatabaseWorkbenchView: View {
     private func objectControls(_ connection: DatabaseConnectionSummary) -> some View {
         HStack(spacing: UIScale.pt(7)) {
             Image(systemName: selectedObjectSymbol)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(theme)
             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                 Text(selectedObjectTitle)
                     .font(.system(size: UIScale.pt(11.5), weight: .semibold))
@@ -347,6 +351,7 @@ struct DatabaseWorkbenchView: View {
     private func grid(_ connection: DatabaseConnectionSummary) -> some View {
         VStack(spacing: 0) {
             DatabaseNativeTableView(
+                accent: theme,
                 fields: data.fields,
                 records: data.records,
                 selectedIndex: data.selectedRecordIndex,
@@ -472,7 +477,7 @@ struct DatabaseWorkbenchView: View {
                 Button("Cancel") { data.cancelEditor() }
                     .buttonStyle(.edith(.borderless))
                 Button("Review") { requestEditorMutation(connection) }
-                    .buttonStyle(.edith(.primary, tint: .accentColor))
+                    .buttonStyle(.edith(.primary, tint: theme))
                     .disabled(mutations.hasTrackedMutation || !data.canSubmitEditor)
             }
             .padding(UIScale.pt(12))
@@ -569,7 +574,7 @@ struct DatabaseWorkbenchView: View {
                 .frame(maxWidth: UIScale.pt(410))
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
-                    .buttonStyle(.edith(.primary, tint: .accentColor))
+                    .buttonStyle(.edith(.primary, tint: theme))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

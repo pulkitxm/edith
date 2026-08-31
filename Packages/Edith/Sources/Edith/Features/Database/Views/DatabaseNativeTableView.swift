@@ -3,6 +3,7 @@ import EdithDatabase
 import SwiftUI
 
 struct DatabaseNativeTableView: NSViewRepresentable {
+    let accent: Color
     let fields: [DatabaseFieldDescriptor]
     let records: [DatabaseRecord]
     let selectedIndex: Int?
@@ -94,7 +95,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                     : NSImage(
                         systemSymbolName: "key.fill", accessibilityDescription: "Editable row")
                 cell.imageView?.contentTintColor =
-                    tableView.selectedRow == row ? .controlAccentColor : .tertiaryLabelColor
+                    tableView.selectedRow == row ? NSColor(parent.accent) : .tertiaryLabelColor
                 textField.toolTip =
                     parent.records[row].identity == nil
                     ? "This row has no stable key"
@@ -138,6 +139,12 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         func tableViewSelectionDidChange(_ notification: Notification) {
             guard !applyingSelection, let row = tableView?.selectedRow, row >= 0 else { return }
             parent.select(row)
+        }
+
+        func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+            let rowView = DatabaseNativeRowView()
+            rowView.accentColor = NSColor(parent.accent)
+            return rowView
         }
 
         func tableView(
@@ -318,6 +325,20 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         }
 
         private static let rowColumnIdentifier = "__database_row_number"
+    }
+}
+
+private final class DatabaseNativeRowView: NSTableRowView {
+    var accentColor = NSColor.controlAccentColor
+
+    override func drawSelection(in dirtyRect: NSRect) {
+        guard selectionHighlightStyle != .none else { return }
+        accentColor.withAlphaComponent(isEmphasized ? 0.24 : 0.14).setFill()
+        NSBezierPath(
+            roundedRect: bounds.insetBy(dx: 1, dy: 1),
+            xRadius: 4,
+            yRadius: 4
+        ).fill()
     }
 }
 
