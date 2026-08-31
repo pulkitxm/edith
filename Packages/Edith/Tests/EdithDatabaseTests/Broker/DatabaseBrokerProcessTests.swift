@@ -229,10 +229,10 @@ private final class DatabaseBrokerProcessTestRuntime: @unchecked Sendable {
             state.shutdownReason = reason
             let waiters = state.stopWaiters
             state.stopWaiters.removeAll(keepingCapacity: false)
+            eventLog.append("runtime-stopped-\(eventName(for: reason))")
             return (waiters, state.observeShutdownRequest)
         }
         guard let outcome else { return }
-        eventLog.append("runtime-stopped-\(eventName(for: reason))")
         outcome.1?(reason)
         for waiter in outcome.0 {
             waiter.resume()
@@ -245,10 +245,10 @@ private final class DatabaseBrokerProcessTestRuntime: @unchecked Sendable {
             state.isStopped = true
             let waiters = state.stopWaiters
             state.stopWaiters.removeAll(keepingCapacity: false)
+            eventLog.append("runtime-stopped-without-reason")
             return waiters
         }
         guard let waiters else { return }
-        eventLog.append("runtime-stopped-without-reason")
         for waiter in waiters {
             waiter.resume()
         }
