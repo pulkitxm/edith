@@ -41,6 +41,7 @@ final class DatabaseDataWorkspaceModel {
     private(set) var metadata: DatabasePageMetadata?
     private(set) var editorMode: DatabaseRowEditorMode?
     private(set) var editorFields: [DatabaseRowFieldDraft] = []
+    private(set) var documentText = ""
     private(set) var editorError: String?
     private(set) var selectedObject: DatabaseObjectIdentifier?
 
@@ -76,6 +77,9 @@ final class DatabaseDataWorkspaceModel {
 
     var canSubmitEditor: Bool {
         guard let editorMode else { return false }
+        if activeProduct == .mongoDB {
+            return !documentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
         if editorMode == .insert, activeProduct == .redis || activeProduct == .valkey {
             var includesKey = false
             var includesValue = false
@@ -100,6 +104,7 @@ final class DatabaseDataWorkspaceModel {
         metadata = nil
         editorMode = nil
         editorFields = []
+        documentText = ""
         editorError = nil
         selectedObject = nil
         filterField = ""
@@ -179,13 +184,17 @@ final class DatabaseDataWorkspaceModel {
     }
 
     func beginInsert(_ connection: DatabaseConnectionSummary) {
-        guard supportsDataMutations(connection), !fields.isEmpty else {
+        guard supportsDataMutations(connection), connection.product == .mongoDB || !fields.isEmpty
+        else {
             editorError = mutationUnavailableMessage(connection)
             return
         }
         editorMode = .insert
         editorError = nil
-        if connection.product == .redis || connection.product == .valkey {
+        if connection.product == .mongoDB {
+            editorFields = []
+            documentText = "{\n  \n}"
+        } else if connection.product == .redis || connection.product == .valkey {
             editorFields = [
                 DatabaseRowFieldDraft(
                     id: "key", typeName: "string", originalValue: nil,
@@ -228,6 +237,16 @@ final class DatabaseDataWorkspaceModel {
         }
         editorMode = .update(recordIndex: selectedRecordIndex)
         editorError = nil
+        if connection.product == .mongoDB {
+            editorFields = []
+            do {
+                documentText = try DatabaseJSONDocumentCodec.encodeObject(record.fields)
+            } catch {
+                documentText = ""
+                editorError = "This document contains values that cannot be edited as JSON."
+            }
+            return
+        }
         let redisString = Self.isRedisString(record)
         editorFields = record.fields.map { field in
             let typeName =
@@ -266,6 +285,7 @@ final class DatabaseDataWorkspaceModel {
                 $0.path.segments.joined(separator: ".") == name
             })
         else { return false }
+        if connection.product == .mongoDB { return false }
         if connection.product == .redis || connection.product == .valkey {
             if name == "ttlMilliseconds" { return true }
             return name == "value" && Self.isRedisString(records[index])
@@ -300,6 +320,11 @@ final class DatabaseDataWorkspaceModel {
         editorError = nil
     }
 
+    func updateDocumentText(_ text: String) {
+        documentText = text
+        editorError = nil
+    }
+
     func setEditorFieldIncluded(_ id: String, included: Bool) {
         guard let index = editorFields.firstIndex(where: { $0.id == id }),
             editorFields[index].isEditable
@@ -324,6 +349,7 @@ final class DatabaseDataWorkspaceModel {
     func cancelEditor() {
         editorMode = nil
         editorFields = []
+        documentText = ""
         editorError = nil
     }
 
@@ -340,6 +366,26 @@ final class DatabaseDataWorkspaceModel {
             }
             let objectTarget = try target(connection)
             switch (connection.product, editorMode) {
+            case (.mongoDB, .insert):
+                let request = try DatabaseDocumentMutationRequests.mongoDBInsert(
+                    target: objectTarget,
+                    document: .object(try DatabaseJSONDocumentCodec.decodeObject(documentText)))
+                editorError = nil
+                return request
+            case (.mongoDB, .update(let recordIndex)):
+                guard records.indices.contains(recordIndex),
+                    let identity = records[recordIndex].identity
+                else {
+                    throw DatabaseRowEditorError.missingIdentity
+                }
+                let request = try DatabaseDocumentMutationRequests.mongoDBUpdate(
+                    target: DatabaseTargetIdentifier(
+                        connectionID: objectTarget.connectionID,
+                        object: objectTarget.object,
+                        record: identity),
+                    values: try DatabaseJSONDocumentCodec.decodeObject(documentText))
+                editorError = nil
+                return request
             case (.postgresql, .insert):
                 let request = try DatabaseRowMutationRequests.postgreSQLInsert(
                     target: objectTarget,
@@ -436,6 +482,8 @@ final class DatabaseDataWorkspaceModel {
                 request = try DatabaseKeyspaceMutationRequests.deleteKey(
                     target: target,
                     product: connection.product)
+            } else if connection.product == .mongoDB {
+                request = try DatabaseDocumentMutationRequests.mongoDBDelete(target: target)
             } else {
                 request = try DatabaseRowMutationRequests.postgreSQLDelete(target: target)
             }
@@ -454,6 +502,19 @@ final class DatabaseDataWorkspaceModel {
 
     func text(for value: DatabaseValue) -> String {
         Self.text(for: value)
+    }
+
+    func documentSource(_ record: DatabaseRecord) -> String? {
+        var sourceFields = record.fields
+        if let identity = record.identity,
+            identity.kind == .documentID,
+            let identifier = identity.components.first,
+            !sourceFields.contains(where: { $0.name == identifier.name })
+        {
+            sourceFields.insert(
+                DatabaseObjectField(name: identifier.name, value: identifier.value), at: 0)
+        }
+        return try? DatabaseJSONDocumentCodec.encodeObject(sourceFields)
     }
 
     func value(named name: String, in record: DatabaseRecord) -> DatabaseValue {
@@ -652,7 +713,7 @@ final class DatabaseDataWorkspaceModel {
 
     func supportsDataMutations(_ connection: DatabaseConnectionSummary) -> Bool {
         (connection.product == .postgresql || connection.product == .redis
-            || connection.product == .valkey)
+            || connection.product == .valkey || connection.product == .mongoDB)
             && connection.readOnlyPolicy == .disabled
             && connection.environmentProtection != .readOnly
             && connection.productionPolicy != .prohibitMutations
@@ -660,7 +721,7 @@ final class DatabaseDataWorkspaceModel {
 
     private func mutationUnavailableMessage(_ connection: DatabaseConnectionSummary) -> String {
         if connection.product != .postgresql && connection.product != .redis
-            && connection.product != .valkey
+            && connection.product != .valkey && connection.product != .mongoDB
         {
             return "Data editing is not available for this database yet."
         }
@@ -850,7 +911,23 @@ final class DatabaseDataWorkspaceModel {
                 return "The key mutation could not be created safely."
             }
         }
-        return "The row mutation could not be created."
+        if let requestError = error as? DatabaseDocumentMutationRequestError {
+            switch requestError {
+            case .missingValues: return "Enter at least one document field."
+            case .invalidIdentity: return "This document has no supported stable identifier."
+            case .invalidTarget, .invalidDocument, .duplicateField:
+                return "The document mutation could not be created safely."
+            }
+        }
+        if let documentError = error as? DatabaseJSONDocumentCodecError {
+            switch documentError {
+            case .invalidJSON: return "Enter a valid JSON document."
+            case .invalidDocument: return "The editor requires one JSON object."
+            case .unsupportedValue: return "The document contains an unsupported JSON value."
+            case .resourceLimit: return "The document exceeds the 1 MB editing limit."
+            }
+        }
+        return "The data mutation could not be created."
     }
 
     private static func message(for error: Error) -> String {

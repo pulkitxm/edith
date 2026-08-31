@@ -239,7 +239,7 @@ struct DatabasePage: View {
                     open: { dataWorkspace.open($0, connection: connection) })
             }
         }
-        .background(Color(nsColor: .underPageBackgroundColor))
+        .background(DashSkin.paper2(dark))
     }
 
     private var isConnected: Bool {
@@ -362,7 +362,7 @@ struct DatabasePage: View {
             .accessibilityLabel("Add database connection")
         }
         .padding(UIScale.pt(10))
-        .background(Color(nsColor: .underPageBackgroundColor))
+        .background(DashSkin.paper2(dark))
     }
 
     private var connections: some View {
