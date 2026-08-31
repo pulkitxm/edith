@@ -257,6 +257,7 @@ import Testing
                     "--remote", "80", "--json",
                 ])
                 #expect(added.code == 0)
+                #expect(added.object?["index"] as? Int == 1)
             }
             let listed = await CLIProbe.capture([
                 "machines", "forwards", "ls", "builder", "--json",

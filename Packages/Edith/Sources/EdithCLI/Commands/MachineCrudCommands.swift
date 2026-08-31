@@ -419,7 +419,9 @@ struct MachinesForwardsAddCommand: AsyncParsableCommand {
                 throw CLIFailure(error.localizedDescription)
             }
             guard !json else {
-                CLIOut.json(ForwardBridge.json(forward, index: 0))
+                let stored = try ForwardBridge.forwards(target.id.uuidString).all
+                let index = stored.firstIndex(where: { $0.id == forward.id }).map { $0 + 1 } ?? 0
+                CLIOut.json(ForwardBridge.json(forward, index: index))
                 return
             }
             CLIOut.out("added \(forward.forwardSpec) on \(target.name)")
