@@ -42,7 +42,7 @@ struct DatabaseObjectNavigatorView: View {
                 .help("Reload database objects")
                 .accessibilityLabel("Reload database objects")
             }
-            TextField("Search tables and views", text: searchBinding)
+            TextField("Search database objects", text: searchBinding)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(size: UIScale.pt(11)))
         }
