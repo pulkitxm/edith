@@ -10,6 +10,7 @@ struct SEOAuditProjectView: View {
     @State private var expandedPages = Set<UUID>()
     @State private var confirmsDeletion = false
     @State private var pageSelectionPresented = false
+    @State private var backHovered = false
 
     private var dark: Bool { scheme == .dark }
     private var project: SEOAuditProject {
@@ -55,9 +56,21 @@ struct SEOAuditProjectView: View {
         HStack(spacing: UIScale.pt(12)) {
             Button(action: model.closeProject) {
                 Image(systemName: "chevron.left")
-                    .frame(width: UIScale.pt(24), height: UIScale.pt(24))
+                    .frame(width: UIScale.pt(30), height: UIScale.pt(30))
             }
             .buttonStyle(.edith(.toolbar))
+            .background(
+                backHovered ? DashSkin.paper2(dark) : .clear,
+                in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: UIScale.pt(8))
+                    .strokeBorder(
+                        backHovered ? DashSkin.accent(dark).opacity(0.45) : .clear,
+                        lineWidth: UIScale.pt(1))
+            )
+            .onHover { backHovered = $0 }
+            .animation(.easeOut(duration: 0.14), value: backHovered)
             .disabled(model.isRunning)
             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                 Text(project.name)

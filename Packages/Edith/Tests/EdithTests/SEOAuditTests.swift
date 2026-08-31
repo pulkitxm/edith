@@ -178,6 +178,22 @@ import Testing
         #expect(!source.contains("selectedProject!"))
     }
 
+    @Test func projectBackButtonUsesAStationaryHoverSurface() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent(
+                    "Sources/Edith/Features/SEOAudit/Views/SEOAuditProjectView.swift"),
+            encoding: .utf8)
+
+        #expect(source.contains("@State private var backHovered = false"))
+        #expect(source.contains("backHovered ? DashSkin.paper2(dark) : .clear"))
+        #expect(source.contains("backHovered ? DashSkin.accent(dark).opacity(0.45) : .clear"))
+        #expect(!source.contains("backHovered ? 1."))
+    }
+
     private func page(url: String, date: Date) -> SEOAuditPageResult {
         SEOAuditPageResult(
             url: url, auditedAt: date, statusCode: 200, responseMilliseconds: 20, bytes: 100,
