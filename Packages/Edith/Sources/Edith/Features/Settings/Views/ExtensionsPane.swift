@@ -927,6 +927,7 @@ private struct ExtensionDetailRows: View {
             case .usage: UsageRows()
             case .herdr: HerdrRows()
             case .quinjet: QuinjetRows()
+            case .seoAudit: SEOAuditRows()
             case .system: SystemRows()
             case .appMaintenance: AppMaintenanceRows()
             case .machines: MachinesRows()
@@ -950,6 +951,26 @@ private struct ExtensionDetailRows: View {
                     .settingsCaption()
             }
         }
+    }
+}
+
+private struct SEOAuditRows: View {
+    @AppStorage(AppStorageKeys.Tabs.seoAuditEnabled, store: SharedDefaults.store) private
+        var enabled =
+        false
+
+    var body: some View {
+        Section("Audits") {
+            LabeledContent("Storage", value: "Local")
+            LabeledContent("Lighthouse", value: "Optional CLI")
+            Text(
+                "Discover sitemap pages, choose the URLs to audit, and keep run history per project."
+            )
+            .settingsCaption()
+            Button("Open Site Audit") { SectionWindow.open(.seoAudit) }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
     }
 }
 
