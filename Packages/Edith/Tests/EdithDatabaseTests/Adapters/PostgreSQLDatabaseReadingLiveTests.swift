@@ -17,7 +17,8 @@ private enum PostgreSQLDatabaseReadingLiveEnvironment {
         isEnabled && values["EDITH_DATABASE_POSTGRESQL_TRAVERSAL"] == "1"
 
     static func plan(
-        statementTimeoutMilliseconds: UInt64 = 15_000
+        statementTimeoutMilliseconds: UInt64 = 15_000,
+        readOnly: Bool = true
     ) throws -> PostgreSQLDatabaseConnectionPlan {
         let host = try #require(values["EDITH_DATABASE_POSTGRESQL_HOST"])
         let portText = try #require(values["EDITH_DATABASE_POSTGRESQL_PORT"])
@@ -35,13 +36,14 @@ private enum PostgreSQLDatabaseReadingLiveEnvironment {
             tlsServerName: nil,
             connectTimeoutMilliseconds: 5_000,
             statementTimeoutMilliseconds: statementTimeoutMilliseconds,
-            readOnly: true)
+            readOnly: readOnly)
     }
 
     static func definition(
-        id: DatabaseConnectionID = DatabaseConnectionID()
+        id: DatabaseConnectionID = DatabaseConnectionID(),
+        writable: Bool = false
     ) throws -> DatabaseConnectionDefinition {
-        let plan = try plan()
+        let plan = try plan(readOnly: !writable)
         return DatabaseConnectionDefinition(
             id: id,
             displayName: "PostgreSQL reading live fixture",
@@ -64,22 +66,25 @@ private enum PostgreSQLDatabaseReadingLiveEnvironment {
                 connectionTimeout: try DatabaseTimeout(milliseconds: 5_000),
                 operationTimeout: try DatabaseTimeout(milliseconds: 15_000),
                 poolSize: try DatabasePoolSize(1)),
-            readOnlyPolicy: .required,
-            productionPolicy: .prohibitMutations,
+            readOnlyPolicy: writable ? .disabled : .required,
+            productionPolicy: writable ? .standard : .prohibitMutations,
             environment: DatabaseEnvironmentMetadata(
                 kind: .testing,
                 label: "Testing",
-                protection: .readOnly),
+                protection: writable ? .standard : .readOnly),
             createdAt: Date(timeIntervalSince1970: 1_800_000_000),
             updatedAt: Date(timeIntervalSince1970: 1_800_000_000))
     }
 
     static func session(
-        statementTimeoutMilliseconds: UInt64 = 15_000
+        statementTimeoutMilliseconds: UInt64 = 15_000,
+        writable: Bool = false
     ) async throws -> PostgreSQLDatabaseAdapterSession {
-        let definition = try definition()
+        let definition = try definition(writable: writable)
         let client = try await PostgresNIODatabaseClient.connect(
-            plan(statementTimeoutMilliseconds: statementTimeoutMilliseconds))
+            plan(
+                statementTimeoutMilliseconds: statementTimeoutMilliseconds,
+                readOnly: !writable))
         do {
             let identity = try await client.discoverIdentity()
             return PostgreSQLDatabaseAdapterSession(
@@ -173,10 +178,119 @@ private enum PostgreSQLDatabaseReadingLiveEnvironment {
         }
         await replacement.disconnect()
     }
+
+    static func executeSetup(
+        _ sql: String,
+        client: any PostgreSQLDatabaseClient
+    ) async throws {
+        _ = try await client.executeMutation(
+            PostgreSQLDatabaseMutationPlan(sql: sql, parameters: []))
+    }
 }
 
 @Suite
 struct PostgreSQLDatabaseReadingLiveTests {
+    @Test(.enabled(if: PostgreSQLDatabaseReadingLiveEnvironment.isEnabled))
+    func postgresqlMutationLiveCreatesUpdatesAndDeletesRow() async throws {
+        let table = "edith_mutation_probe"
+        let client = try await PostgresNIODatabaseClient.connect(
+            PostgreSQLDatabaseReadingLiveEnvironment.plan(readOnly: false))
+        let definition = try PostgreSQLDatabaseReadingLiveEnvironment.definition(writable: true)
+        let identity = try await client.discoverIdentity()
+        let session = PostgreSQLDatabaseAdapterSession(
+            connection: definition,
+            productIdentity: identity,
+            client: client)
+        do {
+            try await PostgreSQLDatabaseReadingLiveEnvironment.executeSetup(
+                "DROP TABLE IF EXISTS public.\(table)",
+                client: client)
+            try await PostgreSQLDatabaseReadingLiveEnvironment.executeSetup(
+                "CREATE TABLE public.\(table) (id bigint PRIMARY KEY, name text NOT NULL)",
+                client: client)
+            let target = DatabaseTargetIdentifier(
+                connectionID: definition.id,
+                object: DatabaseObjectIdentifier(kind: .table, path: ["public", table]))
+            let insertRequest = try DatabaseRowMutationRequests.postgreSQLInsert(
+                target: target,
+                values: [
+                    DatabaseObjectField(name: "id", value: .signedInteger(1)),
+                    DatabaseObjectField(name: "name", value: .string("before")),
+                ])
+            let insertPlan = try await session.normalizeMutation(
+                insertRequest,
+                context: PostgreSQLDatabaseReadingLiveEnvironment.context())
+            let insert = try await session.executeMutation(
+                insertPlan,
+                context: PostgreSQLDatabaseReadingLiveEnvironment.context())
+            #expect(insert.effect == .applied)
+            #expect(insert.affectedRecords.value == 1)
+
+            let firstPage = try await session.readPage(
+                PostgreSQLDatabaseReadingLiveEnvironment.browse(
+                    connectionID: definition.id,
+                    relation: table,
+                    pageSize: 10),
+                context: PostgreSQLDatabaseReadingLiveEnvironment.context())
+            let firstRecord = try #require(firstPage.records.first)
+            let firstIdentity = try #require(firstRecord.identity)
+            let recordTarget = DatabaseTargetIdentifier(
+                connectionID: definition.id,
+                object: target.object,
+                record: firstIdentity)
+            let updateRequest = try DatabaseRowMutationRequests.postgreSQLUpdate(
+                target: recordTarget,
+                values: [DatabaseObjectField(name: "name", value: .string("after"))])
+            let updatePlan = try await session.normalizeMutation(
+                updateRequest,
+                context: PostgreSQLDatabaseReadingLiveEnvironment.context())
+            let update = try await session.executeMutation(
+                updatePlan,
+                context: PostgreSQLDatabaseReadingLiveEnvironment.context())
+            #expect(update.effect == .applied)
+
+            let updatedPage = try await session.readPage(
+                PostgreSQLDatabaseReadingLiveEnvironment.browse(
+                    connectionID: definition.id,
+                    relation: table,
+                    pageSize: 10),
+                context: PostgreSQLDatabaseReadingLiveEnvironment.context())
+            #expect(
+                try PostgreSQLDatabaseReadingLiveEnvironment.value(
+                    "name",
+                    in: #require(updatedPage.records.first)) == .string("after"))
+
+            let deleteRequest = try DatabaseRowMutationRequests.postgreSQLDelete(
+                target: recordTarget)
+            let deletePlan = try await session.normalizeMutation(
+                deleteRequest,
+                context: PostgreSQLDatabaseReadingLiveEnvironment.context())
+            let delete = try await session.executeMutation(
+                deletePlan,
+                context: PostgreSQLDatabaseReadingLiveEnvironment.context())
+            #expect(delete.effect == .applied)
+
+            let emptyPage = try await session.readPage(
+                PostgreSQLDatabaseReadingLiveEnvironment.browse(
+                    connectionID: definition.id,
+                    relation: table,
+                    pageSize: 10),
+                context: PostgreSQLDatabaseReadingLiveEnvironment.context())
+            #expect(emptyPage.records.isEmpty)
+            try await PostgreSQLDatabaseReadingLiveEnvironment.executeSetup(
+                "DROP TABLE public.\(table)",
+                client: client)
+        } catch {
+            try? await PostgreSQLDatabaseReadingLiveEnvironment.executeSetup(
+                "DROP TABLE IF EXISTS public.\(table)",
+                client: client)
+            await session.disconnect()
+            throw error
+        }
+        await session.disconnect()
+        print("postgresql mutation live verified insert=1 update=1 delete=1 cleanup=true")
+    }
+
     @Test(.enabled(if: PostgreSQLDatabaseReadingLiveEnvironment.isEnabled))
     func postgresqlReadingLiveDiscoversAndDecodesFixture() async throws {
         let session = try await PostgreSQLDatabaseReadingLiveEnvironment.session()
