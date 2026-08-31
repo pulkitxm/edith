@@ -142,7 +142,9 @@ private struct SEOAuditNewProjectSheet: View {
             HStack(spacing: UIScale.pt(10)) {
                 capability("Sitemap discovery", "point.3.connected.trianglepath.dotted", true)
                 capability(
-                    "Lighthouse available", "gauge.with.needle", model.lighthouseAvailable)
+                    model.lighthouseAvailable
+                        ? "Lighthouse detected" : "Lighthouse not installed",
+                    "gauge.with.needle", model.lighthouseAvailable)
             }
             HStack {
                 Button("Cancel") {
@@ -151,6 +153,11 @@ private struct SEOAuditNewProjectSheet: View {
                 }
                 .keyboardShortcut(.cancelAction)
                 Spacer()
+                if model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Enter a site URL to continue")
+                        .font(.system(size: UIScale.pt(10.5)))
+                        .foregroundStyle(.secondary)
+                }
                 Button(action: model.beginNewProject) {
                     Label("Create and discover", systemImage: "arrow.right")
                 }
