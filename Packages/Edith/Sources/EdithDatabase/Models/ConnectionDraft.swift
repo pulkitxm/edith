@@ -42,7 +42,8 @@ extension DatabaseConnectionDraftError: LocalizedError {
 
 public struct DatabaseConnectionDraft: Hashable, Sendable {
     public static let supportedProducts: [DatabaseProduct] = [
-        .postgresql, .sqlite, .redis, .valkey, .mongoDB, .elasticsearch, .openSearch, .clickHouse,
+        .postgresql, .mysql, .sqlite, .redis, .valkey, .mongoDB, .elasticsearch, .openSearch,
+        .clickHouse,
     ]
 
     public var id: DatabaseConnectionID
@@ -170,7 +171,7 @@ public struct DatabaseConnectionDraft: Hashable, Sendable {
             return DatabaseAuthentication(kind: .none)
         }
         switch product {
-        case .postgresql:
+        case .postgresql, .mysql:
             guard username != nil else { throw DatabaseConnectionDraftError.missingUsername }
             return passwordReference.map {
                 DatabaseAuthentication(kind: .usernameAndPassword, secretReferences: [$0])
@@ -211,7 +212,7 @@ public struct DatabaseConnectionDraft: Hashable, Sendable {
             return DatabaseAuthentication(
                 kind: .usernameAndPassword,
                 secretReferences: [passwordReference])
-        case .mysql, .mariaDB, .sqlite:
+        case .mariaDB, .sqlite:
             throw DatabaseConnectionDraftError.unsupportedProduct(product)
         }
     }
@@ -221,7 +222,8 @@ public struct DatabaseConnectionDraft: Hashable, Sendable {
             return DatabaseTLSConfiguration(mode: .disabled, verification: .none)
         }
         guard
-            product == .postgresql || product == .mongoDB || product == .elasticsearch
+            product == .postgresql || product == .mysql || product == .mongoDB
+                || product == .elasticsearch
                 || product == .openSearch || product == .clickHouse
         else {
             throw DatabaseConnectionDraftError.tlsUnsupported
@@ -240,9 +242,9 @@ public struct DatabaseConnectionDraft: Hashable, Sendable {
                 throw DatabaseConnectionDraftError.invalidLogicalDatabase
             }
             return DatabaseNamespaceDefaults(logicalDatabase: logicalDatabase)
-        case .postgresql, .mongoDB, .clickHouse:
+        case .postgresql, .mysql, .mongoDB, .clickHouse:
             return DatabaseNamespaceDefaults(database: value)
-        case .sqlite, .mysql, .mariaDB, .elasticsearch, .openSearch:
+        case .sqlite, .mariaDB, .elasticsearch, .openSearch:
             return DatabaseNamespaceDefaults()
         }
     }

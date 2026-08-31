@@ -70,7 +70,8 @@ final class DatabaseConnectionCreationModel: Identifiable {
     }
 
     var supportsTLS: Bool {
-        product == .postgresql || product == .mongoDB || product == .elasticsearch
+        product == .postgresql || product == .mysql || product == .mongoDB
+            || product == .elasticsearch
             || product == .openSearch || product == .clickHouse
     }
 
@@ -82,7 +83,7 @@ final class DatabaseConnectionCreationModel: Identifiable {
     }
 
     var usernameRequired: Bool {
-        product == .postgresql || product == .clickHouse
+        product == .postgresql || product == .mysql || product == .clickHouse
             || (product == .mongoDB || product == .elasticsearch || product == .openSearch)
                 && !password.isEmpty
     }

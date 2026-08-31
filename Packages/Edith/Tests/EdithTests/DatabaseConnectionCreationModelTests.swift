@@ -90,6 +90,27 @@ struct DatabaseConnectionCreationModelTests {
         #expect(model.usernameRequired)
     }
 
+    @Test("A MySQL URL fills the relational connection fields")
+    func mysqlConnectionURL() throws {
+        let model = DatabaseConnectionCreationModel(
+            sender: DatabaseConnectionCreationSender(testSucceeds: true),
+            secretStore: try InMemoryDatabaseSecretStore())
+
+        model.updateConnectionURL(
+            "mysql://edith:secret@127.0.0.1:53306/app?ssl-mode=REQUIRED")
+        model.applyConnectionURL()
+
+        #expect(model.urlImportPhase == .applied)
+        #expect(model.product == .mysql)
+        #expect(model.displayName == "app")
+        #expect(model.port == "53306")
+        #expect(model.username == "edith")
+        #expect(model.password == "secret")
+        #expect(model.database == "app")
+        #expect(model.supportsTLS)
+        #expect(model.usernameRequired)
+    }
+
     @Test("A tested connection can be saved with its Keychain reference")
     func testAndSave() async throws {
         let sender = DatabaseConnectionCreationSender(testSucceeds: true)

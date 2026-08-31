@@ -195,13 +195,21 @@ struct DatabaseConnectionDraftTests {
                     DatabaseSQLiteLocation(path: "/tmp/edith.sqlite", accessMode: .readOnly)))
     }
 
-    @Test("Unsupported live products are rejected")
-    func unsupportedProduct() {
-        let draft = DatabaseConnectionDraft(displayName: "MySQL", product: .mysql)
+    @Test("MySQL connections retain their database and TLS policy")
+    func mysql() throws {
+        let draft = DatabaseConnectionDraft(
+            displayName: "MySQL",
+            product: .mysql,
+            username: "edith",
+            database: "app",
+            tlsMode: .required)
 
-        #expect(throws: DatabaseConnectionDraftError.unsupportedProduct(.mysql)) {
-            try draft.definition()
-        }
+        let definition = try draft.definition()
+
+        #expect(definition.productHint == .mysql)
+        #expect(definition.namespaces.database == "app")
+        #expect(definition.authentication.kind == .none)
+        #expect(definition.tls.mode == .required)
     }
 
     @Test("Redis logical database must be canonical and bounded")

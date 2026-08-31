@@ -108,6 +108,8 @@ public enum DatabaseConnectionURLParser {
         return switch scheme {
         case "postgres", "postgresql":
             .postgresql
+        case "mysql":
+            .mysql
         case "redis", "rediss":
             .redis
         case "valkey", "valkeys":
@@ -167,6 +169,18 @@ public enum DatabaseConnectionURLParser {
             return sslMode.map {
                 ["require", "verify-ca", "verify-full"].contains($0)
             } ?? false
+        }
+        if product == .mysql {
+            let mode =
+                queryValue(named: "ssl-mode", in: components)
+                ?? queryValue(named: "sslMode", in: components)
+            if let mode {
+                return !["disabled", "preferred"].contains(mode.lowercased())
+            }
+            let value =
+                queryValue(named: "tls", in: components)
+                ?? queryValue(named: "ssl", in: components)
+            return value?.lowercased() == "true" || value == "1"
         }
         if product == .mongoDB {
             let value =
