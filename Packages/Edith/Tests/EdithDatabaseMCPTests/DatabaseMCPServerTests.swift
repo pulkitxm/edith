@@ -31,7 +31,7 @@ import Testing
             tools.map(\.name)
                 == [
                     "database_connections", "database_capabilities", "database_browse",
-                    "database_query",
+                    "database_query", "database_operations", "database_cancel_operation",
                 ])
         #expect(isError == false)
         guard case let .text(text, _, _)? = content.first else {
