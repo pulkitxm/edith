@@ -509,7 +509,7 @@ private actor CLIDatabaseMCPRunRecorder {
             DatabaseCLIEnvironment.readQueryText = { path in
                 switch path {
                 case "mutation.json": mutationDocument
-                case "preview.json": confirmationDocument
+                case nil: confirmationDocument
                 default: throw CLIFailure.usage("unexpected mutation document")
                 }
             }
@@ -522,7 +522,7 @@ private actor CLIDatabaseMCPRunRecorder {
 
             let result = await CLIProbe.capture([
                 "database", "mutations", "apply", "--request", "mutation.json",
-                "--confirmation", "preview.json", "--yes", "--json",
+                "--confirmation", "-", "--yes", "--json",
             ])
             #expect(result.code == ExitCodes.success)
             #expect(result.object?["effect"] as? String == "applied")

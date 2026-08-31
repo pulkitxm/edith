@@ -355,8 +355,8 @@ struct DatabaseMutationApplyCommand: AsyncParsableCommand {
             guard yes else {
                 throw CLIFailure.usage("database mutation apply requires --yes")
             }
-            guard requestPath != "-", confirmation != "-", requestPath != confirmation else {
-                throw CLIFailure.usage("apply requires two distinct on-disk JSON files")
+            guard requestPath != confirmation else {
+                throw CLIFailure.usage("apply requires distinct request and confirmation inputs")
             }
             let mutation = try DatabaseCLI.decodeDocument(
                 DatabaseDestructiveRequest.self,
