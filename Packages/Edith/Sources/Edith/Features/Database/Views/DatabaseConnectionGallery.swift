@@ -7,6 +7,7 @@ struct DatabaseConnectionGallery: View {
     let createConnection: () -> Void
     let openConnection: (DatabaseConnectionSummary) -> Void
     @State private var hoveredConnectionID: DatabaseConnectionID?
+    @FocusState private var focusedConnectionID: DatabaseConnectionID?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.databaseAppTheme) private var appTheme
@@ -175,6 +176,8 @@ struct DatabaseConnectionGallery: View {
     private func connectionCard(_ connection: DatabaseConnectionSummary) -> some View {
         let session = model.sessionState(for: connection.id)
         let hovered = hoveredConnectionID == connection.id
+        let focused = focusedConnectionID == connection.id
+        let highlighted = hovered || focused
         return Button {
             openConnection(connection)
         } label: {
@@ -182,7 +185,7 @@ struct DatabaseConnectionGallery: View {
                 HStack(alignment: .top, spacing: UIScale.pt(11)) {
                     ZStack {
                         RoundedRectangle(cornerRadius: UIScale.pt(9))
-                            .fill(palette.accent.opacity(hovered ? 0.18 : 0.11))
+                            .fill(palette.accent.opacity(highlighted ? 0.18 : 0.11))
                         Image(systemName: connection.product.gallerySymbolName)
                             .font(.system(size: UIScale.pt(16), weight: .semibold))
                             .foregroundStyle(palette.accent)
@@ -209,7 +212,7 @@ struct DatabaseConnectionGallery: View {
                     Spacer(minLength: 0)
                     Image(systemName: "arrow.up.right")
                         .font(.system(size: UIScale.pt(10), weight: .semibold))
-                        .foregroundStyle(hovered ? palette.accent : palette.inkFaint)
+                        .foregroundStyle(highlighted ? palette.accent : palette.inkFaint)
                         .accessibilityHidden(true)
                 }
                 HStack(spacing: UIScale.pt(6)) {
@@ -251,18 +254,19 @@ struct DatabaseConnectionGallery: View {
             .padding(UIScale.pt(16))
             .frame(maxWidth: .infinity, minHeight: UIScale.pt(178), alignment: .topLeading)
             .background(
-                hovered ? palette.panel : palette.panel.opacity(0.74),
+                highlighted ? palette.panel : palette.panel.opacity(0.74),
                 in: RoundedRectangle(cornerRadius: UIScale.pt(13))
             )
             .overlay {
                 RoundedRectangle(cornerRadius: UIScale.pt(13))
                     .stroke(
-                        hovered ? palette.accent.opacity(0.6) : palette.line,
-                        lineWidth: hovered ? 1.25 : 1)
+                        highlighted ? palette.accent.opacity(0.72) : palette.line,
+                        lineWidth: highlighted ? 1.5 : 1)
             }
             .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(13)))
         }
         .buttonStyle(.plain)
+        .focused($focusedConnectionID, equals: connection.id)
         .onHover { isHovered in
             hoveredConnectionID = isHovered ? connection.id : nil
         }
