@@ -68,8 +68,10 @@ struct DatabaseConnectionDraftTests {
         let definition = try draft.definition()
 
         #expect(definition.authentication.kind == .none)
-        #expect(definition.location == .sqlite(
-            DatabaseSQLiteLocation(path: "/tmp/edith.sqlite", accessMode: .readOnly)))
+        #expect(
+            definition.location
+                == .sqlite(
+                    DatabaseSQLiteLocation(path: "/tmp/edith.sqlite", accessMode: .readOnly)))
     }
 
     @Test("Unsupported live products are rejected")

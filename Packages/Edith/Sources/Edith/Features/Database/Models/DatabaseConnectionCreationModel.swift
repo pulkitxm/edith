@@ -151,7 +151,8 @@ final class DatabaseConnectionCreationModel: Identifiable {
             testedPassword = password
             let version = payload.productIdentity.version.map { " \($0.string)" } ?? ""
             phase = .tested(
-                "Connected to \(payload.productIdentity.product.displayName)\(version) in \(payload.latencyMilliseconds) ms.")
+                "Connected to \(payload.productIdentity.product.displayName)\(version) in \(payload.latencyMilliseconds) ms."
+            )
         } catch {
             await discardSecret()
             testedDraft = nil
