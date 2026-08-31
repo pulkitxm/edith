@@ -77,7 +77,7 @@ private actor CLIDatabaseMCPRunRecorder {
                 ])
         #expect(
             plan(["ed", "database", "connections", ""], 3).candidates
-                == ["list", "ls", "get", "add"])
+                == ["list", "ls", "get", "add", "test"])
         #expect(
             plan(["ed", "database", "connections", "list", "--fav"], 4).candidates
                 == ["--favorites-only"])
@@ -111,6 +111,10 @@ private actor CLIDatabaseMCPRunRecorder {
         #expect(
             try EdRoot.parseAsRoot(["database", "operations", "cancel", UUID().uuidString])
                 is DatabaseOperationsCancelCommand)
+        #expect(
+            try EdRoot.parseAsRoot([
+                "database", "connections", "test", Self.connectionUUID.uuidString,
+            ]) is DatabaseConnectionsTestCommand)
     }
 
     @Test func operationListSendsExactFiltersAndSafeJSON() async throws {
@@ -244,6 +248,54 @@ private actor CLIDatabaseMCPRunRecorder {
             let deadline = try #require(request.operation.deadline)
             #expect(deadline.timeIntervalSince(started) >= 4.5)
             #expect(deadline.timeIntervalSince(started) <= 5.5)
+        }
+    }
+
+    @Test func savedConnectionTestLoadsDefinitionAndKeepsSecretsOutOfOutput() async throws {
+        let connection = try Self.connection()
+        let sender = CLIDatabaseScriptedSender { request in
+            switch request {
+            case .connectionGet:
+                return .connectionGet(
+                    .success(
+                        DatabaseConnectionGetResult(connection: connection),
+                        metadata: Self.completeMetadata))
+            case .connectionTest(let test):
+                return .connectionTest(
+                    .success(
+                        DatabaseConnectionTestResult(
+                            connection: test.connection.identity,
+                            productIdentity: Self.capabilityReport().productIdentity,
+                            capabilities: Self.capabilityReport(),
+                            latencyMilliseconds: 18,
+                            testedAt: Date(timeIntervalSince1970: 8_000)),
+                        metadata: Self.completeMetadata))
+            default:
+                throw DatabaseBrokerCommandClientError.invalidRequest
+            }
+        }
+
+        try await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.makeSender = { sender }
+            let result = await CLIProbe.capture([
+                "database", "connections", "test", Self.connectionUUID.uuidString,
+                "--timeout-milliseconds", "10000", "--json",
+            ])
+
+            #expect(result.code == ExitCodes.success)
+            #expect(result.stderr.isEmpty)
+            #expect(result.object?["latencyMilliseconds"] as? Int == 18)
+            #expect(result.object?["product"] as? String == "postgresql")
+            #expect(!result.stdout.contains(Self.secretUUID.uuidString))
+            #expect(!result.stdout.contains("TOP_SECRET_DATABASE_SOURCE"))
+
+            let requests = await sender.recordedRequests()
+            #expect(requests.count == 2)
+            #expect(
+                requests.first?.connectionGetRequest?.connectionID.rawValue == Self.connectionUUID)
+            let tested = try #require(requests.last?.connectionTestRequest)
+            #expect(tested.connection == connection)
+            #expect(tested.operation.deadline != nil)
         }
     }
 

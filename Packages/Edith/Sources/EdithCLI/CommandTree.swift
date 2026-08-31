@@ -853,6 +853,11 @@ public enum CommandTree {
                                     "--production-policy": .free,
                                 ],
                                 arguments: [.free]),
+                            CommandNode(
+                                "test", "Test one saved database connection.",
+                                options: ["--json", "--help", "--timeout-milliseconds"],
+                                optionValues: ["--timeout-milliseconds": .free],
+                                arguments: [.free]),
                         ]),
                     CommandNode(
                         "capabilities", "Show detected capabilities for one saved connection.",

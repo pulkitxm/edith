@@ -27,6 +27,7 @@ struct DatabaseConnectionsCommand: AsyncParsableCommand {
             DatabaseConnectionsListCommand.self,
             DatabaseConnectionsGetCommand.self,
             DatabaseConnectionsAddCommand.self,
+            DatabaseConnectionsTestCommand.self,
         ],
         defaultSubcommand: DatabaseConnectionsListCommand.self)
 }

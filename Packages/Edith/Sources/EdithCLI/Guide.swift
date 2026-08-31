@@ -123,6 +123,7 @@ public enum Guide {
         printf '%s\n' "$DB_PASSWORD" | ed database connections add "TUF PostgreSQL" --product postgresql --host 127.0.0.1 --port 15432 --username edith --database million_rows --password-stdin
         ed database connections list --product postgresql --environment production
         ed database connections get <connection-id>
+        ed database connections test <connection-id> --timeout-milliseconds 10000 --json
         ed database capabilities <connection-id>
         ed database capabilities <connection-id> --refresh --json
         ed database connect <connection-id> --json
