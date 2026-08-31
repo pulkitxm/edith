@@ -45,6 +45,10 @@ public struct DatabaseMCPToolHandler: Sendable {
                 return try await operations(arguments: parameters.arguments ?? [:])
             case .cancelOperation:
                 return try await cancelOperation(arguments: parameters.arguments ?? [:])
+            case .testConnection:
+                return try await testConnection(arguments: parameters.arguments ?? [:])
+            case .session:
+                return try await session(arguments: parameters.arguments ?? [:])
             }
         } catch is CancellationError {
             return Self.failure(
@@ -269,6 +273,101 @@ public struct DatabaseMCPToolHandler: Sendable {
                 "cancellation_support": .string(payload.cancellationSupport.rawValue),
                 "operation": payload.operation.map(Self.operation) ?? .null,
             ])
+        }
+    }
+
+    private func testConnection(arguments: [String: Value]) async throws -> CallTool.Result {
+        try Self.rejectUnknown(arguments, allowed: ["connection_id", "timeout_ms"])
+        let connectionID = try Self.connectionID(in: arguments)
+        let getResponse = try await sender.send(
+            .connectionGet(DatabaseConnectionGetRequest(connectionID: connectionID)))
+        guard let getResult = getResponse.connectionGetResult else {
+            return Self.responseKindFailure(expected: .connectionGet, actual: getResponse.kind)
+        }
+        guard let getPayload = getResult.payload else {
+            return Self.failure(
+                envelope: getResult.error
+                    ?? DatabaseErrorEnvelope(
+                        category: .internalFailure,
+                        message: "The connection lookup did not contain a payload."),
+                metadata: getResult.metadata)
+        }
+        guard let definition = getPayload.connection else {
+            return Self.failure(
+                category: "notFound", message: "The saved database connection was not found.")
+        }
+        let operation = try operationContext(arguments)
+        let testResponse = try await sender.send(
+            .connectionTest(
+                DatabaseConnectionTestRequest(
+                    connection: definition,
+                    operation: operation)))
+        guard let result = testResponse.connectionTestResult else {
+            return Self.responseKindFailure(expected: .connectionTest, actual: testResponse.kind)
+        }
+        return Self.render(result) { payload in
+            .object([
+                "connection_id": Self.uuid(connectionID.rawValue),
+                "display_name": .string(Self.bounded(payload.connection.displayName)),
+                "product": .string(payload.productIdentity.product.rawValue),
+                "version": Self.optional(payload.productIdentity.version?.string),
+                "latency_ms": Self.unsigned(payload.latencyMilliseconds),
+                "tested_at": Self.date(payload.testedAt),
+                "operation_id": Self.uuid(operation.operationID.rawValue),
+            ])
+        }
+    }
+
+    private func session(arguments: [String: Value]) async throws -> CallTool.Result {
+        try Self.rejectUnknown(arguments, allowed: ["action", "connection_id", "timeout_ms"])
+        let action = try Self.requiredString("action", in: arguments)
+        let connectionID = try Self.connectionID(in: arguments)
+        let operation = try operationContext(arguments)
+        switch action {
+        case "connect":
+            let response = try await sender.send(
+                .connect(
+                    DatabaseConnectRequest(
+                        connectionID: connectionID,
+                        operation: operation)))
+            guard let result = response.connectResult else {
+                return Self.responseKindFailure(expected: .connect, actual: response.kind)
+            }
+            return Self.render(result) { payload in
+                .object([
+                    "action": "connect",
+                    "connection_id": Self.uuid(connectionID.rawValue),
+                    "display_name": .string(Self.bounded(payload.connection.displayName)),
+                    "product": .string(payload.productIdentity.product.rawValue),
+                    "version": Self.optional(payload.productIdentity.version?.string),
+                    "disconnected": .null,
+                    "completed_at": Self.date(payload.connectedAt),
+                    "operation_id": Self.uuid(operation.operationID.rawValue),
+                ])
+            }
+        case "disconnect":
+            let response = try await sender.send(
+                .disconnect(
+                    DatabaseDisconnectRequest(
+                        connectionID: connectionID,
+                        operation: operation)))
+            guard let result = response.disconnectResult else {
+                return Self.responseKindFailure(expected: .disconnect, actual: response.kind)
+            }
+            return Self.render(result) { payload in
+                .object([
+                    "action": "disconnect",
+                    "connection_id": Self.uuid(connectionID.rawValue),
+                    "display_name": .string(Self.bounded(payload.connection.displayName)),
+                    "product": .null,
+                    "version": .null,
+                    "disconnected": .bool(payload.disconnected),
+                    "completed_at": Self.date(payload.disconnectedAt),
+                    "operation_id": Self.uuid(operation.operationID.rawValue),
+                ])
+            }
+        default:
+            throw DatabaseMCPInputError(message: "action must be connect or disconnect.")
         }
     }
 

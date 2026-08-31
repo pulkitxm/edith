@@ -7,11 +7,14 @@ public enum DatabaseMCPToolName: String, CaseIterable, Sendable {
     case query = "database_query"
     case operations = "database_operations"
     case cancelOperation = "database_cancel_operation"
+    case testConnection = "database_test_connection"
+    case session = "database_session"
 }
 
 public enum DatabaseMCPToolCatalog {
     public static let tools: [Tool] = [
         connections, capabilities, browse, query, operations, cancelOperation,
+        testConnection, session,
     ]
 
     public static let connections = Tool(
@@ -287,6 +290,70 @@ public enum DatabaseMCPToolCatalog {
                 "additionalProperties": false,
             ])))
 
+    public static let testConnection = Tool(
+        name: DatabaseMCPToolName.testConnection.rawValue,
+        title: "Test database connection",
+        description: "Test one saved connection without opening a persistent session.",
+        inputSchema: connectionOperationInputSchema(action: false),
+        annotations: .init(
+            title: "Test database connection",
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false),
+        outputSchema: responseSchema(
+            data: .object([
+                "type": "object",
+                "properties": .object([
+                    "connection_id": uuidSchema,
+                    "display_name": .object(["type": "string"]),
+                    "product": .object(["type": "string"]),
+                    "version": .object(["type": .array(["string", "null"])]),
+                    "latency_ms": .object(["type": "integer", "minimum": 0]),
+                    "tested_at": .object(["type": "string"]),
+                    "operation_id": uuidSchema,
+                ]),
+                "required": .array([
+                    "connection_id", "display_name", "product", "version", "latency_ms",
+                    "tested_at", "operation_id",
+                ]),
+                "additionalProperties": false,
+            ])))
+
+    public static let session = Tool(
+        name: DatabaseMCPToolName.session.rawValue,
+        title: "Database session",
+        description: "Explicitly connect or disconnect one saved database session.",
+        inputSchema: connectionOperationInputSchema(action: true),
+        annotations: .init(
+            title: "Manage database session",
+            readOnlyHint: false,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false),
+        outputSchema: responseSchema(
+            data: .object([
+                "type": "object",
+                "properties": .object([
+                    "action": .object([
+                        "type": "string",
+                        "enum": .array(["connect", "disconnect"]),
+                    ]),
+                    "connection_id": uuidSchema,
+                    "display_name": .object(["type": "string"]),
+                    "product": .object(["type": .array(["string", "null"])]),
+                    "version": .object(["type": .array(["string", "null"])]),
+                    "disconnected": .object(["type": .array(["boolean", "null"])]),
+                    "completed_at": .object(["type": "string"]),
+                    "operation_id": uuidSchema,
+                ]),
+                "required": .array([
+                    "action", "connection_id", "display_name", "product", "version",
+                    "disconnected", "completed_at", "operation_id",
+                ]),
+                "additionalProperties": false,
+            ])))
+
     private static let uuidSchema = Value.object([
         "type": "string",
         "format": "uuid",
@@ -409,6 +476,31 @@ public enum DatabaseMCPToolCatalog {
             required.append(contentsOf: ["language", "command"])
         } else {
             required.append(contentsOf: ["object_kind", "object_path"])
+        }
+        return .object([
+            "type": "object",
+            "properties": .object(properties),
+            "required": .array(required.map(Value.string)),
+            "additionalProperties": false,
+        ])
+    }
+
+    private static func connectionOperationInputSchema(action: Bool) -> Value {
+        var properties: [String: Value] = [
+            "connection_id": uuidSchema,
+            "timeout_ms": .object([
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 86400000,
+            ]),
+        ]
+        var required = ["connection_id"]
+        if action {
+            properties["action"] = .object([
+                "type": "string",
+                "enum": .array(["connect", "disconnect"]),
+            ])
+            required.insert("action", at: 0)
         }
         return .object([
             "type": "object",
