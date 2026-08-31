@@ -104,8 +104,8 @@ private actor CLIDatabaseMCPRunRecorder {
         #expect(
             plan(["ed", "database", "mutations", ""], 3).candidates
                 == [
-                    "row-request", "key-request", "preview", "apply", "status", "cancel",
-                    "outcome",
+                    "row-request", "key-request", "document-request", "preview", "apply",
+                    "status", "cancel", "outcome",
                 ])
     }
 
@@ -162,6 +162,12 @@ private actor CLIDatabaseMCPRunRecorder {
                 "database", "mutations", "key-request", Self.connectionUUID.uuidString,
                 "--action", "update", "--key", "session:1", "--value", "ready",
             ]) is DatabaseMutationKeyRequestCommand)
+        #expect(
+            try EdRoot.parseAsRoot([
+                "database", "mutations", "document-request", Self.connectionUUID.uuidString,
+                "--action", "update", "--path", "app", "--path", "people",
+                "--document-id", "507f1f77bcf86cd799439011", "--document", "person.json",
+            ]) is DatabaseMutationDocumentRequestCommand)
         #expect(
             try EdRoot.parseAsRoot([
                 "database", "mutations", "preview", "--request", "mutation.json",
@@ -477,6 +483,44 @@ private actor CLIDatabaseMCPRunRecorder {
             #expect(command == "SET")
             #expect(parameters.map(\.name) == ["key", "value", "ttlPolicy"])
             #expect(parameters.last?.value == .string("persistent"))
+        }
+    }
+
+    @Test func mutationDocumentRequestBuildsBoundMongoDBUpdate() async throws {
+        try await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.readQueryText = { path in
+                #expect(path == "person.json")
+                return "{\"active\":true,\"name\":\"Ada\",\"tags\":[\"math\",\"code\"]}"
+            }
+            let result = await CLIProbe.capture([
+                "database", "mutations", "document-request", Self.connectionUUID.uuidString,
+                "--action", "update", "--path", "app", "--path", "people",
+                "--document-id", "507f1f77bcf86cd799439011", "--document", "person.json",
+            ])
+
+            #expect(result.code == ExitCodes.success)
+            #expect(result.stderr.isEmpty)
+            let request = try JSONDecoder().decode(
+                DatabaseDestructiveRequest.self,
+                from: Data(result.stdout.utf8))
+            #expect(request.target.object?.kind == .collection)
+            #expect(request.target.object?.path == ["app", "people"])
+            #expect(request.target.record?.kind == .documentID)
+            guard
+                case .document(let product, let operation, let parameters, let body) =
+                    request.payload
+            else {
+                Issue.record("expected MongoDB document mutation")
+                return
+            }
+            #expect(product == .mongoDB)
+            #expect(operation == "updateOne")
+            #expect(parameters.isEmpty)
+            guard case .object(let fields) = body else {
+                Issue.record("expected document fields")
+                return
+            }
+            #expect(fields.map(\.name) == ["active", "name", "tags"])
         }
     }
 

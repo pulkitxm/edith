@@ -285,6 +285,14 @@ enum JSONContract {
                 "/path/that/does/not/exist.json", "--json",
             ]),
         JSONCase(
+            "ed database mutations document-request",
+            [
+                "database", "mutations", "document-request",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--action", "delete", "--path",
+                "app", "--path", "people", "--document-id", "507f1f77bcf86cd799439011",
+                "--json",
+            ]),
+        JSONCase(
             "ed database mutations preview",
             [
                 "database", "mutations", "preview", "--request",

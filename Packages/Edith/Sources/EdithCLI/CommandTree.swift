@@ -980,6 +980,17 @@ public enum CommandTree {
                                     "--value": .free, "--ttl-milliseconds": .free,
                                 ], arguments: [.free]),
                             CommandNode(
+                                "document-request",
+                                "Build a safe MongoDB document mutation request.",
+                                options: [
+                                    "--json", "--help", "--action", "--path", "--document",
+                                    "--document-id", "--id-kind",
+                                ],
+                                optionValues: [
+                                    "--action": .free, "--path": .free, "--document": .free,
+                                    "--document-id": .free, "--id-kind": .free,
+                                ], arguments: [.free]),
+                            CommandNode(
                                 "preview", "Preview a destructive request without applying it.",
                                 options: [
                                     "--json", "--help", "--request", "--timeout-milliseconds",

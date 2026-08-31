@@ -37,6 +37,7 @@ The bare command runs `ed database connections`, which in turn runs
 | `ed database mutations` | Builds, previews, applies, and reconciles guarded mutations. |
 | `ed database mutations row-request` | Builds a canonical PostgreSQL row request. |
 | `ed database mutations key-request` | Builds a canonical Redis or Valkey key request. |
+| `ed database mutations document-request` | Builds a canonical MongoDB document request from bounded JSON. |
 | `ed database mutations preview` | Produces a safety preview and confirmation document. |
 | `ed database mutations apply` | Applies the exact request bound to a fresh confirmation. |
 | `ed database mutations status` | Checks an accepted asynchronous mutation. |
