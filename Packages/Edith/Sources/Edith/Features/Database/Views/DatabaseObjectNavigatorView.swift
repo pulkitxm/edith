@@ -156,13 +156,13 @@ struct DatabaseObjectNavigatorView: View {
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(DashSkin.warn)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
         }
         if group.nextContinuation != nil {
             Button("Load more objects") {
                 explorer.loadGroup(group.identifier, connection: connection, appending: true)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .font(.system(size: UIScale.pt(10.5), weight: .medium))
             .foregroundStyle(DashSkin.accent(dark))
         }
