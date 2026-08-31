@@ -74,12 +74,80 @@ private actor CLIDatabaseMCPRunRecorder {
                 == ["connections", "capabilities", "mcp"])
         #expect(
             plan(["ed", "database", "connections", ""], 3).candidates
-                == ["list", "ls", "get"])
+                == ["list", "ls", "get", "add"])
         #expect(
             plan(["ed", "database", "connections", "list", "--fav"], 4).candidates
                 == ["--favorites-only"])
         #expect(
             plan(["ed", "database", "connections", "get", "36fc"], 4).candidates.isEmpty)
+    }
+
+    @Test func connectionAddTestsStoresAndKeepsCredentialOutOfOutput() async throws {
+        let store = try InMemoryDatabaseSecretStore()
+        let sender = CLIDatabaseScriptedSender { request in
+            switch request {
+            case .connectionTest(let testRequest):
+                let identity = DatabaseProductIdentity(
+                    product: .postgresql,
+                    version: DatabaseVersion(string: "17.4"),
+                    topology: DatabaseTopology(kind: .standalone))
+                let report = DatabaseCapabilityReport(
+                    productIdentity: identity,
+                    capabilities: [],
+                    discoveredAt: Date(timeIntervalSince1970: 2_000))
+                return .connectionTest(
+                    .success(
+                        DatabaseConnectionTestResult(
+                            connection: testRequest.connection.identity,
+                            productIdentity: identity,
+                            capabilities: report,
+                            latencyMilliseconds: 12,
+                            testedAt: Date(timeIntervalSince1970: 2_000)),
+                        metadata: Self.completeMetadata))
+            case .connectionSave(let saveRequest):
+                return .connectionSave(
+                    .success(
+                        DatabaseConnectionSaveResult(connection: saveRequest.connection),
+                        metadata: Self.completeMetadata))
+            default:
+                throw DatabaseBrokerCommandClientError.invalidRequest
+            }
+        }
+
+        try await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.makeSender = { sender }
+            DatabaseCLIEnvironment.makeSecretStore = { store }
+            DatabaseCLIEnvironment.readPassword = { "TOP_SECRET_DATABASE_PASSWORD" }
+            let result = await CLIProbe.capture([
+                "database", "connections", "add", "TUF PostgreSQL",
+                "--product", "postgresql",
+                "--host", "127.0.0.1",
+                "--port", "15432",
+                "--username", "edith",
+                "--database", "million_rows",
+                "--password-stdin",
+                "--json",
+            ])
+
+            #expect(result.code == ExitCodes.success)
+            #expect(result.stderr.isEmpty)
+            #expect(!result.stdout.contains("TOP_SECRET_DATABASE_PASSWORD"))
+            #expect(!result.stdout.contains("passwordReference"))
+            let output = try #require(result.object)
+            #expect(output["testedProduct"] as? String == "postgresql")
+            #expect(output["latencyMilliseconds"] as? Int == 12)
+
+            let requests = await sender.recordedRequests()
+            #expect(requests.count == 2)
+            let tested = try #require(requests[0].connectionTestRequest?.connection)
+            let saved = try #require(requests[1].connectionSaveRequest?.connection)
+            #expect(tested == saved)
+            #expect(tested.displayName == "TUF PostgreSQL")
+            #expect(tested.environment.protection == .confirmationRequired)
+            #expect(tested.readOnlyPolicy == .required)
+            let reference = try #require(tested.authentication.secretReferences.first)
+            #expect(try await store.read(reference) == Data("TOP_SECRET_DATABASE_PASSWORD".utf8))
+        }
     }
 
     @Test func databaseMCPStartsTheInjectedServerWithoutCLIOutput() async {

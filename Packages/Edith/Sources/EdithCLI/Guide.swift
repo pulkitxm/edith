@@ -120,6 +120,7 @@ public enum Guide {
 
         ```
         ed database connections
+        printf '%s\n' "$DB_PASSWORD" | ed database connections add "TUF PostgreSQL" --product postgresql --host 127.0.0.1 --port 15432 --username edith --database million_rows --password-stdin
         ed database connections list --product postgresql --environment production
         ed database connections get <connection-id>
         ed database capabilities <connection-id>
@@ -129,6 +130,9 @@ public enum Guide {
 
         The bare `database` command defaults to `connections`, and bare `connections`
         defaults to `list`. Use `--json` for stable fields and UUID connection ids.
+        `connections add` tests the exact connection through the broker before saving it.
+        Passwords are accepted only from stdin and stored in Keychain; arguments and
+        output contain no credential values or Keychain identifiers.
         Capability discovery uses the cached report when possible. `--refresh` asks the
         broker to reconnect and discover the current product, version, topology,
         permissions, limits, supported operations, and safety limitations.
