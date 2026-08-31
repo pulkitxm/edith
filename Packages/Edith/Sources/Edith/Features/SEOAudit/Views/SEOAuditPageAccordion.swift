@@ -46,6 +46,7 @@ struct SEOAuditPageAccordion: View {
                             .font(.system(size: UIScale.pt(9), weight: .semibold))
                             .foregroundStyle(.tertiary)
                             .rotationEffect(.degrees(expanded ? 90 : 0))
+                            .animation(.easeOut(duration: 0.16), value: expanded)
                     }
                     .padding(.trailing, UIScale.pt(14))
                     .frame(minHeight: UIScale.pt(58))
@@ -57,7 +58,6 @@ struct SEOAuditPageAccordion: View {
                 Divider().padding(.horizontal, UIScale.pt(14))
                 detail
                     .padding(UIScale.pt(14))
-                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
@@ -65,7 +65,6 @@ struct SEOAuditPageAccordion: View {
             RoundedRectangle(cornerRadius: UIScale.pt(12))
                 .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1))
         )
-        .animation(.easeOut(duration: 0.16), value: expanded)
     }
 
     private var statusMark: some View {

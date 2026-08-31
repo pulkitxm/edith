@@ -267,19 +267,101 @@ struct SEOAuditProjectView: View {
     }
 
     private var runPicker: some View {
-        Picker(
-            "Run",
-            selection: Binding(
-                get: { model.selectedRunID ?? project.runs.first?.id ?? UUID() },
-                set: model.selectRun
-            )
-        ) {
-            ForEach(project.runs) { run in
-                Text(run.startedAt.formatted(date: .abbreviated, time: .shortened))
-                    .tag(run.id)
+        HStack(spacing: UIScale.pt(8)) {
+            Text("RUN HISTORY")
+                .font(DashSkin.mono(8.5, weight: .bold))
+                .tracking(0.6)
+                .foregroundStyle(.tertiary)
+            Button {
+                selectRun(at: selectedRunIndex + 1)
+            } label: {
+                Image(systemName: "chevron.left")
             }
+            .buttonStyle(.edith(.toolbar))
+            .help("Older run")
+            .disabled(selectedRunIndex >= project.runs.count - 1)
+            Menu {
+                ForEach(Array(project.runs.enumerated()), id: \.element.id) { index, run in
+                    Button {
+                        model.selectRun(run.id)
+                    } label: {
+                        if run.id == model.selectedRun?.id {
+                            Label(runMenuLabel(run, index: index), systemImage: "checkmark")
+                        } else {
+                            Text(runMenuLabel(run, index: index))
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: UIScale.pt(9)) {
+                    Circle().fill(runStateColor(model.selectedRun?.state))
+                        .frame(width: UIScale.pt(7), height: UIScale.pt(7))
+                    VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                        Text(
+                            model.selectedRun?.startedAt.formatted(
+                                .dateTime.month(.abbreviated).day().hour().minute()) ?? "No run"
+                        )
+                        .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                        Text(
+                            model.selectedRun.map {
+                                "\($0.pages.count) pages · \($0.state.rawValue)"
+                            } ?? "Choose a saved run"
+                        )
+                        .font(DashSkin.mono(8.5))
+                        .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: UIScale.pt(12))
+                    Text("\(selectedRunIndex + 1) / \(project.runs.count)")
+                        .font(DashSkin.mono(9, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: UIScale.pt(8), weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, UIScale.pt(11))
+                .frame(minWidth: UIScale.pt(250), minHeight: UIScale.pt(38))
+                .background(
+                    DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(9))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: UIScale.pt(9))
+                        .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1)))
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            Button {
+                selectRun(at: selectedRunIndex - 1)
+            } label: {
+                Image(systemName: "chevron.right")
+            }
+            .buttonStyle(.edith(.toolbar))
+            .help("Newer run")
+            .disabled(selectedRunIndex <= 0)
         }
-        .frame(maxWidth: UIScale.pt(230))
+    }
+
+    private var selectedRunIndex: Int {
+        project.runs.firstIndex { $0.id == model.selectedRun?.id } ?? 0
+    }
+
+    private func selectRun(at index: Int) {
+        guard project.runs.indices.contains(index) else { return }
+        model.selectRun(project.runs[index].id)
+    }
+
+    private func runMenuLabel(_ run: SEOAuditRun, index: Int) -> String {
+        let date = run.startedAt.formatted(date: .abbreviated, time: .shortened)
+        return "\(index + 1). \(date), \(run.pages.count) pages"
+    }
+
+    private func runStateColor(_ state: SEOAuditRunState?) -> Color {
+        switch state {
+        case .completed: DashSkin.ok
+        case .running: DashSkin.accent(dark)
+        case .cancelled: DashSkin.warn
+        case .failed: DashSkin.danger
+        case nil: .secondary
+        }
     }
 
     private var filters: some View {
