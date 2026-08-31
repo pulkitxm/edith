@@ -1,4 +1,5 @@
 import Foundation
+import MySQLNIO
 import NIOCore
 import NIOEmbedded
 import NIOPosix
@@ -169,6 +170,26 @@ private actor MySQLDatabaseFoundationTestClient: MySQLDatabaseClient {
 
     func discoveries() -> Int {
         discoveryCount
+    }
+}
+
+@Test func mysqlFoundationValueCodecBuildsTypedBindsAndEmptyResults() throws {
+    let signed = try MySQLDatabaseValueCodec.bind(.signedInteger(-42))
+    let unsigned = try MySQLDatabaseValueCodec.bind(.unsignedInteger(UInt64.max))
+    let binary = try MySQLDatabaseValueCodec.bind(.binary(Data([0, 1, 255])))
+
+    #expect(signed.int64 == -42)
+    #expect(!signed.isUnsigned)
+    #expect(unsigned.uint64 == UInt64.max)
+    #expect(unsigned.isUnsigned)
+    #expect(binary.buffer.map { Data($0.readableBytesView) } == Data([0, 1, 255]))
+    #expect(try MySQLDatabaseValueCodec.result([]).rows.isEmpty)
+    #expect(throws: MySQLDatabaseDriverFailure.configuration) {
+        try MySQLDatabaseReadPlan(
+            sql: "SELECT 1",
+            binds: [],
+            maximumResponseBytes: DatabaseAdapterBounds.maximumPageBytes + 1
+        ).validate()
     }
 }
 
