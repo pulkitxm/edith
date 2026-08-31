@@ -179,7 +179,9 @@ final class DatabaseObjectExplorerModel {
                     .browse(
                         Self.discoveryRequest(
                             connectionID: connection.id,
-                            object: DatabaseObjectIdentifier(kind: .server, path: []))))
+                            object: DatabaseObjectIdentifier(
+                                kind: .database,
+                                path: [connection.defaultDatabase ?? connection.name]))))
                 try Task.checkCancellation()
                 let page = try Self.page(from: response)
                 let groups = try Self.postgreSQLGroups(from: page.records)
@@ -277,10 +279,13 @@ final class DatabaseObjectExplorerModel {
     private static func page(
         from response: DatabaseBrokerCommandResponse
     ) throws -> EdithDatabase.DatabasePage<DatabaseRecord> {
-        guard case .browse(let result) = response,
-            result.status != .failed,
-            let page = result.payload?.page
-        else {
+        guard case .browse(let result) = response else {
+            throw DatabaseObjectExplorerError.invalidResponse
+        }
+        if result.status == .failed {
+            throw result.error ?? DatabaseObjectExplorerError.invalidResponse
+        }
+        guard let page = result.payload?.page else {
             throw DatabaseObjectExplorerError.invalidResponse
         }
         return page
@@ -345,6 +350,8 @@ final class DatabaseObjectExplorerModel {
 
     private static func message(for error: Error) -> String {
         switch error {
+        case let error as DatabaseErrorEnvelope:
+            error.message
         case DatabaseObjectExplorerError.invalidResponse:
             "The database returned an unexpected discovery response."
         case DatabaseObjectExplorerError.invalidRecord:

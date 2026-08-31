@@ -23,7 +23,9 @@ struct DatabaseObjectExplorerModelTests {
 
         let requests = await sender.recordedRequests().compactMap(\.browseRequest)
         #expect(requests.count == 2)
-        #expect(requests[0].target.object == DatabaseObjectIdentifier(kind: .server, path: []))
+        #expect(
+            requests[0].target.object
+                == DatabaseObjectIdentifier(kind: .database, path: ["app"]))
         #expect(
             requests[1].target.object == DatabaseObjectIdentifier(kind: .schema, path: ["public"]))
         #expect(requests.allSatisfy { $0.page.pageSize.value == 100 })
@@ -81,6 +83,24 @@ struct DatabaseObjectExplorerModelTests {
         #expect(model.selectedObject == expected)
         #expect(model.groups.first?.objects.first?.identifier == expected)
         #expect(await sender.recordedRequests().isEmpty)
+    }
+
+    @Test("Discovery surfaces broker failures")
+    func discoveryFailure() async throws {
+        let message = "The selected object kind is not supported for discovery."
+        let completeness = DatabaseResultCompleteness(state: .complete)
+        let sender = DatabaseObjectExplorerScriptedSender(responses: [
+            .browse(
+                .failure(
+                    DatabaseErrorEnvelope(category: .unsupported, message: message),
+                    metadata: DatabaseResultMetadata(completeness: completeness)))
+        ])
+        let model = DatabaseObjectExplorerModel(sender: sender)
+
+        model.load(try Self.connection(product: .postgresql))
+        await Self.waitUntil { model.state == .failed(message) }
+
+        #expect(model.state == .failed(message))
     }
 
     private static func connection(
