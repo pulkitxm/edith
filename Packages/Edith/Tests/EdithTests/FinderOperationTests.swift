@@ -626,7 +626,7 @@ private final class PausedPreviewImageLoader {
 
         await model.perform(
             intent: .transferBetweenMachines(
-                from: sourceSession.machine.id, paths: [source.path]),
+                from: sourceSession.machine.id, paths: [source.path], moving: false),
             destination: missingDestination.path)
 
         #expect(FileManager.default.fileExists(atPath: source.path))
@@ -655,7 +655,7 @@ private final class PausedPreviewImageLoader {
 
         await model.commit(
             intent: .transferBetweenMachines(
-                from: sourceSession.machine.id, paths: [missing.path]),
+                from: sourceSession.machine.id, paths: [missing.path], moving: false),
             destination: destinationRoot.path,
             resolutions: ["report.txt": .keepBoth])
 
@@ -750,6 +750,65 @@ private final class PausedPreviewImageLoader {
 
         #expect(exists("copying.txt", in: root))
         #expect(exists("inner/copying.txt", in: root))
+    }
+
+    @Test func copyThenPasteBetweenMachinesLeavesTheOriginal() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-cross-machine-copy-\(UUID().uuidString)")
+        let sourceRoot = root.appendingPathComponent("source")
+        let destinationRoot = root.appendingPathComponent("destination")
+        try FileManager.default.createDirectory(
+            at: sourceRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: destinationRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write("copying.txt", into: sourceRoot, contents: "body")
+        let sourceSession = MachinesModel.shared.session(for: MachinesModel.localMachineID)
+        let source = FinderModel(session: sourceSession, path: sourceRoot.path)
+        let destination = FinderModel(
+            session: MachineSession(
+                machine: Machine(name: "Destination", host: "localhost"), local: true),
+            path: destinationRoot.path)
+        await source.load()
+        await destination.load()
+
+        source.selection = Set(source.entries.map(\.path))
+        source.copySelection(operation: .copy)
+        await destination.paste()
+
+        #expect(exists("copying.txt", in: sourceRoot))
+        #expect(exists("copying.txt", in: destinationRoot))
+        #expect(destination.errorMessage == nil)
+    }
+
+    @Test func cutThenPasteBetweenMachinesRemovesTheOriginalAfterTransfer() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-cross-machine-move-\(UUID().uuidString)")
+        let sourceRoot = root.appendingPathComponent("source")
+        let destinationRoot = root.appendingPathComponent("destination")
+        try FileManager.default.createDirectory(
+            at: sourceRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: destinationRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write("moving.txt", into: sourceRoot, contents: "body")
+        let sourceSession = MachinesModel.shared.session(for: MachinesModel.localMachineID)
+        let source = FinderModel(session: sourceSession, path: sourceRoot.path)
+        let destination = FinderModel(
+            session: MachineSession(
+                machine: Machine(name: "Destination", host: "localhost"), local: true),
+            path: destinationRoot.path)
+        await source.load()
+        await destination.load()
+
+        source.selection = Set(source.entries.map(\.path))
+        source.copySelection(operation: .move)
+        await destination.paste()
+
+        #expect(!exists("moving.txt", in: sourceRoot))
+        #expect(exists("moving.txt", in: destinationRoot))
+        #expect(destination.errorMessage == nil)
+        #expect(FinderModel.clipboard == nil)
     }
 
     @Test func draggingOntoAFolderMovesIntoIt() async throws {

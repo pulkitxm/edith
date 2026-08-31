@@ -214,7 +214,14 @@ final class FinderModel {
     func paste() async {
         guard let clipboard = Self.clipboard else { return }
         guard clipboard.machineID == session.machine.id else {
-            errorMessage = "Copying between machines is not supported yet."
+            await perform(
+                intent: .transferBetweenMachines(
+                    from: clipboard.machineID, paths: clipboard.paths,
+                    moving: clipboard.operation == .move),
+                destination: path)
+            if clipboard.operation == .move, errorMessage == nil {
+                Self.clipboard = nil
+            }
             return
         }
         let isCopy = clipboard.operation == .copy
@@ -1012,16 +1019,16 @@ final class FinderModel {
             await uploadPaths(
                 paths.map { URL(fileURLWithPath: $0) }, into: destination,
                 resolutions: resolutions)
-        case let .transferBetweenMachines(from, paths):
+        case let .transferBetweenMachines(from, paths, moving):
             await transfer(
                 paths: paths, fromMachine: from, into: destination,
-                resolutions: resolutions)
+                resolutions: resolutions, moving: moving)
         }
     }
 
     private func transfer(
         paths: [String], fromMachine: UUID, into destination: String,
-        resolutions: [String: NameConflictResolution]
+        resolutions: [String: NameConflictResolution], moving: Bool
     ) async {
         guard let sourceSession = MachinesModel.shared.sessions[fromMachine] else {
             errorMessage = "The source machine is unavailable."
@@ -1053,7 +1060,23 @@ final class FinderModel {
                 await self?.setTransferProgress(
                     title: "Transferring", processed: processed, total: total)
             }
-            finishTransfer(outcome, verb: "Transferred")
+            if moving, !outcome.completed.isEmpty {
+                let removal = await MachineFileOperationExecution.remove(
+                    MachineFileRemovalPlan(
+                        paths: outcome.completed.map(\.sourcePath), permanently: true),
+                    confirmed: true, platform: sourceSession.remotePlatform ?? .linux
+                ) { command, timeout in
+                    await sourceSession.runCommand(command, timeout: timeout)
+                }
+                if case let .failure(error) = removal {
+                    errorMessage =
+                        "The items were copied, but their originals could not be removed: "
+                        + error.localizedDescription
+                }
+            }
+            if errorMessage == nil {
+                finishTransfer(outcome, verb: moving ? "Moved" : "Transferred")
+            }
         } catch is CancellationError {
         } catch {
             errorMessage = error.localizedDescription
@@ -1225,6 +1248,7 @@ private struct FinderRevealProjection: Sendable {
 extension DropIntent {
     var isMove: Bool {
         if case .moveWithinMachine = self { return true }
+        if case let .transferBetweenMachines(_, _, moving) = self { return moving }
         return false
     }
 }
