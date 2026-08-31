@@ -42,13 +42,18 @@ public enum PowerShell {
 
     public static func invocation(_ words: [String]) -> String? {
         guard let first = words.first else { return nil }
-        guard words.count > 1 else { return first }
-        return "& " + words.map(literal).joined(separator: " ")
+        let invocation = "& " + ([first] + words.dropFirst()).map(literal).joined(separator: " ")
+        return "$ProgressPreference='SilentlyContinue'; $ErrorActionPreference='Stop'; try { "
+            + invocation + "; $edithExitCode=$LASTEXITCODE; "
+            + "if ($null -ne $edithExitCode) { exit $edithExitCode } } catch { "
+            + "[Console]::Error.WriteLine($_.Exception.Message); exit 1 }"
     }
 
     private static func executable(arguments: [String], script: String) -> String {
         let data = script.data(using: .utf16LittleEndian) ?? Data()
-        let options = (["-NoLogo", "-NoProfile"] + arguments + ["-ExecutionPolicy", "Bypass"])
+        let options =
+            (["-NoLogo", "-NoProfile"] + arguments
+                + ["-OutputFormat", "Text", "-ExecutionPolicy", "Bypass"])
             .joined(separator: " ")
         return "powershell.exe \(options) -EncodedCommand \(data.base64EncodedString())"
     }

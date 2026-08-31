@@ -130,9 +130,23 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
 
     @Test func encodesCommandsAsUTF16LE() throws {
         let command = PowerShell.command("Write-Output 'hello'")
+        #expect(command.contains("-OutputFormat Text"))
         let encoded = try #require(command.split(separator: " ").last)
         let data = try #require(Data(base64Encoded: String(encoded)))
         #expect(String(data: data, encoding: .utf16LittleEndian) == "Write-Output 'hello'")
+    }
+
+    @Test func invocationsPropagateNativeAndPowerShellFailures() throws {
+        let single = try #require(PowerShell.invocation(["Get-Date"]))
+        let native = try #require(PowerShell.invocation(["cmd.exe", "/c", "exit /b 7"]))
+
+        #expect(
+            single.hasPrefix(
+                "$ProgressPreference='SilentlyContinue'; $ErrorActionPreference='Stop'; try { "
+                    + "& 'Get-Date'"))
+        #expect(native.contains("& 'cmd.exe' '/c' 'exit /b 7'"))
+        #expect(native.contains("exit $edithExitCode"))
+        #expect(native.contains("[Console]::Error.WriteLine($_.Exception.Message); exit 1"))
     }
 }
 
