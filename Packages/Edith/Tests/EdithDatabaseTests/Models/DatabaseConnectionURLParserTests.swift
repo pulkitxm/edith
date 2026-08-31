@@ -96,6 +96,29 @@ struct DatabaseConnectionURLParserTests {
         #expect(secure.tlsEnabled)
     }
 
+    @Test func parsesClickHouseURLs() throws {
+        let explicit = try DatabaseConnectionURLParser.parse(
+            "clickhouse://edith:p%40ss@127.0.0.1:58123/analytics")
+        let secure = try DatabaseConnectionURLParser.parse(
+            "clickhouses://default@analytics.example.com/warehouse")
+        let selected = try DatabaseConnectionURLParser.parse(
+            "https://edith:secret@analytics.example.com/warehouse",
+            preferredProduct: .clickHouse)
+
+        #expect(explicit.product == .clickHouse)
+        #expect(explicit.host == "127.0.0.1")
+        #expect(explicit.port == 58_123)
+        #expect(explicit.username == "edith")
+        #expect(explicit.password == "p@ss")
+        #expect(explicit.database == "analytics")
+        #expect(!explicit.tlsEnabled)
+        #expect(secure.product == .clickHouse)
+        #expect(secure.port == 8_123)
+        #expect(secure.tlsEnabled)
+        #expect(selected.product == .clickHouse)
+        #expect(selected.tlsEnabled)
+    }
+
     @Test func rejectsUnsupportedAndSecureRedisSchemes() {
         #expect(throws: DatabaseConnectionURLError.unsupportedScheme("mysql")) {
             try DatabaseConnectionURLParser.parse("mysql://localhost/app")

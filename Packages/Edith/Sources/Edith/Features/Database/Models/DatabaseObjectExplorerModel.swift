@@ -149,6 +149,8 @@ final class DatabaseObjectExplorerModel {
             groups = [group]
             state = .loaded
             loadGroup(group.identifier, connection: connection)
+        case .clickHouse:
+            loadClickHouse(connection)
         default:
             state = .failed(
                 "Automatic object discovery is not available for \(connection.product.displayName) yet."
@@ -241,6 +243,34 @@ final class DatabaseObjectExplorerModel {
         activeTask = task
     }
 
+    private func loadClickHouse(_ connection: DatabaseConnectionSummary) {
+        activeTask?.cancel()
+        let requestGeneration = UUID()
+        generation = requestGeneration
+        state = .loading
+        let sender = sender
+        let task = Task { [weak self] in
+            do {
+                let response = try await sender.send(
+                    .browse(
+                        Self.discoveryRequest(
+                            connectionID: connection.id,
+                            object: nil)))
+                try Task.checkCancellation()
+                let page = try Self.page(from: response)
+                let groups = try Self.clickHouseGroups(from: page.records)
+                self?.finishClickHouseGroups(
+                    groups,
+                    connection: connection,
+                    generation: requestGeneration)
+            } catch is CancellationError {
+            } catch {
+                self?.fail(error, generation: requestGeneration)
+            }
+        }
+        activeTask = task
+    }
+
     private func finishPostgreSQLGroups(
         _ discoveredGroups: [DatabaseExplorerGroup],
         connection: DatabaseConnectionSummary,
@@ -255,6 +285,23 @@ final class DatabaseObjectExplorerModel {
             let group = groups.first(where: {
                 $0.identifier.path == [preferredSchema] && $0.isAvailable
             }) ?? groups.first(where: \.isAvailable)
+        else { return }
+        loadGroup(group.identifier, connection: connection)
+    }
+
+    private func finishClickHouseGroups(
+        _ discoveredGroups: [DatabaseExplorerGroup],
+        connection: DatabaseConnectionSummary,
+        generation: UUID
+    ) {
+        guard self.generation == generation, activeConnectionID == connection.id else { return }
+        groups = discoveredGroups
+        state = .loaded
+        activeTask = nil
+        guard
+            let group = connection.defaultDatabase.flatMap({ database in
+                groups.first(where: { $0.identifier.path == [database] })
+            }) ?? groups.first
         else { return }
         loadGroup(group.identifier, connection: connection)
     }
@@ -303,7 +350,7 @@ final class DatabaseObjectExplorerModel {
 
     private static func discoveryRequest(
         connectionID: DatabaseConnectionID,
-        object: DatabaseObjectIdentifier,
+        object: DatabaseObjectIdentifier?,
         continuation: DatabaseContinuationToken? = nil
     ) -> DatabaseBrowseRequest {
         DatabaseBrowseRequest(
@@ -351,6 +398,21 @@ final class DatabaseObjectExplorerModel {
         }
     }
 
+    private static func clickHouseGroups(
+        from records: [DatabaseRecord]
+    ) throws -> [DatabaseExplorerGroup] {
+        try records.map { record in
+            let name = try string("name", in: record)
+            return DatabaseExplorerGroup(
+                identifier: DatabaseObjectIdentifier(kind: .database, path: [name]),
+                title: name,
+                isAvailable: true,
+                objects: [],
+                state: .idle,
+                nextContinuation: nil)
+        }
+    }
+
     private static func objects(
         from records: [DatabaseRecord],
         parent: DatabaseObjectIdentifier
@@ -359,6 +421,7 @@ final class DatabaseObjectExplorerModel {
             guard let name = try? string("name", in: record) else { return nil }
             let kind =
                 stringIfPresent("kind", in: record).flatMap(DatabaseObjectKind.init(rawValue:))
+                ?? clickHouseKind(engine: stringIfPresent("engine", in: record))
                 ?? .table
             let path =
                 parent.kind == .server && [.index, .alias, .dataStream].contains(kind)
@@ -367,8 +430,19 @@ final class DatabaseObjectExplorerModel {
             return DatabaseExplorerObject(
                 identifier: DatabaseObjectIdentifier(kind: kind, path: path),
                 title: name,
-                estimatedRows: integer("estimatedRows", in: record),
+                estimatedRows: integer("estimatedRows", in: record)
+                    ?? integer("total_rows", in: record),
                 columnCount: integer("columnCount", in: record))
+        }
+    }
+
+    private static func clickHouseKind(engine: String?) -> DatabaseObjectKind? {
+        switch engine?.lowercased() {
+        case "view": .view
+        case "materializedview": .materializedView
+        case "dictionary": .dictionary
+        case nil: nil
+        default: .table
         }
     }
 
@@ -391,10 +465,11 @@ final class DatabaseObjectExplorerModel {
     }
 
     private static func integer(_ name: String, in record: DatabaseRecord) -> Int64? {
-        guard
-            case .signedInteger(let value)? = record.fields.first(where: { $0.name == name })?.value
-        else { return nil }
-        return value
+        switch record.fields.first(where: { $0.name == name })?.value {
+        case .signedInteger(let value): value
+        case .unsignedInteger(let value) where value <= UInt64(Int64.max): Int64(value)
+        default: nil
+        }
     }
 
     private static func message(for error: Error) -> String {
