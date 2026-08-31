@@ -102,6 +102,7 @@ struct DatabasePage: View {
     @State private var objectExplorer = DatabaseObjectExplorerModel()
     @State private var workspace = DatabaseWorkspaceModel()
     @State private var showsServiceDetails = false
+    @State private var focusedConnectionID: DatabaseConnectionID?
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         AppTheme.accent.rawValue
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
@@ -147,6 +148,10 @@ struct DatabasePage: View {
             else { return }
             dataWorkspace.finishMutation(connection)
         }
+        .onChange(of: connectionWorkspace.selectedConnectionID) { _, connectionID in
+            guard let focusedConnectionID, focusedConnectionID != connectionID else { return }
+            self.focusedConnectionID = nil
+        }
         .sheet(
             item: Binding(
                 get: { workspace.safetyReview },
@@ -172,9 +177,10 @@ struct DatabasePage: View {
                 saved: { connection in
                     self.connectionCreation = nil
                     Task {
+                        connectionWorkspace.searchText = ""
                         await connectionWorkspace.loadConnections()
                         connectionWorkspace.selectConnection(connection.id)
-                        await connectionWorkspace.connectSelected()
+                        focusedConnectionID = connection.id
                     }
                 },
                 cancel: { self.connectionCreation = nil })
@@ -201,56 +207,50 @@ struct DatabasePage: View {
 
     @ViewBuilder
     private var readyContent: some View {
-        if connectionWorkspace.listState == .empty {
-            connectionOnboarding
-        } else if compact {
-            compactContent
+        if let focusedConnectionID,
+            let connection = connectionWorkspace.selectedConnection,
+            connection.id == focusedConnectionID
+        {
+            focusedContent(connection)
+        } else {
+            connectionCatalog
+        }
+    }
+
+    private var connectionCatalog: some View {
+        DatabaseConnectionGallery(
+            model: connectionWorkspace,
+            createConnection: beginConnectionCreation,
+            openConnection: openConnection)
+    }
+
+    @ViewBuilder
+    private func focusedContent(_ connection: DatabaseConnectionSummary) -> some View {
+        if compact {
+            focusedWorkspace(connection)
                 .environment(\.compactLayout, true)
         } else {
             ViewThatFits(in: .horizontal) {
-                wideContent
-                    .frame(minWidth: UIScale.pt(880))
-                compactContent
+                focusedWorkspace(connection)
+                    .environment(\.compactLayout, false)
+                    .frame(minWidth: UIScale.pt(680))
+                focusedWorkspace(connection)
                     .environment(\.compactLayout, true)
             }
         }
     }
 
-    private var wideContent: some View {
-        HStack(spacing: 0) {
-            navigationSidebar
-                .frame(width: UIScale.pt(260))
+    private func focusedWorkspace(_ connection: DatabaseConnectionSummary) -> some View {
+        VStack(spacing: 0) {
+            DatabaseFocusedConnectionHeader(
+                connection: connection,
+                sessionState: connectionWorkspace.selectedSessionState,
+                backDisabled: workspace.hasTrackedMutation,
+                back: leaveFocusedWorkspace)
             Divider().opacity(0.35)
             workbench
-                .environment(\.compactLayout, false)
         }
-    }
-
-    private var navigationSidebar: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                connections
-            }
-            .frame(
-                minHeight: UIScale.pt(isConnected ? 170 : 360),
-                idealHeight: UIScale.pt(isConnected ? 220 : 500),
-                maxHeight: isConnected ? UIScale.pt(280) : .infinity)
-            if isConnected, let connection = connectionWorkspace.selectedConnection {
-                Divider().opacity(0.35)
-                DatabaseObjectNavigatorView(
-                    explorer: objectExplorer,
-                    connection: connection,
-                    open: { dataWorkspace.open($0, connection: connection) })
-            }
-        }
-        .background(palette.panel)
-    }
-
-    private var isConnected: Bool {
-        if case .connected = connectionWorkspace.selectedSessionState {
-            return true
-        }
-        return false
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func serviceProgress(title: String, detail: String) -> some View {
@@ -306,77 +306,18 @@ struct DatabasePage: View {
         .accessibilityElement(children: .contain)
     }
 
-    private var connectionOnboarding: some View {
-        VStack(spacing: UIScale.pt(20)) {
-            Image(systemName: "cylinder.split.1x2")
-                .font(.system(size: UIScale.pt(42), weight: .light))
-                .foregroundStyle(theme)
-                .accessibilityHidden(true)
-            VStack(spacing: UIScale.pt(8)) {
-                Text("Connect your first database")
-                    .font(.system(size: UIScale.pt(22), weight: .semibold))
-                Text(
-                    "Add a saved connection to browse tables, inspect records, and edit supported data."
-                )
-                .font(.system(size: UIScale.pt(13)))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-            Button("Add connection", action: beginConnectionCreation)
-                .buttonStyle(.edith(.primary, tint: theme))
-        }
-        .frame(maxWidth: UIScale.pt(520))
-        .padding(UIScale.pt(36))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityElement(children: .contain)
-    }
-
-    private var compactContent: some View {
-        VStack(spacing: 0) {
-            compactConnections
-            Divider().opacity(0.35)
-            workbench
-        }
-    }
-
-    private var compactConnections: some View {
-        HStack(spacing: UIScale.pt(8)) {
-            Menu {
-                ForEach(connectionWorkspace.visibleConnections) { connection in
-                    Button(connection.name) {
-                        connectionWorkspace.selectConnection(connection.id)
-                    }
-                }
-            } label: {
-                Label(
-                    connectionWorkspace.selectedConnection?.name ?? "Choose connection",
-                    systemImage: "cylinder.split.1x2"
-                )
-                .lineLimit(1)
-            }
-            .buttonStyle(.edith(.secondary))
-            Spacer(minLength: 0)
-            Button {
-                beginConnectionCreation()
-            } label: {
-                Image(systemName: "plus")
-            }
-            .buttonStyle(.edith(.primary, tint: theme))
-            .accessibilityLabel("Add database connection")
-        }
-        .padding(UIScale.pt(10))
-        .background(palette.panel)
-    }
-
-    private var connections: some View {
-        DatabaseConnectionSidebar(
-            model: connectionWorkspace,
-            createConnection: beginConnectionCreation)
-    }
-
     private func beginConnectionCreation() {
         connectionCreation = DatabaseConnectionCreationModel()
+    }
+
+    private func openConnection(_ connection: DatabaseConnectionSummary) {
+        connectionWorkspace.selectConnection(connection.id)
+        focusedConnectionID = connection.id
+    }
+
+    private func leaveFocusedWorkspace() {
+        guard !workspace.hasTrackedMutation else { return }
+        focusedConnectionID = nil
     }
 
     private var workbench: some View {
@@ -390,8 +331,7 @@ struct DatabasePage: View {
                 connections: connectionWorkspace,
                 explorer: objectExplorer,
                 data: dataWorkspace,
-                mutations: workspace,
-                showsObjectNavigator: false)
+                mutations: workspace)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
