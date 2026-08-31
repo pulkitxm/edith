@@ -179,14 +179,16 @@ private struct SidebarNavRow: View {
                         .font(.system(size: UIScale.pt(13.5), weight: .medium))
                         .foregroundStyle(selected ? .primary : .secondary)
                         .lineLimit(1)
-                    Spacer(
-                        minLength: disclosureExpanded == nil
-                            ? 0 : UIScale.pt(SidebarDisclosureGeometry.controlSlotWidth))
+                    Spacer(minLength: 0)
                     if let shortcutHint {
                         Text(shortcutHint)
                             .font(.system(size: UIScale.pt(11), weight: .medium))
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
+                    }
+                    if disclosureExpanded != nil {
+                        Color.clear.frame(
+                            width: UIScale.pt(SidebarDisclosureGeometry.controlSlotWidth))
                     }
                 }
             }

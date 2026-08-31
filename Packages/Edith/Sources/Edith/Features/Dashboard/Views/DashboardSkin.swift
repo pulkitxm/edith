@@ -150,3 +150,32 @@ struct SkinCard<Content: View>: View {
         )
     }
 }
+
+struct LazyChartCard<Content: View>: View {
+    let title: String
+    var note: String? = nil
+    let dark: Bool
+    var placeholderHeight: CGFloat = UIScale.pt(224)
+    @ViewBuilder var content: () -> Content
+    @State private var loaded = false
+
+    var body: some View {
+        SkinCard(title: title, note: note, dark: dark) {
+            Group {
+                if loaded {
+                    content()
+                } else {
+                    Image(systemName: "chart.xyaxis.line")
+                        .font(.system(size: UIScale.pt(24), weight: .light))
+                        .foregroundStyle(DashSkin.inkFaint(dark).opacity(0.24))
+                        .frame(maxWidth: .infinity, minHeight: placeholderHeight)
+                }
+            }
+        }
+        .task {
+            guard !loaded else { return }
+            await Task.yield()
+            loaded = true
+        }
+    }
+}

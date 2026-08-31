@@ -58,7 +58,8 @@ struct ComboChart: View {
                     .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [3, 3]))
                     .annotation(
                         position: .top, alignment: .center, spacing: UIScale.pt(6),
-                        overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                        overflowResolution: .init(
+                            x: .fit(to: .chart), y: .fit(to: .chart))
                     ) {
                         PointTooltip(
                             label: p.label, tokens: p.tokens, cost: p.cost, blur: blur,
@@ -137,8 +138,60 @@ struct StackDatum: Identifiable {
     let value: Double
 }
 
+struct ChartLegendItem: Identifiable {
+    let id: String
+    let label: String
+    let color: Color
+}
+
+enum DashboardChartLayout {
+    static let visibleModelRows = 8
+    static let modelRowHeight: CGFloat = 30
+}
+
+func chartSeriesDomain(_ bars: [StackDatum]) -> [String] {
+    var seen: Set<String> = []
+    return bars.compactMap { datum in
+        seen.insert(datum.series).inserted ? datum.series : nil
+    }
+}
+
+struct AdaptiveChartLegend: View {
+    let items: [ChartLegendItem]
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            row
+                .frame(maxWidth: .infinity, alignment: .center)
+            ScrollView(.horizontal, showsIndicators: false) {
+                row
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: UIScale.pt(18))
+    }
+
+    private var row: some View {
+        HStack(spacing: UIScale.pt(12)) {
+            ForEach(items) { item in
+                HStack(spacing: UIScale.pt(5)) {
+                    Circle()
+                        .fill(item.color)
+                        .frame(width: UIScale.pt(7), height: UIScale.pt(7))
+                    Text(item.label)
+                        .font(.system(size: UIScale.pt(10)))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
 struct DashChartData {
     var daily: [ComboPoint] = []
+    var stackedCost: [ComboPoint] = []
     var dow: [ComboPoint] = []
     var hourly: [ComboPoint] = []
     var project: [ComboPoint] = []
@@ -162,6 +215,12 @@ struct StackedChart: View {
 
     private var selectedPoint: ComboPoint? {
         selected.flatMap { sel in costLine.first { $0.label == sel } }
+    }
+
+    private var legendItems: [ChartLegendItem] {
+        zip(domain, range).map { series, color in
+            ChartLegendItem(id: series, label: series, color: color)
+        }
     }
 
     var body: some View {
@@ -191,7 +250,8 @@ struct StackedChart: View {
                     .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [3, 3]))
                     .annotation(
                         position: .top, alignment: .center, spacing: UIScale.pt(6),
-                        overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                        overflowResolution: .init(
+                            x: .fit(to: .chart), y: .fit(to: .chart))
                     ) {
                         PointTooltip(
                             label: p.label, tokens: p.tokens, cost: p.cost, blur: blur,
@@ -219,17 +279,21 @@ struct StackedChart: View {
                     .font(.system(size: UIScale.pt(10.5))).foregroundStyle(DashSkin.ink(dark))
             }
         }
-        .chartLegend(position: .bottom, alignment: .center, spacing: UIScale.pt(6))
-        .frame(height: height)
+        .chartLegend(.hidden)
+        .frame(height: max(UIScale.pt(150), height - UIScale.pt(24)))
         .padding(.top, UIScale.pt(22))
 
-        if scroll, costLine.count > 30 {
-            chart
-                .chartScrollableAxes(.horizontal)
-                .chartXVisibleDomain(length: 30)
-        } else {
-            chart
+        VStack(spacing: UIScale.pt(6)) {
+            if scroll, costLine.count > 30 {
+                chart
+                    .chartScrollableAxes(.horizontal)
+                    .chartXVisibleDomain(length: 30)
+            } else {
+                chart
+            }
+            AdaptiveChartLegend(items: legendItems)
         }
+        .frame(height: height)
     }
 }
 
@@ -253,6 +317,20 @@ func donutTotal(_ slices: [DonutSlice]) -> Double {
     slices.reduce(0) { $0 + $1.value }
 }
 
+func compactDonutSlices(
+    _ slices: [DonutSlice], limit: Int = DashboardComputation.stackedSeriesLimit,
+    otherColor: Color
+) -> [DonutSlice] {
+    let ranked = slices.sorted {
+        if $0.value != $1.value { return $0.value > $1.value }
+        return $0.label < $1.label
+    }
+    guard ranked.count > limit else { return ranked }
+    let kept = Array(ranked.prefix(limit))
+    let other = ranked.dropFirst(limit).reduce(0) { $0 + $1.value }
+    return kept + [DonutSlice(id: "__other", label: "Other", value: other, color: otherColor)]
+}
+
 struct DonutChart: View {
     let slices: [DonutSlice]
     var height: CGFloat = 220
@@ -266,7 +344,7 @@ struct DonutChart: View {
     var body: some View {
         let total = donutTotal(slices)
         let percentageTotal = max(total, 1)
-        Chart(slices) { s in
+        let chart = Chart(slices) { s in
             SectorMark(
                 angle: .value("Tokens", s.value),
                 innerRadius: .ratio(0.62),
@@ -280,8 +358,7 @@ struct DonutChart: View {
         .chartForegroundStyleScale(
             domain: slices.map(\.label), range: slices.map(\.color)
         )
-        .chartLegend(position: .bottom, alignment: .center, spacing: UIScale.pt(6))
-        .frame(height: height)
+        .chartLegend(.hidden)
         .overlay {
             VStack(spacing: UIScale.pt(1)) {
                 if let s = selected {
@@ -305,9 +382,18 @@ struct DonutChart: View {
                 }
             }
             .frame(maxWidth: UIScale.pt(110))
-            .offset(y: -14)
             .allowsHitTesting(false)
         }
+
+        VStack(spacing: UIScale.pt(6)) {
+            chart
+                .frame(height: max(UIScale.pt(150), height - UIScale.pt(24)))
+            AdaptiveChartLegend(
+                items: slices.map {
+                    ChartLegendItem(id: $0.id, label: $0.label, color: $0.color)
+                })
+        }
+        .frame(height: height)
     }
 }
 

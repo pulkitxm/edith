@@ -53,8 +53,8 @@ struct DashboardComputeRequest {
 
 enum DashboardComputation {
     static let unattributedCostModel = "unattributed-cost"
-    static let stackedModelSeriesLimit = 8
-    static let weeklyBucketThresholdDays = 120
+    static let stackedSeriesLimit = 8
+    static let weeklyBucketThresholdDays = 60
 
     static let ymd: DateFormatter = {
         let f = DateFormatter()
@@ -1426,6 +1426,7 @@ private struct DashboardFilterComputer {
         var output = 0.0
         var cacheCreate = 0.0
         var cacheRead = 0.0
+        var cost = 0.0
         var byModel: [String: Double] = [:]
         var bySource: [String: Double] = [:]
     }
@@ -1438,6 +1439,7 @@ private struct DashboardFilterComputer {
                 bucket.output = d.output
                 bucket.cacheCreate = d.cacheCreate
                 bucket.cacheRead = d.cacheRead
+                bucket.cost = d.cost
                 bucket.byModel = d.byModel
                 bucket.bySource = d.bySource
                 return bucket
@@ -1460,6 +1462,7 @@ private struct DashboardFilterComputer {
             bucket.output += d.output
             bucket.cacheCreate += d.cacheCreate
             bucket.cacheRead += d.cacheRead
+            bucket.cost += d.cost
             for (name, value) in d.byModel {
                 bucket.byModel[name, default: 0] += value
             }
@@ -1471,10 +1474,13 @@ private struct DashboardFilterComputer {
         return order.compactMap { buckets[$0] }
     }
 
-    private func modelStack(_ buckets: [StackBucket]) -> [StackDatum] {
+    private func stackedSeries(
+        _ buckets: [StackBucket], values: KeyPath<StackBucket, [String: Double]>,
+        label: (String) -> String
+    ) -> [StackDatum] {
         var totals: [String: Double] = [:]
         for bucket in buckets {
-            for (name, value) in bucket.byModel {
+            for (name, value) in bucket[keyPath: values] {
                 totals[name, default: 0] += value
             }
         }
@@ -1482,18 +1488,19 @@ private struct DashboardFilterComputer {
             if $0.value != $1.value { return $0.value > $1.value }
             return $0.key < $1.key
         }.map(\.key)
-        let kept = Array(ranked.prefix(DashboardComputation.stackedModelSeriesLimit))
+        let kept = Array(ranked.prefix(DashboardComputation.stackedSeriesLimit))
         let keptSet = Set(kept)
         var out: [StackDatum] = []
         for bucket in buckets {
+            let seriesValues = bucket[keyPath: values]
             for name in kept {
-                guard let value = bucket.byModel[name] else { continue }
+                guard let value = seriesValues[name] else { continue }
                 out.append(
                     StackDatum(
                         id: "\(bucket.id)-\(name)", x: bucket.label,
-                        series: DashFmt.shortModel(name), value: value))
+                        series: label(name), value: value))
             }
-            let rest = bucket.byModel.reduce(0.0) {
+            let rest = seriesValues.reduce(0.0) {
                 keptSet.contains($1.key) ? $0 : $0 + $1.value
             }
             if rest > 0 {
@@ -1533,6 +1540,11 @@ private struct DashboardFilterComputer {
         }
         next.project = projectPoints
         let buckets = stackBuckets(series)
+        next.stackedCost = buckets.map {
+            ComboPoint(
+                id: $0.id, label: $0.label,
+                tokens: $0.input + $0.output + $0.cacheCreate + $0.cacheRead, cost: $0.cost)
+        }
         next.tokenMix = buckets.flatMap { d in
             [
                 StackDatum(id: "\(d.id)-in", x: d.label, series: "input", value: d.input),
@@ -1542,14 +1554,8 @@ private struct DashboardFilterComputer {
                 StackDatum(id: "\(d.id)-cr", x: d.label, series: "cache read", value: d.cacheRead),
             ]
         }
-        next.modelTime = modelStack(buckets)
-        next.source = buckets.flatMap { d in
-            d.bySource.map {
-                StackDatum(
-                    id: "\(d.id)-\($0.key)", x: d.label, series: sourceLabel($0.key),
-                    value: $0.value)
-            }
-        }
+        next.modelTime = stackedSeries(buckets, values: \.byModel, label: DashFmt.shortModel)
+        next.source = stackedSeries(buckets, values: \.bySource, label: sourceLabel)
         let costs = calendarDays.map(\.cost).filter { $0 > 0 }.sorted()
         next.heatCuts =
             costs.isEmpty

@@ -274,18 +274,6 @@ public enum MachineUsageStore {
         return summary
     }
 
-    public static func prune(
-        keeping machineIDs: [UUID], in directory: URL = UsageCollector.machinesDirectory
-    ) {
-        try? UsageDataLock.withLock(dataDirectory: dataDirectory(for: directory)) {
-            let known = Set(machineIDs)
-            let stale = storedIDs(in: directory).filter { !known.contains($0) }
-            guard !stale.isEmpty else { return }
-            try bumpGeneration(in: directory)
-            for id in stale { _ = removeUnlocked(machineID: id, in: directory) }
-        }
-    }
-
     @discardableResult
     public static func restamp(
         _ machines: [Machine], in directory: URL = UsageCollector.machinesDirectory
