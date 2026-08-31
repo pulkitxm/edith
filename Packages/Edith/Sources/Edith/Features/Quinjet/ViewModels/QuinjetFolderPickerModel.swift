@@ -19,6 +19,7 @@ final class QuinjetFolderPickerModel {
     private let listDirectory: ListDirectory
     private let debounce: Duration
     private var history: [String] = []
+    private var homeDirectory = ""
     private var loadToken = 0
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
@@ -48,10 +49,13 @@ final class QuinjetFolderPickerModel {
                 guard session.state.isConnected else {
                     throw QuinjetMachineError.connectionTimedOut
                 }
+                let platform = session.remotePlatform ?? .linux
                 let result = await session.runCommand(
-                    FilePlaces.homeDirectoryCommand(), timeout: 20)
+                    FilePlaces.homeDirectoryCommand(platform: platform), timeout: 20)
                 let home = try result.get().trimmingCharacters(in: .whitespacesAndNewlines)
-                guard home.hasPrefix("/") else { throw QuinjetMachineError.homeUnavailable }
+                guard QuinjetPath.isAbsolute(home) else {
+                    throw QuinjetMachineError.homeUnavailable
+                }
                 return home
             },
             listDirectory: { path in
@@ -76,6 +80,7 @@ final class QuinjetFolderPickerModel {
         errorMessage = nil
         do {
             let home = try await resolveHome()
+            homeDirectory = home
             await navigate(to: home, recordHistory: false)
         } catch {
             loading = false
@@ -171,13 +176,15 @@ final class QuinjetFolderPickerModel {
         let value = path.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return }
         let target = normalizedDirectory(value)
-        if target == directory || value == "/" || value.hasSuffix("/") {
+        if target == directory || FileListing.parentPath(of: target) == nil
+            || value.hasSuffix("/") || value.hasSuffix("\\")
+        {
             await load(target, filter: nil)
             return
         }
         let origin = directory
-        let parent = FileListing.parentPath(of: value) ?? "/"
-        let prefix = URL(fileURLWithPath: value).lastPathComponent
+        let parent = FileListing.parentPath(of: target) ?? target
+        let prefix = QuinjetPath.name(target)
         await load(parent, filter: prefix)
         guard path.trimmingCharacters(in: .whitespacesAndNewlines) == value else { return }
         let candidates = entries.indices.filter { navigable(entries[$0]) }
@@ -225,8 +232,16 @@ final class QuinjetFolderPickerModel {
 
     private func normalizedDirectory(_ value: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed != "/" else { return trimmed }
-        return trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed
+        let platform: RemoteMachinePlatform =
+            FileListing.isWindowsPath(homeDirectory)
+            ? .windows : .linux
+        let resolved = QuinjetPath.resolve(
+            trimmed, homeDirectory: homeDirectory, platform: platform)
+        guard resolved != "/", FileListing.parentPath(of: resolved) != nil else {
+            return resolved
+        }
+        return resolved.hasSuffix("/") || resolved.hasSuffix("\\")
+            ? String(resolved.dropLast()) : resolved
     }
 
     private func navigable(_ entry: RemoteFileEntry) -> Bool {

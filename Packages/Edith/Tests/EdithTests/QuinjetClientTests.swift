@@ -137,6 +137,58 @@ import Testing
         #expect(projects[0].availableWorktrees.count == 2)
     }
 
+    @Test func hydratesWindowsFoldersEvenWhenLocalAccessibilityIsFalse() async throws {
+        let folder = #"C:\Users\kpulk\Desktop\Crowdvolt\mono-volt"#
+        let folderData = try JSONEncoder().encode(
+            QuinjetRemoteFolders(remotes: [
+                QuinjetRemoteFolder(
+                    target: "win-lan", folder: folder, accessible: false, uses: 10)
+            ]))
+        let worktreeData = try JSONEncoder().encode([
+            QuinjetWorktree(
+                path: folder, head: "1234567890abcdef", branch: "main", current: true,
+                bare: false, detached: false, locked: nil, prunable: nil)
+        ])
+        let client = QuinjetClient { arguments in
+            if arguments == ["remote", "list", "--json"] { return folderData }
+            #expect(arguments.contains(folder))
+            return worktreeData
+        }
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "win-lan", target: "win-lan",
+            controlPath: "/tmp/edith.sock", platform: .windows,
+            homeDirectory: #"C:\Users\kpulk"#)
+
+        let projects = try await client.recentProjects(remote: remote)
+
+        #expect(projects.map(\.name) == ["mono-volt"])
+        #expect(projects.first?.defaultWorktree?.path == folder)
+    }
+
+    @Test func resolvesWindowsHomeAndMatchesNestedWorktreePathsCaseInsensitively() async throws {
+        let folder = #"C:\Users\kpulk\Desktop\Crowdvolt\mono-volt"#
+        let client = QuinjetClient { arguments in
+            #expect(
+                arguments.contains(
+                    #"C:\Users\kpulk\desktop\Crowdvolt\mono-volt\Sources"#))
+            return try JSONEncoder().encode([
+                QuinjetWorktree(
+                    path: folder, head: "1234567890abcdef", branch: "main", current: true,
+                    bare: false, detached: false, locked: nil, prunable: nil)
+            ])
+        }
+        let remote = QuinjetRemote(
+            machineID: UUID(), machineName: "win-lan", target: "win-lan",
+            controlPath: "/tmp/edith.sock", platform: .windows,
+            homeDirectory: #"C:\Users\kpulk"#)
+
+        let selection = try await QuinjetOperationExecution.openSelection(
+            at: #"~\desktop\Crowdvolt\mono-volt\Sources"#, remote: remote, using: client)
+
+        #expect(selection.projectName == "mono-volt")
+        #expect(selection.worktree.path == folder)
+    }
+
     @Test func boundsRemoteFolderProbesAndPreservesFolderOrder() async throws {
         let folders = ["/srv/one", "/srv/two", "/srv/three"]
         let folderData = try JSONEncoder().encode(

@@ -556,21 +556,24 @@ public enum QuinjetOperationExecution {
     public static func openSelection(
         at path: String, remote: QuinjetRemote? = nil, using client: QuinjetClient
     ) async throws -> QuinjetOpenSelection {
-        let worktrees = try await worktrees(at: path, remote: remote, using: client).filter(
+        let resolvedPath = remote?.resolve(path) ?? path
+        let worktrees = try await worktrees(at: resolvedPath, remote: remote, using: client).filter(
             \.canOpen)
-        guard let worktree = worktree(containing: path, in: worktrees) else {
-            throw QuinjetOperationError.noOpenWorktree(path)
+        guard let worktree = worktree(containing: resolvedPath, in: worktrees) else {
+            throw QuinjetOperationError.noOpenWorktree(resolvedPath)
         }
         return QuinjetOpenSelection(
-            projectName: URL(fileURLWithPath: worktree.path).lastPathComponent,
+            projectName: QuinjetPath.name(worktree.path),
             worktree: worktree, worktrees: worktrees)
     }
 
     public static func worktree(containing path: String, in worktrees: [QuinjetWorktree])
         -> QuinjetWorktree?
     {
-        if let exact = worktrees.first(where: { $0.path == path }) { return exact }
-        let enclosing = worktrees.filter { path.hasPrefix($0.path + "/") }
+        if let exact = worktrees.first(where: { QuinjetPath.equals($0.path, path) }) {
+            return exact
+        }
+        let enclosing = worktrees.filter { QuinjetPath.contains(path, in: $0.path) }
         if let deepest = enclosing.max(by: { $0.path.count < $1.path.count }) { return deepest }
         return worktrees.first(where: \.current) ?? worktrees.first
     }

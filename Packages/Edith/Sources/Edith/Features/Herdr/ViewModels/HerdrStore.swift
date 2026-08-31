@@ -646,9 +646,9 @@ final class HerdrStore {
             throw HerdrQuinjetError.machineUnavailable
         }
         let connection = try await connection(for: machine)
-        return QuinjetRemote(
+        return await QuinjetRemote.connected(
             machineID: machine.id, machineName: machine.name, target: machine.sshTarget,
-            controlPath: connection.controlSocketPath)
+            connection: connection)
     }
 
     func quinjetConfiguration(appearance: QuinjetAppearance) -> QuinjetLaunchConfiguration {

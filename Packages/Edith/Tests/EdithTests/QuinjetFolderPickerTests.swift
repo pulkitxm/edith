@@ -92,6 +92,33 @@ import Testing
         #expect(!model.canUndo)
     }
 
+    @Test func resolvesWindowsHomeAndNavigatesBackslashPaths() async {
+        let home = #"C:\Users\kpulk"#
+        let desktop = #"C:\Users\kpulk\Desktop"#
+        let project = #"C:\Users\kpulk\Desktop\Crowdvolt\mono-volt"#
+        let directories = [
+            home: [entry("Desktop", parent: home, kind: .directory)],
+            desktop: [entry("Crowdvolt", parent: desktop, kind: .directory)],
+            #"C:\Users\kpulk\Desktop\Crowdvolt"#: [
+                entry("mono-volt", parent: #"C:\Users\kpulk\Desktop\Crowdvolt"#, kind: .directory)
+            ],
+            project: [],
+        ]
+        let model = QuinjetFolderPickerModel(
+            debounce: .zero, resolveHome: { home },
+            listDirectory: { directories[$0] ?? [] })
+        await model.start()
+
+        model.editPath(#"~\Desktop\Crowdvolt\mono-volt"#)
+        await model.waitForInputRefresh()
+
+        #expect(model.path == project)
+        #expect(model.directory == project)
+        #expect(model.canOpenCurrentDirectory)
+        await model.goUp()
+        #expect(model.directory == #"C:\Users\kpulk\Desktop\Crowdvolt"#)
+    }
+
     private func makeModel() -> QuinjetFolderPickerModel {
         let directories = [
             "/home/pulkit": [
