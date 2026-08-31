@@ -10,7 +10,21 @@ public struct SSHExecResult: Sendable {
         PowerShell.decodedError(String(decoding: stderr, as: UTF8.self))
     }
     public var combinedText: String { stdoutText + stderrText }
+    public var successfulCommandText: String {
+        stdoutText + SSHTransportDiagnostics.cleanSuccessfulStderr(stderrText)
+    }
     public var succeeded: Bool { status == 0 }
+}
+
+private enum SSHTransportDiagnostics {
+    static func cleanSuccessfulStderr(_ text: String) -> String {
+        text.split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { line in
+                !line.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .hasPrefix("mux_client_request_session: session request failed:")
+            }
+            .joined(separator: "\n")
+    }
 }
 
 public struct SSHOutputChunk: Sendable {

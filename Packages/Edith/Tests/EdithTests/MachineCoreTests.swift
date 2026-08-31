@@ -163,6 +163,20 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
         #expect(PowerShell.decodedError(progress).isEmpty)
         #expect(PowerShell.decodedError("plain error") == "plain error")
     }
+
+    @Test func successfulCommandsDropMultiplexingWarningsWithoutDroppingRemoteStderr() {
+        let result = SSHExecResult(
+            status: 0, stdout: Data("C:\\Users\\kpulk".utf8),
+            stderr: Data(
+                "mux_client_request_session: session request failed: Session open refused by peer\n"
+                    .utf8))
+        let remoteWarning = SSHExecResult(
+            status: 0, stdout: Data("value\n".utf8),
+            stderr: Data("remote warning\n".utf8))
+
+        #expect(result.successfulCommandText == "C:\\Users\\kpulk")
+        #expect(remoteWarning.successfulCommandText == "value\nremote warning\n")
+    }
 }
 
 @Suite struct MachineModelsTests {

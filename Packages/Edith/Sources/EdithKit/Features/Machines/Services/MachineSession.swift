@@ -512,7 +512,7 @@ public final class MachineSession {
         }
         do {
             let result = try await connection.run(command, stdin: stdin, timeout: timeout)
-            let output = result.stdoutText + result.stderrText
+            let output = result.successfulCommandText
             guard result.succeeded else {
                 return .failure(
                     SSHConnectionError.commandFailed(
