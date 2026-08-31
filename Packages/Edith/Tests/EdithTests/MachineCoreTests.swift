@@ -439,13 +439,21 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
         #expect(text.contains("@EDITH@"))
     }
 
-    @Test func windowsCollectorUsesCIMMetrics() {
+    @Test func windowsCollectorUsesBoundedNativeMetrics() {
         let script = MachineCollector.script(for: .windows, follow: false, interval: 5)
         let text = String(decoding: script ?? Data(), as: UTF8.self)
         #expect(text.hasPrefix("$EdithMode = 'once'\n$EdithInterval = 5"))
         #expect(text.contains("Win32_OperatingSystem"))
         #expect(text.contains("Win32_PerfFormattedData_PerfOS_Processor"))
-        #expect(text.contains("Win32_PerfFormattedData_Tcpip_NetworkInterface"))
+        #expect(text.contains("Get-NetAdapterStatistics"))
+        #expect(text.contains("Get-Process"))
+        #expect(!text.contains("Win32_PerfFormattedData_Tcpip_NetworkInterface"))
+        #expect(!text.contains("Win32_PerfFormattedData_PerfProc_Process"))
+        #expect(text.contains("Test-EdithTransport"))
+        #expect(text.contains("$current.StartTime -eq $transportStartedAt"))
+        #expect(text.contains("$collectorLifetimeSeconds = 600"))
+        #expect(text.contains("$_['rxBps']"))
+        #expect(text.contains("Sort-Object { $_['cpu'] } -Descending"))
         #expect(text.contains("@EDITH@"))
     }
 
