@@ -23,6 +23,7 @@ struct DashboardView: View {
     @State private var sourcePickerOpen = false
     @State private var modelPickerOpen = false
     @State private var machinePickerOpen = false
+    @State private var customRangeOpen = false
     @State private var showShare = false
     @State private var customFrom = Date()
     @State private var customTo = Date()
@@ -33,6 +34,24 @@ struct DashboardView: View {
     private var gold: Color { DashSkin.gold }
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
     private var blurUsage: Bool { presenterState.active && presenterBlurUsage }
+
+    private static let shortDate: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMM"
+        return formatter
+    }()
+
+    private static let monthKey: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM"
+        return formatter
+    }()
+
+    private static let monthName: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM yyyy"
+        return formatter
+    }()
 
     var body: some View {
         ZStack {
@@ -394,37 +413,26 @@ struct DashboardView: View {
     }
 
     private var controlsBar: some View {
-        VStack(spacing: 10) {
-            WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
-                rangeButton("Today", .today)
-                rangeButton("Yesterday", .yesterday)
-                rangeButton("Week", .thisWeek)
-                rangeButton("Last week", .lastWeek)
-                rangeButton("All", .all)
-                if !model.monthOptions.isEmpty {
-                    Menu {
-                        ForEach(model.monthOptions, id: \.self) { m in
-                            Button(m) { model.range = .month(m) }
-                        }
-                    } label: {
-                        Label("Month", systemImage: "calendar.badge.clock")
-                            .font(.system(size: UIScale.pt(11)))
-                            .modifier(FilterChip(dark: dark))
-                    }
-                    .menuStyle(.borderlessButton).fixedSize()
+        ViewThatFits(in: .horizontal) {
+            VStack(spacing: UIScale.pt(10)) {
+                HStack(spacing: UIScale.pt(8)) {
+                    filterSectionLabel("Range")
+                    rangePresets
+                    Spacer(minLength: UIScale.pt(24))
+                    monthArchiveMenu
+                    customRange
+                    resetButton
                 }
-                if !model.machineGroups.isEmpty { machineMenu }
-                Button("Reset") { model.reset() }
-                    .buttonStyle(.edith(.borderless)).font(DashSkin.mono(11))
-                    .foregroundStyle(acc)
-                    .padding(.vertical, UIScale.pt(5))
+                HStack(spacing: UIScale.pt(8)) {
+                    filterSectionLabel("Scope")
+                    if !model.machineGroups.isEmpty { machineMenu }
+                    modelMenu
+                    Spacer(minLength: UIScale.pt(24))
+                    projectMenu
+                    sourceMenu
+                }
             }
-            WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
-                modelMenu
-                projectMenu
-                sourceMenu
-                customRange
-            }
+            compactControlsBar
         }
         .foregroundStyle(DashSkin.inkSoft(dark))
         .pageGutter(compactLayout)
@@ -432,32 +440,127 @@ struct DashboardView: View {
         .padding(.vertical)
     }
 
-    private var customRange: some View {
-        HStack(spacing: UIScale.pt(4)) {
-            DatePicker(
-                "",
-                selection: Binding(
-                    get: { customFrom },
-                    set: {
-                        customFrom = $0
-                        model.range = .custom(model.ymd($0), model.ymd(customTo))
-                    }),
-                in: (model.dataRange ?? Date()...Date()), displayedComponents: .date
-            )
-            .labelsHidden().datePickerStyle(.field).controlSize(.small)
-            Text("→").font(.system(size: UIScale.pt(10))).foregroundStyle(DashSkin.inkFaint(dark))
-            DatePicker(
-                "",
-                selection: Binding(
-                    get: { customTo },
-                    set: {
-                        customTo = $0
-                        model.range = .custom(model.ymd(customFrom), model.ymd($0))
-                    }),
-                in: (model.dataRange ?? Date()...Date()), displayedComponents: .date
-            )
-            .labelsHidden().datePickerStyle(.field).controlSize(.small)
+    private var compactControlsBar: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+            filterSectionLabel("Range")
+            WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
+                rangePresets
+                monthArchiveMenu
+                customRange
+                resetButton
+            }
+            filterSectionLabel("Scope")
+            WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
+                if !model.machineGroups.isEmpty { machineMenu }
+                modelMenu
+                projectMenu
+                sourceMenu
+            }
         }
+    }
+
+    private var rangePresets: some View {
+        Group {
+            rangeButton("Today", .today)
+            rangeButton("Yesterday", .yesterday)
+            rangeButton("This week", .thisWeek)
+            rangeButton("Last week", .lastWeek)
+            if let month = currentMonthOption {
+                rangeButton("This month", .month(month))
+            }
+            if let month = previousMonthOption {
+                rangeButton("Last month", .month(month))
+            }
+            rangeButton("All", .all)
+        }
+    }
+
+    private func filterSectionLabel(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(DashSkin.mono(8, weight: .semibold))
+            .tracking(UIScale.pt(1.2))
+            .foregroundStyle(DashSkin.inkFaint(dark))
+            .frame(width: UIScale.pt(42), alignment: .leading)
+    }
+
+    private var monthArchiveMenu: some View {
+        Menu {
+            ForEach(model.monthOptions, id: \.self) { month in
+                Button(monthDisplayName(month)) { model.range = .month(month) }
+            }
+        } label: {
+            Label("Browse months", systemImage: "calendar.badge.clock")
+                .font(.system(size: UIScale.pt(11)))
+                .modifier(FilterChip(dark: dark))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .disabled(model.monthOptions.isEmpty)
+    }
+
+    private var resetButton: some View {
+        Button("Reset") { model.reset() }
+            .buttonStyle(.edith(.borderless))
+            .font(DashSkin.mono(11))
+            .foregroundStyle(acc)
+            .padding(.horizontal, UIScale.pt(6))
+            .padding(.vertical, UIScale.pt(5))
+    }
+
+    private var customRange: some View {
+        Button {
+            customRangeOpen = true
+        } label: {
+            Label(customRangeLabel, systemImage: "calendar")
+                .font(.system(size: UIScale.pt(11)))
+                .lineLimit(1)
+                .modifier(FilterChip(dark: dark, active: isCustomRangeActive))
+        }
+        .buttonStyle(.edith(.borderless))
+        .fixedSize()
+        .popover(isPresented: $customRangeOpen, arrowEdge: .bottom) {
+            DashboardDateRangePicker(
+                from: customFrom,
+                to: customTo,
+                bounds: model.dataRange ?? Date()...Date(),
+                onApply: { from, to in
+                    customFrom = from
+                    customTo = to
+                    model.range = .custom(model.ymd(from), model.ymd(to))
+                    customRangeOpen = false
+                },
+                onCancel: { customRangeOpen = false }
+            )
+        }
+    }
+
+    private var customRangeLabel: String {
+        guard isCustomRangeActive else { return "Custom range" }
+        return
+            "\(Self.shortDate.string(from: customFrom)) – \(Self.shortDate.string(from: customTo))"
+    }
+
+    private var isCustomRangeActive: Bool {
+        if case .custom = model.range { return true }
+        return false
+    }
+
+    private var currentMonthOption: String? {
+        guard let upperBound = model.dataRange?.upperBound else { return model.monthOptions.first }
+        return Self.monthKey.string(from: upperBound)
+    }
+
+    private var previousMonthOption: String? {
+        guard let upperBound = model.dataRange?.upperBound,
+            let date = Calendar.current.date(byAdding: .month, value: -1, to: upperBound)
+        else { return model.monthOptions.dropFirst().first }
+        let key = Self.monthKey.string(from: date)
+        return model.monthOptions.contains(key) ? key : nil
+    }
+
+    private func monthDisplayName(_ month: String) -> String {
+        guard let date = DateFormatter.monthParser.date(from: month) else { return month }
+        return Self.monthName.string(from: date)
     }
 
     private func syncCustomDates() {
@@ -499,6 +602,8 @@ struct DashboardView: View {
         case (.today, .today), (.yesterday, .yesterday), (.thisWeek, .thisWeek),
             (.lastWeek, .lastWeek), (.all, .all):
             return true
+        case (.month(let selected), .month(let target)):
+            return selected == target
         default: return false
         }
     }
@@ -885,13 +990,18 @@ struct DashboardView: View {
 
 private struct FilterChip: ViewModifier {
     let dark: Bool
+    var active = false
 
     func body(content: Content) -> some View {
         content
             .padding(.horizontal, UIScale.pt(10))
             .padding(.vertical, UIScale.pt(5))
             .widgetBar(
-                cornerRadius: 8, fill: DashSkin.paper2(dark), stroke: DashSkin.lineStrong(dark))
+                cornerRadius: 8,
+                fill: active
+                    ? AnyShapeStyle(DashSkin.accent(dark).opacity(0.13))
+                    : AnyShapeStyle(DashSkin.paper2(dark)),
+                stroke: active ? DashSkin.accent(dark).opacity(0.55) : DashSkin.lineStrong(dark))
     }
 }
 
