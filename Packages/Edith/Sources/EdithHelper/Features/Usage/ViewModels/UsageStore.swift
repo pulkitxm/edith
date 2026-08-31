@@ -1266,16 +1266,11 @@ final class UsageStore: FeatureModule {
             pendingRefresh = true
             return
         }
-        let machineIDs = MachineRegistry.machines().map(\.id)
         beginTranscript()
         refreshGeneration += 1
         let generation = refreshGeneration
         refreshTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            await Task.detached(priority: .utility) {
-                MachineUsageStore.prune(keeping: machineIDs)
-            }.value
-            guard !Task.isCancelled else { return }
             do {
                 if UsageRefreshRunner.isRunning {
                     _ = try await UsageRefreshFollower.follow { event in
