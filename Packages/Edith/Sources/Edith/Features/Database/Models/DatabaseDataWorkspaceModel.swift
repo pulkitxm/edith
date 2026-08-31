@@ -10,6 +10,21 @@ enum DatabaseDataWorkspaceState: Equatable, Sendable {
     case failed(String)
 }
 
+enum DatabaseRowEditorMode: Equatable, Sendable {
+    case insert
+    case update(recordIndex: Int)
+}
+
+struct DatabaseRowFieldDraft: Identifiable, Equatable, Sendable {
+    let id: String
+    let typeName: String
+    let originalValue: DatabaseValue?
+    let isIdentity: Bool
+    let isEditable: Bool
+    var text: String
+    var isIncluded: Bool
+}
+
 @MainActor
 @Observable
 final class DatabaseDataWorkspaceModel {
@@ -24,6 +39,9 @@ final class DatabaseDataWorkspaceModel {
     private(set) var selectedRecordIndex: Int?
     private(set) var nextContinuation: DatabaseContinuationToken?
     private(set) var metadata: DatabasePageMetadata?
+    private(set) var editorMode: DatabaseRowEditorMode?
+    private(set) var editorFields: [DatabaseRowFieldDraft] = []
+    private(set) var editorError: String?
 
     private let sender: any DatabaseBrokerCommandSending
     private let announcement: @MainActor (String) -> Void
@@ -63,6 +81,9 @@ final class DatabaseDataWorkspaceModel {
         selectedRecordIndex = nil
         nextContinuation = nil
         metadata = nil
+        editorMode = nil
+        editorFields = []
+        editorError = nil
         filterField = ""
         filterValue = ""
         sortField = ""
@@ -115,6 +136,7 @@ final class DatabaseDataWorkspaceModel {
 
     func selectRecord(at index: Int) {
         guard records.indices.contains(index) else { return }
+        cancelEditor()
         selectedRecordIndex = selectedRecordIndex == index ? nil : index
         announcement(selectedRecordIndex == nil ? "Closed row details." : "Opened row details.")
     }
@@ -126,6 +148,151 @@ final class DatabaseDataWorkspaceModel {
         if state == .loading {
             state = records.isEmpty ? .idle : .loaded
         }
+    }
+
+    func beginInsert(_ connection: DatabaseConnectionSummary) {
+        guard supportsRowMutations(connection), !fields.isEmpty else {
+            editorError = mutationUnavailableMessage(connection)
+            return
+        }
+        editorMode = .insert
+        editorError = nil
+        editorFields = fields.map { field in
+            let name = field.path.segments.joined(separator: ".")
+            return DatabaseRowFieldDraft(
+                id: name,
+                typeName: field.typeName,
+                originalValue: nil,
+                isIdentity: false,
+                isEditable: Self.supportsEditing(typeName: field.typeName),
+                text: "",
+                isIncluded: false)
+        }
+    }
+
+    func beginEditingSelectedRow(_ connection: DatabaseConnectionSummary) {
+        guard supportsRowMutations(connection),
+            let selectedRecordIndex,
+            records.indices.contains(selectedRecordIndex),
+            let identity = records[selectedRecordIndex].identity
+        else {
+            editorError = mutationUnavailableMessage(connection)
+            return
+        }
+        let record = records[selectedRecordIndex]
+        let identityNames = Set(identity.components.map(\.name))
+        editorMode = .update(recordIndex: selectedRecordIndex)
+        editorError = nil
+        editorFields = record.fields.map { field in
+            let typeName =
+                fields.first {
+                    $0.path.segments.joined(separator: ".") == field.name
+                }?.typeName ?? "text"
+            let isIdentity = identityNames.contains(field.name)
+            return DatabaseRowFieldDraft(
+                id: field.name,
+                typeName: typeName,
+                originalValue: field.value,
+                isIdentity: isIdentity,
+                isEditable: !isIdentity && Self.supportsEditing(field.value),
+                text: Self.text(for: field.value),
+                isIncluded: false)
+        }
+    }
+
+    func updateEditorField(_ id: String, text: String) {
+        guard let index = editorFields.firstIndex(where: { $0.id == id }),
+            editorFields[index].isEditable
+        else { return }
+        editorFields[index].text = text
+        editorFields[index].isIncluded = true
+        editorError = nil
+    }
+
+    func setEditorFieldIncluded(_ id: String, included: Bool) {
+        guard let index = editorFields.firstIndex(where: { $0.id == id }),
+            editorFields[index].isEditable
+        else { return }
+        editorFields[index].isIncluded = included
+        editorError = nil
+    }
+
+    func setEditorFieldNull(_ id: String) {
+        updateEditorField(id, text: "NULL")
+    }
+
+    func cancelEditor() {
+        editorMode = nil
+        editorFields = []
+        editorError = nil
+    }
+
+    func editorMutationRequest(
+        _ connection: DatabaseConnectionSummary
+    ) -> DatabaseDestructiveRequest? {
+        do {
+            let values = try editorFields.filter(\.isIncluded).map { field in
+                DatabaseObjectField(
+                    name: field.id,
+                    value: try Self.value(from: field))
+            }
+            let objectTarget = try target(connection)
+            switch editorMode {
+            case .insert:
+                let request = try DatabaseRowMutationRequests.postgreSQLInsert(
+                    target: objectTarget,
+                    values: values)
+                editorError = nil
+                return request
+            case .update(let recordIndex):
+                guard records.indices.contains(recordIndex),
+                    let identity = records[recordIndex].identity
+                else {
+                    throw DatabaseRowEditorError.missingIdentity
+                }
+                let request = try DatabaseRowMutationRequests.postgreSQLUpdate(
+                    target: DatabaseTargetIdentifier(
+                        connectionID: objectTarget.connectionID,
+                        object: objectTarget.object,
+                        record: identity),
+                    values: values)
+                editorError = nil
+                return request
+            case nil:
+                throw DatabaseRowEditorError.notEditing
+            }
+        } catch {
+            editorError = Self.editorMessage(error)
+            return nil
+        }
+    }
+
+    func deleteMutationRequest(
+        _ connection: DatabaseConnectionSummary
+    ) -> DatabaseDestructiveRequest? {
+        do {
+            guard supportsRowMutations(connection), let record = selectedRecord,
+                let identity = record.identity
+            else {
+                throw DatabaseRowEditorError.missingIdentity
+            }
+            let objectTarget = try target(connection)
+            let request = try DatabaseRowMutationRequests.postgreSQLDelete(
+                target: DatabaseTargetIdentifier(
+                    connectionID: objectTarget.connectionID,
+                    object: objectTarget.object,
+                    record: identity))
+            editorError = nil
+            return request
+        } catch {
+            editorError = Self.editorMessage(error)
+            return nil
+        }
+    }
+
+    func finishMutation(_ connection: DatabaseConnectionSummary) {
+        cancelEditor()
+        browse(connection)
     }
 
     func text(for value: DatabaseValue) -> String {
@@ -315,6 +482,177 @@ final class DatabaseDataWorkspaceModel {
         }
     }
 
+    func supportsRowMutations(_ connection: DatabaseConnectionSummary) -> Bool {
+        connection.product == .postgresql
+            && connection.readOnlyPolicy == .disabled
+            && connection.environmentProtection != .readOnly
+            && connection.productionPolicy != .prohibitMutations
+    }
+
+    private func mutationUnavailableMessage(_ connection: DatabaseConnectionSummary) -> String {
+        if connection.product != .postgresql {
+            return "Row editing is not available for this database yet."
+        }
+        if connection.readOnlyPolicy != .disabled
+            || connection.environmentProtection == .readOnly
+            || connection.productionPolicy == .prohibitMutations
+        {
+            return "This connection policy does not allow row editing."
+        }
+        if selectedRecord?.identity == nil {
+            return "This row has no stable primary or unique key for safe editing."
+        }
+        return "Open a table before editing rows."
+    }
+
+    private static func supportsEditing(_ value: DatabaseValue) -> Bool {
+        switch value {
+        case .missing, .binary, .array, .object, .productSpecific:
+            false
+        case .null, .boolean, .signedInteger, .unsignedInteger, .decimal, .floatingPoint,
+            .string, .date, .time, .timestamp, .uuid:
+            true
+        }
+    }
+
+    private static func supportsEditing(typeName: String) -> Bool {
+        let type = typeName.lowercased()
+        return !type.contains("bytea")
+            && !type.contains("json")
+            && !type.hasSuffix("[]")
+    }
+
+    private static func value(
+        from field: DatabaseRowFieldDraft
+    ) throws -> DatabaseValue {
+        let trimmed = field.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.uppercased() == "NULL" {
+            return .null
+        }
+        if let original = field.originalValue {
+            switch original {
+            case .boolean:
+                guard let value = parseBoolean(trimmed) else {
+                    throw DatabaseRowEditorError.invalidValue(field.id, field.typeName)
+                }
+                return .boolean(value)
+            case .signedInteger:
+                guard let value = Int64(trimmed) else {
+                    throw DatabaseRowEditorError.invalidValue(field.id, field.typeName)
+                }
+                return .signedInteger(value)
+            case .unsignedInteger:
+                guard let value = UInt64(trimmed) else {
+                    throw DatabaseRowEditorError.invalidValue(field.id, field.typeName)
+                }
+                return .unsignedInteger(value)
+            case .decimal:
+                return .decimal(DatabaseDecimalValue(rawValue: trimmed))
+            case .floatingPoint:
+                guard let value = Double(trimmed), value.isFinite else {
+                    throw DatabaseRowEditorError.invalidValue(field.id, field.typeName)
+                }
+                return .floatingPoint(value)
+            case .string:
+                return .string(field.text)
+            case .date:
+                return .date(DatabaseDateValue(text: trimmed))
+            case .time:
+                return .time(DatabaseTimeValue(text: trimmed))
+            case .timestamp:
+                return .timestamp(DatabaseTimestampValue(text: trimmed))
+            case .uuid:
+                guard let value = UUID(uuidString: trimmed) else {
+                    throw DatabaseRowEditorError.invalidValue(field.id, field.typeName)
+                }
+                return .uuid(value)
+            case .null:
+                break
+            case .missing, .binary, .array, .object, .productSpecific:
+                throw DatabaseRowEditorError.unsupportedValue(field.id)
+            }
+        }
+        return try value(from: field.text, typeName: field.typeName, fieldName: field.id)
+    }
+
+    private static func value(
+        from text: String,
+        typeName: String,
+        fieldName: String
+    ) throws -> DatabaseValue {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let type = typeName.lowercased()
+        if type.contains("bool") {
+            guard let value = parseBoolean(trimmed) else {
+                throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
+            }
+            return .boolean(value)
+        }
+        if type.contains("int") || type.contains("serial") {
+            guard let value = Int64(trimmed) else {
+                throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
+            }
+            return .signedInteger(value)
+        }
+        if type.contains("numeric") || type.contains("decimal") {
+            return .decimal(DatabaseDecimalValue(rawValue: trimmed))
+        }
+        if type.contains("real") || type.contains("double") {
+            guard let value = Double(trimmed), value.isFinite else {
+                throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
+            }
+            return .floatingPoint(value)
+        }
+        if type == "uuid" {
+            guard let value = UUID(uuidString: trimmed) else {
+                throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
+            }
+            return .uuid(value)
+        }
+        if type.contains("timestamp") {
+            return .timestamp(DatabaseTimestampValue(text: trimmed))
+        }
+        if type == "date" {
+            return .date(DatabaseDateValue(text: trimmed))
+        }
+        if type.hasPrefix("time") {
+            return .time(DatabaseTimeValue(text: trimmed))
+        }
+        return .string(text)
+    }
+
+    private static func parseBoolean(_ value: String) -> Bool? {
+        switch value.lowercased() {
+        case "true", "t", "1", "yes": true
+        case "false", "f", "0", "no": false
+        default: nil
+        }
+    }
+
+    private static func editorMessage(_ error: Error) -> String {
+        if let editorError = error as? DatabaseRowEditorError {
+            switch editorError {
+            case .notEditing: return "Open the row editor before saving."
+            case .missingIdentity:
+                return "This row has no stable primary or unique key for safe editing."
+            case .invalidValue(let field, let type):
+                return "Enter a valid \(type) value for \(field)."
+            case .unsupportedValue(let field):
+                return "The value in \(field) cannot be edited in this form yet."
+            }
+        }
+        if let requestError = error as? DatabaseRowMutationRequestError {
+            switch requestError {
+            case .missingValues: return "Select at least one field to save."
+            case .unsupportedIdentity:
+                return "This row has no supported stable identity for safe editing."
+            case .invalidTarget, .invalidIdentifier, .duplicateField:
+                return "The row mutation could not be created safely."
+            }
+        }
+        return "The row mutation could not be created."
+    }
+
     private static func message(for error: Error) -> String {
         if let inputError = error as? DatabaseDataWorkspaceInputError {
             switch inputError {
@@ -350,4 +688,11 @@ final class DatabaseDataWorkspaceModel {
 
 private enum DatabaseDataWorkspaceInputError: Error {
     case invalidTarget(String)
+}
+
+private enum DatabaseRowEditorError: Error {
+    case notEditing
+    case missingIdentity
+    case invalidValue(String, String)
+    case unsupportedValue(String)
 }
