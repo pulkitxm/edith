@@ -123,6 +123,18 @@ final class DatabaseObjectExplorerModel {
             groups = [group]
             state = .loaded
             loadGroup(group.identifier, connection: connection)
+        case .mongoDB:
+            let database = connection.defaultDatabase ?? "admin"
+            let group = DatabaseExplorerGroup(
+                identifier: DatabaseObjectIdentifier(kind: .database, path: [database]),
+                title: database,
+                isAvailable: true,
+                objects: [],
+                state: .idle,
+                nextContinuation: nil)
+            groups = [group]
+            state = .loaded
+            loadGroup(group.identifier, connection: connection)
         default:
             state = .failed(
                 "Automatic object discovery is not available for \(connection.product.displayName) yet."

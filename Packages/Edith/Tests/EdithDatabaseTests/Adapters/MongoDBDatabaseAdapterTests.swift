@@ -214,8 +214,10 @@ private actor MongoDBDatabaseAdapterTestClient: MongoDBDatabaseClient {
     private let suspendsReads: Bool
     private let failsDisconnect: Bool
     private let cancellationAfterRead: DatabaseAdapterCancellationSignal?
+    private let collectionNames: [String]
     private var disconnected = false
     private var readPlans: [MongoDBDatabaseReadPlan] = []
+    private var collectionPlans: [MongoDBDatabaseCollectionPlan] = []
     private var disconnects = 0
 
     init(
@@ -223,13 +225,15 @@ private actor MongoDBDatabaseAdapterTestClient: MongoDBDatabaseClient {
         outcomes: [Outcome] = [],
         suspendsReads: Bool = false,
         failsDisconnect: Bool = false,
-        cancellationAfterRead: DatabaseAdapterCancellationSignal? = nil
+        cancellationAfterRead: DatabaseAdapterCancellationSignal? = nil,
+        collectionNames: [String] = []
     ) {
         self.identity = identity
         self.outcomes = outcomes
         self.suspendsReads = suspendsReads
         self.failsDisconnect = failsDisconnect
         self.cancellationAfterRead = cancellationAfterRead
+        self.collectionNames = collectionNames
     }
 
     func discoverIdentity() async throws -> DatabaseProductIdentity {
@@ -261,6 +265,16 @@ private actor MongoDBDatabaseAdapterTestClient: MongoDBDatabaseClient {
         }
     }
 
+    func listCollections(
+        _ plan: MongoDBDatabaseCollectionPlan
+    ) async throws -> MongoDBDatabaseCollectionResult {
+        collectionPlans.append(plan)
+        let names = Array(collectionNames.prefix(plan.limit))
+        return MongoDBDatabaseCollectionResult(
+            names: names,
+            hasMore: collectionNames.count > names.count)
+    }
+
     func disconnect() async throws {
         disconnected = true
         disconnects += 1
@@ -273,9 +287,55 @@ private actor MongoDBDatabaseAdapterTestClient: MongoDBDatabaseClient {
         readPlans
     }
 
+    func discoveredCollectionPlans() -> [MongoDBDatabaseCollectionPlan] {
+        collectionPlans
+    }
+
     func disconnectCount() -> Int {
         disconnects
     }
+}
+
+@Test func mongoReadingDiscoversCollectionsWithBoundedContinuation() async throws {
+    let client = MongoDBDatabaseAdapterTestClient(
+        collectionNames: ["events", "users", "audit"])
+    let (session, definition) = try await MongoDBDatabaseAdapterFixtures.connect(client: client)
+    let target = DatabaseTargetIdentifier(
+        connectionID: definition.id,
+        object: DatabaseObjectIdentifier(kind: .database, path: ["edith_scale"]))
+    let firstRequest = try DatabaseAdapterPageRequest(
+        target: target,
+        page: DatabasePageRequest(pageSize: try DatabasePageSize(2)),
+        continuation: nil)
+
+    let first = try await session.readPage(
+        firstRequest,
+        context: MongoDBDatabaseAdapterFixtures.context())
+
+    #expect(first.records.compactMap { record in
+        guard case .string(let value)? = record.fields.first(where: { $0.name == "name" })?.value
+        else { return nil }
+        return value
+    } == ["events", "users"])
+    let continuation = try #require(first.nextContinuation)
+    let secondRequest = try DatabaseAdapterPageRequest(
+        target: target,
+        page: DatabasePageRequest(pageSize: try DatabasePageSize(2)),
+        continuation: continuation)
+
+    let second = try await session.readPage(
+        secondRequest,
+        context: MongoDBDatabaseAdapterFixtures.context())
+
+    #expect(second.records.compactMap { record in
+        guard case .string(let value)? = record.fields.first(where: { $0.name == "name" })?.value
+        else { return nil }
+        return value
+    } == ["audit"])
+    #expect(second.nextContinuation == nil)
+    let plans = await client.discoveredCollectionPlans()
+    #expect(plans.map(\.limit) == [3, 5])
+    await session.disconnect()
 }
 
 private actor MongoDBDatabaseConnectorCapture {
