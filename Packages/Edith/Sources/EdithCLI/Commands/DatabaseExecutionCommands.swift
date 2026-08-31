@@ -471,7 +471,7 @@ struct DatabaseDisconnectCommand: AsyncParsableCommand {
 struct DatabaseBrowseCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "browse",
-        abstract: "Read one bounded page from a database object.")
+        abstract: "Read one bounded page from a database root or object.")
 
     @Flag(name: .long, help: "Emit one JSON document on stdout.")
     var json = false
@@ -500,7 +500,7 @@ struct DatabaseBrowseCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let target = try DatabaseCLI.target(
-                connectionID: connectionID, kind: kind, path: path, requiresObject: true)
+                connectionID: connectionID, kind: kind, path: path, requiresObject: false)
             let page = try DatabaseCLI.pageRequest(limit: limit, continuation: continuation)
             let operation = try DatabaseCLI.operationContext(
                 timeoutMilliseconds: timeoutMilliseconds)
