@@ -191,17 +191,16 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
         #expect(result.stderrText == "Could not find the destination.")
     }
 
-    @Test func windowsUploadsCreateTheirDestinationDirectoryAndDisposeSafely() throws {
-        let command = SSHTransferCommands.upload(
-            path: "C:\\Users\\me\\AppData\\Local\\Temp\\nested\\image.png",
-            platform: .windows)
+    @Test func windowsUploadsCreateTheirDestinationDirectorySafely() throws {
+        let command = try #require(
+            SSHTransferCommands.createUploadDirectory(
+                path: "C:\\Users\\me\\AppData\\Local\\Temp\\nested\\image.png",
+                platform: .windows))
         let encoded = try #require(command.split(separator: " ").last)
         let data = try #require(Data(base64Encoded: String(encoded)))
         let script = try #require(String(data: data, encoding: .utf16LittleEndian))
 
         #expect(script.contains("[IO.Directory]::CreateDirectory($parent)"))
-        #expect(script.contains("$output=$null; try"))
-        #expect(script.contains("if ($null -ne $output) { $output.Dispose() }"))
         #expect(script.contains("[Console]::Error.WriteLine($_.Exception.Message)"))
     }
 }

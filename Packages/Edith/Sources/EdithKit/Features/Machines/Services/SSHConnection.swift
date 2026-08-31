@@ -27,18 +27,16 @@ private enum SSHTransportDiagnostics {
 }
 
 enum SSHTransferCommands {
-    static func upload(path: String, platform: RemoteMachinePlatform) -> String {
-        guard platform == .windows else { return "cat > \(ShellQuote.quote(path))" }
-        let script =
+    static func createUploadDirectory(
+        path: String, platform: RemoteMachinePlatform
+    ) -> String? {
+        guard platform == .windows else { return nil }
+        return PowerShell.userCommand(
             "$path=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("
-            + "\(PowerShell.literal(path))); "
-            + "$parent=[IO.Path]::GetDirectoryName($path); "
-            + "if (![String]::IsNullOrWhiteSpace($parent)) { "
-            + "[IO.Directory]::CreateDirectory($parent) | Out-Null }; "
-            + "$output=$null; try { $output=[IO.File]::Create($path); "
-            + "[Console]::OpenStandardInput().CopyTo($output) } finally { "
-            + "if ($null -ne $output) { $output.Dispose() } }"
-        return PowerShell.userCommand(script)
+                + "\(PowerShell.literal(path))); "
+                + "$parent=[IO.Path]::GetDirectoryName($path); "
+                + "if (![String]::IsNullOrWhiteSpace($parent)) { "
+                + "[IO.Directory]::CreateDirectory($parent) | Out-Null }")
     }
 
     static func temporaryDirectory(platform: RemoteMachinePlatform) -> String? {
@@ -404,14 +402,22 @@ public actor SSHConnection {
         localURL: URL, toRemotePath remotePath: String,
         progress: (@Sendable (Int64) -> Void)? = nil
     ) async throws {
-        guard let input = try? FileHandle(forReadingFrom: localURL) else {
+        guard FileManager.default.isReadableFile(atPath: localURL.path) else {
             throw SSHConnectionError.transferFailed("Could not read the local file.")
         }
         let expected =
             (try? FileManager.default.attributesOfItem(atPath: localURL.path)[.size]) as? Int64
             ?? -1
-        let command = SSHTransferCommands.upload(
-            path: remotePath, platform: remotePlatform ?? .linux)
+        if remotePlatform == .windows {
+            try await uploadToWindows(
+                localURL: localURL, remotePath: remotePath, expected: expected,
+                progress: progress)
+            return
+        }
+        guard let input = try? FileHandle(forReadingFrom: localURL) else {
+            throw SSHConnectionError.transferFailed("Could not read the local file.")
+        }
+        let command = "cat > \(ShellQuote.quote(remotePath))"
         let process = execProcess(command: command)
         let stdinPipe = Pipe()
         let stderrPipe = Pipe()
@@ -460,6 +466,53 @@ public actor SSHConnection {
             throw SSHConnectionError.transferFailed(
                 "The machine kept a different file than the one that was sent.")
         }
+    }
+
+    private func uploadToWindows(
+        localURL: URL, remotePath: String, expected: Int64,
+        progress: (@Sendable (Int64) -> Void)?
+    ) async throws {
+        if let command = SSHTransferCommands.createUploadDirectory(
+            path: remotePath, platform: .windows)
+        {
+            try await runChecked(command, timeout: 30)
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/scp")
+        process.arguments =
+            fileTransferArguments()
+            + [localURL.path, "\(machine.sshTarget):\(windowsSFTPPath(remotePath))"]
+        process.environment = environment()
+        let stderrPipe = Pipe()
+        let stderrBuffer = PipeBuffer()
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = stderrPipe
+        stderrPipe.fileHandleForReading.readabilityHandler = {
+            PipeReading.consume($0, receive: stderrBuffer.append)
+        }
+        progress?(0)
+        try process.run()
+        let status = await withTaskCancellationHandler {
+            await Self.waitForExit(process, timeout: 15 * 60)
+        } onCancel: {
+            if process.isRunning { process.terminate() }
+        }
+        stderrPipe.fileHandleForReading.readabilityHandler = nil
+        stderrBuffer.append(stderrPipe.fileHandleForReading.readDataToEndOfFile())
+        let reported = SSHExecResult(
+            status: status, stdout: Data(), stderr: stderrBuffer.snapshot()
+        ).stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard status == 0 else {
+            await discard(remotePath)
+            throw SSHConnectionError.transferFailed(reported.isEmpty ? "Upload failed." : reported)
+        }
+        guard let landed = await remoteSize(remotePath), expected < 0 || landed == expected else {
+            await discard(remotePath)
+            throw SSHConnectionError.transferFailed(
+                "The machine kept a different file than the one that was sent.")
+        }
+        if expected >= 0 { progress?(expected) }
     }
 
     public func temporaryDirectory() async throws -> String {
@@ -581,6 +634,37 @@ public actor SSHConnection {
 
     public nonisolated func terminalEnvironment() -> [String] {
         environment().map { "\($0.key)=\($0.value)" }
+    }
+
+    private nonisolated func fileTransferArguments() -> [String] {
+        var arguments =
+            [
+                "-q", "-o", "ControlPath=\"\(socketPath)\"", "-o", "BatchMode=yes", "-o",
+                "LogLevel=ERROR",
+            ] + baseOptions()
+        switch machine.source {
+        case .sshConfigAlias:
+            break
+        case .manual:
+            arguments += ["-P", String(machine.port)]
+            switch machine.auth {
+            case .agent:
+                break
+            case let .keyFile(path, _):
+                arguments += ["-i", SSHConfigFile.expandTilde(path), "-o", "IdentitiesOnly=yes"]
+            case .password:
+                arguments += [
+                    "-o", "PreferredAuthentications=password,keyboard-interactive",
+                    "-o", "PubkeyAuthentication=no",
+                    "-o", "NumberOfPasswordPrompts=1",
+                ]
+            }
+        }
+        return arguments
+    }
+
+    private nonisolated func windowsSFTPPath(_ path: String) -> String {
+        "/" + path.replacingOccurrences(of: "\\", with: "/")
     }
 
     private nonisolated func execProcess(command: String) -> Process {
