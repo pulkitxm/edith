@@ -154,6 +154,22 @@ import Testing
         #expect(card.contains("Label(\"Delete\""))
     }
 
+    @Test func projectCardsExposeLiveAuditProgress() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent(
+                    "Sources/Edith/Features/SEOAudit/Views/SEOAuditPage.swift"),
+            encoding: .utf8)
+
+        #expect(source.contains("activeRun: active ? model.selectedRun : nil"))
+        #expect(source.contains("AUDITING \\(current)/\\(total)"))
+        #expect(source.contains("Text(activeProgress, format: .percent"))
+        #expect(source.contains("geometry.size.width * activeProgress"))
+    }
+
     @Test func lighthouseResultReplacesAnEarlierFailure() {
         let unavailable = SEOAuditIssue(
             code: "lighthouse-unavailable", severity: .notice,

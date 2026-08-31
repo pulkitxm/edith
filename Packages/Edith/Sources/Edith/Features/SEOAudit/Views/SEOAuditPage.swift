@@ -114,8 +114,11 @@ private struct SEOAuditProjectsView: View {
                     ], spacing: UIScale.pt(14)
                 ) {
                     ForEach(model.projects) { project in
+                        let active = model.isRunning && model.selectedProject?.id == project.id
                         SEOAuditProjectCard(
                             project: project,
+                            activeStage: active ? model.stage : nil,
+                            activeRun: active ? model.selectedRun : nil,
                             canViewDetails: !model.isRunning
                                 || model.selectedProject?.id == project.id,
                             actionsEnabled: !model.isRunning,
@@ -216,6 +219,8 @@ private struct SEOAuditNewProjectSheet: View {
 
 private struct SEOAuditProjectCard: View {
     let project: SEOAuditProjectSummary
+    let activeStage: SEOAuditStage?
+    let activeRun: SEOAuditRun?
     let canViewDetails: Bool
     let actionsEnabled: Bool
     let viewDetails: () -> Void
@@ -243,12 +248,9 @@ private struct SEOAuditProjectCard: View {
                             .lineLimit(1)
                         Divider()
                         HStack(spacing: UIScale.pt(16)) {
-                            cardMetric(
-                                "Pages", project.latestRun.map { String($0.pageCount) } ?? "-")
-                            cardMetric(
-                                "Issues", project.latestRun.map { String($0.issueCount) } ?? "-")
-                            cardMetric(
-                                "Score", project.latestRun?.averageScore.map(String.init) ?? "-")
+                            cardMetric("Pages", displayedPageCount)
+                            cardMetric("Issues", displayedIssueCount)
+                            cardMetric("Score", displayedAverageScore)
                             Spacer(minLength: 0)
                             Text(project.updatedAt, format: .relative(presentation: .named))
                                 .font(.system(size: UIScale.pt(10)))
@@ -332,15 +334,76 @@ private struct SEOAuditProjectCard: View {
         .frame(height: UIScale.pt(138))
         .clipped()
         .overlay(alignment: .bottomLeading) {
-            Text(project.latestRun?.state.rawValue.uppercased() ?? "READY")
-                .font(DashSkin.mono(9, weight: .bold))
-                .tracking(0.8)
-                .foregroundStyle(.white)
-                .padding(.horizontal, UIScale.pt(8))
-                .padding(.vertical, UIScale.pt(5))
-                .background(.black.opacity(0.62), in: Capsule())
-                .padding(UIScale.pt(10))
+            HStack(spacing: UIScale.pt(7)) {
+                if activeStage != nil {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .tint(.white)
+                }
+                Text(activityLabel)
+                    .font(DashSkin.mono(9, weight: .bold))
+                    .tracking(0.8)
+                if let activeProgress {
+                    Text(activeProgress, format: .percent.precision(.fractionLength(0)))
+                        .font(DashSkin.mono(9, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.72))
+                }
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, UIScale.pt(8))
+            .padding(.vertical, UIScale.pt(5))
+            .background(.black.opacity(0.68), in: Capsule())
+            .padding(UIScale.pt(10))
         }
+        .overlay(alignment: .bottom) {
+            if let activeProgress {
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Rectangle().fill(.black.opacity(0.42))
+                        Rectangle().fill(DashSkin.accent(dark))
+                            .frame(width: geometry.size.width * activeProgress)
+                    }
+                }
+                .frame(height: UIScale.pt(3))
+            }
+        }
+    }
+
+    private var activityLabel: String {
+        guard let activeStage else {
+            return project.latestRun?.state.rawValue.uppercased() ?? "READY"
+        }
+        switch activeStage {
+        case .idle: return project.latestRun?.state.rawValue.uppercased() ?? "READY"
+        case .discovering: return "DISCOVERING"
+        case let .auditing(current, total, _): return "AUDITING \(current)/\(total)"
+        case .lighthouse: return "LIGHTHOUSE"
+        case .saving: return "SAVING RUN"
+        }
+    }
+
+    private var activeProgress: Double? {
+        guard let activeStage else { return nil }
+        switch activeStage {
+        case .discovering, .lighthouse, .idle: return nil
+        case .auditing: return activeRun?.progress ?? 0
+        case .saving: return 1
+        }
+    }
+
+    private var displayedPageCount: String {
+        activeRun.map { String($0.pages.count) }
+            ?? project.latestRun.map { String($0.pageCount) } ?? "-"
+    }
+
+    private var displayedIssueCount: String {
+        activeRun.map { String($0.issueCount) }
+            ?? project.latestRun.map { String($0.issueCount) } ?? "-"
+    }
+
+    private var displayedAverageScore: String {
+        activeRun?.averageScore.map(String.init)
+            ?? project.latestRun?.averageScore.map(String.init) ?? "-"
     }
 
     private var projectMark: some View {
