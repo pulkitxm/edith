@@ -196,20 +196,49 @@ struct DatabasePage: View {
     private var readyContent: some View {
         if connectionWorkspace.listState == .empty {
             connectionOnboarding
-        } else if compact {
-            compactContent
         } else {
-            HStack(spacing: 0) {
-                ScrollView {
-                    connections
-                        .frame(minHeight: UIScale.pt(360))
+            GeometryReader { geometry in
+                if compact || geometry.size.width < UIScale.pt(880) {
+                    compactContent
+                        .environment(\.compactLayout, true)
+                } else {
+                    HStack(spacing: 0) {
+                        navigationSidebar
+                            .frame(width: UIScale.pt(260))
+                        Divider().opacity(0.35)
+                        workbench
+                            .environment(\.compactLayout, false)
+                    }
                 }
-                .frame(width: UIScale.pt(250))
-                .background(Color(nsColor: .underPageBackgroundColor))
-                Divider().opacity(0.35)
-                workbench
             }
         }
+    }
+
+    private var navigationSidebar: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                connections
+            }
+            .frame(
+                minHeight: UIScale.pt(isConnected ? 170 : 360),
+                idealHeight: UIScale.pt(isConnected ? 220 : 500),
+                maxHeight: isConnected ? UIScale.pt(280) : .infinity)
+            if isConnected, let connection = connectionWorkspace.selectedConnection {
+                Divider().opacity(0.35)
+                DatabaseObjectNavigatorView(
+                    explorer: objectExplorer,
+                    connection: connection,
+                    open: { dataWorkspace.open($0, connection: connection) })
+            }
+        }
+        .background(Color(nsColor: .underPageBackgroundColor))
+    }
+
+    private var isConnected: Bool {
+        if case .connected = connectionWorkspace.selectedSessionState {
+            return true
+        }
+        return false
     }
 
     private func serviceProgress(title: String, detail: String) -> some View {
@@ -349,7 +378,8 @@ struct DatabasePage: View {
                 connections: connectionWorkspace,
                 explorer: objectExplorer,
                 data: dataWorkspace,
-                mutations: workspace)
+                mutations: workspace,
+                showsObjectNavigator: false)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }

@@ -1,3 +1,4 @@
+import AppKit
 import EdithDatabase
 import EdithKit
 import SwiftUI
@@ -17,7 +18,7 @@ struct DatabaseObjectNavigatorView: View {
             Divider().opacity(0.35)
             content
         }
-        .background(DashSkin.paper2(dark).opacity(0.38))
+        .background(Color(nsColor: .underPageBackgroundColor))
         .onChange(of: explorer.groups) { _, _ in
             expandActiveGroup()
         }
