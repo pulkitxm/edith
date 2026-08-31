@@ -73,7 +73,7 @@ private actor CLIDatabaseMCPRunRecorder {
             plan(["ed", "database", ""], 2).candidates
                 == [
                     "connections", "capabilities", "connect", "disconnect", "browse", "query",
-                    "mcp",
+                    "operations", "mcp",
                 ])
         #expect(
             plan(["ed", "database", "connections", ""], 3).candidates
@@ -105,6 +105,106 @@ private actor CLIDatabaseMCPRunRecorder {
             try EdRoot.parseAsRoot([
                 "database", "query", Self.connectionUUID.uuidString, "--file", "query.sql",
             ]) is DatabaseQueryCommand)
+        #expect(
+            try EdRoot.parseAsRoot(["database", "operations"])
+                is DatabaseOperationsListCommand)
+        #expect(
+            try EdRoot.parseAsRoot(["database", "operations", "cancel", UUID().uuidString])
+                is DatabaseOperationsCancelCommand)
+    }
+
+    @Test func operationListSendsExactFiltersAndSafeJSON() async throws {
+        let operation = try Self.operation()
+        let sender = CLIDatabaseScriptedSender { request in
+            guard case .operationList = request else {
+                throw DatabaseBrokerCommandClientError.invalidRequest
+            }
+            return .operationList(
+                .success(
+                    DatabaseOperationListResult(operations: [operation]),
+                    metadata: Self.completeMetadata))
+        }
+
+        try await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.makeSender = { sender }
+            let result = await CLIProbe.capture([
+                "database", "operations", "list",
+                "--connection", Self.connectionUUID.uuidString,
+                "--state", "running", "--state", "cancelling",
+                "--kind", "database.query", "--before", "2026-08-31T10:00:00Z",
+                "--limit", "40", "--json",
+            ])
+
+            #expect(result.code == ExitCodes.success)
+            #expect(result.stderr.isEmpty)
+            let operations = try #require(result.array as? [[String: Any]])
+            #expect(operations.first?["state"] as? String == "running")
+            #expect(operations.first?["kind"] as? String == "database.query")
+            #expect(!result.stdout.contains(Self.secretUUID.uuidString))
+
+            let request = try #require(await sender.recordedRequests().first?.operationListRequest)
+            #expect(request.search.connectionID?.rawValue == Self.connectionUUID)
+            #expect(request.search.states == [.running, .cancelling])
+            #expect(request.search.kinds == [DatabaseOperationKind(rawValue: "database.query")])
+            #expect(
+                request.search.before == ISO8601DateFormatter().date(from: "2026-08-31T10:00:00Z"))
+            #expect(request.search.limit == 40)
+        }
+    }
+
+    @Test func operationCancelReturnsDispositionAndExactID() async throws {
+        let operation = try Self.operation()
+        let sender = CLIDatabaseScriptedSender { request in
+            guard case .operationCancel(let cancel) = request else {
+                throw DatabaseBrokerCommandClientError.invalidRequest
+            }
+            return .operationCancel(
+                .success(
+                    DatabaseOperationCancelResult(
+                        operationID: cancel.operationID,
+                        disposition: .accepted,
+                        cancellationSupport: .serverSide,
+                        operation: operation),
+                    metadata: Self.completeMetadata))
+        }
+
+        try await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.makeSender = { sender }
+            let result = await CLIProbe.capture([
+                "database", "operations", "cancel",
+                operation.id.rawValue.uuidString, "--json",
+            ])
+
+            #expect(result.code == ExitCodes.success)
+            #expect(result.stderr.isEmpty)
+            #expect(result.object?["disposition"] as? String == "accepted")
+            #expect(result.object?["cancellationSupport"] as? String == "serverSide")
+            let request = try #require(
+                await sender.recordedRequests().first?.operationCancelRequest)
+            #expect(request.operationID == operation.id)
+        }
+    }
+
+    @Test func missingOperationUsesNotFoundWithoutOutput() async {
+        let sender = CLIDatabaseScriptedSender { request in
+            guard case .operationGet = request else {
+                throw DatabaseBrokerCommandClientError.invalidRequest
+            }
+            return .operationGet(
+                .success(
+                    DatabaseOperationGetResult(operation: nil),
+                    metadata: Self.completeMetadata))
+        }
+
+        await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.makeSender = { sender }
+            let result = await CLIProbe.capture([
+                "database", "operations", "get", UUID().uuidString, "--json",
+            ])
+            #expect(result.code == ExitCodes.notFound)
+            #expect(result.stdout.isEmpty)
+            #expect(result.stderr.contains("operation was not found"))
+        }
     }
 
     @Test func connectSendsExactIDDeadlineAndSafeJSON() async throws {
@@ -250,6 +350,8 @@ private actor CLIDatabaseMCPRunRecorder {
                 [
                     "database", "query", Self.connectionUUID.uuidString, "--json", "--ndjson",
                 ],
+                ["database", "operations", "list", "--limit", "1001"],
+                ["database", "operations", "get", "not-a-uuid"],
             ]
             for arguments in cases {
                 let result = await CLIProbe.capture(arguments)
@@ -731,6 +833,27 @@ private actor CLIDatabaseMCPRunRecorder {
                 #expect(result.stderr.localizedCaseInsensitiveContains(message))
             }
         }
+    }
+
+    private static func operation() throws -> DatabaseOperationRecordSummary {
+        let connection = try connection()
+        return DatabaseOperationRecordSummary(
+            id: DatabaseOperationID(
+                rawValue: UUID(uuidString: "0909B692-E58E-49E2-A707-7148943B3688")!),
+            kind: DatabaseOperationKind(rawValue: "database.query"),
+            state: .running,
+            connection: connection.identity,
+            target: DatabaseTargetIdentifier(
+                connectionID: connection.id,
+                object: DatabaseObjectIdentifier(kind: .table, path: ["public", "orders"])),
+            startedAt: Date(timeIntervalSince1970: 7_000),
+            deadline: Date(timeIntervalSince1970: 7_030),
+            progress: .determinate(completed: 50, total: 100, unit: .records),
+            cancellationSupport: .serverSide,
+            retryClassification: .safeIdempotent,
+            pageCount: 1,
+            recordCount: 50,
+            byteCount: 4_096)
     }
 
     private static func page(note: String = "ready") -> DatabasePage<DatabaseRecord> {

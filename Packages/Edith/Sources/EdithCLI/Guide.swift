@@ -128,6 +128,8 @@ public enum Guide {
         ed database connect <connection-id> --json
         ed database browse <connection-id> --path public --path orders --limit 100 --json
         printf 'select * from public.orders limit 100' | ed database query <connection-id> --json
+        ed database operations list --connection <connection-id> --state running --json
+        ed database operations cancel <operation-id> --json
         ed database disconnect <connection-id> --json
         ed database mcp
         ```
@@ -144,6 +146,8 @@ public enum Guide {
         pass the opaque continuation back with `--continuation`, and set an operation
         deadline with `--timeout-milliseconds`. Query text is read only from stdin or
         a UTF-8 file so statements do not leak through process arguments.
+        `database operations` lists broker history, shows progress, and requests
+        cancellation using operation UUIDs returned by execution commands.
 
         `ed database mcp` stays in the foreground and reserves stdout for MCP
         protocol traffic. It exposes bounded connection and capability inspection
