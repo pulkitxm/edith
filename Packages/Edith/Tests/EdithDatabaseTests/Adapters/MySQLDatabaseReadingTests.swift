@@ -224,3 +224,78 @@ private actor MySQLDatabaseReadingClient: MySQLDatabaseClient {
     #expect((await client.capturedPlans()).count == 1)
     await session.disconnect()
 }
+
+@Test(.enabled(if: MySQLDatabaseLiveEnvironment.mysqlEnabled))
+func mysqlReadingLiveDiscoversAndPagesMillionRowTable() async throws {
+    let client = try await MySQLNIODatabaseClient.connect(MySQLDatabaseLiveEnvironment.plan())
+    do {
+        let connectionID = DatabaseConnectionID()
+        let sessionID = DatabaseAdapterSessionID()
+        let databases = try await MySQLDatabaseReadSupport.readPage(
+            MySQLDatabaseReadingFixtures.pageRequest(connectionID: connectionID),
+            connectionID: connectionID,
+            sessionID: sessionID,
+            client: client,
+            startedAt: .now)
+        #expect(
+            databases.records.contains {
+                $0.fields.first?.value == .string("edith_lab")
+            })
+
+        let database = DatabaseObjectIdentifier(kind: .database, path: ["edith_lab"])
+        let relations = try await MySQLDatabaseReadSupport.readPage(
+            MySQLDatabaseReadingFixtures.pageRequest(
+                connectionID: connectionID,
+                object: database),
+            connectionID: connectionID,
+            sessionID: sessionID,
+            client: client,
+            startedAt: .now)
+        #expect(
+            relations.records.contains {
+                $0.fields.first?.value == .string("events")
+            })
+
+        let table = DatabaseObjectIdentifier(kind: .table, path: ["edith_lab", "events"])
+        let first = try await MySQLDatabaseReadSupport.readPage(
+            MySQLDatabaseReadingFixtures.pageRequest(
+                connectionID: connectionID,
+                object: table,
+                size: 100),
+            connectionID: connectionID,
+            sessionID: sessionID,
+            client: client,
+            startedAt: .now)
+        #expect(first.records.count == 100)
+        #expect(first.records.first?.fields.first?.value == .unsignedInteger(1))
+        let continuation = try #require(first.nextContinuation)
+
+        let second = try await MySQLDatabaseReadSupport.readPage(
+            MySQLDatabaseReadingFixtures.pageRequest(
+                connectionID: connectionID,
+                object: table,
+                size: 100,
+                continuation: continuation),
+            connectionID: connectionID,
+            sessionID: sessionID,
+            client: client,
+            startedAt: .now)
+        #expect(second.records.count == 100)
+        #expect(second.records.first?.fields.first?.value == .unsignedInteger(101))
+
+        let query = try await MySQLDatabaseReadSupport.query(
+            MySQLDatabaseReadingFixtures.queryRequest(
+                connectionID: connectionID,
+                command: "SELECT id, category FROM edith_lab.events ORDER BY id",
+                size: 25),
+            connectionID: connectionID,
+            client: client,
+            startedAt: .now)
+        #expect(query.records.count == 25)
+        #expect(query.metadata.completeness.state == .partial)
+    } catch {
+        await client.disconnect()
+        throw error
+    }
+    await client.disconnect()
+}

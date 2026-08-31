@@ -790,10 +790,17 @@ enum MySQLDatabaseReadSupport {
         row: MySQLDatabaseReadRow,
         result: MySQLDatabaseReadResult
     ) throws -> String {
-        guard case .string(let value) = try value(name, row: row, result: result) else {
+        switch try value(name, row: row, result: result) {
+        case .string(let value):
+            return value
+        case .binary(let value) where value.isComplete:
+            guard let text = String(data: value.availableBytes, encoding: .utf8) else {
+                throw MySQLDatabaseAdapterSupport.readFailed
+            }
+            return text
+        default:
             throw MySQLDatabaseAdapterSupport.readFailed
         }
-        return value
     }
 
     private static func boolean(

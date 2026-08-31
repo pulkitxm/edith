@@ -612,7 +612,7 @@ private actor MySQLDatabaseFoundationTestClient: MySQLDatabaseClient {
     #expect(await deadlineClient.disconnects() == 1)
 }
 
-private enum MySQLDatabaseLiveEnvironment {
+enum MySQLDatabaseLiveEnvironment {
     static let values = ProcessInfo.processInfo.environment
     static let mysqlKeys = [
         "EDITH_DATABASE_MYSQL_HOST",
@@ -785,7 +785,7 @@ func mysqlFoundationLiveAdapterCapabilityDiscovery() async throws {
     #expect(report.productIdentity.product == .mysql)
     #expect(report.productIdentity.version?.major == 8)
     #expect(report.supports(.connectionTest))
-    #expect(report.status(for: .query)?.availability == .planned)
+    #expect(report.status(for: .query)?.availability == .available)
 }
 
 private func withMySQLDatabaseStalledServer<Output: Sendable>(

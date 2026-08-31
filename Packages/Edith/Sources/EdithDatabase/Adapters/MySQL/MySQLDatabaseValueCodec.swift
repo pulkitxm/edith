@@ -96,7 +96,13 @@ enum MySQLDatabaseValueCodec {
             guard let value = data.int64 else { throw MySQLDatabaseDriverFailure.server(nil) }
             return .signedInteger(value)
         case .decimal, .newdecimal:
-            guard let value = data.string, validDecimal(value) else {
+            let value: String?
+            if let string = data.string {
+                value = string
+            } else {
+                value = String(data: try rawBytes(data), encoding: .utf8)
+            }
+            guard let value, validDecimal(value) else {
                 throw MySQLDatabaseDriverFailure.server(nil)
             }
             return .decimal(DatabaseDecimalValue(rawValue: value))
@@ -112,7 +118,10 @@ enum MySQLDatabaseValueCodec {
         case .datetime, .datetime2, .timestamp, .timestamp2:
             return .timestamp(DatabaseTimestampValue(text: try timestampText(data)))
         case .json:
-            return try productText(data, typeName: "JSON")
+            guard let value = String(data: try rawBytes(data), encoding: .utf8) else {
+                throw MySQLDatabaseDriverFailure.server(nil)
+            }
+            return try productText(data, typeName: "JSON", fallback: value)
         case .geometry:
             return try productBinary(data, typeName: "GEOMETRY")
         case .blob, .tinyBlob, .mediumBlob,
@@ -202,7 +211,7 @@ enum MySQLDatabaseValueCodec {
     }
 
     private static func dateText(_ data: MySQLData) throws -> String {
-        guard let value = data.time, let year = value.year, let month = value.month,
+        guard let value = mysqlTime(data), let year = value.year, let month = value.month,
             let day = value.day
         else {
             throw MySQLDatabaseDriverFailure.server(nil)
@@ -211,11 +220,12 @@ enum MySQLDatabaseValueCodec {
     }
 
     private static func timeText(_ data: MySQLData) throws -> String {
-        guard let value = data.time, let hour = value.hour, let minute = value.minute,
-            let second = value.second
-        else {
+        guard let value = mysqlTime(data) else {
             throw MySQLDatabaseDriverFailure.server(nil)
         }
+        let hour = value.hour ?? 0
+        let minute = value.minute ?? 0
+        let second = value.second ?? 0
         let base = String(format: "%02d:%02d:%02d", hour, minute, second)
         guard let microsecond = value.microsecond, microsecond > 0 else { return base }
         return base + String(format: ".%06d", microsecond)
@@ -223,6 +233,29 @@ enum MySQLDatabaseValueCodec {
 
     private static func timestampText(_ data: MySQLData) throws -> String {
         try dateText(data) + " " + timeText(data)
+    }
+
+    private static func mysqlTime(_ data: MySQLData) -> MySQLTime? {
+        if let value = data.time { return value }
+        let type: MySQLProtocol.DataType
+        switch data.type {
+        case .newdate:
+            type = .date
+        case .timestamp2:
+            type = .timestamp
+        case .datetime2:
+            type = .datetime
+        case .time2:
+            type = .time
+        default:
+            return nil
+        }
+        return MySQLData(
+            type: type,
+            format: data.format,
+            buffer: data.buffer,
+            isUnsigned: data.isUnsigned
+        ).time
     }
 
     private static func typeName(_ column: MySQLProtocol.ColumnDefinition41) -> String {
