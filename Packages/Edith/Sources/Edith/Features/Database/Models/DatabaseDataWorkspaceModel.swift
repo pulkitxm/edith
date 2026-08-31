@@ -42,6 +42,7 @@ final class DatabaseDataWorkspaceModel {
     private(set) var editorMode: DatabaseRowEditorMode?
     private(set) var editorFields: [DatabaseRowFieldDraft] = []
     private(set) var editorError: String?
+    private(set) var selectedObject: DatabaseObjectIdentifier?
 
     private let sender: any DatabaseBrokerCommandSending
     private let announcement: @MainActor (String) -> Void
@@ -84,6 +85,7 @@ final class DatabaseDataWorkspaceModel {
         editorMode = nil
         editorFields = []
         editorError = nil
+        selectedObject = nil
         filterField = ""
         filterValue = ""
         sortField = ""
@@ -127,6 +129,16 @@ final class DatabaseDataWorkspaceModel {
     }
 
     func refresh(_ connection: DatabaseConnectionSummary) {
+        browse(connection)
+    }
+
+    func open(
+        _ object: DatabaseObjectIdentifier,
+        connection: DatabaseConnectionSummary
+    ) {
+        cancel()
+        selectedObject = object
+        targetText = object.path.joined(separator: ".")
         browse(connection)
     }
 
@@ -342,6 +354,9 @@ final class DatabaseDataWorkspaceModel {
     private func target(
         _ connection: DatabaseConnectionSummary
     ) throws -> DatabaseTargetIdentifier {
+        if let selectedObject {
+            return DatabaseTargetIdentifier(connectionID: connection.id, object: selectedObject)
+        }
         let entered = targetText.trimmingCharacters(in: .whitespacesAndNewlines)
         let segments = entered.split(separator: ".", omittingEmptySubsequences: true).map(
             String.init)
