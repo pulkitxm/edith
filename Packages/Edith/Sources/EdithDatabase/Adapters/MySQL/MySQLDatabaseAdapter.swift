@@ -81,16 +81,35 @@ actor MySQLDatabaseAdapterSession: DatabaseAdapterSession {
         _ request: DatabaseAdapterPageRequest,
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterPage {
-        try await requireAvailableContext(context)
-        throw MySQLDatabaseAdapterSupport.capabilityUnavailable
+        let startedAt = Date()
+        return try await perform(
+            context: context,
+            fallback: MySQLDatabaseAdapterSupport.readFailed
+        ) { [connectionID = connection.id, sessionID = id] client in
+            try await MySQLDatabaseReadSupport.readPage(
+                request,
+                connectionID: connectionID,
+                sessionID: sessionID,
+                client: client,
+                startedAt: startedAt)
+        }
     }
 
     func query(
         _ request: DatabaseAdapterQueryRequest,
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterPage {
-        try await requireAvailableContext(context)
-        throw MySQLDatabaseAdapterSupport.capabilityUnavailable
+        let startedAt = Date()
+        return try await perform(
+            context: context,
+            fallback: MySQLDatabaseAdapterSupport.queryFailed
+        ) { [connectionID = connection.id] client in
+            try await MySQLDatabaseReadSupport.query(
+                request,
+                connectionID: connectionID,
+                client: client,
+                startedAt: startedAt)
+        }
     }
 
     func normalizeMutation(
@@ -223,6 +242,8 @@ actor MySQLDatabaseAdapterSession: DatabaseAdapterSession {
             if let driverFailure = error as? MySQLDatabaseDriverFailure {
                 if case .connection = driverFailure {
                     await failAndClose()
+                } else if case .resourceLimit = driverFailure {
+                    await failAndClose()
                 }
                 throw MySQLDatabaseAdapterSupport.map(driverFailure, fallback: fallback)
             }
@@ -320,6 +341,44 @@ enum MySQLDatabaseAdapterSupport {
             category: .unsupported,
             message: "This MySQL capability is not available yet.",
             productCode: "mysql.capability.unavailable"))
+
+    static let invalidRequest = DatabaseAdapterFailure.reported(
+        DatabaseErrorEnvelope(
+            category: .invalidRequest,
+            message: "The MySQL request is invalid.",
+            productCode: "mysql.request.invalid"))
+
+    static let invalidTarget = DatabaseAdapterFailure.reported(
+        DatabaseErrorEnvelope(
+            category: .invalidRequest,
+            message: "The MySQL object target is invalid.",
+            productCode: "mysql.target.invalid"))
+
+    static let invalidContinuation = DatabaseAdapterFailure.reported(
+        DatabaseErrorEnvelope(
+            category: .invalidRequest,
+            message: "The MySQL continuation is invalid or stale.",
+            productCode: "mysql.continuation.invalid"))
+
+    static let readFailed = DatabaseAdapterFailure.reported(
+        DatabaseErrorEnvelope(
+            category: .server,
+            message: "MySQL could not browse the requested data.",
+            productCode: "mysql.browse.failed",
+            retry: DatabaseRetryGuidance(action: .retry)))
+
+    static let queryFailed = DatabaseAdapterFailure.reported(
+        DatabaseErrorEnvelope(
+            category: .server,
+            message: "MySQL could not complete the query.",
+            productCode: "mysql.query.failed",
+            retry: DatabaseRetryGuidance(action: .retry)))
+
+    static let readOnlyViolation = DatabaseAdapterFailure.reported(
+        DatabaseErrorEnvelope(
+            category: .readOnlyViolation,
+            message: "Only one read-only MySQL statement is allowed.",
+            productCode: "mysql.query.read_only"))
 
     static let operationBusy = DatabaseAdapterFailure.reported(
         DatabaseErrorEnvelope(
@@ -489,17 +548,16 @@ enum MySQLDatabaseAdapterSupport {
         let pendingReason = DatabaseCapabilityUnavailableReason(
             category: .notImplemented,
             message: "This capability is pending a MySQL adapter extension.")
-        let available = DatabaseCapabilityStatus(
-            id: .connectionTest,
-            requirement: .sharedRequired,
-            availability: .available)
-        let pending: [(DatabaseCapabilityID, DatabaseCapabilityRequirement)] = [
+        let available: [(DatabaseCapabilityID, DatabaseCapabilityRequirement)] = [
+            (.connectionTest, .sharedRequired),
             (.objectDiscovery, .sharedRequired),
             (.objectDescription, .sharedRequired),
             (.query, .familyRequired),
             (.queryCancellation, .sharedRequired),
-            (.explain, .familyRequired),
             (.browse, .sharedRequired),
+        ]
+        let pending: [(DatabaseCapabilityID, DatabaseCapabilityRequirement)] = [
+            (.explain, .familyRequired),
             (.insert, .sharedRequired),
             (.update, .sharedRequired),
             (.delete, .sharedRequired),
@@ -512,7 +570,12 @@ enum MySQLDatabaseAdapterSupport {
             (.administration, .productRequired),
         ]
         let statuses =
-            [available]
+            available.map { identifier, requirement in
+                DatabaseCapabilityStatus(
+                    id: identifier,
+                    requirement: requirement,
+                    availability: .available)
+            }
             + pending.map { identifier, requirement in
                 DatabaseCapabilityStatus(
                     id: identifier,

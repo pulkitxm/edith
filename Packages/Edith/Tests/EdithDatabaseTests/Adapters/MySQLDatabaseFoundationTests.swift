@@ -554,7 +554,7 @@ private actor MySQLDatabaseFoundationTestClient: MySQLDatabaseClient {
         context: MySQLDatabaseFoundationFixtures.context())
     #expect(report.productIdentity == MySQLDatabaseFoundationFixtures.identity)
     #expect(report.supports(.connectionTest))
-    #expect(report.status(for: .browse)?.availability == .planned)
+    #expect(report.status(for: .browse)?.availability == .available)
     #expect(report.transactionModes == [.explicit, .savepoints])
     #expect(report.cancellationModes == [.cooperative])
     await session.disconnect()
