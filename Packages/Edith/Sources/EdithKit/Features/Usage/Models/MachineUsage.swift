@@ -467,6 +467,17 @@ public enum MachineUsageCollector {
         return outputDirectory(home: home, platform: platform) + separator + "usage.json"
     }
 
+    public static func probeValues(_ output: String) -> (home: String, host: String) {
+        let lines = output.split(whereSeparator: \.isNewline)
+        let clean: (Substring) -> String = {
+            String($0).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return (
+            lines.first.map(clean) ?? "",
+            lines.count > 1 ? clean(lines[1]) : ""
+        )
+    }
+
     public static func collect(
         machine: Machine, slug: String, over connection: SSHConnection,
         timeout: TimeInterval = defaultTimeout, now: Date = Date()
@@ -476,15 +487,14 @@ public enum MachineUsageCollector {
             throw MachineUsageError.unreachableHome(machine.name)
         }
         let probe = try await connection.run(probeCommand(platform: platform), timeout: 30)
-        let lines = probe.stdoutText.split(separator: "\n", omittingEmptySubsequences: false)
-        let home = lines.first.map { String($0).trimmingCharacters(in: .whitespaces) } ?? ""
+        let values = probeValues(probe.stdoutText)
+        let home = values.home
         let validHome =
             platform == .windows ? FileListing.isWindowsPath(home) : home.hasPrefix("/")
         guard probe.succeeded, !home.isEmpty, validHome else {
             throw MachineUsageError.unreachableHome(machine.name)
         }
-        let reported = lines.count > 1 ? String(lines[1]).trimmingCharacters(in: .whitespaces) : ""
-        let host = reported.isEmpty ? machine.host : reported
+        let host = values.host.isEmpty ? machine.host : values.host
 
         let run = try await connection.run(
             runCommand(home: home, platform: platform), stdin: script, timeout: timeout)

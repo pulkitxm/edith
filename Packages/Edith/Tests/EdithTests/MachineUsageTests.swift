@@ -399,6 +399,12 @@ import Testing
                 == "C:\\Users\\kpulk\\.cache\\edith\\usage\\usage.json")
     }
 
+    @Test func windowsProbeRemovesCarriageReturnsFromItsPaths() {
+        let values = MachineUsageCollector.probeValues("C:\\Users\\kpulk\r\nPULKIT-TUF\r\n")
+        #expect(values.home == "C:\\Users\\kpulk")
+        #expect(values.host == "PULKIT-TUF")
+    }
+
     @Test func theReportedFailureIsTheLastThingTheCollectorSaid() {
         let log = "  ▸ cli 3 days\n  ✖ jq is required and could not be installed\n\n"
         #expect(
