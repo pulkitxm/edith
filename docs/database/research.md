@@ -1,15 +1,17 @@
 # Open-source product research
 
-Research was performed from clean shallow clones on 2026-08-30. Exact revisions are recorded so the comparison remains reproducible. Code, layouts, branding, icons, and assets are not copied. SSPL projects are behavior references only.
+Research was performed from clean shallow clones on 2026-08-30 and refreshed for the native workspace pass on 2026-08-31. Exact revisions are recorded so the comparison remains reproducible. Code, layouts, branding, icons, and assets are not copied. SSPL projects are behavior references only.
 
 ## Inspected sources
 
 | Product | Repository | Commit | License | Primary value |
 | --- | --- | --- | --- | --- |
 | pgAdmin 4 | [pgadmin-org/pgadmin4](https://github.com/pgadmin-org/pgadmin4) | `bc58657d3d3ab4209cdadea6d191b632cf1572cc` | PostgreSQL Licence | PostgreSQL administration, plans, monitoring, and ERD |
-| DBeaver Community | [dbeaver/dbeaver](https://github.com/dbeaver/dbeaver) | `83882e8b498531c8e157a86d04275a212b9d6803` | Apache-2.0 | Cross-database adapters, segmented grid, editing, accessibility |
+| DBeaver Community | [dbeaver/dbeaver](https://github.com/dbeaver/dbeaver) | `913a1b5b40a3880b2427abffd3ceccce7eb5aed3` | Apache-2.0 | Cross-database adapters, segmented grid, editing, accessibility |
 | Beekeeper Studio | [beekeeper-studio/beekeeper-studio](https://github.com/beekeeper-studio/beekeeper-studio) | `4e3e03e3223b2b71a1af8926d455f533b80af837` | GPL-3.0-or-later for Community | Friendly connections and staged data editing |
 | DbGate | [dbgate/dbgate](https://github.com/dbgate/dbgate) | `f5be442d8f7f3ffccb0276b000fa65d042a50581` | GPL-3.0 | Incremental grid, streaming, process isolation, MCP behavior |
+| Cove | [emanuele-em/cove](https://github.com/emanuele-em/cove) | `ecf0e56f962257499dd1452a1bc0fcdc6c08c55c` | MIT | Native Swift connection rail, lazy object tree, staged grid, inspector |
+| LensDB | [w3debugger/lensdb](https://github.com/w3debugger/lensdb) | `648856a9e3226bf944d96d0f6dc566ccc072cabc` | MIT | Minimal macOS split view, table selection, editable results, appearance |
 | Azimutt | [azimuttapp/azimutt](https://github.com/azimuttapp/azimutt) | `3f79c2971a8a3be62ccf6003eb17a7ded7640897` | MIT | Large-schema relationship exploration |
 | Harlequin | [tconbeer/harlequin](https://github.com/tconbeer/harlequin) | `0b6067c0b3acb9db135a9c89fc4fbccd84c76d4d` | MIT | Shared interactive and headless query core |
 | RedisInsight | [RedisInsight/RedisInsight](https://github.com/RedisInsight/RedisInsight) | `79e1ae9c2851587062ca4db1a75060ee18e28455` | SSPL v1 | Behavior only: Redis workflows, bulk progress, production safety |
@@ -30,6 +32,8 @@ CH-UI Pro features remain outside the implementation reference set. Its BSL path
 | DBeaver | Driver form, network, SSH, SSL, filters, read-only | 200-row segments and server sort | Staged SQL preview and transaction controls | ERD, plans, dashboards | Unified cancellable jobs | Reusable tasks, separate CLI direction |
 | Beekeeper Studio | Simple engine form, URL, TLS, SSH | 100-row remote pages and streaming export | Keyed staged edits, transaction apply, SQL preview | Paid ERD only | Query and export cancellation | No headless database CLI |
 | DbGate | Product form, prompt modes, TLS, SSH | 100-row incremental grid and JSONL spool | Change-set SQL confirmation and permissions | ERD, schema compare, charts | Worker progress and abort, uneven driver cancellation | Server packages and MCP behavior |
+| Cove | Compact connection rail and native sheets | Server pages in an AppKit table | Staged cells, keyed rows, SQL preview | Schema and relationship inspection | Query cancellation and visible state | GUI only |
+| LensDB | Native list with inline connection expansion | Bounded result grid | Staged cells and explicit save | Schema-focused detail | Refresh state only | GUI only |
 | Azimutt | Schema import or gateway URL | Selected schema layouts and 100-row query limit | Mainly read-oriented | Best large-schema relationship canvas | Visible cancel is not transport cancellation | Strong schema CLI |
 | Harlequin | Adapter profiles and connection strings | Hard caps, extra-row truncation test, Arrow grid | Fail-closed read-only, no data editor | Catalog only | Capability-gated cancel and timeout | First-class `hsql` sharing adapters |
 | RedisInsight | Rich Redis, TLS, SSH, cloud, environment | SCAN, virtualization, visible-row metadata | Target typing and batched unlink | Memory, TTL, type, cluster, search | Progress, abort, reports | Deployment API, not data CLI |
@@ -46,6 +50,8 @@ CH-UI Pro features remain outside the implementation reference set. Its BSL path
 
 - DBeaver and pgAdmin demonstrate explicit product, TLS, tunnel, namespace, read-only, timeout, and environment context.
 - Compass and CH-UI demonstrate stable multi-connection tabs, dirty-state protection, saved queries, and connection-scoped history.
+- Cove keeps connection identity narrow and persistent while the object tree and active workspace receive the usable width.
+- LensDB uses macOS split-view collapse behavior and keeps the selected database name inside the column body so toolbar controls do not collide.
 - Edith adds Keychain-only secrets, a capability report, production protection, and the same shared executor for every surface.
 
 ### Lazy navigation
@@ -53,6 +59,7 @@ CH-UI Pro features remain outside the implementation reference set. Its BSL path
 - DBeaver loads navigator children in background and pushes filters to the server.
 - Azimutt renders named schema subsets and reveals related objects on demand.
 - P3X builds large key trees outside the main interface thread.
+- Cove uses compact disclosure rows, native context menus, per-node refresh, and create or drop actions scoped to the selected tree path.
 - Database uses paged metadata roots and children, searchable subsets, relationship-neighbor reveal, and explicit stale cache state.
 
 ### Large data
@@ -69,6 +76,8 @@ Database therefore combines a small server page, explicit completeness, stable c
 ### Editing and destructive work
 
 - Beekeeper and DBeaver require safe row identity, stage changes, expose diffs, and preview generated SQL before an atomic apply.
+- Cove keeps ordinary edits in the grid, presents one review action only while changes are pending, and puts page controls in a quiet footer.
+- LensDB highlights only changed cells and new rows, which keeps the unmodified dataset visually dominant.
 - RedisInsight asks for a database target on production mutations and performs bulk deletion as SCAN plus bounded pipelines.
 - Compass previews affected count and representative documents before bulk mutation.
 - mongo-express uses server-side command allowlists and configuration-enforced read-only behavior.
