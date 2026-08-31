@@ -97,7 +97,10 @@ public enum DatabaseConnectionURLParser {
         preferredProduct: DatabaseProduct?
     ) throws -> DatabaseProduct {
         if scheme == "http" || scheme == "https" {
-            guard preferredProduct == .elasticsearch || preferredProduct == .openSearch else {
+            guard
+                preferredProduct == .elasticsearch || preferredProduct == .openSearch
+                    || preferredProduct == .clickHouse
+            else {
                 throw DatabaseConnectionURLError.unsupportedScheme(scheme)
             }
             return preferredProduct!
@@ -115,6 +118,8 @@ public enum DatabaseConnectionURLParser {
             .elasticsearch
         case "opensearch", "opensearchs":
             .openSearch
+        case "clickhouse", "clickhouses":
+            .clickHouse
         case "sqlite", "sqlite3", "file":
             .sqlite
         default:
@@ -171,6 +176,9 @@ public enum DatabaseConnectionURLParser {
         }
         if product == .elasticsearch || product == .openSearch {
             return scheme == "https" || scheme == "elasticsearchs" || scheme == "opensearchs"
+        }
+        if product == .clickHouse {
+            return scheme == "https" || scheme == "clickhouses"
         }
         return scheme == "rediss" || scheme == "valkeys"
     }

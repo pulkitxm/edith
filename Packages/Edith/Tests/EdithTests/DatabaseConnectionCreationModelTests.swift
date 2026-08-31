@@ -67,6 +67,29 @@ struct DatabaseConnectionCreationModelTests {
         #expect(!model.tlsEnabled)
     }
 
+    @Test("A ClickHouse URL fills the analytical connection fields")
+    func clickHouseConnectionURL() throws {
+        let model = DatabaseConnectionCreationModel(
+            sender: DatabaseConnectionCreationSender(testSucceeds: true),
+            secretStore: try InMemoryDatabaseSecretStore())
+
+        model.selectProduct(.clickHouse)
+        model.updateConnectionURL(
+            "clickhouse://edith:secret@127.0.0.1:58123/analytics")
+        model.applyConnectionURL()
+
+        #expect(model.urlImportPhase == .applied)
+        #expect(model.product == .clickHouse)
+        #expect(model.displayName == "analytics")
+        #expect(model.host == "127.0.0.1")
+        #expect(model.port == "58123")
+        #expect(model.username == "edith")
+        #expect(model.password == "secret")
+        #expect(model.database == "analytics")
+        #expect(model.supportsTLS)
+        #expect(model.usernameRequired)
+    }
+
     @Test("A tested connection can be saved with its Keychain reference")
     func testAndSave() async throws {
         let sender = DatabaseConnectionCreationSender(testSucceeds: true)

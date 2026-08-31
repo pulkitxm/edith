@@ -42,7 +42,7 @@ extension DatabaseConnectionDraftError: LocalizedError {
 
 public struct DatabaseConnectionDraft: Hashable, Sendable {
     public static let supportedProducts: [DatabaseProduct] = [
-        .postgresql, .sqlite, .redis, .valkey, .mongoDB, .elasticsearch, .openSearch,
+        .postgresql, .sqlite, .redis, .valkey, .mongoDB, .elasticsearch, .openSearch, .clickHouse,
     ]
 
     public var id: DatabaseConnectionID
@@ -197,10 +197,13 @@ public struct DatabaseConnectionDraft: Hashable, Sendable {
             return DatabaseAuthentication(
                 kind: username == nil ? .password : .usernameAndPassword,
                 secretReferences: [passwordReference])
-        case .elasticsearch, .openSearch:
+        case .elasticsearch, .openSearch, .clickHouse:
             guard let passwordReference else {
-                guard username == nil else {
+                guard product == .clickHouse || username == nil else {
                     throw DatabaseConnectionDraftError.passwordRequired
+                }
+                if product == .clickHouse, username == nil {
+                    throw DatabaseConnectionDraftError.missingUsername
                 }
                 return DatabaseAuthentication(kind: .none)
             }
@@ -208,7 +211,7 @@ public struct DatabaseConnectionDraft: Hashable, Sendable {
             return DatabaseAuthentication(
                 kind: .usernameAndPassword,
                 secretReferences: [passwordReference])
-        case .mysql, .mariaDB, .sqlite, .clickHouse:
+        case .mysql, .mariaDB, .sqlite:
             throw DatabaseConnectionDraftError.unsupportedProduct(product)
         }
     }
@@ -219,7 +222,7 @@ public struct DatabaseConnectionDraft: Hashable, Sendable {
         }
         guard
             product == .postgresql || product == .mongoDB || product == .elasticsearch
-                || product == .openSearch
+                || product == .openSearch || product == .clickHouse
         else {
             throw DatabaseConnectionDraftError.tlsUnsupported
         }
@@ -237,9 +240,9 @@ public struct DatabaseConnectionDraft: Hashable, Sendable {
                 throw DatabaseConnectionDraftError.invalidLogicalDatabase
             }
             return DatabaseNamespaceDefaults(logicalDatabase: logicalDatabase)
-        case .postgresql, .mongoDB:
+        case .postgresql, .mongoDB, .clickHouse:
             return DatabaseNamespaceDefaults(database: value)
-        case .sqlite, .mysql, .mariaDB, .elasticsearch, .openSearch, .clickHouse:
+        case .sqlite, .mysql, .mariaDB, .elasticsearch, .openSearch:
             return DatabaseNamespaceDefaults()
         }
     }
