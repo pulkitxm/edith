@@ -858,6 +858,35 @@ public enum CommandTree {
                         "capabilities", "Show detected capabilities for one saved connection.",
                         options: ["--json", "--help", "--refresh"], arguments: [.free]),
                     CommandNode(
+                        "connect", "Open a broker session for one saved connection.",
+                        options: ["--json", "--help", "--timeout-milliseconds"],
+                        optionValues: ["--timeout-milliseconds": .free], arguments: [.free]),
+                    CommandNode(
+                        "disconnect", "Close a broker session for one saved connection.",
+                        options: ["--json", "--help", "--timeout-milliseconds"],
+                        optionValues: ["--timeout-milliseconds": .free], arguments: [.free]),
+                    CommandNode(
+                        "browse", "Read one bounded page from a database object.",
+                        options: [
+                            "--json", "--ndjson", "--help", "--kind", "--path", "--limit",
+                            "--continuation", "--timeout-milliseconds",
+                        ],
+                        optionValues: [
+                            "--kind": .free, "--path": .free, "--limit": .free,
+                            "--continuation": .free, "--timeout-milliseconds": .free,
+                        ], arguments: [.free]),
+                    CommandNode(
+                        "query", "Execute one bounded read query from stdin or a UTF-8 file.",
+                        options: [
+                            "--json", "--ndjson", "--help", "--language", "--file", "--kind",
+                            "--path", "--limit", "--continuation", "--timeout-milliseconds",
+                        ],
+                        optionValues: [
+                            "--language": .free, "--file": .free, "--kind": .free,
+                            "--path": .free, "--limit": .free, "--continuation": .free,
+                            "--timeout-milliseconds": .free,
+                        ], arguments: [.free]),
+                    CommandNode(
                         "mcp", "Serve read-only database inspection over MCP stdio."),
                 ]),
             CommandNode(
