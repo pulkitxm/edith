@@ -5,10 +5,14 @@ public enum DatabaseMCPToolName: String, CaseIterable, Sendable {
     case capabilities = "database_capabilities"
     case browse = "database_browse"
     case query = "database_query"
+    case operations = "database_operations"
+    case cancelOperation = "database_cancel_operation"
 }
 
 public enum DatabaseMCPToolCatalog {
-    public static let tools: [Tool] = [connections, capabilities, browse, query]
+    public static let tools: [Tool] = [
+        connections, capabilities, browse, query, operations, cancelOperation,
+    ]
 
     public static let connections = Tool(
         name: DatabaseMCPToolName.connections.rawValue,
@@ -165,6 +169,123 @@ public enum DatabaseMCPToolCatalog {
             idempotentHint: true,
             openWorldHint: false),
         outputSchema: pageResponseSchema)
+
+    public static let operations = Tool(
+        name: DatabaseMCPToolName.operations.rawValue,
+        title: "Database operations",
+        description: "List tracked database operations or get one operation by identifier.",
+        inputSchema: .object([
+            "type": "object",
+            "properties": .object([
+                "action": .object([
+                    "type": "string",
+                    "enum": .array(["list", "get"]),
+                ]),
+                "operation_id": uuidSchema,
+                "connection_id": uuidSchema,
+                "states": .object([
+                    "type": "array",
+                    "maxItems": 7,
+                    "items": .object([
+                        "type": "string",
+                        "enum": .array([
+                            "queued", "running", "cancelling", "succeeded", "failed",
+                            "cancelled", "partiallySucceeded",
+                        ]),
+                    ]),
+                ]),
+                "kinds": .object([
+                    "type": "array",
+                    "maxItems": 32,
+                    "items": .object([
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256,
+                    ]),
+                ]),
+                "before": .object([
+                    "type": "string",
+                    "format": "date-time",
+                ]),
+                "limit": .object([
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000,
+                ]),
+            ]),
+            "required": .array(["action"]),
+            "additionalProperties": false,
+        ]),
+        annotations: .init(
+            title: "Inspect database operations",
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false),
+        outputSchema: responseSchema(
+            data: .object([
+                "type": "object",
+                "properties": .object([
+                    "action": .object([
+                        "type": "string",
+                        "enum": .array(["list", "get"]),
+                    ]),
+                    "operations": .object([
+                        "type": "array",
+                        "maxItems": 1000,
+                        "items": .object(["type": "object"]),
+                    ]),
+                    "operation": .object([
+                        "anyOf": .array([
+                            .object(["type": "object"]),
+                            .object(["type": "null"]),
+                        ])
+                    ]),
+                ]),
+                "required": .array(["action"]),
+                "additionalProperties": false,
+            ])))
+
+    public static let cancelOperation = Tool(
+        name: DatabaseMCPToolName.cancelOperation.rawValue,
+        title: "Cancel database operation",
+        description: "Request cancellation of one tracked database operation.",
+        inputSchema: .object([
+            "type": "object",
+            "properties": .object([
+                "operation_id": uuidSchema
+            ]),
+            "required": .array(["operation_id"]),
+            "additionalProperties": false,
+        ]),
+        annotations: .init(
+            title: "Cancel database operation",
+            readOnlyHint: false,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false),
+        outputSchema: responseSchema(
+            data: .object([
+                "type": "object",
+                "properties": .object([
+                    "operation_id": uuidSchema,
+                    "disposition": .object([
+                        "type": "string",
+                        "enum": .array(["accepted", "alreadyFinished", "notActive", "notFound"]),
+                    ]),
+                    "cancellation_support": .object(["type": "string"]),
+                    "operation": .object([
+                        "anyOf": .array([
+                            .object(["type": "object"]),
+                            .object(["type": "null"]),
+                        ])
+                    ]),
+                ]),
+                "required": .array([
+                    "operation_id", "disposition", "cancellation_support", "operation",
+                ]),
+                "additionalProperties": false,
+            ])))
 
     private static let uuidSchema = Value.object([
         "type": "string",

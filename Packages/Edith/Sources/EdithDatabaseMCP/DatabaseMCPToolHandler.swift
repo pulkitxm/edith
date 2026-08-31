@@ -41,6 +41,10 @@ public struct DatabaseMCPToolHandler: Sendable {
                 return try await browse(arguments: parameters.arguments ?? [:])
             case .query:
                 return try await query(arguments: parameters.arguments ?? [:])
+            case .operations:
+                return try await operations(arguments: parameters.arguments ?? [:])
+            case .cancelOperation:
+                return try await cancelOperation(arguments: parameters.arguments ?? [:])
             }
         } catch is CancellationError {
             return Self.failure(
@@ -199,6 +203,73 @@ public struct DatabaseMCPToolHandler: Sendable {
         return DatabaseOperationContext(
             operationID: makeOperationID(),
             deadline: timeout.map { Date().addingTimeInterval(Double($0) / 1_000) })
+    }
+
+    private func operations(arguments: [String: Value]) async throws -> CallTool.Result {
+        try Self.rejectUnknown(
+            arguments,
+            allowed: [
+                "action", "operation_id", "connection_id", "states", "kinds", "before", "limit",
+            ])
+        let action = try Self.requiredString("action", in: arguments)
+        switch action {
+        case "list":
+            let limit = try Self.optionalInt("limit", in: arguments) ?? 200
+            guard (1...1_000).contains(limit) else {
+                throw DatabaseMCPInputError(message: "limit must be between 1 and 1000.")
+            }
+            let connectionID = try Self.optionalConnectionID(in: arguments)
+            let search = DatabaseOperationHistorySearch(
+                connectionID: connectionID,
+                states: try Self.operationStates(in: arguments),
+                kinds: try Self.operationKinds(in: arguments),
+                before: try Self.optionalDate("before", in: arguments),
+                limit: limit)
+            let response = try await sender.send(
+                .operationList(DatabaseOperationListRequest(search: search)))
+            guard let result = response.operationListResult else {
+                return Self.responseKindFailure(expected: .operationList, actual: response.kind)
+            }
+            return Self.render(result) { payload in
+                .object([
+                    "action": "list",
+                    "operations": .array(payload.operations.prefix(limit).map(Self.operation)),
+                ])
+            }
+        case "get":
+            let operationID = try Self.operationID(in: arguments)
+            let response = try await sender.send(
+                .operationGet(DatabaseOperationGetRequest(operationID: operationID)))
+            guard let result = response.operationGetResult else {
+                return Self.responseKindFailure(expected: .operationGet, actual: response.kind)
+            }
+            return Self.render(result) { payload in
+                .object([
+                    "action": "get",
+                    "operation": payload.operation.map(Self.operation) ?? .null,
+                ])
+            }
+        default:
+            throw DatabaseMCPInputError(message: "action must be list or get.")
+        }
+    }
+
+    private func cancelOperation(arguments: [String: Value]) async throws -> CallTool.Result {
+        try Self.rejectUnknown(arguments, allowed: ["operation_id"])
+        let operationID = try Self.operationID(in: arguments)
+        let response = try await sender.send(
+            .operationCancel(DatabaseOperationCancelRequest(operationID: operationID)))
+        guard let result = response.operationCancelResult else {
+            return Self.responseKindFailure(expected: .operationCancel, actual: response.kind)
+        }
+        return Self.render(result) { payload in
+            .object([
+                "operation_id": Self.uuid(payload.operationID.rawValue),
+                "disposition": .string(payload.disposition.rawValue),
+                "cancellation_support": .string(payload.cancellationSupport.rawValue),
+                "operation": payload.operation.map(Self.operation) ?? .null,
+            ])
+        }
     }
 
     private static func render<Payload: Sendable>(
@@ -601,14 +672,43 @@ public struct DatabaseMCPToolHandler: Sendable {
             "kind": .string(bounded(value.kind.rawValue)),
             "state": .string(value.state.rawValue),
             "connection_id": uuid(value.connection.id.rawValue),
+            "connection_name": .string(bounded(value.connection.displayName)),
+            "target": value.target.map(targetValue) ?? .null,
             "started_at": optionalDate(value.startedAt),
             "finished_at": optionalDate(value.finishedAt),
             "deadline": optionalDate(value.deadline),
+            "progress": value.progress.map { progress in
+                .object([
+                    "kind": .string(progress.kind.rawValue),
+                    "completed": progress.completed.map(unsigned) ?? .null,
+                    "total": progress.total.map(unsigned) ?? .null,
+                    "unit": optional(progress.unit?.rawValue),
+                    "message": optional(progress.message),
+                ])
+            } ?? .null,
             "cancellation_support": .string(value.cancellationSupport.rawValue),
             "retry_classification": .string(value.retryClassification.rawValue),
             "page_count": unsigned(value.pageCount),
             "record_count": unsigned(value.recordCount),
             "byte_count": unsigned(value.byteCount),
+            "warnings": .array(
+                value.warnings.prefix(maximumCollectionItems).map(warning)),
+            "partial_failures": .array(
+                value.partialFailures.prefix(maximumCollectionItems).map(partialFailure)),
+            "error": value.error.map(errorValue) ?? .null,
+        ])
+    }
+
+    private static func targetValue(_ value: DatabaseTargetIdentifier) -> Value {
+        .object([
+            "connection_id": uuid(value.connectionID.rawValue),
+            "object": value.object.map { object in
+                .object([
+                    "kind": .string(object.kind.rawValue),
+                    "path": .array(object.path.map { .string(bounded($0)) }),
+                ])
+            } ?? .null,
+            "record": value.record.map(recordIdentity) ?? .null,
         ])
     }
 
@@ -795,6 +895,67 @@ public struct DatabaseMCPToolHandler: Sendable {
             throw DatabaseMCPInputError(message: "language is not supported.")
         }
         return language
+    }
+
+    private static func operationID(
+        in arguments: [String: Value]
+    ) throws -> DatabaseOperationID {
+        let rawValue = try requiredString("operation_id", in: arguments)
+        guard let value = UUID(uuidString: rawValue) else {
+            throw DatabaseMCPInputError(message: "operation_id must be a UUID.")
+        }
+        return DatabaseOperationID(rawValue: value)
+    }
+
+    private static func optionalConnectionID(
+        in arguments: [String: Value]
+    ) throws -> DatabaseConnectionID? {
+        guard arguments["connection_id"] != nil else { return nil }
+        return try connectionID(in: arguments)
+    }
+
+    private static func operationStates(
+        in arguments: [String: Value]
+    ) throws -> Set<DatabaseOperationState> {
+        let values = try stringArray("states", in: arguments)
+        guard values.count <= DatabaseOperationState.allCases.count else {
+            throw DatabaseMCPInputError(message: "states contains too many values.")
+        }
+        return try Set(
+            values.map { value in
+                guard let state = DatabaseOperationState(rawValue: value) else {
+                    throw DatabaseMCPInputError(message: "states contains an unsupported value.")
+                }
+                return state
+            })
+    }
+
+    private static func operationKinds(
+        in arguments: [String: Value]
+    ) throws -> Set<DatabaseOperationKind> {
+        let values = try stringArray("kinds", in: arguments)
+        guard values.allSatisfy({ $0.count <= 256 }) else {
+            throw DatabaseMCPInputError(
+                message: "kinds must not contain values longer than 256 characters.")
+        }
+        return Set(values.map(DatabaseOperationKind.init(rawValue:)))
+    }
+
+    private static func optionalDate(
+        _ key: String,
+        in arguments: [String: Value]
+    ) throws -> Date? {
+        guard let rawValue = try optionalString(key, in: arguments) else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let value = formatter.date(from: rawValue) {
+            return value
+        }
+        formatter.formatOptions = [.withInternetDateTime]
+        guard let value = formatter.date(from: rawValue) else {
+            throw DatabaseMCPInputError(message: "\(key) must be an ISO 8601 timestamp.")
+        }
+        return value
     }
 
     private static func connectionID(

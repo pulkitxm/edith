@@ -281,6 +281,133 @@ import Testing
         #expect(await sender.recordedRequests().isEmpty)
     }
 
+    @Test func operationListPreservesFiltersProgressAndTarget() async throws {
+        let operation = try DatabaseMCPFixtures.operation()
+        let sender = DatabaseMCPScriptedSender([
+            .success(
+                .operationList(
+                    .success(
+                        DatabaseOperationListResult(operations: [operation]),
+                        metadata: DatabaseMCPFixtures.completeMetadata)))
+        ])
+        let handler = DatabaseMCPToolHandler(sender: sender)
+
+        let result = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_operations",
+                arguments: [
+                    "action": "list",
+                    "connection_id": .string(
+                        DatabaseMCPFixtures.connectionID.rawValue.uuidString),
+                    "states": .array(["running", "cancelling"]),
+                    "kinds": .array(["database.query"]),
+                    "before": "2026-08-31T10:00:00Z",
+                    "limit": 25,
+                ]))
+
+        #expect(result.isError == false)
+        let operations = result.structuredContent?.objectValue?["data"]?.objectValue?[
+            "operations"
+        ]?.arrayValue
+        let projected = operations?.first?.objectValue
+        #expect(projected?["state"]?.stringValue == "running")
+        #expect(projected?["progress"]?.objectValue?["completed"]?.intValue == 50)
+        #expect(
+            projected?["target"]?.objectValue?["object"]?.objectValue?["path"]?.arrayValue
+                == ["public", "orders"])
+
+        let requests = await sender.recordedRequests()
+        guard case let .operationList(request) = requests.first else {
+            Issue.record("Expected an operation-list request.")
+            return
+        }
+        #expect(request.search.connectionID == DatabaseMCPFixtures.connectionID)
+        #expect(request.search.states == [.running, .cancelling])
+        #expect(request.search.kinds == [DatabaseOperationKind(rawValue: "database.query")])
+        #expect(request.search.limit == 25)
+        #expect(request.search.before != nil)
+    }
+
+    @Test func operationGetReturnsExplicitNullWhenMissing() async {
+        let sender = DatabaseMCPScriptedSender([
+            .success(
+                .operationGet(
+                    .success(
+                        DatabaseOperationGetResult(operation: nil),
+                        metadata: DatabaseMCPFixtures.completeMetadata)))
+        ])
+        let handler = DatabaseMCPToolHandler(sender: sender)
+
+        let result = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_operations",
+                arguments: [
+                    "action": "get",
+                    "operation_id": .string(
+                        DatabaseMCPFixtures.operationID.rawValue.uuidString),
+                ]))
+
+        #expect(result.isError == false)
+        #expect(
+            result.structuredContent?.objectValue?["data"]?.objectValue?["operation"]?.isNull
+                == true)
+        let requests = await sender.recordedRequests()
+        #expect(requests.first?.operationGetRequest?.operationID == DatabaseMCPFixtures.operationID)
+    }
+
+    @Test func cancelOperationUsesSeparateTypedMutationTool() async throws {
+        let operation = try DatabaseMCPFixtures.operation()
+        let sender = DatabaseMCPScriptedSender([
+            .success(
+                .operationCancel(
+                    .success(
+                        DatabaseOperationCancelResult(
+                            operationID: operation.id,
+                            disposition: .accepted,
+                            cancellationSupport: .serverSide,
+                            operation: operation),
+                        metadata: DatabaseMCPFixtures.completeMetadata)))
+        ])
+        let handler = DatabaseMCPToolHandler(sender: sender)
+
+        let result = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_cancel_operation",
+                arguments: [
+                    "operation_id": .string(operation.id.rawValue.uuidString)
+                ]))
+
+        #expect(result.isError == false)
+        let data = result.structuredContent?.objectValue?["data"]?.objectValue
+        #expect(data?["disposition"]?.stringValue == "accepted")
+        #expect(data?["cancellation_support"]?.stringValue == "serverSide")
+        let requests = await sender.recordedRequests()
+        #expect(requests.first?.operationCancelRequest?.operationID == operation.id)
+    }
+
+    @Test func rejectsInvalidOperationInputsBeforeCallingTheBroker() async {
+        let sender = DatabaseMCPScriptedSender([])
+        let handler = DatabaseMCPToolHandler(sender: sender)
+
+        let invalidID = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_cancel_operation",
+                arguments: ["operation_id": "not-a-uuid"]))
+        let invalidLimit = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_operations",
+                arguments: ["action": "list", "limit": 1_001]))
+        let invalidState = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_operations",
+                arguments: ["action": "list", "states": .array(["unknown"])]))
+
+        #expect(invalidID.isError == true)
+        #expect(invalidLimit.isError == true)
+        #expect(invalidState.isError == true)
+        #expect(await sender.recordedRequests().isEmpty)
+    }
+
     @Test func rejectsInvalidAndUnknownArgumentsWithoutCallingTheBroker() async {
         let sender = DatabaseMCPScriptedSender([])
         let handler = DatabaseMCPToolHandler(sender: sender)

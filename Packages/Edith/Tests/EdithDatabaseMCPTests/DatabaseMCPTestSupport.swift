@@ -155,4 +155,24 @@ enum DatabaseMCPFixtures {
                     serverDurationMilliseconds: 8),
                 bytesReceived: 128))
     }
+
+    static func operation() throws -> DatabaseOperationRecordSummary {
+        let connection = try connection()
+        return DatabaseOperationRecordSummary(
+            id: operationID,
+            kind: DatabaseOperationKind(rawValue: "database.query"),
+            state: .running,
+            connection: connection.identity,
+            target: DatabaseTargetIdentifier(
+                connectionID: connection.id,
+                object: DatabaseObjectIdentifier(kind: .table, path: ["public", "orders"])),
+            startedAt: now,
+            deadline: now.addingTimeInterval(30),
+            progress: .determinate(completed: 50, total: 100, unit: .records),
+            cancellationSupport: .serverSide,
+            retryClassification: .safeIdempotent,
+            pageCount: 1,
+            recordCount: 50,
+            byteCount: 4_096)
+    }
 }
