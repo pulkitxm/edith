@@ -37,6 +37,31 @@ public enum DatabaseJSONDocumentCodec {
         return fields
     }
 
+    public static func decodePlainObject(_ text: String) throws -> [DatabaseObjectField] {
+        let data = Data(text.utf8)
+        guard !data.isEmpty, data.count <= maximumBytes else {
+            throw data.isEmpty
+                ? DatabaseJSONDocumentCodecError.invalidJSON
+                : DatabaseJSONDocumentCodecError.resourceLimit
+        }
+        let object: Any
+        do {
+            object = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        } catch {
+            throw DatabaseJSONDocumentCodecError.invalidJSON
+        }
+        var remaining = maximumElements
+        guard
+            case let .object(fields) = try plainValue(
+                object,
+                depth: 0,
+                remaining: &remaining)
+        else {
+            throw DatabaseJSONDocumentCodecError.invalidDocument
+        }
+        return fields
+    }
+
     public static func encode(_ value: DatabaseValue, pretty: Bool = true) throws -> String {
         var remaining = maximumElements
         let object = try object(value, depth: 0, remaining: &remaining)
@@ -195,6 +220,60 @@ public enum DatabaseJSONDocumentCodec {
             }
             return ["$oid": text]
         }
+    }
+
+    private static func plainValue(
+        _ object: Any,
+        depth: Int,
+        remaining: inout Int
+    ) throws -> DatabaseValue {
+        try consume(depth: depth, remaining: &remaining)
+        if object is NSNull { return .null }
+        if let string = object as? String { return .string(string) }
+        if let number = object as? NSNumber {
+            if CFGetTypeID(number) == CFBooleanGetTypeID() {
+                return .boolean(number.boolValue)
+            }
+            if CFNumberIsFloatType(number) {
+                let value = number.doubleValue
+                guard value.isFinite else {
+                    throw DatabaseJSONDocumentCodecError.unsupportedValue
+                }
+                return .floatingPoint(value)
+            }
+            if number.stringValue.hasPrefix("-") {
+                guard let value = Int64(number.stringValue) else {
+                    throw DatabaseJSONDocumentCodecError.unsupportedValue
+                }
+                return .signedInteger(value)
+            }
+            if let value = Int64(number.stringValue) { return .signedInteger(value) }
+            guard let value = UInt64(number.stringValue) else {
+                throw DatabaseJSONDocumentCodecError.unsupportedValue
+            }
+            return .unsignedInteger(value)
+        }
+        if let array = object as? [Any] {
+            return .array(
+                try array.map {
+                    try plainValue($0, depth: depth + 1, remaining: &remaining)
+                })
+        }
+        guard let dictionary = object as? [String: Any] else {
+            throw DatabaseJSONDocumentCodecError.unsupportedValue
+        }
+        return .object(
+            try dictionary.keys.sorted().map { key in
+                guard !key.isEmpty, !key.contains("\0") else {
+                    throw DatabaseJSONDocumentCodecError.invalidDocument
+                }
+                return DatabaseObjectField(
+                    name: key,
+                    value: try plainValue(
+                        dictionary[key]!,
+                        depth: depth + 1,
+                        remaining: &remaining))
+            })
     }
 
     private static func consume(depth: Int, remaining: inout Int) throws {
