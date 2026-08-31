@@ -301,6 +301,7 @@ struct DatabaseDataWorkspaceModelTests {
 
         model.beginInsert(connection)
         model.updateDocumentText("{\"_id\":\"doc-new\",\"title\":\"created\"}")
+        #expect(model.canSubmitEditor)
         let insert = try #require(model.editorMutationRequest(connection))
         #expect(insert.payload.command == "create")
         #expect(insert.target.record?.components.last?.value == .string("doc-new"))
