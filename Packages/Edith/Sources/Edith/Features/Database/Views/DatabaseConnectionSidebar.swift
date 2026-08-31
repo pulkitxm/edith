@@ -5,12 +5,9 @@ import SwiftUI
 struct DatabaseConnectionSidebar: View {
     @Bindable var model: DatabaseConnectionWorkspaceModel
     let createConnection: () -> Void
-    @Environment(\.colorScheme) private var scheme
-
-    private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             header
             EdithTextField(
                 placeholder: "Search saved connections",
@@ -33,9 +30,7 @@ struct DatabaseConnectionSidebar: View {
         HStack(spacing: UIScale.pt(8)) {
             Text("Connections")
                 .font(.system(size: UIScale.pt(12), weight: .semibold))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-                .textCase(.uppercase)
-                .tracking(0.5)
+                .foregroundStyle(.secondary)
             Spacer(minLength: 0)
             Button(action: createConnection) {
                 Image(systemName: "plus")
@@ -68,7 +63,7 @@ struct DatabaseConnectionSidebar: View {
                 symbol: "arrow.triangle.2.circlepath",
                 title: "Loading connections",
                 detail: "Saved connection information is being refreshed.",
-                tint: DashSkin.accent(dark),
+                tint: .accentColor,
                 progress: true)
             connectionRows(connections)
         case .empty:
@@ -93,21 +88,21 @@ struct DatabaseConnectionSidebar: View {
                 symbol: "exclamationmark.circle.fill",
                 title: "Partial connection list",
                 detail: "Some saved connections could not be loaded.",
-                tint: DashSkin.warn)
+                tint: .orange)
             connectionRows(connections)
         case .stale(let connections):
             stateNotice(
                 symbol: "clock.arrow.circlepath",
                 title: "Stale connection list",
                 detail: "The broker returned saved information that may be out of date.",
-                tint: DashSkin.warn)
+                tint: .orange)
             connectionRows(connections)
         case .failed(let connections, let message):
             stateNotice(
                 symbol: "exclamationmark.triangle.fill",
                 title: "Connections unavailable",
                 detail: message,
-                tint: DashSkin.danger,
+                tint: .red,
                 retry: true)
             connectionRows(connections)
         }
@@ -118,11 +113,11 @@ struct DatabaseConnectionSidebar: View {
         if connections.isEmpty {
             Text("No connection entries are available in this result.")
                 .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityLabel("No connection entries are available in this result")
         } else {
-            LazyVStack(spacing: UIScale.pt(7)) {
+            LazyVStack(spacing: UIScale.pt(3)) {
                 ForEach(connections) { connection in
                     connectionRow(connection)
                 }
@@ -136,48 +131,47 @@ struct DatabaseConnectionSidebar: View {
         return Button {
             model.selectConnection(connection.id)
         } label: {
-            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                HStack(spacing: UIScale.pt(7)) {
-                    Image(systemName: connection.product.symbolName)
-                        .font(.system(size: UIScale.pt(12), weight: .semibold))
-                        .foregroundStyle(
-                            selected ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
-                        )
-                        .accessibilityHidden(true)
+            HStack(spacing: UIScale.pt(9)) {
+                Image(systemName: connection.product.symbolName)
+                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                    .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+                    .frame(width: UIScale.pt(16))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text(connection.name)
                         .font(.system(size: UIScale.pt(12.5), weight: .semibold))
-                        .foregroundStyle(DashSkin.ink(dark))
-                        .lineLimit(2)
-                    Spacer(minLength: 0)
-                    if connection.isFavorite {
-                        Image(systemName: "star.fill")
-                            .font(.system(size: UIScale.pt(9)))
-                            .foregroundStyle(DashSkin.gold)
-                            .accessibilityHidden(true)
-                    }
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text("\(connection.product.displayName) · \(connection.environmentKind.title)")
+                        .font(.system(size: UIScale.pt(10), weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-                Text("\(connection.product.displayName) · \(connection.environmentKind.title)")
-                    .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .lineLimit(1)
+                Spacer(minLength: 0)
+                if connection.isFavorite {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: UIScale.pt(8.5)))
+                        .foregroundStyle(.yellow)
+                        .accessibilityHidden(true)
+                }
                 if let sessionLabel {
                     Text(sessionLabel)
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
+                        .font(.system(size: UIScale.pt(9.5), weight: .semibold))
                         .foregroundStyle(sessionColor(model.sessionState(for: connection.id)))
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, UIScale.pt(10))
-            .padding(.vertical, UIScale.pt(9))
+            .padding(.horizontal, UIScale.pt(9))
+            .padding(.vertical, UIScale.pt(7))
             .background(
-                selected ? DashSkin.accent(dark).opacity(0.11) : DashSkin.paper(dark),
-                in: RoundedRectangle(cornerRadius: UIScale.pt(9))
+                selected ? Color.accentColor.opacity(0.14) : Color.clear,
+                in: RoundedRectangle(cornerRadius: UIScale.pt(7))
             )
             .overlay {
-                RoundedRectangle(cornerRadius: UIScale.pt(9))
+                RoundedRectangle(cornerRadius: UIScale.pt(7))
                     .stroke(
-                        selected ? DashSkin.accent(dark) : DashSkin.line(dark),
-                        lineWidth: selected ? 1.5 : 1)
+                        selected ? Color.accentColor.opacity(0.45) : Color.clear,
+                        lineWidth: 1)
             }
             .contentShape(Rectangle())
         }
@@ -220,7 +214,7 @@ struct DatabaseConnectionSidebar: View {
             }
             Text(detail)
                 .font(.system(size: UIScale.pt(10.5)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if retry {
                 Button("Try again", action: reload)
@@ -244,13 +238,13 @@ struct DatabaseConnectionSidebar: View {
         VStack(alignment: .leading, spacing: UIScale.pt(9)) {
             Image(systemName: symbol)
                 .font(.system(size: UIScale.pt(24), weight: .light))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+                .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             Text(title)
                 .font(.system(size: UIScale.pt(13), weight: .semibold))
             Text(detail)
                 .font(.system(size: UIScale.pt(11)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button(actionTitle, action: action ?? reload)
                 .buttonStyle(.edith(.secondary))
@@ -281,11 +275,11 @@ struct DatabaseConnectionSidebar: View {
 
     private func sessionColor(_ state: DatabaseConnectionSessionState) -> Color {
         switch state {
-        case .connected: DashSkin.ok
-        case .connecting, .disconnecting: DashSkin.accent(dark)
-        case .failed: DashSkin.danger
-        case .outcomeUnknown: DashSkin.warn
-        case .disconnected: DashSkin.inkFaint(dark)
+        case .connected: .green
+        case .connecting, .disconnecting: .accentColor
+        case .failed: .red
+        case .outcomeUnknown: .orange
+        case .disconnected: .secondary
         }
     }
 }
