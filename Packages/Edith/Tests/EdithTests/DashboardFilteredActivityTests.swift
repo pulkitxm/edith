@@ -62,13 +62,13 @@ import Testing
 
     @Test func denseModelAndSourceChartsAggregateTheirLongTails() throws {
         let sourceIDs = (1...12).map { "source-\($0)" }
-        let sourceRows = sourceIDs.enumerated().map { index, source in
+        let sourceRows: String = sourceIDs.enumerated().map { index, source in
             let value = index + 1
             return "\"\(source)\":[{\"modelName\":\"model-\(value)\",\"inputTokens\":\(value)}]"
         }.joined(separator: ",")
-        let daily =
+        let daily: String =
             "{\"period\":\"2026-06-01\",\"bySource\":{\(sourceRows)},\"projects\":[],\"hours\":[]}"
-        let sources = sourceIDs.map { "\"\($0)\"" }.joined(separator: ",")
+        let sources: String = sourceIDs.map { "\"\($0)\"" }.joined(separator: ",")
         let dashboard = try model(daily, sources: sources)
 
         let modelSeries = Set(dashboard.chartData.modelTime.map(\.series))
