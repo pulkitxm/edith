@@ -3,10 +3,12 @@ import MCP
 public enum DatabaseMCPToolName: String, CaseIterable, Sendable {
     case connections = "database_connections"
     case capabilities = "database_capabilities"
+    case browse = "database_browse"
+    case query = "database_query"
 }
 
 public enum DatabaseMCPToolCatalog {
-    public static let tools: [Tool] = [connections, capabilities]
+    public static let tools: [Tool] = [connections, capabilities, browse, query]
 
     public static let connections = Tool(
         name: DatabaseMCPToolName.connections.rawValue,
@@ -138,6 +140,32 @@ public enum DatabaseMCPToolCatalog {
                 "additionalProperties": false,
             ])))
 
+    public static let browse = Tool(
+        name: DatabaseMCPToolName.browse.rawValue,
+        title: "Browse database records",
+        description: "Read one bounded page from an explicit object on a saved connection.",
+        inputSchema: pageInputSchema(command: false),
+        annotations: .init(
+            title: "Browse database records",
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false),
+        outputSchema: pageResponseSchema)
+
+    public static let query = Tool(
+        name: DatabaseMCPToolName.query.rawValue,
+        title: "Run a bounded database read query",
+        description: "Run one bounded read query on an explicit saved connection.",
+        inputSchema: pageInputSchema(command: true),
+        annotations: .init(
+            title: "Run a bounded database read query",
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false),
+        outputSchema: pageResponseSchema)
+
     private static let uuidSchema = Value.object([
         "type": "string",
         "format": "uuid",
@@ -175,6 +203,99 @@ public enum DatabaseMCPToolCatalog {
         ]),
         "additionalProperties": false,
     ])
+
+    private static let pageResponseSchema = responseSchema(
+        data: .object([
+            "type": "object",
+            "properties": .object([
+                "connection_id": uuidSchema,
+                "page": .object([
+                    "type": "object",
+                    "properties": .object([
+                        "records": .object([
+                            "type": "array",
+                            "maxItems": 500,
+                            "items": .object(["type": "object"]),
+                        ]),
+                        "fields": .object([
+                            "type": "array",
+                            "maxItems": 256,
+                            "items": .object(["type": "object"]),
+                        ]),
+                        "next_continuation": .object([
+                            "type": .array(["string", "null"])
+                        ]),
+                        "metadata": .object(["type": "object"]),
+                    ]),
+                    "required": .array([
+                        "records", "fields", "next_continuation", "metadata",
+                    ]),
+                    "additionalProperties": false,
+                ]),
+            ]),
+            "required": .array(["connection_id", "page"]),
+            "additionalProperties": false,
+        ]))
+
+    private static func pageInputSchema(command: Bool) -> Value {
+        var properties: [String: Value] = [
+            "connection_id": uuidSchema,
+            "object_kind": .object([
+                "type": "string",
+                "enum": .array([
+                    "table", "view", "materializedView", "key", "collection", "alias",
+                    "dataStream", "dictionary", "other",
+                ]),
+            ]),
+            "object_path": .object([
+                "type": "array",
+                "minItems": command ? 0 : 1,
+                "maxItems": 32,
+                "items": .object([
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512,
+                ]),
+            ]),
+            "page_size": .object([
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 500,
+            ]),
+            "continuation": .object([
+                "type": "string",
+                "maxLength": 32768,
+            ]),
+            "timeout_ms": .object([
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 86400000,
+            ]),
+        ]
+        var required = ["connection_id"]
+        if command {
+            properties["language"] = .object([
+                "type": "string",
+                "enum": .array([
+                    "sql", "redisCommand", "mongoQuery", "searchQueryDSL", "clickHouseSQL",
+                ]),
+            ])
+            properties["command"] = .object([
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 262144,
+            ])
+            required.append(contentsOf: ["language", "command"])
+        } else {
+            required.append(contentsOf: ["object_kind", "object_path"])
+        }
+        return .object([
+            "type": "object",
+            "properties": .object(properties),
+            "required": .array(required.map(Value.string)),
+            "additionalProperties": false,
+        ])
+    }
 
     private static func responseSchema(data: Value) -> Value {
         .object([

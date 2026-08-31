@@ -8,6 +8,9 @@ public struct DatabaseMCPToolHandler: Sendable {
     private static let maximumConnections = 100
     private static let maximumCapabilities = 256
     private static let maximumCollectionItems = 64
+    private static let maximumPageSize = 500
+    private static let maximumContinuationCharacters = 32_768
+    private static let maximumQueryCharacters = 262_144
 
     private let sender: any DatabaseBrokerCommandSending
     private let makeOperationID: @Sendable () -> DatabaseOperationID
@@ -34,6 +37,10 @@ public struct DatabaseMCPToolHandler: Sendable {
                 return try await connections(arguments: parameters.arguments ?? [:])
             case .capabilities:
                 return try await capabilities(arguments: parameters.arguments ?? [:])
+            case .browse:
+                return try await browse(arguments: parameters.arguments ?? [:])
+            case .query:
+                return try await query(arguments: parameters.arguments ?? [:])
             }
         } catch is CancellationError {
             return Self.failure(
@@ -121,6 +128,77 @@ public struct DatabaseMCPToolHandler: Sendable {
                 "report": Self.capabilityReport(payload.report),
             ])
         }
+    }
+
+    private func browse(arguments: [String: Value]) async throws -> CallTool.Result {
+        try Self.rejectUnknown(
+            arguments,
+            allowed: [
+                "connection_id", "object_kind", "object_path", "page_size", "continuation",
+                "timeout_ms",
+            ])
+        let target = try Self.target(in: arguments, requiresObject: true)
+        let response = try await sender.send(
+            .browse(
+                DatabaseBrowseRequest(
+                    target: target,
+                    page: try Self.pageRequest(in: arguments),
+                    operation: try operationContext(arguments))))
+        guard let result = response.browseResult else {
+            return Self.responseKindFailure(expected: .browse, actual: response.kind)
+        }
+        return Self.render(result) { payload in
+            .object([
+                "connection_id": Self.uuid(target.connectionID.rawValue),
+                "page": Self.page(payload.page),
+            ])
+        }
+    }
+
+    private func query(arguments: [String: Value]) async throws -> CallTool.Result {
+        try Self.rejectUnknown(
+            arguments,
+            allowed: [
+                "connection_id", "object_kind", "object_path", "page_size", "continuation",
+                "timeout_ms", "language", "command",
+            ])
+        let target = try Self.target(in: arguments, requiresObject: false)
+        let command = try Self.requiredString("command", in: arguments)
+        guard command.count <= Self.maximumQueryCharacters else {
+            throw DatabaseMCPInputError(
+                message: "command must not exceed \(Self.maximumQueryCharacters) characters.")
+        }
+        let language = try Self.queryLanguage(in: arguments)
+        let response = try await sender.send(
+            .query(
+                DatabaseQueryRequest(
+                    target: target,
+                    language: language,
+                    command: command,
+                    page: try Self.pageRequest(in: arguments),
+                    operation: try operationContext(arguments))))
+        guard let result = response.queryResult else {
+            return Self.responseKindFailure(expected: .query, actual: response.kind)
+        }
+        return Self.render(result) { payload in
+            .object([
+                "connection_id": Self.uuid(target.connectionID.rawValue),
+                "page": Self.page(payload.page),
+            ])
+        }
+    }
+
+    private func operationContext(
+        _ arguments: [String: Value]
+    ) throws -> DatabaseOperationContext {
+        let timeout = try Self.optionalInt("timeout_ms", in: arguments)
+        if let timeout, !(1...86_400_000).contains(timeout) {
+            throw DatabaseMCPInputError(
+                message: "timeout_ms must be between 1 and 86400000.")
+        }
+        return DatabaseOperationContext(
+            operationID: makeOperationID(),
+            deadline: timeout.map { Date().addingTimeInterval(Double($0) / 1_000) })
     }
 
     private static func render<Payload: Sendable>(
@@ -342,6 +420,161 @@ public struct DatabaseMCPToolHandler: Sendable {
         ])
     }
 
+    private static func page(_ value: DatabasePage<DatabaseRecord>) -> Value {
+        .object([
+            "records": .array(value.records.prefix(maximumPageSize).map(record)),
+            "fields": .array(value.fields.prefix(maximumCapabilities).map(field)),
+            "next_continuation": optional(value.nextContinuation?.rawValue),
+            "metadata": pageMetadata(value.metadata),
+        ])
+    }
+
+    private static func record(_ value: DatabaseRecord) -> Value {
+        .object([
+            "identity": value.identity.map(recordIdentity) ?? .null,
+            "fields": .array(
+                value.fields.prefix(maximumCapabilities).map {
+                    .object([
+                        "name": .string(bounded($0.name)),
+                        "value": databaseValue($0.value),
+                    ])
+                }),
+            "metadata": .array(
+                value.metadata.prefix(maximumCollectionItems).map {
+                    .object([
+                        "name": .string(bounded($0.name)),
+                        "value": .string(bounded($0.value)),
+                    ])
+                }),
+        ])
+    }
+
+    private static func recordIdentity(_ value: DatabaseRecordIdentity) -> Value {
+        .object([
+            "kind": .string(value.kind.rawValue),
+            "components": .array(
+                value.components.prefix(maximumCollectionItems).map(identityComponent)),
+            "concurrency_tokens": .array(
+                value.concurrencyTokens.prefix(maximumCollectionItems).map(identityComponent)),
+        ])
+    }
+
+    private static func identityComponent(_ value: DatabaseIdentityComponent) -> Value {
+        .object([
+            "name": .string(bounded(value.name)),
+            "value": databaseValue(value.value),
+        ])
+    }
+
+    private static func field(_ value: DatabaseFieldDescriptor) -> Value {
+        .object([
+            "path": .array(value.path.segments.map { .string(bounded($0)) }),
+            "display_name": .string(bounded(value.displayName)),
+            "type_name": .string(bounded(value.typeName)),
+            "nullable": .bool(value.isNullable),
+            "sortable": .bool(value.isSortable),
+            "filterable": .bool(value.isFilterable),
+        ])
+    }
+
+    private static func pageMetadata(_ value: DatabasePageMetadata) -> Value {
+        .object([
+            "completeness": .object([
+                "state": .string(value.completeness.state.rawValue),
+                "reason": optional(value.completeness.reason),
+            ]),
+            "count": .object([
+                "value": value.count.value.map(unsigned) ?? .null,
+                "accuracy": .string(value.count.accuracy.rawValue),
+            ]),
+            "timing": value.timing.map {
+                .object([
+                    "duration_ms": unsigned($0.durationMilliseconds),
+                    "server_duration_ms": $0.serverDurationMilliseconds.map(unsigned) ?? .null,
+                ])
+            } ?? .null,
+            "bytes_received": value.bytesReceived.map(unsigned) ?? .null,
+            "warnings": .array(
+                value.warnings.prefix(maximumCollectionItems).map(warning)),
+            "partial_failures": .array(
+                value.partialFailures.prefix(maximumCollectionItems).map(partialFailure)),
+        ])
+    }
+
+    private static func databaseValue(_ value: DatabaseValue) -> Value {
+        switch value {
+        case .missing:
+            return .object(["kind": "missing"])
+        case .null:
+            return .null
+        case .boolean(let flag):
+            return .bool(flag)
+        case .signedInteger(let number):
+            return Int(exactly: number).map(Value.int) ?? .string(String(number))
+        case .unsignedInteger(let number):
+            return unsigned(number)
+        case .decimal(let number):
+            return .object(["kind": "decimal", "value": .string(number.rawValue)])
+        case .floatingPoint(let number):
+            return number.isFinite ? .double(number) : .null
+        case .string(let text):
+            return boundedValue(text)
+        case .binary(let binary):
+            let available = binary.availableBytes.prefix(4_096)
+            return .object([
+                "kind": "binary",
+                "byte_count": unsigned(binary.byteCount),
+                "base64": .string(Data(available).base64EncodedString()),
+                "complete": .bool(binary.isComplete),
+                "truncated": .bool(binary.availableBytes.count > available.count),
+            ])
+        case .date(let date):
+            return .object(["kind": "date", "value": .string(bounded(date.text))])
+        case .time(let time):
+            return .object(["kind": "time", "value": .string(bounded(time.text))])
+        case .timestamp(let timestamp):
+            return .object(["kind": "timestamp", "value": .string(bounded(timestamp.text))])
+        case .uuid(let identifier):
+            return uuid(identifier)
+        case .array(let values):
+            return .object([
+                "kind": "array",
+                "values": .array(values.prefix(maximumCollectionItems).map(databaseValue)),
+                "truncated": .bool(values.count > maximumCollectionItems),
+            ])
+        case .object(let fields):
+            return .object([
+                "kind": "object",
+                "fields": .array(
+                    fields.prefix(maximumCollectionItems).map {
+                        .object([
+                            "name": .string(bounded($0.name)),
+                            "value": databaseValue($0.value),
+                        ])
+                    }),
+                "truncated": .bool(fields.count > maximumCollectionItems),
+            ])
+        case .productSpecific(let product):
+            return .object([
+                "kind": "productSpecific",
+                "product": optional(product.product?.rawValue),
+                "type_name": .string(bounded(product.typeName)),
+                "text": product.textRepresentation.map(boundedValue) ?? .null,
+                "binary_bytes": product.binaryRepresentation.map { .int($0.count) } ?? .null,
+            ])
+        }
+    }
+
+    private static func boundedValue(_ value: String) -> Value {
+        guard value.count > maximumTextCharacters else { return .string(value) }
+        return .object([
+            "kind": "string",
+            "value": .string(bounded(value)),
+            "characters": .int(value.count),
+            "truncated": true,
+        ])
+    }
+
     private static func metadata(_ value: DatabaseResultMetadata) -> Value {
         .object([
             "operation": value.operation.map(operation) ?? .null,
@@ -478,6 +711,90 @@ public struct DatabaseMCPToolHandler: Sendable {
             throw DatabaseMCPInputError(message: "\(key) must be a boolean.")
         }
         return boolean
+    }
+
+    private static func optionalInt(
+        _ key: String,
+        in arguments: [String: Value]
+    ) throws -> Int? {
+        guard let value = arguments[key] else { return nil }
+        guard let integer = value.intValue else {
+            throw DatabaseMCPInputError(message: "\(key) must be an integer.")
+        }
+        return integer
+    }
+
+    private static func stringArray(
+        _ key: String,
+        in arguments: [String: Value]
+    ) throws -> [String] {
+        guard let value = arguments[key] else { return [] }
+        guard let values = value.arrayValue else {
+            throw DatabaseMCPInputError(message: "\(key) must be an array of strings.")
+        }
+        let strings = try values.map { value -> String in
+            guard let string = value.stringValue else {
+                throw DatabaseMCPInputError(message: "\(key) must contain only strings.")
+            }
+            return string.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard strings.count <= 32,
+            strings.allSatisfy({ !$0.isEmpty && $0.count <= 512 })
+        else {
+            throw DatabaseMCPInputError(
+                message: "\(key) must contain at most 32 non-empty strings of 512 characters.")
+        }
+        return strings
+    }
+
+    private static func target(
+        in arguments: [String: Value],
+        requiresObject: Bool
+    ) throws -> DatabaseTargetIdentifier {
+        let connectionID = try connectionID(in: arguments)
+        let path = try stringArray("object_path", in: arguments)
+        if requiresObject, path.isEmpty {
+            throw DatabaseMCPInputError(message: "object_path must contain at least one item.")
+        }
+        guard !path.isEmpty else {
+            return DatabaseTargetIdentifier(connectionID: connectionID)
+        }
+        let rawKind = try requiredString("object_kind", in: arguments)
+        guard let kind = DatabaseObjectKind(rawValue: rawKind) else {
+            throw DatabaseMCPInputError(message: "object_kind is not supported.")
+        }
+        return DatabaseTargetIdentifier(
+            connectionID: connectionID,
+            object: DatabaseObjectIdentifier(kind: kind, path: path))
+    }
+
+    private static func pageRequest(
+        in arguments: [String: Value]
+    ) throws -> DatabasePageRequest {
+        let size = try optionalInt("page_size", in: arguments) ?? 100
+        guard (1...maximumPageSize).contains(size) else {
+            throw DatabaseMCPInputError(
+                message: "page_size must be between 1 and \(maximumPageSize).")
+        }
+        let continuation = try optionalString("continuation", in: arguments)
+        if let continuation, continuation.count > maximumContinuationCharacters {
+            throw DatabaseMCPInputError(
+                message:
+                    "continuation must not exceed \(maximumContinuationCharacters) characters.")
+        }
+        return DatabasePageRequest(
+            pageSize: try DatabasePageSize(size),
+            continuation: continuation.map(DatabaseContinuationToken.init(rawValue:)))
+    }
+
+    private static func queryLanguage(
+        in arguments: [String: Value]
+    ) throws -> DatabaseQueryLanguage {
+        let rawValue = try requiredString("language", in: arguments)
+        guard let language = DatabaseQueryLanguage(rawValue: rawValue) else {
+            throw DatabaseMCPInputError(message: "language is not supported.")
+        }
+        return language
     }
 
     private static func connectionID(
