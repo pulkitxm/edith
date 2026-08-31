@@ -14,7 +14,7 @@
   },
   "devDependencies": {
     "@babel/parser": "8.0.4",
-    "@biomejs/biome": "2.5.10",
+    "@biomejs/biome": "2.5.11",
     "emojibase": "17.0.0",
     "emojibase-data": "17.0.0"
   }
