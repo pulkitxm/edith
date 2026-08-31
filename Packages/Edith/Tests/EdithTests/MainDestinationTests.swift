@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import Edith
@@ -27,6 +28,14 @@ import Testing
         #expect(icons.allSatisfy { !$0.isEmpty })
     }
 
+    @Test func everySidebarIconResolvesToASystemSymbol() {
+        for destination in MainDestination.allCases where destination.logoName == nil {
+            #expect(
+                NSImage(systemSymbolName: destination.icon, accessibilityDescription: nil) != nil,
+                "\(destination.rawValue) has an invalid symbol")
+        }
+    }
+
     @Test func appItemsUseInformationArchitectureOrder() {
         #expect(MainDestination.appItems == [.extensions, .settings, .about])
     }
@@ -34,7 +43,8 @@ import Testing
     @Test func homeItemsUseInformationArchitectureOrder() {
         #expect(
             MainDestination.homeItems == [
-                .home, .attention, .dashboard, .herdr, .quinjet, .music, .calendar, .system,
+                .home, .attention, .dashboard, .herdr, .quinjet, .seoAudit, .music, .calendar,
+                .system,
                 .appMaintenance, .machines, .companion,
             ])
     }

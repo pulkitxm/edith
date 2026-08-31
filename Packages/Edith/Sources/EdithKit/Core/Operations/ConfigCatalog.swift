@@ -140,6 +140,10 @@ public enum ConfigCatalog {
             AppStorageKeys.Tabs.order, .csv, group: "panel",
             summary: "Comma separated panel tab order."),
         SettingDefinition(
+            AppStorageKeys.Tabs.seoAuditEnabled, .bool, group: "panel",
+            summary: "Site Audit extension: sitemap, metadata, and local Lighthouse reports.",
+            fallback: .bool(false)),
+        SettingDefinition(
             AppStorageKeys.General.mainWindowSection, .string, group: "panel",
             summary: "Section the main window opens on."),
         SettingDefinition(

@@ -29,6 +29,9 @@ import EdithCore
             id: "quinjet", helper: false, machine: false, toolRule: .all, adapter: true,
             requiredTools: ["quinjet"], optionalTools: []),
         MatrixRow(
+            id: "seoAudit", helper: false, machine: false, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "system", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(

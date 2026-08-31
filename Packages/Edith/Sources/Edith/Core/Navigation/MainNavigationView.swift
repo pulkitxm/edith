@@ -14,7 +14,8 @@ extension EnvironmentValues {
 }
 
 enum MainDestination: String, CaseIterable, Identifiable {
-    case home, attention, dashboard, herdr, quinjet, music, calendar, system, appMaintenance
+    case home, attention, dashboard, herdr, quinjet, seoAudit, music, calendar, system,
+        appMaintenance
     case machines, companion, extensions, settings, about
 
     var id: String { rawValue }
@@ -26,6 +27,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
         case .dashboard: return "Agent Usage"
         case .herdr: return "Herdr"
         case .quinjet: return "Quinjet"
+        case .seoAudit: return "Site Audit"
         case .music: return "Music"
         case .calendar: return "Calendar"
         case .system: return "System"
@@ -45,6 +47,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
         case .dashboard: return "chart.bar.fill"
         case .herdr: return "rectangle.split.3x1.fill"
         case .quinjet: return "arrow.triangle.branch"
+        case .seoAudit: return "doc.text.magnifyingglass"
         case .music: return "music.note"
         case .calendar: return "calendar"
         case .system: return "cpu"
@@ -65,7 +68,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
     }
 
     static let homeItems: [MainDestination] = [
-        .home, .attention, .dashboard, .herdr, .quinjet, .music, .calendar, .system,
+        .home, .attention, .dashboard, .herdr, .quinjet, .seoAudit, .music, .calendar, .system,
         .appMaintenance, .machines, .companion,
     ]
     static let appItems: [MainDestination] = [
@@ -445,6 +448,8 @@ struct MainWindowView: View {
         var herdrEnabled = false
     @AppStorage(AppStorageKeys.Tabs.quinjetEnabled, store: SharedDefaults.store) private
         var quinjetEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.seoAuditEnabled, store: SharedDefaults.store) private
+        var seoAuditEnabled = false
     @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
         var calendarEnabled =
         false
@@ -532,6 +537,7 @@ struct MainWindowView: View {
         case .dashboard: usageEnabled ? requested : .home
         case .herdr: herdrEnabled ? requested : .home
         case .quinjet: quinjetEnabled ? requested : .home
+        case .seoAudit: seoAuditEnabled ? requested : .home
         case .music: musicEnabled ? requested : .home
         case .calendar: calendarEnabled ? requested : .home
         case .system: systemEnabled ? requested : .home
@@ -1010,6 +1016,7 @@ struct MainWindowView: View {
             case .dashboard: usageEnabled
             case .herdr: herdrEnabled
             case .quinjet: quinjetEnabled
+            case .seoAudit: seoAuditEnabled
             case .music: musicEnabled
             case .calendar: calendarEnabled
             case .system: systemEnabled
@@ -1471,6 +1478,7 @@ struct MainWindowView: View {
         case .dashboard: DashboardView()
         case .herdr: HerdrPage()
         case .quinjet: QuinjetPage()
+        case .seoAudit: SEOAuditPage()
         case .music: MusicPage()
         case .calendar: CalendarPage()
         case .system: SystemPage()

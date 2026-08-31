@@ -69,6 +69,12 @@ import EdithCore
                 == .failed("monitor failed"))
     }
 
+    @Test func siteAuditIsReadyWithoutExternalSetup() {
+        #expect(
+            ExtensionLiveAdapters.siteAuditReadiness()
+                == .ready("Site Audit is ready to store projects and run history locally."))
+    }
+
     @Test func attentionRequiresAnEnabledTrackingSource() {
         #expect(
             ExtensionLiveAdapters.attentionReadiness(settings: AttentionSettings())
