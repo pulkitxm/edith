@@ -14,7 +14,8 @@ enum DatabaseConnectionCreationPhase: Equatable {
 
 @MainActor
 @Observable
-final class DatabaseConnectionCreationModel {
+final class DatabaseConnectionCreationModel: Identifiable {
+    let id = UUID()
     var displayName = ""
     var product = DatabaseProduct.postgresql
     var host = "127.0.0.1"
