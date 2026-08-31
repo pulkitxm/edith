@@ -28,7 +28,7 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(request.target.connectionID == connection.id)
         #expect(request.target.object?.kind == .table)
         #expect(request.target.object?.path == ["analytics", "orders"])
-        #expect(request.page.pageSize.value == 200)
+        #expect(request.page.pageSize.value == 100)
         #expect(
             request.page.filter
                 == .predicate(
