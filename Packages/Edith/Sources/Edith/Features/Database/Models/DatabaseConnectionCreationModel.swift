@@ -79,7 +79,7 @@ final class DatabaseConnectionCreationModel {
     }
 
     var canSave: Bool {
-        guard phase != .testing, phase != .saving,
+        guard case .tested = phase,
             let testedDraft,
             let draft = try? makeDraft()
         else { return false }
@@ -188,6 +188,8 @@ final class DatabaseConnectionCreationModel {
     func invalidateTest() {
         if case .testing = phase { return }
         if case .saving = phase { return }
+        testedDraft = nil
+        testedPassword = nil
         phase = .editing
     }
 
