@@ -192,7 +192,10 @@ final class DatabaseDataWorkspaceModel {
             return
         }
         let record = records[selectedRecordIndex]
-        let identityNames = Set(identity.components.map(\.name))
+        var identityNames = Set<String>()
+        for component in identity.components {
+            identityNames.insert(component.name)
+        }
         editorMode = .update(recordIndex: selectedRecordIndex)
         editorError = nil
         editorFields = record.fields.map { field in
@@ -271,10 +274,12 @@ final class DatabaseDataWorkspaceModel {
         _ connection: DatabaseConnectionSummary
     ) -> DatabaseDestructiveRequest? {
         do {
-            let values = try editorFields.filter(\.isIncluded).map { field in
-                DatabaseObjectField(
-                    name: field.id,
-                    value: try Self.value(from: field))
+            var values: [DatabaseObjectField] = []
+            for field in editorFields where field.isIncluded {
+                values.append(
+                    DatabaseObjectField(
+                        name: field.id,
+                        value: try Self.value(from: field)))
             }
             let objectTarget = try target(connection)
             switch editorMode {
@@ -496,9 +501,17 @@ final class DatabaseDataWorkspaceModel {
         case .redis, .valkey:
             connection.logicalDatabase ?? ""
         case .postgresql:
-            connection.defaultSchema.map { "\($0)." } ?? "public."
+            if let defaultSchema = connection.defaultSchema {
+                "\(defaultSchema)."
+            } else {
+                "public."
+            }
         case .mysql, .mariaDB, .mongoDB, .clickHouse:
-            connection.defaultDatabase.map { "\($0)." } ?? ""
+            if let defaultDatabase = connection.defaultDatabase {
+                "\(defaultDatabase)."
+            } else {
+                ""
+            }
         case .sqlite, .elasticsearch, .openSearch:
             ""
         }
