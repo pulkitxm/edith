@@ -127,6 +127,22 @@ import Testing
             ])
     }
 
+    @Test func bridgeReplacesDimensionsInsideEncodedPowerShell() throws {
+        let command = PowerShell.command(
+            "$cols = '{columns}'; $rows = '{rows}'; Write-Output \"$cols x $rows\"")
+        let controller = TerminalLaunchRequest(
+            executable: "/usr/bin/ssh", arguments: ["win-lan", command], environment: [])
+
+        let request = HerdrTerminalBridgeSpecification(controller: controller)
+            .request(columns: 132, rows: 48)
+        let encoded = try #require(request.arguments.last?.split(separator: " ").last)
+        let data = try #require(Data(base64Encoded: String(encoded)))
+
+        #expect(
+            String(data: data, encoding: .utf16LittleEndian)
+                == "$cols = '132'; $rows = '48'; Write-Output \"$cols x $rows\"")
+    }
+
     @Test func embeddedBridgeLaunchesTheBundledCommand() throws {
         let controller = TerminalLaunchRequest(
             executable: "/usr/local/bin/herdr",
