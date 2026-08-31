@@ -58,6 +58,53 @@ struct DatabaseConnectionDraftTests {
         #expect(definition.authentication.source == "admin")
     }
 
+    @Test("Elasticsearch supports anonymous HTTP connections")
+    func elasticsearchAnonymous() throws {
+        let draft = DatabaseConnectionDraft(
+            displayName: "TUF Elasticsearch",
+            product: .elasticsearch,
+            host: "127.0.0.1",
+            port: 59_200,
+            environmentKind: .testing,
+            environmentLabel: "TUF",
+            environmentProtection: .standard,
+            readOnlyPolicy: .disabled,
+            productionPolicy: .standard)
+
+        let definition = try draft.definition()
+
+        #expect(definition.productHint == .elasticsearch)
+        #expect(definition.authentication.kind == .none)
+        guard case .network(let endpoints) = definition.location else {
+            Issue.record("Expected a network connection.")
+            return
+        }
+        #expect(endpoints.first?.host == "127.0.0.1")
+        #expect(endpoints.first?.port.value == 59_200)
+        #expect(definition.namespaces.database == nil)
+        #expect(definition.readOnlyPolicy == .disabled)
+        #expect(definition.environment.kind == .testing)
+    }
+
+    @Test("Elasticsearch supports basic authentication and verified TLS")
+    func elasticsearchAuthenticationAndTLS() throws {
+        let reference = DatabaseSecretReference(identifier: UUID(), purpose: .password)
+        let draft = DatabaseConnectionDraft(
+            displayName: "Elastic Cloud",
+            product: .elasticsearch,
+            host: "search.example.com",
+            username: "edith",
+            passwordReference: reference,
+            tlsMode: .required)
+
+        let definition = try draft.definition()
+
+        #expect(definition.authentication.kind == .usernameAndPassword)
+        #expect(definition.authentication.secretReferences == [reference])
+        #expect(definition.tls.mode == .required)
+        #expect(definition.tls.verification == .full)
+    }
+
     @Test("SQLite uses its path and no credentials")
     func sqlite() throws {
         let draft = DatabaseConnectionDraft(
