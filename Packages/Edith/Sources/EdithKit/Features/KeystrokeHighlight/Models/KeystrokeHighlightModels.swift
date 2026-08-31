@@ -88,12 +88,17 @@ public enum KeystrokeLabelResolver {
             labels.append("⇧")
         }
         if modifiers.contains(.command) { labels.append("⌘") }
-        if modifiers.contains(.function) { labels.append("fn") }
+        if modifiers.contains(.function),
+            shouldDisplayFunction(keyCode: keyCode, characters: characters)
+        {
+            labels.append("fn")
+        }
         labels.append(key)
         return labels
     }
 
     public static func keyLabel(keyCode: UInt16, characters: String?) -> String? {
+        if let functionKey = functionKeyLabel(characters) { return functionKey }
         if let special = specialKeys[keyCode] { return special }
         guard let characters, let first = characters.first, !first.isWhitespace else {
             return fallbackKeys[keyCode]
@@ -112,6 +117,15 @@ public enum KeystrokeLabelResolver {
             }
     }
 
+    private static func shouldDisplayFunction(keyCode: UInt16, characters: String?) -> Bool {
+        functionKeyLabel(characters) == nil && !implicitFunctionKeyCodes.contains(keyCode)
+    }
+
+    private static func functionKeyLabel(_ value: String?) -> String? {
+        guard let value, value.count == 1, let character = value.first else { return nil }
+        return functionKeyLabels[character]
+    }
+
     private static let specialKeys: [UInt16: String] = [
         36: "↩", 48: "⇥", 49: "Space", 51: "⌫", 53: "Esc", 71: "Clear", 76: "⌤",
         96: "F5", 97: "F6", 98: "F7", 99: "F3", 100: "F8", 101: "F9", 103: "F11",
@@ -128,4 +142,23 @@ public enum KeystrokeLabelResolver {
         34: "I", 35: "P", 37: "L", 38: "J", 39: "'", 40: "K", 41: ";", 42: "\\",
         43: ",", 44: "/", 45: "N", 46: "M", 47: ".", 50: "`",
     ]
+
+    private static let implicitFunctionKeyCodes: Set<UInt16> = [
+        71, 96, 97, 98, 99, 100, 101, 103, 105, 106, 107, 109, 111, 113, 115, 116, 117,
+        118, 119, 120, 121, 122, 123, 124, 125, 126,
+    ]
+
+    private static let functionKeyLabels: [Character: String] = {
+        var labels: [Character: String] = [
+            "\u{F700}": "↑", "\u{F701}": "↓", "\u{F702}": "←", "\u{F703}": "→",
+            "\u{F727}": "Insert", "\u{F728}": "⌦", "\u{F729}": "Home",
+            "\u{F72A}": "Begin", "\u{F72B}": "End", "\u{F72C}": "Page ↑",
+            "\u{F72D}": "Page ↓", "\u{F739}": "Clear", "\u{F746}": "Help",
+        ]
+        for offset in 0..<35 {
+            guard let scalar = Unicode.Scalar(0xF704 + offset) else { continue }
+            labels[Character(String(scalar))] = "F\(offset + 1)"
+        }
+        return labels
+    }()
 }

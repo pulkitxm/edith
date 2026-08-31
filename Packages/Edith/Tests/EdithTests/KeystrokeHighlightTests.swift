@@ -28,6 +28,32 @@ import Testing
                 keyCode: 18, characters: "!", modifiers: [.shift]) == ["⇧", "!"])
     }
 
+    @Test func arrowKeysDoNotClaimTheFunctionKeyWasPressed() {
+        let modifiers: KeystrokeModifiers = [.option, .command, .function]
+        #expect(
+            KeystrokeLabelResolver.labels(
+                keyCode: 123, characters: "\u{F702}", modifiers: modifiers)
+                == ["⌥", "⌘", "←"])
+        #expect(
+            KeystrokeLabelResolver.labels(keyCode: 123, characters: nil, modifiers: modifiers)
+                == ["⌥", "⌘", "←"])
+        #expect(
+            KeystrokeLabelResolver.labels(
+                keyCode: 122, characters: "\u{F704}", modifiers: [.function]) == ["F1"])
+    }
+
+    @Test func functionModifiedNavigationKeysUseTheirLogicalKey() {
+        #expect(
+            KeystrokeLabelResolver.labels(
+                keyCode: 123, characters: "\u{F729}", modifiers: [.function]) == ["Home"])
+    }
+
+    @Test func functionRemainsVisibleForOrdinaryKeys() {
+        #expect(
+            KeystrokeLabelResolver.labels(
+                keyCode: 0, characters: "a", modifiers: [.function]) == ["fn", "A"])
+    }
+
     @Test func queueLimitsAndExpiresEntries() throws {
         let now = Date(timeIntervalSince1970: 1_000)
         var queue = KeystrokeHighlightQueue(maximumVisible: 2)
