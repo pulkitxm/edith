@@ -4,6 +4,7 @@ import SwiftUI
 
 struct DatabaseWorkbenchView: View {
     let connections: DatabaseConnectionWorkspaceModel
+    let explorer: DatabaseObjectExplorerModel
     let data: DatabaseDataWorkspaceModel
     let mutations: DatabaseWorkspaceModel
     @Environment(\.colorScheme) private var scheme
@@ -26,6 +27,7 @@ struct DatabaseWorkbenchView: View {
         .background(DashSkin.paper(dark))
         .task(id: connections.selectedConnectionID) {
             data.prepare(for: connections.selectedConnection)
+            explorer.prepare(for: connections.selectedConnection)
         }
     }
 
@@ -53,6 +55,9 @@ struct DatabaseWorkbenchView: View {
             workingState("Connecting", "Opening a secure database session.")
         case .connected:
             workspace(connection)
+                .task(id: connection.id) {
+                    explorer.load(connection)
+                }
         case .disconnecting:
             workingState("Disconnecting", "Closing the database session.")
         case .failed(let message, _), .outcomeUnknown(let message, _):
@@ -69,6 +74,33 @@ struct DatabaseWorkbenchView: View {
         VStack(spacing: 0) {
             contextRail(connection)
             Divider().opacity(0.35)
+            if compact {
+                compactObjectPicker(connection)
+                Divider().opacity(0.35)
+                dataRegion(connection)
+            } else {
+                HSplitView {
+                    DatabaseObjectNavigatorView(
+                        explorer: explorer,
+                        connection: connection,
+                        open: { data.open($0, connection: connection) }
+                    )
+                    .frame(
+                        minWidth: UIScale.pt(190), idealWidth: UIScale.pt(225),
+                        maxWidth: UIScale.pt(300))
+                    dataRegion(connection)
+                        .frame(minWidth: UIScale.pt(460))
+                }
+            }
+        }
+        .onChange(of: explorer.selectedObject) { _, object in
+            guard let object, data.selectedObject != object else { return }
+            data.open(object, connection: connection)
+        }
+    }
+
+    private func dataRegion(_ connection: DatabaseConnectionSummary) -> some View {
+        VStack(spacing: 0) {
             controls(connection)
             Divider().opacity(0.35)
             results(connection)
@@ -114,12 +146,12 @@ struct DatabaseWorkbenchView: View {
         Group {
             if compact {
                 VStack(spacing: UIScale.pt(8)) {
-                    targetControls(connection)
+                    objectControls(connection)
                     filterControls(connection)
                 }
             } else {
                 HStack(spacing: UIScale.pt(8)) {
-                    targetControls(connection)
+                    objectControls(connection)
                     Divider().frame(height: UIScale.pt(20))
                     filterControls(connection)
                 }
@@ -128,22 +160,66 @@ struct DatabaseWorkbenchView: View {
         .padding(UIScale.pt(10))
     }
 
-    private func targetControls(_ connection: DatabaseConnectionSummary) -> some View {
+    private func objectControls(_ connection: DatabaseConnectionSummary) -> some View {
         HStack(spacing: UIScale.pt(7)) {
-            TextField(targetPlaceholder(connection), text: targetBinding)
-                .textFieldStyle(.roundedBorder)
-                .font(DashSkin.mono(11))
-                .accessibilityLabel("Database object")
-                .onSubmit { data.browse(connection) }
+            Image(systemName: selectedObjectSymbol)
+                .foregroundStyle(DashSkin.accent(dark))
+            VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                Text(selectedObjectTitle)
+                    .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                    .lineLimit(1)
+                if let selected = explorer.selectedObject, selected.path.count > 1 {
+                    Text(selected.path.dropLast().joined(separator: " / "))
+                        .font(.system(size: UIScale.pt(9.5)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
             Button {
                 data.browse(connection)
             } label: {
-                Label(data.records.isEmpty ? "Open" : "Refresh", systemImage: "arrow.clockwise")
+                Image(systemName: "arrow.clockwise")
             }
-            .buttonStyle(.edith(.primary, tint: DashSkin.accent(dark)))
-            .disabled(data.isLoading)
+            .buttonStyle(.edith(.borderless))
+            .disabled(data.isLoading || explorer.selectedObject == nil)
+            .help("Refresh data")
+            .accessibilityLabel("Refresh selected object")
         }
-        .frame(maxWidth: compact ? .infinity : UIScale.pt(390))
+        .frame(maxWidth: compact ? .infinity : UIScale.pt(330), alignment: .leading)
+    }
+
+    private func compactObjectPicker(_ connection: DatabaseConnectionSummary) -> some View {
+        HStack(spacing: UIScale.pt(8)) {
+            Menu {
+                ForEach(explorer.groups) { group in
+                    Section(group.title) {
+                        ForEach(group.objects) { object in
+                            Button(object.title) {
+                                explorer.select(object.identifier)
+                                data.open(object.identifier, connection: connection)
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Label(selectedObjectTitle, systemImage: selectedObjectSymbol)
+                    .lineLimit(1)
+            }
+            .buttonStyle(.edith(.secondary))
+            .disabled(explorer.groups.allSatisfy { $0.objects.isEmpty })
+            Spacer(minLength: 0)
+            Button {
+                explorer.load(connection)
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(.edith(.borderless))
+            .accessibilityLabel("Reload database objects")
+        }
+        .padding(.horizontal, UIScale.pt(10))
+        .frame(height: UIScale.pt(42))
+        .background(DashSkin.paper2(dark).opacity(0.45))
     }
 
     private func filterControls(_ connection: DatabaseConnectionSummary) -> some View {
@@ -182,7 +258,14 @@ struct DatabaseWorkbenchView: View {
     private func results(_ connection: DatabaseConnectionSummary) -> some View {
         switch data.state {
         case .idle:
-            emptyState(symbol: "tablecells", title: "Open an object", detail: guidance(connection))
+            if explorer.state == .loading {
+                workingState("Loading objects", "Reading the first available database namespace.")
+            } else {
+                emptyState(
+                    symbol: "sidebar.left",
+                    title: "Select an object",
+                    detail: "Choose a table or view from the object navigator.")
+            }
         case .loading where data.records.isEmpty:
             workingState("Loading data", "Fetching the first bounded page.")
         case .failed(let message) where data.records.isEmpty:
@@ -497,10 +580,6 @@ struct DatabaseWorkbenchView: View {
         .padding(UIScale.pt(26))
     }
 
-    private var targetBinding: Binding<String> {
-        Binding(get: { data.targetText }, set: { data.targetText = $0 })
-    }
-
     private var filterBinding: Binding<String> {
         Binding(get: { data.filterValue }, set: { data.filterValue = $0 })
     }
@@ -546,27 +625,18 @@ struct DatabaseWorkbenchView: View {
         return parts.joined(separator: " · ")
     }
 
-    private func targetPlaceholder(_ connection: DatabaseConnectionSummary) -> String {
-        switch connection.product {
-        case .postgresql: "schema.table"
-        case .sqlite: "table"
-        case .mysql, .mariaDB: "database.table"
-        case .redis, .valkey: "logical database"
-        case .mongoDB: "database.collection"
-        case .elasticsearch, .openSearch: "index"
-        case .clickHouse: "database.table"
-        }
+    private var selectedObjectTitle: String {
+        explorer.selectedObject?.path.last ?? "Select an object"
     }
 
-    private func guidance(_ connection: DatabaseConnectionSummary) -> String {
-        switch connection.product {
-        case .postgresql: "Enter a table such as public.customers."
-        case .sqlite: "Enter a table such as customers."
-        case .mysql, .mariaDB: "Enter a table such as app.customers."
-        case .redis, .valkey: "Open the selected logical database to browse its keys."
-        case .mongoDB: "Enter a collection such as app.customers."
-        case .elasticsearch, .openSearch: "Enter an index such as products."
-        case .clickHouse: "Enter a table such as default.events."
+    private var selectedObjectSymbol: String {
+        switch explorer.selectedObject?.kind {
+        case .table: "tablecells"
+        case .view, .materializedView: "rectangle.stack"
+        case .index: "list.bullet.rectangle"
+        case .collection: "doc.on.doc"
+        case .keyspace: "key.horizontal"
+        default: "sidebar.left"
         }
     }
 
