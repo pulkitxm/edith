@@ -383,7 +383,7 @@ import Testing
         #expect(tools.contains("mutationCenter().install"))
     }
 
-    @Test func homeQuickActionsUseFourColumnsAndIncludeExtensionActions() throws {
+    @Test func homeQuickActionsStretchEnabledActionsAcrossOneRow() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -391,7 +391,9 @@ import Testing
             .appendingPathComponent("Sources/Edith/Features/Pages/Views/HomePageView.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-        #expect(source.contains("count: 4"))
+        #expect(source.contains("private var actionCount: Int"))
+        #expect(source.contains("count: max(1, actionCount)"))
+        #expect(!source.contains("count: 4"))
         #expect(source.contains("title: \"Lid awake\""))
         #expect(source.contains("title: \"Keystrokes\""))
         #expect(source.contains("AppStorageKeys.KeystrokeHighlight.enabled"))

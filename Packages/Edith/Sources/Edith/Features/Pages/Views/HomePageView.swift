@@ -545,10 +545,16 @@ private struct QuickActionsCard: View {
     @StateObject private var lidAwakeOperations = LidAwakeOperationModel()
 
     private var theme: Color { themeColor(themeName) }
+    private var actionCount: Int {
+        (systemEnabled ? 2 : 0)
+            + (lidAwakeEnabled ? 1 : 0)
+            + (keystrokeHighlightEnabled ? 1 : 0)
+            + (presenterEnabled ? 1 : 0)
+    }
     private var columns: [GridItem] {
         Array(
             repeating: GridItem(.flexible(), spacing: UIScale.pt(12)),
-            count: 4)
+            count: max(1, actionCount))
     }
 
     var body: some View {
