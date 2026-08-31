@@ -152,6 +152,13 @@ struct DatabaseConnectionCreationSheet: View {
                         ? "0" : "Optional default database",
                     text: textBinding(\.database))
             }
+            if model.product == .mongoDB {
+                field("Authentication database", required: true) {
+                    EdithTextField(
+                        placeholder: "admin",
+                        text: textBinding(\.authenticationDatabase))
+                }
+            }
             if model.supportsTLS {
                 Toggle("Require TLS with full certificate verification", isOn: boolBinding(\.tlsEnabled))
                     .toggleStyle(.switch)

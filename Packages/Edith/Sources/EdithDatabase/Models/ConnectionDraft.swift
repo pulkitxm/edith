@@ -53,6 +53,7 @@ public struct DatabaseConnectionDraft: Hashable, Sendable {
     public var path: String
     public var username: String
     public var database: String
+    public var authenticationDatabase: String
     public var passwordReference: DatabaseSecretReference?
     public var tlsMode: DatabaseTLSMode
     public var environmentKind: DatabaseEnvironmentKind
@@ -70,6 +71,7 @@ public struct DatabaseConnectionDraft: Hashable, Sendable {
         path: String = "",
         username: String = "",
         database: String = "",
+        authenticationDatabase: String = "admin",
         passwordReference: DatabaseSecretReference? = nil,
         tlsMode: DatabaseTLSMode = .disabled,
         environmentKind: DatabaseEnvironmentKind = .development,
@@ -86,6 +88,7 @@ public struct DatabaseConnectionDraft: Hashable, Sendable {
         self.path = path
         self.username = username
         self.database = database
+        self.authenticationDatabase = authenticationDatabase
         self.passwordReference = passwordReference
         self.tlsMode = tlsMode
         self.environmentKind = environmentKind
@@ -183,7 +186,7 @@ public struct DatabaseConnectionDraft: Hashable, Sendable {
             return DatabaseAuthentication(
                 kind: .scram,
                 secretReferences: [passwordReference],
-                source: database.nilIfEmpty ?? "admin")
+                source: authenticationDatabase.nilIfEmpty ?? "admin")
         case .redis, .valkey:
             guard let passwordReference else {
                 guard username == nil else {

@@ -839,13 +839,15 @@ public enum CommandTree {
                                 "add", "Test and save a database connection.",
                                 options: [
                                     "--json", "--help", "--product", "--host", "--port",
-                                    "--path", "--username", "--database", "--password-stdin",
+                                    "--path", "--username", "--database",
+                                    "--authentication-database", "--password-stdin",
                                     "--tls", "--environment", "--environment-label",
                                     "--protection", "--read-only", "--production-policy",
                                 ],
                                 optionValues: [
                                     "--product": .free, "--host": .free, "--port": .free,
                                     "--path": .free, "--username": .free, "--database": .free,
+                                    "--authentication-database": .free,
                                     "--environment": .free, "--environment-label": .free,
                                     "--protection": .free, "--read-only": .free,
                                     "--production-policy": .free,
