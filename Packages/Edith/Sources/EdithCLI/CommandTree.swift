@@ -957,6 +957,15 @@ public enum CommandTree {
                         "mutations", "Preview, apply, and reconcile destructive database work.",
                         children: [
                             CommandNode(
+                                "row-request", "Build a safe PostgreSQL row mutation request.",
+                                options: [
+                                    "--help", "--action", "--path", "--identity", "--values",
+                                ],
+                                optionValues: [
+                                    "--action": .free, "--path": .free, "--identity": .free,
+                                    "--values": .free,
+                                ], arguments: [.free]),
+                            CommandNode(
                                 "preview", "Preview a destructive request without applying it.",
                                 options: [
                                     "--json", "--help", "--request", "--timeout-milliseconds",
