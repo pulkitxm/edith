@@ -153,7 +153,7 @@ public enum DatabaseMCPToolCatalog {
     public static let browse = Tool(
         name: DatabaseMCPToolName.browse.rawValue,
         title: "Browse database records",
-        description: "Read one bounded page from an explicit object on a saved connection.",
+        description: "Read one bounded page from a database root or explicit object.",
         inputSchema: pageInputSchema(command: false),
         annotations: .init(
             title: "Browse database records",
@@ -550,7 +550,7 @@ public enum DatabaseMCPToolCatalog {
             ]),
             "object_path": .object([
                 "type": "array",
-                "minItems": command ? 0 : 1,
+                "minItems": 1,
                 "maxItems": 32,
                 "items": .object([
                     "type": "string",
@@ -587,8 +587,6 @@ public enum DatabaseMCPToolCatalog {
                 "maxLength": 262144,
             ])
             required.append(contentsOf: ["language", "command"])
-        } else {
-            required.append(contentsOf: ["object_kind", "object_path"])
         }
         return .object([
             "type": "object",

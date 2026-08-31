@@ -194,6 +194,38 @@ import Testing
         #expect(request.operation.deadline != nil)
     }
 
+    @Test func browseWithoutAnObjectDiscoversTheConnectionRoot() async throws {
+        let sender = DatabaseMCPScriptedSender([
+            .success(
+                .browse(
+                    .success(
+                        DatabaseBrowseResult(page: DatabaseMCPFixtures.page()),
+                        metadata: DatabaseMCPFixtures.completeMetadata)))
+        ])
+        let handler = DatabaseMCPToolHandler(
+            sender: sender,
+            makeOperationID: { DatabaseMCPFixtures.operationID })
+
+        let result = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_browse",
+                arguments: [
+                    "connection_id": .string(
+                        DatabaseMCPFixtures.connectionID.rawValue.uuidString),
+                    "page_size": 20,
+                ]))
+
+        #expect(result.isError == false)
+        let requests = await sender.recordedRequests()
+        guard case let .browse(request) = requests.first else {
+            Issue.record("Expected a root browse request.")
+            return
+        }
+        #expect(request.target.object == nil)
+        #expect(request.page.pageSize.value == 20)
+        #expect(request.operation.operationID == DatabaseMCPFixtures.operationID)
+    }
+
     @Test func queryPreservesLanguageAndBoundsLargeValues() async throws {
         let sender = DatabaseMCPScriptedSender([
             .success(

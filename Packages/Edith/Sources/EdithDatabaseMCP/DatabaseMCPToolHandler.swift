@@ -150,7 +150,7 @@ public struct DatabaseMCPToolHandler: Sendable {
                 "connection_id", "object_kind", "object_path", "page_size", "continuation",
                 "timeout_ms",
             ])
-        let target = try Self.target(in: arguments, requiresObject: true)
+        let target = try Self.target(in: arguments, requiresObject: false)
         let response = try await sender.send(
             .browse(
                 DatabaseBrowseRequest(
@@ -1050,11 +1050,21 @@ public struct DatabaseMCPToolHandler: Sendable {
         requiresObject: Bool
     ) throws -> DatabaseTargetIdentifier {
         let connectionID = try connectionID(in: arguments)
+        let hasKind = arguments["object_kind"] != nil
+        let hasPath = arguments["object_path"] != nil
+        guard hasKind == hasPath else {
+            throw DatabaseMCPInputError(
+                message: "object_kind and object_path must be provided together.")
+        }
         let path = try stringArray("object_path", in: arguments)
         if requiresObject, path.isEmpty {
             throw DatabaseMCPInputError(message: "object_path must contain at least one item.")
         }
         guard !path.isEmpty else {
+            if hasPath {
+                throw DatabaseMCPInputError(
+                    message: "object_path must contain at least one item when provided.")
+            }
             return DatabaseTargetIdentifier(connectionID: connectionID)
         }
         let rawKind = try requiredString("object_kind", in: arguments)

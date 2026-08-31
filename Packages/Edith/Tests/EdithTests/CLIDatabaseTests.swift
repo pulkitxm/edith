@@ -1009,6 +1009,32 @@ private actor CLIDatabaseMCPRunRecorder {
         }
     }
 
+    @Test func browseWithoutAPathDiscoversTheConnectionRoot() async throws {
+        let sender = CLIDatabaseScriptedSender { request in
+            guard case .browse = request else {
+                throw DatabaseBrokerCommandClientError.invalidRequest
+            }
+            return .browse(
+                .success(
+                    DatabaseBrowseResult(page: Self.page()),
+                    metadata: Self.completeMetadata))
+        }
+
+        try await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.makeSender = { sender }
+            let result = await CLIProbe.capture([
+                "database", "browse", Self.connectionUUID.uuidString, "--limit", "20", "--json",
+            ])
+
+            #expect(result.code == ExitCodes.success)
+            #expect(result.stderr.isEmpty)
+            let request = try #require(await sender.recordedRequests().first?.browseRequest)
+            #expect(request.target.connectionID.rawValue == Self.connectionUUID)
+            #expect(request.target.object == nil)
+            #expect(request.page.pageSize.value == 20)
+        }
+    }
+
     @Test func queryReadsFileInputAndRendersBoundedJSON() async throws {
         let sender = CLIDatabaseScriptedSender { request in
             guard case .query = request else {
@@ -1091,7 +1117,6 @@ private actor CLIDatabaseMCPRunRecorder {
         await CLIProbe.inWorld { _ in
             DatabaseCLIEnvironment.makeSender = { sender }
             let cases = [
-                ["database", "browse", Self.connectionUUID.uuidString],
                 [
                     "database", "browse", Self.connectionUUID.uuidString, "--path", "orders",
                     "--limit", "0",
