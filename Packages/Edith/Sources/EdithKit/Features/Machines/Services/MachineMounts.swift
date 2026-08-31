@@ -134,6 +134,14 @@ public enum MachineMounts {
         root.appendingPathComponent(folderName(for: machine))
     }
 
+    static func canonicalMountPoint(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
+    static func sameMountPoint(_ first: String, _ second: String) -> Bool {
+        canonicalMountPoint(first) == canonicalMountPoint(second)
+    }
+
     public static func remotePath(
         _ path: String, platform: RemoteMachinePlatform
     ) -> String {
@@ -370,11 +378,14 @@ public enum MachineMounts {
     static func settled(machine: Machine, at destination: URL, remotePath: String) async
         -> MachineMount?
     {
-        guard let volume = await volumes().first(where: { $0.mountPoint == destination.path })
+        guard
+            let volume = await volumes().first(where: {
+                sameMountPoint($0.mountPoint, destination.path)
+            })
         else { return nil }
         return MachineMount(
             machineID: machine.id, target: machine.sshTarget, remotePath: remotePath,
-            mountPoint: destination.path, isReadOnly: volume.isReadOnly)
+            mountPoint: volume.mountPoint, isReadOnly: volume.isReadOnly)
     }
 
     private static func attach(
