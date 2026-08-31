@@ -43,7 +43,7 @@ struct DatabaseWorkbenchView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DashSkin.paper(dark))
-        .task(id: connections.selectedConnectionID) {
+        .task(id: connections.selectedConnection) {
             data.prepare(for: connections.selectedConnection)
             explorer.prepare(for: connections.selectedConnection)
         }
@@ -549,7 +549,7 @@ struct DatabaseWorkbenchView: View {
                             RoundedRectangle(cornerRadius: UIScale.pt(7))
                                 .strokeBorder(DashSkin.line(dark))
                         }
-                        .accessibilityLabel("(connection.product.displayName) document JSON")
+                        .accessibilityLabel("\(connection.product.displayName) document JSON")
                 }
                 .padding(UIScale.pt(12))
             } else {
