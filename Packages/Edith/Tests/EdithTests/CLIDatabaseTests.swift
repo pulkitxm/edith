@@ -47,6 +47,8 @@ private actor CLIDatabaseMCPRunRecorder {
         uuidString: "89E9D935-71EC-455A-A43A-C5301D7C6635")!
     private static let queryUUID = UUID(
         uuidString: "7565FB65-A823-4F88-93F3-61CD6558E590")!
+    private static let mutationOperationUUID = UUID(
+        uuidString: "CE33CE42-91CB-438B-BB10-8130315A241B")!
     private static let completeMetadata = DatabaseResultMetadata(
         completeness: DatabaseResultCompleteness(state: .complete))
 
@@ -78,7 +80,7 @@ private actor CLIDatabaseMCPRunRecorder {
             plan(["ed", "database", ""], 2).candidates
                 == [
                     "connections", "saved-queries", "capabilities", "connect", "disconnect",
-                    "browse", "query", "operations", "mcp",
+                    "browse", "query", "mutations", "operations", "mcp",
                 ])
         #expect(
             plan(["ed", "database", "connections", ""], 3).candidates
@@ -99,6 +101,9 @@ private actor CLIDatabaseMCPRunRecorder {
                 == ["--continuation"])
         #expect(
             plan(["ed", "database", "query", "id", "--nd"], 4).candidates == ["--ndjson"])
+        #expect(
+            plan(["ed", "database", "mutations", ""], 3).candidates
+                == ["preview", "apply", "status", "cancel", "outcome"])
     }
 
     @Test func databaseExecutionRoutesParse() throws {
@@ -143,6 +148,15 @@ private actor CLIDatabaseMCPRunRecorder {
             try EdRoot.parseAsRoot([
                 "database", "saved-queries", "delete", Self.queryUUID.uuidString, "--yes",
             ]) is DatabaseSavedQueriesDeleteCommand)
+        #expect(
+            try EdRoot.parseAsRoot([
+                "database", "mutations", "preview", "--request", "mutation.json",
+            ]) is DatabaseMutationPreviewCommand)
+        #expect(
+            try EdRoot.parseAsRoot([
+                "database", "mutations", "apply", "--request", "mutation.json",
+                "--confirmation", "preview.json", "--yes",
+            ]) is DatabaseMutationApplyCommand)
     }
 
     @Test func connectionEditPreservesTransportAndCredentials() async throws {
@@ -383,6 +397,180 @@ private actor CLIDatabaseMCPRunRecorder {
             #expect(refused.code == ExitCodes.usage)
             #expect(delete.code == ExitCodes.success)
             #expect((await sender.recordedRequests()).count == 4)
+        }
+    }
+
+    @Test func mutationPreviewReadsBoundedRequestAndEmitsReusableConfirmation() async throws {
+        let mutation = Self.mutation()
+        let preview = try Self.mutationPreview()
+        let document = try Self.encoded(mutation)
+        let sender = CLIDatabaseScriptedSender { request in
+            guard case .mutationPreview = request else {
+                throw DatabaseBrokerCommandClientError.invalidRequest
+            }
+            return .mutationPreview(
+                .success(
+                    DatabaseMutationPreviewResult(preview: preview),
+                    metadata: Self.completeMetadata))
+        }
+
+        try await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.makeSender = { sender }
+            DatabaseCLIEnvironment.readQueryText = { path in
+                #expect(path == "mutation.json")
+                return document
+            }
+            let result = await CLIProbe.capture([
+                "database", "mutations", "preview", "--request", "mutation.json",
+                "--timeout-milliseconds", "5000", "--json",
+            ])
+
+            #expect(result.code == ExitCodes.success)
+            #expect(result.object?["action"] as? String == "update")
+            #expect(result.object?["scope"] as? String == "singleRecord")
+            #expect(result.object?["token"] as? String == "short-lived-token")
+            let required = try #require(
+                result.object?["requiredConfirmation"] as? [String: Any])
+            #expect(required["text"] as? String == "Primary orders / public.orders")
+            let request = try #require(
+                await sender.recordedRequests().first?.mutationPreviewRequest)
+            #expect(request.mutation == mutation)
+            #expect(request.operation.deadline != nil)
+        }
+    }
+
+    @Test func mutationApplyRequiresFilesAndBindsExactPreview() async throws {
+        let mutation = Self.mutation()
+        let mutationDocument = try Self.encoded(mutation)
+        let confirmationDocument =
+            """
+            {"token":"short-lived-token","requiredConfirmation":{"text":"Primary orders / public.orders"}}
+            """
+        let sender = CLIDatabaseScriptedSender { request in
+            guard case .mutationApply = request else {
+                throw DatabaseBrokerCommandClientError.invalidRequest
+            }
+            return .mutationApply(
+                .success(
+                    DatabaseMutationApplyResult(
+                        disposition: .completed,
+                        effect: .applied,
+                        affectedRecords: DatabaseCountMetadata(value: 1, accuracy: .exact)),
+                    metadata: Self.completeMetadata))
+        }
+
+        try await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.makeSender = { sender }
+            DatabaseCLIEnvironment.readQueryText = { path in
+                switch path {
+                case "mutation.json": mutationDocument
+                case "preview.json": confirmationDocument
+                default: throw CLIFailure.usage("unexpected mutation document")
+                }
+            }
+
+            let refused = await CLIProbe.capture([
+                "database", "mutations", "apply", "--request", "mutation.json",
+                "--confirmation", "preview.json",
+            ])
+            #expect(refused.code == ExitCodes.usage)
+
+            let result = await CLIProbe.capture([
+                "database", "mutations", "apply", "--request", "mutation.json",
+                "--confirmation", "preview.json", "--yes", "--json",
+            ])
+            #expect(result.code == ExitCodes.success)
+            #expect(result.object?["effect"] as? String == "applied")
+            #expect(
+                result.object?["connectionID"] as? String
+                    == Self.connectionUUID.uuidString.lowercased())
+            let request = try #require(
+                await sender.recordedRequests().first?.mutationApplyRequest)
+            #expect(request.mutation == mutation)
+            #expect(request.token.rawValue == "short-lived-token")
+            #expect(request.confirmationText == "Primary orders / public.orders")
+        }
+    }
+
+    @Test func mutationReconciliationUsesAcceptedReceiptAndDurableOutcome() async throws {
+        let accepted = DatabaseAcceptedMutation(
+            operationID: DatabaseOperationID(rawValue: Self.mutationOperationUUID),
+            serverOperationIdentifier: "postgres-backend-42")
+        let receipt =
+            """
+            {"connectionID":"\(Self.connectionUUID.uuidString)","acceptedMutation":{"operationID":"\(Self.mutationOperationUUID.uuidString)","serverOperationIdentifier":"postgres-backend-42"}}
+            """
+        let outcome = DatabaseMutationApplyResult(
+            disposition: .completed,
+            effect: .applied,
+            affectedRecords: DatabaseCountMetadata(value: 1, accuracy: .exact))
+        let sender = CLIDatabaseScriptedSender { request in
+            switch request {
+            case .mutationStatus:
+                return .mutationStatus(
+                    .success(
+                        DatabaseMutationStatusResult(
+                            acceptedMutation: accepted,
+                            state: .running,
+                            progress: .determinate(completed: 1, total: 2, unit: .steps)),
+                        metadata: Self.completeMetadata))
+            case .mutationCancel:
+                return .mutationCancel(
+                    .success(
+                        DatabaseMutationCancelResult(
+                            acceptedMutation: accepted,
+                            disposition: .accepted),
+                        metadata: Self.completeMetadata))
+            case .mutationOutcomeGet:
+                return .mutationOutcomeGet(
+                    .success(
+                        DatabaseMutationOutcomeGetResult(operation: nil, outcome: outcome),
+                        metadata: Self.completeMetadata))
+            default:
+                throw DatabaseBrokerCommandClientError.invalidRequest
+            }
+        }
+
+        try await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.makeSender = { sender }
+            DatabaseCLIEnvironment.readQueryText = { path in
+                #expect(path == "receipt.json")
+                return receipt
+            }
+            let status = await CLIProbe.capture([
+                "database", "mutations", "status", "--receipt", "receipt.json", "--json",
+            ])
+            let refused = await CLIProbe.capture([
+                "database", "mutations", "cancel", "--receipt", "receipt.json",
+            ])
+            let cancel = await CLIProbe.capture([
+                "database", "mutations", "cancel", "--receipt", "receipt.json", "--yes",
+                "--json",
+            ])
+            let durable = await CLIProbe.capture([
+                "database", "mutations", "outcome", Self.mutationOperationUUID.uuidString,
+                "--json",
+            ])
+
+            #expect(status.code == ExitCodes.success)
+            #expect(status.object?["state"] as? String == "running")
+            #expect(refused.code == ExitCodes.usage)
+            #expect(cancel.code == ExitCodes.success)
+            #expect(cancel.object?["disposition"] as? String == "accepted")
+            #expect(durable.code == ExitCodes.success)
+            let renderedOutcome = try #require(durable.object?["outcome"] as? [String: Any])
+            #expect(renderedOutcome["effect"] as? String == "applied")
+
+            let requests = await sender.recordedRequests()
+            #expect(requests.count == 3)
+            let statusRequest = try #require(requests[0].mutationStatusRequest)
+            #expect(statusRequest.connectionID.rawValue == Self.connectionUUID)
+            #expect(statusRequest.acceptedMutation == accepted)
+            let cancelRequest = try #require(requests[1].mutationCancelRequest)
+            #expect(cancelRequest.acceptedMutation == accepted)
+            #expect(
+                requests[2].mutationOutcomeGetRequest?.operationID.rawValue
+                    == Self.mutationOperationUUID)
         }
     }
 
@@ -1188,6 +1376,69 @@ private actor CLIDatabaseMCPRunRecorder {
             isFavorite: true,
             createdAt: Date(timeIntervalSince1970: 5_000),
             updatedAt: Date(timeIntervalSince1970: 6_000))
+    }
+
+    private static func mutation() -> DatabaseDestructiveRequest {
+        let target = DatabaseTargetIdentifier(
+            connectionID: DatabaseConnectionID(rawValue: connectionUUID),
+            object: DatabaseObjectIdentifier(kind: .table, path: ["public", "orders"]),
+            record: DatabaseRecordIdentity(
+                kind: .primaryKey,
+                components: [
+                    DatabaseIdentityComponent(name: "id", value: .signedInteger(42))
+                ]))
+        return DatabaseDestructiveRequest(
+            target: target,
+            payload: .relational(
+                product: .postgresql,
+                statement: "UPDATE public.orders SET note = $1 WHERE id = $2 RETURNING 1",
+                parameters: [
+                    DatabaseMutationParameter(name: "note", value: .string("verified")),
+                    DatabaseMutationParameter(name: "id", value: .signedInteger(42)),
+                ]))
+    }
+
+    private static func mutationPreview() throws -> DatabaseDestructivePreview {
+        let connection = try connection()
+        let effect = DatabaseDestructiveEffect(
+            action: .update,
+            connection: connection.identity,
+            context: DatabaseMutationContext(
+                kind: .database,
+                value: "orders",
+                schema: "public"),
+            target: mutation().target,
+            selectedRecords: [],
+            predicate: nil,
+            scope: .singleRecord,
+            impact: DatabaseMutationImpact(
+                count: DatabaseCountMetadata(value: 1, accuracy: .exact),
+                description: "one order row"),
+            transactionBehavior: .transactional,
+            rollbackAvailability: .available,
+            executionMode: .synchronous,
+            executionDigest: "execution-digest",
+            displayDigest: "display-digest")
+        return DatabaseDestructivePreview(
+            effect: effect,
+            request: DatabaseMutationPreview(
+                product: .postgresql,
+                kind: .sql,
+                command: "UPDATE public.orders SET note = $1 WHERE id = $2 RETURNING 1",
+                parameters: [],
+                body: nil),
+            warnings: [],
+            requiredConfirmation: DatabaseRequiredConfirmation(
+                strength: .connectionAndTarget,
+                text: "Primary orders / public.orders"),
+            issuedAt: Date(timeIntervalSince1970: 7_000),
+            expiresAt: Date(timeIntervalSince1970: 7_120),
+            token: DatabaseConfirmationToken(rawValue: "short-lived-token"))
+    }
+
+    private static func encoded<Value: Encodable>(_ value: Value) throws -> String {
+        let data = try JSONEncoder().encode(value)
+        return try #require(String(data: data, encoding: .utf8))
     }
 
     private static func page(note: String = "ready") -> DatabasePage<DatabaseRecord> {
