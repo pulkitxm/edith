@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+export PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/mingw64/bin:/c/Program Files/nodejs"
 
 PLATFORM="$(uname -s)"
 case "$PLATFORM" in
@@ -1170,9 +1170,10 @@ fi
 
 if [ -s "$TMP/manifest.jsonl" ]; then
   _note "assembling usage.json"
+  jq -s '.' "$TMP/sessions.jsonl" >"$TMP/sessions.json"
   jq -s \
     --arg now "$NOW" \
-    --slurpfile ss <(jq -s '.' "$TMP/sessions.jsonl") \
+    --slurpfile ss "$TMP/sessions.json" \
     "$ASSEMBLE" "$TMP/manifest.jsonl" >"$TMP/usage.json"
 else
   _note "no usage on this Mac; reporting the machines only"
@@ -1842,10 +1843,11 @@ if [ -s "$TMP/manifest.jsonl" ]; then
   cp "$TMP/cwdmap.jsonl" "$CWDMAP_CACHE"
   _phase "projects" "$(wc -l <"$TMP/cwdmap.jsonl" | tr -d ' ') repos"
 
+  jq -s 'map({(.cwd): .}) | add // {}' "$TMP/cwdmap.jsonl" >"$TMP/cwdmap.json"
   if ! jq \
     --slurpfile usage "$TMP/usage.json" \
     --slurpfile titles "$TMP/titles.json" \
-    --slurpfile cm <(jq -s 'map({(.cwd): .}) | add // {}' "$TMP/cwdmap.jsonl") \
+    --slurpfile cm "$TMP/cwdmap.json" \
     "$DETAILS" "$TMP/recs.json" >"$TMP/merged.json"; then
     _error "detail assembly failed; previous data preserved"
     exit 1
