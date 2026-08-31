@@ -1,3 +1,4 @@
+import Foundation
 import MCP
 import Testing
 
@@ -272,6 +273,42 @@ import Testing
         #expect(request.command == "select * from public.orders")
         #expect(request.page.pageSize.value == 10)
         #expect(request.operation.operationID == DatabaseMCPFixtures.operationID)
+    }
+
+    @Test func serializesReadsForTheSameConnection() async throws {
+        let sender = DatabaseMCPBlockingReadSender()
+        let handler = DatabaseMCPToolHandler(sender: sender)
+        let connectionID = DatabaseMCPFixtures.connectionID.rawValue.uuidString
+
+        async let browse = handler.callTool(
+            CallTool.Parameters(
+                name: "database_browse",
+                arguments: [
+                    "connection_id": .string(connectionID),
+                    "object_kind": "table",
+                    "object_path": .array(["public", "orders"]),
+                ]))
+        await sender.waitForFirstRequest()
+        async let query = handler.callTool(
+            CallTool.Parameters(
+                name: "database_query",
+                arguments: [
+                    "connection_id": .string(connectionID),
+                    "language": "sql",
+                    "command": "SELECT id FROM orders",
+                ]))
+
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(await sender.recordedRequests().count == 1)
+        await sender.releaseFirstRequest()
+
+        let results = await (browse, query)
+        #expect(results.0.isError == false)
+        #expect(results.1.isError == false)
+        let requests = await sender.recordedRequests()
+        #expect(requests.count == 2)
+        #expect(requests[0].kind == .browse)
+        #expect(requests[1].kind == .query)
     }
 
     @Test func clickHouseQueryUsesTheSharedTypedCommand() async throws {
@@ -1027,5 +1064,56 @@ import Testing
     private static func text(_ result: CallTool.Result) -> String {
         guard case let .text(text, _, _)? = result.content.first else { return "" }
         return text
+    }
+}
+
+private actor DatabaseMCPBlockingReadSender: DatabaseBrokerCommandSending {
+    private var requests: [DatabaseBrokerCommandRequest] = []
+    private var firstRequestWaiters: [CheckedContinuation<Void, Never>] = []
+    private var firstRequestRelease: CheckedContinuation<Void, Never>?
+
+    func send(
+        _ request: DatabaseBrokerCommandRequest
+    ) async throws -> DatabaseBrokerCommandResponse {
+        requests.append(request)
+        if requests.count == 1 {
+            for waiter in firstRequestWaiters {
+                waiter.resume()
+            }
+            firstRequestWaiters.removeAll()
+            await withCheckedContinuation { continuation in
+                firstRequestRelease = continuation
+            }
+        }
+        switch request {
+        case .browse:
+            return .browse(
+                .success(
+                    DatabaseBrowseResult(page: DatabaseMCPFixtures.page()),
+                    metadata: DatabaseMCPFixtures.completeMetadata))
+        case .query:
+            return .query(
+                .success(
+                    DatabaseQueryResult(page: DatabaseMCPFixtures.page()),
+                    metadata: DatabaseMCPFixtures.completeMetadata))
+        default:
+            throw DatabaseBrokerCommandClientError.unavailable
+        }
+    }
+
+    func waitForFirstRequest() async {
+        guard requests.isEmpty else { return }
+        await withCheckedContinuation { continuation in
+            firstRequestWaiters.append(continuation)
+        }
+    }
+
+    func releaseFirstRequest() {
+        firstRequestRelease?.resume()
+        firstRequestRelease = nil
+    }
+
+    func recordedRequests() -> [DatabaseBrokerCommandRequest] {
+        requests
     }
 }
