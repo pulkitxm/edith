@@ -551,7 +551,9 @@ struct DatabaseConnectionsAddCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.")
     var json = false
 
-    @Option(name: .long, help: "Database product: postgresql, sqlite, redis, valkey or mongodb.")
+    @Option(
+        name: .long,
+        help: "Database product: postgresql, sqlite, redis, valkey, mongodb or elasticsearch.")
     var product: String
 
     @Option(name: .long, help: "Network host. Defaults to 127.0.0.1.")

@@ -50,12 +50,40 @@ struct DatabaseConnectionURLParserTests {
         #expect(result.suggestedName == "app")
     }
 
+    @Test func parsesElasticsearchHTTPURLForSelectedProduct() throws {
+        let result = try DatabaseConnectionURLParser.parse(
+            "http://127.0.0.1:59200",
+            preferredProduct: .elasticsearch)
+
+        #expect(result.product == .elasticsearch)
+        #expect(result.host == "127.0.0.1")
+        #expect(result.port == 59_200)
+        #expect(result.username.isEmpty)
+        #expect(result.password.isEmpty)
+        #expect(!result.tlsEnabled)
+    }
+
+    @Test func parsesElasticsearchHTTPSCredentials() throws {
+        let result = try DatabaseConnectionURLParser.parse(
+            "https://edith:p%40ss@search.example.com",
+            preferredProduct: .elasticsearch)
+
+        #expect(result.product == .elasticsearch)
+        #expect(result.username == "edith")
+        #expect(result.password == "p@ss")
+        #expect(result.port == 9_200)
+        #expect(result.tlsEnabled)
+    }
+
     @Test func rejectsUnsupportedAndSecureRedisSchemes() {
         #expect(throws: DatabaseConnectionURLError.unsupportedScheme("mysql")) {
             try DatabaseConnectionURLParser.parse("mysql://localhost/app")
         }
         #expect(throws: DatabaseConnectionURLError.secureRedisUnsupported) {
             try DatabaseConnectionURLParser.parse("rediss://localhost/0")
+        }
+        #expect(throws: DatabaseConnectionURLError.unsupportedScheme("http")) {
+            try DatabaseConnectionURLParser.parse("http://localhost:9200")
         }
     }
 }
