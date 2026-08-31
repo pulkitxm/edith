@@ -238,7 +238,7 @@ public enum DatabaseMCPToolCatalog {
         name: DatabaseMCPToolName.documentMutation.rawValue,
         title: "Preview or apply one document mutation",
         description:
-            "Insert, update, or delete one explicit MongoDB or Elasticsearch document through preview-bound confirmation.",
+            "Insert, update, or delete one explicit MongoDB, Elasticsearch, or OpenSearch document through preview-bound confirmation.",
         inputSchema: .object([
             "type": "object",
             "properties": .object([
@@ -249,7 +249,7 @@ public enum DatabaseMCPToolCatalog {
                 "connection_id": uuidSchema,
                 "product": .object([
                     "type": "string",
-                    "enum": .array(["mongodb", "elasticsearch"]),
+                    "enum": .array(["mongodb", "elasticsearch", "opensearch"]),
                 ]),
                 "action": .object([
                     "type": "string",
@@ -260,7 +260,7 @@ public enum DatabaseMCPToolCatalog {
                 "index": .object(["type": "string", "maxLength": 255]),
                 "document": .object([
                     "type": "object",
-                    "maxProperties": 256,
+                    "maxProperties": 4096,
                     "additionalProperties": true,
                 ]),
                 "document_id": .object(["type": "string", "maxLength": 1024]),

@@ -11,6 +11,7 @@ enum OpenSearchDatabaseHTTPMethod: String, Sendable {
     case delete = "DELETE"
     case get = "GET"
     case post = "POST"
+    case put = "PUT"
 }
 
 final class OpenSearchDatabaseURLSessionDelegate: NSObject, URLSessionTaskDelegate,

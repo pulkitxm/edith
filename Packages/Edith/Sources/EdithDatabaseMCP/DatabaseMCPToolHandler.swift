@@ -1170,9 +1170,10 @@ public struct DatabaseMCPToolHandler: Sendable {
     ) throws -> DatabaseDestructiveRequest {
         let connectionID = try connectionID(in: arguments)
         let product = try requiredString("product", in: arguments)
-        guard product == "mongodb" || product == "elasticsearch" else {
+        guard product == "mongodb" || product == "elasticsearch" || product == "opensearch"
+        else {
             throw DatabaseMCPInputError(
-                message: "product must be mongodb or elasticsearch.")
+                message: "product must be mongodb, elasticsearch or opensearch.")
         }
         let document = try arguments["document"].map { value -> [DatabaseObjectField] in
             let maximumFields = product == "mongodb" ? 256 : 4_096
@@ -1202,9 +1203,10 @@ public struct DatabaseMCPToolHandler: Sendable {
                     documentID: documentID,
                     document: document)
             }
-            return try elasticsearchDocumentMutation(
+            return try searchDocumentMutation(
                 arguments: arguments,
                 connectionID: connectionID,
+                product: product == "elasticsearch" ? .elasticsearch : .openSearch,
                 documentID: documentID,
                 document: document)
         } catch let error as DatabaseMCPInputError {
@@ -1268,9 +1270,10 @@ public struct DatabaseMCPToolHandler: Sendable {
         }
     }
 
-    private static func elasticsearchDocumentMutation(
+    private static func searchDocumentMutation(
         arguments: [String: Value],
         connectionID: DatabaseConnectionID,
+        product: DatabaseProduct,
         documentID: String?,
         document: [DatabaseObjectField]?
     ) throws -> DatabaseDestructiveRequest {
@@ -1282,7 +1285,7 @@ public struct DatabaseMCPToolHandler: Sendable {
         else {
             throw DatabaseMCPInputError(
                 message:
-                    "Elasticsearch document mutations require index and document_id without MongoDB fields."
+                    "Search document mutations require index and document_id without MongoDB fields."
             )
         }
         let action = try requiredString("action", in: arguments)
@@ -1296,7 +1299,7 @@ public struct DatabaseMCPToolHandler: Sendable {
             else {
                 throw DatabaseMCPInputError(
                     message:
-                        "Elasticsearch update and delete require sequence_number and primary_term."
+                        "Search update and delete require sequence_number and primary_term."
                 )
             }
             concurrencyTokens = [
@@ -1310,7 +1313,7 @@ public struct DatabaseMCPToolHandler: Sendable {
         } else {
             guard sequenceNumber == nil, primaryTerm == nil else {
                 throw DatabaseMCPInputError(
-                    message: "Elasticsearch insert does not accept concurrency fields.")
+                    message: "Search insert does not accept concurrency fields.")
             }
             concurrencyTokens = []
         }
@@ -1329,21 +1332,43 @@ public struct DatabaseMCPToolHandler: Sendable {
             guard let document else {
                 throw DatabaseMCPInputError(message: "insert requires document.")
             }
-            return try DatabaseDocumentMutationRequests.elasticsearchCreate(
-                target: target,
-                document: .object(document))
+            return
+                if product == .elasticsearch
+            {
+                try DatabaseDocumentMutationRequests.elasticsearchCreate(
+                    target: target,
+                    document: .object(document))
+            } else {
+                try DatabaseDocumentMutationRequests.openSearchCreate(
+                    target: target,
+                    document: .object(document))
+            }
         case "update":
             guard let document else {
                 throw DatabaseMCPInputError(message: "update requires document.")
             }
-            return try DatabaseDocumentMutationRequests.elasticsearchReplace(
-                target: target,
-                document: .object(document))
+            return
+                if product == .elasticsearch
+            {
+                try DatabaseDocumentMutationRequests.elasticsearchReplace(
+                    target: target,
+                    document: .object(document))
+            } else {
+                try DatabaseDocumentMutationRequests.openSearchReplace(
+                    target: target,
+                    document: .object(document))
+            }
         case "delete":
             guard document == nil else {
                 throw DatabaseMCPInputError(message: "delete does not accept document.")
             }
-            return try DatabaseDocumentMutationRequests.elasticsearchDelete(target: target)
+            return
+                if product == .elasticsearch
+            {
+                try DatabaseDocumentMutationRequests.elasticsearchDelete(target: target)
+            } else {
+                try DatabaseDocumentMutationRequests.openSearchDelete(target: target)
+            }
         default:
             throw DatabaseMCPInputError(message: "action must be insert, update or delete.")
         }

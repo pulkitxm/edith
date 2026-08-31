@@ -13,9 +13,11 @@ private enum OpenSearchDatabaseFoundationScenario: Sendable {
 
 private struct OpenSearchDatabaseFoundationRequestSnapshot: Sendable {
     let url: String
+    let method: String
     let authorization: String?
     let accept: String?
     let opaqueIdentifier: String?
+    let body: Data?
 }
 
 private final class OpenSearchDatabaseFoundationStubState: @unchecked Sendable {
@@ -35,16 +37,34 @@ private final class OpenSearchDatabaseFoundationStubState: @unchecked Sendable {
     func take(
         _ request: URLRequest
     ) -> OpenSearchDatabaseFoundationScenario? {
-        lock.withLock {
+        let body = Self.body(request)
+        return lock.withLock {
             requests.append(
                 OpenSearchDatabaseFoundationRequestSnapshot(
                     url: request.url?.absoluteString ?? "",
+                    method: request.httpMethod ?? "",
                     authorization: request.value(forHTTPHeaderField: "Authorization"),
                     accept: request.value(forHTTPHeaderField: "Accept"),
-                    opaqueIdentifier: request.value(forHTTPHeaderField: "X-Opaque-Id")))
+                    opaqueIdentifier: request.value(forHTTPHeaderField: "X-Opaque-Id"),
+                    body: body))
             guard !scenarios.isEmpty else { return nil }
             return scenarios.removeFirst()
         }
+    }
+
+    private static func body(_ request: URLRequest) -> Data? {
+        if let body = request.httpBody { return body }
+        guard let stream = request.httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        while stream.hasBytesAvailable && data.count <= 1_048_576 {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            guard count > 0 else { break }
+            data.append(buffer, count: count)
+        }
+        return data
     }
 
     func recordStop() {
@@ -285,6 +305,58 @@ struct OpenSearchDatabaseFoundationTransportTests {
             openSearchFoundationPlan(),
             sessionFactory: { openSearchFoundationSession($0) })
         #expect(try await client.discoverIdentity().product == .openSearch)
+        await client.disconnect()
+    }
+
+    @Test func sendsGuardedDocumentMutationRequests() async throws {
+        let mutationBody = Data(
+            """
+            {"_index":"edith-documents-v1","_id":"new/document","result":"created","_seq_no":1,"_primary_term":1}
+            """.utf8)
+        OpenSearchDatabaseFoundationURLProtocol.state.configure(
+            openSearchFoundationSuccessScenarios + [
+                .response(
+                    status: 201,
+                    headers: openSearchFoundationProductHeaders,
+                    body: mutationBody)
+            ])
+        let client = try await URLSessionOpenSearchDatabaseClient.connect(
+            openSearchFoundationPlan(),
+            sessionFactory: { openSearchFoundationSession($0) })
+        let result = try await client.mutate(
+            OpenSearchDatabaseMutationPlan(
+                index: "edith-documents-v1",
+                identifier: "new/document",
+                operation: .create(body: Data("{\"title\":\"created\"}".utf8))))
+        await client.disconnect()
+
+        #expect(result.result == "created")
+        let request = try #require(
+            OpenSearchDatabaseFoundationURLProtocol.state.snapshot().requests.last)
+        #expect(request.method == "PUT")
+        #expect(request.url.contains("/edith-documents-v1/_create/new%2Fdocument"))
+        #expect(request.url.contains("refresh=wait_for"))
+        #expect(request.body == Data("{\"title\":\"created\"}".utf8))
+    }
+
+    @Test func mapsDocumentConcurrencyConflicts() async throws {
+        OpenSearchDatabaseFoundationURLProtocol.state.configure(
+            openSearchFoundationSuccessScenarios + [
+                .response(
+                    status: 409,
+                    headers: openSearchFoundationProductHeaders,
+                    body: Data("{}".utf8))
+            ])
+        let client = try await URLSessionOpenSearchDatabaseClient.connect(
+            openSearchFoundationPlan(),
+            sessionFactory: { openSearchFoundationSession($0) })
+        await #expect(throws: OpenSearchDatabaseDriverFailure.conflict) {
+            _ = try await client.mutate(
+                OpenSearchDatabaseMutationPlan(
+                    index: "edith-documents-v1",
+                    identifier: "doc-1",
+                    operation: .delete(sequenceNumber: 7, primaryTerm: 2)))
+        }
         await client.disconnect()
     }
 
