@@ -103,7 +103,10 @@ private actor CLIDatabaseMCPRunRecorder {
             plan(["ed", "database", "query", "id", "--nd"], 4).candidates == ["--ndjson"])
         #expect(
             plan(["ed", "database", "mutations", ""], 3).candidates
-                == ["row-request", "preview", "apply", "status", "cancel", "outcome"])
+                == [
+                    "row-request", "key-request", "preview", "apply", "status", "cancel",
+                    "outcome",
+                ])
     }
 
     @Test func databaseExecutionRoutesParse() throws {
@@ -154,6 +157,11 @@ private actor CLIDatabaseMCPRunRecorder {
                 "--action", "update", "--path", "public", "--path", "orders",
                 "--identity", "identity.json", "--values", "values.json",
             ]) is DatabaseMutationRowRequestCommand)
+        #expect(
+            try EdRoot.parseAsRoot([
+                "database", "mutations", "key-request", Self.connectionUUID.uuidString,
+                "--action", "update", "--key", "session:1", "--value", "ready",
+            ]) is DatabaseMutationKeyRequestCommand)
         #expect(
             try EdRoot.parseAsRoot([
                 "database", "mutations", "preview", "--request", "mutation.json",
@@ -442,6 +450,33 @@ private actor CLIDatabaseMCPRunRecorder {
             #expect(product == .postgresql)
             #expect(statement.contains("UPDATE \"public\".\"orders\""))
             #expect(parameters.map(\.name) == ["note"])
+        }
+    }
+
+    @Test func mutationKeyRequestBuildsBoundValkeyUpdate() async throws {
+        try await CLIProbe.inWorld { _ in
+            let result = await CLIProbe.capture([
+                "database", "mutations", "key-request", Self.connectionUUID.uuidString,
+                "--action", "update", "--product", "valkey", "--logical-database", "2",
+                "--key", "session:1", "--value", "ready", "--ttl-milliseconds=-1",
+            ])
+
+            #expect(result.code == ExitCodes.success)
+            #expect(result.stderr.isEmpty)
+            let request = try JSONDecoder().decode(
+                DatabaseDestructiveRequest.self,
+                from: Data(result.stdout.utf8))
+            #expect(request.target.object?.kind == .keyspace)
+            #expect(request.target.object?.path == ["2"])
+            #expect(request.target.record?.components.first?.value == .string("session:1"))
+            guard case .keyspace(let product, let command, let parameters) = request.payload else {
+                Issue.record("expected Redis-compatible key mutation")
+                return
+            }
+            #expect(product == .valkey)
+            #expect(command == "SET")
+            #expect(parameters.map(\.name) == ["key", "value", "ttlPolicy"])
+            #expect(parameters.last?.value == .string("persistent"))
         }
     }
 

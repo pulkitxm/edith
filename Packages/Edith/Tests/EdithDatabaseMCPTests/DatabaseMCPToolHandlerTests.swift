@@ -1,7 +1,7 @@
-import EdithDatabase
 import MCP
 import Testing
 
+@testable import EdithDatabase
 @testable import EdithDatabaseMCP
 
 @Suite struct DatabaseMCPToolHandlerTests {
@@ -279,6 +279,117 @@ import Testing
         #expect(Self.category(oversizedPage) == "invalidRequest")
         #expect(Self.category(unsupportedLanguage) == "invalidRequest")
         #expect(await sender.recordedRequests().isEmpty)
+    }
+
+    @Test func keyMutationRequiresPreviewBoundConfirmation() async throws {
+        let target = DatabaseTargetIdentifier(
+            connectionID: DatabaseMCPFixtures.connectionID,
+            object: DatabaseObjectIdentifier(kind: .keyspace, path: ["2"]),
+            record: DatabaseRecordIdentity(
+                kind: .key,
+                components: [
+                    DatabaseIdentityComponent(name: "key", value: .string("session:1"))
+                ]))
+        let mutation = try DatabaseKeyspaceMutationRequests.updateString(
+            target: target,
+            product: .valkey,
+            value: .string("ready"),
+            ttlMilliseconds: nil,
+            preservesExistingTTL: false)
+        let effect = DatabaseDestructiveEffect(
+            action: .update,
+            connection: try DatabaseMCPFixtures.connection().identity,
+            context: DatabaseMutationContext(kind: .logicalDatabase, value: "2"),
+            target: target,
+            selectedRecords: [],
+            predicate: nil,
+            scope: .singleRecord,
+            impact: DatabaseMutationImpact(
+                count: DatabaseCountMetadata(value: 1, accuracy: .exact),
+                description: "Update one string key"),
+            transactionBehavior: .nontransactional,
+            rollbackAvailability: .unavailable,
+            executionMode: .synchronous,
+            executionDigest: "execution-digest",
+            displayDigest: "display-digest")
+        let preview = DatabaseDestructivePreview(
+            effect: effect,
+            request: DatabaseMutationPreview(
+                product: .valkey,
+                kind: .keyspace,
+                command: "SET",
+                parameters: mutation.payload.parameters.map {
+                    DatabaseMutationParameterPreview(name: $0.name, valueKind: .string)
+                },
+                body: nil),
+            warnings: [
+                DatabaseWarning(
+                    code: "redis.mutation.no_rollback",
+                    message: "This change cannot be rolled back.",
+                    severity: .caution)
+            ],
+            requiredConfirmation: DatabaseRequiredConfirmation(
+                strength: .target,
+                text: "Primary orders / 2"),
+            issuedAt: DatabaseMCPFixtures.now,
+            expiresAt: DatabaseMCPFixtures.now.addingTimeInterval(60),
+            token: DatabaseConfirmationToken(rawValue: "preview-token"))
+        let sender = DatabaseMCPScriptedSender([
+            .success(
+                .mutationPreview(
+                    .success(
+                        DatabaseMutationPreviewResult(preview: preview),
+                        metadata: DatabaseMCPFixtures.completeMetadata))),
+            .success(
+                .mutationApply(
+                    .success(
+                        DatabaseMutationApplyResult(
+                            disposition: .completed,
+                            effect: .applied,
+                            affectedRecords: DatabaseCountMetadata(value: 1, accuracy: .exact)),
+                        metadata: DatabaseMCPFixtures.completeMetadata))),
+        ])
+        let handler = DatabaseMCPToolHandler(
+            sender: sender,
+            makeOperationID: { DatabaseMCPFixtures.operationID })
+        let base: [String: Value] = [
+            "connection_id": .string(DatabaseMCPFixtures.connectionID.rawValue.uuidString),
+            "product": "valkey",
+            "action": "update",
+            "logical_database": "2",
+            "key": "session:1",
+            "value": "ready",
+            "ttl_ms": -1,
+        ]
+        var previewArguments = base
+        previewArguments["mode"] = "preview"
+        let previewResult = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_key_mutation",
+                arguments: previewArguments))
+        #expect(previewResult.isError == false)
+        let previewData = previewResult.structuredContent?.objectValue?["data"]?.objectValue
+        #expect(previewData?["confirmation_token"]?.stringValue == "preview-token")
+        #expect(previewData?["rollback"]?.stringValue == "unavailable")
+
+        var applyArguments = base
+        applyArguments["mode"] = "apply"
+        applyArguments["confirmation_token"] = "preview-token"
+        applyArguments["confirmation_text"] = "Primary orders / 2"
+        let applyResult = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_key_mutation",
+                arguments: applyArguments))
+        #expect(applyResult.isError == false)
+        let applyData = applyResult.structuredContent?.objectValue?["data"]?.objectValue
+        #expect(applyData?["effect"]?.stringValue == "applied")
+        #expect(applyData?["affected_records"]?.objectValue?["value"]?.intValue == 1)
+
+        let requests = await sender.recordedRequests()
+        #expect(requests.count == 2)
+        #expect(requests.first?.mutationPreviewRequest?.mutation == mutation)
+        #expect(requests.last?.mutationApplyRequest?.mutation == mutation)
+        #expect(requests.last?.mutationApplyRequest?.token.rawValue == "preview-token")
     }
 
     @Test func operationListPreservesFiltersProgressAndTarget() async throws {

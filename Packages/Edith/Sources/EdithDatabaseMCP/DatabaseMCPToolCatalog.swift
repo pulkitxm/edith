@@ -9,12 +9,13 @@ public enum DatabaseMCPToolName: String, CaseIterable, Sendable {
     case cancelOperation = "database_cancel_operation"
     case testConnection = "database_test_connection"
     case session = "database_session"
+    case keyMutation = "database_key_mutation"
 }
 
 public enum DatabaseMCPToolCatalog {
     public static let tools: [Tool] = [
         connections, capabilities, browse, query, operations, cancelOperation,
-        testConnection, session,
+        testConnection, session, keyMutation,
     ]
 
     public static let connections = Tool(
@@ -172,6 +173,64 @@ public enum DatabaseMCPToolCatalog {
             idempotentHint: true,
             openWorldHint: false),
         outputSchema: pageResponseSchema)
+
+    public static let keyMutation = Tool(
+        name: DatabaseMCPToolName.keyMutation.rawValue,
+        title: "Preview or apply one Redis-compatible key mutation",
+        description:
+            "Create, update, expire, persist, or delete one explicit Redis or Valkey string key through preview-bound confirmation.",
+        inputSchema: .object([
+            "type": "object",
+            "properties": .object([
+                "mode": .object([
+                    "type": "string",
+                    "enum": .array(["preview", "apply"]),
+                ]),
+                "connection_id": uuidSchema,
+                "product": .object([
+                    "type": "string",
+                    "enum": .array(["redis", "valkey"]),
+                ]),
+                "action": .object([
+                    "type": "string",
+                    "enum": .array(["insert", "update", "delete"]),
+                ]),
+                "logical_database": .object([
+                    "type": "string",
+                    "pattern": "^[0-9]+$",
+                    "maxLength": 10,
+                ]),
+                "key": .object([
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                ]),
+                "value": .object([
+                    "type": "string",
+                    "maxLength": 65536,
+                ]),
+                "ttl_ms": .object([
+                    "type": "integer",
+                    "description": "Positive TTL in milliseconds, or -1 for no expiry.",
+                ]),
+                "confirmation_token": .object(["type": "string"]),
+                "confirmation_text": .object(["type": "string"]),
+                "timeout_ms": .object([
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 86400000,
+                ]),
+            ]),
+            "required": .array(["mode", "connection_id", "product", "action", "key"]),
+            "additionalProperties": false,
+        ]),
+        annotations: .init(
+            title: "Mutate one Redis-compatible key",
+            readOnlyHint: false,
+            destructiveHint: true,
+            idempotentHint: false,
+            openWorldHint: false),
+        outputSchema: responseSchema(data: .object(["type": "object"])))
 
     public static let operations = Tool(
         name: DatabaseMCPToolName.operations.rawValue,

@@ -193,12 +193,110 @@ struct DatabaseMutationsCommand: AsyncParsableCommand {
         abstract: "Preview, apply, and reconcile destructive database work.",
         subcommands: [
             DatabaseMutationRowRequestCommand.self,
+            DatabaseMutationKeyRequestCommand.self,
             DatabaseMutationPreviewCommand.self,
             DatabaseMutationApplyCommand.self,
             DatabaseMutationStatusCommand.self,
             DatabaseMutationCancelCommand.self,
             DatabaseMutationOutcomeCommand.self,
         ])
+}
+
+struct DatabaseMutationKeyRequestCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "key-request",
+        abstract: "Build a safe Redis or Valkey string-key mutation request as JSON.")
+
+    @Option(name: .long, help: "Key action: insert, update or delete.")
+    var action: String
+
+    @Option(name: .long, help: "Database product: redis or valkey.")
+    var product = "redis"
+
+    @Option(name: .long, help: "Logical database number.")
+    var logicalDatabase = "0"
+
+    @Option(name: .long, help: "Key name.")
+    var key: String
+
+    @Option(name: .long, help: "String value for insert or value update.")
+    var value: String?
+
+    @Option(name: .long, help: "Positive TTL in milliseconds, or -1 for no expiry.")
+    var ttlMilliseconds: Int64?
+
+    @Argument(help: "The saved Redis or Valkey connection UUID.")
+    var connectionID: String
+
+    func run() async throws {
+        try await execute {
+            let product: DatabaseProduct
+            switch self.product.lowercased() {
+            case "redis": product = .redis
+            case "valkey": product = .valkey
+            default: throw CLIFailure.usage("--product must be redis or valkey")
+            }
+            guard let logicalDatabaseValue = Int(logicalDatabase), logicalDatabaseValue >= 0,
+                logicalDatabaseValue.description == logicalDatabase
+            else {
+                throw CLIFailure.usage("--logical-database must be a non-negative integer")
+            }
+            let keyValue = DatabaseValue.string(key)
+            let object = DatabaseObjectIdentifier(kind: .keyspace, path: [logicalDatabase])
+            let connectionID = try DatabaseCLI.connectionID(connectionID)
+            let record = DatabaseRecordIdentity(
+                kind: .key,
+                components: [DatabaseIdentityComponent(name: "key", value: keyValue)])
+            let mutation: DatabaseDestructiveRequest
+            switch action.lowercased() {
+            case "insert":
+                guard let value else {
+                    throw CLIFailure.usage("insert requires --value")
+                }
+                mutation = try DatabaseKeyspaceMutationRequests.insertString(
+                    target: DatabaseTargetIdentifier(
+                        connectionID: connectionID,
+                        object: object),
+                    product: product,
+                    key: keyValue,
+                    value: .string(value),
+                    ttlMilliseconds: ttlMilliseconds)
+            case "update":
+                let target = DatabaseTargetIdentifier(
+                    connectionID: connectionID,
+                    object: object,
+                    record: record)
+                if let value {
+                    mutation = try DatabaseKeyspaceMutationRequests.updateString(
+                        target: target,
+                        product: product,
+                        value: .string(value),
+                        ttlMilliseconds: ttlMilliseconds == -1 ? nil : ttlMilliseconds,
+                        preservesExistingTTL: ttlMilliseconds == nil)
+                } else if let ttlMilliseconds {
+                    mutation = try DatabaseKeyspaceMutationRequests.updateTTL(
+                        target: target,
+                        product: product,
+                        ttlMilliseconds: ttlMilliseconds == -1 ? nil : ttlMilliseconds)
+                } else {
+                    throw CLIFailure.usage("update requires --value or --ttl-milliseconds")
+                }
+            case "delete":
+                guard value == nil, ttlMilliseconds == nil else {
+                    throw CLIFailure.usage("delete does not accept --value or --ttl-milliseconds")
+                }
+                mutation = try DatabaseKeyspaceMutationRequests.deleteKey(
+                    target: DatabaseTargetIdentifier(
+                        connectionID: connectionID,
+                        object: object,
+                        record: record),
+                    product: product)
+            default:
+                throw CLIFailure.usage("--action must be insert, update or delete")
+            }
+            CLIOut.out(try DatabaseCLI.encodeDocument(mutation))
+        }
+    }
 }
 
 struct DatabaseMutationRowRequestCommand: AsyncParsableCommand {
