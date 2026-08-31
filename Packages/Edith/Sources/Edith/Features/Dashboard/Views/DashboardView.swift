@@ -534,7 +534,7 @@ struct DashboardView: View {
                 Button("Last month") { model.range = .month(month) }
             }
         } label: {
-            Label("More", systemImage: "chevron.down")
+            Label("More", systemImage: "clock.arrow.circlepath")
                 .font(.system(size: UIScale.pt(11)))
                 .modifier(FilterChip(dark: dark, active: alternateRangeActive))
         }
