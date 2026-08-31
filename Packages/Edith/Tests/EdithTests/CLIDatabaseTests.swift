@@ -1051,6 +1051,38 @@ private actor CLIDatabaseMCPRunRecorder {
         }
     }
 
+    @Test func clickHouseQueryRoutesTheNativeLanguage() async throws {
+        let sender = CLIDatabaseScriptedSender { request in
+            guard case .query = request else {
+                throw DatabaseBrokerCommandClientError.invalidRequest
+            }
+            return .query(
+                .success(
+                    DatabaseQueryResult(page: Self.page()),
+                    metadata: Self.completeMetadata))
+        }
+
+        try await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.makeSender = { sender }
+            DatabaseCLIEnvironment.readQueryText = { path in
+                #expect(path == "analytics.sql")
+                return "SELECT category, count() FROM events GROUP BY category"
+            }
+            let result = await CLIProbe.capture([
+                "database", "query", Self.connectionUUID.uuidString,
+                "--file", "analytics.sql", "--language", "clickHouseSQL", "--limit", "100",
+                "--json",
+            ])
+
+            #expect(result.code == ExitCodes.success)
+            #expect(result.stderr.isEmpty)
+            let request = try #require(await sender.recordedRequests().first?.queryRequest)
+            #expect(request.language == .clickHouseSQL)
+            #expect(request.command == "SELECT category, count() FROM events GROUP BY category")
+            #expect(request.page.pageSize.value == 100)
+        }
+    }
+
     @Test func executionValidationDoesNotReachBroker() async {
         let sender = CLIDatabaseScriptedSender { _ in
             throw DatabaseBrokerCommandClientError.invalidRequest

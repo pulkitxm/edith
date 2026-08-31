@@ -242,6 +242,41 @@ import Testing
         #expect(request.operation.operationID == DatabaseMCPFixtures.operationID)
     }
 
+    @Test func clickHouseQueryUsesTheSharedTypedCommand() async throws {
+        let sender = DatabaseMCPScriptedSender([
+            .success(
+                .query(
+                    .success(
+                        DatabaseQueryResult(page: DatabaseMCPFixtures.page()),
+                        metadata: DatabaseMCPFixtures.completeMetadata)))
+        ])
+        let handler = DatabaseMCPToolHandler(
+            sender: sender,
+            makeOperationID: { DatabaseMCPFixtures.operationID })
+
+        let result = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_query",
+                arguments: [
+                    "connection_id": .string(
+                        DatabaseMCPFixtures.connectionID.rawValue.uuidString),
+                    "language": "clickHouseSQL",
+                    "command": "SELECT category, count() FROM events GROUP BY category",
+                    "page_size": 100,
+                ]))
+
+        #expect(result.isError == false)
+        let requests = await sender.recordedRequests()
+        guard case let .query(request) = requests.first else {
+            Issue.record("Expected a ClickHouse query request.")
+            return
+        }
+        #expect(request.language == .clickHouseSQL)
+        #expect(request.command == "SELECT category, count() FROM events GROUP BY category")
+        #expect(request.page.pageSize.value == 100)
+        #expect(request.operation.operationID == DatabaseMCPFixtures.operationID)
+    }
+
     @Test func rejectsUnsafePageAndQueryInputsBeforeCallingTheBroker() async {
         let sender = DatabaseMCPScriptedSender([])
         let handler = DatabaseMCPToolHandler(sender: sender)
