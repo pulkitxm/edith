@@ -77,8 +77,13 @@ final class DatabaseDataWorkspaceModel {
     var canSubmitEditor: Bool {
         guard let editorMode else { return false }
         if editorMode == .insert, activeProduct == .redis || activeProduct == .valkey {
-            let included = Set(editorFields.filter(\.isIncluded).map(\.id))
-            return included.contains("key") && included.contains("value")
+            var includesKey = false
+            var includesValue = false
+            for field in editorFields where field.isIncluded {
+                includesKey = includesKey || field.id == "key"
+                includesValue = includesValue || field.id == "value"
+            }
+            return includesKey && includesValue
         }
         return editorFields.contains(where: { $0.isEditable && $0.isIncluded })
     }
