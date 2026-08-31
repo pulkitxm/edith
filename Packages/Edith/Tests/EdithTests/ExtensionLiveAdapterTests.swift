@@ -37,6 +37,38 @@ import EdithCore
             ])
     }
 
+    @Test func keystrokeHighlightReportsRuntimeState() {
+        let suite = "test.extension-adapter.keystrokes.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        #expect(
+            ExtensionLiveAdapters.keystrokeHighlightReadiness(defaults: defaults)
+                == .uninstalled("Keystroke Highlight is off."))
+        defaults.set(true, forKey: AppStorageKeys.KeystrokeHighlight.enabled)
+        #expect(
+            ExtensionLiveAdapters.keystrokeHighlightReadiness(defaults: defaults)
+                == .ready(
+                    "Keystroke Highlight is ready and paused. Press ⌃⌥⌘K to start it."))
+        defaults.set("⌃⇧K", forKey: AppStorageKeys.KeystrokeHighlight.hotKeyLabel)
+        #expect(
+            ExtensionLiveAdapters.keystrokeHighlightReadiness(defaults: defaults)
+                == .ready(
+                    "Keystroke Highlight is ready and paused. Press ⌃⇧K to start it."))
+        defaults.set(true, forKey: AppStorageKeys.KeystrokeHighlight.active)
+        #expect(
+            ExtensionLiveAdapters.keystrokeHighlightReadiness(defaults: defaults)
+                == .loading("The keystroke overlay is starting."))
+        defaults.set(true, forKey: AppStorageKeys.KeystrokeHighlight.runtimeActive)
+        #expect(
+            ExtensionLiveAdapters.keystrokeHighlightReadiness(defaults: defaults)
+                == .ready("Key presses are being monitored and the overlay is ready."))
+        defaults.set("monitor failed", forKey: AppStorageKeys.KeystrokeHighlight.runtimeError)
+        #expect(
+            ExtensionLiveAdapters.keystrokeHighlightReadiness(defaults: defaults)
+                == .failed("monitor failed"))
+    }
+
     @Test func attentionRequiresAnEnabledTrackingSource() {
         #expect(
             ExtensionLiveAdapters.attentionReadiness(settings: AttentionSettings())

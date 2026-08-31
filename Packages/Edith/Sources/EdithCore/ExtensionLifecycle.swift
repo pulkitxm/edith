@@ -660,6 +660,49 @@ public enum ExtensionLifecycleCatalog {
                     "ed clipboard ls --json")
             ]),
         descriptor(
+            "keystrokeHighlight",
+            "Show keyboard input as clear keycaps that disappear automatically.",
+            workflows: [
+                instruction(
+                    "demo", "Record a demo",
+                    "Show letters, symbols, navigation keys and shortcuts as they are pressed."),
+                instruction(
+                    "position", "Place the overlay",
+                    "Keep the keycaps at the top or bottom of the screen under the pointer."),
+                instruction(
+                    "toggle", "Pause between takes",
+                    "Start or pause the overlay without removing the extension.",
+                    "ed config set keystrokeHighlightActive false"),
+            ],
+            prerequisites: [
+                instruction(
+                    "permission", "Grant Input Monitoring",
+                    "Allow Edith to observe physical key presses outside its own windows.",
+                    "ed permissions request inputMonitoring")
+            ],
+            examples: [
+                "ed extensions enable keystrokeHighlight",
+                "ed config set keystrokeHighlightActive true",
+                "ed config set keystrokeHighlightDuration 1.5",
+            ],
+            docs: [
+                documentation(
+                    "guide", "Keystroke Highlight guide",
+                    "docs/cli/keystroke-highlight/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "doctor", "Check the overlay",
+                    "Inspect the helper, permission and runtime state.",
+                    "ed extensions doctor keystrokeHighlight --json")
+            ],
+            verification: [
+                instruction(
+                    "status", "Verify monitoring",
+                    "Confirm the event monitor and overlay are ready.",
+                    "ed extensions verify keystrokeHighlight --json")
+            ]),
+        descriptor(
             "focusDim", "Reduce visual noise by dimming everything behind the active app.",
             workflows: [
                 instruction(

@@ -13,6 +13,7 @@ final class AppServices {
     private(set) var colorPicker: ColorPickerStore?
     private(set) var clipboard: ClipboardStore?
     private(set) var emoji: EmojiStore?
+    private(set) var keystrokeHighlight: KeystrokeHighlightRuntime?
     private(set) var focusDim: FocusDimEngine?
     private(set) var presenter: PresenterDetector?
     private(set) var micMute: MicMuteEngine?
@@ -102,6 +103,7 @@ final class AppServices {
         startup.cancel()
         terminating = true
         shutDownEmojiRuntime()
+        keystrokeHighlight?.shutdown()
         if #available(macOS 14.4, *) { MixerEngine.shared.shutdown() }
         await lidAwake?.shutdownForTermination()
         await lidAwakeRestorationGate.wait()
@@ -318,6 +320,26 @@ final class AppServices {
     }
 
     private func reconcilePresentationServices() {
+        let keystrokeHighlightEnabled = Self.extensionEnabled(
+            AppStorageKeys.KeystrokeHighlight.enabled)
+        if keystrokeHighlightEnabled {
+            KeystrokeHighlightHotKey.register()
+        } else {
+            KeystrokeHighlightHotKey.unregister()
+            SharedDefaults.store.set(false, forKey: AppStorageKeys.KeystrokeHighlight.active)
+        }
+        let keystrokeHighlightWanted = FeatureGates.keystrokeHighlightMonitorWanted(
+            enabled: keystrokeHighlightEnabled,
+            active: SharedDefaults.store.bool(forKey: AppStorageKeys.KeystrokeHighlight.active))
+        if keystrokeHighlightWanted, keystrokeHighlight == nil {
+            keystrokeHighlight = KeystrokeHighlightRuntime()
+        }
+        if !keystrokeHighlightWanted, let runtime = keystrokeHighlight {
+            runtime.shutdown()
+            keystrokeHighlight = nil
+        }
+        keystrokeHighlight?.syncSettings()
+
         let focusDimOn = FocusDimState.isEnabled()
         if focusDimOn, focusDim == nil { focusDim = FocusDimEngine() }
         if !focusDimOn, let engine = focusDim {

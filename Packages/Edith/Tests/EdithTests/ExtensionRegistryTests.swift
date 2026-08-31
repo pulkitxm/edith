@@ -22,6 +22,7 @@ import Testing
         "tabCalendarEnabled",
         "notchShelfEnabled",
         "clipboardEnabled",
+        "keystrokeHighlightEnabled",
         "focusDimEnabled",
         "presenterEnabled",
         "colorPickerEnabled",
@@ -38,7 +39,8 @@ import Testing
             ExtensionRegistry.entries.map(\.id) == [
                 "attention", "usage", "herdr", "quinjet", "system", "appMaintenance", "machines",
                 "companion", "systemStats", "micMute", "lidAwake", "music", "calendar",
-                "notchShelf", "clipboard", "focusDim", "presenter", "emoji", "colorPicker",
+                "notchShelf", "clipboard", "keystrokeHighlight", "focusDim", "presenter", "emoji",
+                "colorPicker",
             ])
     }
 
@@ -151,7 +153,7 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "attention", "usage", "herdr", "quinjet", "system", "machines", "notchShelf",
-                "clipboard", "appMaintenance",
+                "clipboard", "keystrokeHighlight", "appMaintenance",
             ])
     }
 
@@ -200,7 +202,7 @@ import Testing
         #expect(titleMatches.map(\.id) == ["usage"])
         #expect(subtitleMatches.map(\.id) == ["calendar"])
         #expect(categoryMatches.allSatisfy { $0.group == .utilities })
-        #expect(combinedMatches.map(\.id) == ["presenter"])
+        #expect(combinedMatches.map(\.id) == ["keystrokeHighlight", "presenter"])
         #expect(attentionMatches.map(\.id) == ["attention"])
     }
 
@@ -246,6 +248,7 @@ import Testing
             "calendar": [.calendar],
             "notchShelf": [],
             "clipboard": [],
+            "keystrokeHighlight": [.inputMonitoring],
             "focusDim": [.screenRecording],
             "presenter": [.screenRecording],
             "colorPicker": [.screenRecording],
@@ -267,6 +270,7 @@ import Testing
             "calendar": [],
             "notchShelf": [.applicationAudio, .bluetooth, .camera, .automation],
             "clipboard": [.accessibility],
+            "keystrokeHighlight": [],
             "focusDim": [],
             "presenter": [],
             "colorPicker": [],
@@ -399,6 +403,7 @@ import Testing
             "tabCalendarEnabled": true,
             "notchShelfEnabled": false,
             "clipboardEnabled": true,
+            "keystrokeHighlightEnabled": false,
             "focusDimEnabled": false,
             "presenterEnabled": true,
             "colorPickerEnabled": false,

@@ -26,6 +26,7 @@ system query failure produces `failed` with runtime phase `error`.
 | Herdr | Herdr presence on this Mac or a configured machine | collected sessions and per-host errors | `ed herdr ls --json`; `ed extensions verify herdr` |
 | Quinjet | verified Quinjet executable, terminal and theme values, and cmux when selected | terminal integration can be resolved | `ed tools install quinjet`; `ed config set quinjetTerminal embedded` |
 | System | built-in running-application module | regular applications visible through AppKit | `ed apps ls --json`; `ed app relaunch` |
+| App Maintenance | built-in app and package inspection | readable application and package sources | `ed extensions verify appMaintenance`; `ed tools install homebrew` |
 | Machines | readable machine registry with valid names, hosts, and SSH ports | configured machine count | `ed machines ls --json`; `ed machines add --help` |
 | Companion | configured endpoint | backend health checks and optional dependency health | `ed companion doctor --json` |
 | CPU & Memory | built-in metrics module | CPU tick sample and physical memory availability | `ed system stats --json`; `ed app relaunch` |
@@ -35,8 +36,10 @@ system query failure produces `failed` with runtime phase `error`.
 | Calendar | live EventKit authorization | readable calendar count | `ed permissions request calendar`; `ed calendar ls --json` |
 | Notch Shelf | decodable shelf index and, when Audio Mixer is enabled, macOS 14.4 or later | parked item count and missing backing files; Audio Mixer is omitted on unsupported systems | `ed shelf ls --json`; `ed permissions settings applicationAudio` |
 | Clipboard | decodable JSONL index | entry count and missing blob payloads | `ed clipboard stats --json`; `ed clipboard ls --json` |
+| Keystroke Highlight | enabled extension and active or paused state | listen-only keyboard event monitor while active | `ed config set keystrokeHighlightActive true`; `ed permissions request inputMonitoring` |
 | Focus Dim | finite intensity and animation values plus a valid display mode | active display count | `ed config ls --group focusdim --json`; `ed permissions refresh` |
 | Presenter | at least one protected data category and coherent detector settings | manual protection or automatic detectors can operate | `ed presenter status --json`; `ed config ls --group presenter --json` |
+| Emoji Picker | bundled emoji catalog and valid picker settings | recent emoji usage | `ed emoji ls --json`; `ed permissions refresh` |
 | Color Picker | valid copy format, color profile, history limit, and decodable history | active display and saved sample count | `ed color ls --json`; `ed permissions refresh` |
 
 ## Agent workflow

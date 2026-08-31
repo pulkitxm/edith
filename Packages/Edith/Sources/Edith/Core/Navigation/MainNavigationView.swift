@@ -257,9 +257,10 @@ struct SidebarUtilityVisibility: Equatable {
     let system: Bool
     let presenter: Bool
     let lidAwake: Bool
+    let keystrokeHighlight: Bool
 
     var hasActions: Bool {
-        system || presenter || lidAwake
+        system || presenter || lidAwake || keystrokeHighlight
     }
 }
 
@@ -457,6 +458,10 @@ struct MainWindowView: View {
         var preventSleep = false
     @AppStorage(LidAwakeState.enabledKey, store: SharedDefaults.store) private
         var lidAwakeEnabled = false
+    @AppStorage(AppStorageKeys.KeystrokeHighlight.enabled, store: SharedDefaults.store) private
+        var keystrokeHighlightEnabled = false
+    @AppStorage(AppStorageKeys.KeystrokeHighlight.active, store: SharedDefaults.store) private
+        var keystrokeHighlightActive = false
     @AppStorage(AppStorageKeys.Presenter.mode, store: SharedDefaults.store) private
         var presenterMode = false
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
@@ -832,7 +837,8 @@ struct MainWindowView: View {
         SidebarUtilityVisibility(
             system: systemEnabled,
             presenter: presenterEnabled,
-            lidAwake: lidAwakeEnabled)
+            lidAwake: lidAwakeEnabled,
+            keystrokeHighlight: keystrokeHighlightEnabled)
     }
 
     private var sidebarUtilityTransition: AnyTransition {
@@ -1170,28 +1176,60 @@ struct MainWindowView: View {
                 }
                 .transition(sidebarUtilityTransition)
             }
-            if presenterEnabled {
-                presenterQuickActionTile
-                    .transition(sidebarUtilityTransition)
-            }
-            if lidAwakeEnabled {
-                quickActionTile(
-                    icon: "laptopcomputer", title: "Lid awake", active: lidAwakeActive,
-                    trigger: lidAwakeActive ? 1 : 0,
-                    help: "Keep this Mac running with the lid closed"
-                ) {
-                    if lidAwakeActive {
-                        lidAwakeOperations.perform(.off)
+            if lidAwakeEnabled || keystrokeHighlightEnabled {
+                VStack(spacing: UIScale.pt(8)) {
+                    if lidAwakeEnabled && keystrokeHighlightEnabled {
+                        if clampedSidebarWidth < 220 {
+                            lidAwakeQuickActionTile
+                            keystrokeHighlightQuickActionTile
+                        } else {
+                            HStack(spacing: UIScale.pt(8)) {
+                                lidAwakeQuickActionTile
+                                keystrokeHighlightQuickActionTile
+                            }
+                        }
+                    } else if lidAwakeEnabled {
+                        lidAwakeQuickActionTile
                     } else {
-                        confirmingLidAwake = true
+                        keystrokeHighlightQuickActionTile
                     }
                 }
                 .transition(sidebarUtilityTransition)
+            }
+            if presenterEnabled {
+                presenterQuickActionTile
+                    .transition(sidebarUtilityTransition)
             }
         }
         .animation(
             Motion.animation(Motion.glide, reduceMotion: reduceMotion),
             value: sidebarUtilityVisibility)
+    }
+
+    private var lidAwakeQuickActionTile: some View {
+        quickActionTile(
+            icon: "laptopcomputer", title: "Lid awake", active: lidAwakeActive,
+            trigger: lidAwakeActive ? 1 : 0,
+            help: "Keep this Mac running with the lid closed"
+        ) {
+            if lidAwakeActive {
+                lidAwakeOperations.perform(.off)
+            } else {
+                confirmingLidAwake = true
+            }
+        }
+    }
+
+    private var keystrokeHighlightQuickActionTile: some View {
+        quickActionTile(
+            icon: "keyboard.badge.ellipsis", title: "Keystrokes",
+            active: keystrokeHighlightActive,
+            trigger: keystrokeHighlightActive ? 1 : 0,
+            help: "Show keyboard input on screen"
+        ) {
+            $keystrokeHighlightActive
+                .configured(AppStorageKeys.KeystrokeHighlight.active).wrappedValue.toggle()
+        }
     }
 
     private var presenterQuickActionTile: some View {

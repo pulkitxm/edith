@@ -86,17 +86,30 @@ import Testing
 
     @Test func everyExtensionBackedUtilityKeepsTheFooterVisible() {
         #expect(
-            !SidebarUtilityVisibility(system: false, presenter: false, lidAwake: false)
-                .hasActions)
+            !SidebarUtilityVisibility(
+                system: false, presenter: false, lidAwake: false, keystrokeHighlight: false
+            )
+            .hasActions)
         #expect(
-            SidebarUtilityVisibility(system: true, presenter: false, lidAwake: false)
-                .hasActions)
+            SidebarUtilityVisibility(
+                system: true, presenter: false, lidAwake: false, keystrokeHighlight: false
+            )
+            .hasActions)
         #expect(
-            SidebarUtilityVisibility(system: false, presenter: true, lidAwake: false)
-                .hasActions)
+            SidebarUtilityVisibility(
+                system: false, presenter: true, lidAwake: false, keystrokeHighlight: false
+            )
+            .hasActions)
         #expect(
-            SidebarUtilityVisibility(system: false, presenter: false, lidAwake: true)
-                .hasActions)
+            SidebarUtilityVisibility(
+                system: false, presenter: false, lidAwake: true, keystrokeHighlight: false
+            )
+            .hasActions)
+        #expect(
+            SidebarUtilityVisibility(
+                system: false, presenter: false, lidAwake: false, keystrokeHighlight: true
+            )
+            .hasActions)
     }
 
     @Test func extensionBackedUtilitiesShareOneAnimatedVisibilityState() throws {

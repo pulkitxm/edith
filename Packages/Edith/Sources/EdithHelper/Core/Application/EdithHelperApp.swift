@@ -317,6 +317,7 @@ enum GlobalHotKey {
         static let micMute: UInt32 = 6
         static let presenterToggle: UInt32 = 7
         static let emoji: UInt32 = 8
+        static let keystrokeHighlight: UInt32 = 9
     }
 
     fileprivate static var refs: [UInt32: EventHotKeyRef] = [:]
@@ -556,6 +557,46 @@ enum PresenterHotKey {
     static func unregister() {
         GlobalHotKey.clear(id: GlobalHotKey.ID.presenterToggle)
     }
+}
+
+enum KeystrokeHighlightHotKey {
+    static var code: Int {
+        SharedDefaults.store.object(forKey: AppStorageKeys.KeystrokeHighlight.hotKeyCode) as? Int
+            ?? kVK_ANSI_K
+    }
+    static var mods: Int {
+        SharedDefaults.store.object(forKey: AppStorageKeys.KeystrokeHighlight.hotKeyMods) as? Int
+            ?? (controlKey | optionKey | cmdKey)
+    }
+    static var label: String {
+        SharedDefaults.store.string(forKey: AppStorageKeys.KeystrokeHighlight.hotKeyLabel)
+            ?? "⌃⌥⌘K"
+    }
+
+    static func register() {
+        guard SharedDefaults.store.bool(forKey: AppStorageKeys.KeystrokeHighlight.enabled) else {
+            unregister()
+            return
+        }
+        GlobalHotKey.set(
+            id: GlobalHotKey.ID.keystrokeHighlight, keyCode: code, modifiers: mods
+        ) {
+            toggleKeystrokeHighlight()
+        }
+    }
+
+    static func unregister() {
+        GlobalHotKey.clear(id: GlobalHotKey.ID.keystrokeHighlight)
+    }
+}
+
+func toggleKeystrokeHighlight() {
+    guard SharedDefaults.store.bool(forKey: AppStorageKeys.KeystrokeHighlight.enabled) else {
+        return
+    }
+    let active = !SharedDefaults.store.bool(forKey: AppStorageKeys.KeystrokeHighlight.active)
+    SharedDefaults.store.set(active, forKey: AppStorageKeys.KeystrokeHighlight.active)
+    IPC.post(IPC.Name.settingsChanged)
 }
 
 func showPanel() {
