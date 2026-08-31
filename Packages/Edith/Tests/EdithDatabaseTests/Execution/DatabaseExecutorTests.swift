@@ -2360,6 +2360,7 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
         #expect(await executor.activeOperationCount() == 0)
 
         await executor.disconnectAll()
+        await fixture.session.gates.disconnect.waitForEntries()
         #expect(await executor.backgroundTaskCount() == 1)
         #expect(await executor.retainedServerCancellationCount() == 1)
         let invocations = await fixture.session.snapshot().invocations
@@ -2451,6 +2452,7 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
         }
         await successGate.waitForEntries()
         await executor.disconnectAll()
+        await fixture.session.gates.disconnect.waitForEntries()
         let invocations = await fixture.session.snapshot().invocations
         let cancellationIndex = try #require(
             invocations.firstIndex(of: .cancel(operation.operationID)))
