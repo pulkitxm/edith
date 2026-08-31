@@ -397,6 +397,23 @@ struct SEOAuditProjectView: View {
                     systemImage: "line.3.horizontal.decrease.circle")
             }
             .fixedSize()
+            Menu {
+                ForEach(SEOAuditSocialPlatform.allCases) { platform in
+                    Button {
+                        model.socialPreviewPlatform = platform
+                    } label: {
+                        Label(platform.title, systemImage: platform.icon)
+                    }
+                }
+            } label: {
+                Label(
+                    compact
+                        ? model.socialPreviewPlatform.title
+                        : "Preview: \(model.socialPreviewPlatform.title)",
+                    systemImage: model.socialPreviewPlatform.icon)
+            }
+            .fixedSize()
+            .help("Change every social card preview")
         }
         .frame(maxWidth: .infinity)
     }
@@ -433,6 +450,7 @@ struct SEOAuditProjectView: View {
                             lighthouseAvailable: model.lighthouseAvailable,
                             lighthouseRunning: model.activeLighthouseURL == page.url,
                             runLighthouse: { model.runLighthouse(for: page) },
+                            socialPlatform: model.socialPreviewPlatform,
                             expanded: Binding(
                                 get: { expandedPages.contains(page.id) },
                                 set: { open in

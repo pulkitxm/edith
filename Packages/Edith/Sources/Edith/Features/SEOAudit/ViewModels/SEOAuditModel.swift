@@ -16,6 +16,7 @@ final class SEOAuditModel {
     var query = ""
     var pageSelectionQuery = ""
     var severity: SEOAuditSeverity?
+    var socialPreviewPlatform = SEOAuditSocialPlatform.facebook
     var lighthouseEnabled = true
     var discoveredPageURLs: [String] = []
     var selectedPageURLs = Set<String>()

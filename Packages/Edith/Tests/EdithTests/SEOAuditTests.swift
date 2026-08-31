@@ -26,6 +26,9 @@ import Testing
             <meta property="og:image" content="/social.png">
             <meta property="og:type" content="website">
             <meta name="twitter:card" content="summary_large_image">
+            <meta name="twitter:title" content="X title">
+            <meta name="twitter:description" content="X description">
+            <meta name="twitter:image" content="/x-social.png">
             <link rel="canonical" href="/preferred">
             </head><body><h1>Page heading</h1><p>one two three</p></body></html>
             """
@@ -38,6 +41,9 @@ import Testing
         #expect(metadata.openGraphImageURL == "https://example.com/social.png")
         #expect(metadata.canonicalURL == "https://example.com/preferred")
         #expect(metadata.twitterCard == "summary_large_image")
+        #expect(metadata.twitterTitle == "X title")
+        #expect(metadata.twitterDescription == "X description")
+        #expect(metadata.twitterImageURL == "https://example.com/x-social.png")
         #expect(metadata.wordCount == 5)
     }
 
@@ -235,6 +241,29 @@ import Testing
         model.selectProject(id: active.id)
         #expect(model.projectDetailPresented)
         #expect(model.selectedProject?.id == active.id)
+    }
+
+    @Test func socialPreviewsExposePlatformSpecificFormats() throws {
+        #expect(
+            SEOAuditSocialPlatform.allCases.map(\.title) == [
+                "Facebook", "X", "LinkedIn", "Slack", "Discord",
+            ])
+        #expect(SEOAuditSocialPlatform.facebook.formatLabel.contains("1200×630"))
+        #expect(SEOAuditSocialPlatform.x.formatLabel.contains("large card"))
+        #expect(SEOAuditSocialPlatform.linkedIn.formatLabel.contains("1200×627"))
+
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent(
+                    "Sources/Edith/Features/SEOAudit/Views/SEOAuditPageAccordion.swift"),
+            encoding: .utf8)
+
+        #expect(source.contains("usesXSummaryCard"))
+        #expect(source.contains("1:1 · summary"))
+        #expect(source.contains("twitterImageURL ?? page.metadata.openGraphImageURL"))
     }
 
     private func page(url: String, date: Date) -> SEOAuditPageResult {

@@ -8,6 +8,7 @@ struct SEOAuditPageAccordion: View {
     let lighthouseAvailable: Bool
     let lighthouseRunning: Bool
     let runLighthouse: () -> Void
+    let socialPlatform: SEOAuditSocialPlatform
     @Binding var expanded: Bool
     @Environment(\.colorScheme) private var scheme
 
@@ -148,48 +149,190 @@ struct SEOAuditPageAccordion: View {
     }
 
     private var openGraphPreview: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ZStack {
-                Rectangle().fill(DashSkin.line(dark).opacity(0.45))
-                if let value = page.metadata.openGraphImageURL, let url = URL(string: value) {
-                    AsyncImage(url: url) { phase in
-                        if let image = phase.image {
-                            image.resizable().scaledToFill()
-                        } else if phase.error != nil {
-                            previewFallback
-                        } else {
-                            ProgressView().controlSize(.small)
-                        }
-                    }
-                } else {
-                    previewFallback
-                }
-            }
-            .aspectRatio(1.91, contentMode: .fit)
-            .clipped()
-            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                Text(URL(string: page.url)?.host?.uppercased() ?? "PAGE")
-                    .font(DashSkin.mono(8, weight: .bold))
-                    .tracking(0.6)
+        VStack(alignment: .leading, spacing: UIScale.pt(7)) {
+            HStack(spacing: UIScale.pt(6)) {
+                Label(socialPlatform.title, systemImage: socialPlatform.icon)
+                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                Spacer(minLength: UIScale.pt(8))
+                Text(previewFormatLabel)
+                    .font(DashSkin.mono(8, weight: .semibold))
                     .foregroundStyle(.tertiary)
-                Text(page.metadata.openGraphTitle ?? page.metadata.title ?? "No social title")
-                    .font(.system(size: UIScale.pt(11.5), weight: .semibold))
-                    .lineLimit(1)
-                Text(
-                    page.metadata.openGraphDescription ?? page.metadata.description
-                        ?? "No social description"
-                )
-                .font(.system(size: UIScale.pt(9.5)))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
+            }
+            platformPreview
+        }
+    }
+
+    @ViewBuilder
+    private var platformPreview: some View {
+        switch socialPlatform {
+        case .facebook:
+            facebookPreview
+        case .x:
+            xPreview
+        case .linkedIn:
+            linkedInPreview
+        case .slack:
+            slackPreview
+        case .discord:
+            discordPreview
+        }
+    }
+
+    private var facebookPreview: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            previewImage.aspectRatio(1200 / 630, contentMode: .fit)
+            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                previewDomain
+                previewTitle.lineLimit(1)
+                previewDescription.lineLimit(2)
             }
             .padding(UIScale.pt(10))
         }
-        .background(DashSkin.paper(dark))
-        .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(10)))
+        .socialPreviewSurface(dark: dark)
+    }
+
+    @ViewBuilder
+    private var xPreview: some View {
+        if usesXSummaryCard {
+            HStack(spacing: 0) {
+                previewImage
+                    .aspectRatio(1, contentMode: .fill)
+                    .frame(width: UIScale.pt(104), height: UIScale.pt(104))
+                    .clipped()
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    previewTitle.lineLimit(2)
+                    previewDescription.lineLimit(2)
+                    previewDomain
+                }
+                .padding(UIScale.pt(10))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .socialPreviewSurface(dark: dark)
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                previewImage.aspectRatio(2, contentMode: .fit)
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    previewTitle.lineLimit(2)
+                    previewDescription.lineLimit(2)
+                    previewDomain
+                }
+                .padding(UIScale.pt(10))
+            }
+            .socialPreviewSurface(dark: dark)
+        }
+    }
+
+    private var linkedInPreview: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            previewImage.aspectRatio(1200 / 627, contentMode: .fit)
+            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                previewTitle.lineLimit(2)
+                previewDomain
+            }
+            .padding(UIScale.pt(10))
+        }
+        .socialPreviewSurface(dark: dark)
+    }
+
+    private var slackPreview: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(7)) {
+            previewDomain
+            previewTitle.lineLimit(2)
+            previewDescription.lineLimit(3)
+            previewImage
+                .aspectRatio(1200 / 630, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(7)))
+        }
+        .padding(UIScale.pt(10))
+        .padding(.leading, UIScale.pt(4))
+        .background(DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: UIScale.pt(2))
+                .fill(DashSkin.accent(dark))
+                .frame(width: UIScale.pt(3))
+                .padding(.vertical, UIScale.pt(7))
+        }
+    }
+
+    private var discordPreview: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(7)) {
+            previewDomain
+            previewTitle.lineLimit(2)
+            previewDescription.lineLimit(3)
+            previewImage
+                .aspectRatio(1200 / 630, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(7)))
+        }
+        .padding(UIScale.pt(11))
+        .background(DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
         .overlay(
-            RoundedRectangle(cornerRadius: UIScale.pt(10))
-                .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1)))
+            RoundedRectangle(cornerRadius: UIScale.pt(9))
+                .strokeBorder(DashSkin.accent(dark).opacity(0.32), lineWidth: UIScale.pt(1)))
+    }
+
+    private var previewImage: some View {
+        ZStack {
+            Rectangle().fill(DashSkin.line(dark).opacity(0.45))
+            if let previewImageURL {
+                AsyncImage(url: previewImageURL) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                    } else if phase.error != nil {
+                        previewFallback
+                    } else {
+                        ProgressView().controlSize(.small)
+                    }
+                }
+            } else {
+                previewFallback
+            }
+        }
+        .clipped()
+    }
+
+    private var previewTitle: some View {
+        Text(
+            socialPlatform == .x
+                ? page.metadata.twitterTitle ?? page.metadata.openGraphTitle
+                    ?? page.metadata.title ?? "No social title"
+                : page.metadata.openGraphTitle ?? page.metadata.title ?? "No social title"
+        )
+        .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+    }
+
+    private var previewDescription: some View {
+        Text(
+            socialPlatform == .x
+                ? page.metadata.twitterDescription ?? page.metadata.openGraphDescription
+                    ?? page.metadata.description ?? "No social description"
+                : page.metadata.openGraphDescription ?? page.metadata.description
+                    ?? "No social description"
+        )
+        .font(.system(size: UIScale.pt(9.5)))
+        .foregroundStyle(.secondary)
+    }
+
+    private var previewDomain: some View {
+        Text(URL(string: page.url)?.host?.uppercased() ?? "PAGE")
+            .font(DashSkin.mono(8, weight: .bold))
+            .tracking(0.6)
+            .foregroundStyle(.tertiary)
+    }
+
+    private var previewImageURL: URL? {
+        let value =
+            socialPlatform == .x
+            ? page.metadata.twitterImageURL ?? page.metadata.openGraphImageURL
+            : page.metadata.openGraphImageURL
+        return value.flatMap(URL.init(string:))
+    }
+
+    private var usesXSummaryCard: Bool {
+        page.metadata.twitterCard?.lowercased() == "summary"
+    }
+
+    private var previewFormatLabel: String {
+        usesXSummaryCard && socialPlatform == .x ? "1:1 · summary" : socialPlatform.formatLabel
     }
 
     private var previewFallback: some View {
@@ -381,5 +524,15 @@ struct SEOAuditPageAccordion: View {
         if score >= 90 { return DashSkin.ok }
         if score >= 50 { return DashSkin.warn }
         return DashSkin.danger
+    }
+}
+
+private extension View {
+    func socialPreviewSurface(dark: Bool) -> some View {
+        background(DashSkin.paper(dark))
+            .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(10)))
+            .overlay(
+                RoundedRectangle(cornerRadius: UIScale.pt(10))
+                    .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1)))
     }
 }

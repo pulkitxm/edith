@@ -45,7 +45,50 @@ struct SEOAuditMetadata: Codable, Equatable, Sendable {
     let openGraphImageURL: String?
     let openGraphType: String?
     let twitterCard: String?
+    let twitterTitle: String?
+    let twitterDescription: String?
+    let twitterImageURL: String?
     let wordCount: Int
+}
+
+enum SEOAuditSocialPlatform: String, CaseIterable, Identifiable, Sendable {
+    case facebook
+    case x
+    case linkedIn
+    case slack
+    case discord
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .facebook: "Facebook"
+        case .x: "X"
+        case .linkedIn: "LinkedIn"
+        case .slack: "Slack"
+        case .discord: "Discord"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .facebook: "person.2.fill"
+        case .x: "bubble.left.and.bubble.right.fill"
+        case .linkedIn: "briefcase.fill"
+        case .slack: "number"
+        case .discord: "person.3.fill"
+        }
+    }
+
+    var formatLabel: String {
+        switch self {
+        case .facebook: "1.91:1 · 1200×630"
+        case .x: "2:1 · large card"
+        case .linkedIn: "1.91:1 · 1200×627"
+        case .slack: "1.91:1 · unfurl"
+        case .discord: "1.91:1 · embed"
+        }
+    }
 }
 
 struct SEOAuditPageResult: Codable, Equatable, Identifiable, Sendable {
