@@ -196,21 +196,26 @@ struct DatabasePage: View {
     private var readyContent: some View {
         if connectionWorkspace.listState == .empty {
             connectionOnboarding
+        } else if compact {
+            compactContent
+                .environment(\.compactLayout, true)
         } else {
-            GeometryReader { geometry in
-                if compact || geometry.size.width < UIScale.pt(880) {
-                    compactContent
-                        .environment(\.compactLayout, true)
-                } else {
-                    HStack(spacing: 0) {
-                        navigationSidebar
-                            .frame(width: UIScale.pt(260))
-                        Divider().opacity(0.35)
-                        workbench
-                            .environment(\.compactLayout, false)
-                    }
-                }
+            ViewThatFits(in: .horizontal) {
+                wideContent
+                    .frame(minWidth: UIScale.pt(880))
+                compactContent
+                    .environment(\.compactLayout, true)
             }
+        }
+    }
+
+    private var wideContent: some View {
+        HStack(spacing: 0) {
+            navigationSidebar
+                .frame(width: UIScale.pt(260))
+            Divider().opacity(0.35)
+            workbench
+                .environment(\.compactLayout, false)
         }
     }
 
