@@ -3,6 +3,7 @@ import Foundation
 enum ElasticsearchDatabaseDriverFailure: Error, Equatable, Sendable {
     case authentication
     case connection
+    case conflict
     case invalidConfiguration
     case invalidResponse
     case permission(Int)
@@ -90,7 +91,30 @@ protocol ElasticsearchDatabaseClient: Sendable {
         pointInTimeID: String
     ) async throws -> ElasticsearchDatabaseSearchResponse
     func closePointInTime(_ identifier: String) async throws
+    func mutate(
+        _ plan: ElasticsearchDatabaseMutationPlan
+    ) async throws -> ElasticsearchDatabaseMutationResult
     func disconnect() async
+}
+
+enum ElasticsearchDatabaseMutationOperation: Equatable, Sendable {
+    case create(body: Data)
+    case replace(body: Data, sequenceNumber: Int64, primaryTerm: Int64)
+    case delete(sequenceNumber: Int64, primaryTerm: Int64)
+}
+
+struct ElasticsearchDatabaseMutationPlan: Equatable, Sendable {
+    let index: String
+    let identifier: String
+    let operation: ElasticsearchDatabaseMutationOperation
+}
+
+struct ElasticsearchDatabaseMutationResult: Equatable, Sendable {
+    let index: String
+    let identifier: String
+    let result: String
+    let sequenceNumber: Int64
+    let primaryTerm: Int64
 }
 
 typealias ElasticsearchDatabaseSessionFactory =
@@ -265,6 +289,64 @@ actor URLSessionElasticsearchDatabaseClient: ElasticsearchDatabaseClient {
         guard decoded.succeeded, decoded.freed >= 0 else {
             throw ElasticsearchDatabaseDriverFailure.invalidResponse
         }
+    }
+
+    func mutate(
+        _ mutation: ElasticsearchDatabaseMutationPlan
+    ) async throws -> ElasticsearchDatabaseMutationResult {
+        let index = try ElasticsearchDatabaseDriverSupport.pathSegment(mutation.index)
+        let identifier = try ElasticsearchDatabaseDriverSupport.documentPathSegment(
+            mutation.identifier)
+        let method: ElasticsearchDatabaseHTTPMethod
+        let path: String
+        var queryItems = [URLQueryItem(name: "refresh", value: "wait_for")]
+        let body: Data?
+        switch mutation.operation {
+        case .create(let document):
+            method = .put
+            path = "/\(index)/_create/\(identifier)"
+            body = document
+        case .replace(let document, let sequenceNumber, let primaryTerm):
+            guard sequenceNumber >= 0, primaryTerm >= 0 else {
+                throw ElasticsearchDatabaseDriverFailure.invalidConfiguration
+            }
+            method = .put
+            path = "/\(index)/_doc/\(identifier)"
+            queryItems.append(URLQueryItem(name: "if_seq_no", value: String(sequenceNumber)))
+            queryItems.append(URLQueryItem(name: "if_primary_term", value: String(primaryTerm)))
+            body = document
+        case .delete(let sequenceNumber, let primaryTerm):
+            guard sequenceNumber >= 0, primaryTerm >= 0 else {
+                throw ElasticsearchDatabaseDriverFailure.invalidConfiguration
+            }
+            method = .delete
+            path = "/\(index)/_doc/\(identifier)"
+            queryItems.append(URLQueryItem(name: "if_seq_no", value: String(sequenceNumber)))
+            queryItems.append(URLQueryItem(name: "if_primary_term", value: String(primaryTerm)))
+            body = nil
+        }
+        let response = try await send(
+            method: method,
+            path: path,
+            queryItems: queryItems,
+            body: body)
+        let decoded = try decode(
+            ElasticsearchDatabaseDocumentMutationResponse.self,
+            from: response.body)
+        guard decoded.index == mutation.index,
+            decoded.identifier == mutation.identifier,
+            decoded.sequenceNumber >= 0,
+            decoded.primaryTerm >= 0,
+            ["created", "updated", "deleted"].contains(decoded.result)
+        else {
+            throw ElasticsearchDatabaseDriverFailure.invalidResponse
+        }
+        return ElasticsearchDatabaseMutationResult(
+            index: decoded.index,
+            identifier: decoded.identifier,
+            result: decoded.result,
+            sequenceNumber: decoded.sequenceNumber,
+            primaryTerm: decoded.primaryTerm)
     }
 
     func disconnect() async {
@@ -570,6 +652,22 @@ private struct ElasticsearchDatabaseClosePointInTimeResponse: Decodable {
     }
 }
 
+private struct ElasticsearchDatabaseDocumentMutationResponse: Decodable {
+    let index: String
+    let identifier: String
+    let result: String
+    let sequenceNumber: Int64
+    let primaryTerm: Int64
+
+    private enum CodingKeys: String, CodingKey {
+        case index = "_index"
+        case identifier = "_id"
+        case result
+        case sequenceNumber = "_seq_no"
+        case primaryTerm = "_primary_term"
+    }
+}
+
 enum ElasticsearchDatabaseDriverErrorClassifier {
     static func validate(
         _ response: ElasticsearchDatabaseHTTPResponse
@@ -583,6 +681,8 @@ enum ElasticsearchDatabaseDriverErrorClassifier {
             throw .authentication
         case 403:
             throw .permission(403)
+        case 409:
+            throw .conflict
         case 408, 504:
             throw .timeout
         default:
@@ -902,6 +1002,26 @@ enum ElasticsearchDatabaseDriverSupport {
         }
         var allowed = CharacterSet.urlPathAllowed
         allowed.remove(charactersIn: "/\\?#%:,*")
+        guard let encoded = value.addingPercentEncoding(withAllowedCharacters: allowed),
+            !encoded.isEmpty
+        else {
+            throw .invalidConfiguration
+        }
+        return encoded
+    }
+
+    static func documentPathSegment(
+        _ value: String
+    ) throws(ElasticsearchDatabaseDriverFailure) -> String {
+        guard !value.isEmpty,
+            value.utf8.count <= 512,
+            !value.contains("\0"),
+            !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+        else {
+            throw .invalidConfiguration
+        }
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/\\?#%")
         guard let encoded = value.addingPercentEncoding(withAllowedCharacters: allowed),
             !encoded.isEmpty
         else {

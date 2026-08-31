@@ -120,15 +120,25 @@ actor ElasticsearchDatabaseAdapterSession: DatabaseAdapterSession {
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseDestructivePlan {
         try await requireAvailableContext(context)
-        throw ElasticsearchDatabaseAdapterSupport.readOnlyViolation
+        return try ElasticsearchDatabaseMutationSupport.normalize(
+            request,
+            connectionID: connection.id)
     }
 
     func executeMutation(
         _ plan: DatabaseDestructivePlan,
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterMutationResult {
-        try await requireAvailableContext(context)
-        throw ElasticsearchDatabaseAdapterSupport.readOnlyViolation
+        let mutation = try ElasticsearchDatabaseMutationSupport.execution(
+            plan,
+            connectionID: connection.id)
+        let result: ElasticsearchDatabaseMutationResult = try await perform(
+            context: context,
+            fallback: ElasticsearchDatabaseMutationSupport.mutationFailed
+        ) { client in
+            try await client.mutate(mutation)
+        }
+        return try ElasticsearchDatabaseMutationSupport.result(result, plan: mutation)
     }
 
     func openStream(
@@ -500,6 +510,11 @@ enum ElasticsearchDatabaseAdapterSupport {
         category: .unsupported,
         message: "Elasticsearch streaming is unavailable; use bounded PIT pages.",
         code: "elasticsearch.stream.unavailable")
+    static let mutationConflict = failure(
+        category: .conflict,
+        message: "The Elasticsearch document changed before the mutation was applied.",
+        code: "elasticsearch.mutation.conflict",
+        retry: .createNewPreview)
 
     static func connectionPlan(
         _ resolved: DatabaseResolvedConnection,
@@ -519,8 +534,6 @@ enum ElasticsearchDatabaseAdapterSupport {
             definition.tls.clientPrivateKey == nil,
             definition.tls.serverName == nil,
             [.automatic, .standalone, .cluster].contains(definition.deploymentMode),
-            definition.readOnlyPolicy != .disabled
-                || definition.productionPolicy == .prohibitMutations,
             case let .network(endpoints) = definition.location,
             endpoints.count == 1,
             let endpoint = endpoints.first,
@@ -636,7 +649,7 @@ enum ElasticsearchDatabaseAdapterSupport {
             missingPermissions: ["view_index_metadata"])
         let unsafeReason = DatabaseCapabilityUnavailableReason(
             category: .unsafe,
-            message: "The Elasticsearch adapter is strictly read-only.")
+            message: "Only guarded single-document Elasticsearch mutations are available.")
         let unavailableReason = DatabaseCapabilityUnavailableReason(
             category: .notImplemented,
             message: "This capability is not provided by the bounded Elasticsearch reader.")
@@ -645,15 +658,15 @@ enum ElasticsearchDatabaseAdapterSupport {
             (.query, .familyRequired),
             (.queryCancellation, .sharedRequired),
             (.browse, .sharedRequired),
+            (.insert, .sharedRequired),
+            (.update, .sharedRequired),
+            (.delete, .sharedRequired),
         ]
         let metadata: [(DatabaseCapabilityID, DatabaseCapabilityRequirement)] = [
             (.objectDiscovery, .sharedRequired),
             (.objectDescription, .sharedRequired),
         ]
         let unsafe: [(DatabaseCapabilityID, DatabaseCapabilityRequirement)] = [
-            (.insert, .sharedRequired),
-            (.update, .sharedRequired),
-            (.delete, .sharedRequired),
             (.bulkMutation, .sharedRequired),
             (.importData, .sharedRequired),
             (.schemaMutation, .familyRequired),
@@ -716,12 +729,13 @@ enum ElasticsearchDatabaseAdapterSupport {
                     scope: "selected target"),
             ],
             pagingModes: [.pointInTime],
-            mutationModes: [.unsupported],
+            mutationModes: [.singleRecord],
             transactionModes: [.none],
             cancellationModes: [.cooperative, .protocolCancellation],
             safetyLimitations: [
-                "Only fixed read-only resolve, mapping, PIT, search, and PIT close endpoints are used.",
-                "Scroll, deep offsets, scripts, mutation APIs, and arbitrary endpoint paths are rejected.",
+                "Only fixed resolve, mapping, PIT, search, create, replace, delete, and PIT close endpoints are used.",
+                "Document replacement and deletion require exact sequence-number and primary-term concurrency tokens.",
+                "Scroll, deep offsets, scripts, bulk mutation APIs, and arbitrary endpoint paths are rejected.",
                 "PIT continuations expire after 60 seconds and bind to one session and request.",
             ],
             discoveredAt: discoveredAt,
@@ -900,6 +914,8 @@ enum ElasticsearchDatabaseAdapterSupport {
             return authenticationFailed
         case .connection:
             return connectionFailed
+        case .conflict:
+            return mutationConflict
         case .invalidConfiguration:
             return invalidRequest
         case .invalidResponse:
@@ -928,8 +944,8 @@ enum ElasticsearchDatabaseAdapterSupport {
         switch failure {
         case .connection, .responseTooLarge, .tls, .unsupportedProduct:
             return true
-        case .authentication, .invalidConfiguration, .invalidResponse, .permission, .server,
-            .timeout:
+        case .authentication, .conflict, .invalidConfiguration, .invalidResponse, .permission,
+            .server, .timeout:
             return false
         }
     }
