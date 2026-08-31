@@ -959,7 +959,8 @@ public enum CommandTree {
                             CommandNode(
                                 "row-request", "Build a safe PostgreSQL row mutation request.",
                                 options: [
-                                    "--help", "--action", "--path", "--identity", "--values",
+                                    "--json", "--help", "--action", "--path", "--identity",
+                                    "--values",
                                 ],
                                 optionValues: [
                                     "--action": .free, "--path": .free, "--identity": .free,
@@ -969,8 +970,9 @@ public enum CommandTree {
                                 "key-request",
                                 "Build a safe Redis or Valkey string-key mutation request.",
                                 options: [
-                                    "--help", "--action", "--product", "--logical-database",
-                                    "--key", "--value", "--ttl-milliseconds",
+                                    "--json", "--help", "--action", "--product",
+                                    "--logical-database", "--key", "--value",
+                                    "--ttl-milliseconds",
                                 ],
                                 optionValues: [
                                     "--action": .free, "--product": .free,

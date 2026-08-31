@@ -1100,6 +1100,18 @@ private extension DatabaseConnectionOperation {
             userInterface(
                 "Database page", "test and save a database connection",
                 ["Analytics staging", "--product", "postgresql"])
+        case .edit:
+            userInterface(
+                "Database connection settings", "edit safety and display metadata",
+                ["36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--environment", "testing"])
+        case .connect:
+            userInterface(
+                "Database workbench", "open the selected database connection",
+                ["36fc476b-28f7-4c1a-ae54-4b10d793fd0f"])
+        case .disconnect:
+            userInterface(
+                "Database workbench", "close the selected database connection",
+                ["36fc476b-28f7-4c1a-ae54-4b10d793fd0f"])
         }
     }
 }
