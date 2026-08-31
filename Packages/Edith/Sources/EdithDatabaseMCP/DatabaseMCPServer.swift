@@ -34,7 +34,8 @@ public struct DatabaseMCPServer: Sendable {
 
     public func run() async throws {
         let server = await makeServer()
-        let transport = StdioTransport()
+        let stdio = StdioTransport()
+        let transport = DatabaseMCPSerialTransport(base: stdio, logger: stdio.logger)
         try await withTaskCancellationHandler {
             try await server.start(transport: transport)
             await server.waitUntilCompleted()
