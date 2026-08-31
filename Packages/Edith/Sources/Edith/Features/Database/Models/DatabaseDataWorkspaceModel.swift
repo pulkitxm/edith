@@ -212,6 +212,34 @@ final class DatabaseDataWorkspaceModel {
         }
     }
 
+    func canEdit(
+        recordAt index: Int,
+        field name: String,
+        connection: DatabaseConnectionSummary
+    ) -> Bool {
+        guard supportsRowMutations(connection), records.indices.contains(index),
+            let identity = records[index].identity,
+            !identity.components.contains(where: { $0.name == name }),
+            let field = fields.first(where: {
+                $0.path.segments.joined(separator: ".") == name
+            })
+        else { return false }
+        return Self.supportsEditing(typeName: field.typeName)
+    }
+
+    func inlineMutationRequest(
+        recordAt index: Int,
+        field name: String,
+        text: String,
+        connection: DatabaseConnectionSummary
+    ) -> DatabaseDestructiveRequest? {
+        guard canEdit(recordAt: index, field: name, connection: connection) else { return nil }
+        selectedRecordIndex = index
+        beginEditingSelectedRow(connection)
+        updateEditorField(name, text: text)
+        return editorMutationRequest(connection)
+    }
+
     func updateEditorField(_ id: String, text: String) {
         guard let index = editorFields.firstIndex(where: { $0.id == id }),
             editorFields[index].isEditable

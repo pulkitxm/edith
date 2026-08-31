@@ -330,6 +330,20 @@ struct DatabaseWorkbenchView: View {
                         data.beginEditingSelectedRow(connection)
                     }
                 },
+                canEdit: { index, field in
+                    !mutations.hasTrackedMutation
+                        && data.canEdit(recordAt: index, field: field, connection: connection)
+                },
+                edit: { index, field, text in
+                    guard
+                        let request = data.inlineMutationRequest(
+                            recordAt: index,
+                            field: field,
+                            text: text,
+                            connection: connection)
+                    else { return }
+                    mutations.requestSafetyReview(for: request)
+                },
                 sort: { field, direction in
                     data.sortField = field
                     data.sortDirection = direction

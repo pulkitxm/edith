@@ -11,6 +11,8 @@ struct DatabaseNativeTableView: NSViewRepresentable {
     let text: (DatabaseValue) -> String
     let select: (Int) -> Void
     let open: (Int) -> Void
+    let canEdit: (Int, String) -> Bool
+    let edit: (Int, String, String) -> Void
     let sort: (String, DatabaseSortDirection) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -53,7 +55,9 @@ struct DatabaseNativeTableView: NSViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, NSTableViewDelegate, NSTableViewDataSource {
+    final class Coordinator: NSObject, NSTableViewDelegate, NSTableViewDataSource,
+        NSTextFieldDelegate
+    {
         var parent: DatabaseNativeTableView
         weak var tableView: NSTableView?
         private var fieldNames: [String] = []
@@ -103,7 +107,21 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                 ? .monospacedSystemFont(ofSize: 10.5, weight: .light)
                 : .monospacedSystemFont(ofSize: 10.5, weight: .regular)
             textField.toolTip = "\(field.displayName): \(rendered)"
+            textField.tag = row
+            textField.isEditable = parent.canEdit(row, identifier.rawValue)
+            textField.isSelectable = textField.isEditable
             return cell
+        }
+
+        func tableView(
+            _ tableView: NSTableView,
+            shouldEdit tableColumn: NSTableColumn?,
+            row: Int
+        ) -> Bool {
+            guard let name = tableColumn?.identifier.rawValue,
+                name != Self.rowColumnIdentifier
+            else { return false }
+            return parent.canEdit(row, name)
         }
 
         func tableViewSelectionDidChange(_ notification: Notification) {
@@ -123,8 +141,24 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         }
 
         @objc func openSelectedRow() {
-            guard let row = tableView?.clickedRow, row >= 0 else { return }
+            guard let tableView, tableView.clickedRow >= 0 else { return }
+            let row = tableView.clickedRow
+            let column = tableView.clickedColumn
+            if column > 0,
+                parent.canEdit(row, tableView.tableColumns[column].identifier.rawValue)
+            {
+                tableView.editColumn(column, row: row, with: nil, select: true)
+                return
+            }
             parent.open(row)
+        }
+
+        func controlTextDidEndEditing(_ notification: Notification) {
+            guard let textField = notification.object as? NSTextField,
+                let name = textField.identifier?.rawValue,
+                parent.canEdit(textField.tag, name)
+            else { return }
+            parent.edit(textField.tag, name, textField.stringValue)
         }
 
         func rebuildColumnsIfNeeded() {
@@ -204,10 +238,11 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             let cell = NSTableCellView()
             cell.identifier = identifier
             let textField = NSTextField(labelWithString: "")
+            textField.identifier = identifier
             textField.translatesAutoresizingMaskIntoConstraints = false
             textField.lineBreakMode = .byTruncatingTail
             textField.maximumNumberOfLines = 1
-            textField.isSelectable = false
+            textField.delegate = self
             cell.textField = textField
             cell.addSubview(textField)
             NSLayoutConstraint.activate([

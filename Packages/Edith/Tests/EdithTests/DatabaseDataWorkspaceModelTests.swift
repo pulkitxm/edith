@@ -126,6 +126,33 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(insert.target.record == nil)
     }
 
+    @Test("Inline editing protects identity fields and creates a reviewed mutation")
+    func inlineEditing() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)])
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.customers"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        #expect(!model.canEdit(recordAt: 0, field: "id", connection: connection))
+        #expect(model.canEdit(recordAt: 0, field: "name", connection: connection))
+        let mutation = try #require(
+            model.inlineMutationRequest(
+                recordAt: 0,
+                field: "name",
+                text: "Inline",
+                connection: connection))
+        #expect(
+            mutation.payload.command
+                == "UPDATE \"public\".\"customers\" SET \"name\" = $1 WHERE \"id\" IS NOT DISTINCT FROM $2 RETURNING 1"
+        )
+        #expect(mutation.payload.parameters.map(\.value) == [.string("Inline")])
+    }
+
     private static func connection(
         product: DatabaseProduct
     ) throws -> DatabaseConnectionSummary {
