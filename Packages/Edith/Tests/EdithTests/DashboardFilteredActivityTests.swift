@@ -60,6 +60,28 @@ import Testing
         #expect(detail.peakHour == 1)
     }
 
+    @Test func denseModelAndSourceChartsAggregateTheirLongTails() throws {
+        let sourceIDs = (1...12).map { "source-\($0)" }
+        let sourceRows = sourceIDs.enumerated().map { index, source in
+            let value = index + 1
+            return "\"\(source)\":[{\"modelName\":\"model-\(value)\",\"inputTokens\":\(value)}]"
+        }.joined(separator: ",")
+        let daily =
+            "{\"period\":\"2026-06-01\",\"bySource\":{\(sourceRows)},\"projects\":[],\"hours\":[]}"
+        let sources = sourceIDs.map { "\"\($0)\"" }.joined(separator: ",")
+        let dashboard = try model(daily, sources: sources)
+
+        let modelSeries = Set(dashboard.chartData.modelTime.map(\.series))
+        let sourceSeries = Set(dashboard.chartData.source.map(\.series))
+
+        #expect(modelSeries.count == DashboardComputation.stackedSeriesLimit + 1)
+        #expect(sourceSeries.count == DashboardComputation.stackedSeriesLimit + 1)
+        #expect(modelSeries.contains("Other"))
+        #expect(sourceSeries.contains("Other"))
+        #expect(dashboard.chartData.modelTime.reduce(0) { $0 + $1.value } == 78)
+        #expect(dashboard.chartData.source.reduce(0) { $0 + $1.value } == 78)
+    }
+
     @Test func unsupportedProviderHoursRemainUnattributed() throws {
         let daily = """
             {"period":"2026-06-01",
