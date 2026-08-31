@@ -981,9 +981,11 @@ private struct DatabaseRows: View {
 
     var body: some View {
         Section("Workbench") {
-            LabeledContent("Transport", value: "Authenticated local broker")
-            Text("Explore supported databases and review destructive operations before execution.")
-                .settingsCaption()
+            LabeledContent("Connection", value: "Secure local service")
+            Text(
+                "Add databases, browse their data, and review destructive changes before applying them."
+            )
+            .settingsCaption()
             Button("Open Database") { SectionWindow.open(.database) }
         }
         .disabled(!enabled)

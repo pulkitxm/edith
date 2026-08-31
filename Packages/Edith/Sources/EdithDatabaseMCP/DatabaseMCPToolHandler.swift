@@ -524,19 +524,19 @@ public struct DatabaseMCPToolHandler: Sendable {
         switch error {
         case .invalidRequest:
             failure(
-                category: "invalidRequest", message: "The broker rejected the database request.")
+                category: "invalidRequest", message: "The database service rejected the request.")
         case .timedOut:
-            failure(category: "timeout", message: "The local database broker request timed out.")
+            failure(category: "timeout", message: "The database service request timed out.")
         case .unavailable:
-            failure(category: "network", message: "The local database broker is unavailable.")
+            failure(category: "network", message: "The database service is unavailable.")
         case .unsafePeer:
             failure(
                 category: "authenticationFailed",
-                message: "The local database broker failed peer authentication.")
+                message: "The database service could not verify the local app.")
         case .outcomeUnknown:
             failure(
                 category: "network",
-                message: "The local database broker could not confirm the request outcome.")
+                message: "The database service could not confirm the request outcome.")
         }
     }
 
