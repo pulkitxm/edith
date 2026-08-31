@@ -304,7 +304,7 @@ private enum DatabaseConnectionCreationError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .brokerFailure(message):
-            message ?? "The database broker could not complete this request."
+            message ?? "The database service could not complete this request."
         }
     }
 }

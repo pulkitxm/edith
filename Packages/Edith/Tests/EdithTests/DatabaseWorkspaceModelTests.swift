@@ -47,7 +47,7 @@ import Testing
         #expect(model.safetyReview == nil)
         #expect(
             model.safetyPhase
-                == .failed("The broker returned an unexpected preview response."))
+                == .failed("The database service returned an unexpected preview response."))
 
         model.requestSafetyReview(for: Self.request)
         await sender.waitUntilRequested(2)
@@ -57,7 +57,8 @@ import Testing
         #expect(model.safetyReview == nil)
         #expect(
             model.safetyPhase
-                == .failed("The broker returned a partial result. No mutation was replayed."))
+                == .failed(
+                    "The database service returned a partial result. No mutation was replayed."))
     }
 
     @Test func stalePreviewCannotReplaceTheNewestRefresh() async throws {
@@ -557,7 +558,7 @@ import Testing
         #expect(
             wrongKindModel.safetyPhase
                 == .outcomeUnknown(
-                    "The broker returned an unexpected apply response. The mutation was not replayed."
+                    "The database service returned an unexpected apply response. The mutation was not replayed."
                 ))
         #expect(wrongKindModel.unresolvedOperationID == wrongKindApplyID)
         #expect(wrongKindModel.hasTrackedMutation)
@@ -582,7 +583,7 @@ import Testing
         #expect(
             partialModel.safetyPhase
                 == .outcomeUnknown(
-                    "The broker returned a partial mutation result. Verify its durable outcome before issuing another mutation."
+                    "The database service returned a partial mutation result. Verify its durable outcome before issuing another mutation."
                 ))
         #expect(partialModel.unresolvedOperationID == partialApplyID)
         #expect(partialModel.hasTrackedMutation)
@@ -692,12 +693,12 @@ import Testing
         await sender.waitUntilFinished(2)
         await Self.waitUntil {
             model.safetyPhase
-                == .failed("The local database broker request timed out.")
+                == .failed("The local database service request timed out.")
         }
 
         #expect(
             model.safetyPhase
-                == .failed("The local database broker request timed out."))
+                == .failed("The local database service request timed out."))
         #expect(!model.hasTrackedMutation)
         let requests = await sender.recordedRequests()
         #expect(requests.filter { $0.kind == .mutationApply }.count == 1)

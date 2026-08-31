@@ -52,6 +52,10 @@ enum DashSkin {
     static func paper2(_ d: Bool) -> Color {
         d ? paper2Pair.1 : paper2Pair.0
     }
+    static func paper2(_ d: Bool, theme: AppTheme) -> Color {
+        themed(
+            paper2Pair, dark: d, theme: theme, lightFraction: 0.035, darkFraction: 0.075)
+    }
     static func ink(_ d: Bool) -> Color {
         d ? inkPair.1 : inkPair.0
     }
@@ -61,14 +65,30 @@ enum DashSkin {
     static func inkSoft(_ d: Bool) -> Color {
         d ? inkSoftPair.1 : inkSoftPair.0
     }
+    static func inkSoft(_ d: Bool, theme: AppTheme) -> Color {
+        themed(
+            inkSoftPair, dark: d, theme: theme, lightFraction: 0.035, darkFraction: 0.02)
+    }
     static func inkFaint(_ d: Bool) -> Color {
         d ? inkFaintPair.1 : inkFaintPair.0
+    }
+    static func inkFaint(_ d: Bool, theme: AppTheme) -> Color {
+        themed(
+            inkFaintPair, dark: d, theme: theme, lightFraction: 0.03, darkFraction: 0.015)
     }
     static func line(_ d: Bool) -> Color {
         d ? linePair.1 : linePair.0
     }
+    static func line(_ d: Bool, theme: AppTheme) -> Color {
+        themed(linePair, dark: d, theme: theme, lightFraction: 0.035, darkFraction: 0.06)
+    }
     static func lineStrong(_ d: Bool) -> Color {
         d ? lineStrongPair.1 : lineStrongPair.0
+    }
+    static func lineStrong(_ d: Bool, theme: AppTheme) -> Color {
+        themed(
+            lineStrongPair, dark: d, theme: theme, lightFraction: 0.045,
+            darkFraction: 0.08)
     }
     static func accent(_ d: Bool) -> Color {
         accent(d, theme: currentTheme)
@@ -83,6 +103,9 @@ enum DashSkin {
     }
     static func grid(_ d: Bool) -> Color {
         d ? gridPair.1 : gridPair.0
+    }
+    static func grid(_ d: Bool, theme: AppTheme) -> Color {
+        themed(gridPair, dark: d, theme: theme, lightFraction: 0.03, darkFraction: 0.06)
     }
     static func heat(_ level: Int, _ d: Bool) -> Color {
         let (target, fraction) = (d ? heatStepsDark : heatSteps)[max(0, min(level, 3))]

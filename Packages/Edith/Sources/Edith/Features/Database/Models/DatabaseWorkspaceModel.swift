@@ -271,7 +271,7 @@ final class DatabaseWorkspaceModel {
         guard previewGeneration == generation, previewOperationID == operationID else { return }
         defer { previewTask = nil }
         guard let result = response.mutationPreviewResult else {
-            safetyPhase = .failed("The broker returned an unexpected preview response.")
+            safetyPhase = .failed("The database service returned an unexpected preview response.")
             return
         }
         guard
@@ -310,7 +310,7 @@ final class DatabaseWorkspaceModel {
         defer { applyTask = nil }
         guard let result = response.mutationApplyResult else {
             markOutcomeUnknown(
-                "The broker returned an unexpected apply response. The mutation was not replayed.",
+                "The database service returned an unexpected apply response. The mutation was not replayed.",
                 generation: generation,
                 operationID: operationID)
             return
@@ -321,7 +321,7 @@ final class DatabaseWorkspaceModel {
             result.metadata.partialFailures.isEmpty
         else {
             markOutcomeUnknown(
-                "The broker returned a partial mutation result. Verify its durable outcome before issuing another mutation.",
+                "The database service returned a partial mutation result. Verify its durable outcome before issuing another mutation.",
                 generation: generation,
                 operationID: operationID)
             return
@@ -331,7 +331,7 @@ final class DatabaseWorkspaceModel {
             let payload = result.payload
         else {
             markOutcomeUnknown(
-                "The broker did not return a proven mutation effect. Verify its durable outcome before issuing another mutation.",
+                "The database service did not return a proven mutation effect. Verify its durable outcome before issuing another mutation.",
                 generation: generation,
                 operationID: operationID)
             return
@@ -426,7 +426,7 @@ final class DatabaseWorkspaceModel {
         }
         guard let operation = payload.operation else {
             markOutcomeUnknown(
-                "The broker has no durable record for the mutation outcome. The apply request was not replayed.",
+                "The database service has no durable record for the mutation outcome. The apply request was not replayed.",
                 generation: generation,
                 operationID: operationID)
             return
@@ -446,12 +446,12 @@ final class DatabaseWorkspaceModel {
         switch operation.state {
         case .queued, .running, .cancelling:
             markOutcomeUnknown(
-                "The broker reports that the mutation is still active. Check status again before issuing another mutation.",
+                "The database service reports that the mutation is still active. Check status again before issuing another mutation.",
                 generation: generation,
                 operationID: operationID)
         case .succeeded:
             markOutcomeUnknown(
-                "The broker reports that the apply command finished, but its mutation result is unavailable. Verify database state before issuing another mutation.",
+                "The database service reports that the apply command finished, but its mutation result is unavailable. Verify database state before issuing another mutation.",
                 generation: generation,
                 operationID: operationID)
         case .partiallySucceeded:
@@ -651,7 +651,7 @@ final class DatabaseWorkspaceModel {
             }
         case .notActive, .notFound:
             markOutcomeUnknown(
-                "The broker could not confirm an active operation to cancel. Verify database state before issuing another mutation.",
+                "The database service could not confirm an active operation to cancel. Verify database state before issuing another mutation.",
                 generation: generation,
                 operationID: operationID)
         }
@@ -748,7 +748,7 @@ final class DatabaseWorkspaceModel {
             status.acceptedMutation == mutation
         else {
             markAcceptedOutcomeUnknown(
-                "The broker returned no complete status for the accepted mutation.",
+                "The database service returned no complete status for the accepted mutation.",
                 mutation: mutation,
                 generation: generation)
             return
@@ -772,7 +772,7 @@ final class DatabaseWorkspaceModel {
             cancellation.acceptedMutation == mutation
         else {
             markAcceptedOutcomeUnknown(
-                "The broker returned no complete cancellation status for the accepted mutation.",
+                "The database service returned no complete cancellation status for the accepted mutation.",
                 mutation: mutation,
                 generation: generation)
             return
@@ -947,7 +947,7 @@ final class DatabaseWorkspaceModel {
 
     private static func message<Payload>(for result: DatabaseCommandResult<Payload>) -> String {
         if result.status == .partiallySucceeded || !result.metadata.partialFailures.isEmpty {
-            return "The broker returned a partial result. No mutation was replayed."
+            return "The database service returned a partial result. No mutation was replayed."
         }
         return result.error?.message ?? "The database operation failed."
     }
@@ -956,18 +956,18 @@ final class DatabaseWorkspaceModel {
         if let clientError = error as? DatabaseBrokerCommandClientError {
             switch clientError {
             case .invalidRequest:
-                return "The broker rejected the database request."
+                return "The database service rejected the database request."
             case .timedOut:
-                return "The local database broker request timed out."
+                return "The local database service request timed out."
             case .unavailable:
-                return "The local database broker is unavailable."
+                return "The local database service is unavailable."
             case .unsafePeer:
-                return "The local database broker failed peer authentication."
+                return "The local database service could not be verified."
             case .outcomeUnknown:
                 return "The database operation outcome is unknown."
             }
         }
-        return "The local database broker could not complete the operation."
+        return "The local database service could not complete the operation."
     }
 
     private static func completionMessage(_ count: DatabaseCountMetadata) -> String {

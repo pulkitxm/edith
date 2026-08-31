@@ -4,6 +4,10 @@ import SwiftUI
 
 struct DatabaseNativeTableView: NSViewRepresentable {
     let accent: Color
+    let background: Color
+    let grid: Color
+    let ink: Color
+    let inkFaint: Color
     let fields: [DatabaseFieldDescriptor]
     let records: [DatabaseRecord]
     let selectedIndex: Int?
@@ -33,9 +37,9 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         tableView.intercellSpacing = NSSize(width: 8, height: 1)
         tableView.columnAutoresizingStyle = .noColumnAutoresizing
         tableView.gridStyleMask = [.solidHorizontalGridLineMask]
-        tableView.gridColor = .separatorColor.withAlphaComponent(0.55)
+        tableView.gridColor = NSColor(grid)
         tableView.style = .plain
-        tableView.backgroundColor = .clear
+        tableView.backgroundColor = NSColor(background)
         tableView.headerView?.menu = nil
 
         let scrollView = NSScrollView()
@@ -43,7 +47,8 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
-        scrollView.drawsBackground = false
+        scrollView.drawsBackground = true
+        scrollView.backgroundColor = NSColor(background)
         context.coordinator.tableView = tableView
         context.coordinator.rebuildColumns()
         return scrollView
@@ -51,6 +56,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         context.coordinator.parent = self
+        context.coordinator.applyPalette(to: scrollView)
         context.coordinator.rebuildColumnsIfNeeded()
         context.coordinator.tableView?.reloadData()
         context.coordinator.reloadSelection()
@@ -87,7 +93,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             if identifier.rawValue == Self.rowColumnIdentifier {
                 textField.stringValue = (row + 1).formatted()
                 textField.alignment = .right
-                textField.textColor = .secondaryLabelColor
+                textField.textColor = NSColor(parent.inkFaint)
                 textField.font = .monospacedDigitSystemFont(ofSize: 10.5, weight: .regular)
                 cell.imageView?.image =
                     parent.records[row].identity == nil
@@ -113,7 +119,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             let rendered = bounded(parent.text(value))
             textField.stringValue = rendered
             textField.alignment = .left
-            textField.textColor = value.isAbsent ? .tertiaryLabelColor : .labelColor
+            textField.textColor = NSColor(value.isAbsent ? parent.inkFaint : parent.ink)
             textField.font =
                 value.isAbsent
                 ? .monospacedSystemFont(ofSize: 10.5, weight: .light)
@@ -190,6 +196,13 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                 return
             }
             rebuildColumns()
+        }
+
+        func applyPalette(to scrollView: NSScrollView) {
+            let background = NSColor(parent.background)
+            scrollView.backgroundColor = background
+            tableView?.backgroundColor = background
+            tableView?.gridColor = NSColor(parent.grid)
         }
 
         func rebuildColumns() {

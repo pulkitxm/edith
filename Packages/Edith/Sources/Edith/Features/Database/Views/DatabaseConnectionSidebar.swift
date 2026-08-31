@@ -60,7 +60,7 @@ struct DatabaseConnectionSidebar: View {
             emptyState(
                 symbol: "cylinder.split.1x2",
                 title: "Connections not loaded",
-                detail: "Load saved connections through the authenticated local broker.",
+                detail: "Loading your saved database connections.",
                 actionTitle: "Load connections")
         case .loading(let connections):
             stateNotice(
@@ -75,7 +75,7 @@ struct DatabaseConnectionSidebar: View {
                 symbol: "cylinder.split.1x2",
                 title: "No saved connections",
                 detail:
-                    "Add a database connection here, test it through the local broker, then save it.",
+                    "Add a database connection here, test it, then save it.",
                 actionTitle: "Add connection",
                 action: createConnection)
         case .filteredEmpty(let search):
@@ -98,7 +98,7 @@ struct DatabaseConnectionSidebar: View {
             stateNotice(
                 symbol: "clock.arrow.circlepath",
                 title: "Stale connection list",
-                detail: "The broker returned saved information that may be out of date.",
+                detail: "The saved connection information may be out of date.",
                 tint: .orange)
             connectionRows(connections)
         case .failed(let connections, let message):

@@ -27,8 +27,11 @@ struct DatabaseWorkbenchView: View {
     @Environment(\.colorScheme) private var scheme
     @State private var documentPresentation = DatabaseDocumentPresentation.tree
 
-    private var theme: Color { themeColor(themeName) }
     private var dark: Bool { scheme == .dark }
+    private var palette: DatabaseThemePalette {
+        DatabaseThemePalette(dark: dark, theme: AppTheme(storedName: themeName))
+    }
+    private var theme: Color { palette.accent }
 
     var body: some View {
         Group {
@@ -42,7 +45,7 @@ struct DatabaseWorkbenchView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(dark))
+        .background(palette.canvas)
         .task(id: connections.selectedConnection) {
             data.prepare(for: connections.selectedConnection)
             explorer.prepare(for: connections.selectedConnection)
@@ -278,7 +281,7 @@ struct DatabaseWorkbenchView: View {
         }
         .padding(.horizontal, UIScale.pt(10))
         .frame(height: UIScale.pt(42))
-        .background(DashSkin.paper2(dark))
+        .background(palette.panel)
     }
 
     private func filterControls(_ connection: DatabaseConnectionSummary) -> some View {
@@ -375,6 +378,10 @@ struct DatabaseWorkbenchView: View {
         VStack(spacing: 0) {
             DatabaseNativeTableView(
                 accent: theme,
+                background: palette.canvas,
+                grid: palette.grid,
+                ink: palette.ink,
+                inkFaint: palette.inkFaint,
                 fields: data.fields,
                 records: data.records,
                 selectedIndex: data.selectedRecordIndex,
@@ -424,7 +431,7 @@ struct DatabaseWorkbenchView: View {
             }
             .padding(.horizontal, UIScale.pt(12))
             .frame(height: UIScale.pt(38))
-            .background(DashSkin.paper2(dark))
+            .background(palette.panel)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -514,7 +521,7 @@ struct DatabaseWorkbenchView: View {
                 }
             }
         }
-        .background(DashSkin.paper2(dark))
+        .background(palette.panel)
     }
 
     private func editor(_ connection: DatabaseConnectionSummary) -> some View {
@@ -544,11 +551,11 @@ struct DatabaseWorkbenchView: View {
                         .font(.system(size: UIScale.pt(11), design: .monospaced))
                         .scrollContentBackground(.hidden)
                         .padding(UIScale.pt(6))
-                        .background(DashSkin.paper(dark))
+                        .background(palette.canvas)
                         .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(7)))
                         .overlay {
                             RoundedRectangle(cornerRadius: UIScale.pt(7))
-                                .strokeBorder(DashSkin.line(dark))
+                                .strokeBorder(palette.line)
                         }
                         .accessibilityLabel("\(connection.product.displayName) document JSON")
                 }
@@ -570,7 +577,7 @@ struct DatabaseWorkbenchView: View {
                 }
             }
         }
-        .background(DashSkin.paper2(dark))
+        .background(palette.panel)
     }
 
     private func editorField(
