@@ -630,20 +630,20 @@ struct DashboardView: View {
             }
             LazyChartCard(title: "Token mix by day", dark: dark) {
                 StackedChart(
-                    bars: model.chartData.tokenMix, costLine: model.chartData.daily,
+                    bars: model.chartData.tokenMix, costLine: model.chartData.stackedCost,
                     domain: tokenMixDomain, range: tokenMixRange, dark: dark, blur: blurMoney,
                     blurTokens: blurUsage)
             }
             LazyChartCard(title: "Model usage over time", dark: dark) {
                 StackedChart(
-                    bars: model.chartData.modelTime, costLine: model.chartData.daily,
+                    bars: model.chartData.modelTime, costLine: model.chartData.stackedCost,
                     domain: modelDomain, range: modelRange, dark: dark, blur: blurMoney,
                     blurTokens: blurUsage)
             }
             if model.allSources.count > 1 {
                 LazyChartCard(title: "Usage by source over time", dark: dark) {
                     StackedChart(
-                        bars: model.chartData.source, costLine: model.chartData.daily,
+                        bars: model.chartData.source, costLine: model.chartData.stackedCost,
                         domain: sourceDomain, range: sourceRange, dark: dark, blur: blurMoney,
                         blurTokens: blurUsage)
                 }

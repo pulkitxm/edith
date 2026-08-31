@@ -190,6 +190,7 @@ struct AdaptiveChartLegend: View {
 
 struct DashChartData {
     var daily: [ComboPoint] = []
+    var stackedCost: [ComboPoint] = []
     var dow: [ComboPoint] = []
     var hourly: [ComboPoint] = []
     var project: [ComboPoint] = []

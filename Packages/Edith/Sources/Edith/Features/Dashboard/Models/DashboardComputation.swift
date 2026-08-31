@@ -54,7 +54,7 @@ struct DashboardComputeRequest {
 enum DashboardComputation {
     static let unattributedCostModel = "unattributed-cost"
     static let stackedSeriesLimit = 8
-    static let weeklyBucketThresholdDays = 120
+    static let weeklyBucketThresholdDays = 60
 
     static let ymd: DateFormatter = {
         let f = DateFormatter()
@@ -1426,6 +1426,7 @@ private struct DashboardFilterComputer {
         var output = 0.0
         var cacheCreate = 0.0
         var cacheRead = 0.0
+        var cost = 0.0
         var byModel: [String: Double] = [:]
         var bySource: [String: Double] = [:]
     }
@@ -1438,6 +1439,7 @@ private struct DashboardFilterComputer {
                 bucket.output = d.output
                 bucket.cacheCreate = d.cacheCreate
                 bucket.cacheRead = d.cacheRead
+                bucket.cost = d.cost
                 bucket.byModel = d.byModel
                 bucket.bySource = d.bySource
                 return bucket
@@ -1460,6 +1462,7 @@ private struct DashboardFilterComputer {
             bucket.output += d.output
             bucket.cacheCreate += d.cacheCreate
             bucket.cacheRead += d.cacheRead
+            bucket.cost += d.cost
             for (name, value) in d.byModel {
                 bucket.byModel[name, default: 0] += value
             }
@@ -1537,6 +1540,11 @@ private struct DashboardFilterComputer {
         }
         next.project = projectPoints
         let buckets = stackBuckets(series)
+        next.stackedCost = buckets.map {
+            ComboPoint(
+                id: $0.id, label: $0.label,
+                tokens: $0.input + $0.output + $0.cacheCreate + $0.cacheRead, cost: $0.cost)
+        }
         next.tokenMix = buckets.flatMap { d in
             [
                 StackDatum(id: "\(d.id)-in", x: d.label, series: "input", value: d.input),

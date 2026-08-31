@@ -82,6 +82,27 @@ import Testing
         #expect(dashboard.chartData.source.reduce(0) { $0 + $1.value } == 78)
     }
 
+    @Test func longRangeStackedChartsUseMatchingWeeklyCostBuckets() async throws {
+        let start = try #require(DashboardModel.ymd.date(from: "2026-06-01"))
+        let calendar = Calendar(identifier: .gregorian)
+        let daily = try (0...60).map { offset in
+            let date = try #require(calendar.date(byAdding: .day, value: offset, to: start))
+            let period = DashboardModel.ymd.string(from: date)
+            return
+                "{\"period\":\"\(period)\",\"bySource\":{\"cli\":[{\"modelName\":\"a\",\"inputTokens\":10,\"cost\":1}]},\"projects\":[],\"hours\":[]}"
+        }.joined(separator: ",")
+        let dashboard = try model(daily, sources: "\"cli\"")
+        await dashboard.awaitPendingComputation()
+        let barBuckets = Set(dashboard.chartData.modelTime.map(\.x))
+        let activeCostBuckets = Set(
+            dashboard.chartData.stackedCost.filter { $0.tokens > 0 }.map(\.label))
+
+        #expect(dashboard.chartData.stackedCost.count < 61)
+        #expect(barBuckets == activeCostBuckets)
+        #expect(dashboard.chartData.stackedCost.reduce(0) { $0 + $1.tokens } == 610)
+        #expect(dashboard.chartData.stackedCost.reduce(0) { $0 + $1.cost } == 61)
+    }
+
     @Test func unsupportedProviderHoursRemainUnattributed() throws {
         let daily = """
             {"period":"2026-06-01",
