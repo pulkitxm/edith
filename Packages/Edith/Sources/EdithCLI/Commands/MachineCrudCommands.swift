@@ -613,7 +613,9 @@ struct MachinesSnippetsAddCommand: AsyncParsableCommand {
                 throw CLIFailure(error.localizedDescription)
             }
             guard !json else {
-                CLIOut.json(SnippetBridge.json(snippet, index: 0))
+                let stored = try SnippetBridge.snippets(target.id.uuidString).all
+                let index = stored.firstIndex(where: { $0.id == snippet.id }).map { $0 + 1 } ?? 0
+                CLIOut.json(SnippetBridge.json(snippet, index: index))
                 return
             }
             CLIOut.out("saved \(title) on \(shared ? "every machine" : target.name)")

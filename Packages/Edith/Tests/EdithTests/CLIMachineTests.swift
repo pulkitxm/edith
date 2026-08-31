@@ -293,12 +293,15 @@ import Testing
         await CLIProbe.inWorld { _ in
             Self.seed()
             MachineRegistry.add(Machine(name: "Other", host: "10.0.0.5"))
-            _ = await CLIProbe.capture([
-                "machines", "snippets", "add", "--shared", "builder", "disk", "df", "-h",
+            let shared = await CLIProbe.capture([
+                "machines", "snippets", "add", "--json", "--shared", "builder", "disk", "df",
+                "-h",
             ])
-            _ = await CLIProbe.capture([
-                "machines", "snippets", "add", "builder", "logs", "journalctl", "-xe",
+            let local = await CLIProbe.capture([
+                "machines", "snippets", "add", "--json", "builder", "logs", "journalctl", "-xe",
             ])
+            #expect(shared.object?["index"] as? Int == 1)
+            #expect(local.object?["index"] as? Int == 2)
             let mine = await CLIProbe.capture(["machines", "snippets", "ls", "builder", "--json"])
             let theirs = await CLIProbe.capture(["machines", "snippets", "ls", "other", "--json"])
             #expect(
