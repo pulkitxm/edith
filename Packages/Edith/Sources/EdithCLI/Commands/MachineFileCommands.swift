@@ -101,7 +101,7 @@ struct MachineFilesGetCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let source = try await CLIEnvironment.remoteTransferTarget(machine)
-            let remoteName = (remote as NSString).lastPathComponent
+            let remoteName = FileListing.name(of: remote)
             let requested = URL(
                 fileURLWithPath: (local ?? remoteName).expandingTilde()
             ).standardizedFileURL
@@ -319,7 +319,7 @@ struct MachineFilesPutCommand: AsyncParsableCommand {
             let destination =
                 remoteIsDirectory
                 ? FileListing.join(parent: trimmed, name: source.lastPathComponent) : remote
-            let rawDirectory = (destination as NSString).deletingLastPathComponent
+            let rawDirectory = FileListing.parentPath(of: destination) ?? ""
             let directory = rawDirectory.isEmpty ? "." : rawDirectory
             let existing = try await target.endpoint.list(directory)
             let plan = RemoteTransferOperationExecution.plan(

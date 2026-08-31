@@ -291,7 +291,9 @@ public actor SSHConnection {
         let command =
             remotePlatform == .windows
             ? PowerShell.command(
-                "$bytes=[IO.File]::ReadAllBytes(\(PowerShell.literal(remotePath))); "
+                "$path=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("
+                    + "\(PowerShell.literal(remotePath))); "
+                    + "$bytes=[IO.File]::ReadAllBytes($path); "
                     + "$output=[Console]::OpenStandardOutput(); "
                     + "$output.Write($bytes,0,$bytes.Length); $output.Flush()")
             : "cat \(ShellQuote.quote(remotePath))"
@@ -375,7 +377,8 @@ public actor SSHConnection {
         let command =
             remotePlatform == .windows
             ? PowerShell.command(
-                "$output=[IO.File]::Create(\(PowerShell.literal(remotePath))); "
+                "$path=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("
+                    + "\(PowerShell.literal(remotePath))); $output=[IO.File]::Create($path); "
                     + "[Console]::OpenStandardInput().CopyTo($output); $output.Dispose()")
             : "cat > \(ShellQuote.quote(remotePath))"
         let process = execProcess(command: command)

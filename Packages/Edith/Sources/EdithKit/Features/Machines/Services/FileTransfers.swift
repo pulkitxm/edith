@@ -63,7 +63,7 @@ public enum DropResolver {
             if path == normalizedDestination { return false }
             if path == "/" || path == "." { return false }
             if normalizedDestination.hasPrefix(path + "/") { return false }
-            let rawParent = (path as NSString).deletingLastPathComponent
+            let rawParent = FileListing.parentPath(of: path) ?? ""
             let parent = rawParent.isEmpty ? "." : rawParent
             if parent == normalizedDestination { return false }
         }
@@ -71,6 +71,7 @@ public enum DropResolver {
     }
 
     private static func normalizedPath(_ path: String) -> String {
+        let path = path.replacingOccurrences(of: "\\", with: "/")
         let absolute = path.hasPrefix("/")
         var components: [Substring] = []
         for component in path.split(separator: "/", omittingEmptySubsequences: true) {

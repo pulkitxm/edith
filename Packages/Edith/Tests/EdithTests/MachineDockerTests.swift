@@ -350,9 +350,13 @@ private final class MachineSessionUpdateCounter: @unchecked Sendable {
 
     @Test func joinsAndWalksWindowsPaths() {
         #expect(FileListing.join(parent: "C:\\Users", name: "Pulkit") == "C:\\Users\\Pulkit")
+        #expect(FileListing.join(parent: "~\\Desktop", name: "repo") == "~\\Desktop\\repo")
         #expect(FileListing.parentPath(of: "C:\\Users\\Pulkit") == "C:\\Users")
         #expect(FileListing.parentPath(of: "C:\\Users") == "C:\\")
         #expect(FileListing.parentPath(of: "C:\\") == nil)
+        #expect(FileListing.parentPath(of: "~\\Desktop\\repo") == "~\\Desktop")
+        #expect(FileListing.name(of: "C:\\Users\\Pulkit\\report.txt") == "report.txt")
+        #expect(FileListing.name(of: "~\\Desktop\\repo") == "repo")
         let crumbs = FileListing.breadcrumbs(for: "C:\\Users\\Pulkit")
         #expect(crumbs.map(\.name) == ["C:", "Users", "Pulkit"])
         #expect(crumbs.map(\.path) == ["C:\\", "C:\\Users", "C:\\Users\\Pulkit"])
