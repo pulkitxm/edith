@@ -7,6 +7,7 @@ struct SEOAuditProjectView: View {
     @Environment(\.colorScheme) private var scheme
     @State private var expandedPages = Set<UUID>()
     @State private var confirmsDeletion = false
+    @State private var pageSelectionPresented = false
 
     private var dark: Bool { scheme == .dark }
     private var project: SEOAuditProject { model.selectedProject! }
@@ -23,6 +24,7 @@ struct SEOAuditProjectView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: UIScale.pt(16)) {
                     summary
+                    commandDeck
                     controls
                     pageList
                 }
@@ -38,6 +40,9 @@ struct SEOAuditProjectView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Every saved run and page result for this project will be removed from this Mac.")
+        }
+        .sheet(isPresented: $pageSelectionPresented) {
+            SEOAuditPageSelectionSheet(model: model)
         }
         .onChange(of: model.selectedRunID) { _, _ in expandedPages.removeAll() }
     }
@@ -62,15 +67,12 @@ struct SEOAuditProjectView: View {
             if model.isRunning {
                 Button("Stop", role: .destructive, action: model.cancel)
             } else {
-                Button(action: model.runAgain) {
-                    Label("Run audit", systemImage: "arrow.clockwise")
+                Button(action: model.leaveForNewProject) {
+                    Label("New project", systemImage: "plus")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
             }
             Menu {
-                Toggle("Run Lighthouse", isOn: $model.lighthouseEnabled)
-                    .disabled(!model.lighthouseAvailable)
-                Divider()
                 Button("Delete Project", role: .destructive) { confirmsDeletion = true }
             } label: {
                 Image(systemName: "ellipsis")
@@ -131,12 +133,137 @@ struct SEOAuditProjectView: View {
     private var controls: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: UIScale.pt(10)) {
-                runPicker; filters
+                if !project.runs.isEmpty { runPicker }
+                filters
             }
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                runPicker; filters
+                if !project.runs.isEmpty { runPicker }
+                filters
             }
         }
+    }
+
+    private var commandDeck: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            HStack {
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text("AUDIT COMMANDS")
+                        .font(DashSkin.mono(8.5, weight: .bold))
+                        .tracking(0.8)
+                        .foregroundStyle(DashSkin.accent(dark))
+                    Text("Discover, choose, then audit")
+                        .font(.system(size: UIScale.pt(13), weight: .semibold))
+                }
+                Spacer()
+                if !model.lighthouseAvailable {
+                    Label("Lighthouse is not on PATH", systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: UIScale.pt(10), weight: .medium))
+                        .foregroundStyle(DashSkin.warn)
+                }
+            }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: UIScale.pt(10)) {
+                    discoveryCommand
+                    selectionCommand
+                    lighthouseCommand
+                    auditCommand
+                }
+                VStack(spacing: UIScale.pt(10)) {
+                    discoveryCommand
+                    selectionCommand
+                    lighthouseCommand
+                    auditCommand
+                }
+            }
+        }
+        .padding(UIScale.pt(14))
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
+        .overlay(
+            RoundedRectangle(cornerRadius: UIScale.pt(14))
+                .strokeBorder(DashSkin.accent(dark).opacity(0.28), lineWidth: UIScale.pt(1)))
+    }
+
+    private var discoveryCommand: some View {
+        commandCell(
+            icon: "point.3.connected.trianglepath.dotted", label: "DISCOVERED",
+            value: String(model.discoveredPageURLs.count), detail: "pages from sitemap"
+        ) {
+            Button(action: model.discoverPages) {
+                Label(
+                    model.discoveredPageURLs.isEmpty ? "Discover pages" : "Discover more",
+                    systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
+            .disabled(model.isRunning)
+        }
+    }
+
+    private var selectionCommand: some View {
+        commandCell(
+            icon: "checklist", label: "SELECTED", value: String(model.selectedPageCount),
+            detail: "of \(model.discoveredPageURLs.count) pages"
+        ) {
+            Button("Choose pages") { pageSelectionPresented = true }
+                .buttonStyle(.bordered)
+                .disabled(model.discoveredPageURLs.isEmpty || model.isRunning)
+        }
+    }
+
+    private var lighthouseCommand: some View {
+        commandCell(
+            icon: "gauge.with.needle", label: "LIGHTHOUSE",
+            value: model.lighthouseEnabled ? "On" : "Off",
+            detail: model.lighthouseEnabled ? "4 categories per page" : "metadata only"
+        ) {
+            Toggle("Include", isOn: $model.lighthouseEnabled)
+                .toggleStyle(.checkbox)
+                .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                .disabled(!model.lighthouseAvailable || model.isRunning)
+        }
+    }
+
+    private var auditCommand: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            Text("RUN")
+                .font(DashSkin.mono(8, weight: .bold))
+                .tracking(0.6)
+                .foregroundStyle(.tertiary)
+            Text("Audit \(model.selectedPageCount) pages")
+                .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+            Text(model.lighthouseEnabled ? "Metadata + Lighthouse" : "Metadata only")
+                .font(.system(size: UIScale.pt(9.5)))
+                .foregroundStyle(.secondary)
+            Button(action: model.auditSelectedPages) {
+                Label("Run selected", systemImage: "play.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(model.selectedPageCount == 0 || model.isRunning)
+        }
+        .padding(UIScale.pt(12))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DashSkin.accent(dark).opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func commandCell<Actions: View>(
+        icon: String, label: String, value: String, detail: String,
+        @ViewBuilder actions: () -> Actions
+    ) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            HStack(spacing: UIScale.pt(6)) {
+                Image(systemName: icon).foregroundStyle(DashSkin.accent(dark))
+                Text(label)
+                    .font(DashSkin.mono(8, weight: .bold))
+                    .tracking(0.6)
+                    .foregroundStyle(.tertiary)
+            }
+            Text(value).font(DashSkin.mono(19, weight: .semibold))
+            Text(detail).font(.system(size: UIScale.pt(9.5))).foregroundStyle(.secondary)
+            actions()
+        }
+        .padding(UIScale.pt(12))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
     }
 
     private var runPicker: some View {
@@ -178,7 +305,12 @@ struct SEOAuditProjectView: View {
     @ViewBuilder
     private var pageList: some View {
         if model.selectedRun == nil {
-            emptyState("No run selected", "Choose a saved run or start a new audit.")
+            emptyState(
+                model.discoveredPageURLs.isEmpty ? "Discover the sitemap" : "Pages are ready",
+                model.discoveredPageURLs.isEmpty
+                    ? "Find pages first, then choose exactly what to audit."
+                    : "Choose pages and run your first audit."
+            )
         } else if model.visiblePages.isEmpty {
             emptyState(
                 model.isRunning ? "Waiting for the first page" : "No pages match",
@@ -196,6 +328,12 @@ struct SEOAuditProjectView: View {
                     ForEach(model.visiblePages) { page in
                         SEOAuditPageAccordion(
                             page: page, history: model.history(for: page),
+                            selected: Binding(
+                                get: { model.selectedPageURLs.contains(page.url) },
+                                set: { _ in model.togglePage(page.url) }),
+                            lighthouseAvailable: model.lighthouseAvailable,
+                            lighthouseRunning: model.activeLighthouseURL == page.url,
+                            runLighthouse: { model.runLighthouse(for: page) },
                             expanded: Binding(
                                 get: { expandedPages.contains(page.id) },
                                 set: { open in
@@ -271,6 +409,7 @@ private struct SEOAuditProgressRail: View {
         case .idle: "Ready"
         case .discovering: "Discovering pages"
         case .auditing: "Auditing pages"
+        case .lighthouse: "Running Lighthouse"
         case .saving: "Saving run"
         }
     }
@@ -280,7 +419,74 @@ private struct SEOAuditProgressRail: View {
         case .idle: ""
         case .discovering: "robots.txt → sitemap.xml"
         case let .auditing(current, total, url): "\(current) / \(total)  \(url)"
+        case let .lighthouse(url): url
         case .saving: "writing local history"
         }
+    }
+}
+
+private struct SEOAuditPageSelectionSheet: View {
+    @Bindable var model: SEOAuditModel
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var scheme
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: UIScale.pt(12)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text("Choose pages").font(DashSkin.serif(22))
+                    Text("\(model.selectedPageCount) of \(model.discoveredPageURLs.count) selected")
+                        .font(DashSkin.mono(9.5))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Select all", action: model.selectAllPages)
+                Button("Clear", action: model.deselectAllPages)
+                Button("Done", action: dismiss.callAsFunction)
+                    .buttonStyle(.borderedProminent)
+            }
+            .padding(UIScale.pt(18))
+            Divider()
+            SearchField(placeholder: "Filter discovered URLs", text: $model.pageSelectionQuery)
+                .padding(UIScale.pt(14))
+            ScrollView {
+                LazyVStack(spacing: UIScale.pt(6)) {
+                    ForEach(model.visibleDiscoveredPageURLs, id: \.self) { url in
+                        Button {
+                            model.togglePage(url)
+                        } label: {
+                            HStack(spacing: UIScale.pt(10)) {
+                                Image(
+                                    systemName: model.selectedPageURLs.contains(url)
+                                        ? "checkmark.square.fill" : "square"
+                                )
+                                .foregroundStyle(
+                                    model.selectedPageURLs.contains(url)
+                                        ? DashSkin.accent(dark) : .secondary)
+                                Text(url)
+                                    .font(DashSkin.mono(10.5))
+                                    .foregroundStyle(DashSkin.ink(dark))
+                                    .lineLimit(1)
+                                Spacer()
+                            }
+                            .padding(.horizontal, UIScale.pt(12))
+                            .frame(minHeight: UIScale.pt(36))
+                            .background(
+                                model.selectedPageURLs.contains(url)
+                                    ? DashSkin.accent(dark).opacity(0.08) : DashSkin.paper2(dark),
+                                in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                        }
+                        .buttonStyle(.edith(.borderless))
+                    }
+                }
+                .padding(.horizontal, UIScale.pt(14))
+                .padding(.bottom, UIScale.pt(14))
+            }
+        }
+        .frame(minWidth: UIScale.pt(620), minHeight: UIScale.pt(520))
+        .background(DashSkin.paper(dark))
+        .onDisappear { model.pageSelectionQuery = "" }
     }
 }

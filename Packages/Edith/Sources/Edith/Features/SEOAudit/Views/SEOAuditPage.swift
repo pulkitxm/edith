@@ -19,6 +19,9 @@ struct SEOAuditPage: View {
             }
         }
         .background(DashSkin.paper(scheme == .dark))
+        .sheet(isPresented: $model.newProjectPresented) {
+            SEOAuditNewProjectSheet(model: model)
+        }
         .alert(
             "Site Audit could not finish",
             isPresented: Binding(
@@ -45,85 +48,21 @@ private struct SEOAuditProjectsView: View {
                 PageHeader {
                     Text("Site Audit")
                 } accessory: {
-                    Text("Crawl every page, inspect every share card, and keep each run local.")
-                        .font(.system(size: UIScale.pt(13)))
-                        .foregroundStyle(DashSkin.inkSoft(dark))
+                    HStack(spacing: UIScale.pt(14)) {
+                        Text("Crawl every page, inspect every share card, and keep each run local.")
+                            .font(.system(size: UIScale.pt(13)))
+                            .foregroundStyle(DashSkin.inkSoft(dark))
+                        Button(action: model.presentNewProject) {
+                            Label("New project", systemImage: "plus")
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                 }
-                newProjectCard
-                    .pageGutter(compact)
                 projects
                     .pageGutter(compact)
             }
             .padding(.bottom, UIScale.pt(PageMetrics.bottom))
         }
-    }
-
-    private var newProjectCard: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                Image(systemName: "point.3.connected.trianglepath.dotted")
-                    .font(.system(size: UIScale.pt(20), weight: .medium))
-                    .foregroundStyle(DashSkin.accent(dark))
-                    .frame(width: UIScale.pt(34), height: UIScale.pt(34))
-                    .background(DashSkin.accent(dark).opacity(0.12), in: Circle())
-                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    Text("Start with a URL")
-                        .font(.system(size: UIScale.pt(16), weight: .semibold))
-                    Text("Edith finds robots.txt, sitemap indexes, and every page below them.")
-                        .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-            }
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: UIScale.pt(10)) {
-                    fields; startButton
-                }
-                VStack(spacing: UIScale.pt(10)) {
-                    fields; startButton.frame(maxWidth: .infinity)
-                }
-            }
-            HStack(spacing: UIScale.pt(10)) {
-                Toggle("Run Lighthouse for every page", isOn: $model.lighthouseEnabled)
-                    .toggleStyle(.checkbox)
-                    .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                    .disabled(!model.lighthouseAvailable)
-                if !model.lighthouseAvailable {
-                    Text("Lighthouse is not on PATH")
-                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                        .foregroundStyle(DashSkin.warn)
-                }
-            }
-        }
-        .padding(UIScale.pt(18))
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(16)))
-        .overlay(
-            RoundedRectangle(cornerRadius: UIScale.pt(16))
-                .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1)))
-    }
-
-    private var fields: some View {
-        HStack(spacing: UIScale.pt(10)) {
-            EdithTextField(
-                placeholder: "localhost:3000 or example.com", text: $model.input,
-                icon: "link", clearable: true, onSubmit: model.beginNewProject
-            )
-            .frame(maxWidth: .infinity)
-            EdithTextField(
-                placeholder: "Project name (optional)", text: $model.projectName,
-                icon: "folder"
-            )
-            .frame(maxWidth: compact ? .infinity : UIScale.pt(230))
-        }
-    }
-
-    private var startButton: some View {
-        Button(action: model.beginNewProject) {
-            Label("Start audit", systemImage: "arrow.right")
-                .frame(minWidth: UIScale.pt(100))
-        }
-        .buttonStyle(.borderedProminent)
-        .disabled(model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     @ViewBuilder
@@ -138,6 +77,10 @@ private struct SEOAuditProjectsView: View {
                 Text("Your first completed crawl will stay here with its full history.")
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(.secondary)
+                Button(action: model.presentNewProject) {
+                    Label("Create a project", systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, UIScale.pt(52))
@@ -160,6 +103,84 @@ private struct SEOAuditProjectsView: View {
                 }
             }
         }
+    }
+}
+
+private struct SEOAuditNewProjectSheet: View {
+    @Bindable var model: SEOAuditModel
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var scheme
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(20)) {
+            HStack(alignment: .top, spacing: UIScale.pt(12)) {
+                Image(systemName: "point.3.connected.trianglepath.dotted")
+                    .font(.system(size: UIScale.pt(21), weight: .medium))
+                    .foregroundStyle(DashSkin.accent(dark))
+                    .frame(width: UIScale.pt(38), height: UIScale.pt(38))
+                    .background(DashSkin.accent(dark).opacity(0.12), in: Circle())
+                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                    Text("New audit project")
+                        .font(DashSkin.serif(23))
+                    Text("Add the site once. Every audit run stays attached to this project.")
+                        .font(.system(size: UIScale.pt(11.5)))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                fieldLabel("Site URL")
+                EdithTextField(
+                    placeholder: "localhost:3000 or example.com", text: $model.input,
+                    icon: "link", clearable: true, onSubmit: model.beginNewProject)
+                fieldLabel("Project name")
+                EdithTextField(
+                    placeholder: "Optional", text: $model.projectName, icon: "folder")
+            }
+            HStack(spacing: UIScale.pt(10)) {
+                capability("Sitemap discovery", "point.3.connected.trianglepath.dotted", true)
+                capability(
+                    "Lighthouse available", "gauge.with.needle", model.lighthouseAvailable)
+            }
+            HStack {
+                Button("Cancel") {
+                    model.newProjectPresented = false
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button(action: model.beginNewProject) {
+                    Label("Create and discover", systemImage: "arrow.right")
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(UIScale.pt(24))
+        .frame(width: UIScale.pt(500))
+        .background(DashSkin.paper(dark))
+    }
+
+    private func fieldLabel(_ value: String) -> some View {
+        Text(value.uppercased())
+            .font(DashSkin.mono(8.5, weight: .bold))
+            .tracking(0.6)
+            .foregroundStyle(.tertiary)
+    }
+
+    private func capability(_ title: String, _ icon: String, _ available: Bool) -> some View {
+        HStack(spacing: UIScale.pt(7)) {
+            Image(systemName: available ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .foregroundStyle(available ? DashSkin.ok : DashSkin.warn)
+            Image(systemName: icon).foregroundStyle(.secondary)
+            Text(title).font(.system(size: UIScale.pt(10.5), weight: .medium))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(UIScale.pt(10))
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
     }
 }
 

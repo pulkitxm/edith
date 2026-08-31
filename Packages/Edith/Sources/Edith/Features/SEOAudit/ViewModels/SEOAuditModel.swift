@@ -11,8 +11,13 @@ final class SEOAuditModel {
     var input = ""
     var projectName = ""
     var query = ""
+    var pageSelectionQuery = ""
     var severity: SEOAuditSeverity?
     var lighthouseEnabled = true
+    var discoveredPageURLs: [String] = []
+    var selectedPageURLs = Set<String>()
+    var newProjectPresented = false
+    var activeLighthouseURL: String?
     var errorMessage: String?
 
     @ObservationIgnored private let repository: SEOAuditRepository
@@ -37,6 +42,13 @@ final class SEOAuditModel {
 
     var isRunning: Bool { stage != .idle }
     var lighthouseAvailable: Bool { lighthouse.isAvailable }
+    var selectedPageCount: Int { selectedPageURLs.intersection(discoveredPageURLs).count }
+
+    var visibleDiscoveredPageURLs: [String] {
+        let value = pageSelectionQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return discoveredPageURLs }
+        return discoveredPageURLs.filter { $0.localizedCaseInsensitiveContains(value) }
+    }
 
     var selectedRun: SEOAuditRun? {
         guard let project = selectedProject else { return nil }
@@ -66,15 +78,30 @@ final class SEOAuditModel {
             return
         }
         let name = projectName.trimmingCharacters(in: .whitespacesAndNewlines)
-        var project = SEOAuditProject(
+        let project = SEOAuditProject(
             name: name.isEmpty ? SEOAuditURLInput.projectName(for: url) : name,
             baseURL: url.absoluteString)
-        project.runs.insert(SEOAuditRun(), at: 0)
         selectedProject = project
-        selectedRunID = project.runs[0].id
+        selectedRunID = nil
+        discoveredPageURLs = []
+        selectedPageURLs = []
         input = ""
         projectName = ""
-        run(projectID: project.id, startURL: url)
+        newProjectPresented = false
+        saveSelectedProject()
+        discoverPages()
+    }
+
+    func presentNewProject() {
+        input = ""
+        projectName = ""
+        newProjectPresented = true
+    }
+
+    func leaveForNewProject() {
+        guard !isRunning else { return }
+        closeProject()
+        presentNewProject()
     }
 
     func selectProject(id: UUID) {
@@ -82,6 +109,8 @@ final class SEOAuditModel {
             let project = try repository.loadProject(id: id)
             selectedProject = project
             selectedRunID = project.latestRun?.id
+            discoveredPageURLs = Self.knownPageURLs(in: project)
+            selectedPageURLs = Set(discoveredPageURLs)
             query = ""
             severity = nil
         } catch {
@@ -93,20 +122,91 @@ final class SEOAuditModel {
         guard !isRunning else { return }
         selectedProject = nil
         selectedRunID = nil
+        discoveredPageURLs = []
+        selectedPageURLs = []
         query = ""
         severity = nil
     }
 
     func runAgain() {
-        guard var project = selectedProject,
+        selectAllPages()
+        auditSelectedPages()
+    }
+
+    func discoverPages() {
+        guard let project = selectedProject,
             let url = SEOAuditURLInput.normalize(project.baseURL), !isRunning
         else { return }
+        auditTask?.cancel()
+        auditTask = Task { [weak self] in
+            guard let self else { return }
+            await executeDiscovery(startURL: url)
+        }
+    }
+
+    func auditSelectedPages() {
+        guard var project = selectedProject, !isRunning else { return }
+        let selected = Set(selectedPageURLs)
+        var urls: [URL] = []
+        for value in discoveredPageURLs where selected.contains(value) {
+            if let url = URL(string: value) { urls.append(url) }
+        }
+        guard !urls.isEmpty else {
+            errorMessage = "Select at least one page to audit."
+            return
+        }
         let newRun = SEOAuditRun()
         project.runs.insert(newRun, at: 0)
         project.updatedAt = Date()
         selectedProject = project
         selectedRunID = newRun.id
-        run(projectID: project.id, startURL: url)
+        run(projectID: project.id, urls: urls)
+    }
+
+    func togglePage(_ url: String) {
+        if selectedPageURLs.contains(url) {
+            selectedPageURLs.remove(url)
+        } else {
+            selectedPageURLs.insert(url)
+        }
+    }
+
+    func selectAllPages() {
+        selectedPageURLs = Set(discoveredPageURLs)
+    }
+
+    func deselectAllPages() {
+        selectedPageURLs.removeAll()
+    }
+
+    func runLighthouse(for page: SEOAuditPageResult) {
+        guard lighthouseAvailable, !isRunning, let url = URL(string: page.url) else { return }
+        activeLighthouseURL = page.url
+        stage = .lighthouse(url: page.url)
+        auditTask?.cancel()
+        let task = Task { [weak self] in
+            guard let self else { return }
+            let result = await lighthouse.audit(url)
+            if Task.isCancelled {
+                activeLighthouseURL = nil
+                stage = .idle
+                auditTask = nil
+                return
+            }
+            updateRun { run in
+                guard let index = run.pages.firstIndex(where: { $0.id == page.id }) else {
+                    return
+                }
+                run.pages[index] = page.with(
+                    scores: result.scores, lighthouseError: result.error)
+            }
+            selectedProject?.updatedAt = Date()
+            saveSelectedProject()
+            activeLighthouseURL = nil
+            stage = .idle
+            auditTask = nil
+        }
+        auditTask = task
     }
 
     func cancel() {
@@ -120,6 +220,8 @@ final class SEOAuditModel {
             projects.removeAll { $0.id == project.id }
             selectedProject = nil
             selectedRunID = nil
+            discoveredPageURLs = []
+            selectedPageURLs = []
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -136,21 +238,35 @@ final class SEOAuditModel {
         return project.history(for: page.url, excluding: run.id)
     }
 
-    private func run(projectID: UUID, startURL: URL) {
+    private func run(projectID: UUID, urls: [URL]) {
         auditTask?.cancel()
         auditTask = Task { [weak self] in
             guard let self else { return }
-            await execute(projectID: projectID, startURL: startURL)
+            await execute(projectID: projectID, urls: urls)
         }
     }
 
-    private func execute(projectID: UUID, startURL: URL) async {
+    private func executeDiscovery(startURL: URL) async {
         stage = .discovering
-        saveSelectedProject()
         do {
             let urls = try await crawler.pages(startingAt: startURL)
             try Task.checkCancellation()
-            updateRun { $0.discoveredPageCount = urls.count }
+            let values = urls.map(\.absoluteString)
+            let previous = Set(discoveredPageURLs)
+            discoveredPageURLs = Self.unique(discoveredPageURLs + values)
+            selectedPageURLs.formUnion(Set(values).subtracting(previous))
+        } catch is CancellationError {
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        stage = .idle
+        auditTask = nil
+    }
+
+    private func execute(projectID: UUID, urls: [URL]) async {
+        updateRun { $0.discoveredPageCount = urls.count }
+        saveSelectedProject()
+        do {
             for (index, url) in urls.enumerated() {
                 try Task.checkCancellation()
                 stage = .auditing(current: index + 1, total: urls.count, url: url.absoluteString)
@@ -190,6 +306,19 @@ final class SEOAuditModel {
         stage = .idle
         auditTask = nil
         if selectedProject?.id != projectID { return }
+    }
+
+    private static func knownPageURLs(in project: SEOAuditProject) -> [String] {
+        var values: [String] = []
+        for run in project.runs {
+            for page in run.pages { values.append(page.url) }
+        }
+        return unique(values)
+    }
+
+    private static func unique(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        return values.filter { seen.insert($0).inserted }
     }
 
     private func updateRun(_ mutation: (inout SEOAuditRun) -> Void) {

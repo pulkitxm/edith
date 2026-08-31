@@ -79,9 +79,10 @@ struct SEOAuditPageResult: Codable, Equatable, Identifiable, Sendable {
 
     var errorCount: Int { issues.count { $0.severity == .error } }
     var warningCount: Int { issues.count { $0.severity == .warning } }
+    var hasLighthouseScores: Bool { !scores.values.isEmpty }
 
     func with(scores: SEOAuditScores, lighthouseError: String?) -> SEOAuditPageResult {
-        var updatedIssues = issues
+        var updatedIssues = issues.filter { $0.code != "lighthouse-unavailable" }
         if let lighthouseError {
             updatedIssues.append(
                 SEOAuditIssue(
@@ -209,6 +210,7 @@ enum SEOAuditStage: Equatable, Sendable {
     case idle
     case discovering
     case auditing(current: Int, total: Int, url: String)
+    case lighthouse(url: String)
     case saving
 }
 

@@ -91,6 +91,39 @@ import Testing
         #expect(project.history(for: url, excluding: currentRun.id) == [newerPage, olderPage])
     }
 
+    @Test @MainActor func pageSelectionSupportsBulkAndIndividualChanges() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = SEOAuditModel(repository: SEOAuditRepository(root: root))
+        model.discoveredPageURLs = [
+            "https://example.com/", "https://example.com/docs", "https://example.com/about",
+        ]
+
+        model.selectAllPages()
+        #expect(model.selectedPageCount == 3)
+        model.togglePage("https://example.com/docs")
+        #expect(model.selectedPageCount == 2)
+        model.deselectAllPages()
+        #expect(model.selectedPageCount == 0)
+    }
+
+    @Test func lighthouseResultReplacesAnEarlierFailure() {
+        let unavailable = SEOAuditIssue(
+            code: "lighthouse-unavailable", severity: .notice,
+            title: "Lighthouse did not finish", detail: "Not installed")
+        let original = SEOAuditPageResult(
+            url: "https://example.com", statusCode: 200, responseMilliseconds: 20, bytes: 100,
+            metadata: .empty, issues: [unavailable])
+        let updated = original.with(
+            scores: SEOAuditScores(
+                performance: 91, accessibility: 92, bestPractices: 93, seo: 94),
+            lighthouseError: nil)
+
+        #expect(updated.hasLighthouseScores)
+        #expect(updated.scores.average == 92)
+        #expect(!updated.issues.contains { $0.code == "lighthouse-unavailable" })
+    }
+
     private func page(url: String, date: Date) -> SEOAuditPageResult {
         SEOAuditPageResult(
             url: url, auditedAt: date, statusCode: 200, responseMilliseconds: 20, bytes: 100,

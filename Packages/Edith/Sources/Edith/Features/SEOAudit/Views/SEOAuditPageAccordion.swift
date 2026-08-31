@@ -4,6 +4,10 @@ import SwiftUI
 struct SEOAuditPageAccordion: View {
     let page: SEOAuditPageResult
     let history: [SEOAuditPageResult]
+    @Binding var selected: Bool
+    let lighthouseAvailable: Bool
+    let lighthouseRunning: Bool
+    let runLighthouse: () -> Void
     @Binding var expanded: Bool
     @Environment(\.colorScheme) private var scheme
 
@@ -11,38 +15,44 @@ struct SEOAuditPageAccordion: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Button {
-                expanded.toggle()
-            } label: {
-                HStack(spacing: UIScale.pt(12)) {
-                    statusMark
-                    VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                        Text(
-                            page.metadata.title ?? URL(string: page.url)?.lastPathComponent
-                                ?? page.url
-                        )
-                        .font(.system(size: UIScale.pt(12.5), weight: .semibold))
-                        .foregroundStyle(DashSkin.ink(dark))
-                        .lineLimit(1)
-                        Text(page.url)
-                            .font(DashSkin.mono(9.5))
-                            .foregroundStyle(.secondary)
+            HStack(spacing: UIScale.pt(10)) {
+                Toggle("Select \(page.url)", isOn: $selected)
+                    .labelsHidden()
+                    .toggleStyle(.checkbox)
+                    .padding(.leading, UIScale.pt(14))
+                Button {
+                    expanded.toggle()
+                } label: {
+                    HStack(spacing: UIScale.pt(12)) {
+                        statusMark
+                        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                            Text(
+                                page.metadata.title ?? URL(string: page.url)?.lastPathComponent
+                                    ?? page.url
+                            )
+                            .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                            .foregroundStyle(DashSkin.ink(dark))
                             .lineLimit(1)
+                            Text(page.url)
+                                .font(DashSkin.mono(9.5))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: UIScale.pt(8))
+                        if page.errorCount > 0 { issuePill(String(page.errorCount), .error) }
+                        if page.warningCount > 0 { issuePill(String(page.warningCount), .warning) }
+                        score
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: UIScale.pt(9), weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                            .rotationEffect(.degrees(expanded ? 90 : 0))
                     }
-                    Spacer(minLength: UIScale.pt(8))
-                    if page.errorCount > 0 { issuePill(String(page.errorCount), .error) }
-                    if page.warningCount > 0 { issuePill(String(page.warningCount), .warning) }
-                    score
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: UIScale.pt(9), weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                    .padding(.trailing, UIScale.pt(14))
+                    .frame(minHeight: UIScale.pt(58))
+                    .contentShape(Rectangle())
                 }
-                .padding(.horizontal, UIScale.pt(14))
-                .frame(minHeight: UIScale.pt(58))
-                .contentShape(Rectangle())
+                .buttonStyle(.edith(.borderless))
             }
-            .buttonStyle(.edith(.borderless))
             if expanded {
                 Divider().padding(.horizontal, UIScale.pt(14))
                 detail
@@ -94,6 +104,35 @@ struct SEOAuditPageAccordion: View {
 
     private var detail: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+            HStack(spacing: UIScale.pt(10)) {
+                if let url = URL(string: page.url) {
+                    Link(destination: url) {
+                        Label("Open page", systemImage: "arrow.up.right")
+                    }
+                    .buttonStyle(.bordered)
+                }
+                Button(action: runLighthouse) {
+                    Label(
+                        page.hasLighthouseScores ? "Run Lighthouse again" : "Run Lighthouse",
+                        systemImage: "gauge.with.needle")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!lighthouseAvailable || lighthouseRunning)
+                if lighthouseRunning {
+                    ProgressView().controlSize(.small)
+                    Text("Running four Lighthouse categories")
+                        .font(.system(size: UIScale.pt(10.5)))
+                        .foregroundStyle(.secondary)
+                } else if !lighthouseAvailable {
+                    Text("Install the Lighthouse CLI to enable page scores.")
+                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                        .foregroundStyle(DashSkin.warn)
+                }
+                Spacer()
+                Text(selected ? "Included in next audit" : "Excluded from next audit")
+                    .font(DashSkin.mono(9, weight: .semibold))
+                    .foregroundStyle(selected ? DashSkin.ok : .secondary)
+            }
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: UIScale.pt(14)) {
                     openGraphPreview.frame(width: UIScale.pt(300))
@@ -162,12 +201,49 @@ struct SEOAuditPageAccordion: View {
 
     private var auditFacts: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            HStack(spacing: UIScale.pt(8)) {
-                scoreTile("PERF", page.scores.performance)
-                scoreTile("A11Y", page.scores.accessibility)
-                scoreTile("BEST", page.scores.bestPractices)
-                scoreTile("SEO", page.scores.seo)
+            VStack(alignment: .leading, spacing: UIScale.pt(9)) {
+                HStack {
+                    sectionLabel("Lighthouse", count: page.scores.values.count)
+                    Spacer()
+                    Text(page.hasLighthouseScores ? "latest local run" : "not run")
+                        .font(DashSkin.mono(8.5, weight: .semibold))
+                        .foregroundStyle(page.hasLighthouseScores ? DashSkin.ok : .secondary)
+                }
+                if page.hasLighthouseScores {
+                    HStack(spacing: UIScale.pt(8)) {
+                        scoreTile("PERF", page.scores.performance)
+                        scoreTile("A11Y", page.scores.accessibility)
+                        scoreTile("BEST", page.scores.bestPractices)
+                        scoreTile("SEO", page.scores.seo)
+                    }
+                } else {
+                    HStack(spacing: UIScale.pt(9)) {
+                        Image(systemName: "gauge.open.with.lines.needle.33percent")
+                            .foregroundStyle(DashSkin.accent(dark))
+                        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                            Text("No Lighthouse report for this page")
+                                .font(.system(size: UIScale.pt(11), weight: .semibold))
+                            Text(
+                                lighthouseAvailable
+                                    ? "Run it here, or include Lighthouse in the next bulk audit."
+                                    : "Install the Lighthouse CLI, then return to this page."
+                            )
+                            .font(.system(size: UIScale.pt(9.5)))
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(UIScale.pt(11))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        DashSkin.accent(dark).opacity(0.07),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+                }
             }
+            .padding(UIScale.pt(12))
+            .background(DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+            .overlay(
+                RoundedRectangle(cornerRadius: UIScale.pt(10))
+                    .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1)))
             LazyVGrid(
                 columns: [GridItem(.adaptive(minimum: UIScale.pt(120)), alignment: .leading)],
                 alignment: .leading, spacing: UIScale.pt(10)
@@ -181,8 +257,48 @@ struct SEOAuditPageAccordion: View {
                 fact("Canonical", page.metadata.canonicalURL == nil ? "Missing" : "Present")
                 fact("Robots", page.metadata.robots ?? "Default")
             }
+            .padding(UIScale.pt(12))
+            .background(DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+            metadataPanel
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var metadataPanel: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(9)) {
+            sectionLabel("Search and social", count: metadataValues.count)
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: UIScale.pt(170)), alignment: .leading)],
+                alignment: .leading, spacing: UIScale.pt(9)
+            ) {
+                ForEach(metadataValues, id: \.0) { label, value in
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                        Text(label.uppercased())
+                            .font(DashSkin.mono(7.5, weight: .bold))
+                            .foregroundStyle(.tertiary)
+                        Text(value)
+                            .font(.system(size: UIScale.pt(10)))
+                            .foregroundStyle(
+                                value == "Missing" ? DashSkin.warn : DashSkin.ink(dark)
+                            )
+                            .lineLimit(2)
+                    }
+                }
+            }
+        }
+        .padding(UIScale.pt(12))
+        .background(DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+    }
+
+    private var metadataValues: [(String, String)] {
+        [
+            ("Title", page.metadata.title ?? "Missing"),
+            ("Description", page.metadata.description ?? "Missing"),
+            ("H1", page.metadata.heading ?? "Missing"),
+            ("Language", page.metadata.language ?? "Missing"),
+            ("OG type", page.metadata.openGraphType ?? "Missing"),
+            ("Twitter card", page.metadata.twitterCard ?? "Missing"),
+        ]
     }
 
     private func scoreTile(_ label: String, _ value: Int?) -> some View {
