@@ -550,7 +550,7 @@ private actor CLIDatabaseMCPRunRecorder {
                     .signedInteger(7), .signedInteger(2),
                 ])
             guard
-                case .document(let product, let operation, let parameters, let body) =
+                case .search(let product, let operation, let parameters, let body) =
                     request.payload
             else {
                 Issue.record("expected Elasticsearch document mutation")
