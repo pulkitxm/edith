@@ -27,11 +27,17 @@ struct SEOAuditProjectView: View {
             }
             Divider()
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                LazyVStack(
+                    alignment: .leading, spacing: UIScale.pt(16),
+                    pinnedViews: [.sectionHeaders]
+                ) {
                     summary
                     commandDeck
-                    controls
-                    pageList
+                    Section {
+                        pageList
+                    } header: {
+                        pinnedControls
+                    }
                 }
                 .pageContent(compact)
                 .padding(.top, UIScale.pt(16))
@@ -158,6 +164,18 @@ struct SEOAuditProjectView: View {
                 filters
             }
         }
+    }
+
+    private var pinnedControls: some View {
+        controls
+            .padding(.vertical, UIScale.pt(9))
+            .background(DashSkin.paper(dark))
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(DashSkin.line(dark))
+                    .frame(height: UIScale.pt(1))
+            }
+            .zIndex(1)
     }
 
     private var commandDeck: some View {

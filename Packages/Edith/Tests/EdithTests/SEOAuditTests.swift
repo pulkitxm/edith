@@ -269,6 +269,22 @@ import Testing
         #expect(!source.contains("backHovered ? 1."))
     }
 
+    @Test func runControlsStayPinnedAboveThePageList() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent(
+                    "Sources/Edith/Features/SEOAudit/Views/SEOAuditProjectView.swift"),
+            encoding: .utf8)
+
+        #expect(source.contains("pinnedViews: [.sectionHeaders]"))
+        #expect(source.contains("Section {\n                        pageList"))
+        #expect(source.contains("header: {\n                        pinnedControls"))
+        #expect(source.contains(".background(DashSkin.paper(dark))"))
+    }
+
     @Test @MainActor func navigationUsesTheAppLifetimeAuditModel() throws {
         #expect(SEOAuditModel.shared === SEOAuditModel.shared)
 
