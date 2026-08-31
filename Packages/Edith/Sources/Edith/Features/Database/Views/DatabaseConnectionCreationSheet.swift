@@ -7,9 +7,17 @@ struct DatabaseConnectionCreationSheet: View {
     let saved: (DatabaseConnectionDefinition) -> Void
     let cancel: () -> Void
     @State private var revealsConnectionURL = false
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        AppTheme.accent.rawValue
     @Environment(\.colorScheme) private var scheme
 
     private var dark: Bool { scheme == .dark }
+    private var palette: DatabaseThemePalette {
+        DatabaseThemePalette(dark: dark, theme: AppTheme(storedName: themeName))
+    }
+    private var supportedURLProducts: String {
+        model.supportedProducts.map(\.displayName).formatted(.list(type: .and))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -54,8 +62,11 @@ struct DatabaseConnectionCreationSheet: View {
             Divider().opacity(0.35)
             footer
         }
-        .frame(minWidth: UIScale.pt(620), minHeight: UIScale.pt(680))
-        .background(DashSkin.paper(dark))
+        .frame(
+            minWidth: UIScale.pt(480), idealWidth: UIScale.pt(620),
+            minHeight: UIScale.pt(520), idealHeight: UIScale.pt(680)
+        )
+        .background(palette.canvas)
         .onDisappear {
             Task { await model.discardUnsavedCredential() }
         }
@@ -65,19 +76,19 @@ struct DatabaseConnectionCreationSheet: View {
         HStack(spacing: UIScale.pt(12)) {
             ZStack {
                 RoundedRectangle(cornerRadius: UIScale.pt(10))
-                    .fill(DashSkin.accent(dark).opacity(0.12))
+                    .fill(palette.accent.opacity(0.12))
                 Image(systemName: "cylinder.split.1x2.fill")
                     .font(.system(size: UIScale.pt(17), weight: .semibold))
-                    .foregroundStyle(DashSkin.accent(dark))
+                    .foregroundStyle(palette.accent)
             }
             .frame(width: UIScale.pt(38), height: UIScale.pt(38))
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text("New database connection")
                     .font(.system(size: UIScale.pt(16), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
+                    .foregroundStyle(palette.ink)
                 Text("Paste a full URL or enter the connection details below.")
                     .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .foregroundStyle(palette.inkFaint)
             }
             Spacer(minLength: 0)
             Button("Cancel", action: cancel)
@@ -85,7 +96,7 @@ struct DatabaseConnectionCreationSheet: View {
         }
         .padding(.horizontal, UIScale.pt(22))
         .padding(.vertical, UIScale.pt(16))
-        .background(DashSkin.paper2(dark).opacity(0.55))
+        .background(palette.panel.opacity(0.55))
     }
 
     private var connectionURLFields: some View {
@@ -104,7 +115,7 @@ struct DatabaseConnectionCreationSheet: View {
                 }
                 .textFieldStyle(.plain)
                 .font(.system(size: UIScale.pt(12.5), design: .monospaced))
-                .foregroundStyle(DashSkin.ink(dark))
+                .foregroundStyle(palette.ink)
                 .edithFieldSurface(focused: false)
                 .onSubmit(model.applyConnectionURL)
                 Button {
@@ -122,7 +133,7 @@ struct DatabaseConnectionCreationSheet: View {
             }
             switch model.urlImportPhase {
             case .editing:
-                Text("PostgreSQL, Redis, Valkey, MongoDB, and SQLite URLs are supported.")
+                Text("\(supportedURLProducts) URLs are supported.")
                     .foregroundStyle(.secondary)
             case .applied:
                 Label(
@@ -182,7 +193,7 @@ struct DatabaseConnectionCreationSheet: View {
                     SecureField("Optional password", text: textBinding(\.password))
                         .textFieldStyle(.plain)
                         .font(.system(size: UIScale.pt(12.5)))
-                        .foregroundStyle(DashSkin.ink(dark))
+                        .foregroundStyle(palette.ink)
                         .edithFieldSurface(focused: false)
                 }
             }
@@ -277,22 +288,22 @@ struct DatabaseConnectionCreationSheet: View {
         }
         .padding(.horizontal, UIScale.pt(22))
         .padding(.vertical, UIScale.pt(14))
-        .background(DashSkin.paper2(dark).opacity(0.55))
+        .background(palette.panel.opacity(0.55))
     }
 
     @ViewBuilder
     private var phaseStatus: some View {
         switch model.phase {
         case .editing:
-            status("Test required", symbol: "circle.dashed", color: DashSkin.inkFaint(dark))
+            status("Test required", symbol: "circle.dashed", color: palette.inkFaint)
         case .testing:
             status(
-                "Testing through broker", symbol: "arrow.triangle.2.circlepath",
-                color: DashSkin.accent(dark))
+                "Testing connection", symbol: "arrow.triangle.2.circlepath",
+                color: palette.accent)
         case .tested(let detail):
             status(detail, symbol: "checkmark.circle.fill", color: DashSkin.ok)
         case .saving:
-            status("Saving connection", symbol: "tray.and.arrow.down", color: DashSkin.accent(dark))
+            status("Saving connection", symbol: "tray.and.arrow.down", color: palette.accent)
         case .failed(let detail):
             status(detail, symbol: "exclamationmark.triangle.fill", color: DashSkin.danger)
         case .saved:
@@ -315,17 +326,17 @@ struct DatabaseConnectionCreationSheet: View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             Label(title, systemImage: symbol)
                 .font(.system(size: UIScale.pt(12), weight: .semibold))
-                .foregroundStyle(DashSkin.inkSoft(dark))
+                .foregroundStyle(palette.inkSoft)
                 .textCase(.uppercase)
                 .tracking(0.4)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(UIScale.pt(14))
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+        .background(palette.panel, in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
         .overlay {
             RoundedRectangle(cornerRadius: UIScale.pt(12))
-                .stroke(DashSkin.line(dark), lineWidth: 1)
+                .stroke(palette.line, lineWidth: 1)
         }
     }
 
@@ -337,7 +348,7 @@ struct DatabaseConnectionCreationSheet: View {
         VStack(alignment: .leading, spacing: UIScale.pt(5)) {
             Text(required ? "\(label) *" : label)
                 .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+                .foregroundStyle(palette.inkFaint)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)

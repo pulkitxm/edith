@@ -6,8 +6,12 @@ struct DatabaseConnectionOverview: View {
     let model: DatabaseConnectionWorkspaceModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+    @Environment(\.databaseAppTheme) private var appTheme
 
     private var dark: Bool { scheme == .dark }
+    private var palette: DatabaseThemePalette {
+        DatabaseThemePalette(dark: dark, theme: appTheme)
+    }
 
     var body: some View {
         Group {
@@ -43,7 +47,7 @@ struct DatabaseConnectionOverview: View {
             }
             Text("\(connection.product.displayName) · \(connection.environmentLabel)")
                 .font(.system(size: UIScale.pt(13)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+                .foregroundStyle(palette.inkFaint)
             Group {
                 if compact {
                     VStack(alignment: .leading, spacing: UIScale.pt(7)) {
@@ -97,16 +101,16 @@ struct DatabaseConnectionOverview: View {
                     symbol: "circle",
                     title: "Disconnected",
                     detail: "Connecting is always an explicit action.",
-                    tint: DashSkin.inkFaint(dark))
+                    tint: palette.inkFaint)
                 Button("Connect") {
                     Task { await model.connectSelected() }
                 }
-                .buttonStyle(.edith(.primary, tint: DashSkin.accent(dark)))
+                .buttonStyle(.edith(.primary, tint: palette.accent))
                 .accessibilityLabel("Connect to \(connection.name)")
             case .connecting:
                 sessionProgress(
                     title: "Connecting",
-                    detail: "The authenticated broker is opening this database session.")
+                    detail: "Opening a secure database session.")
             case .connected(let session, let quality):
                 sessionStatus(
                     symbol: "checkmark.circle.fill",
@@ -122,7 +126,7 @@ struct DatabaseConnectionOverview: View {
             case .disconnecting:
                 sessionProgress(
                     title: "Disconnecting",
-                    detail: "The broker is closing this database session.")
+                    detail: "Closing the database session.")
             case .failed(let message, let previous):
                 sessionStatus(
                     symbol: "exclamationmark.triangle.fill",
@@ -133,7 +137,7 @@ struct DatabaseConnectionOverview: View {
                     Button("Try connecting again") {
                         Task { await model.connectSelected() }
                     }
-                    .buttonStyle(.edith(.primary, tint: DashSkin.accent(dark)))
+                    .buttonStyle(.edith(.primary, tint: palette.accent))
                     .accessibilityLabel("Try connecting to \(connection.name) again")
                 } else {
                     Button("Try disconnecting again") {
@@ -151,7 +155,7 @@ struct DatabaseConnectionOverview: View {
                 if let previous {
                     Text(connectedDetail(previous))
                         .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .foregroundStyle(palette.inkFaint)
                 }
                 Button("Disconnect to resolve status") {
                     Task { await model.disconnectSelected() }
@@ -168,12 +172,12 @@ struct DatabaseConnectionOverview: View {
             case .unavailable:
                 Text("Connect to discover the features available for this database.")
                     .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .foregroundStyle(palette.inkFaint)
                     .fixedSize(horizontal: false, vertical: true)
             case .refreshing(let snapshot, let quality):
                 sessionProgress(
                     title: "Refreshing capabilities",
-                    detail: "The broker is discovering current product and permission support.")
+                    detail: "Checking current product and permission support.")
                 if let snapshot {
                     capabilitySnapshot(snapshot, quality: quality ?? .partial)
                 }
@@ -220,7 +224,7 @@ struct DatabaseConnectionOverview: View {
                 capabilityCount(
                     snapshot.unavailableCount,
                     label: "unavailable",
-                    tint: DashSkin.inkFaint(dark))
+                    tint: palette.inkFaint)
             }
             factRow("Product", productDetail(snapshot))
             factRow("Topology", snapshot.topology.title)
@@ -274,7 +278,7 @@ struct DatabaseConnectionOverview: View {
                 if let reason = capability.unavailableReason {
                     Text(reason)
                         .font(.system(size: UIScale.pt(10.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .foregroundStyle(palette.inkFaint)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -282,7 +286,7 @@ struct DatabaseConnectionOverview: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(UIScale.pt(8))
-        .background(DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+        .background(palette.canvas, in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             [capability.name, capability.availabilityTitle, capability.unavailableReason]
@@ -297,7 +301,7 @@ struct DatabaseConnectionOverview: View {
                 .foregroundStyle(tint)
             Text(label)
                 .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+                .foregroundStyle(palette.inkFaint)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
@@ -338,7 +342,7 @@ struct DatabaseConnectionOverview: View {
                     .font(.system(size: UIScale.pt(12), weight: .semibold))
                 Text(detail)
                     .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .foregroundStyle(palette.inkFaint)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -361,7 +365,7 @@ struct DatabaseConnectionOverview: View {
                     .font(.system(size: UIScale.pt(12), weight: .semibold))
                 Text(detail)
                     .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .foregroundStyle(palette.inkFaint)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -373,11 +377,11 @@ struct DatabaseConnectionOverview: View {
         HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
             Text(label)
                 .font(.system(size: UIScale.pt(11), weight: .medium))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+                .foregroundStyle(palette.inkFaint)
                 .frame(width: UIScale.pt(112), alignment: .leading)
             Text(value)
                 .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                .foregroundStyle(DashSkin.ink(dark))
+                .foregroundStyle(palette.ink)
                 .textSelection(.enabled)
             Spacer(minLength: 0)
         }
@@ -393,15 +397,15 @@ struct DatabaseConnectionOverview: View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             Label(title, systemImage: symbol)
                 .font(.system(size: UIScale.pt(13), weight: .semibold))
-                .foregroundStyle(DashSkin.ink(dark))
+                .foregroundStyle(palette.ink)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(UIScale.pt(16))
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+        .background(palette.panel, in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
         .overlay {
             RoundedRectangle(cornerRadius: UIScale.pt(12))
-                .stroke(DashSkin.line(dark), lineWidth: 1)
+                .stroke(palette.line, lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
@@ -420,15 +424,15 @@ struct DatabaseConnectionOverview: View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             Image(systemName: "cylinder.split.1x2")
                 .font(.system(size: UIScale.pt(32), weight: .light))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+                .foregroundStyle(palette.inkFaint)
                 .accessibilityHidden(true)
             Text("Select a saved connection")
                 .font(.system(size: UIScale.pt(22), weight: .semibold))
             Text(
-                "Review its environment and safety policy before explicitly opening a broker session."
+                "Review its environment and safety policy before opening a session."
             )
             .font(.system(size: UIScale.pt(13)))
-            .foregroundStyle(DashSkin.inkFaint(dark))
+            .foregroundStyle(palette.inkFaint)
             .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: UIScale.pt(560), alignment: .leading)
@@ -441,15 +445,15 @@ struct DatabaseConnectionOverview: View {
     }
 
     private func environmentColor(_ connection: DatabaseConnectionSummary) -> Color {
-        connection.environmentKind == .production ? DashSkin.warn : DashSkin.accent(dark)
+        connection.environmentKind == .production ? DashSkin.warn : palette.accent
     }
 
     private func protectionColor(_ connection: DatabaseConnectionSummary) -> Color {
-        connection.environmentProtection == .standard ? DashSkin.inkFaint(dark) : DashSkin.warn
+        connection.environmentProtection == .standard ? palette.inkFaint : DashSkin.warn
     }
 
     private func readOnlyColor(_ connection: DatabaseConnectionSummary) -> Color {
-        connection.readOnlyPolicy == .disabled ? DashSkin.inkFaint(dark) : DashSkin.ok
+        connection.readOnlyPolicy == .disabled ? palette.inkFaint : DashSkin.ok
     }
 
     private func connectedDetail(_ session: DatabaseConnectedSessionSummary) -> String {
@@ -476,7 +480,7 @@ struct DatabaseConnectionOverview: View {
         switch availability {
         case .available: DashSkin.ok
         case .degraded: DashSkin.warn
-        case .unavailable, .planned: DashSkin.inkFaint(dark)
+        case .unavailable, .planned: palette.inkFaint
         }
     }
 }

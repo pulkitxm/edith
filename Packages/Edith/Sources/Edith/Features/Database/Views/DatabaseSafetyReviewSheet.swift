@@ -13,6 +13,7 @@ struct DatabaseSafetyReviewSheet: View {
     let dismiss: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.databaseAppTheme) private var appTheme
     @FocusState private var confirmationFocused: Bool
     @State private var interaction: DatabaseSafetyReviewInteractionState
     @State private var presentation: DatabaseSafetyReviewPresentation
@@ -38,6 +39,9 @@ struct DatabaseSafetyReviewSheet: View {
     }
 
     private var dark: Bool { scheme == .dark }
+    private var palette: DatabaseThemePalette {
+        DatabaseThemePalette(dark: dark, theme: appTheme)
+    }
     private var activePhase: DatabaseSafetyReviewPhase {
         interaction.submissionLocked && phase == .ready ? .executing : phase
     }
@@ -72,7 +76,7 @@ struct DatabaseSafetyReviewSheet: View {
             minWidth: DatabaseSafetyReviewLayout.minimumSheetWidth, idealWidth: 780,
             minHeight: DatabaseSafetyReviewLayout.minimumSheetHeight, idealHeight: 720
         )
-        .background(DashSkin.paper(dark))
+        .background(palette.canvas)
         .interactiveDismissDisabled(activePhase.blocksInteractiveDismissal)
         .onAppear {
             announce("Destructive database operation requires review.")
@@ -134,12 +138,12 @@ struct DatabaseSafetyReviewSheet: View {
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text(presentation.actionTitle)
                     .font(DashSkin.serif(24, weight: .bold))
-                    .foregroundStyle(DashSkin.ink(dark))
+                    .foregroundStyle(palette.ink)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
                 Text(headerContext)
                     .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .foregroundStyle(palette.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
                     .help(headerContext)
             }
@@ -159,7 +163,7 @@ struct DatabaseSafetyReviewSheet: View {
                 DatabaseSafetyPill(
                     title: expirationTitle(now: timeline.date),
                     symbol: expired ? "clock.badge.xmark" : "clock.fill",
-                    accentColor: expired ? DashSkin.danger : DashSkin.accent(dark),
+                    accentColor: expired ? DashSkin.danger : palette.accent,
                     dark: dark)
             }
         }
@@ -219,10 +223,10 @@ struct DatabaseSafetyReviewSheet: View {
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                             Text(warning.severityTitle)
                                 .font(.system(size: UIScale.pt(11), weight: .semibold))
-                                .foregroundStyle(DashSkin.ink(dark))
+                                .foregroundStyle(palette.ink)
                             Text(warning.message)
                                 .font(.system(size: UIScale.pt(12)))
-                                .foregroundStyle(DashSkin.ink(dark))
+                                .foregroundStyle(palette.ink)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .textSelection(.enabled)
                         }
@@ -241,10 +245,10 @@ struct DatabaseSafetyReviewSheet: View {
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 Text(presentation.selectionTitle)
                     .font(.system(size: UIScale.pt(13), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
+                    .foregroundStyle(palette.ink)
                 Text(presentation.selectionDetail)
                     .font(DashSkin.mono(11))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .foregroundStyle(palette.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
@@ -257,10 +261,10 @@ struct DatabaseSafetyReviewSheet: View {
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 Text(presentation.impactTitle)
                     .font(.system(size: UIScale.pt(13), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
+                    .foregroundStyle(palette.ink)
                 Text(presentation.impactDetail)
                     .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .foregroundStyle(palette.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
@@ -277,7 +281,7 @@ struct DatabaseSafetyReviewSheet: View {
                 HStack(spacing: UIScale.pt(6)) {
                     Text(presentation.requestTitle)
                         .font(.system(size: UIScale.pt(11), weight: .semibold))
-                        .foregroundStyle(DashSkin.inkSoft(dark))
+                        .foregroundStyle(palette.inkSoft)
                 }
                 DatabaseSafetyCodeBlock(text: presentation.requestCommand, dark: dark)
                 if let parameters = presentation.requestParameters {
@@ -320,13 +324,13 @@ struct DatabaseSafetyReviewSheet: View {
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 Text(presentation.confirmationInstruction)
                     .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .foregroundStyle(palette.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: UIScale.pt(6)) {
                     ScrollView(.horizontal) {
                         Text(presentation.confirmationText)
                             .font(DashSkin.mono(11, weight: .semibold))
-                            .foregroundStyle(DashSkin.ink(dark))
+                            .foregroundStyle(palette.ink)
                             .fixedSize(horizontal: true, vertical: true)
                             .padding(.horizontal, UIScale.pt(9))
                             .padding(.vertical, UIScale.pt(7))
@@ -378,7 +382,7 @@ struct DatabaseSafetyReviewSheet: View {
         }
         .padding(.horizontal, UIScale.pt(20))
         .padding(.vertical, UIScale.pt(15))
-        .background(DashSkin.paper2(dark))
+        .background(palette.panel)
     }
 
     private func confirmationStatus(
@@ -472,7 +476,7 @@ struct DatabaseSafetyReviewSheet: View {
                 Label("Create fresh preview", systemImage: "arrow.clockwise")
                     .frame(maxWidth: fillsWidth ? .infinity : nil)
             }
-            .buttonStyle(.edith(.primary, tint: DashSkin.accent(dark)))
+            .buttonStyle(.edith(.primary, tint: palette.accent))
             .edithButtonTarget(.primary)
             .disabled(interaction.refreshLocked)
         } else if state == .completed {
@@ -586,10 +590,10 @@ struct DatabaseSafetyReviewSheet: View {
 
     private func confirmationStatusColor(_ state: DatabaseSafetyConfirmationState) -> Color {
         switch state {
-        case .empty: DashSkin.inkFaint(dark)
+        case .empty: palette.inkFaint
         case .ready: DashSkin.ok
         case .completed: activePhase.isAccepted ? DashSkin.warn : DashSkin.ok
-        case .executing: DashSkin.accent(dark)
+        case .executing: palette.accent
         case .outcomeUnknown, .partiallyApplied: DashSkin.warn
         case .mismatch, .expired, .failed: DashSkin.danger
         }
@@ -613,7 +617,7 @@ struct DatabaseSafetyReviewSheet: View {
 
     private func riskColor(_ risk: DatabaseSafetyRiskLevel) -> Color {
         switch risk {
-        case .guarded: DashSkin.accent(dark)
+        case .guarded: palette.accent
         case .high: DashSkin.warn
         case .critical: DashSkin.danger
         }
@@ -621,7 +625,7 @@ struct DatabaseSafetyReviewSheet: View {
 
     private func warningColor(_ severity: DatabaseWarningSeverity) -> Color {
         switch severity {
-        case .information: DashSkin.accent(dark)
+        case .information: palette.accent
         case .caution: DashSkin.warn
         case .high: DashSkin.danger
         }
@@ -677,6 +681,11 @@ private struct DatabaseSafetyCard<Content: View>: View {
     let dark: Bool
     var stroke: Color?
     @ViewBuilder let content: () -> Content
+    @Environment(\.databaseAppTheme) private var appTheme
+
+    private var palette: DatabaseThemePalette {
+        DatabaseThemePalette(dark: dark, theme: appTheme)
+    }
 
     init(
         title: String,
@@ -696,7 +705,7 @@ private struct DatabaseSafetyCard<Content: View>: View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             Label(title, systemImage: symbol)
                 .font(DashSkin.serif(17))
-                .foregroundStyle(DashSkin.ink(dark))
+                .foregroundStyle(palette.ink)
                 .accessibilityAddTraits(.isHeader)
             content()
         }
@@ -704,8 +713,8 @@ private struct DatabaseSafetyCard<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .widgetBar(
             cornerRadius: 14,
-            fill: DashSkin.paper2(dark),
-            stroke: stroke ?? DashSkin.line(dark),
+            fill: palette.panel,
+            stroke: stroke ?? palette.line,
             shadow: .black.opacity(dark ? 0.22 : 0.04),
             shadowRadius: 8,
             shadowY: 4)
@@ -715,6 +724,11 @@ private struct DatabaseSafetyCard<Content: View>: View {
 private struct DatabaseSafetyFactsGrid: View {
     let facts: [DatabaseSafetyReviewFact]
     let dark: Bool
+    @Environment(\.databaseAppTheme) private var appTheme
+
+    private var palette: DatabaseThemePalette {
+        DatabaseThemePalette(dark: dark, theme: appTheme)
+    }
 
     var body: some View {
         LazyVGrid(
@@ -731,16 +745,16 @@ private struct DatabaseSafetyFactsGrid: View {
                 HStack(alignment: .top, spacing: UIScale.pt(8)) {
                     Image(systemName: fact.symbol)
                         .font(.system(size: UIScale.pt(12), weight: .semibold))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .foregroundStyle(palette.inkFaint)
                         .frame(width: UIScale.pt(16))
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                         Text(fact.label)
                             .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                            .foregroundStyle(DashSkin.inkSoft(dark))
+                            .foregroundStyle(palette.inkSoft)
                         Text(fact.value)
                             .font(.system(size: UIScale.pt(12), weight: .medium))
-                            .foregroundStyle(DashSkin.ink(dark))
+                            .foregroundStyle(palette.ink)
                             .fixedSize(horizontal: false, vertical: true)
                             .help(fact.value)
                     }
@@ -755,21 +769,26 @@ private struct DatabaseSafetyFactsGrid: View {
 private struct DatabaseSafetyCodeBlock: View {
     let text: String
     let dark: Bool
+    @Environment(\.databaseAppTheme) private var appTheme
+
+    private var palette: DatabaseThemePalette {
+        DatabaseThemePalette(dark: dark, theme: appTheme)
+    }
 
     var body: some View {
         ScrollView([.horizontal, .vertical]) {
             Text(text)
                 .font(DashSkin.mono(11))
-                .foregroundStyle(DashSkin.ink(dark))
+                .foregroundStyle(palette.ink)
                 .fixedSize(horizontal: true, vertical: true)
                 .textSelection(.enabled)
                 .padding(UIScale.pt(11))
         }
         .frame(maxWidth: .infinity, minHeight: UIScale.pt(58), maxHeight: UIScale.pt(190))
-        .background(DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+        .background(palette.canvas, in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
         .overlay {
             RoundedRectangle(cornerRadius: UIScale.pt(9))
-                .strokeBorder(DashSkin.line(dark))
+                .strokeBorder(palette.line)
         }
         .accessibilityLabel("Generated request")
         .accessibilityValue(text)
@@ -781,15 +800,20 @@ private struct DatabaseSafetyLabeledText: View {
     let text: String
     let monospaced: Bool
     let dark: Bool
+    @Environment(\.databaseAppTheme) private var appTheme
+
+    private var palette: DatabaseThemePalette {
+        DatabaseThemePalette(dark: dark, theme: appTheme)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
             Text(label)
                 .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                .foregroundStyle(DashSkin.inkSoft(dark))
+                .foregroundStyle(palette.inkSoft)
             Text(text)
                 .font(monospaced ? DashSkin.mono(10.5) : .system(size: UIScale.pt(11)))
-                .foregroundStyle(DashSkin.inkSoft(dark))
+                .foregroundStyle(palette.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
         }
@@ -803,6 +827,11 @@ private struct DatabaseSafetyPill: View {
     let symbol: String
     let accentColor: Color
     let dark: Bool
+    @Environment(\.databaseAppTheme) private var appTheme
+
+    private var palette: DatabaseThemePalette {
+        DatabaseThemePalette(dark: dark, theme: appTheme)
+    }
 
     var body: some View {
         HStack(spacing: UIScale.pt(5)) {
@@ -810,7 +839,7 @@ private struct DatabaseSafetyPill: View {
                 .foregroundStyle(accentColor)
                 .accessibilityHidden(true)
             Text(title)
-                .foregroundStyle(DashSkin.ink(dark))
+                .foregroundStyle(palette.ink)
         }
         .font(.system(size: UIScale.pt(10.5), weight: .semibold))
         .padding(.horizontal, UIScale.pt(8))
@@ -826,6 +855,11 @@ private struct DatabaseSafetyStatusLine: View {
     let symbol: String
     let color: Color
     let dark: Bool
+    @Environment(\.databaseAppTheme) private var appTheme
+
+    private var palette: DatabaseThemePalette {
+        DatabaseThemePalette(dark: dark, theme: appTheme)
+    }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(6)) {
@@ -835,7 +869,7 @@ private struct DatabaseSafetyStatusLine: View {
                 .accessibilityHidden(true)
             Text(text)
                 .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                .foregroundStyle(DashSkin.inkSoft(dark))
+                .foregroundStyle(palette.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)

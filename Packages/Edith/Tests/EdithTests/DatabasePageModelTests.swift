@@ -26,7 +26,7 @@ struct DatabasePageModelTests {
 
         #expect(
             model.failureDetail
-                == "The local database broker failed peer authentication.")
+                == "The local database service could not be verified.")
     }
 
     @Test("Repair replaces the service and returns the page to ready")

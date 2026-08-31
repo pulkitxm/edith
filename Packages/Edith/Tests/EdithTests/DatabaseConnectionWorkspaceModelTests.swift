@@ -139,7 +139,7 @@ import Testing
             return
         }
         #expect(retained.map(\.id) == [connection.id])
-        #expect(message == "The local database broker is unavailable.")
+        #expect(message == "The local database service is unavailable.")
     }
 
     @Test func selectionNeverAutoConnectsAndSessionFailuresStayIsolated() async throws {
@@ -186,7 +186,7 @@ import Testing
             Issue.record("Expected the reporting connection to fail independently.")
             return
         }
-        #expect(message == "The local database broker is unavailable.")
+        #expect(message == "The local database service is unavailable.")
         #expect(model.sessionState(for: primary.id).connectedSession?.connectionID == primary.id)
 
         let requests = await sender.recordedRequests()
