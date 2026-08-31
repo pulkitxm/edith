@@ -307,7 +307,7 @@ final class DatabaseDataWorkspaceModel {
         _ connection: DatabaseConnectionSummary,
         continuation: DatabaseContinuationToken?
     ) throws -> DatabaseBrowseRequest {
-        let pageSize = try DatabasePageSize(200)
+        let pageSize = try DatabasePageSize(100)
         let filter: DatabaseFilter?
         let normalizedFilterField = filterField.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedFilterValue = filterValue.trimmingCharacters(in: .whitespacesAndNewlines)
