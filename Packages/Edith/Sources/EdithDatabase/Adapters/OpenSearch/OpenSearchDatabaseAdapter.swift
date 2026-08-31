@@ -126,15 +126,25 @@ actor OpenSearchDatabaseAdapterSession: DatabaseAdapterSession {
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseDestructivePlan {
         try await requireAvailableContext(context)
-        throw OpenSearchDatabaseAdapterSupport.readOnlyViolation
+        return try OpenSearchDatabaseMutationSupport.normalize(
+            request,
+            connectionID: connection.id)
     }
 
     func executeMutation(
         _ plan: DatabaseDestructivePlan,
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterMutationResult {
-        try await requireAvailableContext(context)
-        throw OpenSearchDatabaseAdapterSupport.readOnlyViolation
+        let mutation = try OpenSearchDatabaseMutationSupport.execution(
+            plan,
+            connectionID: connection.id)
+        let result: OpenSearchDatabaseMutationResult = try await perform(
+            context: context,
+            fallback: OpenSearchDatabaseMutationSupport.mutationFailed
+        ) { client in
+            try await client.mutate(mutation)
+        }
+        return try OpenSearchDatabaseMutationSupport.result(result, plan: mutation)
     }
 
     func openStream(
@@ -506,6 +516,11 @@ enum OpenSearchDatabaseAdapterSupport {
         category: .unsupported,
         message: "OpenSearch streaming is unavailable; use bounded PIT pages.",
         code: "opensearch.stream.unavailable")
+    static let mutationConflict = failure(
+        category: .conflict,
+        message: "The OpenSearch document changed before the mutation was applied.",
+        code: "opensearch.mutation.conflict",
+        retry: .createNewPreview)
     static let readingUnavailable = failure(
         category: .unsupported,
         message: "Stable OpenSearch PIT pagination requires OpenSearch 3.0 or newer.",
@@ -652,12 +667,15 @@ enum OpenSearchDatabaseAdapterSupport {
             requiredVersion: "3.0")
         let unsafeReason = DatabaseCapabilityUnavailableReason(
             category: .unsafe,
-            message: "The OpenSearch adapter is strictly read-only.")
+            message: "Only guarded single-document OpenSearch mutations are available.")
         let unavailableReason = DatabaseCapabilityUnavailableReason(
             category: .notImplemented,
             message: "This capability is not provided by the bounded OpenSearch reader.")
         let alwaysAvailable: [(DatabaseCapabilityID, DatabaseCapabilityRequirement)] = [
-            (.connectionTest, .sharedRequired)
+            (.connectionTest, .sharedRequired),
+            (.insert, .sharedRequired),
+            (.update, .sharedRequired),
+            (.delete, .sharedRequired),
         ]
         let reading: [(DatabaseCapabilityID, DatabaseCapabilityRequirement)] = [
             (.query, .familyRequired),
@@ -669,9 +687,6 @@ enum OpenSearchDatabaseAdapterSupport {
             (.objectDescription, .sharedRequired),
         ]
         let unsafe: [(DatabaseCapabilityID, DatabaseCapabilityRequirement)] = [
-            (.insert, .sharedRequired),
-            (.update, .sharedRequired),
-            (.delete, .sharedRequired),
             (.bulkMutation, .sharedRequired),
             (.importData, .sharedRequired),
             (.schemaMutation, .familyRequired),
@@ -744,12 +759,13 @@ enum OpenSearchDatabaseAdapterSupport {
                     scope: "selected target"),
             ],
             pagingModes: boundedReadingAvailable ? [.pointInTime] : [],
-            mutationModes: [.unsupported],
+            mutationModes: [.singleRecord],
             transactionModes: [.none],
             cancellationModes: [.cooperative, .protocolCancellation],
             safetyLimitations: [
-                "Only fixed read-only resolve, mapping, PIT, search, and PIT close endpoints are used.",
-                "Scroll, deep offsets, scripts, mutation APIs, and arbitrary endpoint paths are rejected.",
+                "Only fixed resolve, mapping, PIT, search, create, replace, delete, and PIT close endpoints are used.",
+                "Document replacement and deletion require exact sequence-number and primary-term concurrency tokens.",
+                "Scroll, deep offsets, scripts, bulk mutation APIs, and arbitrary endpoint paths are rejected.",
                 "PIT continuations expire before their server context and bind to one session and request.",
                 "Wildcard and regular expression queries may be disabled by the server expensive query policy.",
             ],
@@ -955,6 +971,8 @@ enum OpenSearchDatabaseAdapterSupport {
             return authenticationFailed
         case .connection:
             return connectionFailed
+        case .conflict:
+            return mutationConflict
         case .invalidConfiguration:
             return invalidRequest
         case .invalidResponse:
@@ -983,7 +1001,8 @@ enum OpenSearchDatabaseAdapterSupport {
         switch failure {
         case .connection, .responseTooLarge, .timeout, .tls, .unsupportedProduct:
             return true
-        case .authentication, .invalidConfiguration, .invalidResponse, .permission, .server:
+        case .authentication, .conflict, .invalidConfiguration, .invalidResponse, .permission,
+            .server:
             return false
         }
     }

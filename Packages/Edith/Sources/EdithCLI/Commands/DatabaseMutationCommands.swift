@@ -207,9 +207,11 @@ struct DatabaseMutationsCommand: AsyncParsableCommand {
 struct DatabaseMutationDocumentRequestCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "document-request",
-        abstract: "Build a safe MongoDB or Elasticsearch document mutation request as JSON.")
+        abstract:
+            "Build a safe MongoDB, Elasticsearch, or OpenSearch document mutation request as JSON."
+    )
 
-    @Option(name: .long, help: "Database product: mongodb or elasticsearch.")
+    @Option(name: .long, help: "Database product: mongodb, elasticsearch, or opensearch.")
     var product = "mongodb"
 
     @Option(name: .long, help: "Document action: insert, update or delete.")
@@ -229,10 +231,10 @@ struct DatabaseMutationDocumentRequestCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Document _id type: object-id, string, integer or uuid.")
     var idKind = "object-id"
 
-    @Option(name: .long, help: "Elasticsearch _seq_no for update or delete.")
+    @Option(name: .long, help: "Search document _seq_no for update or delete.")
     var sequenceNumber: Int64?
 
-    @Option(name: .long, help: "Elasticsearch _primary_term for update or delete.")
+    @Option(name: .long, help: "Search document _primary_term for update or delete.")
     var primaryTerm: Int64?
 
     @Flag(name: .long, help: "Emit the mutation request as JSON.")
@@ -256,12 +258,15 @@ struct DatabaseMutationDocumentRequestCommand: AsyncParsableCommand {
             switch self.product.lowercased() {
             case "mongodb": product = .mongoDB
             case "elasticsearch": product = .elasticsearch
-            default: throw CLIFailure.usage("--product must be mongodb or elasticsearch")
+            case "opensearch": product = .openSearch
+            default:
+                throw CLIFailure.usage(
+                    "--product must be mongodb, elasticsearch or opensearch")
             }
             let fields = try document.map { path in
                 let text = try DatabaseCLIEnvironment.readQueryText(path == "-" ? nil : path)
                 do {
-                    return product == .elasticsearch
+                    return product == .elasticsearch || product == .openSearch
                         ? try DatabaseJSONDocumentCodec.decodePlainObject(text)
                         : try DatabaseJSONDocumentCodec.decodeObject(text)
                 } catch {
@@ -281,14 +286,14 @@ struct DatabaseMutationDocumentRequestCommand: AsyncParsableCommand {
                     object: DatabaseObjectIdentifier(kind: .collection, path: path),
                     record: try documentID.map { try identity($0) })
                 mutation = try mongoDBMutation(target: target, fields: fields)
-            case .elasticsearch:
+            case .elasticsearch, .openSearch:
                 guard path.count == 1, let documentID, !documentID.isEmpty else {
                     throw CLIFailure.usage(
-                        "Elasticsearch document mutations require one --path index and --document-id"
+                        "Search document mutations require one --path index and --document-id"
                     )
                 }
                 let requiresConcurrency = action.lowercased() != "insert"
-                let target = try elasticsearchTarget(
+                let target = try searchTarget(
                     connectionID: connectionID,
                     index: path[0],
                     identifier: documentID,
@@ -297,29 +302,48 @@ struct DatabaseMutationDocumentRequestCommand: AsyncParsableCommand {
                 case "insert":
                     guard let fields, sequenceNumber == nil, primaryTerm == nil else {
                         throw CLIFailure.usage(
-                            "Elasticsearch insert requires --document and no concurrency options")
+                            "Search insert requires --document and no concurrency options")
                     }
-                    mutation = try DatabaseDocumentMutationRequests.elasticsearchCreate(
-                        target: target,
-                        document: .object(fields))
+                    mutation =
+                        if product == .elasticsearch {
+                            try DatabaseDocumentMutationRequests.elasticsearchCreate(
+                                target: target,
+                                document: .object(fields))
+                        } else {
+                            try DatabaseDocumentMutationRequests.openSearchCreate(
+                                target: target,
+                                document: .object(fields))
+                        }
                 case "update":
                     guard let fields else {
-                        throw CLIFailure.usage("Elasticsearch update requires --document")
+                        throw CLIFailure.usage("Search update requires --document")
                     }
-                    mutation = try DatabaseDocumentMutationRequests.elasticsearchReplace(
-                        target: target,
-                        document: .object(fields))
+                    mutation =
+                        if product == .elasticsearch {
+                            try DatabaseDocumentMutationRequests.elasticsearchReplace(
+                                target: target,
+                                document: .object(fields))
+                        } else {
+                            try DatabaseDocumentMutationRequests.openSearchReplace(
+                                target: target,
+                                document: .object(fields))
+                        }
                 case "delete":
                     guard document == nil else {
-                        throw CLIFailure.usage("Elasticsearch delete does not accept --document")
+                        throw CLIFailure.usage("Search delete does not accept --document")
                     }
-                    mutation = try DatabaseDocumentMutationRequests.elasticsearchDelete(
-                        target: target)
+                    mutation =
+                        if product == .elasticsearch {
+                            try DatabaseDocumentMutationRequests.elasticsearchDelete(target: target)
+                        } else {
+                            try DatabaseDocumentMutationRequests.openSearchDelete(target: target)
+                        }
                 default:
                     throw CLIFailure.usage("--action must be insert, update or delete")
                 }
             default:
-                throw CLIFailure.usage("--product must be mongodb or elasticsearch")
+                throw CLIFailure.usage(
+                    "--product must be mongodb, elasticsearch or opensearch")
             }
             CLIOut.out(try DatabaseCLI.encodeDocument(mutation))
         }
@@ -356,7 +380,7 @@ struct DatabaseMutationDocumentRequestCommand: AsyncParsableCommand {
         }
     }
 
-    private func elasticsearchTarget(
+    private func searchTarget(
         connectionID: DatabaseConnectionID,
         index: String,
         identifier: String,
@@ -368,7 +392,7 @@ struct DatabaseMutationDocumentRequestCommand: AsyncParsableCommand {
                 sequenceNumber >= 0, primaryTerm >= 0
             else {
                 throw CLIFailure.usage(
-                    "Elasticsearch update and delete require non-negative --sequence-number and --primary-term"
+                    "Search update and delete require non-negative --sequence-number and --primary-term"
                 )
             }
             concurrencyTokens = [

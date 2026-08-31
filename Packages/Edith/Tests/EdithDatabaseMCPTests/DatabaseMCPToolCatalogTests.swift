@@ -73,5 +73,12 @@ import Testing
         #expect(DatabaseMCPToolCatalog.session.annotations.readOnlyHint == false)
         #expect(DatabaseMCPToolCatalog.keyMutation.annotations.destructiveHint == true)
         #expect(DatabaseMCPToolCatalog.documentMutation.annotations.destructiveHint == true)
+        let documentProperties =
+            DatabaseMCPToolCatalog.documentMutation.inputSchema.objectValue?["properties"]?
+            .objectValue
+        #expect(
+            documentProperties?["product"]?.objectValue?["enum"]?.arrayValue
+                == ["mongodb", "elasticsearch", "opensearch"])
+        #expect(documentProperties?["document"]?.objectValue?["maxProperties"]?.intValue == 4_096)
     }
 }

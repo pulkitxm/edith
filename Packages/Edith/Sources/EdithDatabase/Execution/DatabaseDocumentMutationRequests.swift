@@ -13,43 +13,40 @@ public enum DatabaseDocumentMutationRequests {
         target: DatabaseTargetIdentifier,
         document: DatabaseValue
     ) throws -> DatabaseDestructiveRequest {
-        _ = try searchIdentity(target, requiresConcurrency: false)
-        try validateSearchDocument(document)
-        return DatabaseDestructiveRequest(
-            target: target,
-            payload: .search(
-                product: .elasticsearch,
-                operation: "create",
-                parameters: [],
-                body: document))
+        try searchCreate(target: target, document: document, product: .elasticsearch)
     }
 
     public static func elasticsearchReplace(
         target: DatabaseTargetIdentifier,
         document: DatabaseValue
     ) throws -> DatabaseDestructiveRequest {
-        _ = try searchIdentity(target, requiresConcurrency: true)
-        try validateSearchDocument(document)
-        return DatabaseDestructiveRequest(
-            target: target,
-            payload: .search(
-                product: .elasticsearch,
-                operation: "replace",
-                parameters: [],
-                body: document))
+        try searchReplace(target: target, document: document, product: .elasticsearch)
     }
 
     public static func elasticsearchDelete(
         target: DatabaseTargetIdentifier
     ) throws -> DatabaseDestructiveRequest {
-        _ = try searchIdentity(target, requiresConcurrency: true)
-        return DatabaseDestructiveRequest(
-            target: target,
-            payload: .search(
-                product: .elasticsearch,
-                operation: "delete",
-                parameters: [],
-                body: .null))
+        try searchDelete(target: target, product: .elasticsearch)
+    }
+
+    public static func openSearchCreate(
+        target: DatabaseTargetIdentifier,
+        document: DatabaseValue
+    ) throws -> DatabaseDestructiveRequest {
+        try searchCreate(target: target, document: document, product: .openSearch)
+    }
+
+    public static func openSearchReplace(
+        target: DatabaseTargetIdentifier,
+        document: DatabaseValue
+    ) throws -> DatabaseDestructiveRequest {
+        try searchReplace(target: target, document: document, product: .openSearch)
+    }
+
+    public static func openSearchDelete(
+        target: DatabaseTargetIdentifier
+    ) throws -> DatabaseDestructiveRequest {
+        try searchDelete(target: target, product: .openSearch)
     }
 
     public static func mongoDBInsert(
@@ -111,6 +108,59 @@ public enum DatabaseDocumentMutationRequests {
         requiresConcurrency: Bool
     ) throws -> DatabaseSearchDocumentIdentity {
         try searchIdentity(target, requiresConcurrency: requiresConcurrency)
+    }
+
+    static func openSearchIdentity(
+        _ target: DatabaseTargetIdentifier,
+        requiresConcurrency: Bool
+    ) throws -> DatabaseSearchDocumentIdentity {
+        try searchIdentity(target, requiresConcurrency: requiresConcurrency)
+    }
+
+    private static func searchCreate(
+        target: DatabaseTargetIdentifier,
+        document: DatabaseValue,
+        product: DatabaseProduct
+    ) throws -> DatabaseDestructiveRequest {
+        _ = try searchIdentity(target, requiresConcurrency: false)
+        try validateSearchDocument(document)
+        return DatabaseDestructiveRequest(
+            target: target,
+            payload: .search(
+                product: product,
+                operation: "create",
+                parameters: [],
+                body: document))
+    }
+
+    private static func searchReplace(
+        target: DatabaseTargetIdentifier,
+        document: DatabaseValue,
+        product: DatabaseProduct
+    ) throws -> DatabaseDestructiveRequest {
+        _ = try searchIdentity(target, requiresConcurrency: true)
+        try validateSearchDocument(document)
+        return DatabaseDestructiveRequest(
+            target: target,
+            payload: .search(
+                product: product,
+                operation: "replace",
+                parameters: [],
+                body: document))
+    }
+
+    private static func searchDelete(
+        target: DatabaseTargetIdentifier,
+        product: DatabaseProduct
+    ) throws -> DatabaseDestructiveRequest {
+        _ = try searchIdentity(target, requiresConcurrency: true)
+        return DatabaseDestructiveRequest(
+            target: target,
+            payload: .search(
+                product: product,
+                operation: "delete",
+                parameters: [],
+                body: .null))
     }
 
     private static func validateTarget(

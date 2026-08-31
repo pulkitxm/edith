@@ -553,6 +553,49 @@ import Testing
                 ]))
     }
 
+    @Test func openSearchDocumentMutationCarriesConcurrencyAndPlainJSON() async throws {
+        let sender = DatabaseMCPScriptedSender([])
+        let handler = DatabaseMCPToolHandler(sender: sender)
+        _ = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_document_mutation",
+                arguments: [
+                    "mode": "preview",
+                    "connection_id": .string(
+                        DatabaseMCPFixtures.connectionID.rawValue.uuidString),
+                    "product": "opensearch",
+                    "action": "update",
+                    "index": "edith-documents-v1",
+                    "document_id": "doc-1",
+                    "sequence_number": 7,
+                    "primary_term": 2,
+                    "document": .object([
+                        "event": .object(["$date": "literal"]),
+                        "title": "updated",
+                    ]),
+                ]))
+
+        let requests = await sender.recordedRequests()
+        let mutation = try #require(requests.first?.mutationPreviewRequest?.mutation)
+        #expect(mutation.target.object?.kind == .index)
+        #expect(mutation.target.record?.kind == .searchDocument)
+        #expect(
+            mutation.target.record?.concurrencyTokens.map(\.value) == [
+                .signedInteger(7), .signedInteger(2),
+            ])
+        #expect(mutation.payload.product == .openSearch)
+        #expect(mutation.payload.command == "replace")
+        guard case .object(let fields) = mutation.payload.body else {
+            Issue.record("expected an OpenSearch document body")
+            return
+        }
+        #expect(
+            fields.first(where: { $0.name == "event" })?.value
+                == .object([
+                    DatabaseObjectField(name: "$date", value: .string("literal"))
+                ]))
+    }
+
     @Test func operationListPreservesFiltersProgressAndTarget() async throws {
         let operation = try DatabaseMCPFixtures.operation()
         let sender = DatabaseMCPScriptedSender([

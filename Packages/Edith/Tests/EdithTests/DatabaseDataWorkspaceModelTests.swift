@@ -325,6 +325,36 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(model.canSubmitEditor)
     }
 
+    @Test("OpenSearch document editor creates guarded search mutations")
+    func openSearchDocumentMutationRequests() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [Self.elasticsearchResponse()])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .openSearch)
+        model.prepare(for: connection)
+        model.targetText = "edith-documents-v1"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        model.selectRecord(at: 0)
+        model.beginEditingSelectedRow(connection)
+        model.updateDocumentText("{\"_id\":\"doc-1\",\"title\":\"updated\"}")
+        let update = try #require(model.editorMutationRequest(connection))
+        #expect(update.payload.product == .openSearch)
+        #expect(update.payload.command == "replace")
+        #expect(update.target.record?.concurrencyTokens.count == 2)
+
+        let deletion = try #require(model.deleteMutationRequest(connection))
+        #expect(deletion.payload.product == .openSearch)
+        #expect(deletion.payload.command == "delete")
+
+        model.beginInsert(connection)
+        model.updateDocumentText("{\"_id\":\"doc-new\",\"title\":\"created\"}")
+        let insert = try #require(model.editorMutationRequest(connection))
+        #expect(insert.payload.product == .openSearch)
+        #expect(insert.payload.command == "create")
+        #expect(insert.target.record?.concurrencyTokens.isEmpty == true)
+    }
+
     private static func connection(
         product: DatabaseProduct
     ) throws -> DatabaseConnectionSummary {
