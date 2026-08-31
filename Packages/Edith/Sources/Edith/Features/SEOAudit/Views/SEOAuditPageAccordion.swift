@@ -42,7 +42,7 @@ struct SEOAuditPageAccordion: View {
                 .frame(minHeight: UIScale.pt(58))
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             if expanded {
                 Divider().padding(.horizontal, UIScale.pt(14))
                 detail

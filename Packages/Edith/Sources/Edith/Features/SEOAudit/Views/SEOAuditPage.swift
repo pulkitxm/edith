@@ -214,7 +214,7 @@ private struct SEOAuditProjectCard: View {
             .shadow(color: .black.opacity(hovered ? 0.1 : 0.04), radius: hovered ? 12 : 4, y: 3)
             .scaleEffect(hovered ? 1.008 : 1)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .onHover { hovered = $0 }
         .animation(.easeOut(duration: 0.16), value: hovered)
         .accessibilityLabel("Open \(project.name)")
