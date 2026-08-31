@@ -216,9 +216,9 @@ public struct DatabaseMCPToolHandler: Sendable {
         try Self.rejectUnknown(
             arguments,
             allowed: [
-                "mode", "connection_id", "action", "database", "collection", "document",
-                "document_id", "id_kind", "confirmation_token", "confirmation_text",
-                "timeout_ms",
+                "mode", "connection_id", "product", "action", "database", "collection",
+                "index", "document", "document_id", "id_kind", "sequence_number",
+                "primary_term", "confirmation_token", "confirmation_text", "timeout_ms",
             ])
         let request = try Self.documentMutationRequest(in: arguments)
         return try await mutation(arguments: arguments, request: request)
@@ -1169,16 +1169,14 @@ public struct DatabaseMCPToolHandler: Sendable {
         in arguments: [String: Value]
     ) throws -> DatabaseDestructiveRequest {
         let connectionID = try connectionID(in: arguments)
-        let database = try requiredString("database", in: arguments)
-        let collection = try requiredString("collection", in: arguments)
-        guard !database.isEmpty, !collection.isEmpty,
-            database.utf8.count <= 255, collection.utf8.count <= 255
-        else {
+        let product = try requiredString("product", in: arguments)
+        guard product == "mongodb" || product == "elasticsearch" else {
             throw DatabaseMCPInputError(
-                message: "database and collection must be non-empty and at most 255 bytes.")
+                message: "product must be mongodb or elasticsearch.")
         }
         let document = try arguments["document"].map { value -> [DatabaseObjectField] in
-            guard let object = value.objectValue, object.count <= 256 else {
+            let maximumFields = product == "mongodb" ? 256 : 4_096
+            guard let object = value.objectValue, object.count <= maximumFields else {
                 throw DatabaseMCPInputError(message: "document must be a JSON object.")
             }
             var remaining = 4_096
@@ -1191,52 +1189,163 @@ public struct DatabaseMCPToolHandler: Sendable {
                         object[name]!,
                         depth: 0,
                         remaining: &remaining,
-                        remainingBytes: &remainingBytes))
+                        remainingBytes: &remainingBytes,
+                        extendedJSON: product == "mongodb"))
             }
         }
         let documentID = try optionalString("document_id", in: arguments)
+        do {
+            if product == "mongodb" {
+                return try mongoDBDocumentMutation(
+                    arguments: arguments,
+                    connectionID: connectionID,
+                    documentID: documentID,
+                    document: document)
+            }
+            return try elasticsearchDocumentMutation(
+                arguments: arguments,
+                connectionID: connectionID,
+                documentID: documentID,
+                document: document)
+        } catch let error as DatabaseMCPInputError {
+            throw error
+        } catch {
+            throw DatabaseMCPInputError(message: "The document mutation request is invalid.")
+        }
+    }
+
+    private static func mongoDBDocumentMutation(
+        arguments: [String: Value],
+        connectionID: DatabaseConnectionID,
+        documentID: String?,
+        document: [DatabaseObjectField]?
+    ) throws -> DatabaseDestructiveRequest {
+        guard arguments["index"] == nil, arguments["sequence_number"] == nil,
+            arguments["primary_term"] == nil,
+            let database = try optionalString("database", in: arguments),
+            let collection = try optionalString("collection", in: arguments),
+            !database.isEmpty, !collection.isEmpty,
+            database.utf8.count <= 255, collection.utf8.count <= 255
+        else {
+            throw DatabaseMCPInputError(
+                message:
+                    "MongoDB document mutations require database and collection without Elasticsearch fields."
+            )
+        }
         let target = DatabaseTargetIdentifier(
             connectionID: connectionID,
-            object: DatabaseObjectIdentifier(
-                kind: .collection,
-                path: [database, collection]),
+            object: DatabaseObjectIdentifier(kind: .collection, path: [database, collection]),
             record: try documentID.map {
                 try documentIdentity(
                     $0,
                     kind: try optionalString("id_kind", in: arguments) ?? "object-id")
             })
-        do {
-            switch try requiredString("action", in: arguments) {
-            case "insert":
-                guard documentID == nil, let document else {
-                    throw DatabaseMCPInputError(
-                        message: "insert requires document and does not accept document_id.")
-                }
-                return try DatabaseDocumentMutationRequests.mongoDBInsert(
-                    target: target,
-                    document: .object(document))
-            case "update":
-                guard documentID != nil, let document else {
-                    throw DatabaseMCPInputError(
-                        message: "update requires document_id and document.")
-                }
-                return try DatabaseDocumentMutationRequests.mongoDBUpdate(
-                    target: target,
-                    values: document)
-            case "delete":
-                guard documentID != nil, document == nil else {
-                    throw DatabaseMCPInputError(
-                        message: "delete requires document_id and does not accept document.")
-                }
-                return try DatabaseDocumentMutationRequests.mongoDBDelete(target: target)
-            default:
+        switch try requiredString("action", in: arguments) {
+        case "insert":
+            guard documentID == nil, let document else {
                 throw DatabaseMCPInputError(
-                    message: "action must be insert, update or delete.")
+                    message: "insert requires document and does not accept document_id.")
             }
-        } catch let error as DatabaseMCPInputError {
-            throw error
-        } catch {
-            throw DatabaseMCPInputError(message: "The document mutation request is invalid.")
+            return try DatabaseDocumentMutationRequests.mongoDBInsert(
+                target: target,
+                document: .object(document))
+        case "update":
+            guard documentID != nil, let document else {
+                throw DatabaseMCPInputError(
+                    message: "update requires document_id and document.")
+            }
+            return try DatabaseDocumentMutationRequests.mongoDBUpdate(
+                target: target,
+                values: document)
+        case "delete":
+            guard documentID != nil, document == nil else {
+                throw DatabaseMCPInputError(
+                    message: "delete requires document_id and does not accept document.")
+            }
+            return try DatabaseDocumentMutationRequests.mongoDBDelete(target: target)
+        default:
+            throw DatabaseMCPInputError(message: "action must be insert, update or delete.")
+        }
+    }
+
+    private static func elasticsearchDocumentMutation(
+        arguments: [String: Value],
+        connectionID: DatabaseConnectionID,
+        documentID: String?,
+        document: [DatabaseObjectField]?
+    ) throws -> DatabaseDestructiveRequest {
+        guard arguments["database"] == nil, arguments["collection"] == nil,
+            arguments["id_kind"] == nil,
+            let index = try optionalString("index", in: arguments),
+            !index.isEmpty, index.utf8.count <= 255,
+            let documentID, !documentID.isEmpty, documentID.utf8.count <= 512
+        else {
+            throw DatabaseMCPInputError(
+                message:
+                    "Elasticsearch document mutations require index and document_id without MongoDB fields."
+            )
+        }
+        let action = try requiredString("action", in: arguments)
+        let requiresConcurrency = action != "insert"
+        let sequenceNumber = try optionalInt("sequence_number", in: arguments)
+        let primaryTerm = try optionalInt("primary_term", in: arguments)
+        let concurrencyTokens: [DatabaseIdentityComponent]
+        if requiresConcurrency {
+            guard let sequenceNumber, let primaryTerm,
+                sequenceNumber >= 0, primaryTerm >= 0
+            else {
+                throw DatabaseMCPInputError(
+                    message:
+                        "Elasticsearch update and delete require sequence_number and primary_term."
+                )
+            }
+            concurrencyTokens = [
+                DatabaseIdentityComponent(
+                    name: "_seq_no",
+                    value: .signedInteger(Int64(sequenceNumber))),
+                DatabaseIdentityComponent(
+                    name: "_primary_term",
+                    value: .signedInteger(Int64(primaryTerm))),
+            ]
+        } else {
+            guard sequenceNumber == nil, primaryTerm == nil else {
+                throw DatabaseMCPInputError(
+                    message: "Elasticsearch insert does not accept concurrency fields.")
+            }
+            concurrencyTokens = []
+        }
+        let target = DatabaseTargetIdentifier(
+            connectionID: connectionID,
+            object: DatabaseObjectIdentifier(kind: .index, path: [index]),
+            record: DatabaseRecordIdentity(
+                kind: .searchDocument,
+                components: [
+                    DatabaseIdentityComponent(name: "_index", value: .string(index)),
+                    DatabaseIdentityComponent(name: "_id", value: .string(documentID)),
+                ],
+                concurrencyTokens: concurrencyTokens))
+        switch action {
+        case "insert":
+            guard let document else {
+                throw DatabaseMCPInputError(message: "insert requires document.")
+            }
+            return try DatabaseDocumentMutationRequests.elasticsearchCreate(
+                target: target,
+                document: .object(document))
+        case "update":
+            guard let document else {
+                throw DatabaseMCPInputError(message: "update requires document.")
+            }
+            return try DatabaseDocumentMutationRequests.elasticsearchReplace(
+                target: target,
+                document: .object(document))
+        case "delete":
+            guard document == nil else {
+                throw DatabaseMCPInputError(message: "delete does not accept document.")
+            }
+            return try DatabaseDocumentMutationRequests.elasticsearchDelete(target: target)
+        default:
+            throw DatabaseMCPInputError(message: "action must be insert, update or delete.")
         }
     }
 
@@ -1283,7 +1392,8 @@ public struct DatabaseMCPToolHandler: Sendable {
         _ value: Value,
         depth: Int,
         remaining: inout Int,
-        remainingBytes: inout Int
+        remainingBytes: inout Int,
+        extendedJSON: Bool
     ) throws -> DatabaseValue {
         guard depth <= 16, remaining > 0 else {
             throw DatabaseMCPInputError(message: "document exceeds the bounded value limit.")
@@ -1314,10 +1424,11 @@ public struct DatabaseMCPToolHandler: Sendable {
                         $0,
                         depth: depth + 1,
                         remaining: &remaining,
-                        remainingBytes: &remainingBytes)
+                        remainingBytes: &remainingBytes,
+                        extendedJSON: extendedJSON)
                 })
         case .object(let fields):
-            if fields.count == 1 {
+            if extendedJSON, fields.count == 1 {
                 if let raw = fields["$oid"]?.stringValue {
                     return .productSpecific(
                         DatabaseProductValue(
@@ -1341,7 +1452,8 @@ public struct DatabaseMCPToolHandler: Sendable {
                             fields[name]!,
                             depth: depth + 1,
                             remaining: &remaining,
-                            remainingBytes: &remainingBytes))
+                            remainingBytes: &remainingBytes,
+                            extendedJSON: extendedJSON))
                 })
         }
     }
