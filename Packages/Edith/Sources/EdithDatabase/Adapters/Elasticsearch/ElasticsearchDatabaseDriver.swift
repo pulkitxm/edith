@@ -483,6 +483,29 @@ struct ElasticsearchDatabaseResolveResponse: Decodable, Sendable {
         let dataStream: String?
         let mode: String?
 
+        init(
+            name: String,
+            aliases: [String],
+            attributes: [String],
+            dataStream: String?,
+            mode: String?
+        ) {
+            self.name = name
+            self.aliases = aliases
+            self.attributes = attributes
+            self.dataStream = dataStream
+            self.mode = mode
+        }
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            name = try container.decode(String.self, forKey: .name)
+            aliases = try container.decodeIfPresent([String].self, forKey: .aliases) ?? []
+            attributes = try container.decodeIfPresent([String].self, forKey: .attributes) ?? []
+            dataStream = try container.decodeIfPresent(String.self, forKey: .dataStream)
+            mode = try container.decodeIfPresent(String.self, forKey: .mode)
+        }
+
         private enum CodingKeys: String, CodingKey {
             case name
             case aliases

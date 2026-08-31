@@ -665,6 +665,24 @@ private func elasticsearchReadingSession(
     await session.disconnect()
 }
 
+@Test func elasticsearchResolveDecoderAcceptsNineFiveIndexShape() throws {
+    let data = Data(
+        #"""
+        {
+          "indices": [{"name":"edith-mutation-v1","attributes":["open"],"mode":"standard"}],
+          "aliases": [],
+          "data_streams": []
+        }
+        """#.utf8)
+
+    let response = try JSONDecoder().decode(ElasticsearchDatabaseResolveResponse.self, from: data)
+
+    #expect(response.indices.count == 1)
+    #expect(response.indices.first?.name == "edith-mutation-v1")
+    #expect(response.indices.first?.aliases == [])
+    #expect(response.indices.first?.attributes == ["open"])
+}
+
 @Test func elasticsearchReadingDegradesMetadataPermissionWithoutLeakingDetails() async throws {
     let definition = try ElasticsearchDatabaseReadingFixtures.definition()
     let client = ElasticsearchDatabaseReadingClient(resolveFailure: .permission(403))
