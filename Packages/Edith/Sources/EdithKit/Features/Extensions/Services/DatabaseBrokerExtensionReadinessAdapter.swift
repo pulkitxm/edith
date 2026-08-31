@@ -20,13 +20,13 @@ struct DatabaseBrokerExtensionReadinessAdapter: Sendable {
     func readiness() async -> ExtensionAdapterReadiness {
         do {
             try await ensureReady()
-            return .ready("The authenticated local database broker is ready.")
+            return .ready("The secure local database service is ready.")
         } catch is CancellationError {
-            return .loading("The local database broker readiness check was cancelled.")
+            return .loading("The database service check was cancelled.")
         } catch let error as DatabaseBrokerAvailabilityError {
             return readiness(for: error)
         } catch {
-            return .failed("The local database broker readiness check failed.")
+            return .failed("The database service check failed.")
         }
     }
 
@@ -35,15 +35,15 @@ struct DatabaseBrokerExtensionReadinessAdapter: Sendable {
     ) -> ExtensionAdapterReadiness {
         switch error {
         case .readinessTimedOut:
-            .failed("The local database broker did not become ready in time.")
+            .failed("The database service did not become ready in time.")
         case .versionTransitionTimedOut:
-            .failed("The local database broker could not finish updating in time.")
+            .failed("The database service could not finish updating in time.")
         case .unsafePeer:
-            .failed("The local database broker failed peer authentication.")
+            .failed("The database service could not verify the local app.")
         case .outcomeUnknown:
-            .failed("The local database broker could not confirm its readiness outcome.")
+            .failed("The database service could not confirm its current state.")
         case .unavailable:
-            .failed("The local database broker is unavailable.")
+            .failed("The database service is unavailable.")
         }
     }
 }

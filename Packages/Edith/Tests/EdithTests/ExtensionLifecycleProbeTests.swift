@@ -342,7 +342,7 @@ import EdithDatabase
             ensureReady: {}
         ).readiness()
 
-        #expect(readiness == .ready("The authenticated local database broker is ready."))
+        #expect(readiness == .ready("The secure local database service is ready."))
     }
 
     @Test func databaseBrokerReadinessAdapterReportsUnavailable() async {
@@ -352,7 +352,7 @@ import EdithDatabase
             }
         ).readiness()
 
-        #expect(readiness == .failed("The local database broker is unavailable."))
+        #expect(readiness == .failed("The database service is unavailable."))
     }
 
     @Test func databaseBrokerReadinessAdapterReportsTimeouts() async {
@@ -369,10 +369,10 @@ import EdithDatabase
 
         #expect(
             readinessTimeout
-                == .failed("The local database broker did not become ready in time."))
+                == .failed("The database service did not become ready in time."))
         #expect(
             transitionTimeout
-                == .failed("The local database broker could not finish updating in time."))
+                == .failed("The database service could not finish updating in time."))
     }
 
     @Test func databaseBrokerReadinessAdapterReportsUnsafePeer() async {
@@ -384,7 +384,7 @@ import EdithDatabase
 
         #expect(
             readiness
-                == .failed("The local database broker failed peer authentication."))
+                == .failed("The database service could not verify the local app."))
     }
 
     @Test func herdrSnapshotsMapSessionAndHostHealth() {
