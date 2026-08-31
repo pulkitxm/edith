@@ -1,3 +1,4 @@
+import EdithDatabase
 import MCP
 
 public enum DatabaseMCPToolName: String, CaseIterable, Sendable {
@@ -545,10 +546,7 @@ public enum DatabaseMCPToolCatalog {
             "connection_id": uuidSchema,
             "object_kind": .object([
                 "type": "string",
-                "enum": .array([
-                    "table", "view", "materializedView", "key", "collection", "alias",
-                    "dataStream", "dictionary", "other",
-                ]),
+                "enum": .array(DatabaseObjectKind.allCases.map { .string($0.rawValue) }),
             ]),
             "object_path": .object([
                 "type": "array",

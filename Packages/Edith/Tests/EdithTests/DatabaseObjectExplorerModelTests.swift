@@ -191,6 +191,34 @@ struct DatabaseObjectExplorerModelTests {
             model.groups.first?.objects.map(\.identifier.kind) == [.index, .alias, .dataStream])
     }
 
+    @Test("OpenSearch discovers indices, aliases, and data streams")
+    func openSearchDiscovery() async throws {
+        let sender = DatabaseObjectExplorerScriptedSender(responses: [
+            Self.response(records: [
+                Self.relation("products", kind: .index),
+                Self.relation("products-current", kind: .alias),
+                Self.relation("logs", kind: .dataStream),
+            ])
+        ])
+        let model = DatabaseObjectExplorerModel(sender: sender)
+        let connection = try Self.connection(product: .openSearch)
+
+        model.load(connection)
+        await Self.waitUntil { model.groups.first?.state == .loaded }
+
+        let request = try #require(await sender.recordedRequests().first?.browseRequest)
+        #expect(
+            request.target.object
+                == DatabaseObjectIdentifier(kind: .server, path: ["indices"]))
+        #expect(model.groups.first?.title == "Search objects")
+        #expect(
+            model.groups.first?.objects.map(\.identifier.path) == [
+                ["products"], ["products-current"], ["logs"],
+            ])
+        #expect(
+            model.groups.first?.objects.map(\.identifier.kind) == [.index, .alias, .dataStream])
+    }
+
     private static func connection(
         product: DatabaseProduct,
         logicalDatabase: String? = nil

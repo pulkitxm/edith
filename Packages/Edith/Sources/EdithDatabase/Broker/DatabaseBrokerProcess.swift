@@ -184,6 +184,7 @@ enum DatabaseBrokerLiveAdapterFactory {
             RedisValkeyDatabaseAdapter(),
             MongoDBDatabaseAdapter(),
             ElasticsearchDatabaseAdapter(),
+            OpenSearchDatabaseAdapter(),
             PostgreSQLDatabaseAdapter(),
         ]
     }
