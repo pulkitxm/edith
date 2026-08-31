@@ -397,7 +397,7 @@ private struct SQLiteDatabaseAdapterIdentityColumn: Sendable {
 
 private struct SQLiteDatabaseAdapterIdentityPlan: Sendable {
     let columns: [SQLiteDatabaseAdapterIdentityColumn]
-    let kind: DatabaseRecordIdentityKind
+    let kind: DatabaseRecordIdentityKind?
 }
 
 private struct SQLiteDatabaseAdapterSQLFragment: Sendable {
@@ -554,9 +554,21 @@ private enum SQLiteDatabaseAdapterSupport {
         deadline: Date?
     ) throws -> SQLiteDatabaseAdapterReadOutput {
         try validateConsistency(request.consistency, failure: invalidRead)
+        if isObjectDiscoveryTarget(request.target, connectionID: connectionID) {
+            return try discoverObjects(
+                request,
+                connectionID: connectionID,
+                database: database,
+                deadline: deadline)
+        }
         let target = try browseTarget(request.target, connectionID: connectionID)
         let offset = try continuationOffset(request.continuation, kind: .browse)
-        guard try database.tableExists(target.table, in: target.schema) else {
+        guard try objectExists(
+            database: database,
+            schema: target.schema,
+            name: target.table,
+            kind: target.kind)
+        else {
             throw invalidRead
         }
         let discoveredColumns = try tableColumns(
@@ -564,12 +576,15 @@ private enum SQLiteDatabaseAdapterSupport {
             schema: target.schema,
             table: target.table)
         let tableAlias = "_edith_table"
-        let identity = try identityPlan(
-            database: database,
-            schema: target.schema,
-            table: target.table,
-            available: discoveredColumns,
-            sourceAlias: tableAlias)
+        let identity =
+            target.kind == .table
+            ? try identityPlan(
+                database: database,
+                schema: target.schema,
+                table: target.table,
+                available: discoveredColumns,
+                sourceAlias: tableAlias)
+            : SQLiteDatabaseAdapterIdentityPlan(columns: [], kind: nil)
         let nonNullIdentityNames = Set(
             identity.kind == .primaryKey
                 ? identity.columns.map { fold($0.name) }
@@ -596,6 +611,7 @@ private enum SQLiteDatabaseAdapterSupport {
             available: columns,
             sourceAlias: tableAlias,
             identityColumns: identity.columns,
+            fallbackColumns: selected.map(\.source),
             failure: invalidRead)
         var selections = selected.map { selectedColumn in
             let source = qualified(tableAlias, selectedColumn.source.name)
@@ -624,6 +640,66 @@ private enum SQLiteDatabaseAdapterSupport {
             selected: selected,
             identityColumns: identity.columns,
             identityKind: identity.kind,
+            pageSize: request.pageSize.value,
+            offset: offset,
+            deadline: deadline)
+    }
+
+    private static func discoverObjects(
+        _ request: DatabaseAdapterPageRequest,
+        connectionID: DatabaseConnectionID,
+        database: Database,
+        deadline: Date?
+    ) throws -> SQLiteDatabaseAdapterReadOutput {
+        guard request.target.connectionID == connectionID,
+            request.target.record == nil,
+            request.filter == nil,
+            request.sorts.isEmpty,
+            request.projection == nil,
+            let object = request.target.object,
+            object.nativeIdentifier == nil,
+            object.kind == .database || object.kind == .schema,
+            object.path.count <= 1
+        else {
+            throw invalidRead
+        }
+        let schema = object.path.first?.lowercased() ?? "main"
+        guard schema == "main" || schema == "temp" else {
+            throw invalidRead
+        }
+        let offset = try continuationOffset(request.continuation, kind: .browse)
+        let columns = [
+            SQLiteDatabaseAdapterColumn(
+                name: "name",
+                typeName: "text",
+                isNullable: false,
+                primaryKeyIndex: 0),
+            SQLiteDatabaseAdapterColumn(
+                name: "kind",
+                typeName: "text",
+                isNullable: false,
+                primaryKeyIndex: 0),
+        ]
+        let selected = columns.map {
+            SQLiteDatabaseAdapterSelectedColumn(source: $0, outputName: $0.name)
+        }
+        let sql = """
+            SELECT name, CASE type WHEN 'view' THEN 'view' ELSE 'table' END AS kind
+            FROM \(quote(schema)).sqlite_schema
+            WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%'
+            ORDER BY type, name
+            LIMIT ? OFFSET ?
+            """
+        let statement = try database.makeStatement(sql: sql)
+        return try fetchPage(
+            statement: statement,
+            arguments: StatementArguments([
+                Int64(request.pageSize.value + 1),
+                Int64(offset),
+            ]),
+            selected: selected,
+            identityColumns: [],
+            identityKind: nil,
             pageSize: request.pageSize.value,
             offset: offset,
             deadline: deadline)
@@ -792,11 +868,11 @@ private enum SQLiteDatabaseAdapterSupport {
     private static func browseTarget(
         _ target: DatabaseTargetIdentifier,
         connectionID: DatabaseConnectionID
-    ) throws -> (schema: String, table: String) {
+    ) throws -> (schema: String, table: String, kind: DatabaseObjectKind) {
         guard target.connectionID == connectionID,
             target.record == nil,
             let object = target.object,
-            object.kind == .table,
+            object.kind == .table || object.kind == .view,
             object.nativeIdentifier == nil,
             object.path.count == 1 || object.path.count == 2
         else {
@@ -815,7 +891,32 @@ private enum SQLiteDatabaseAdapterSupport {
             throw invalidRead
         }
         try validateResultIdentifier(table, failure: invalidRead)
-        return (schema, table)
+        return (schema, table, object.kind)
+    }
+
+    private static func isObjectDiscoveryTarget(
+        _ target: DatabaseTargetIdentifier,
+        connectionID: DatabaseConnectionID
+    ) -> Bool {
+        guard target.connectionID == connectionID,
+            target.record == nil,
+            let object = target.object
+        else { return false }
+        return object.kind == .database || object.kind == .schema
+    }
+
+    private static func objectExists(
+        database: Database,
+        schema: String,
+        name: String,
+        kind: DatabaseObjectKind
+    ) throws -> Bool {
+        let type = kind == .view ? "view" : "table"
+        let count = try Int.fetchOne(
+            database,
+            sql: "SELECT 1 FROM \(quote(schema)).sqlite_schema WHERE type = ? AND name = ? LIMIT 1",
+            arguments: [type, name])
+        return count == 1
     }
 
     private static func validateQueryTarget(
@@ -1058,6 +1159,7 @@ private enum SQLiteDatabaseAdapterSupport {
         available: [SQLiteDatabaseAdapterColumn],
         sourceAlias: String,
         identityColumns: [SQLiteDatabaseAdapterIdentityColumn],
+        fallbackColumns: [SQLiteDatabaseAdapterColumn],
         failure: DatabaseAdapterFailure
     ) throws -> [String] {
         var terms = try orderSQL(
@@ -1072,6 +1174,9 @@ private enum SQLiteDatabaseAdapterSupport {
         for identityColumn in identityColumns where !sortedNames.contains(fold(identityColumn.name))
         {
             terms.append("\(identityColumn.expression) ASC")
+        }
+        if terms.isEmpty {
+            terms = fallbackColumns.map { "\(qualified(sourceAlias, $0.name)) ASC" }
         }
         guard !terms.isEmpty else {
             throw failure
