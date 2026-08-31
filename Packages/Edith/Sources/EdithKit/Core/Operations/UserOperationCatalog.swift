@@ -1,4 +1,5 @@
 import EdithCore
+import EdithDatabase
 
 public enum UserOperationCatalog {
     private static let machineRegistrations: [RegisteredUserOperation] = {
@@ -144,6 +145,9 @@ public enum UserOperationCatalog {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         + AppMaintenanceOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + DatabaseConnectionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         + WorkspaceOperation.allCases.map {
@@ -1085,6 +1089,17 @@ private extension ColorPickerOperation {
         switch self {
         case .pick:
             userInterface("Colour picker", "open the system loupe")
+        }
+    }
+}
+
+private extension DatabaseConnectionOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .add:
+            userInterface(
+                "Database page", "test and save a database connection",
+                ["Analytics staging", "--product", "postgresql"])
         }
     }
 }
