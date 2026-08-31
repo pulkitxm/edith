@@ -15,13 +15,15 @@ public struct SSHExecResult: Sendable {
     public var succeeded: Bool { status == 0 }
 }
 
-private enum SSHTransportDiagnostics {
+enum SSHTransportDiagnostics {
+    static func isMultiplexingWarning(_ line: String) -> Bool {
+        line.trimmingCharacters(in: .whitespacesAndNewlines)
+            .hasPrefix("mux_client_request_session: session request failed:")
+    }
+
     static func cleanStderr(_ text: String) -> String {
         text.split(separator: "\n", omittingEmptySubsequences: false)
-            .filter { line in
-                !line.trimmingCharacters(in: .whitespacesAndNewlines)
-                    .hasPrefix("mux_client_request_session: session request failed:")
-            }
+            .filter { !isMultiplexingWarning(String($0)) }
             .joined(separator: "\n")
     }
 }
