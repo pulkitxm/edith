@@ -98,7 +98,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             let value =
                 parent.records[row].fields.first(where: { $0.name == identifier.rawValue })?
                 .value ?? .missing
-            let rendered = parent.text(value)
+            let rendered = bounded(parent.text(value))
             textField.stringValue = rendered
             textField.alignment = .left
             textField.textColor = value.isAbsent ? .tertiaryLabelColor : .labelColor
@@ -265,6 +265,12 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             default:
                 return max(160, titleWidth)
             }
+        }
+
+        private func bounded(_ value: String) -> String {
+            let compact = value.replacingOccurrences(of: "\n", with: " ")
+            guard compact.count > 512 else { return compact }
+            return "\(compact.prefix(511))…"
         }
 
         private static let rowColumnIdentifier = "__database_row_number"
