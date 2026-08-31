@@ -49,7 +49,7 @@ extension DatabaseCLI {
 
     static func encodeDocument<Value: Encodable>(_ value: Value) throws -> String {
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         do {
             let data = try encoder.encode(value)
             guard let text = String(data: data, encoding: .utf8) else {
@@ -199,7 +199,8 @@ struct DatabaseMutationsCommand: AsyncParsableCommand {
             DatabaseMutationStatusCommand.self,
             DatabaseMutationCancelCommand.self,
             DatabaseMutationOutcomeCommand.self,
-        ])
+        ],
+        defaultSubcommand: DatabaseMutationRowRequestCommand.self)
 }
 
 struct DatabaseMutationKeyRequestCommand: AsyncParsableCommand {
@@ -225,11 +226,15 @@ struct DatabaseMutationKeyRequestCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Positive TTL in milliseconds, or -1 for no expiry.")
     var ttlMilliseconds: Int64?
 
+    @Flag(name: .long, help: "Emit the mutation request as JSON.")
+    var json = false
+
     @Argument(help: "The saved Redis or Valkey connection UUID.")
     var connectionID: String
 
     func run() async throws {
         try await execute {
+            _ = json
             let product: DatabaseProduct
             switch self.product.lowercased() {
             case "redis": product = .redis
@@ -316,11 +321,15 @@ struct DatabaseMutationRowRequestCommand: AsyncParsableCommand {
     @Option(name: .long, help: "DatabaseObjectField array JSON file for insert or update.")
     var values: String?
 
+    @Flag(name: .long, help: "Emit the mutation request as JSON.")
+    var json = false
+
     @Argument(help: "The saved PostgreSQL connection UUID.")
     var connectionID: String
 
     func run() async throws {
         try await execute {
+            _ = json
             guard path.count == 2,
                 path.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
             else {
