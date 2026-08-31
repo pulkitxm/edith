@@ -45,6 +45,8 @@ private actor CLIDatabaseMCPRunRecorder {
         uuidString: "36FC476B-28F7-4C1A-AE54-4B10D793FD0F")!
     private static let secretUUID = UUID(
         uuidString: "89E9D935-71EC-455A-A43A-C5301D7C6635")!
+    private static let queryUUID = UUID(
+        uuidString: "7565FB65-A823-4F88-93F3-61CD6558E590")!
     private static let completeMetadata = DatabaseResultMetadata(
         completeness: DatabaseResultCompleteness(state: .complete))
 
@@ -57,6 +59,9 @@ private actor CLIDatabaseMCPRunRecorder {
             try EdRoot.parseAsRoot(["database", "connections", "ls"])
                 is DatabaseConnectionsListCommand)
         #expect(try EdRoot.parseAsRoot(["database", "mcp"]) is DatabaseMCPCommand)
+        #expect(
+            try EdRoot.parseAsRoot(["database", "saved-queries"])
+                is DatabaseSavedQueriesListCommand)
     }
 
     @Test func databaseCompletionRegistersRoutesFlagsAndFreeConnectionIDs() {
@@ -72,12 +77,18 @@ private actor CLIDatabaseMCPRunRecorder {
         #expect(
             plan(["ed", "database", ""], 2).candidates
                 == [
-                    "connections", "capabilities", "connect", "disconnect", "browse", "query",
-                    "operations", "mcp",
+                    "connections", "saved-queries", "capabilities", "connect", "disconnect",
+                    "browse", "query", "operations", "mcp",
                 ])
         #expect(
             plan(["ed", "database", "connections", ""], 3).candidates
-                == ["list", "ls", "get", "add", "test"])
+                == [
+                    "list", "ls", "get", "add", "test", "edit", "duplicate", "rename",
+                    "delete",
+                ])
+        #expect(
+            plan(["ed", "database", "saved-queries", ""], 3).candidates
+                == ["list", "ls", "get", "save", "duplicate", "rename", "delete"])
         #expect(
             plan(["ed", "database", "connections", "list", "--fav"], 4).candidates
                 == ["--favorites-only"])
@@ -115,6 +126,264 @@ private actor CLIDatabaseMCPRunRecorder {
             try EdRoot.parseAsRoot([
                 "database", "connections", "test", Self.connectionUUID.uuidString,
             ]) is DatabaseConnectionsTestCommand)
+        #expect(
+            try EdRoot.parseAsRoot([
+                "database", "connections", "edit", Self.connectionUUID.uuidString,
+                "--environment", "staging",
+            ]) is DatabaseConnectionsEditCommand)
+        #expect(
+            try EdRoot.parseAsRoot([
+                "database", "connections", "delete", Self.connectionUUID.uuidString, "--yes",
+            ]) is DatabaseConnectionsDeleteCommand)
+        #expect(
+            try EdRoot.parseAsRoot([
+                "database", "saved-queries", "save", "orders", "--language", "sql",
+            ]) is DatabaseSavedQueriesSaveCommand)
+        #expect(
+            try EdRoot.parseAsRoot([
+                "database", "saved-queries", "delete", Self.queryUUID.uuidString, "--yes",
+            ]) is DatabaseSavedQueriesDeleteCommand)
+    }
+
+    @Test func connectionEditPreservesTransportAndCredentials() async throws {
+        let connection = try Self.connection()
+        let sender = CLIDatabaseScriptedSender { request in
+            switch request {
+            case .connectionGet:
+                return .connectionGet(
+                    .success(
+                        DatabaseConnectionGetResult(connection: connection),
+                        metadata: Self.completeMetadata))
+            case .connectionEdit(let edit):
+                return .connectionEdit(
+                    .success(
+                        DatabaseConnectionEditResult(connection: edit.connection),
+                        metadata: Self.completeMetadata))
+            default:
+                throw DatabaseBrokerCommandClientError.invalidRequest
+            }
+        }
+
+        try await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.makeSender = { sender }
+            let result = await CLIProbe.capture([
+                "database", "connections", "edit", Self.connectionUUID.uuidString,
+                "--environment", "staging", "--environment-label", "pre-release",
+                "--protection", "read-only", "--read-only", "required",
+                "--production-policy", "prohibit-mutations", "--clear-group",
+                "--clear-tags", "--clear-color", "--not-favorite", "--json",
+            ])
+
+            #expect(result.code == ExitCodes.success)
+            #expect(result.stderr.isEmpty)
+            #expect(!result.stdout.contains(Self.secretUUID.uuidString))
+            let requests = await sender.recordedRequests()
+            #expect(requests.count == 2)
+            let edit = try #require(requests.last?.connectionEditRequest)
+            #expect(edit.connectionID.rawValue == Self.connectionUUID)
+            #expect(edit.connection.location == connection.location)
+            #expect(edit.connection.authentication == connection.authentication)
+            #expect(edit.connection.tls == connection.tls)
+            #expect(edit.connection.environment.kind == .staging)
+            #expect(edit.connection.environment.label == "pre-release")
+            #expect(edit.connection.environment.protection == .readOnly)
+            #expect(edit.connection.productionPolicy == .prohibitMutations)
+            #expect(edit.connection.group == nil)
+            #expect(edit.connection.tags.isEmpty)
+            #expect(edit.connection.color == nil)
+            #expect(!edit.connection.isFavorite)
+        }
+    }
+
+    @Test func connectionDuplicateAndDeleteKeepCredentialReferencesPrivate() async throws {
+        let connection = try Self.connection()
+        let reference = try #require(connection.authentication.secretReferences.first)
+        let sender = CLIDatabaseScriptedSender { request in
+            switch request {
+            case .connectionDuplicate:
+                return .connectionDuplicate(
+                    .success(
+                        DatabaseConnectionDuplicateResult(
+                            sourceConnectionID: connection.id,
+                            connection: connection,
+                            sharesCredentials: true,
+                            sharedCredentialReferences: [reference]),
+                        metadata: Self.completeMetadata))
+            case .connectionDelete(let delete):
+                return .connectionDelete(
+                    .success(
+                        DatabaseConnectionDeleteResult(
+                            connectionID: delete.connectionID,
+                            deleted: true,
+                            disconnected: true),
+                        metadata: Self.completeMetadata))
+            default:
+                throw DatabaseBrokerCommandClientError.invalidRequest
+            }
+        }
+
+        await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.makeSender = { sender }
+            let duplicate = await CLIProbe.capture([
+                "database", "connections", "duplicate", Self.connectionUUID.uuidString,
+                "orders copy", "--json",
+            ])
+            #expect(duplicate.code == ExitCodes.success)
+            #expect(duplicate.object?["sharesCredentials"] as? Bool == true)
+            #expect(duplicate.object?["sharedCredentialCount"] as? Int == 1)
+            #expect(!duplicate.stdout.contains(Self.secretUUID.uuidString))
+
+            let refused = await CLIProbe.capture([
+                "database", "connections", "delete", Self.connectionUUID.uuidString,
+            ])
+            #expect(refused.code == ExitCodes.usage)
+
+            let deleted = await CLIProbe.capture([
+                "database", "connections", "delete", Self.connectionUUID.uuidString,
+                "--yes", "--json",
+            ])
+            #expect(deleted.code == ExitCodes.success)
+            #expect(deleted.object?["deleted"] as? Bool == true)
+            #expect(deleted.object?["disconnected"] as? Bool == true)
+            #expect((await sender.recordedRequests()).count == 2)
+        }
+    }
+
+    @Test func savedQueryListSendsBoundedFiltersWithoutBodies() async throws {
+        let query = Self.savedQuery()
+        let sender = CLIDatabaseScriptedSender { request in
+            guard case .savedQueryList = request else {
+                throw DatabaseBrokerCommandClientError.invalidRequest
+            }
+            return .savedQueryList(
+                .success(
+                    DatabaseSavedQueryListResult(queries: [query]),
+                    metadata: Self.completeMetadata))
+        }
+
+        try await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.makeSender = { sender }
+            let result = await CLIProbe.capture([
+                "database", "saved-queries", "list", "--search", "orders",
+                "--connection", Self.connectionUUID.uuidString,
+                "--language", "sql", "--tag", "reporting", "--favorites-only",
+                "--order", "name", "--limit", "25", "--offset", "10", "--json",
+            ])
+
+            #expect(result.code == ExitCodes.success)
+            let rows = try #require(result.array as? [[String: Any]])
+            #expect(rows.first?["name"] as? String == "Recent orders")
+            #expect(rows.first?["text"] == nil)
+            #expect(!result.stdout.contains(query.text))
+            let request = try #require(await sender.recordedRequests().first?.savedQueryListRequest)
+            #expect(request.search.connectionID?.rawValue == Self.connectionUUID)
+            #expect(request.search.languages == [.sql])
+            #expect(request.search.tags == ["reporting"])
+            #expect(request.search.favoritesOnly)
+            #expect(request.search.order == .name)
+            #expect(request.search.limit == 25)
+            #expect(request.search.offset == 10)
+        }
+    }
+
+    @Test func savedQuerySaveReadsInputAndRoutesExactDefinition() async throws {
+        let sender = CLIDatabaseScriptedSender { request in
+            guard case .savedQuerySave(let save) = request else {
+                throw DatabaseBrokerCommandClientError.invalidRequest
+            }
+            return .savedQuerySave(
+                .success(
+                    DatabaseSavedQuerySaveResult(query: save.query, created: true),
+                    metadata: Self.completeMetadata))
+        }
+
+        try await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.makeSender = { sender }
+            DatabaseCLIEnvironment.readQueryText = { path in
+                #expect(path == "orders.sql")
+                return "select id from public.orders"
+            }
+            let result = await CLIProbe.capture([
+                "database", "saved-queries", "save", "Recent orders",
+                "--connection", Self.connectionUUID.uuidString,
+                "--language", "sql", "--file", "orders.sql",
+                "--tag", "reporting", "--favorite", "--json",
+            ])
+
+            #expect(result.code == ExitCodes.success)
+            #expect(result.object?["created"] as? Bool == true)
+            let request = try #require(await sender.recordedRequests().first?.savedQuerySaveRequest)
+            #expect(request.query.connectionID?.rawValue == Self.connectionUUID)
+            #expect(request.query.name == "Recent orders")
+            #expect(request.query.language == .sql)
+            #expect(request.query.text == "select id from public.orders")
+            #expect(request.query.tags == ["reporting"])
+            #expect(request.query.isFavorite)
+        }
+    }
+
+    @Test func savedQueryManagementRoutesExactIdentifiers() async throws {
+        let query = Self.savedQuery()
+        let sender = CLIDatabaseScriptedSender { request in
+            switch request {
+            case .savedQueryGet:
+                return .savedQueryGet(
+                    .success(
+                        DatabaseSavedQueryGetResult(query: query),
+                        metadata: Self.completeMetadata))
+            case .savedQueryDuplicate:
+                return .savedQueryDuplicate(
+                    .success(
+                        DatabaseSavedQueryDuplicateResult(
+                            sourceQueryID: query.id,
+                            query: query),
+                        metadata: Self.completeMetadata))
+            case .savedQueryRename:
+                return .savedQueryRename(
+                    .success(
+                        DatabaseSavedQueryRenameResult(query: query),
+                        metadata: Self.completeMetadata))
+            case .savedQueryDelete(let delete):
+                return .savedQueryDelete(
+                    .success(
+                        DatabaseSavedQueryDeleteResult(
+                            queryID: delete.queryID,
+                            deleted: true),
+                        metadata: Self.completeMetadata))
+            default:
+                throw DatabaseBrokerCommandClientError.invalidRequest
+            }
+        }
+
+        await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.makeSender = { sender }
+            let get = await CLIProbe.capture([
+                "database", "saved-queries", "get", Self.queryUUID.uuidString, "--json",
+            ])
+            let duplicate = await CLIProbe.capture([
+                "database", "saved-queries", "duplicate", Self.queryUUID.uuidString,
+                "orders copy", "--json",
+            ])
+            let rename = await CLIProbe.capture([
+                "database", "saved-queries", "rename", Self.queryUUID.uuidString,
+                "orders renamed", "--json",
+            ])
+            let refused = await CLIProbe.capture([
+                "database", "saved-queries", "delete", Self.queryUUID.uuidString,
+            ])
+            let delete = await CLIProbe.capture([
+                "database", "saved-queries", "delete", Self.queryUUID.uuidString,
+                "--yes", "--json",
+            ])
+
+            #expect(get.code == ExitCodes.success)
+            #expect(get.object?["text"] as? String == query.text)
+            #expect(duplicate.code == ExitCodes.success)
+            #expect(rename.code == ExitCodes.success)
+            #expect(refused.code == ExitCodes.usage)
+            #expect(delete.code == ExitCodes.success)
+            #expect((await sender.recordedRequests()).count == 4)
+        }
     }
 
     @Test func operationListSendsExactFiltersAndSafeJSON() async throws {
@@ -906,6 +1175,19 @@ private actor CLIDatabaseMCPRunRecorder {
             pageCount: 1,
             recordCount: 50,
             byteCount: 4_096)
+    }
+
+    private static func savedQuery() -> DatabaseSavedQuery {
+        DatabaseSavedQuery(
+            id: DatabaseSavedQueryID(rawValue: queryUUID),
+            connectionID: DatabaseConnectionID(rawValue: connectionUUID),
+            name: "Recent orders",
+            language: .sql,
+            text: "select id from public.orders",
+            tags: ["reporting"],
+            isFavorite: true,
+            createdAt: Date(timeIntervalSince1970: 5_000),
+            updatedAt: Date(timeIntervalSince1970: 6_000))
     }
 
     private static func page(note: String = "ready") -> DatabasePage<DatabaseRecord> {
