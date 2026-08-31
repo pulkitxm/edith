@@ -811,6 +811,36 @@ private final class PausedPreviewImageLoader {
         #expect(FinderModel.clipboard == nil)
     }
 
+    @Test func crossMachineCutKeepsClipboardUntilAConflictIsResolved() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-cross-machine-conflict-\(UUID().uuidString)")
+        let sourceRoot = root.appendingPathComponent("source")
+        let destinationRoot = root.appendingPathComponent("destination")
+        try FileManager.default.createDirectory(
+            at: sourceRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: destinationRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write("moving.txt", into: sourceRoot, contents: "new")
+        try write("moving.txt", into: destinationRoot, contents: "old")
+        let sourceSession = MachinesModel.shared.session(for: MachinesModel.localMachineID)
+        let source = FinderModel(session: sourceSession, path: sourceRoot.path)
+        let destination = FinderModel(
+            session: MachineSession(
+                machine: Machine(name: "Destination", host: "localhost"), local: true),
+            path: destinationRoot.path)
+        await source.load()
+        await destination.load()
+
+        source.selection = Set(source.entries.map(\.path))
+        source.copySelection(operation: .move)
+        await destination.paste()
+
+        #expect(destination.pendingConflict?.names == ["moving.txt"])
+        #expect(FinderModel.clipboard != nil)
+        #expect(exists("moving.txt", in: sourceRoot))
+    }
+
     @Test func draggingOntoAFolderMovesIntoIt() async throws {
         let (model, root) = try sandbox()
         defer { try? FileManager.default.removeItem(at: root) }

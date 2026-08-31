@@ -219,9 +219,6 @@ final class FinderModel {
                     from: clipboard.machineID, paths: clipboard.paths,
                     moving: clipboard.operation == .move),
                 destination: path)
-            if clipboard.operation == .move, errorMessage == nil {
-                Self.clipboard = nil
-            }
             return
         }
         let isCopy = clipboard.operation == .copy
@@ -1076,6 +1073,9 @@ final class FinderModel {
             }
             if errorMessage == nil {
                 finishTransfer(outcome, verb: moving ? "Moved" : "Transferred")
+            }
+            if moving, errorMessage == nil {
+                Self.clipboard = nil
             }
         } catch is CancellationError {
         } catch {
