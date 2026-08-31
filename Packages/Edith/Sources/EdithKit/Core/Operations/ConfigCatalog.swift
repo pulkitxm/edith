@@ -821,6 +821,9 @@ public enum ConfigCatalog {
     private static let keystrokeHighlight: [SettingDefinition] = [
         SettingDefinition(
             AppStorageKeys.KeystrokeHighlight.enabled, .bool, group: "keystrokes",
+            summary: "Make the Keystroke Highlight extension available.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.KeystrokeHighlight.active, .bool, group: "keystrokes",
             summary: "Show key presses in an on-screen overlay.", fallback: .bool(false)),
         SettingDefinition(
             AppStorageKeys.KeystrokeHighlight.duration, .number, group: "keystrokes",
@@ -831,6 +834,17 @@ public enum ConfigCatalog {
             summary: "Screen edge used for the key press overlay.",
             allowed: KeystrokeHighlightPosition.allCases.map(\.rawValue),
             fallback: .string(KeystrokeHighlightPosition.bottom.rawValue)),
+        SettingDefinition(
+            AppStorageKeys.KeystrokeHighlight.hotKeyCode, .int, group: "keystrokes",
+            summary: "Virtual key code of the keystroke highlight shortcut.", fallback: .int(40)),
+        SettingDefinition(
+            AppStorageKeys.KeystrokeHighlight.hotKeyMods, .int, group: "keystrokes",
+            summary: "Carbon modifier mask of the keystroke highlight shortcut.",
+            fallback: .int(6400)),
+        SettingDefinition(
+            AppStorageKeys.KeystrokeHighlight.hotKeyLabel, .string, group: "keystrokes",
+            summary: "Printable label for the keystroke highlight shortcut.",
+            fallback: .string("⌃⌥⌘K")),
     ]
 
     private static let colorPicker: [SettingDefinition] = [

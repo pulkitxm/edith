@@ -462,6 +462,11 @@ public enum ExtensionLiveAdapters {
         guard defaults.bool(forKey: AppStorageKeys.KeystrokeHighlight.enabled) else {
             return .uninstalled("Keystroke Highlight is off.")
         }
+        guard defaults.bool(forKey: AppStorageKeys.KeystrokeHighlight.active) else {
+            let shortcut =
+                defaults.string(forKey: AppStorageKeys.KeystrokeHighlight.hotKeyLabel) ?? "⌃⌥⌘K"
+            return .ready("Keystroke Highlight is ready and paused. Press \(shortcut) to start it.")
+        }
         let error = defaults.string(forKey: AppStorageKeys.KeystrokeHighlight.runtimeError) ?? ""
         if !error.isEmpty { return .failed(error) }
         if defaults.bool(forKey: AppStorageKeys.KeystrokeHighlight.runtimeActive) {

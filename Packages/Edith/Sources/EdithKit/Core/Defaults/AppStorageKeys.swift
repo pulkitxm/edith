@@ -131,8 +131,12 @@ public enum AppStorageKeys {
     }
 
     public enum KeystrokeHighlight {
+        public static let active = "keystrokeHighlightActive"
         public static let duration = "keystrokeHighlightDuration"
         public static let enabled = "keystrokeHighlightEnabled"
+        public static let hotKeyCode = "keystrokeHighlightHotKeyCode"
+        public static let hotKeyLabel = "keystrokeHighlightHotKeyLabel"
+        public static let hotKeyMods = "keystrokeHighlightHotKeyMods"
         public static let position = "keystrokeHighlightPosition"
         public static let runtimeActive = "keystrokeHighlightRuntimeActive"
         public static let runtimeError = "keystrokeHighlightRuntimeError"

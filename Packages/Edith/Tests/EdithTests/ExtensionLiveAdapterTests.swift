@@ -48,6 +48,16 @@ import EdithCore
         defaults.set(true, forKey: AppStorageKeys.KeystrokeHighlight.enabled)
         #expect(
             ExtensionLiveAdapters.keystrokeHighlightReadiness(defaults: defaults)
+                == .ready(
+                    "Keystroke Highlight is ready and paused. Press ⌃⌥⌘K to start it."))
+        defaults.set("⌃⇧K", forKey: AppStorageKeys.KeystrokeHighlight.hotKeyLabel)
+        #expect(
+            ExtensionLiveAdapters.keystrokeHighlightReadiness(defaults: defaults)
+                == .ready(
+                    "Keystroke Highlight is ready and paused. Press ⌃⇧K to start it."))
+        defaults.set(true, forKey: AppStorageKeys.KeystrokeHighlight.active)
+        #expect(
+            ExtensionLiveAdapters.keystrokeHighlightReadiness(defaults: defaults)
                 == .loading("The keystroke overlay is starting."))
         defaults.set(true, forKey: AppStorageKeys.KeystrokeHighlight.runtimeActive)
         #expect(

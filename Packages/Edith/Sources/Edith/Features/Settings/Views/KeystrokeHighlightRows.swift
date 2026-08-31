@@ -4,6 +4,8 @@ import SwiftUI
 struct KeystrokeHighlightRows: View {
     @AppStorage(AppStorageKeys.KeystrokeHighlight.enabled, store: SharedDefaults.store) private
         var enabled = false
+    @AppStorage(AppStorageKeys.KeystrokeHighlight.active, store: SharedDefaults.store) private
+        var active = false
     @AppStorage(AppStorageKeys.KeystrokeHighlight.duration, store: SharedDefaults.store) private
         var duration = KeystrokeHighlightSettings.defaultDuration
     @AppStorage(AppStorageKeys.KeystrokeHighlight.position, store: SharedDefaults.store) private
@@ -17,6 +19,25 @@ struct KeystrokeHighlightRows: View {
 
     var body: some View {
         Group {
+            Section("Control") {
+                Toggle(
+                    "Show keystrokes",
+                    isOn: $active.configured(AppStorageKeys.KeystrokeHighlight.active))
+                Text(
+                    "Pause the overlay without removing the extension. The shortcut keeps working while the extension is enabled."
+                )
+                .settingsCaption()
+                LabeledContent {
+                    HotKeyRecorderControl(
+                        keyPrefix: "keystrokeHighlightHotKey", defaultLabel: "⌃⌥⌘K")
+                } label: {
+                    HStack(spacing: UIScale.pt(6)) {
+                        Text("Toggle shortcut")
+                        InfoDot("Starts or pauses keystroke highlighting from anywhere.")
+                    }
+                }
+            }
+
             Section("Display") {
                 Picker(
                     "Position",
@@ -63,7 +84,9 @@ struct KeystrokeHighlightRows: View {
             }
 
             Section("Status") {
-                if runtimeError.isEmpty {
+                if !active {
+                    LabeledContent("Keyboard monitor", value: "Paused")
+                } else if runtimeError.isEmpty {
                     LabeledContent(
                         "Keyboard monitor", value: runtimeActive ? "Active" : "Starting")
                 } else {

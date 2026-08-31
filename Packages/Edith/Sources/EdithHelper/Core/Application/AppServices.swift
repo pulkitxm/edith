@@ -320,12 +320,21 @@ final class AppServices {
     }
 
     private func reconcilePresentationServices() {
-        let keystrokeHighlightOn = Self.extensionEnabled(
+        let keystrokeHighlightEnabled = Self.extensionEnabled(
             AppStorageKeys.KeystrokeHighlight.enabled)
-        if keystrokeHighlightOn, keystrokeHighlight == nil {
+        if keystrokeHighlightEnabled {
+            KeystrokeHighlightHotKey.register()
+        } else {
+            KeystrokeHighlightHotKey.unregister()
+            SharedDefaults.store.set(false, forKey: AppStorageKeys.KeystrokeHighlight.active)
+        }
+        let keystrokeHighlightWanted = FeatureGates.keystrokeHighlightMonitorWanted(
+            enabled: keystrokeHighlightEnabled,
+            active: SharedDefaults.store.bool(forKey: AppStorageKeys.KeystrokeHighlight.active))
+        if keystrokeHighlightWanted, keystrokeHighlight == nil {
             keystrokeHighlight = KeystrokeHighlightRuntime()
         }
-        if !keystrokeHighlightOn, let runtime = keystrokeHighlight {
+        if !keystrokeHighlightWanted, let runtime = keystrokeHighlight {
             runtime.shutdown()
             keystrokeHighlight = nil
         }
