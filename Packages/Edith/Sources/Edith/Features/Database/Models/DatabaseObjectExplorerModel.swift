@@ -138,6 +138,17 @@ final class DatabaseObjectExplorerModel {
             groups = [group]
             state = .loaded
             loadGroup(group.identifier, connection: connection)
+        case .elasticsearch:
+            let group = DatabaseExplorerGroup(
+                identifier: DatabaseObjectIdentifier(kind: .server, path: ["indices"]),
+                title: "Search objects",
+                isAvailable: true,
+                objects: [],
+                state: .idle,
+                nextContinuation: nil)
+            groups = [group]
+            state = .loaded
+            loadGroup(group.identifier, connection: connection)
         default:
             state = .failed(
                 "Automatic object discovery is not available for \(connection.product.displayName) yet."
@@ -349,8 +360,12 @@ final class DatabaseObjectExplorerModel {
             let kind =
                 stringIfPresent("kind", in: record).flatMap(DatabaseObjectKind.init(rawValue:))
                 ?? .table
+            let path =
+                parent.kind == .server && [.index, .alias, .dataStream].contains(kind)
+                ? [name]
+                : parent.path + [name]
             return DatabaseExplorerObject(
-                identifier: DatabaseObjectIdentifier(kind: kind, path: parent.path + [name]),
+                identifier: DatabaseObjectIdentifier(kind: kind, path: path),
                 title: name,
                 estimatedRows: integer("estimatedRows", in: record),
                 columnCount: integer("columnCount", in: record))
