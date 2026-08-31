@@ -304,13 +304,17 @@ struct DashboardView: View {
             ("\(m.activeDays) active days", false, false),
             ("\(m.totalTokens) tokens", false, true),
             ("\(m.modelCount) models", false, false),
-            (m.sourceLabels, false, false),
+            (sourceMetaText, false, false),
         ]
         return parts.enumerated().map { index, part in
             MetaSegment(
                 id: index, text: index == 0 ? part.0 : "·  \(part.0)", sensitive: part.1,
                 usage: part.2)
         }
+    }
+
+    private var sourceMetaText: String {
+        model.allSources.count > 3 ? "\(model.allSources.count) agents" : model.meta.sourceLabels
     }
 
     private var kpiColumns: [GridItem] {
@@ -617,87 +621,93 @@ struct DashboardView: View {
         TerminalLogView(log: refresh.log, theme: appTheme, height: UIScale.pt(150))
     }
 
-    @ViewBuilder private func charts(compact: Bool) -> some View {
-        SkinCard(title: "Daily usage", dark: dark) {
-            ComboChart(
-                points: model.chartData.daily, barColor: acc, lineColor: gold, dark: dark,
-                scroll: true, blur: blurMoney, blurTokens: blurUsage)
-        }
-        SkinCard(title: "Token mix by day", dark: dark) {
-            StackedChart(
-                bars: model.chartData.tokenMix, costLine: model.chartData.daily,
-                domain: tokenMixDomain, range: tokenMixRange, dark: dark, blur: blurMoney,
-                blurTokens: blurUsage)
-        }
-        SkinCard(title: "Model usage over time", dark: dark) {
-            StackedChart(
-                bars: model.chartData.modelTime, costLine: model.chartData.daily,
-                domain: modelDomain, range: modelRange, dark: dark, blur: blurMoney,
-                blurTokens: blurUsage)
-        }
-        if model.allSources.count > 1 {
-            SkinCard(title: "Usage by source over time", dark: dark) {
+    private func charts(compact: Bool) -> some View {
+        LazyVStack(spacing: UIScale.pt(16)) {
+            LazyChartCard(title: "Daily usage", dark: dark) {
+                ComboChart(
+                    points: model.chartData.daily, barColor: acc, lineColor: gold, dark: dark,
+                    scroll: true, blur: blurMoney, blurTokens: blurUsage)
+            }
+            LazyChartCard(title: "Token mix by day", dark: dark) {
                 StackedChart(
-                    bars: model.chartData.source, costLine: model.chartData.daily,
-                    domain: sourceDomain, range: sourceRange, dark: dark, blur: blurMoney,
+                    bars: model.chartData.tokenMix, costLine: model.chartData.daily,
+                    domain: tokenMixDomain, range: tokenMixRange, dark: dark, blur: blurMoney,
                     blurTokens: blurUsage)
             }
-        }
-        if compact {
-            VStack(spacing: UIScale.pt(16)) {
-                dowCard
-                shareByModelCard
+            LazyChartCard(title: "Model usage over time", dark: dark) {
+                StackedChart(
+                    bars: model.chartData.modelTime, costLine: model.chartData.daily,
+                    domain: modelDomain, range: modelRange, dark: dark, blur: blurMoney,
+                    blurTokens: blurUsage)
             }
-        } else {
-            HStack(alignment: .top, spacing: UIScale.pt(16)) {
-                dowCard
-                shareByModelCard
+            if model.allSources.count > 1 {
+                LazyChartCard(title: "Usage by source over time", dark: dark) {
+                    StackedChart(
+                        bars: model.chartData.source, costLine: model.chartData.daily,
+                        domain: sourceDomain, range: sourceRange, dark: dark, blur: blurMoney,
+                        blurTokens: blurUsage)
+                }
             }
-        }
-        if !model.projects.isEmpty || !pathUnattributedText.isEmpty {
-            SkinCard(title: "By project", dark: dark) {
-                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                    if !model.projects.isEmpty {
-                        ComboChart(
-                            points: model.chartData.project, barColor: acc, lineColor: gold,
-                            dark: dark, height: UIScale.pt(280), blur: blurMoney,
-                            blurTokens: blurUsage)
-                        ProjectDrilldownView(
-                            model: model, dark: dark, blur: blurMoney, blurTokens: blurUsage)
+            if compact {
+                VStack(spacing: UIScale.pt(16)) {
+                    dowCard
+                    shareByModelCard
+                }
+            } else {
+                HStack(alignment: .top, spacing: UIScale.pt(16)) {
+                    dowCard
+                    shareByModelCard
+                }
+            }
+            if !model.projects.isEmpty || !pathUnattributedText.isEmpty {
+                LazyChartCard(
+                    title: "By project", dark: dark, placeholderHeight: UIScale.pt(304)
+                ) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                        if !model.projects.isEmpty {
+                            ComboChart(
+                                points: model.chartData.project, barColor: acc, lineColor: gold,
+                                dark: dark, height: UIScale.pt(280), blur: blurMoney,
+                                blurTokens: blurUsage)
+                            ProjectDrilldownView(
+                                model: model, dark: dark, blur: blurMoney, blurTokens: blurUsage)
+                        }
+                        if !pathUnattributedText.isEmpty {
+                            Text(pathUnattributedText)
+                                .font(.system(size: UIScale.pt(11)))
+                                .foregroundStyle(DashSkin.inkSoft(dark))
+                                .presenterBlur(blurMoney || blurUsage)
+                        }
                     }
-                    if !pathUnattributedText.isEmpty {
-                        Text(pathUnattributedText)
+                }
+            }
+            LazyChartCard(title: "Hourly usage", dark: dark) {
+                VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                    ComboChart(
+                        points: model.chartData.hourly, barColor: acc, lineColor: gold, dark: dark,
+                        height: UIScale.pt(200), blur: blurMoney, blurTokens: blurUsage)
+                    if !hourlyUnattributedText.isEmpty {
+                        Text(hourlyUnattributedText)
                             .font(.system(size: UIScale.pt(11)))
                             .foregroundStyle(DashSkin.inkSoft(dark))
                             .presenterBlur(blurMoney || blurUsage)
                     }
                 }
             }
-        }
-        SkinCard(title: "Hourly usage", dark: dark) {
-            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                ComboChart(
-                    points: model.chartData.hourly, barColor: acc, lineColor: gold, dark: dark,
-                    height: UIScale.pt(200), blur: blurMoney, blurTokens: blurUsage)
-                if !hourlyUnattributedText.isEmpty {
-                    Text(hourlyUnattributedText)
+            SkinCard(
+                title: "Models", note: "\(model.modelTotals.count) total", dark: dark
+            ) {
+                VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                    if model.modelUnfilterableCost > 0.000_001 {
+                        Text(
+                            "Unattributed provider cost of \(DashFmt.usd(model.modelUnfilterableCost)) is excluded because it spans selected and unselected models."
+                        )
                         .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(DashSkin.inkSoft(dark))
-                        .presenterBlur(blurMoney || blurUsage)
+                        .presenterBlur(blurMoney)
+                    }
+                    modelsTable
                 }
-            }
-        }
-        SkinCard(title: "Models", dark: dark) {
-            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                if model.modelUnfilterableCost > 0.000_001 {
-                    Text(
-                        "Unattributed provider cost of \(DashFmt.usd(model.modelUnfilterableCost)) is excluded because it spans selected and unselected models."
-                    )
-                    .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .presenterBlur(blurMoney)
-                }
-                modelsTable
             }
         }
     }
@@ -737,7 +747,7 @@ struct DashboardView: View {
     }
 
     private var dowCard: some View {
-        SkinCard(title: "By day of week", dark: dark) {
+        LazyChartCard(title: "By day of week", dark: dark) {
             ComboChart(
                 points: model.chartData.dow, barColor: acc, lineColor: gold, dark: dark,
                 height: UIScale.pt(200), blur: blurMoney, blurTokens: blurUsage)
@@ -745,7 +755,7 @@ struct DashboardView: View {
     }
 
     private var shareByModelCard: some View {
-        SkinCard(title: "Share by model", dark: dark) {
+        LazyChartCard(title: "Share by model", dark: dark) {
             DonutChart(slices: donutSlices, blurTokens: blurUsage)
         }
     }
@@ -755,38 +765,64 @@ struct DashboardView: View {
             HStack(spacing: UIScale.pt(8)) {
                 tableHeader("Model", .model, width: nil)
                 tableHeader("Cost", .cost, width: UIScale.pt(70))
-                tableHeader("Share", .share, width: UIScale.pt(60))
+                if !compactLayout {
+                    tableHeader("Share", .share, width: UIScale.pt(60))
+                }
                 tableHeader("Tokens", .tokens, width: UIScale.pt(70))
-                tableHeader("Days", .days, width: UIScale.pt(44))
+                if !compactLayout {
+                    tableHeader("Days", .days, width: UIScale.pt(44))
+                }
             }
             .font(DashSkin.mono(10, weight: .semibold)).foregroundStyle(DashSkin.inkFaint(dark))
             .padding(.vertical, UIScale.pt(4))
             Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
-            ForEach(model.modelTotals) { m in
-                HStack(spacing: UIScale.pt(8)) {
-                    Circle().fill(model.modelColor(m.model, dark: dark)).frame(
-                        width: UIScale.pt(8), height: UIScale.pt(8))
-                    Text(model.modelLabel(m.model))
-                        .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.ink(dark))
-                        .frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
-                    Text(DashFmt.usd(m.cost)).font(DashSkin.mono(11)).frame(
-                        width: UIScale.pt(70), alignment: .trailing
-                    ).presenterBlur(blurMoney)
+            if model.modelTotals.count > DashboardChartLayout.visibleModelRows {
+                ScrollView {
+                    LazyVStack(spacing: UIScale.pt(0)) {
+                        modelRows
+                    }
+                }
+                .frame(
+                    height: UIScale.pt(
+                        DashboardChartLayout.modelRowHeight
+                            * CGFloat(DashboardChartLayout.visibleModelRows)))
+            } else {
+                VStack(spacing: UIScale.pt(0)) {
+                    modelRows
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var modelRows: some View {
+        ForEach(model.modelTotals) { m in
+            HStack(spacing: UIScale.pt(8)) {
+                Circle().fill(model.modelColor(m.model, dark: dark)).frame(
+                    width: UIScale.pt(8), height: UIScale.pt(8))
+                Text(model.modelLabel(m.model))
+                    .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.ink(dark))
+                    .frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
+                Text(DashFmt.usd(m.cost)).font(DashSkin.mono(11)).frame(
+                    width: UIScale.pt(70), alignment: .trailing
+                ).presenterBlur(blurMoney)
+                if !compactLayout {
                     Text(DashFmt.pct(m.share)).font(DashSkin.mono(11)).frame(
                         width: UIScale.pt(60), alignment: .trailing
                     ).foregroundStyle(DashSkin.inkSoft(dark))
-                    Text(DashFmt.tokens(m.tokens)).font(DashSkin.mono(11)).frame(
-                        width: UIScale.pt(70), alignment: .trailing
-                    ).presenterBlur(blurUsage)
+                }
+                Text(DashFmt.tokens(m.tokens)).font(DashSkin.mono(11)).frame(
+                    width: UIScale.pt(70), alignment: .trailing
+                ).presenterBlur(blurUsage)
+                if !compactLayout {
                     Text("\(m.days)").font(DashSkin.mono(11)).frame(
                         width: UIScale.pt(44), alignment: .trailing
                     )
                     .foregroundStyle(DashSkin.inkSoft(dark))
                 }
-                .foregroundStyle(DashSkin.ink(dark))
-                .padding(.vertical, UIScale.pt(5))
-                Rectangle().fill(DashSkin.line(dark).opacity(0.5)).frame(height: UIScale.pt(1))
             }
+            .foregroundStyle(DashSkin.ink(dark))
+            .padding(.vertical, UIScale.pt(5))
+            Rectangle().fill(DashSkin.line(dark).opacity(0.5)).frame(height: UIScale.pt(1))
         }
     }
 
@@ -819,18 +855,31 @@ struct DashboardView: View {
             DashPalette.cacheCreateColor, DashPalette.cacheReadColor,
         ]
     }
-    private var modelDomain: [String] { model.allModels.map(DashFmt.shortModel) }
-    private var modelRange: [Color] { model.allModels.map { model.modelColor($0, dark: dark) } }
-    private var sourceDomain: [String] { model.allSources.map(\.label) }
+    private var modelDomain: [String] { chartSeriesDomain(model.chartData.modelTime) }
+    private var modelRange: [Color] {
+        modelDomain.map { series in
+            guard series != "Other",
+                let name = model.allModels.first(where: { DashFmt.shortModel($0) == series })
+            else { return DashSkin.inkFaint(dark) }
+            return model.modelColor(name, dark: dark)
+        }
+    }
+    private var sourceDomain: [String] { chartSeriesDomain(model.chartData.source) }
     private var sourceRange: [Color] {
-        model.allSources.map { model.sourceColor($0.id, dark: dark) }
+        sourceDomain.map { series in
+            guard series != "Other",
+                let source = model.allSources.first(where: { $0.label == series })
+            else { return DashSkin.inkFaint(dark) }
+            return model.sourceColor(source.id, dark: dark)
+        }
     }
     private var donutSlices: [DonutSlice] {
-        model.tokenBearingModelTotals.map {
+        let slices = model.tokenBearingModelTotals.map {
             DonutSlice(
                 id: $0.model, label: model.modelLabel($0.model), value: $0.tokens,
                 color: model.modelColor($0.model, dark: dark))
         }
+        return compactDonutSlices(slices, otherColor: DashSkin.inkFaint(dark))
     }
 }
 
