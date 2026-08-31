@@ -85,7 +85,7 @@ import Testing
     @Test func longRangeStackedChartsUseMatchingWeeklyCostBuckets() async throws {
         let start = try #require(DashboardModel.ymd.date(from: "2026-06-01"))
         let calendar = Calendar(identifier: .gregorian)
-        let daily = try (0...60).map { offset in
+        let daily: String = try (0...60).map { offset in
             let date = try #require(calendar.date(byAdding: .day, value: offset, to: start))
             let period = DashboardModel.ymd.string(from: date)
             return
