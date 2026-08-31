@@ -235,9 +235,9 @@ public enum DatabaseMCPToolCatalog {
 
     public static let documentMutation = Tool(
         name: DatabaseMCPToolName.documentMutation.rawValue,
-        title: "Preview or apply one MongoDB document mutation",
+        title: "Preview or apply one document mutation",
         description:
-            "Insert, update, or delete one explicit MongoDB document through preview-bound confirmation.",
+            "Insert, update, or delete one explicit MongoDB or Elasticsearch document through preview-bound confirmation.",
         inputSchema: .object([
             "type": "object",
             "properties": .object([
@@ -246,12 +246,17 @@ public enum DatabaseMCPToolCatalog {
                     "enum": .array(["preview", "apply"]),
                 ]),
                 "connection_id": uuidSchema,
+                "product": .object([
+                    "type": "string",
+                    "enum": .array(["mongodb", "elasticsearch"]),
+                ]),
                 "action": .object([
                     "type": "string",
                     "enum": .array(["insert", "update", "delete"]),
                 ]),
                 "database": .object(["type": "string", "maxLength": 255]),
                 "collection": .object(["type": "string", "maxLength": 255]),
+                "index": .object(["type": "string", "maxLength": 255]),
                 "document": .object([
                     "type": "object",
                     "maxProperties": 256,
@@ -262,6 +267,8 @@ public enum DatabaseMCPToolCatalog {
                     "type": "string",
                     "enum": .array(["object-id", "string", "integer", "uuid"]),
                 ]),
+                "sequence_number": .object(["type": "integer", "minimum": 0]),
+                "primary_term": .object(["type": "integer", "minimum": 0]),
                 "confirmation_token": .object(["type": "string"]),
                 "confirmation_text": .object(["type": "string"]),
                 "timeout_ms": .object([
@@ -270,13 +277,11 @@ public enum DatabaseMCPToolCatalog {
                     "maximum": 86400000,
                 ]),
             ]),
-            "required": .array([
-                "mode", "connection_id", "action", "database", "collection",
-            ]),
+            "required": .array(["mode", "connection_id", "product", "action"]),
             "additionalProperties": false,
         ]),
         annotations: .init(
-            title: "Mutate one MongoDB document",
+            title: "Mutate one database document",
             readOnlyHint: false,
             destructiveHint: true,
             idempotentHint: false,
