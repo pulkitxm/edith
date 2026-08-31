@@ -1,12 +1,60 @@
 import EdithKit
 import SwiftUI
 
+struct DashboardDateRangeSelection: Equatable {
+    var from: Date
+    var to: Date
+    var choosingEnd = false
+
+    init(from: Date, to: Date, bounds: ClosedRange<Date>, calendar: Calendar = .current) {
+        let lower = calendar.startOfDay(for: bounds.lowerBound)
+        let upper = calendar.startOfDay(for: bounds.upperBound)
+        let start = min(max(calendar.startOfDay(for: from), lower), upper)
+        let end = min(max(calendar.startOfDay(for: to), lower), upper)
+        self.from = min(start, end)
+        self.to = max(start, end)
+    }
+
+    mutating func select(
+        _ date: Date, bounds: ClosedRange<Date>, calendar: Calendar = .current
+    ) {
+        let value = calendar.startOfDay(for: date)
+        guard bounds.contains(value) else { return }
+        if choosingEnd, value >= from {
+            to = value
+            choosingEnd = false
+        } else {
+            from = value
+            to = value
+            choosingEnd = true
+        }
+    }
+
+    mutating func setTrailing(
+        days: Int, bounds: ClosedRange<Date>, calendar: Calendar = .current
+    ) {
+        let upper = calendar.startOfDay(for: bounds.upperBound)
+        from = max(
+            calendar.date(byAdding: .day, value: -(max(days, 1) - 1), to: upper) ?? upper,
+            bounds.lowerBound)
+        to = upper
+        choosingEnd = false
+    }
+
+    mutating func setMonthToDate(
+        bounds: ClosedRange<Date>, calendar: Calendar = .current
+    ) {
+        let upper = calendar.startOfDay(for: bounds.upperBound)
+        from = max(calendar.startOfMonth(containing: upper), bounds.lowerBound)
+        to = upper
+        choosingEnd = false
+    }
+}
+
 struct DashboardDateRangePicker: View {
     @Environment(\.colorScheme) private var scheme
     @State private var visibleMonth: Date
-    @State private var draftFrom: Date
-    @State private var draftTo: Date
-    @State private var choosingEnd = false
+    @State private var selection: DashboardDateRangeSelection
 
     let bounds: ClosedRange<Date>
     let onApply: (Date, Date) -> Void
@@ -21,14 +69,12 @@ struct DashboardDateRangePicker: View {
         let calendar = Calendar.current
         let lower = calendar.startOfDay(for: bounds.lowerBound)
         let upper = calendar.startOfDay(for: bounds.upperBound)
-        let start = min(max(calendar.startOfDay(for: from), lower), upper)
-        let end = min(max(calendar.startOfDay(for: to), lower), upper)
         self.bounds = lower...upper
         self.onApply = onApply
         self.onCancel = onCancel
-        _draftFrom = State(initialValue: min(start, end))
-        _draftTo = State(initialValue: max(start, end))
-        _visibleMonth = State(initialValue: calendar.startOfMonth(containing: max(start, end)))
+        let selection = DashboardDateRangeSelection(from: from, to: to, bounds: lower...upper)
+        _selection = State(initialValue: selection)
+        _visibleMonth = State(initialValue: calendar.startOfMonth(containing: selection.to))
     }
 
     private var dark: Bool { scheme == .dark }
@@ -50,11 +96,11 @@ struct DashboardDateRangePicker: View {
 
     private var rangeHeader: some View {
         HStack(spacing: UIScale.pt(10)) {
-            rangeEndpoint("From", draftFrom, active: choosingEnd)
+            rangeEndpoint("From", selection.from, active: selection.choosingEnd)
             Image(systemName: "arrow.right")
                 .font(.system(size: UIScale.pt(10), weight: .semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
-            rangeEndpoint("To", draftTo, active: !choosingEnd)
+            rangeEndpoint("To", selection.to, active: !selection.choosingEnd)
         }
     }
 
@@ -134,9 +180,9 @@ struct DashboardDateRangePicker: View {
         let available = bounds.contains(date)
         let sameMonth = calendar.isDate(date, equalTo: visibleMonth, toGranularity: .month)
         let endpoint =
-            calendar.isDate(date, inSameDayAs: draftFrom)
-            || calendar.isDate(date, inSameDayAs: draftTo)
-        let withinRange = date >= draftFrom && date <= draftTo
+            calendar.isDate(date, inSameDayAs: selection.from)
+            || calendar.isDate(date, inSameDayAs: selection.to)
+        let withinRange = date >= selection.from && date <= selection.to
         return Button {
             select(date)
         } label: {
@@ -167,11 +213,8 @@ struct DashboardDateRangePicker: View {
             shortcut("7 days", days: 7)
             shortcut("30 days", days: 30)
             Button("Month to date") {
-                let upper = bounds.upperBound
-                draftFrom = max(calendar.startOfMonth(containing: upper), bounds.lowerBound)
-                draftTo = upper
-                visibleMonth = calendar.startOfMonth(containing: upper)
-                choosingEnd = false
+                selection.setMonthToDate(bounds: bounds, calendar: calendar)
+                visibleMonth = calendar.startOfMonth(containing: selection.to)
             }
             .buttonStyle(.edith(.borderless))
             .font(DashSkin.mono(9))
@@ -185,13 +228,8 @@ struct DashboardDateRangePicker: View {
 
     private func shortcut(_ title: String, days: Int) -> some View {
         Button(title) {
-            let upper = bounds.upperBound
-            draftFrom = max(
-                calendar.date(byAdding: .day, value: -(days - 1), to: upper) ?? upper,
-                bounds.lowerBound)
-            draftTo = upper
-            visibleMonth = calendar.startOfMonth(containing: upper)
-            choosingEnd = false
+            selection.setTrailing(days: days, bounds: bounds, calendar: calendar)
+            visibleMonth = calendar.startOfMonth(containing: selection.to)
         }
         .buttonStyle(.edith(.borderless))
         .font(DashSkin.mono(9))
@@ -203,7 +241,7 @@ struct DashboardDateRangePicker: View {
 
     private var actionRow: some View {
         HStack {
-            Text(choosingEnd ? "Choose an end date" : "Range ready")
+            Text(selection.choosingEnd ? "Choose an end date" : "Range ready")
                 .font(DashSkin.mono(9))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Spacer()
@@ -212,7 +250,7 @@ struct DashboardDateRangePicker: View {
                 .font(DashSkin.mono(10))
                 .foregroundStyle(DashSkin.inkSoft(dark))
             Button("Apply") {
-                onApply(min(draftFrom, draftTo), max(draftFrom, draftTo))
+                onApply(selection.from, selection.to)
             }
             .buttonStyle(.edith(.borderless))
             .font(DashSkin.mono(10, weight: .semibold))
@@ -244,15 +282,7 @@ struct DashboardDateRangePicker: View {
     }
 
     private func select(_ date: Date) {
-        guard bounds.contains(date) else { return }
-        if choosingEnd, date >= draftFrom {
-            draftTo = date
-            choosingEnd = false
-        } else {
-            draftFrom = date
-            draftTo = date
-            choosingEnd = true
-        }
+        selection.select(date, bounds: bounds, calendar: calendar)
     }
 
     private static let monthFormatter: DateFormatter = {
