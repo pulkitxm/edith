@@ -96,11 +96,11 @@ struct DashboardDateRangePicker: View {
 
     private var rangeHeader: some View {
         HStack(spacing: UIScale.pt(10)) {
-            rangeEndpoint("From", selection.from, active: selection.choosingEnd)
+            rangeEndpoint("From", selection.from, active: false)
             Image(systemName: "arrow.right")
                 .font(.system(size: UIScale.pt(10), weight: .semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
-            rangeEndpoint("To", selection.to, active: !selection.choosingEnd)
+            rangeEndpoint("To", selection.to, active: selection.choosingEnd)
         }
     }
 
