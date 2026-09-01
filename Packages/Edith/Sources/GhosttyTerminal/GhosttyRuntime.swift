@@ -80,8 +80,8 @@ public final class GhosttyRuntime {
         runtime.confirm_read_clipboard_cb = { userdata, confirmation, state, request in
             GhosttyRuntime.confirmClipboard(userdata, confirmation, state, request)
         }
-        runtime.write_clipboard_cb = { _, _, content, count, _ in
-            GhosttyRuntime.writeClipboard(content, count)
+        runtime.write_clipboard_cb = { _, location, content, count, _ in
+            GhosttyRuntime.writeClipboard(location, content, count)
         }
         runtime.close_surface_cb = { userdata, _ in
             GhosttySurfaceRegistry.shared.close(userdata)
@@ -329,19 +329,11 @@ public final class GhosttyRuntime {
     }
 
     private static func writeClipboard(
+        _ location: ghostty_clipboard_e,
         _ content: UnsafePointer<ghostty_clipboard_content_s>?, _ count: Int
     ) {
-        guard let content, count > 0 else { return }
-        var text = ""
-        for index in 0..<count {
-            let entry = content[index]
-            guard let raw = entry.data, entry.len > 0 else { continue }
-            let buffer = UnsafeRawBufferPointer(start: raw, count: entry.len)
-            text += String(decoding: buffer, as: UTF8.self)
-        }
-        guard !text.isEmpty else { return }
-        let board = NSPasteboard.general
-        board.clearContents()
-        board.setString(text, forType: .string)
+        guard location == GHOSTTY_CLIPBOARD_STANDARD else { return }
+        TerminalClipboard.write(
+            TerminalClipboard.entries(from: content, count: count), to: .general)
     }
 }
