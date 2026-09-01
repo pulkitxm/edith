@@ -348,6 +348,15 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
         #expect(command.contains("chmod 755"))
         #expect(command.contains("mv \"$temporary\""))
     }
+
+    @Test func clipboardSyncRejectsWindowsBeforeRunningUnixSetup() {
+        #expect(SSHClipboardManager.supports(.darwin))
+        #expect(SSHClipboardManager.supports(.linux))
+        #expect(!SSHClipboardManager.supports(.windows))
+        #expect(
+            SSHClipboardManagerError.unsupportedPlatform.errorDescription
+                == "Clipboard sync supports remote macOS and Linux machines.")
+    }
 }
 
 @Suite @MainActor struct MachineStoreTests {
