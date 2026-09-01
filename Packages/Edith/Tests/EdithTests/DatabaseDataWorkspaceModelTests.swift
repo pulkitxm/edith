@@ -571,6 +571,83 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(mutation.payload.parameters.map(\.value) == [.string("Inline")])
     }
 
+    @Test(
+        "MySQL-family row editor creates bounded canonical mutations",
+        arguments: [DatabaseProduct.mysql, .mariaDB]
+    )
+    func mySQLFamilyMutationRequests(product: DatabaseProduct) async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)])
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: product)
+        model.prepare(for: connection)
+        model.targetText = "commerce.customers"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        model.selectRecord(at: 0)
+        model.beginEditingSelectedRow(connection)
+        model.updateEditorField("name", text: "Updated")
+        let update = try #require(model.editorMutationRequest(connection))
+        #expect(
+            update.payload.command
+                == "UPDATE `commerce`.`customers` SET `name` = ? WHERE `id` <=> ? LIMIT 1")
+        #expect(update.payload.product == product)
+        #expect(update.payload.parameters.map(\.value) == [.string("Updated")])
+
+        let deletion = try #require(model.deleteMutationRequest(connection))
+        #expect(
+            deletion.payload.command
+                == "DELETE FROM `commerce`.`customers` WHERE `id` <=> ? LIMIT 1")
+        #expect(deletion.payload.product == product)
+
+        model.beginInsert(connection)
+        model.updateEditorField("name", text: "Created")
+        let insert = try #require(model.editorMutationRequest(connection))
+        #expect(insert.payload.command == "INSERT INTO `commerce`.`customers` (`name`) VALUES (?)")
+        #expect(insert.payload.product == product)
+        #expect(insert.payload.parameters.map(\.value) == [.string("Created")])
+    }
+
+    @Test("SQLite row editor creates identity-bounded canonical mutations")
+    func sqliteMutationRequests() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)])
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .sqlite)
+        model.prepare(for: connection)
+        model.targetText = "customers"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        model.selectRecord(at: 0)
+        model.beginEditingSelectedRow(connection)
+        model.updateEditorField("name", text: "Updated")
+        let update = try #require(model.editorMutationRequest(connection))
+        #expect(
+            update.payload.command
+                == "UPDATE \"main\".\"customers\" SET \"name\" = ? WHERE \"id\" IS ?")
+        #expect(update.payload.product == .sqlite)
+        #expect(update.payload.parameters.map(\.value) == [.string("Updated")])
+
+        let deletion = try #require(model.deleteMutationRequest(connection))
+        #expect(
+            deletion.payload.command
+                == "DELETE FROM \"main\".\"customers\" WHERE \"id\" IS ?")
+        #expect(deletion.payload.product == .sqlite)
+
+        model.beginInsert(connection)
+        model.updateEditorField("name", text: "Created")
+        let insert = try #require(model.editorMutationRequest(connection))
+        #expect(
+            insert.payload.command
+                == "INSERT INTO \"main\".\"customers\" (\"name\") VALUES (?)")
+        #expect(insert.payload.product == .sqlite)
+        #expect(insert.payload.parameters.map(\.value) == [.string("Created")])
+    }
+
     @Test("Row editor only reviews fields that changed")
     func rowEditorChangeTracking() async throws {
         let sender = DatabaseDataScriptedSender(responses: [

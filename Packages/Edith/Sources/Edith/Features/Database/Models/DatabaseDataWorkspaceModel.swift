@@ -825,6 +825,48 @@ final class DatabaseDataWorkspaceModel {
                     values: values)
                 editorError = nil
                 return request
+            case (.mysql, .insert), (.mariaDB, .insert):
+                let request = try DatabaseRowMutationRequests.mySQLInsert(
+                    target: objectTarget,
+                    product: connection.product,
+                    values: values)
+                editorError = nil
+                return request
+            case (.mysql, .update(let recordIndex)), (.mariaDB, .update(let recordIndex)):
+                guard records.indices.contains(recordIndex),
+                    let identity = records[recordIndex].identity
+                else {
+                    throw DatabaseRowEditorError.missingIdentity
+                }
+                let request = try DatabaseRowMutationRequests.mySQLUpdate(
+                    target: DatabaseTargetIdentifier(
+                        connectionID: objectTarget.connectionID,
+                        object: objectTarget.object,
+                        record: identity),
+                    product: connection.product,
+                    values: values)
+                editorError = nil
+                return request
+            case (.sqlite, .insert):
+                let request = try DatabaseRowMutationRequests.sqliteInsert(
+                    target: objectTarget,
+                    values: values)
+                editorError = nil
+                return request
+            case (.sqlite, .update(let recordIndex)):
+                guard records.indices.contains(recordIndex),
+                    let identity = records[recordIndex].identity
+                else {
+                    throw DatabaseRowEditorError.missingIdentity
+                }
+                let request = try DatabaseRowMutationRequests.sqliteUpdate(
+                    target: DatabaseTargetIdentifier(
+                        connectionID: objectTarget.connectionID,
+                        object: objectTarget.object,
+                        record: identity),
+                    values: values)
+                editorError = nil
+                return request
             case (.redis, .insert), (.valkey, .insert):
                 guard let key = values.first(where: { $0.name == "key" })?.value,
                     let value = values.first(where: { $0.name == "value" })?.value
@@ -907,6 +949,12 @@ final class DatabaseDataWorkspaceModel {
                 request = try DatabaseDocumentMutationRequests.elasticsearchDelete(target: target)
             } else if connection.product == .openSearch {
                 request = try DatabaseDocumentMutationRequests.openSearchDelete(target: target)
+            } else if connection.product == .mysql || connection.product == .mariaDB {
+                request = try DatabaseRowMutationRequests.mySQLDelete(
+                    target: target,
+                    product: connection.product)
+            } else if connection.product == .sqlite {
+                request = try DatabaseRowMutationRequests.sqliteDelete(target: target)
             } else {
                 request = try DatabaseRowMutationRequests.postgreSQLDelete(target: target)
             }
@@ -1389,7 +1437,9 @@ final class DatabaseDataWorkspaceModel {
     }
 
     func supportsDataMutations(_ connection: DatabaseConnectionSummary) -> Bool {
-        (connection.product == .postgresql || connection.product == .redis
+        (connection.product == .postgresql || connection.product == .mysql
+            || connection.product == .mariaDB || connection.product == .sqlite
+            || connection.product == .redis
             || connection.product == .valkey || connection.product == .mongoDB
             || connection.product == .elasticsearch || connection.product == .openSearch)
             && connection.readOnlyPolicy == .disabled
@@ -1398,7 +1448,9 @@ final class DatabaseDataWorkspaceModel {
     }
 
     private func mutationUnavailableMessage(_ connection: DatabaseConnectionSummary) -> String {
-        if connection.product != .postgresql && connection.product != .redis
+        if connection.product != .postgresql && connection.product != .mysql
+            && connection.product != .mariaDB && connection.product != .sqlite
+            && connection.product != .redis
             && connection.product != .valkey && connection.product != .mongoDB
             && connection.product != .elasticsearch && connection.product != .openSearch
         {
