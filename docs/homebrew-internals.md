@@ -409,6 +409,7 @@ declares the processes to stop:
 ```ruby
 uninstall quit: [
   "com.pulkit.edith",
+  "com.pulkit.edith.helper.v2",
   "com.pulkit.edith.helper",
   "com.pulkit.edith.statusbar",
   "com.pulkit.edith.files",
@@ -580,6 +581,7 @@ cask "edith" do
 
   uninstall quit: [
     "com.pulkit.edith",
+    "com.pulkit.edith.helper.v2",
     "com.pulkit.edith.helper",
     "com.pulkit.edith.statusbar",
     "com.pulkit.edith.files",
@@ -592,6 +594,7 @@ cask "edith" do
     "~/Library/HTTPStorages/com.pulkit.edith",
     "~/Library/Preferences/com.pulkit.edith.plist",
     "~/Library/Preferences/com.pulkit.edith.shared.plist",
+    "~/Library/Preferences/com.pulkit.edith.helper.v2.plist",
     "~/Library/Preferences/com.pulkit.edith.helper.plist",
     "~/Library/Preferences/com.pulkit.edith.statusbar.plist",
     "~/Library/Saved Application State/com.pulkit.edith.savedState",
@@ -649,7 +652,7 @@ consequential lines in the file, for reasons in section 15.
 
 **`uninstall quit:`** lists the current and retired bundle identifiers, as covered
 in section 8. They are not guesses: `com.pulkit.edith` is `Resources/Info.plist`,
-`com.pulkit.edith.helper` is `Resources/HelperInfo.plist`, and
+`com.pulkit.edith.helper.v2` is `Resources/HelperInfo.plist`, and
 `com.pulkit.edith.files` is the Files helper, named in
 `Packages/Edith/Sources/EdithKit/Core/AppIdentity/MainApp.swift` and used by
 `Packages/Edith/Sources/EdithCLI/AppBridge.swift`.

@@ -39,6 +39,7 @@ test("uninstalling quits every bundle and zapping clears Edith's own state", () 
   for (const bundleID of [
     "com.pulkit.edith",
     "com.pulkit.edith.helper",
+    "com.pulkit.edith.helper.v2",
     "com.pulkit.edith.statusbar",
     "com.pulkit.edith.files",
   ]) {

@@ -67,6 +67,7 @@ describe("build install lifecycle", () => {
       "/Applications/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith",
     );
     expect(script).toContain('stop_process "com.pulkit.edith.helper"');
+    expect(script).toContain('stop_process "com.pulkit.edith.helper.v2"');
     expect(script).not.toContain("killall Edith");
   });
 
