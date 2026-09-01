@@ -104,13 +104,9 @@ extension GhosttyTerminalView {
         key.unshifted_codepoint = 0
         key.composing = false
         _ = ghostty_surface_key(surface, key)
-        var pointerFlags = event.modifierFlags
-        if ghostty_surface_mouse_captured(surface), event.keyCode == 54 || event.keyCode == 55 {
-            pointerFlags.insert(.shift)
-        }
         if let point = mousePoint {
             sendPointerPosition(
-                surface, point: point, flags: pointerFlags, force: true)
+                surface, point: point, flags: event.modifierFlags, force: true)
         }
     }
 
