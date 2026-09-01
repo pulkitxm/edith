@@ -148,6 +148,7 @@ final class HerdrStore {
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
     private let agentCloser: HerdrAgentCloser
+    private let machinesProvider: () -> [Machine]
     private var expectedHostCount: Int
     private var restoringDefaults = true
     private var collapseCountsReady = false
@@ -165,12 +166,14 @@ final class HerdrStore {
     init(
         defaults: UserDefaults = SharedDefaults.store,
         liveWatcher: @escaping HerdrLiveWatcher = { yield in await HerdrLive.watch(yield) },
-        agentCloser: @escaping HerdrAgentCloser = { try await HerdrAgentCloseExecution.close($0) }
+        agentCloser: @escaping HerdrAgentCloser = { try await HerdrAgentCloseExecution.close($0) },
+        machinesProvider: @escaping () -> [Machine] = { MachineRegistry.machines() }
     ) {
         self.defaults = defaults
         self.liveWatcher = liveWatcher
-        expectedHostCount = MachineRegistry.machines().count + 1
         self.agentCloser = agentCloser
+        self.machinesProvider = machinesProvider
+        expectedHostCount = machinesProvider().count + 1
         railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
         railWidth = HerdrPaneSizing.rail(
             defaults.object(forKey: AppStorageKeys.Herdr.railWidth) as? Double
@@ -341,7 +344,7 @@ final class HerdrStore {
 
     func watch() async {
         guard watchTask == nil else { return }
-        expectedHostCount = MachineRegistry.machines().count + 1
+        expectedHostCount = machinesProvider().count + 1
         if hosts.isEmpty { settling = true }
         watchGeneration += 1
         let generation = watchGeneration
@@ -418,7 +421,7 @@ final class HerdrStore {
         for snapshot in snapshots { incoming.insert(snapshot.id) }
         var configured: Set<String> = [HerdrHostSnapshot.localID]
         var order = [HerdrHostSnapshot.localID: 0]
-        for (index, machine) in MachineRegistry.machines().enumerated() {
+        for (index, machine) in machinesProvider().enumerated() {
             let id = machine.id.uuidString
             configured.insert(id)
             order[id] = index + 1
