@@ -384,30 +384,33 @@ public final class MachineSession {
         guard state.isConnected, !isTestingInternetSpeed else { return }
         internetSpeedRunTask?.cancel()
         internetSpeedRunTask = Task { [weak self] in
-            guard let self else { return }
-            isTestingInternetSpeed = true
-            internetSpeedError = nil
-            do {
-                let value: InternetSpeedMeasurement
-                if isLocal {
-                    value = try await InternetSpeedTester.measureLocal()
-                } else if let connection, let remotePlatform {
-                    value = try await InternetSpeedTester.measureRemote(
-                        connection: connection, platform: remotePlatform)
-                } else {
-                    throw InternetSpeedTestError.unavailable(
-                        "The selected machine is not connected.")
-                }
-                guard !Task.isCancelled else { return }
-                apply(internetSpeed: value)
-            } catch is CancellationError {
-                return
-            } catch {
-                guard !Task.isCancelled else { return }
-                internetSpeedError = error.localizedDescription
-            }
-            isTestingInternetSpeed = false
+            await self?.performInternetSpeedTest()
         }
+    }
+
+    private func performInternetSpeedTest() async {
+        isTestingInternetSpeed = true
+        internetSpeedError = nil
+        do {
+            let value: InternetSpeedMeasurement
+            if isLocal {
+                value = try await InternetSpeedTester.measureLocal()
+            } else if let connection, let remotePlatform {
+                value = try await InternetSpeedTester.measureRemote(
+                    connection: connection, platform: remotePlatform)
+            } else {
+                throw InternetSpeedTestError.unavailable(
+                    "The selected machine is not connected.")
+            }
+            guard !Task.isCancelled else { return }
+            apply(internetSpeed: value)
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled else { return }
+            internetSpeedError = error.localizedDescription
+        }
+        isTestingInternetSpeed = false
     }
 
     public func beginInternetSpeedObservation() {
