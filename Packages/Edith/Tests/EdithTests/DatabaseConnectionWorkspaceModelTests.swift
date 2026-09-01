@@ -70,6 +70,12 @@ import Testing
         #expect(search.text == "primary")
         #expect(search.group == "payments")
         #expect(search.favoritesOnly)
+
+        model.clearFilters()
+
+        #expect(model.searchText.isEmpty)
+        #expect(model.selectedGroup == nil)
+        #expect(!model.favoritesOnly)
     }
 
     @Test func completeEmptyListDistinguishesInitialAndFilteredResults() async {

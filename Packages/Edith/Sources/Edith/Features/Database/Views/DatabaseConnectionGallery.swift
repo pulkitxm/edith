@@ -137,8 +137,7 @@ struct DatabaseConnectionGallery: View {
             if model.favoritesOnly || model.selectedGroup != nil {
                 Divider()
                 Button("Clear filters") {
-                    model.favoritesOnly = false
-                    model.selectedGroup = nil
+                    model.clearFilters()
                 }
             }
         } label: {
@@ -186,9 +185,11 @@ struct DatabaseConnectionGallery: View {
             emptyState(
                 symbol: "magnifyingglass",
                 title: "No matching connections",
-                detail: "No saved connection matches \"\(search)\".",
-                actionTitle: "Clear search",
-                action: clearSearch)
+                detail: hasStructuredFilters
+                    ? "No saved connection matches the current filters."
+                    : "No saved connection matches \"\(search)\".",
+                actionTitle: hasStructuredFilters ? "Clear filters" : "Clear search",
+                action: clearFilters)
         case .loaded(let connections):
             connectionCards(connections)
         case .partial(let connections):
@@ -519,8 +520,12 @@ struct DatabaseConnectionGallery: View {
         }
     }
 
-    private func clearSearch() {
-        model.searchText = ""
+    private func clearFilters() {
+        model.clearFilters()
+    }
+
+    private var hasStructuredFilters: Bool {
+        model.favoritesOnly || model.selectedGroup != nil
     }
 
     private func connectionAccent(_ connection: DatabaseConnectionSummary) -> Color {

@@ -325,6 +325,12 @@ final class DatabaseConnectionWorkspaceModel {
         announcement("Selected \(summariesByID[connectionID]?.name ?? "database connection").")
     }
 
+    func clearFilters() {
+        searchText = ""
+        favoritesOnly = false
+        selectedGroup = nil
+    }
+
     func selectSavedConnection(_ connection: DatabaseConnectionDefinition) {
         listGeneration = UUID()
         let summary = DatabaseConnectionSummary(definition: connection)
