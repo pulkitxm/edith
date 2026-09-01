@@ -134,26 +134,6 @@ struct DatabaseRowFieldDraft: Identifiable, Equatable, Sendable {
 @Observable
 final class DatabaseDataWorkspaceModel {
     var targetText = ""
-    var filterField = "" {
-        didSet {
-            if filterField != oldValue { resetBrowsePaging() }
-        }
-    }
-    var filterValue = "" {
-        didSet {
-            if filterValue != oldValue { resetBrowsePaging() }
-        }
-    }
-    var sortField = "" {
-        didSet {
-            if sortField != oldValue { resetBrowsePaging() }
-        }
-    }
-    var sortDirection = DatabaseSortDirection.ascending {
-        didSet {
-            if sortDirection != oldValue { resetBrowsePaging() }
-        }
-    }
     var queryText = ""
     var searchQueryOperation = DatabaseSearchQueryOperation.search
     private(set) var filterClauses: [DatabaseWorkspaceFilterClause] = []
@@ -223,10 +203,7 @@ final class DatabaseDataWorkspaceModel {
     }
 
     var activeFilterCount: Int {
-        if !filterClauses.isEmpty {
-            return filterClauses.count(where: \.isEnabled)
-        }
-        return legacyFilterIsActive ? 1 : 0
+        filterClauses.count(where: \.isEnabled)
     }
 
     var hasActiveFilters: Bool {
@@ -235,24 +212,15 @@ final class DatabaseDataWorkspaceModel {
 
     var activeFilterSummary: String {
         let enabled = filterClauses.filter(\.isEnabled)
-        if !filterClauses.isEmpty {
-            guard !enabled.isEmpty else { return "No active filters" }
-            if enabled.count == 1 {
-                return enabled[0].summary
-            }
-            return "\(enabled.count) filters, match \(filterConjunction == .and ? "all" : "any")"
+        guard !enabled.isEmpty else { return "No active filters" }
+        if enabled.count == 1 {
+            return enabled[0].summary
         }
-        guard legacyFilterIsActive else { return "No active filters" }
-        return DatabaseWorkspaceFilterClause(
-            field: filterField,
-            operation: .contains,
-            valueText: filterValue,
-            caseSensitivity: .insensitive
-        ).summary
+        return "\(enabled.count) filters, match \(filterConjunction == .and ? "all" : "any")"
     }
 
     var activeSortCount: Int {
-        effectiveWorkspaceSorts.count
+        orderedSorts.count
     }
 
     var hasActiveSorts: Bool {
@@ -260,9 +228,8 @@ final class DatabaseDataWorkspaceModel {
     }
 
     var activeSortSummary: String {
-        let sorts = effectiveWorkspaceSorts
-        guard !sorts.isEmpty else { return "No active sorts" }
-        return sorts.map(\.summary).joined(separator: ", ")
+        guard !orderedSorts.isEmpty else { return "No active sorts" }
+        return orderedSorts.map(\.summary).joined(separator: ", ")
     }
 
     func defaultFilterOperator(
@@ -300,10 +267,6 @@ final class DatabaseDataWorkspaceModel {
             valueText: valueText,
             isEnabled: isEnabled,
             caseSensitivity: resolvedSensitivity)
-        if filterClauses.isEmpty {
-            filterField = ""
-            filterValue = ""
-        }
         filterClauses.append(clause)
         resetBrowsePaging()
         return clause.id
@@ -330,49 +293,52 @@ final class DatabaseDataWorkspaceModel {
     func clearFilters() {
         filterClauses = []
         filterConjunction = .and
-        filterField = ""
-        filterValue = ""
         resetBrowsePaging()
     }
 
     func cycleSort(field: String, additive: Bool) {
         let normalizedField = field.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedField.isEmpty else { return }
-        var sorts = effectiveWorkspaceSorts
-        sortField = ""
-        sortDirection = .ascending
-        if let index = sorts.firstIndex(where: { $0.field == normalizedField }) {
-            let current = sorts[index]
-            if additive {
-                if current.direction == .ascending {
-                    sorts[index] = DatabaseWorkspaceSort(
-                        field: normalizedField,
-                        direction: .descending)
-                } else {
-                    sorts.remove(at: index)
-                }
-            } else if current.direction == .ascending {
-                sorts = [
-                    DatabaseWorkspaceSort(field: normalizedField, direction: .descending)
-                ]
+        if let index = orderedSorts.firstIndex(where: { $0.field == normalizedField }) {
+            if orderedSorts[index].direction == .ascending {
+                setSort(field: normalizedField, direction: .descending, additive: additive)
+            } else if additive {
+                removeSort(field: normalizedField)
             } else {
-                sorts = []
+                clearSorts()
             }
         } else {
-            let sort = DatabaseWorkspaceSort(field: normalizedField, direction: .ascending)
-            sorts = additive ? sorts + [sort] : [sort]
+            setSort(field: normalizedField, direction: .ascending, additive: additive)
         }
+    }
+
+    func setSort(
+        field: String,
+        direction: DatabaseSortDirection,
+        additive: Bool
+    ) {
+        let normalizedField = field.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedField.isEmpty else { return }
+        let sort = DatabaseWorkspaceSort(field: normalizedField, direction: direction)
+        var sorts = orderedSorts
+        if additive {
+            if let index = sorts.firstIndex(where: { $0.field == normalizedField }) {
+                sorts[index] = sort
+            } else {
+                sorts.append(sort)
+            }
+        } else {
+            sorts = [sort]
+        }
+        guard sorts != orderedSorts else { return }
         orderedSorts = sorts
         resetBrowsePaging()
     }
 
     func removeSort(field: String) {
         let normalizedField = field.trimmingCharacters(in: .whitespacesAndNewlines)
-        let sorts = effectiveWorkspaceSorts
-        guard sorts.contains(where: { $0.field == normalizedField }) else { return }
-        sortField = ""
-        sortDirection = .ascending
-        orderedSorts = sorts.filter { $0.field != normalizedField }
+        guard orderedSorts.contains(where: { $0.field == normalizedField }) else { return }
+        orderedSorts.removeAll { $0.field == normalizedField }
         resetBrowsePaging()
     }
 
@@ -389,9 +355,8 @@ final class DatabaseDataWorkspaceModel {
     }
 
     func clearSorts() {
+        guard !orderedSorts.isEmpty else { return }
         orderedSorts = []
-        sortField = ""
-        sortDirection = .ascending
         resetBrowsePaging()
     }
 
@@ -410,12 +375,8 @@ final class DatabaseDataWorkspaceModel {
         documentText = ""
         editorError = nil
         selectedObject = nil
-        filterField = ""
-        filterValue = ""
         filterClauses = []
         filterConjunction = .and
-        sortField = ""
-        sortDirection = .ascending
         orderedSorts = []
         queryText = ""
         searchQueryOperation = .search
@@ -1096,7 +1057,7 @@ final class DatabaseDataWorkspaceModel {
     ) throws -> DatabaseBrowseRequest {
         let pageSize = try DatabasePageSize(100)
         let filter = try workspaceFilter()
-        let sorts = effectiveWorkspaceSorts.map {
+        let sorts = orderedSorts.map {
             DatabaseSort(field: fieldPath(named: $0.field), direction: $0.direction)
         }
         return DatabaseBrowseRequest(
@@ -1108,39 +1069,13 @@ final class DatabaseDataWorkspaceModel {
                 sorts: sorts))
     }
 
-    private var legacyFilterIsActive: Bool {
-        !filterField.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !filterValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private var effectiveWorkspaceSorts: [DatabaseWorkspaceSort] {
-        if !orderedSorts.isEmpty {
-            return orderedSorts
-        }
-        let normalizedField = sortField.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedField.isEmpty else { return [] }
-        return [DatabaseWorkspaceSort(field: normalizedField, direction: sortDirection)]
-    }
-
     private func workspaceFilter() throws -> DatabaseFilter? {
-        if !filterClauses.isEmpty {
-            let filters = try filterClauses.filter(\.isEnabled).map(filter(for:))
-            if filters.count == 1 {
-                return filters[0]
-            }
-            guard !filters.isEmpty else { return nil }
-            return filterConjunction == .and ? .all(filters) : .any(filters)
+        let filters = try filterClauses.filter(\.isEnabled).map(filter(for:))
+        if filters.count == 1 {
+            return filters[0]
         }
-        guard legacyFilterIsActive else { return nil }
-        return .predicate(
-            DatabaseFilterPredicate(
-                field: fieldPath(
-                    named: filterField.trimmingCharacters(in: .whitespacesAndNewlines)),
-                operation: .contains,
-                values: [
-                    .string(filterValue.trimmingCharacters(in: .whitespacesAndNewlines))
-                ],
-                caseSensitivity: .insensitive))
+        guard !filters.isEmpty else { return nil }
+        return filterConjunction == .and ? .all(filters) : .any(filters)
     }
 
     private func filter(

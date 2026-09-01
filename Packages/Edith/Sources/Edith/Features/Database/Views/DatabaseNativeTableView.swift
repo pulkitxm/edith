@@ -11,15 +11,14 @@ struct DatabaseNativeTableView: NSViewRepresentable {
     let fields: [DatabaseFieldDescriptor]
     let records: [DatabaseRecord]
     let selectedIndex: Int?
-    let sortField: String
-    let sortDirection: DatabaseSortDirection
+    let sorts: [DatabaseSort]
     let text: (DatabaseValue) -> String
     let select: (Int) -> Void
     let open: (Int) -> Void
     let rowIsEditable: (Int) -> Bool
     let canEdit: (Int, String) -> Bool
     let edit: (Int, String, String) -> Void
-    let sort: (String, DatabaseSortDirection) -> Void
+    let sort: (String, Bool) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -74,6 +73,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         weak var tableView: NSTableView?
         private var fieldNames: [String] = []
         private var applyingSelection = false
+        private var applyingSortDescriptors = false
 
         init(parent: DatabaseNativeTableView) {
             self.parent = parent
@@ -171,11 +171,12 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             _ tableView: NSTableView,
             sortDescriptorsDidChange oldDescriptors: [NSSortDescriptor]
         ) {
-            guard let descriptor = tableView.sortDescriptors.first,
-                let field = descriptor.key,
-                fieldNames.contains(field)
+            guard !applyingSortDescriptors,
+                let field = interactedSortField(
+                    oldDescriptors: oldDescriptors,
+                    newDescriptors: tableView.sortDescriptors)
             else { return }
-            parent.sort(field, descriptor.ascending ? .ascending : .descending)
+            parent.sort(field, NSEvent.modifierFlags.contains(.shift))
         }
 
         @objc func openSelectedRow() {
@@ -271,18 +272,60 @@ struct DatabaseNativeTableView: NSViewRepresentable {
 
         private func updateSortDescriptors() {
             guard let tableView else { return }
-            let descriptors: [NSSortDescriptor]
-            if fieldNames.contains(parent.sortField) {
-                descriptors = [
-                    NSSortDescriptor(
-                        key: parent.sortField,
-                        ascending: parent.sortDirection == .ascending)
-                ]
-            } else {
-                descriptors = []
+            let descriptors = parent.sorts.compactMap { sort -> NSSortDescriptor? in
+                let field = sort.field.segments.joined(separator: ".")
+                guard fieldNames.contains(field) else { return nil }
+                return NSSortDescriptor(
+                    key: field,
+                    ascending: sort.direction == .ascending)
             }
             if tableView.sortDescriptors != descriptors {
+                applyingSortDescriptors = true
+                defer { applyingSortDescriptors = false }
                 tableView.sortDescriptors = descriptors
+            }
+        }
+
+        private func interactedSortField(
+            oldDescriptors: [NSSortDescriptor],
+            newDescriptors: [NSSortDescriptor]
+        ) -> String? {
+            let oldSorts = sortableDescriptors(oldDescriptors)
+            let newSorts = sortableDescriptors(newDescriptors)
+            var oldDirections: [String: Bool] = [:]
+            var newDirections: [String: Bool] = [:]
+            for sort in oldSorts {
+                oldDirections[sort.field] = sort.ascending
+            }
+            for sort in newSorts {
+                newDirections[sort.field] = sort.ascending
+            }
+            if let added = newSorts.first(where: { oldDirections[$0.field] == nil }) {
+                return added.field
+            }
+            if let changed = newSorts.first(where: {
+                guard let previous = oldDirections[$0.field] else { return false }
+                return previous != $0.ascending
+            }) {
+                return changed.field
+            }
+            if let removed = oldSorts.first(where: { newDirections[$0.field] == nil }) {
+                return removed.field
+            }
+            let oldFields = oldSorts.map(\.field)
+            let newFields = newSorts.map(\.field)
+            guard oldFields != newFields else { return nil }
+            return newSorts.enumerated().first(where: { index, sort in
+                !oldFields.indices.contains(index) || oldFields[index] != sort.field
+            })?.element.field ?? oldFields.first
+        }
+
+        private func sortableDescriptors(
+            _ descriptors: [NSSortDescriptor]
+        ) -> [(field: String, ascending: Bool)] {
+            descriptors.compactMap { descriptor in
+                guard let field = descriptor.key, fieldNames.contains(field) else { return nil }
+                return (field, descriptor.ascending)
             }
         }
 

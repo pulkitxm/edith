@@ -16,10 +16,12 @@ struct DatabaseDataWorkspaceModelTests {
         let connection = try Self.connection(product: .postgresql)
         model.prepare(for: connection)
         model.targetText = "analytics.orders"
-        model.filterField = "customer_name"
-        model.filterValue = "Ada"
-        model.sortField = "created_at"
-        model.sortDirection = .descending
+        model.addFilterClause(
+            field: "customer_name",
+            operation: .contains,
+            valueText: "Ada",
+            caseSensitivity: .insensitive)
+        model.setSort(field: "created_at", direction: .descending, additive: false)
 
         model.browse(connection)
         await Self.waitUntil { model.state == .loaded }
@@ -45,6 +47,27 @@ struct DatabaseDataWorkspaceModelTests {
                         direction: .descending)
                 ])
         #expect(model.records == [Self.record(1)])
+    }
+
+    @Test("Exact sort direction replaces or preserves ordered priority")
+    func exactSortDirection() {
+        let model = DatabaseDataWorkspaceModel(announcement: { _ in })
+
+        model.setSort(field: "created_at", direction: .descending, additive: false)
+        #expect(model.orderedSorts.map(\.summary) == ["created_at descending"])
+
+        model.setSort(field: "id", direction: .ascending, additive: true)
+        #expect(
+            model.orderedSorts.map(\.summary)
+                == ["created_at descending", "id ascending"])
+
+        model.setSort(field: "created_at", direction: .ascending, additive: true)
+        #expect(
+            model.orderedSorts.map(\.summary)
+                == ["created_at ascending", "id ascending"])
+
+        model.setSort(field: "name", direction: .descending, additive: false)
+        #expect(model.orderedSorts.map(\.summary) == ["name descending"])
     }
 
     @Test("Structured filters build one conjunction level with ordered typed sorts")
