@@ -342,7 +342,11 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
     }
 
     @Test func remoteInstallPlacesTheNativeBinaryOnTheManagedPath() {
-        let command = SSHClipboardManager.remoteInstallCommand(version: "0.2.8")
+        let command = SSHClipboardManager.remoteInstallCommand(version: "0.2.10")
+        #expect(
+            command.contains(
+                "https://github.com/pulkitxm/ssh-clipboard/releases/download/v0.2.10/ssh-clipboard-0.2.10.tgz"
+            ))
         #expect(command.contains("vendor/$os-$arch/ssh-clipboard"))
         #expect(command.contains("$HOME/.local/bin/ssh-clipboard"))
         #expect(command.contains("chmod 755"))
