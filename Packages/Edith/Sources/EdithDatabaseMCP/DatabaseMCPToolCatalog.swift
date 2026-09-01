@@ -3,10 +3,19 @@ import MCP
 public enum DatabaseMCPToolName: String, CaseIterable, Sendable {
     case connections = "database_connections"
     case capabilities = "database_capabilities"
+    case browse = "database_browse"
+    case query = "database_query"
+    case operations = "database_operations"
+    case cancelOperation = "database_cancel_operation"
+    case testConnection = "database_test_connection"
+    case session = "database_session"
 }
 
 public enum DatabaseMCPToolCatalog {
-    public static let tools: [Tool] = [connections, capabilities]
+    public static let tools: [Tool] = [
+        connections, capabilities, browse, query, operations, cancelOperation,
+        testConnection, session,
+    ]
 
     public static let connections = Tool(
         name: DatabaseMCPToolName.connections.rawValue,
@@ -138,6 +147,213 @@ public enum DatabaseMCPToolCatalog {
                 "additionalProperties": false,
             ])))
 
+    public static let browse = Tool(
+        name: DatabaseMCPToolName.browse.rawValue,
+        title: "Browse database records",
+        description: "Read one bounded page from an explicit object on a saved connection.",
+        inputSchema: pageInputSchema(command: false),
+        annotations: .init(
+            title: "Browse database records",
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false),
+        outputSchema: pageResponseSchema)
+
+    public static let query = Tool(
+        name: DatabaseMCPToolName.query.rawValue,
+        title: "Run a bounded database read query",
+        description: "Run one bounded read query on an explicit saved connection.",
+        inputSchema: pageInputSchema(command: true),
+        annotations: .init(
+            title: "Run a bounded database read query",
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false),
+        outputSchema: pageResponseSchema)
+
+    public static let operations = Tool(
+        name: DatabaseMCPToolName.operations.rawValue,
+        title: "Database operations",
+        description: "List tracked database operations or get one operation by identifier.",
+        inputSchema: .object([
+            "type": "object",
+            "properties": .object([
+                "action": .object([
+                    "type": "string",
+                    "enum": .array(["list", "get"]),
+                ]),
+                "operation_id": uuidSchema,
+                "connection_id": uuidSchema,
+                "states": .object([
+                    "type": "array",
+                    "maxItems": 7,
+                    "items": .object([
+                        "type": "string",
+                        "enum": .array([
+                            "queued", "running", "cancelling", "succeeded", "failed",
+                            "cancelled", "partiallySucceeded",
+                        ]),
+                    ]),
+                ]),
+                "kinds": .object([
+                    "type": "array",
+                    "maxItems": 32,
+                    "items": .object([
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256,
+                    ]),
+                ]),
+                "before": .object([
+                    "type": "string",
+                    "format": "date-time",
+                ]),
+                "limit": .object([
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000,
+                ]),
+            ]),
+            "required": .array(["action"]),
+            "additionalProperties": false,
+        ]),
+        annotations: .init(
+            title: "Inspect database operations",
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false),
+        outputSchema: responseSchema(
+            data: .object([
+                "type": "object",
+                "properties": .object([
+                    "action": .object([
+                        "type": "string",
+                        "enum": .array(["list", "get"]),
+                    ]),
+                    "operations": .object([
+                        "type": "array",
+                        "maxItems": 1000,
+                        "items": .object(["type": "object"]),
+                    ]),
+                    "operation": .object([
+                        "anyOf": .array([
+                            .object(["type": "object"]),
+                            .object(["type": "null"]),
+                        ])
+                    ]),
+                ]),
+                "required": .array(["action"]),
+                "additionalProperties": false,
+            ])))
+
+    public static let cancelOperation = Tool(
+        name: DatabaseMCPToolName.cancelOperation.rawValue,
+        title: "Cancel database operation",
+        description: "Request cancellation of one tracked database operation.",
+        inputSchema: .object([
+            "type": "object",
+            "properties": .object([
+                "operation_id": uuidSchema
+            ]),
+            "required": .array(["operation_id"]),
+            "additionalProperties": false,
+        ]),
+        annotations: .init(
+            title: "Cancel database operation",
+            readOnlyHint: false,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false),
+        outputSchema: responseSchema(
+            data: .object([
+                "type": "object",
+                "properties": .object([
+                    "operation_id": uuidSchema,
+                    "disposition": .object([
+                        "type": "string",
+                        "enum": .array(["accepted", "alreadyFinished", "notActive", "notFound"]),
+                    ]),
+                    "cancellation_support": .object(["type": "string"]),
+                    "operation": .object([
+                        "anyOf": .array([
+                            .object(["type": "object"]),
+                            .object(["type": "null"]),
+                        ])
+                    ]),
+                ]),
+                "required": .array([
+                    "operation_id", "disposition", "cancellation_support", "operation",
+                ]),
+                "additionalProperties": false,
+            ])))
+
+    public static let testConnection = Tool(
+        name: DatabaseMCPToolName.testConnection.rawValue,
+        title: "Test database connection",
+        description: "Test one saved connection without opening a persistent session.",
+        inputSchema: connectionOperationInputSchema(action: false),
+        annotations: .init(
+            title: "Test database connection",
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false),
+        outputSchema: responseSchema(
+            data: .object([
+                "type": "object",
+                "properties": .object([
+                    "connection_id": uuidSchema,
+                    "display_name": .object(["type": "string"]),
+                    "product": .object(["type": "string"]),
+                    "version": .object(["type": .array(["string", "null"])]),
+                    "latency_ms": .object(["type": "integer", "minimum": 0]),
+                    "tested_at": .object(["type": "string"]),
+                    "operation_id": uuidSchema,
+                ]),
+                "required": .array([
+                    "connection_id", "display_name", "product", "version", "latency_ms",
+                    "tested_at", "operation_id",
+                ]),
+                "additionalProperties": false,
+            ])))
+
+    public static let session = Tool(
+        name: DatabaseMCPToolName.session.rawValue,
+        title: "Database session",
+        description: "Explicitly connect or disconnect one saved database session.",
+        inputSchema: connectionOperationInputSchema(action: true),
+        annotations: .init(
+            title: "Manage database session",
+            readOnlyHint: false,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false),
+        outputSchema: responseSchema(
+            data: .object([
+                "type": "object",
+                "properties": .object([
+                    "action": .object([
+                        "type": "string",
+                        "enum": .array(["connect", "disconnect"]),
+                    ]),
+                    "connection_id": uuidSchema,
+                    "display_name": .object(["type": "string"]),
+                    "product": .object(["type": .array(["string", "null"])]),
+                    "version": .object(["type": .array(["string", "null"])]),
+                    "disconnected": .object(["type": .array(["boolean", "null"])]),
+                    "completed_at": .object(["type": "string"]),
+                    "operation_id": uuidSchema,
+                ]),
+                "required": .array([
+                    "action", "connection_id", "display_name", "product", "version",
+                    "disconnected", "completed_at", "operation_id",
+                ]),
+                "additionalProperties": false,
+            ])))
+
     private static let uuidSchema = Value.object([
         "type": "string",
         "format": "uuid",
@@ -175,6 +391,124 @@ public enum DatabaseMCPToolCatalog {
         ]),
         "additionalProperties": false,
     ])
+
+    private static let pageResponseSchema = responseSchema(
+        data: .object([
+            "type": "object",
+            "properties": .object([
+                "connection_id": uuidSchema,
+                "page": .object([
+                    "type": "object",
+                    "properties": .object([
+                        "records": .object([
+                            "type": "array",
+                            "maxItems": 500,
+                            "items": .object(["type": "object"]),
+                        ]),
+                        "fields": .object([
+                            "type": "array",
+                            "maxItems": 256,
+                            "items": .object(["type": "object"]),
+                        ]),
+                        "next_continuation": .object([
+                            "type": .array(["string", "null"])
+                        ]),
+                        "metadata": .object(["type": "object"]),
+                    ]),
+                    "required": .array([
+                        "records", "fields", "next_continuation", "metadata",
+                    ]),
+                    "additionalProperties": false,
+                ]),
+            ]),
+            "required": .array(["connection_id", "page"]),
+            "additionalProperties": false,
+        ]))
+
+    private static func pageInputSchema(command: Bool) -> Value {
+        var properties: [String: Value] = [
+            "connection_id": uuidSchema,
+            "object_kind": .object([
+                "type": "string",
+                "enum": .array([
+                    "table", "view", "materializedView", "key", "collection", "alias",
+                    "dataStream", "dictionary", "other",
+                ]),
+            ]),
+            "object_path": .object([
+                "type": "array",
+                "minItems": command ? 0 : 1,
+                "maxItems": 32,
+                "items": .object([
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512,
+                ]),
+            ]),
+            "page_size": .object([
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 500,
+            ]),
+            "continuation": .object([
+                "type": "string",
+                "maxLength": 32768,
+            ]),
+            "timeout_ms": .object([
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 86400000,
+            ]),
+        ]
+        var required = ["connection_id"]
+        if command {
+            properties["language"] = .object([
+                "type": "string",
+                "enum": .array([
+                    "sql", "redisCommand", "mongoQuery", "searchQueryDSL", "clickHouseSQL",
+                ]),
+            ])
+            properties["command"] = .object([
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 262144,
+            ])
+            required.append(contentsOf: ["language", "command"])
+        } else {
+            required.append(contentsOf: ["object_kind", "object_path"])
+        }
+        return .object([
+            "type": "object",
+            "properties": .object(properties),
+            "required": .array(required.map(Value.string)),
+            "additionalProperties": false,
+        ])
+    }
+
+    private static func connectionOperationInputSchema(action: Bool) -> Value {
+        var properties: [String: Value] = [
+            "connection_id": uuidSchema,
+            "timeout_ms": .object([
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 86400000,
+            ]),
+        ]
+        var required = ["connection_id"]
+        if action {
+            properties["action"] = .object([
+                "type": "string",
+                "enum": .array(["connect", "disconnect"]),
+            ])
+            required.insert("action", at: 0)
+        }
+        return .object([
+            "type": "object",
+            "properties": .object(properties),
+            "required": .array(required.map(Value.string)),
+            "additionalProperties": false,
+        ])
+    }
 
     private static func responseSchema(data: Value) -> Value {
         .object([

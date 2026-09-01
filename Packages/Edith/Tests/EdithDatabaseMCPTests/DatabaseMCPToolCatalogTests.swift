@@ -7,10 +7,17 @@ import Testing
     @Test func exposesBoundedReadOnlyConnectionAndCapabilityTools() {
         #expect(
             DatabaseMCPToolCatalog.tools.map(\.name)
-                == ["database_connections", "database_capabilities"])
+                == [
+                    "database_connections", "database_capabilities", "database_browse",
+                    "database_query", "database_operations", "database_cancel_operation",
+                    "database_test_connection", "database_session",
+                ])
 
         for tool in DatabaseMCPToolCatalog.tools {
-            #expect(tool.annotations.readOnlyHint == true)
+            #expect(
+                tool.annotations.readOnlyHint
+                    == (["database_cancel_operation", "database_session"].contains(tool.name)
+                        ? false : true))
             #expect(tool.annotations.destructiveHint == false)
             #expect(tool.annotations.idempotentHint == true)
             #expect(tool.annotations.openWorldHint == false)
@@ -31,5 +38,25 @@ import Testing
             DatabaseMCPToolCatalog.capabilities.inputSchema.objectValue?["required"]?
             .arrayValue
         #expect(capabilityRequired == ["connection_id"])
+
+        let browseProperties =
+            DatabaseMCPToolCatalog.browse.inputSchema.objectValue?["properties"]?.objectValue
+        #expect(browseProperties?["object_path"]?.objectValue?["maxItems"]?.intValue == 32)
+        #expect(browseProperties?["page_size"]?.objectValue?["maximum"]?.intValue == 500)
+        #expect(
+            browseProperties?["continuation"]?.objectValue?["maxLength"]?.intValue == 32_768)
+
+        let queryProperties =
+            DatabaseMCPToolCatalog.query.inputSchema.objectValue?["properties"]?.objectValue
+        #expect(queryProperties?["command"]?.objectValue?["maxLength"]?.intValue == 262_144)
+        #expect(queryProperties?["language"]?.objectValue?["enum"]?.arrayValue?.count == 5)
+
+        let operationProperties =
+            DatabaseMCPToolCatalog.operations.inputSchema.objectValue?["properties"]?.objectValue
+        #expect(operationProperties?["limit"]?.objectValue?["maximum"]?.intValue == 1_000)
+        #expect(operationProperties?["states"]?.objectValue?["maxItems"]?.intValue == 7)
+        #expect(DatabaseMCPToolCatalog.cancelOperation.annotations.readOnlyHint == false)
+        #expect(DatabaseMCPToolCatalog.testConnection.annotations.readOnlyHint == true)
+        #expect(DatabaseMCPToolCatalog.session.annotations.readOnlyHint == false)
     }
 }

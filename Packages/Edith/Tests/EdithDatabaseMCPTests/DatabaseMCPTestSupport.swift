@@ -115,4 +115,64 @@ enum DatabaseMCPFixtures {
             discoveredAt: now,
             expiresAt: now.addingTimeInterval(300))
     }
+
+    static func page(note: String = "ready") -> DatabasePage<DatabaseRecord> {
+        DatabasePage(
+            records: [
+                DatabaseRecord(
+                    identity: DatabaseRecordIdentity(
+                        kind: .primaryKey,
+                        components: [
+                            DatabaseIdentityComponent(name: "id", value: .signedInteger(42))
+                        ]),
+                    fields: [
+                        DatabaseObjectField(name: "id", value: .signedInteger(42)),
+                        DatabaseObjectField(name: "note", value: .string(note)),
+                    ])
+            ],
+            fields: [
+                DatabaseFieldDescriptor(
+                    path: DatabaseFieldPath("id"),
+                    displayName: "id",
+                    typeName: "int8",
+                    isNullable: false,
+                    isSortable: true,
+                    isFilterable: true),
+                DatabaseFieldDescriptor(
+                    path: DatabaseFieldPath("note"),
+                    displayName: "note",
+                    typeName: "text",
+                    isNullable: false,
+                    isSortable: true,
+                    isFilterable: true),
+            ],
+            nextContinuation: DatabaseContinuationToken(rawValue: "next-page"),
+            metadata: DatabasePageMetadata(
+                completeness: DatabaseResultCompleteness(state: .partial),
+                count: DatabaseCountMetadata(value: 1, accuracy: .lowerBound),
+                timing: DatabaseQueryTiming(
+                    durationMilliseconds: 12,
+                    serverDurationMilliseconds: 8),
+                bytesReceived: 128))
+    }
+
+    static func operation() throws -> DatabaseOperationRecordSummary {
+        let connection = try connection()
+        return DatabaseOperationRecordSummary(
+            id: operationID,
+            kind: DatabaseOperationKind(rawValue: "database.query"),
+            state: .running,
+            connection: connection.identity,
+            target: DatabaseTargetIdentifier(
+                connectionID: connection.id,
+                object: DatabaseObjectIdentifier(kind: .table, path: ["public", "orders"])),
+            startedAt: now,
+            deadline: now.addingTimeInterval(30),
+            progress: .determinate(completed: 50, total: 100, unit: .records),
+            cancellationSupport: .serverSide,
+            retryClassification: .safeIdempotent,
+            pageCount: 1,
+            recordCount: 50,
+            byteCount: 4_096)
+    }
 }

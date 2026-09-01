@@ -27,7 +27,13 @@ import Testing
         await server.stop()
 
         #expect(cursor == nil)
-        #expect(tools.map(\.name) == ["database_connections", "database_capabilities"])
+        #expect(
+            tools.map(\.name)
+                == [
+                    "database_connections", "database_capabilities", "database_browse",
+                    "database_query", "database_operations", "database_cancel_operation",
+                    "database_test_connection", "database_session",
+                ])
         #expect(isError == false)
         guard case let .text(text, _, _)? = content.first else {
             Issue.record("Expected JSON text content.")
