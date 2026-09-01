@@ -95,7 +95,7 @@ extension DatabaseCLI {
                 }))
     }
 
-    private static func targetJSON(_ target: DatabaseTargetIdentifier) -> JSONValue {
+    static func targetJSON(_ target: DatabaseTargetIdentifier) -> JSONValue {
         .object([
             "connectionID": .string(target.connectionID.rawValue.uuidString.lowercased()),
             "object": target.object.map {
@@ -108,7 +108,7 @@ extension DatabaseCLI {
         ])
     }
 
-    private static func progressJSON(_ progress: DatabaseOperationProgress) -> JSONValue {
+    static func progressJSON(_ progress: DatabaseOperationProgress) -> JSONValue {
         .object([
             "kind": .string(progress.kind.rawValue),
             "completed": progress.completed.map(unsignedIntegerJSON) ?? .null,
@@ -118,7 +118,7 @@ extension DatabaseCLI {
         ])
     }
 
-    private static func warningJSON(_ warning: DatabaseWarning) -> JSONValue {
+    static func warningJSON(_ warning: DatabaseWarning) -> JSONValue {
         .object([
             "code": .string(warning.code),
             "message": boundedTextJSON(warning.message),
@@ -126,7 +126,7 @@ extension DatabaseCLI {
         ])
     }
 
-    private static func partialFailureJSON(_ failure: DatabasePartialFailure) -> JSONValue {
+    static func partialFailureJSON(_ failure: DatabasePartialFailure) -> JSONValue {
         .object([
             "itemIndex": failure.itemIndex.map(unsignedIntegerJSON) ?? .null,
             "itemIdentifier": .optional(failure.itemIdentifier),
@@ -134,7 +134,7 @@ extension DatabaseCLI {
         ])
     }
 
-    private static func errorJSON(_ error: DatabaseErrorEnvelope) -> JSONValue {
+    static func errorJSON(_ error: DatabaseErrorEnvelope) -> JSONValue {
         .object([
             "category": .string(error.category.rawValue),
             "message": boundedTextJSON(error.message),

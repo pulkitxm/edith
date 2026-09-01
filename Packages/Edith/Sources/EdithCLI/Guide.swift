@@ -138,6 +138,13 @@ public enum Guide {
         ed database connect <connection-id> --json
         ed database browse <connection-id> --path public --path orders --limit 100 --json
         printf 'select * from public.orders limit 100' | ed database query <connection-id> --json
+        ed database mutations row-request <connection-id> --action update --path public --path orders --identity identity.json --values values.json > mutation.json
+        ed database mutations preview --request mutation.json --json > preview.json
+        ed database mutations apply --request mutation.json --confirmation preview.json --yes --json > receipt.json
+        ed database mutations preview --request mutation.json --json | ed database mutations apply --request mutation.json --confirmation - --yes --json
+        ed database mutations status --receipt receipt.json --json
+        ed database mutations cancel --receipt receipt.json --yes --json
+        ed database mutations outcome <operation-id> --json
         ed database operations list --connection <connection-id> --state running --json
         ed database operations cancel <operation-id> --json
         ed database disconnect <connection-id> --json
@@ -162,6 +169,14 @@ public enum Guide {
         pass the opaque continuation back with `--continuation`, and set an operation
         deadline with `--timeout-milliseconds`. Query text is read only from stdin or
         a UTF-8 file so statements do not leak through process arguments.
+        Destructive work starts from a bounded `DatabaseDestructiveRequest` JSON file.
+        `mutations row-request` builds PostgreSQL insert, update, and delete requests with
+        quoted identifiers and bound values from typed identity and value documents.
+        `mutations preview` returns the exact effect, impact, confirmation text, expiry,
+        and a short-lived one-time token. `mutations apply` requires the unchanged request,
+        the saved preview document, and `--yes`; it never accepts tokens or confirmation
+        text in process arguments. Save an accepted apply result to check status, request
+        cancellation, or reconcile the durable outcome after an interrupted operation.
         `database operations` lists broker history, shows progress, and requests
         cancellation using operation UUIDs returned by execution commands.
 

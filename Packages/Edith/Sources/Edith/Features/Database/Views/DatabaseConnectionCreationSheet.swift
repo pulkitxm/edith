@@ -125,8 +125,11 @@ struct DatabaseConnectionCreationSheet: View {
                 Text("PostgreSQL, Redis, Valkey, MongoDB, and SQLite URLs are supported.")
                     .foregroundStyle(.secondary)
             case .applied:
-                Label("URL applied. Review the parsed details, then test the connection.", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(DashSkin.ok)
+                Label(
+                    "URL applied. Review the parsed details, then test the connection.",
+                    systemImage: "checkmark.circle.fill"
+                )
+                .foregroundStyle(DashSkin.ok)
             case .failed(let detail):
                 Label(detail, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(DashSkin.danger)

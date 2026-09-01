@@ -954,6 +954,58 @@ public enum CommandTree {
                             "--timeout-milliseconds": .free,
                         ], arguments: [.free]),
                     CommandNode(
+                        "mutations", "Preview, apply, and reconcile destructive database work.",
+                        children: [
+                            CommandNode(
+                                "row-request", "Build a safe PostgreSQL row mutation request.",
+                                options: [
+                                    "--help", "--action", "--path", "--identity", "--values",
+                                ],
+                                optionValues: [
+                                    "--action": .free, "--path": .free, "--identity": .free,
+                                    "--values": .free,
+                                ], arguments: [.free]),
+                            CommandNode(
+                                "preview", "Preview a destructive request without applying it.",
+                                options: [
+                                    "--json", "--help", "--request", "--timeout-milliseconds",
+                                ],
+                                optionValues: [
+                                    "--request": .free, "--timeout-milliseconds": .free,
+                                ]),
+                            CommandNode(
+                                "apply", "Apply the exact request bound to a fresh preview.",
+                                options: [
+                                    "--json", "--help", "--yes", "--request", "--confirmation",
+                                    "--timeout-milliseconds",
+                                ],
+                                optionValues: [
+                                    "--request": .free, "--confirmation": .free,
+                                    "--timeout-milliseconds": .free,
+                                ], destructivePolicy: .previewThenYes),
+                            CommandNode(
+                                "status", "Check an accepted asynchronous database mutation.",
+                                options: [
+                                    "--json", "--help", "--receipt", "--timeout-milliseconds",
+                                ],
+                                optionValues: [
+                                    "--receipt": .free, "--timeout-milliseconds": .free,
+                                ]),
+                            CommandNode(
+                                "cancel",
+                                "Request cancellation of an accepted asynchronous mutation.",
+                                options: [
+                                    "--json", "--help", "--yes", "--receipt",
+                                    "--timeout-milliseconds",
+                                ],
+                                optionValues: [
+                                    "--receipt": .free, "--timeout-milliseconds": .free,
+                                ], destructivePolicy: .previewThenYes),
+                            CommandNode(
+                                "outcome", "Read the durable outcome for a mutation operation.",
+                                options: common, arguments: [.free]),
+                        ]),
+                    CommandNode(
                         "operations", "Inspect and cancel tracked database operations.",
                         children: [
                             CommandNode(

@@ -14,6 +14,7 @@ struct DatabaseCommand: AsyncParsableCommand {
             DatabaseDisconnectCommand.self,
             DatabaseBrowseCommand.self,
             DatabaseQueryCommand.self,
+            DatabaseMutationsCommand.self,
             DatabaseOperationsCommand.self,
             DatabaseMCPCommand.self,
         ],
