@@ -260,6 +260,8 @@ enum DatabaseCapabilityState: Equatable, Sendable {
 @MainActor
 @Observable
 final class DatabaseConnectionWorkspaceModel {
+    private static let connectionListLimit = 100
+
     var searchText = ""
     var favoritesOnly = false
     var selectedGroup: String?
@@ -298,19 +300,20 @@ final class DatabaseConnectionWorkspaceModel {
     }
 
     var availableGroups: [DatabaseConnectionGroupOption] {
-        let groups = summariesByID.values.reduce(
-            into: [String: DatabaseConnectionGroupOption]()
-        ) { result, summary in
-            guard let identity = summary.groupIdentity, let label = summary.group else { return }
-            result[identity] = DatabaseConnectionGroupOption(id: identity, label: label)
+        var groups: [String: DatabaseConnectionGroupOption] = [:]
+        for summary in summariesByID.values.prefix(Self.connectionListLimit) {
+            guard let identity = summary.groupIdentity, let label = summary.group else { continue }
+            groups[identity] = DatabaseConnectionGroupOption(id: identity, label: label)
         }
-        return groups.values.sorted {
+        var options = Array(groups.values)
+        options.sort {
             let labelOrder = $0.label.localizedStandardCompare($1.label)
             if labelOrder == .orderedSame {
                 return $0.id < $1.id
             }
             return labelOrder == .orderedAscending
         }
+        return options
     }
 
     var selectedConnection: DatabaseConnectionSummary? {
@@ -425,7 +428,7 @@ final class DatabaseConnectionWorkspaceModel {
                             group: selectedGroup,
                             favoritesOnly: favoritesOnly,
                             order: .recentlyUsed,
-                            limit: 100))))
+                            limit: Self.connectionListLimit))))
             try Task.checkCancellation()
             guard listGeneration == generation else { return }
             finishConnectionList(response)
@@ -740,11 +743,16 @@ final class DatabaseConnectionWorkspaceModel {
     }
 
     private var filterDescription: String? {
-        let values = [
-            normalizedSearch,
-            favoritesOnly ? "favorites" : nil,
-            DatabaseConnectionDisplayText.optional(selectedGroup).map { "group \($0)" },
-        ].compactMap { $0 }
+        var values: [String] = []
+        if let normalizedSearch {
+            values.append(normalizedSearch)
+        }
+        if favoritesOnly {
+            values.append("favorites")
+        }
+        if let group = DatabaseConnectionDisplayText.optional(selectedGroup) {
+            values.append("group \(group)")
+        }
         return values.isEmpty ? nil : values.joined(separator: ", ")
     }
 
