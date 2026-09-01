@@ -181,6 +181,11 @@ import Testing
         #expect(!GhosttyTerminalView.suppresses("\r", whileComposing: false))
     }
 
+    @Test func copyShortcutOnlyBelongsToTheTerminalWhenTextIsSelected() {
+        #expect(!GhosttyTerminalView.shouldHandleCopyShortcut(hasSelection: false))
+        #expect(GhosttyTerminalView.shouldHandleCopyShortcut(hasSelection: true))
+    }
+
     @Test func modifierTransitionsSendPressAndRelease() throws {
         let pressed = try #require(
             NSEvent.keyEvent(
@@ -214,6 +219,21 @@ import Testing
             fileExists: { $0 == "/tmp/project/Sources/App.swift" })
 
         #expect(target?.path == "/tmp/project/Sources/App.swift")
+    }
+
+    @Test func remoteSessionsNeverResolvePathsAgainstTheLocalMac() {
+        #expect(
+            GhosttyTerminalView.linkTarget(
+                for: "/tmp/remote.log", workingDirectory: "/tmp",
+                allowsLocalFiles: false, fileExists: { _ in true }) == nil)
+        #expect(
+            GhosttyTerminalView.linkTarget(
+                for: "file:///tmp/remote.log", workingDirectory: "/tmp",
+                allowsLocalFiles: false, fileExists: { _ in true }) == nil)
+        #expect(
+            GhosttyTerminalView.linkTarget(
+                for: "https://example.com", workingDirectory: "/tmp",
+                allowsLocalFiles: false, fileExists: { _ in true })?.host == "example.com")
     }
 
     @Test func unsafeInlineSchemesDoNotOpen() {

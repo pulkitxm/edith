@@ -226,6 +226,7 @@ extension GhosttyTerminalView {
 
     static func linkTarget(
         for rawValue: String, workingDirectory: String?,
+        allowsLocalFiles: Bool = true,
         fileExists: (String) -> Bool = FileManager.default.fileExists(atPath:)
     ) -> URL? {
         var value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -246,9 +247,14 @@ extension GhosttyTerminalView {
 
         if let url = URL(string: value), let scheme = url.scheme?.lowercased(), !scheme.isEmpty {
             guard scheme != "javascript", scheme != "data" else { return nil }
-            if scheme == "file" { return url.standardizedFileURL }
+            if scheme == "file" {
+                guard allowsLocalFiles else { return nil }
+                return url.standardizedFileURL
+            }
             return url
         }
+
+        guard allowsLocalFiles else { return nil }
 
         var path = value
         if path.hasPrefix("~") {
@@ -275,12 +281,32 @@ extension GhosttyTerminalView {
         return URL(fileURLWithPath: path).standardizedFileURL
     }
 
-    func openTerminalTarget(_ rawValue: String) -> Bool {
-        guard let url = Self.linkTarget(for: rawValue, workingDirectory: currentDirectory) else {
+    func openTerminalTarget(
+        _ rawValue: String,
+        kind: ghostty_action_open_url_kind_e = GHOSTTY_ACTION_OPEN_URL_KIND_UNKNOWN
+    ) -> Bool {
+        if kind == GHOSTTY_ACTION_OPEN_URL_KIND_OSC8 {
+            commandClickOpenedTarget = true
+            let target = TerminalUntrustedURL(
+                value: rawValue, allowsLocalFiles: allowsLocalFileLinks)
+            let presentingWindow = window
+            DispatchQueue.main.async {
+                TerminalUntrustedURLPresenter.open(target, from: presentingWindow)
+            }
+            return true
+        }
+        guard
+            let url = Self.linkTarget(
+                for: rawValue, workingDirectory: currentDirectory,
+                allowsLocalFiles: allowsLocalFileLinks)
+        else {
             return false
         }
         commandClickOpenedTarget = true
-        return NSWorkspace.shared.open(url)
+        DispatchQueue.main.async {
+            NSWorkspace.shared.open(url)
+        }
+        return true
     }
 
     func setHoveredLink(_ value: String?) {
@@ -344,7 +370,13 @@ extension GhosttyTerminalView {
     }
 
     func selectionChanged() {
-        NSAccessibility.post(element: self, notification: .selectedTextChanged)
+        accessibilitySelectionTask?.cancel()
+        accessibilitySelectionTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(100))
+            guard !Task.isCancelled, let self else { return }
+            NSAccessibility.post(element: self, notification: .selectedTextChanged)
+            accessibilitySelectionTask = nil
+        }
     }
 
     func beginSearch(_ needle: String) {
@@ -373,11 +405,4 @@ extension GhosttyTerminalView {
         progressStrip.update(state, progress: progress)
     }
 
-    public override func isAccessibilityElement() -> Bool { true }
-
-    public override func accessibilityRole() -> NSAccessibility.Role? { .textArea }
-
-    public override func accessibilityValue() -> Any? { selectedText() ?? "" }
-
-    public override func accessibilitySelectedText() -> String? { selectedText() }
 }

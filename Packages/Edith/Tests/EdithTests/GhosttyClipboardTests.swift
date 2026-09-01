@@ -41,4 +41,32 @@ import Testing
         #expect(board.types?.filter { $0 == .string }.count == 1)
         #expect(board.string(forType: .string) == "latest")
     }
+
+    @Test func readsOnlyRequestedRepresentationsAndListsCanonicalMIMETypes() throws {
+        let board = NSPasteboard(name: .init("edith.ghostty.read.mixed"))
+        board.declareTypes([.string, .html], owner: nil)
+        board.setString("paste me", forType: .string)
+        board.setData(Data("<b>paste me</b>".utf8), forType: .html)
+
+        let request = try #require(
+            TerminalClipboard.read(
+                requestedMIMEs: ["text/plain", "text/plain"], listAvailable: true,
+                from: board))
+
+        #expect(
+            request.entries == [
+                TerminalClipboardEntry(mime: "text/plain", data: Data("paste me".utf8))
+            ])
+        #expect(request.availableMIMEs.contains("text/plain"))
+        #expect(request.availableMIMEs.contains("text/html"))
+    }
+
+    @Test func anUnavailableRequestedRepresentationDoesNotStartARead() {
+        let board = NSPasteboard(name: .init("edith.ghostty.read.unavailable"))
+        board.clearContents()
+
+        #expect(
+            TerminalClipboard.read(
+                requestedMIMEs: ["text/plain"], listAvailable: false, from: board) == nil)
+    }
 }

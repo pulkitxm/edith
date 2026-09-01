@@ -6,10 +6,12 @@ public final class GhosttyTerminalView: NSView {
     public var onDropFiles: ((TerminalDropPayload) -> Bool)?
     public var onTitleChange: ((String) -> Void)?
     public var onWorkingDirectoryChange: ((String) -> Void)?
+    public var onReady: (() -> Void)?
 
     private(set) var surface: ghostty_surface_t?
     public internal(set) var currentDirectory: String?
     public internal(set) var hoveredLink: String?
+    public let allowsLocalFileLinks: Bool
     private var launch: GhosttyLaunch?
     private var theme: GhosttyTheme?
     private var themeConfig: ghostty_config_t?
@@ -28,6 +30,7 @@ public final class GhosttyTerminalView: NSView {
     let progressStrip = TerminalProgressStrip(frame: .zero)
     var searchTotal: Int?
     var searchSelected: Int?
+    var accessibilitySelectionTask: Task<Void, Never>?
     let markedText = NSMutableAttributedString()
     var keyTextAccumulator: [String]?
 
@@ -72,6 +75,7 @@ public final class GhosttyTerminalView: NSView {
         self.launch = launch
         self.theme = theme
         currentDirectory = launch.workingDirectory
+        allowsLocalFileLinks = launch.allowsLocalFileLinks
         super.init(frame: .zero)
         wantsLayer = true
         registerForDraggedTypes(Array(Self.dropTypes))
@@ -104,6 +108,7 @@ public final class GhosttyTerminalView: NSView {
     required init?(coder: NSCoder) { nil }
 
     deinit {
+        accessibilitySelectionTask?.cancel()
         if cursorHidden { NSCursor.unhide() }
         shutdown()
         GhosttySurfaceRegistry.shared.unregister(self)
@@ -165,6 +170,7 @@ public final class GhosttyTerminalView: NSView {
         applySize()
         ghostty_surface_set_focus(surface, window?.firstResponder === self)
         applyPresentationState()
+        onReady?()
     }
 
     public func apply(theme newTheme: GhosttyTheme) {
@@ -234,6 +240,9 @@ public final class GhosttyTerminalView: NSView {
     public func setRenderingActive(_ active: Bool) {
         guard renderingActive != active else { return }
         renderingActive = active
+        if let surface {
+            ghostty_surface_set_focus(surface, active && window?.firstResponder === self)
+        }
         applyPresentationState()
     }
 

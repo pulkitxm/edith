@@ -99,6 +99,9 @@ extension GhosttyTerminalView {
         guard flags == .command else { return super.performKeyEquivalent(with: event) }
         switch character {
         case "c":
+            guard Self.shouldHandleCopyShortcut(hasSelection: hasSelection) else {
+                return super.performKeyEquivalent(with: event)
+            }
             copyTerminalSelection(nil)
             return true
         case "v":
@@ -128,6 +131,10 @@ extension GhosttyTerminalView {
         default:
             return super.performKeyEquivalent(with: event)
         }
+    }
+
+    static func shouldHandleCopyShortcut(hasSelection: Bool) -> Bool {
+        hasSelection
     }
 
     private func send(
@@ -394,9 +401,7 @@ extension GhosttyTerminalView {
             _ = self?.accept(payload)
         }
         if receivingPromises { return }
-        if performBindingAction("paste_from_clipboard") { return }
-        guard let text = NSPasteboard.general.string(forType: .string) else { return }
-        _ = insertText(text)
+        _ = performBindingAction("paste_from_clipboard")
     }
 
     @objc func selectAllTerminalText(_ sender: Any?) {
@@ -438,7 +443,11 @@ extension GhosttyTerminalView {
             surface, position.0, position.1, Self.mods(from: event.modifierFlags))
         let link = hoveredLink ?? terminalTargetAtPointer()
         let menu = NSMenu()
-        if let link, Self.linkTarget(for: link, workingDirectory: currentDirectory) != nil {
+        if let link,
+            Self.linkTarget(
+                for: link, workingDirectory: currentDirectory,
+                allowsLocalFiles: allowsLocalFileLinks) != nil
+        {
             let open = menu.addItem(
                 withTitle: "Open Link", action: #selector(openContextLink(_:)), keyEquivalent: "")
             open.target = self

@@ -7,15 +7,17 @@ public struct GhosttyLaunch: Sendable {
     public let arguments: [String]
     public let environment: [String]
     public let workingDirectory: String?
+    public let allowsLocalFileLinks: Bool
 
     public init(
         executable: String, arguments: [String], environment: [String],
-        workingDirectory: String? = nil
+        workingDirectory: String? = nil, allowsLocalFileLinks: Bool = true
     ) {
         self.executable = executable
         self.arguments = arguments
         self.environment = environment
         self.workingDirectory = workingDirectory
+        self.allowsLocalFileLinks = allowsLocalFileLinks
     }
 
     var command: String {
@@ -35,6 +37,7 @@ public final class GhosttyRuntime {
     private var config: ghostty_config_t?
     private var started = false
     private var tickScheduled = false
+    private var observers: [NSObjectProtocol] = []
 
     public var isReady: Bool { app != nil }
 
@@ -74,14 +77,14 @@ public final class GhosttyRuntime {
         runtime.action_cb = { _, target, action in
             GhosttyRuntime.shared.perform(action: action, target: target)
         }
-        runtime.read_clipboard_cb = { userdata, location, state, _, _, _ in
-            GhosttyRuntime.readClipboard(userdata, location, state)
+        runtime.read_clipboard_cb = { userdata, location, state, mimes, count, list in
+            GhosttyRuntime.readClipboard(userdata, location, state, mimes, count, list)
         }
         runtime.confirm_read_clipboard_cb = { userdata, confirmation, state, request in
             GhosttyRuntime.confirmClipboard(userdata, confirmation, state, request)
         }
-        runtime.write_clipboard_cb = { _, location, content, count, _ in
-            GhosttyRuntime.writeClipboard(location, content, count)
+        runtime.write_clipboard_cb = { _, location, content, count, confirm in
+            GhosttyRuntime.writeClipboard(location, content, count, confirm)
         }
         runtime.close_surface_cb = { userdata, _ in
             GhosttySurfaceRegistry.shared.close(userdata)
@@ -92,6 +95,8 @@ public final class GhosttyRuntime {
             return
         }
         app = created
+        ghostty_app_set_focus(created, NSApp.isActive)
+        installApplicationObservers()
     }
 
     var handle: ghostty_app_t? { app }
@@ -135,6 +140,32 @@ public final class GhosttyRuntime {
         }
     }
 
+    private func installApplicationObservers() {
+        let center = NotificationCenter.default
+        observers.append(
+            center.addObserver(
+                forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                guard let app = self?.app else { return }
+                ghostty_app_set_focus(app, true)
+            })
+        observers.append(
+            center.addObserver(
+                forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                guard let app = self?.app else { return }
+                ghostty_app_set_focus(app, false)
+            })
+        observers.append(
+            center.addObserver(
+                forName: NSTextInputContext.keyboardSelectionDidChangeNotification,
+                object: nil, queue: .main
+            ) { [weak self] _ in
+                guard let app = self?.app else { return }
+                ghostty_app_keyboard_changed(app)
+            })
+    }
+
     private func perform(action: ghostty_action_s, target: ghostty_target_s) -> Bool {
         switch action.tag {
         case GHOSTTY_ACTION_RENDER:
@@ -148,7 +179,14 @@ public final class GhosttyRuntime {
                 let value = GhosttyTerminalView.decoded(
                     action.action.open_url.url, count: Int(action.action.open_url.len))
             else { return false }
-            return onMain { view.openTerminalTarget(value) }
+            let kind = action.action.open_url.kind
+            if Thread.isMainThread {
+                return view.openTerminalTarget(value, kind: kind)
+            }
+            DispatchQueue.main.async { [weak view] in
+                _ = view?.openTerminalTarget(value, kind: kind)
+            }
+            return true
         case GHOSTTY_ACTION_MOUSE_SHAPE:
             guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
             onMain { view.setMouseShape(action.action.mouse_shape) }
@@ -229,33 +267,20 @@ public final class GhosttyRuntime {
 
     private static func readClipboard(
         _ userdata: UnsafeMutableRawPointer?, _ location: ghostty_clipboard_e,
-        _ state: UnsafeMutableRawPointer?
+        _ state: UnsafeMutableRawPointer?, _ mimes: UnsafePointer<UnsafePointer<CChar>?>?,
+        _ count: Int, _ list: Bool
     ) -> ghostty_clipboard_read_result_e {
-        guard let surface = GhosttySurfaceRegistry.shared.surface(userdata),
-            let text = NSPasteboard.general.string(forType: .string)
-        else {
-            return GHOSTTY_CLIPBOARD_READ_UNAVAILABLE
+        guard location == GHOSTTY_CLIPBOARD_STANDARD,
+            let surface = GhosttySurfaceRegistry.shared.surface(userdata)
+        else { return GHOSTTY_CLIPBOARD_READ_UNSUPPORTED }
+        let requested = (0..<count).compactMap { index in
+            mimes?[index].map(String.init(cString:))
         }
-        let bytes = Array(text.utf8CString)
-        let mime = Array("text/plain;charset=utf-8".utf8CString)
-        bytes.withUnsafeBufferPointer { data in
-            mime.withUnsafeBufferPointer { mimePointer in
-                var content = ghostty_clipboard_content_s(
-                    mime: mimePointer.baseAddress,
-                    data: data.baseAddress,
-                    len: max(0, data.count - 1))
-                withUnsafePointer(to: &content) { contentPointer in
-                    var complete = ghostty_clipboard_complete_s(
-                        contents: contentPointer,
-                        contents_len: 1,
-                        available: nil,
-                        available_len: 0,
-                        confirmed: true,
-                        remember: false)
-                    ghostty_surface_complete_clipboard_request(surface, &complete, state)
-                }
-            }
-        }
+        guard
+            let request = TerminalClipboard.read(
+                requestedMIMEs: requested, listAvailable: list, from: .general)
+        else { return GHOSTTY_CLIPBOARD_READ_UNAVAILABLE }
+        TerminalClipboard.complete(request, surface: surface, state: state)
         return GHOSTTY_CLIPBOARD_READ_STARTED
     }
 
@@ -264,30 +289,49 @@ public final class GhosttyRuntime {
         _ confirmation: UnsafePointer<ghostty_clipboard_confirm_s>?,
         _ state: UnsafeMutableRawPointer?, _ request: ghostty_clipboard_request_e
     ) {
-        guard let surface = GhosttySurfaceRegistry.shared.surface(userdata), let confirmation,
-            let state
+        guard let view = GhosttySurfaceRegistry.shared.view(userdata), let confirmation, let state
         else { return }
-        let approved = GhosttyRuntime.shared.onMain {
+        let value = confirmation.pointee
+        let entries: [TerminalClipboardEntry] =
+            if let contents = value.contents {
+                (0..<value.contents_len).compactMap { TerminalClipboardEntry(contents[$0]) }
+            } else {
+                []
+            }
+        let available: [String] =
+            if let values = value.available {
+                (0..<value.available_len).compactMap { values[$0].map(String.init(cString:)) }
+            } else {
+                []
+            }
+        let requestData = TerminalClipboardRead(entries: entries, availableMIMEs: available)
+        let detail = confirmationDetail(requestData)
+        let stateAddress = UInt(bitPattern: state)
+        DispatchQueue.main.async { [weak view] in
+            guard let view else { return }
             let alert = NSAlert()
             alert.messageText = confirmationTitle(for: request)
-            alert.informativeText = confirmationDetail(confirmation.pointee)
+            alert.informativeText = detail
             alert.alertStyle = .warning
             alert.addButton(withTitle: confirmationButton(for: request))
             alert.addButton(withTitle: "Cancel")
-            return alert.runModal() == .alertFirstButtonReturn
+            let finish: (NSApplication.ModalResponse) -> Void = { [weak view] response in
+                guard let surface = view?.surface,
+                    let pendingState = UnsafeMutableRawPointer(bitPattern: stateAddress)
+                else { return }
+                guard response == .alertFirstButtonReturn else {
+                    ghostty_surface_deny_clipboard_request(surface, pendingState)
+                    return
+                }
+                TerminalClipboard.complete(
+                    requestData, surface: surface, state: pendingState, confirmed: true)
+            }
+            if let window = view.window {
+                alert.beginSheetModal(for: window, completionHandler: finish)
+            } else {
+                finish(alert.runModal())
+            }
         }
-        guard approved else {
-            ghostty_surface_deny_clipboard_request(surface, state)
-            return
-        }
-        var complete = ghostty_clipboard_complete_s(
-            contents: confirmation.pointee.contents,
-            contents_len: confirmation.pointee.contents_len,
-            available: confirmation.pointee.available,
-            available_len: confirmation.pointee.available_len,
-            confirmed: true,
-            remember: false)
-        ghostty_surface_complete_clipboard_request(surface, &complete, state)
     }
 
     private static func confirmationTitle(for request: ghostty_clipboard_request_e) -> String {
@@ -314,26 +358,50 @@ public final class GhosttyRuntime {
         }
     }
 
-    private static func confirmationDetail(_ confirmation: ghostty_clipboard_confirm_s) -> String {
-        guard let contents = confirmation.contents, confirmation.contents_len > 0 else {
+    private static func confirmationDetail(_ request: TerminalClipboardRead) -> String {
+        guard
+            let entry = request.entries.first(where: { $0.baseMIMEType == "text/plain" })
+                ?? request.entries.first
+        else {
             return "A program in this terminal requested clipboard access."
         }
-        let entry = contents[0]
-        guard let raw = entry.data, entry.len > 0 else {
+        guard !entry.data.isEmpty else {
             return "A program in this terminal requested clipboard access."
         }
         let text = String(
-            decoding: UnsafeRawBufferPointer(start: raw, count: min(Int(entry.len), 240)),
-            as: UTF8.self)
-        return text.count < Int(entry.len) ? "\(text)…" : text
+            decoding: entry.data.prefix(240), as: UTF8.self)
+        return text.utf8.count < entry.data.count ? "\(text)…" : text
     }
 
     private static func writeClipboard(
         _ location: ghostty_clipboard_e,
-        _ content: UnsafePointer<ghostty_clipboard_content_s>?, _ count: Int
+        _ content: UnsafePointer<ghostty_clipboard_content_s>?, _ count: Int, _ confirm: Bool
     ) {
         guard location == GHOSTTY_CLIPBOARD_STANDARD else { return }
-        TerminalClipboard.write(
-            TerminalClipboard.entries(from: content, count: count), to: .general)
+        let entries = TerminalClipboard.entries(from: content, count: count)
+        guard !entries.isEmpty else { return }
+        guard confirm else {
+            TerminalClipboard.write(entries, to: .general)
+            return
+        }
+        let detail = confirmationDetail(
+            TerminalClipboardRead(entries: entries, availableMIMEs: []))
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "Allow terminal to change the clipboard?"
+            alert.informativeText = detail
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Change Clipboard")
+            alert.addButton(withTitle: "Cancel")
+            let finish: (NSApplication.ModalResponse) -> Void = { response in
+                guard response == .alertFirstButtonReturn else { return }
+                TerminalClipboard.write(entries, to: .general)
+            }
+            if let window = NSApp.keyWindow {
+                alert.beginSheetModal(for: window, completionHandler: finish)
+            } else {
+                finish(alert.runModal())
+            }
+        }
     }
 }
