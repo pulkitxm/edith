@@ -511,18 +511,16 @@ struct DatabaseWorkbenchView: View {
                     : "Fetching the first bounded page.",
                 cancel: data.cancel)
         case .failed(let message) where data.records.isEmpty:
-            emptyState(
-                symbol: "exclamationmark.triangle",
-                title: workbenchMode == .query ? "Query unavailable" : "Data unavailable",
-                detail: message,
-                actionTitle: "Try again",
-                action: {
-                    if workbenchMode == .query {
-                        data.runQuery(connection)
-                    } else {
-                        data.browse(connection)
-                    }
-                })
+            if workbenchMode == .browse {
+                populatedResults(connection)
+            } else {
+                emptyState(
+                    symbol: "exclamationmark.triangle",
+                    title: "Query unavailable",
+                    detail: message,
+                    actionTitle: "Try again",
+                    action: { data.runQuery(connection) })
+            }
         case .loading, .loaded, .failed:
             populatedResults(connection)
         }
@@ -576,6 +574,9 @@ struct DatabaseWorkbenchView: View {
                     accent: theme,
                     palette: palette,
                     apply: { data.browse(connection) })
+                if case .failed(let message) = data.state {
+                    browseFailureNotice(message, connection: connection)
+                }
             }
             DatabaseNativeTableView(
                 accent: theme,
@@ -688,6 +689,48 @@ struct DatabaseWorkbenchView: View {
             .background(palette.panel)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func browseFailureNotice(
+        _ message: String,
+        connection: DatabaseConnectionSummary
+    ) -> some View {
+        HStack(spacing: UIScale.pt(9)) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .foregroundStyle(DashSkin.warn)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(
+                    data.hasActiveFilters
+                        ? "Filter could not be applied" : "Data could not be refreshed"
+                )
+                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                .foregroundStyle(palette.ink)
+                Text(message)
+                    .font(.system(size: UIScale.pt(9.5)))
+                    .foregroundStyle(palette.inkSoft)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: UIScale.pt(8))
+            if data.hasActiveFilters {
+                Button("Clear filters") {
+                    data.clearFilters()
+                    data.browse(connection)
+                }
+                .buttonStyle(.edith(.secondary))
+            }
+            Button("Try again") {
+                data.browse(connection)
+            }
+            .buttonStyle(.edith(.borderless))
+        }
+        .padding(.horizontal, UIScale.pt(12))
+        .padding(.vertical, UIScale.pt(7))
+        .background(DashSkin.warn.opacity(dark ? 0.08 : 0.06))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(
+            "\(data.hasActiveFilters ? "Filter could not be applied" : "Data could not be refreshed"). \(message)"
+        )
     }
 
     @ViewBuilder

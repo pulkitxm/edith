@@ -217,6 +217,44 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(await sender.recordedRequests().count == 1)
     }
 
+    @Test("Failed empty filtered results can clear and retry without the rejected filter")
+    func failedEmptyFilterRecovery() async throws {
+        let fields = [
+            DatabaseFieldDescriptor(
+                path: DatabaseFieldPath("name"),
+                displayName: "name",
+                typeName: "text",
+                isNullable: false,
+                isSortable: true,
+                isFilterable: true)
+        ]
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [], fields: fields)
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.customers"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+        model.addFilterClause(field: "name", operation: .contains, valueText: "Ada")
+
+        model.browse(connection)
+        await Self.waitUntil { model.state == .failed("The database rejected this data request.") }
+
+        #expect(model.records.isEmpty)
+        #expect(model.fields == fields)
+        #expect(model.hasActiveFilters)
+        model.clearFilters()
+        #expect(!model.hasActiveFilters)
+
+        model.browse(connection)
+        await Self.waitUntil { model.state == .failed("The database rejected this data request.") }
+        #expect(await sender.recordedRequests().count == 3)
+        let retry = try #require((await sender.recordedRequests()).last?.browseRequest)
+        #expect(retry.page.filter == nil)
+    }
+
     @Test("Membership filters accept JSON arrays with commas in text values")
     func structuredFilterJSONArray() async throws {
         let sender = DatabaseDataScriptedSender(responses: [
