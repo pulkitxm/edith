@@ -352,16 +352,7 @@ struct DatabaseConnectionCreationSheet: View {
         HStack(spacing: UIScale.pt(12)) {
             phaseStatus
             Spacer(minLength: UIScale.pt(12))
-            Button {
-                submissionTask = Task {
-                    if let connection = await model.testAndSaveConnection(
-                        applyPendingURL: entryMode == .url),
-                        !Task.isCancelled
-                    {
-                        saved(connection)
-                    }
-                }
-            } label: {
+            Button(action: submit) {
                 if isWorking {
                     ProgressView().controlSize(.small)
                 } else {
@@ -477,6 +468,19 @@ struct DatabaseConnectionCreationSheet: View {
 
     private var isWorking: Bool {
         model.phase == .testing || model.phase == .saving
+    }
+
+    private func submit() {
+        submissionTask?.cancel()
+        let appliesPendingURL = entryMode == .url
+        submissionTask = Task {
+            guard
+                let connection = await model.testAndSaveConnection(
+                    applyPendingURL: appliesPendingURL),
+                !Task.isCancelled
+            else { return }
+            saved(connection)
+        }
     }
 
     private func cancelSubmissionAndDismiss() {

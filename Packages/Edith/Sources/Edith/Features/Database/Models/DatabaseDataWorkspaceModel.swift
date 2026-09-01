@@ -995,9 +995,9 @@ final class DatabaseDataWorkspaceModel {
     ) -> String {
         switch product {
         case .postgresql, .sqlite:
-            return "SELECT * FROM " + object.path.map(doubleQuoted).joined(separator: ".")
+            return "SELECT * FROM " + qualifiedIdentifier(object.path, quote: doubleQuoted)
         case .mysql, .mariaDB, .clickHouse:
-            return "SELECT * FROM " + object.path.map(backtickQuoted).joined(separator: ".")
+            return "SELECT * FROM " + qualifiedIdentifier(object.path, quote: backtickQuoted)
         case .redis, .valkey:
             return "TYPE session:1"
         case .mongoDB:
@@ -1009,6 +1009,20 @@ final class DatabaseDataWorkspaceModel {
             }
             return "{\n  \"query\": {\n    \"match_all\": {}\n  }\n}"
         }
+    }
+
+    private static func qualifiedIdentifier(
+        _ path: [String],
+        quote: (String) -> String
+    ) -> String {
+        var identifier = ""
+        for component in path {
+            if !identifier.isEmpty {
+                identifier += "."
+            }
+            identifier += quote(component)
+        }
+        return identifier
     }
 
     private static func replay(
