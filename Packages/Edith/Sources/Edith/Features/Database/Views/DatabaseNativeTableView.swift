@@ -35,13 +35,15 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         tableView.allowsEmptySelection = true
         tableView.usesAlternatingRowBackgroundColors = false
         tableView.rowHeight = 30
-        tableView.intercellSpacing = NSSize(width: 8, height: 1)
+        tableView.intercellSpacing = NSSize(width: 12, height: 0)
         tableView.columnAutoresizingStyle = .noColumnAutoresizing
-        tableView.gridStyleMask = [.solidHorizontalGridLineMask]
-        tableView.gridColor = NSColor(grid)
+        tableView.gridStyleMask = []
         tableView.style = .plain
         tableView.backgroundColor = NSColor(background)
+        tableView.selectionHighlightStyle = .regular
         tableView.headerView?.menu = nil
+        tableView.headerView?.frame.size.height = 28
+        tableView.setAccessibilityLabel("Database records")
 
         let scrollView = NSScrollView()
         scrollView.documentView = tableView
@@ -50,6 +52,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = true
         scrollView.backgroundColor = NSColor(background)
+        scrollView.borderType = .noBorder
         context.coordinator.tableView = tableView
         context.coordinator.rebuildColumns()
         return scrollView
@@ -95,7 +98,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                 textField.stringValue = (row + 1).formatted()
                 textField.alignment = .right
                 textField.textColor = NSColor(parent.inkFaint)
-                textField.font = .monospacedDigitSystemFont(ofSize: 10.5, weight: .regular)
+                textField.font = .monospacedDigitSystemFont(ofSize: 10.5, weight: .medium)
                 cell.imageView?.image =
                     parent.records[row].identity == nil
                     ? nil
@@ -109,6 +112,9 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                     parent.records[row].identity == nil
                     ? "This row has no stable key"
                     : "This row has a stable key"
+                textField.setAccessibilityLabel("Row \(row + 1)")
+                textField.setAccessibilityValue(
+                    parent.records[row].identity == nil ? "No stable key" : "Stable key")
                 return cell
             }
             guard
@@ -125,9 +131,11 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             textField.textColor = NSColor(value.isAbsent ? parent.inkFaint : parent.ink)
             textField.font =
                 value.isAbsent
-                ? .monospacedSystemFont(ofSize: 10.5, weight: .light)
-                : .monospacedSystemFont(ofSize: 10.5, weight: .regular)
+                ? .monospacedSystemFont(ofSize: 11, weight: .light)
+                : .monospacedSystemFont(ofSize: 11, weight: .regular)
             textField.toolTip = "\(field.displayName): \(rendered)"
+            textField.setAccessibilityLabel(field.displayName)
+            textField.setAccessibilityValue(rendered)
             textField.tag = row
             textField.isEditable = parent.canEdit(row, identifier.rawValue)
             textField.isSelectable = true
@@ -153,6 +161,9 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
             let rowView = DatabaseNativeRowView()
             rowView.accentColor = NSColor(parent.accent)
+            rowView.alternatingColor = NSColor(parent.ink).withAlphaComponent(0.025)
+            rowView.hoverColor = NSColor(parent.ink).withAlphaComponent(0.07)
+            rowView.rowIndex = row
             return rowView
         }
 
@@ -205,7 +216,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             let background = NSColor(parent.background)
             scrollView.backgroundColor = background
             tableView?.backgroundColor = background
-            tableView?.gridColor = NSColor(parent.grid)
+            applyHeaderPalette()
         }
 
         func rebuildColumns() {
@@ -216,9 +227,10 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             let rowColumn = NSTableColumn(
                 identifier: NSUserInterfaceItemIdentifier(Self.rowColumnIdentifier))
             rowColumn.title = "#"
-            rowColumn.width = 58
-            rowColumn.minWidth = 52
-            rowColumn.maxWidth = 72
+            rowColumn.headerCell = makeHeaderCell(title: "#", alignment: .right)
+            rowColumn.width = 50
+            rowColumn.minWidth = 46
+            rowColumn.maxWidth = 64
             rowColumn.resizingMask = .userResizingMask
             tableView.addTableColumn(rowColumn)
 
@@ -227,6 +239,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                 let name = field.path.segments.joined(separator: ".")
                 let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(name))
                 column.title = field.displayName
+                column.headerCell = makeHeaderCell(title: field.displayName)
                 column.width = initialWidth(for: field)
                 column.minWidth = 90
                 column.maxWidth = 520
@@ -237,6 +250,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                 tableView.addTableColumn(column)
             }
             updateSortDescriptors()
+            applyHeaderPalette()
         }
 
         func reloadSelection() {
@@ -283,12 +297,13 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             textField.translatesAutoresizingMaskIntoConstraints = false
             textField.lineBreakMode = .byTruncatingTail
             textField.maximumNumberOfLines = 1
+            textField.drawsBackground = false
             textField.delegate = self
             cell.textField = textField
             cell.addSubview(textField)
             NSLayoutConstraint.activate([
-                textField.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
-                textField.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -4),
+                textField.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 8),
+                textField.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8),
                 textField.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
             ])
             return cell
@@ -309,15 +324,37 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             cell.addSubview(imageView)
             cell.addSubview(textField)
             NSLayoutConstraint.activate([
-                imageView.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 5),
+                imageView.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 6),
                 imageView.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
                 imageView.widthAnchor.constraint(equalToConstant: 11),
                 imageView.heightAnchor.constraint(equalToConstant: 11),
-                textField.leadingAnchor.constraint(equalTo: imageView.trailingAnchor, constant: 3),
-                textField.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -5),
+                textField.leadingAnchor.constraint(equalTo: imageView.trailingAnchor, constant: 4),
+                textField.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -6),
                 textField.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
             ])
             return cell
+        }
+
+        private func makeHeaderCell(
+            title: String,
+            alignment: NSTextAlignment = .left
+        ) -> DatabaseNativeHeaderCell {
+            let cell = DatabaseNativeHeaderCell(textCell: title)
+            cell.alignment = alignment
+            cell.lineBreakMode = .byTruncatingTail
+            cell.font = .systemFont(ofSize: 11, weight: .medium)
+            return cell
+        }
+
+        private func applyHeaderPalette() {
+            guard let tableView else { return }
+            for column in tableView.tableColumns {
+                guard let cell = column.headerCell as? DatabaseNativeHeaderCell else { continue }
+                cell.fillColor = NSColor(parent.background)
+                cell.dividerColor = NSColor(parent.inkFaint).withAlphaComponent(0.2)
+                cell.textColor = NSColor(parent.inkFaint)
+            }
+            tableView.headerView?.needsDisplay = true
         }
 
         private func initialWidth(for field: DatabaseFieldDescriptor) -> CGFloat {
@@ -346,14 +383,82 @@ struct DatabaseNativeTableView: NSViewRepresentable {
 
 private final class DatabaseNativeRowView: NSTableRowView {
     var accentColor = NSColor.controlAccentColor
+    var alternatingColor = NSColor.labelColor.withAlphaComponent(0.025)
+    var hoverColor = NSColor.labelColor.withAlphaComponent(0.07)
+    var rowIndex = 0
+    private var hovering = false
+    private var hoverTrackingArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        hoverTrackingArea = trackingArea
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        hovering = true
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hovering = false
+        needsDisplay = true
+    }
+
+    override func drawBackground(in dirtyRect: NSRect) {
+        guard !isSelected else { return }
+        if !rowIndex.isMultiple(of: 2) {
+            alternatingColor.setFill()
+            bounds.fill()
+        }
+        guard hovering else { return }
+        hoverColor.setFill()
+        NSBezierPath(
+            roundedRect: bounds.insetBy(dx: 2, dy: 1),
+            xRadius: 4,
+            yRadius: 4
+        ).fill()
+    }
 
     override func drawSelection(in dirtyRect: NSRect) {
         guard selectionHighlightStyle != .none else { return }
-        accentColor.withAlphaComponent(isEmphasized ? 0.24 : 0.14).setFill()
-        NSBezierPath(
+        let path = NSBezierPath(
             roundedRect: bounds.insetBy(dx: 1, dy: 1),
             xRadius: 4,
             yRadius: 4
+        )
+        accentColor.withAlphaComponent(isEmphasized ? 0.2 : 0.11).setFill()
+        path.fill()
+        accentColor.withAlphaComponent(isEmphasized ? 0.42 : 0.22).setStroke()
+        path.lineWidth = 1
+        path.stroke()
+    }
+}
+
+private final class DatabaseNativeHeaderCell: NSTableHeaderCell {
+    var fillColor = NSColor.controlBackgroundColor
+    var dividerColor = NSColor.separatorColor
+
+    override func draw(withFrame cellFrame: NSRect, in controlView: NSView) {
+        fillColor.setFill()
+        cellFrame.fill()
+        super.drawInterior(withFrame: cellFrame.insetBy(dx: 8, dy: 3), in: controlView)
+        dividerColor.setFill()
+        let dividerY = controlView.isFlipped ? cellFrame.maxY - 1 : cellFrame.minY
+        NSRect(
+            x: cellFrame.minX,
+            y: dividerY,
+            width: cellFrame.width,
+            height: 1
         ).fill()
     }
 }
