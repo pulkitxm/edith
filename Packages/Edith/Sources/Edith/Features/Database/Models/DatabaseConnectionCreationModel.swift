@@ -12,10 +12,17 @@ enum DatabaseConnectionCreationPhase: Equatable {
     case saved
 }
 
+enum DatabaseConnectionURLImportPhase: Equatable {
+    case editing
+    case applied
+    case failed(String)
+}
+
 @MainActor
 @Observable
 final class DatabaseConnectionCreationModel: Identifiable {
     let id = UUID()
+    var connectionURL = ""
     var displayName = ""
     var product = DatabaseProduct.postgresql
     var host = "127.0.0.1"
@@ -32,6 +39,7 @@ final class DatabaseConnectionCreationModel: Identifiable {
     var readOnlyPolicy = DatabaseReadOnlyPolicy.required
     var productionPolicy = DatabaseProductionPolicy.requireMutationPreview
     private(set) var phase = DatabaseConnectionCreationPhase.editing
+    private(set) var urlImportPhase = DatabaseConnectionURLImportPhase.editing
 
     private let sender: any DatabaseBrokerCommandSending
     private let secretStore: any DatabaseSecretStore
@@ -80,6 +88,12 @@ final class DatabaseConnectionCreationModel: Identifiable {
         phase != .testing && phase != .saving
     }
 
+    var canApplyConnectionURL: Bool {
+        !connectionURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && phase != .testing
+            && phase != .saving
+    }
+
     var canSave: Bool {
         guard case .tested = phase,
             let testedDraft,
@@ -105,6 +119,35 @@ final class DatabaseConnectionCreationModel: Identifiable {
             if database == "0" { database = "" }
         }
         invalidateTest()
+    }
+
+    func updateConnectionURL(_ value: String) {
+        connectionURL = value
+        urlImportPhase = .editing
+        invalidateTest()
+    }
+
+    func applyConnectionURL() {
+        do {
+            let parsed = try DatabaseConnectionURLParser.parse(connectionURL)
+            product = parsed.product
+            host = parsed.host
+            port = String(parsed.port)
+            path = parsed.path
+            username = parsed.username
+            password = parsed.password
+            database = parsed.database
+            authenticationDatabase = parsed.authenticationDatabase
+            tlsEnabled = parsed.tlsEnabled
+            if displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                displayName = parsed.suggestedName
+            }
+            connectionURL = ""
+            urlImportPhase = .applied
+            invalidateTest()
+        } catch {
+            urlImportPhase = .failed(Self.message(for: error))
+        }
     }
 
     func selectEnvironment(_ environment: DatabaseEnvironmentKind) {

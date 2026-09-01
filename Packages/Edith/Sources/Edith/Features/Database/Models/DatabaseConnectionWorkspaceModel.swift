@@ -19,6 +19,7 @@ struct DatabaseConnectionSummary: Identifiable, Equatable, Sendable {
     let defaultDatabase: String?
     let defaultSchema: String?
     let logicalDatabase: String?
+    let networkEndpoints: [DatabaseNetworkEndpoint]
 
     init(definition: DatabaseConnectionDefinition) {
         id = definition.id
@@ -43,6 +44,12 @@ struct DatabaseConnectionSummary: Identifiable, Equatable, Sendable {
         defaultSchema = DatabaseConnectionDisplayText.optional(definition.namespaces.schema)
         logicalDatabase = DatabaseConnectionDisplayText.optional(
             definition.namespaces.logicalDatabase)
+        switch definition.location {
+        case .network(let endpoints):
+            networkEndpoints = endpoints
+        case .sqlite, .memory:
+            networkEndpoints = []
+        }
     }
 
     var environmentSummary: String {
@@ -251,6 +258,8 @@ final class DatabaseConnectionWorkspaceModel {
     private let sender: any DatabaseBrokerCommandSending
     private let currentDate: @Sendable () -> Date
     private let announcement: @MainActor (String) -> Void
+    private let prepareConnection:
+        @MainActor @Sendable (DatabaseConnectionSummary) async throws -> Void
     private var summariesByID: [DatabaseConnectionID: DatabaseConnectionSummary] = [:]
     private var sessionStates: [DatabaseConnectionID: DatabaseConnectionSessionState] = [:]
     private var capabilityStates: [DatabaseConnectionID: DatabaseCapabilityState] = [:]
@@ -261,11 +270,15 @@ final class DatabaseConnectionWorkspaceModel {
     init(
         sender: any DatabaseBrokerCommandSending = DatabaseBrokerCommandClient(),
         currentDate: @escaping @Sendable () -> Date = { Date() },
+        prepareConnection:
+            @escaping @MainActor @Sendable (DatabaseConnectionSummary) async throws -> Void =
+            { summary in try await DatabaseMachineForwardRouter.prepare(summary) },
         announcement: @escaping @MainActor (String) -> Void =
             DatabaseConnectionWorkspaceModel.announce
     ) {
         self.sender = sender
         self.currentDate = currentDate
+        self.prepareConnection = prepareConnection
         self.announcement = announcement
     }
 
@@ -345,6 +358,9 @@ final class DatabaseConnectionWorkspaceModel {
         announcement("Connecting to \(connectionName(for: connectionID)).")
 
         do {
+            guard let summary = summariesByID[connectionID] else { return }
+            try await prepareConnection(summary)
+            try Task.checkCancellation()
             let response = try await sender.send(
                 .connect(DatabaseConnectRequest(connectionID: connectionID)))
             try Task.checkCancellation()
@@ -653,6 +669,9 @@ final class DatabaseConnectionWorkspaceModel {
         for error: Error,
         action: DatabaseConnectionAction
     ) -> String {
+        if let routingError = error as? DatabaseMachineForwardRoutingError {
+            return routingError.errorDescription ?? action.genericFailure
+        }
         guard let clientError = error as? DatabaseBrokerCommandClientError else {
             return action.genericFailure
         }

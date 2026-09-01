@@ -208,6 +208,38 @@ struct DatabaseBrokerExecutableResolver: Sendable {
     }
 }
 
+struct DatabaseBrokerExecutableCandidateValidator: Sendable {
+    private let validateImplementation: @Sendable (String) throws -> Void
+
+    init() throws {
+        let system = MacOSDatabaseBrokerExecutableCodeSigningSystem()
+        let currentCode = try system.currentCode()
+        let currentStaticCode = try system.staticCode(for: currentCode)
+        let requirement = try system.designatedRequirement(for: currentStaticCode)
+        let options: DatabaseBrokerExecutableCodeValidationOptions = [
+            .offline,
+            .strict,
+            .allArchitectures,
+            .restrictSymlinks,
+        ]
+        try system.validateCurrent(
+            code: currentCode,
+            requirement: requirement,
+            options: options)
+        validateImplementation = { path in
+            let candidate = try system.candidateStaticCode(at: path)
+            try system.validateCandidate(
+                code: candidate,
+                requirement: requirement,
+                options: options)
+        }
+    }
+
+    func validate(path: String) throws {
+        try validateImplementation(path)
+    }
+}
+
 struct DatabaseBrokerSpawnRequest: Equatable, Sendable {
     let executablePath: String
     let arguments: [String]

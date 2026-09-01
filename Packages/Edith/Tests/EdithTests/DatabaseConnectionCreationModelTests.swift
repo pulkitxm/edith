@@ -7,6 +7,28 @@ import Testing
 @MainActor
 @Suite("Database connection creation")
 struct DatabaseConnectionCreationModelTests {
+    @Test("A full connection URL fills the advanced fields")
+    func connectionURL() throws {
+        let model = DatabaseConnectionCreationModel(
+            sender: DatabaseConnectionCreationSender(testSucceeds: true),
+            secretStore: try InMemoryDatabaseSecretStore())
+
+        model.updateConnectionURL(
+            "postgresql://owner:p%40ss@db.example.com:6432/app?sslmode=require")
+        model.applyConnectionURL()
+
+        #expect(model.urlImportPhase == .applied)
+        #expect(model.connectionURL.isEmpty)
+        #expect(model.product == .postgresql)
+        #expect(model.displayName == "app")
+        #expect(model.host == "db.example.com")
+        #expect(model.port == "6432")
+        #expect(model.username == "owner")
+        #expect(model.password == "p@ss")
+        #expect(model.database == "app")
+        #expect(model.tlsEnabled)
+    }
+
     @Test("A tested connection can be saved with its Keychain reference")
     func testAndSave() async throws {
         let sender = DatabaseConnectionCreationSender(testSucceeds: true)

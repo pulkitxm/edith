@@ -308,6 +308,30 @@ import Testing
         #expect(model.selectedSessionState == .disconnected)
     }
 
+    @Test func connectionPreparationFailurePreventsBrokerConnect() async throws {
+        let connection = try Self.connection(id: 11, name: "Forwarded")
+        let sender = DatabaseConnectionScriptedSender()
+        await sender.succeed(Self.listResponse([connection]), at: 0)
+        let model = DatabaseConnectionWorkspaceModel(
+            sender: sender,
+            currentDate: { Date(timeIntervalSince1970: 8_000) },
+            prepareConnection: { _ in
+                throw DatabaseMachineForwardRoutingError.machineUnavailable(
+                    "database PostgreSQL")
+            },
+            announcement: { _ in })
+
+        await model.loadConnections()
+        await model.connectSelected()
+
+        guard case .failed(let message, nil) = model.selectedSessionState else {
+            Issue.record("Expected connection preparation to fail.")
+            return
+        }
+        #expect(message == "The machine for database PostgreSQL is unavailable.")
+        #expect((await sender.recordedRequests()).count == 1)
+    }
+
     private static let now = Date(timeIntervalSince1970: 8_000)
     private static let completeMetadata = DatabaseResultMetadata(
         completeness: DatabaseResultCompleteness(state: .complete))
@@ -318,6 +342,7 @@ import Testing
         DatabaseConnectionWorkspaceModel(
             sender: sender,
             currentDate: { Date(timeIntervalSince1970: 8_000) },
+            prepareConnection: { _ in },
             announcement: { _ in })
     }
 

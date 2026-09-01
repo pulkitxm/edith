@@ -6,6 +6,7 @@ struct DatabaseConnectionCreationSheet: View {
     @Bindable var model: DatabaseConnectionCreationModel
     let saved: (DatabaseConnectionDefinition) -> Void
     let cancel: () -> Void
+    @State private var revealsConnectionURL = false
     @Environment(\.colorScheme) private var scheme
 
     private var dark: Bool { scheme == .dark }
@@ -16,7 +17,9 @@ struct DatabaseConnectionCreationSheet: View {
             Divider().opacity(0.35)
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                    intro
+                    section("Connection URL", symbol: "link") {
+                        connectionURLFields
+                    }
                     section("Identity", symbol: "tag") {
                         field("Connection name", required: true) {
                             EdithTextField(
@@ -52,7 +55,7 @@ struct DatabaseConnectionCreationSheet: View {
             footer
         }
         .frame(minWidth: UIScale.pt(620), minHeight: UIScale.pt(680))
-        .background(DashSkin.paper(dark))
+        .background(Color(nsColor: .windowBackgroundColor))
         .onDisappear {
             Task { await model.discardUnsavedCredential() }
         }
@@ -72,7 +75,7 @@ struct DatabaseConnectionCreationSheet: View {
                 Text("New database connection")
                     .font(.system(size: UIScale.pt(16), weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
-                Text("Credentials stay in Keychain. The broker receives references only.")
+                Text("Paste a full URL or enter the connection details below.")
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
@@ -85,19 +88,51 @@ struct DatabaseConnectionCreationSheet: View {
         .background(DashSkin.paper2(dark).opacity(0.55))
     }
 
-    private var intro: some View {
-        HStack(alignment: .top, spacing: UIScale.pt(10)) {
-            Image(systemName: "shield.lefthalf.filled")
-                .foregroundStyle(DashSkin.gold)
-            Text(
-                "Every saved connection carries its environment and mutation policy. Test the exact details before Save becomes available."
-            )
-            .font(.system(size: UIScale.pt(11.5)))
-            .foregroundStyle(DashSkin.inkSoft(dark))
-            .fixedSize(horizontal: false, vertical: true)
+    private var connectionURLFields: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            HStack(spacing: UIScale.pt(8)) {
+                Group {
+                    if revealsConnectionURL {
+                        TextField(
+                            "postgresql://user:password@host/database",
+                            text: connectionURLBinding)
+                    } else {
+                        SecureField(
+                            "postgresql://user:password@host/database",
+                            text: connectionURLBinding)
+                    }
+                }
+                .textFieldStyle(.plain)
+                .font(.system(size: UIScale.pt(12.5), design: .monospaced))
+                .foregroundStyle(DashSkin.ink(dark))
+                .edithFieldSurface(focused: false)
+                .onSubmit(model.applyConnectionURL)
+                Button {
+                    revealsConnectionURL.toggle()
+                } label: {
+                    Image(systemName: revealsConnectionURL ? "eye.slash" : "eye")
+                }
+                .buttonStyle(.edith(.borderless))
+                .help(revealsConnectionURL ? "Hide connection URL" : "Show connection URL")
+                .accessibilityLabel(
+                    revealsConnectionURL ? "Hide connection URL" : "Show connection URL")
+                Button("Use URL", action: model.applyConnectionURL)
+                    .buttonStyle(.edith(.secondary))
+                    .disabled(!model.canApplyConnectionURL)
+            }
+            switch model.urlImportPhase {
+            case .editing:
+                Text("PostgreSQL, Redis, Valkey, MongoDB, and SQLite URLs are supported.")
+                    .foregroundStyle(.secondary)
+            case .applied:
+                Label("URL applied. Review the parsed details, then test the connection.", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(DashSkin.ok)
+            case .failed(let detail):
+                Label(detail, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(DashSkin.danger)
+            }
         }
-        .padding(UIScale.pt(12))
-        .background(DashSkin.gold.opacity(0.08), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+        .font(.system(size: UIScale.pt(10.5)))
     }
 
     @ViewBuilder
@@ -320,6 +355,10 @@ struct DatabaseConnectionCreationSheet: View {
 
     private var productBinding: Binding<DatabaseProduct> {
         Binding(get: { model.product }, set: model.selectProduct)
+    }
+
+    private var connectionURLBinding: Binding<String> {
+        Binding(get: { model.connectionURL }, set: model.updateConnectionURL)
     }
 
     private var environmentBinding: Binding<DatabaseEnvironmentKind> {

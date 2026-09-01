@@ -85,6 +85,55 @@ struct DatabaseObjectExplorerModelTests {
         #expect(await sender.recordedRequests().isEmpty)
     }
 
+    @Test("SQLite discovers tables and views from its main schema")
+    func sqliteInitialDiscovery() async throws {
+        let sender = DatabaseObjectExplorerScriptedSender(responses: [
+            Self.response(records: [
+                Self.relation("customers", kind: .table),
+                Self.relation("active_customers", kind: .view),
+            ]),
+        ])
+        let model = DatabaseObjectExplorerModel(sender: sender)
+        let connection = try Self.connection(product: .sqlite)
+
+        model.load(connection)
+        await Self.waitUntil {
+            model.groups.first(where: { $0.title == "main" })?.state == .loaded
+        }
+
+        let requests = await sender.recordedRequests().compactMap(\.browseRequest)
+        #expect(requests.count == 1)
+        #expect(
+            requests[0].target.object == DatabaseObjectIdentifier(kind: .schema, path: ["main"]))
+        let objects = try #require(model.groups.first?.objects)
+        #expect(objects.map(\.title) == ["customers", "active_customers"])
+        #expect(objects.map(\.identifier.kind) == [.table, .view])
+        #expect(model.selectedObject == objects.first?.identifier)
+    }
+
+    @Test("MongoDB discovers collections from its selected database")
+    func mongoDBInitialDiscovery() async throws {
+        let sender = DatabaseObjectExplorerScriptedSender(responses: [
+            Self.response(records: [Self.relation("events", kind: .collection)]),
+        ])
+        let model = DatabaseObjectExplorerModel(sender: sender)
+        let connection = try Self.connection(product: .mongoDB)
+
+        model.load(connection)
+        await Self.waitUntil {
+            model.groups.first(where: { $0.title == "app" })?.state == .loaded
+        }
+
+        let requests = await sender.recordedRequests().compactMap(\.browseRequest)
+        #expect(requests.count == 1)
+        #expect(
+            requests[0].target.object == DatabaseObjectIdentifier(kind: .database, path: ["app"]))
+        let object = try #require(model.groups.first?.objects.first)
+        #expect(object.identifier.kind == .collection)
+        #expect(object.identifier.path == ["app", "events"])
+        #expect(model.selectedObject == object.identifier)
+    }
+
     @Test("Discovery surfaces broker failures")
     func discoveryFailure() async throws {
         let message = "The selected object kind is not supported for discovery."

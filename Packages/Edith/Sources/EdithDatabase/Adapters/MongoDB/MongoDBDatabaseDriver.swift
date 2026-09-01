@@ -35,8 +35,23 @@ struct MongoDBDatabaseReadResult: Sendable {
     let bytesReceived: UInt64
 }
 
+struct MongoDBDatabaseCollectionPlan: Sendable {
+    let database: String
+    let limit: Int
+    let batchSize: Int
+    let maximumTimeMilliseconds: Int32
+}
+
+struct MongoDBDatabaseCollectionResult: Sendable {
+    let names: [String]
+    let hasMore: Bool
+}
+
 protocol MongoDBDatabaseClient: Sendable {
     func discoverIdentity() async throws -> DatabaseProductIdentity
+    func listCollections(
+        _ plan: MongoDBDatabaseCollectionPlan
+    ) async throws -> MongoDBDatabaseCollectionResult
     func read(_ plan: MongoDBDatabaseReadPlan) async throws -> MongoDBDatabaseReadResult
     func disconnect() async throws
 }
@@ -119,6 +134,42 @@ actor MongoKittenDatabaseClient: MongoDBDatabaseClient {
         }
     }
 
+    func listCollections(
+        _ plan: MongoDBDatabaseCollectionPlan
+    ) async throws -> MongoDBDatabaseCollectionResult {
+        guard let transport else {
+            throw MongoDBDatabaseDriverFailure.connection
+        }
+        let connection = try await transport.activeConnection()
+        do {
+            await connection.setDatabaseQueryTimeout(
+                .milliseconds(Int64(plan.maximumTimeMilliseconds)))
+            let commandNamespace = MongoNamespace(to: "$cmd", inDatabase: plan.database)
+            let response = try await connection.executeCodable(
+                ListCollections(),
+                decodeAs: MongoCursorResponse.self,
+                namespace: commandNamespace,
+                sessionId: connection.implicitSessionId,
+                traceLabel: "DatabaseListCollections")
+            let cursor = MongoCursor(
+                reply: response.cursor,
+                in: .administrativeCommand,
+                connection: connection,
+                session: connection.implicitSession,
+                transaction: nil,
+                traceLabel: "DatabaseListCollections")
+            cursor.maxTimeMS = plan.maximumTimeMilliseconds
+            return try await Self.collectCollections(
+                cursor: cursor,
+                limit: plan.limit,
+                batchSize: plan.batchSize)
+        } catch let failure as MongoDBDatabaseDriverFailure {
+            throw failure
+        } catch {
+            throw try MongoDBDatabaseDriverErrorClassifier.classify(error)
+        }
+    }
+
     func disconnect() async throws {
         guard let transport else { return }
         try await transport.close()
@@ -149,6 +200,50 @@ actor MongoKittenDatabaseClient: MongoDBDatabaseClient {
                 documents: accumulator.documents,
                 hasMore: accumulator.hasMore,
                 bytesReceived: accumulator.bytesReceived)
+        } catch {
+            if !cursor.isDrained {
+                do {
+                    try await cursor.close()
+                } catch {
+                    throw MongoDBDatabaseDriverFailure.connection
+                }
+            }
+            throw error
+        }
+    }
+
+    private static func collectCollections(
+        cursor: MongoCursor,
+        limit: Int,
+        batchSize: Int
+    ) async throws -> MongoDBDatabaseCollectionResult {
+        var names: [String] = []
+        names.reserveCapacity(limit)
+        var hasMore = false
+        let decoder = BSONDecoder()
+        do {
+            while !cursor.isDrained, names.count < limit {
+                try Task.checkCancellation()
+                let nextSize = min(batchSize, limit - names.count)
+                let documents = try await cursor.getMore(batchSize: max(1, nextSize))
+                for document in documents {
+                    if names.count == limit {
+                        hasMore = true
+                        break
+                    }
+                    let description = try decoder.decode(
+                        CollectionDescription.self,
+                        from: document)
+                    names.append(description.name)
+                }
+            }
+            hasMore = hasMore || !cursor.isDrained
+            if !cursor.isDrained {
+                try await cursor.close()
+            }
+            return MongoDBDatabaseCollectionResult(
+                names: names,
+                hasMore: hasMore)
         } catch {
             if !cursor.isDrained {
                 do {
