@@ -67,6 +67,14 @@ extension GhosttyTerminalView {
         _ = send(event: event, action: GHOSTTY_ACTION_RELEASE, text: nil, composing: false)
     }
 
+    func handleLocalEvent(_ event: NSEvent) -> NSEvent? {
+        switch event.type {
+        case .keyUp: handleLocalKeyUp(event)
+        case .leftMouseDown: handleLocalLeftMouseDown(event)
+        default: event
+        }
+    }
+
     func handleLocalKeyUp(_ event: NSEvent) -> NSEvent? {
         guard
             Self.shouldHandleLocalKeyUp(
@@ -87,6 +95,30 @@ extension GhosttyTerminalView {
         matchesWindow: Bool, focused: Bool
     ) -> Bool {
         !(matchesWindow && focused)
+    }
+
+    func handleLocalLeftMouseDown(_ event: NSEvent) -> NSEvent? {
+        guard let window, event.window === window,
+            let contentView = window.contentView,
+            contentView.hitTest(contentView.convert(event.locationInWindow, from: nil)) === self
+        else { return event }
+        suppressNextLeftMouseUp = false
+        let focused = window.firstResponder === self
+        guard !focused else { return event }
+        window.makeFirstResponder(self)
+        guard
+            Self.shouldConsumeFocusClick(
+                appActive: NSApp.isActive, keyWindow: window.isKeyWindow,
+                focused: focused, hitSurface: true)
+        else { return event }
+        suppressNextLeftMouseUp = true
+        return nil
+    }
+
+    static func shouldConsumeFocusClick(
+        appActive: Bool, keyWindow: Bool, focused: Bool, hitSurface: Bool
+    ) -> Bool {
+        appActive && keyWindow && !focused && hitSurface
     }
 
     public override func flagsChanged(with event: NSEvent) {
@@ -287,7 +319,7 @@ extension GhosttyTerminalView {
     ) -> Bool {
         guard let surface else { return false }
         let local = convert(event.locationInWindow, from: nil)
-        mouseOverSurface = true
+        mouseOverSurface = bounds.contains(local)
         let escapeCapture = Self.shouldEscapeCapture(
             button: which, clickCount: event.clickCount, flags: event.modifierFlags)
         let mods = pointerMods(
@@ -326,6 +358,10 @@ extension GhosttyTerminalView {
     }
 
     public override func mouseUp(with event: NSEvent) {
+        if suppressNextLeftMouseUp {
+            suppressNextLeftMouseUp = false
+            return
+        }
         commandClickGesture.move(to: convert(event.locationInWindow, from: nil))
         let target = hoveredLink ?? terminalTargetAtPointer()
         commandClickOpenedTarget = false
@@ -407,6 +443,7 @@ extension GhosttyTerminalView {
     private func moved(_ event: NSEvent) {
         guard let surface else { return }
         let local = convert(event.locationInWindow, from: nil)
+        mouseOverSurface = bounds.contains(local)
         let escapeCapture = NSEvent.pressedMouseButtons == 0 || commandClickGesture.origin != nil
         sendPointerPosition(
             surface, point: local, flags: event.modifierFlags,

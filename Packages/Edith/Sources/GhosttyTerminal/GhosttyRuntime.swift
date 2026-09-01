@@ -88,8 +88,8 @@ public final class GhosttyRuntime {
         runtime.write_clipboard_cb = { _, location, content, count, confirm in
             GhosttyRuntime.writeClipboard(location, content, count, confirm)
         }
-        runtime.close_surface_cb = { userdata, _ in
-            GhosttySurfaceRegistry.shared.close(userdata)
+        runtime.close_surface_cb = { userdata, processAlive in
+            GhosttySurfaceRegistry.shared.close(userdata, processAlive: processAlive)
         }
 
         guard let created = ghostty_app_new(&runtime, cfg) else {
@@ -192,6 +192,11 @@ public final class GhosttyRuntime {
             DispatchQueue.main.async { [weak view] in
                 _ = view?.openTerminalTarget(value, kind: kind)
             }
+            return true
+        case GHOSTTY_ACTION_SHOW_CHILD_EXITED:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            let exitCode = Int32(bitPattern: action.action.child_exited.exit_code)
+            onMain { view.childExited(exitCode) }
             return true
         case GHOSTTY_ACTION_MOUSE_SHAPE:
             guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }

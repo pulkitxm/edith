@@ -141,11 +141,12 @@ final class TerminalSessionHolder {
         }
         let view = GhosttyTerminalView(launch: launch, theme: theme)
         let viewGeneration = generation
-        view.onClose = { [weak self] in
+        view.onClose = { [weak self, weak view] exitCode in
             Task { @MainActor in
-                guard let self, self.generation == viewGeneration else { return }
-                self.exitMessage = "Session ended."
-                self.started = false
+                guard let self, let view, self.generation == viewGeneration,
+                    self.ghosttyView === view
+                else { return }
+                self.finishGhosttySession(view, exitCode: exitCode)
             }
         }
         view.onTitleChange = { [weak self] title in
@@ -165,6 +166,22 @@ final class TerminalSessionHolder {
         ghosttyView = view
         flushQueuedGhosttyInput(to: view)
         return view
+    }
+
+    private func finishGhosttySession(_ view: GhosttyTerminalView, exitCode: Int32?) {
+        focusTask?.cancel()
+        focusTask = nil
+        clearQueuedGhosttyInput()
+        view.shutdown()
+        ghosttyView = nil
+        ghosttyLaunch = nil
+        generation += 1
+        started = false
+        currentTitle = nil
+        currentWorkingDirectory = nil
+        exitMessage =
+            exitCode == nil || exitCode == 0
+            ? "Session ended." : "Session ended with status \(exitCode ?? 0)."
     }
 
     private func setCurrentTitle(_ title: String?, generation: Int) {

@@ -179,6 +179,46 @@ import Testing
         }
     }
 
+    @Test func exitedGhosttySessionTearsDownAndCanRestart() async throws {
+        try await withGhosttyEnabled(true) {
+            let holder = TerminalSessionHolder()
+            holder.start(executable: "/usr/bin/true", arguments: [], environment: [])
+            let launch = try #require(holder.ghosttyLaunch)
+            let theme = GhosttyTheme(palette: .edith(dark: true))
+            let first = holder.retainedGhosttyView(launch: launch, theme: theme)
+            first.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+            let window = NSWindow(
+                contentRect: first.frame, styleMask: [.borderless], backing: .buffered,
+                defer: false)
+            window.contentView = first
+            defer {
+                holder.stop()
+                window.contentView = nil
+            }
+
+            for _ in 0..<300 {
+                if !holder.started { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+
+            #expect(!holder.started)
+            #expect(holder.exitMessage == "Session ended.")
+            #expect(holder.ghosttyLaunch == nil)
+            #expect(holder.ghosttyView == nil)
+            #expect(first.surface == nil)
+            let finishedGeneration = holder.generation
+
+            holder.start(executable: "/bin/cat", arguments: [], environment: [])
+            let restartedLaunch = try #require(holder.ghosttyLaunch)
+            let second = holder.retainedGhosttyView(launch: restartedLaunch, theme: theme)
+            window.contentView = second
+
+            #expect(holder.started)
+            #expect(holder.generation == finishedGeneration)
+            #expect(second !== first)
+        }
+    }
+
     @Test func swiftTermMetadataCallbacksReachTheSharedHolder() async {
         await withGhosttyEnabled(false) {
             let holder = TerminalSessionHolder()
@@ -303,6 +343,24 @@ import Testing
         #expect(!GhosttyTerminalView.shouldRender(active: true, hidden: true, windowVisible: true))
         #expect(
             !GhosttyTerminalView.shouldRender(active: true, hidden: false, windowVisible: false))
+        #expect(
+            GhosttyTerminalView.shouldFocus(
+                active: true, keyWindow: true, firstResponder: true))
+        #expect(
+            !GhosttyTerminalView.shouldFocus(
+                active: true, keyWindow: false, firstResponder: true))
+        #expect(
+            !GhosttyTerminalView.shouldFocus(
+                active: true, keyWindow: true, firstResponder: false))
+        #expect(
+            GhosttyTerminalView.shouldConsumeFocusClick(
+                appActive: true, keyWindow: true, focused: false, hitSurface: true))
+        #expect(
+            !GhosttyTerminalView.shouldConsumeFocusClick(
+                appActive: false, keyWindow: true, focused: false, hitSurface: true))
+        #expect(
+            !GhosttyTerminalView.shouldConsumeFocusClick(
+                appActive: true, keyWindow: true, focused: true, hitSurface: true))
     }
 
     private func withGhosttyEnabled(
