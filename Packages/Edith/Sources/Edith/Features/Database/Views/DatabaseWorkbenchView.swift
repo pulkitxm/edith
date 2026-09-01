@@ -194,9 +194,11 @@ struct DatabaseWorkbenchView: View {
         VStack(alignment: .leading, spacing: UIScale.pt(9)) {
             HStack(spacing: UIScale.pt(9)) {
                 modePicker(connection)
-                Label(selectedObjectTitle, systemImage: selectedObjectSymbol)
-                    .font(.system(size: UIScale.pt(11.5), weight: .semibold))
-                    .lineLimit(1)
+                if !compact {
+                    Label(selectedObjectTitle, systemImage: selectedObjectSymbol)
+                        .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                        .lineLimit(1)
+                }
                 Spacer(minLength: 0)
                 if connection.product == .elasticsearch || connection.product == .openSearch {
                     Picker("Query operation", selection: searchQueryOperationBinding(connection)) {
@@ -405,18 +407,52 @@ struct DatabaseWorkbenchView: View {
                     }
                 }
             } label: {
-                Label(selectedObjectTitle, systemImage: selectedObjectSymbol)
-                    .lineLimit(1)
+                HStack(spacing: UIScale.pt(7)) {
+                    Image(systemName: selectedObjectSymbol)
+                        .font(.system(size: UIScale.pt(11), weight: .semibold))
+                        .foregroundStyle(theme)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(selectedObjectTitle)
+                            .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                            .foregroundStyle(palette.ink)
+                            .lineLimit(1)
+                        if let context = selectedObjectContext {
+                            Text(context)
+                                .font(.system(size: UIScale.pt(8.5)))
+                                .foregroundStyle(palette.inkFaint)
+                                .lineLimit(1)
+                        }
+                    }
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: UIScale.pt(7), weight: .bold))
+                        .foregroundStyle(palette.inkFaint)
+                }
+                .padding(.horizontal, UIScale.pt(8))
+                .frame(height: UIScale.pt(32))
+                .background(
+                    palette.canvas.opacity(0.72),
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(7))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: UIScale.pt(7))
+                        .strokeBorder(palette.line.opacity(0.68), lineWidth: 1)
+                }
             }
-            .buttonStyle(.edith(.secondary))
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
             .disabled(explorer.groups.isEmpty)
             Spacer(minLength: 0)
             Button {
                 explorer.load(connection, force: true)
             } label: {
-                Image(systemName: "arrow.clockwise")
+                Image(systemName: "arrow.triangle.2.circlepath")
             }
-            .buttonStyle(.edith(.borderless))
+            .buttonStyle(
+                DatabaseCommandButtonStyle(
+                    kind: .utility, dark: dark, palette: palette)
+            )
+            .help("Reload database objects")
             .accessibilityLabel("Reload database objects")
         }
         .padding(.horizontal, UIScale.pt(10))
@@ -1164,6 +1200,11 @@ struct DatabaseWorkbenchView: View {
 
     private var selectedObjectTitle: String {
         explorer.selectedObject?.path.last ?? "Select an object"
+    }
+
+    private var selectedObjectContext: String? {
+        guard let selected = explorer.selectedObject, selected.path.count > 1 else { return nil }
+        return selected.path.dropLast().joined(separator: " / ")
     }
 
     private var selectedObjectSymbol: String {
