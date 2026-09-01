@@ -75,6 +75,27 @@ struct DatabaseConnectionURLParserTests {
         #expect(result.tlsEnabled)
     }
 
+    @Test func parsesOpenSearchURLs() throws {
+        let selected = try DatabaseConnectionURLParser.parse(
+            "https://edith:p%40ss@search.example.com",
+            preferredProduct: .openSearch)
+        let explicit = try DatabaseConnectionURLParser.parse(
+            "opensearch://127.0.0.1:59201")
+        let secure = try DatabaseConnectionURLParser.parse(
+            "opensearchs://search.example.com")
+
+        #expect(selected.product == .openSearch)
+        #expect(selected.username == "edith")
+        #expect(selected.password == "p@ss")
+        #expect(selected.tlsEnabled)
+        #expect(explicit.product == .openSearch)
+        #expect(explicit.port == 59_201)
+        #expect(!explicit.tlsEnabled)
+        #expect(secure.product == .openSearch)
+        #expect(secure.port == 9_200)
+        #expect(secure.tlsEnabled)
+    }
+
     @Test func rejectsUnsupportedAndSecureRedisSchemes() {
         #expect(throws: DatabaseConnectionURLError.unsupportedScheme("mysql")) {
             try DatabaseConnectionURLParser.parse("mysql://localhost/app")

@@ -101,6 +101,39 @@ private enum OpenSearchDatabaseReadingFixtures {
             object: DatabaseObjectIdentifier(kind: kind, path: [name]))
     }
 
+    static func identifiedTarget(
+        connectionID: DatabaseConnectionID,
+        identifier: String = "doc-1",
+        sequenceNumber: Int64? = 7,
+        primaryTerm: Int64? = 2
+    ) -> DatabaseTargetIdentifier {
+        let concurrencyTokens: [DatabaseIdentityComponent]
+        if let sequenceNumber, let primaryTerm {
+            concurrencyTokens = [
+                DatabaseIdentityComponent(
+                    name: "_seq_no",
+                    value: .signedInteger(sequenceNumber)),
+                DatabaseIdentityComponent(
+                    name: "_primary_term",
+                    value: .signedInteger(primaryTerm)),
+            ]
+        } else {
+            concurrencyTokens = []
+        }
+        return DatabaseTargetIdentifier(
+            connectionID: connectionID,
+            object: DatabaseObjectIdentifier(kind: .index, path: ["edith-documents-v1"]),
+            record: DatabaseRecordIdentity(
+                kind: .searchDocument,
+                components: [
+                    DatabaseIdentityComponent(
+                        name: "_index",
+                        value: .string("edith-documents-v1")),
+                    DatabaseIdentityComponent(name: "_id", value: .string(identifier)),
+                ],
+                concurrencyTokens: concurrencyTokens))
+    }
+
     static func discoveryTarget(
         connectionID: DatabaseConnectionID
     ) -> DatabaseTargetIdentifier {
@@ -256,11 +289,14 @@ private actor OpenSearchDatabaseReadingClient: OpenSearchDatabaseClient {
     private var pointInTimeIDs: [String]
     private let resolveFailure: OpenSearchDatabaseDriverFailure?
     private let mappingFailure: OpenSearchDatabaseDriverFailure?
+    private let mutationFailure: OpenSearchDatabaseDriverFailure?
+    private var mutationResults: [OpenSearchDatabaseMutationResult]
     private var disconnected = false
     private var resolveCount = 0
     private var mappingCount = 0
     private var searches: [(Data, String)] = []
     private var closed: [String] = []
+    private var mutationPlans: [OpenSearchDatabaseMutationPlan] = []
     private var disconnectCount = 0
 
     init(
@@ -268,13 +304,17 @@ private actor OpenSearchDatabaseReadingClient: OpenSearchDatabaseClient {
         outcomes: [OpenSearchDatabaseReadingOutcome] = [],
         pointInTimeIDs: [String] = ["pit-opened"],
         resolveFailure: OpenSearchDatabaseDriverFailure? = nil,
-        mappingFailure: OpenSearchDatabaseDriverFailure? = nil
+        mappingFailure: OpenSearchDatabaseDriverFailure? = nil,
+        mutationFailure: OpenSearchDatabaseDriverFailure? = nil,
+        mutationResults: [OpenSearchDatabaseMutationResult] = []
     ) {
         self.identities = identities
         self.outcomes = outcomes
         self.pointInTimeIDs = pointInTimeIDs
         self.resolveFailure = resolveFailure
         self.mappingFailure = mappingFailure
+        self.mutationFailure = mutationFailure
+        self.mutationResults = mutationResults
     }
 
     func discoverIdentity() throws -> DatabaseProductIdentity {
@@ -360,6 +400,17 @@ private actor OpenSearchDatabaseReadingClient: OpenSearchDatabaseClient {
         closed.append(identifier)
     }
 
+    func mutate(
+        _ plan: OpenSearchDatabaseMutationPlan
+    ) throws -> OpenSearchDatabaseMutationResult {
+        mutationPlans.append(plan)
+        if let mutationFailure { throw mutationFailure }
+        guard !mutationResults.isEmpty else {
+            throw OpenSearchDatabaseDriverFailure.connection
+        }
+        return mutationResults.removeFirst()
+    }
+
     func disconnect() {
         disconnected = true
         disconnectCount += 1
@@ -369,6 +420,10 @@ private actor OpenSearchDatabaseReadingClient: OpenSearchDatabaseClient {
         resolve: Int, mapping: Int, searches: [(Data, String)], closed: [String], disconnects: Int
     ) {
         (resolveCount, mappingCount, searches, closed, disconnectCount)
+    }
+
+    func mutations() -> [OpenSearchDatabaseMutationPlan] {
+        mutationPlans
     }
 }
 
@@ -381,7 +436,7 @@ private func opensearchReadingSession(
         context: OpenSearchDatabaseReadingFixtures.context())
 }
 
-@Test func opensearchReadingReportsBoundedReadOnlyCapabilities() throws {
+@Test func opensearchReadingReportsBoundedMutationCapabilities() throws {
     let report = OpenSearchDatabaseAdapterSupport.capabilityReport(
         identity: OpenSearchDatabaseReadingFixtures.identity,
         discoveredAt: Date(timeIntervalSince1970: 1_800_000_000))
@@ -392,10 +447,176 @@ private func opensearchReadingSession(
     #expect(report.supports(.browse))
     #expect(report.supports(.query))
     #expect(report.status(for: .objectDiscovery)?.availability == .degraded)
-    #expect(report.status(for: .insert)?.reason?.category == .unsafe)
+    #expect(report.supports(.insert))
+    #expect(report.supports(.update))
+    #expect(report.supports(.delete))
     #expect(report.pagingModes == [.pointInTime])
-    #expect(report.mutationModes == [.unsupported])
+    #expect(report.mutationModes == [.singleRecord])
     #expect(Set(report.capabilities.map(\.id)).count == report.capabilities.count)
+}
+
+@Test func opensearchDocumentMutationRequestsAreCanonicalAndIdentityBound() throws {
+    let connectionID = DatabaseConnectionID()
+    let createTarget = OpenSearchDatabaseReadingFixtures.identifiedTarget(
+        connectionID: connectionID,
+        identifier: "new/document",
+        sequenceNumber: nil,
+        primaryTerm: nil)
+    let identifiedTarget = OpenSearchDatabaseReadingFixtures.identifiedTarget(
+        connectionID: connectionID)
+    let document: DatabaseValue = .object([
+        DatabaseObjectField(name: "title", value: .string("Safe search")),
+        DatabaseObjectField(name: "count", value: .signedInteger(3)),
+    ])
+    let create = try DatabaseDocumentMutationRequests.openSearchCreate(
+        target: createTarget,
+        document: document)
+    #expect(create.payload.command == "create")
+    #expect(create.payload.kind == .search)
+    #expect(create.target.record?.kind == .searchDocument)
+    let replace = try DatabaseDocumentMutationRequests.openSearchReplace(
+        target: identifiedTarget,
+        document: document)
+    #expect(replace.payload.command == "replace")
+    #expect(replace.target.record?.concurrencyTokens.count == 2)
+    let delete = try DatabaseDocumentMutationRequests.openSearchDelete(
+        target: identifiedTarget)
+    #expect(delete.payload.command == "delete")
+    #expect(delete.payload.body == .null)
+    #expect(throws: DatabaseDocumentMutationRequestError.self) {
+        try DatabaseDocumentMutationRequests.openSearchReplace(
+            target: createTarget,
+            document: document)
+    }
+    #expect(throws: DatabaseDocumentMutationRequestError.self) {
+        try DatabaseDocumentMutationRequests.openSearchCreate(
+            target: createTarget,
+            document: .object([
+                DatabaseObjectField(name: "_id", value: .string("different"))
+            ]))
+    }
+}
+
+@Test func opensearchDocumentMutationsNormalizeAndExecuteOneDocument() async throws {
+    let client = OpenSearchDatabaseReadingClient(
+        mutationResults: [
+            OpenSearchDatabaseMutationResult(
+                index: "edith-documents-v1",
+                identifier: "doc-new",
+                result: "created",
+                sequenceNumber: 1,
+                primaryTerm: 1),
+            OpenSearchDatabaseMutationResult(
+                index: "edith-documents-v1",
+                identifier: "doc-1",
+                result: "updated",
+                sequenceNumber: 8,
+                primaryTerm: 2),
+            OpenSearchDatabaseMutationResult(
+                index: "edith-documents-v1",
+                identifier: "doc-1",
+                result: "deleted",
+                sequenceNumber: 9,
+                primaryTerm: 2),
+        ])
+    let definition = try OpenSearchDatabaseReadingFixtures.definition()
+    let session = try await opensearchReadingSession(client: client, definition: definition)
+    let createTarget = OpenSearchDatabaseReadingFixtures.identifiedTarget(
+        connectionID: definition.id,
+        identifier: "doc-new",
+        sequenceNumber: nil,
+        primaryTerm: nil)
+    let identifiedTarget = OpenSearchDatabaseReadingFixtures.identifiedTarget(
+        connectionID: definition.id)
+    let requests = [
+        try DatabaseDocumentMutationRequests.openSearchCreate(
+            target: createTarget,
+            document: .object([
+                DatabaseObjectField(name: "title", value: .string("created"))
+            ])),
+        try DatabaseDocumentMutationRequests.openSearchReplace(
+            target: identifiedTarget,
+            document: .object([
+                DatabaseObjectField(name: "title", value: .string("updated"))
+            ])),
+        try DatabaseDocumentMutationRequests.openSearchDelete(target: identifiedTarget),
+    ]
+    for (request, expectedAction) in zip(
+        requests,
+        [DatabaseDestructiveAction.insert, .update, .delete]
+    ) {
+        let plan = try await session.normalizeMutation(
+            request,
+            context: OpenSearchDatabaseReadingFixtures.context())
+        #expect(plan.action == expectedAction)
+        #expect(plan.scope == .singleRecord)
+        #expect(plan.impact.count == DatabaseCountMetadata(value: 1, accuracy: .exact))
+        #expect(plan.transactionBehavior == .nontransactional)
+        #expect(plan.rollbackAvailability == .unavailable)
+        let result = try await session.executeMutation(
+            plan,
+            context: OpenSearchDatabaseReadingFixtures.context())
+        #expect(result.disposition == .completed)
+        #expect(result.effect == .applied)
+        #expect(result.affectedRecords.value == 1)
+    }
+    let mutations = await client.mutations()
+    #expect(mutations.count == 3)
+    #expect(mutations.map(\.index) == Array(repeating: "edith-documents-v1", count: 3))
+    #expect(mutations.map(\.identifier) == ["doc-new", "doc-1", "doc-1"])
+    guard case let .replace(body, sequenceNumber, primaryTerm) = mutations[1].operation else {
+        Issue.record("Expected an OpenSearch replacement plan")
+        return
+    }
+    #expect(sequenceNumber == 7)
+    #expect(primaryTerm == 2)
+    #expect(String(data: body, encoding: .utf8)?.contains("updated") == true)
+    await session.disconnect()
+}
+
+@Test func opensearchDocumentMutationRejectsNoncanonicalAndStaleRequests() async throws {
+    let definition = try OpenSearchDatabaseReadingFixtures.definition()
+    let client = OpenSearchDatabaseReadingClient()
+    let session = try await opensearchReadingSession(client: client, definition: definition)
+    let target = OpenSearchDatabaseReadingFixtures.identifiedTarget(
+        connectionID: definition.id)
+    let canonical = try DatabaseDocumentMutationRequests.openSearchReplace(
+        target: target,
+        document: .object([
+            DatabaseObjectField(name: "title", value: .string("updated"))
+        ]))
+    let altered = DatabaseDestructiveRequest(
+        target: canonical.target,
+        payload: .search(
+            product: .openSearch,
+            operation: "replace",
+            parameters: [DatabaseMutationParameter(name: "refresh", value: .string("false"))],
+            body: .object([
+                DatabaseObjectField(name: "title", value: .string("updated"))
+            ])))
+    await #expect(throws: OpenSearchDatabaseMutationSupport.invalidMutation) {
+        _ = try await session.normalizeMutation(
+            altered,
+            context: OpenSearchDatabaseReadingFixtures.context())
+    }
+    await session.disconnect()
+
+    let conflictClient = OpenSearchDatabaseReadingClient(mutationFailure: .conflict)
+    let conflictSession = try await opensearchReadingSession(
+        client: conflictClient,
+        definition: definition)
+    let plan = try await conflictSession.normalizeMutation(
+        canonical,
+        context: OpenSearchDatabaseReadingFixtures.context())
+    do {
+        _ = try await conflictSession.executeMutation(
+            plan,
+            context: OpenSearchDatabaseReadingFixtures.context())
+        Issue.record("Expected an OpenSearch concurrency conflict")
+    } catch let failure {
+        #expect(failure == OpenSearchDatabaseAdapterSupport.mutationConflict)
+    }
+    await conflictSession.disconnect()
 }
 
 @Test func opensearchReadingDiscoversIndexesAndAliasesLazily() async throws {

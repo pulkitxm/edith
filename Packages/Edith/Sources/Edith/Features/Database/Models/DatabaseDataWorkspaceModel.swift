@@ -77,7 +77,9 @@ final class DatabaseDataWorkspaceModel {
 
     var canSubmitEditor: Bool {
         guard let editorMode else { return false }
-        if activeProduct == .mongoDB || activeProduct == .elasticsearch {
+        if activeProduct == .mongoDB || activeProduct == .elasticsearch
+            || activeProduct == .openSearch
+        {
             return !documentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
         if editorMode == .insert, activeProduct == .redis || activeProduct == .valkey {
@@ -196,7 +198,7 @@ final class DatabaseDataWorkspaceModel {
         if connection.product == .mongoDB {
             editorFields = []
             documentText = "{\n  \n}"
-        } else if connection.product == .elasticsearch {
+        } else if connection.product == .elasticsearch || connection.product == .openSearch {
             editorFields = []
             documentText = "{\n  \"_id\": \"\"\n}"
         } else if connection.product == .redis || connection.product == .valkey {
@@ -246,7 +248,7 @@ final class DatabaseDataWorkspaceModel {
         if Self.usesDocumentEditor(connection) {
             editorFields = []
             do {
-                if connection.product == .elasticsearch {
+                if connection.product == .elasticsearch || connection.product == .openSearch {
                     guard let source = documentSource(record) else {
                         throw DatabaseJSONDocumentCodecError.unsupportedValue
                     }
@@ -399,7 +401,7 @@ final class DatabaseDataWorkspaceModel {
                     values: try DatabaseJSONDocumentCodec.decodeObject(documentText))
                 editorError = nil
                 return request
-            case (.elasticsearch, .insert):
+            case (.elasticsearch, .insert), (.openSearch, .insert):
                 let input = try Self.searchDocumentInput(documentText)
                 guard let object = objectTarget.object, let index = object.path.first else {
                     throw DatabaseRowEditorError.missingIdentity
@@ -414,12 +416,20 @@ final class DatabaseDataWorkspaceModel {
                             DatabaseIdentityComponent(
                                 name: "_id", value: .string(input.identifier)),
                         ]))
-                let request = try DatabaseDocumentMutationRequests.elasticsearchCreate(
-                    target: target,
-                    document: .object(input.fields))
+                let request =
+                    if connection.product == .elasticsearch {
+                        try DatabaseDocumentMutationRequests.elasticsearchCreate(
+                            target: target,
+                            document: .object(input.fields))
+                    } else {
+                        try DatabaseDocumentMutationRequests.openSearchCreate(
+                            target: target,
+                            document: .object(input.fields))
+                    }
                 editorError = nil
                 return request
-            case (.elasticsearch, .update(let recordIndex)):
+            case (.elasticsearch, .update(let recordIndex)),
+                (.openSearch, .update(let recordIndex)):
                 guard records.indices.contains(recordIndex),
                     let identity = records[recordIndex].identity
                 else {
@@ -433,12 +443,20 @@ final class DatabaseDataWorkspaceModel {
                 else {
                     throw DatabaseRowEditorError.changedIdentity
                 }
-                let request = try DatabaseDocumentMutationRequests.elasticsearchReplace(
-                    target: DatabaseTargetIdentifier(
-                        connectionID: objectTarget.connectionID,
-                        object: objectTarget.object,
-                        record: identity),
-                    document: .object(input.fields))
+                let target = DatabaseTargetIdentifier(
+                    connectionID: objectTarget.connectionID,
+                    object: objectTarget.object,
+                    record: identity)
+                let request =
+                    if connection.product == .elasticsearch {
+                        try DatabaseDocumentMutationRequests.elasticsearchReplace(
+                            target: target,
+                            document: .object(input.fields))
+                    } else {
+                        try DatabaseDocumentMutationRequests.openSearchReplace(
+                            target: target,
+                            document: .object(input.fields))
+                    }
                 editorError = nil
                 return request
             case (.postgresql, .insert):
@@ -541,6 +559,8 @@ final class DatabaseDataWorkspaceModel {
                 request = try DatabaseDocumentMutationRequests.mongoDBDelete(target: target)
             } else if connection.product == .elasticsearch {
                 request = try DatabaseDocumentMutationRequests.elasticsearchDelete(target: target)
+            } else if connection.product == .openSearch {
+                request = try DatabaseDocumentMutationRequests.openSearchDelete(target: target)
             } else {
                 request = try DatabaseRowMutationRequests.postgreSQLDelete(target: target)
             }
@@ -771,7 +791,7 @@ final class DatabaseDataWorkspaceModel {
     func supportsDataMutations(_ connection: DatabaseConnectionSummary) -> Bool {
         (connection.product == .postgresql || connection.product == .redis
             || connection.product == .valkey || connection.product == .mongoDB
-            || connection.product == .elasticsearch)
+            || connection.product == .elasticsearch || connection.product == .openSearch)
             && connection.readOnlyPolicy == .disabled
             && connection.environmentProtection != .readOnly
             && connection.productionPolicy != .prohibitMutations
@@ -780,7 +800,7 @@ final class DatabaseDataWorkspaceModel {
     private func mutationUnavailableMessage(_ connection: DatabaseConnectionSummary) -> String {
         if connection.product != .postgresql && connection.product != .redis
             && connection.product != .valkey && connection.product != .mongoDB
-            && connection.product != .elasticsearch
+            && connection.product != .elasticsearch && connection.product != .openSearch
         {
             return "Data editing is not available for this database yet."
         }
@@ -798,6 +818,7 @@ final class DatabaseDataWorkspaceModel {
 
     private static func usesDocumentEditor(_ connection: DatabaseConnectionSummary) -> Bool {
         connection.product == .mongoDB || connection.product == .elasticsearch
+            || connection.product == .openSearch
     }
 
     private static func searchDocumentInput(

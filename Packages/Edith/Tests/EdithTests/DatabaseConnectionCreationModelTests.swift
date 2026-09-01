@@ -49,6 +49,24 @@ struct DatabaseConnectionCreationModelTests {
         #expect(!model.tlsEnabled)
     }
 
+    @Test("An OpenSearch URL uses the selected product")
+    func openSearchConnectionURL() throws {
+        let model = DatabaseConnectionCreationModel(
+            sender: DatabaseConnectionCreationSender(testSucceeds: true),
+            secretStore: try InMemoryDatabaseSecretStore())
+
+        model.selectProduct(.openSearch)
+        model.updateConnectionURL("http://127.0.0.1:59201")
+        model.applyConnectionURL()
+
+        #expect(model.urlImportPhase == .applied)
+        #expect(model.product == .openSearch)
+        #expect(model.displayName == "127.0.0.1")
+        #expect(model.host == "127.0.0.1")
+        #expect(model.port == "59201")
+        #expect(!model.tlsEnabled)
+    }
+
     @Test("A tested connection can be saved with its Keychain reference")
     func testAndSave() async throws {
         let sender = DatabaseConnectionCreationSender(testSucceeds: true)

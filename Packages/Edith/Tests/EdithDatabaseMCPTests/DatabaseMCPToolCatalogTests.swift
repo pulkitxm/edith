@@ -1,6 +1,7 @@
 import MCP
 import Testing
 
+@testable import EdithDatabase
 @testable import EdithDatabaseMCP
 
 @Suite struct DatabaseMCPToolCatalogTests {
@@ -54,6 +55,9 @@ import Testing
         #expect(browseProperties?["page_size"]?.objectValue?["maximum"]?.intValue == 500)
         #expect(
             browseProperties?["continuation"]?.objectValue?["maxLength"]?.intValue == 32_768)
+        #expect(
+            browseProperties?["object_kind"]?.objectValue?["enum"]?.arrayValue
+                == DatabaseObjectKind.allCases.map { .string($0.rawValue) })
 
         let queryProperties =
             DatabaseMCPToolCatalog.query.inputSchema.objectValue?["properties"]?.objectValue
@@ -69,5 +73,12 @@ import Testing
         #expect(DatabaseMCPToolCatalog.session.annotations.readOnlyHint == false)
         #expect(DatabaseMCPToolCatalog.keyMutation.annotations.destructiveHint == true)
         #expect(DatabaseMCPToolCatalog.documentMutation.annotations.destructiveHint == true)
+        let documentProperties =
+            DatabaseMCPToolCatalog.documentMutation.inputSchema.objectValue?["properties"]?
+            .objectValue
+        #expect(
+            documentProperties?["product"]?.objectValue?["enum"]?.arrayValue
+                == ["mongodb", "elasticsearch", "opensearch"])
+        #expect(documentProperties?["document"]?.objectValue?["maxProperties"]?.intValue == 4_096)
     }
 }

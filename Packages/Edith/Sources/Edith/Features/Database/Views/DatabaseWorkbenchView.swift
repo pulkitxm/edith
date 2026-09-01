@@ -735,6 +735,7 @@ struct DatabaseWorkbenchView: View {
 
     private func usesDocumentEditor(_ connection: DatabaseConnectionSummary) -> Bool {
         connection.product == .mongoDB || connection.product == .elasticsearch
+            || connection.product == .openSearch
     }
 
     private func requestEditorMutation(_ connection: DatabaseConnectionSummary) {

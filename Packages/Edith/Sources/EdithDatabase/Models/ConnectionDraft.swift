@@ -42,7 +42,7 @@ extension DatabaseConnectionDraftError: LocalizedError {
 
 public struct DatabaseConnectionDraft: Hashable, Sendable {
     public static let supportedProducts: [DatabaseProduct] = [
-        .postgresql, .sqlite, .redis, .valkey, .mongoDB, .elasticsearch,
+        .postgresql, .sqlite, .redis, .valkey, .mongoDB, .elasticsearch, .openSearch,
     ]
 
     public var id: DatabaseConnectionID
@@ -197,7 +197,7 @@ public struct DatabaseConnectionDraft: Hashable, Sendable {
             return DatabaseAuthentication(
                 kind: username == nil ? .password : .usernameAndPassword,
                 secretReferences: [passwordReference])
-        case .elasticsearch:
+        case .elasticsearch, .openSearch:
             guard let passwordReference else {
                 guard username == nil else {
                     throw DatabaseConnectionDraftError.passwordRequired
@@ -208,7 +208,7 @@ public struct DatabaseConnectionDraft: Hashable, Sendable {
             return DatabaseAuthentication(
                 kind: .usernameAndPassword,
                 secretReferences: [passwordReference])
-        case .mysql, .mariaDB, .sqlite, .openSearch, .clickHouse:
+        case .mysql, .mariaDB, .sqlite, .clickHouse:
             throw DatabaseConnectionDraftError.unsupportedProduct(product)
         }
     }
@@ -217,7 +217,10 @@ public struct DatabaseConnectionDraft: Hashable, Sendable {
         if tlsMode == .disabled {
             return DatabaseTLSConfiguration(mode: .disabled, verification: .none)
         }
-        guard product == .postgresql || product == .mongoDB || product == .elasticsearch else {
+        guard
+            product == .postgresql || product == .mongoDB || product == .elasticsearch
+                || product == .openSearch
+        else {
             throw DatabaseConnectionDraftError.tlsUnsupported
         }
         return DatabaseTLSConfiguration(mode: .required, verification: .full)

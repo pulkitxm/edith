@@ -138,7 +138,7 @@ final class DatabaseObjectExplorerModel {
             groups = [group]
             state = .loaded
             loadGroup(group.identifier, connection: connection)
-        case .elasticsearch:
+        case .elasticsearch, .openSearch:
             let group = DatabaseExplorerGroup(
                 identifier: DatabaseObjectIdentifier(kind: .server, path: ["indices"]),
                 title: "Search objects",
