@@ -163,7 +163,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: output) }
         let url = "https://example.com/agent/docs"
         let command =
-            "printf '\n\n\n\n\n\(url)\r\n'; stty raw -echo; printf '\\033[?1000h\\033[?1006h'; cat > '\(output.path)'"
+            "printf '\n\n\n\n\n\(url)\r\n'; stty raw -echo; dd bs=1 count=1 2>/dev/null; printf '\\033[?1003h\\033[?1006h'; cat > '\(output.path)'"
         let launch = GhosttyLaunch(
             executable: "/bin/sh", arguments: ["-c", command],
             environment: ProcessInfo.processInfo.environment.map { "\($0.key)=\($0.value)" })
@@ -179,12 +179,7 @@ import Testing
             view.shutdown()
         }
 
-        for _ in 0..<100 {
-            if let surface = view.surface, ghostty_surface_mouse_captured(surface) { break }
-            try await Task.sleep(for: .milliseconds(10))
-        }
         let surface = try #require(view.surface)
-        #expect(ghostty_surface_mouse_captured(surface))
 
         var discoveredLinkPoint: NSPoint?
         for _ in 0..<20 where discoveredLinkPoint == nil {
@@ -206,6 +201,12 @@ import Testing
             if discoveredLinkPoint == nil { try await Task.sleep(for: .milliseconds(10)) }
         }
         let linkPoint = try #require(discoveredLinkPoint)
+        view.insertText("x")
+        for _ in 0..<100 {
+            if ghostty_surface_mouse_captured(surface) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(ghostty_surface_mouse_captured(surface))
         let commandFlags = NSEvent.ModifierFlags(
             rawValue: NSEvent.ModifierFlags.command.rawValue | UInt(NX_DEVICELCMDKEYMASK))
         let commandDown = try #require(
@@ -214,7 +215,7 @@ import Testing
                 timestamp: 2, windowNumber: window.windowNumber, context: nil, characters: "",
                 charactersIgnoringModifiers: "", isARepeat: false, keyCode: 55))
 
-        view.applyModifierChange(commandDown, mousePoint: linkPoint)
+        view.applyModifierChange(commandDown, mouseOverSurface: true)
 
         #expect(view.hoveredLink == url)
         #expect(view.terminalCursor == .pointingHand)
@@ -241,8 +242,10 @@ import Testing
                 with: .flagsChanged, location: linkPoint, modifierFlags: [], timestamp: 5,
                 windowNumber: window.windowNumber, context: nil, characters: "",
                 charactersIgnoringModifiers: "", isARepeat: false, keyCode: 55))
-        view.applyModifierChange(commandUp, mousePoint: linkPoint)
+        view.applyModifierChange(commandUp, mouseOverSurface: true)
         #expect(view.hoveredLink == nil)
+        try await Task.sleep(for: .milliseconds(150))
+        #expect((try? Data(contentsOf: output))?.isEmpty == true)
     }
 
     @Test func appKitFunctionKeyTextIsNotSentToTheTerminal() throws {
@@ -334,27 +337,57 @@ import Testing
     @Test func visibleUnfocusedSurfaceReceivesWindowModifierChanges() {
         #expect(
             GhosttyTerminalView.shouldForwardLocalModifier(
-                matchesWindow: true, focused: false, visible: true))
+                matchesWindow: true, focused: false))
         #expect(
             !GhosttyTerminalView.shouldForwardLocalModifier(
-                matchesWindow: true, focused: true, visible: true))
+                matchesWindow: true, focused: true))
         #expect(
-            !GhosttyTerminalView.shouldForwardLocalModifier(
-                matchesWindow: false, focused: false, visible: true))
+            GhosttyTerminalView.shouldForwardLocalModifier(
+                matchesWindow: false, focused: false))
         #expect(
-            !GhosttyTerminalView.shouldForwardLocalModifier(
-                matchesWindow: true, focused: false, visible: false))
+            GhosttyTerminalView.shouldForwardLocalModifier(
+                matchesWindow: false, focused: true))
+    }
+
+    @Test func capturedLinkStateRefreshesWhileCommandRemainsActive() {
+        #expect(
+            GhosttyTerminalView.shouldRefreshCapturedLink(
+                commandActive: true, mouseCaptured: true))
+        #expect(
+            !GhosttyTerminalView.shouldRefreshCapturedLink(
+                commandActive: false, mouseCaptured: true))
+        #expect(
+            !GhosttyTerminalView.shouldRefreshCapturedLink(
+                commandActive: true, mouseCaptured: false))
     }
 
     @Test func commandEscapesMouseCaptureOnlyForPointerEvents() {
         let captured = GhosttyTerminalView.pointerFlags(.command, mouseCaptured: true)
         let uncaptured = GhosttyTerminalView.pointerFlags(.command, mouseCaptured: false)
         let plainCaptured = GhosttyTerminalView.pointerFlags([], mouseCaptured: true)
+        let capturedTUIInput = GhosttyTerminalView.pointerFlags(
+            .command, mouseCaptured: true, escapeCapture: false)
 
         #expect(captured.contains(.command))
         #expect(captured.contains(.shift))
         #expect(uncaptured == .command)
         #expect(plainCaptured.isEmpty)
+        #expect(capturedTUIInput == .command)
+    }
+
+    @Test func onlyASingleLeftCommandClickEscapesMouseCapture() {
+        #expect(
+            GhosttyTerminalView.shouldEscapeCapture(
+                button: GHOSTTY_MOUSE_LEFT, clickCount: 1, flags: .command))
+        #expect(
+            !GhosttyTerminalView.shouldEscapeCapture(
+                button: GHOSTTY_MOUSE_LEFT, clickCount: 2, flags: .command))
+        #expect(
+            !GhosttyTerminalView.shouldEscapeCapture(
+                button: GHOSTTY_MOUSE_RIGHT, clickCount: 1, flags: .command))
+        #expect(
+            !GhosttyTerminalView.shouldEscapeCapture(
+                button: GHOSTTY_MOUSE_LEFT, clickCount: 1, flags: []))
     }
 
     @Test func webAndLocalhostLinksResolveWithoutFilesystemAccess() {

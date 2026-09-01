@@ -64,13 +64,15 @@ final class GhosttySurfaceRegistry {
     func forwardModifierChange(_ event: NSEvent) {
         let registered = lock.withLock { views.values.compactMap(\.value) }
         let eventWindow = event.window ?? NSApp.keyWindow
-        for view in registered
-        where GhosttyTerminalView.shouldForwardLocalModifier(
-            matchesWindow: eventWindow === view.window,
-            focused: view.window?.firstResponder === view,
-            visible: view.renderingActive && !view.isHidden)
-        {
-            view.flagsChanged(with: event)
+        for view in registered {
+            let matchesWindow = eventWindow != nil && eventWindow === view.window
+            guard
+                GhosttyTerminalView.shouldForwardLocalModifier(
+                    matchesWindow: matchesWindow, focused: view.window?.firstResponder === view)
+            else { continue }
+            let mouseOverSurface =
+                view.renderingActive && !view.isHidden && view.mouseOverSurface
+            view.applyModifierChange(event, mouseOverSurface: mouseOverSurface)
         }
     }
 }

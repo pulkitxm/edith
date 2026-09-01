@@ -378,17 +378,11 @@ extension GhosttyTerminalView {
             terminalCursor = .arrow
         }
         window?.invalidateCursorRects(for: self)
-        terminalCursor.set()
     }
 
     func setMouseVisible(_ visible: Bool) {
-        guard visible == cursorHidden else { return }
-        cursorHidden = !visible
-        if visible {
-            NSCursor.unhide()
-        } else {
-            NSCursor.hide()
-        }
+        guard renderingActive, !isHidden, mouseOverSurface else { return }
+        NSCursor.setHiddenUntilMouseMoves(!visible)
     }
 
     func selectionChanged() {

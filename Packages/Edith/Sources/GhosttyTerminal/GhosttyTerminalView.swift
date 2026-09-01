@@ -21,10 +21,9 @@ public final class GhosttyTerminalView: NSView {
     private var drawScheduled = false
     private(set) var renderingActive = true
     var terminalCursor = NSCursor.iBeam
-    var cursorHidden = false
+    var mouseOverSurface = false
     var commandClickOpenedTarget = false
     var commandClickGesture = TerminalCommandClickGesture()
-    var lastMousePoint: NSPoint?
     let linkHoverView = TerminalLinkHoverView(frame: .zero)
     let searchBar = TerminalSearchBar(frame: .zero)
     let progressStrip = TerminalProgressStrip(frame: .zero)
@@ -115,7 +114,6 @@ public final class GhosttyTerminalView: NSView {
     deinit {
         accessibilitySelectionTask?.cancel()
         if let keyUpMonitor { NSEvent.removeMonitor(keyUpMonitor) }
-        if cursorHidden { NSCursor.unhide() }
         shutdown()
         GhosttySurfaceRegistry.shared.unregister(self)
     }
