@@ -49,27 +49,25 @@ final class LimitsStatusItem {
 
     func showUnavailable() { update([]) }
 
-    private func setTitle(
-        _ title: NSAttributedString, sizingTitle: NSAttributedString
-    ) {
-        ensureStatusItem(length: StatusItemSizing.titleLength(sizingTitle))
+    private func setTitle(_ title: NSAttributedString) {
+        ensureStatusItem(length: StatusItemSizing.titleLength(title))
         stackedView?.removeFromSuperview()
         stackedView = nil
         item?.button?.attributedTitle = title
     }
 
     private func renderTagged(_ groups: [MenuBarProviderGroup]) {
-        setTitle(taggedTitle(groups), sizingTitle: taggedTitle(Self.sizingGroups(groups)))
+        setTitle(taggedTitle(groups))
     }
 
     private func taggedTitle(_ groups: [MenuBarProviderGroup]) -> NSAttributedString {
         let multi = groups.count > 1
         let title = NSMutableAttributedString()
         for (index, group) in groups.enumerated() {
-            if index > 0 { title.append(NSAttributedString(string: "   ")) }
+            if index > 0 { title.append(NSAttributedString(string: " ")) }
             if multi { appendLogo(group.provider, into: title) }
             for (segmentIndex, segment) in group.segments.enumerated() {
-                if segmentIndex > 0 { title.append(NSAttributedString(string: "  ")) }
+                if segmentIndex > 0 { title.append(NSAttributedString(string: " ")) }
                 appendLabel(segment.slot.menuBarLabel + " ", into: title)
                 appendValue(segment, percentSuffix: !multi, into: title)
             }
@@ -78,7 +76,7 @@ final class LimitsStatusItem {
     }
 
     private func renderSlash(_ groups: [MenuBarProviderGroup]) {
-        setTitle(slashTitle(groups), sizingTitle: slashTitle(Self.sizingGroups(groups)))
+        setTitle(slashTitle(groups))
     }
 
     private func slashTitle(_ groups: [MenuBarProviderGroup]) -> NSAttributedString {
@@ -86,7 +84,7 @@ final class LimitsStatusItem {
         let separatorColor = (subColor ?? NSColor.labelColor)
             .withAlphaComponent(0.65)
         for (index, group) in groups.enumerated() {
-            if index > 0 { title.append(NSAttributedString(string: "   ")) }
+            if index > 0 { title.append(NSAttributedString(string: " ")) }
             appendLogo(group.provider, into: title)
             for (segmentIndex, segment) in group.segments.enumerated() {
                 if segmentIndex > 0 {
@@ -107,7 +105,7 @@ final class LimitsStatusItem {
 
     private func renderStacked(_ groups: [MenuBarProviderGroup]) {
         let sizingView = StackedLimitsView()
-        sizingView.groups = stackedGroups(Self.sizingGroups(groups))
+        sizingView.groups = stackedGroups(groups)
         ensureStatusItem(length: sizingView.desiredWidth)
         item?.button?.attributedTitle = NSAttributedString()
         let view = stackedView ?? StackedLimitsView()
@@ -148,21 +146,6 @@ final class LimitsStatusItem {
                     ?? ProviderLimits(provider: provider, session: nil, week: nil))
         }
         return stable
-    }
-
-    static func sizingGroups(_ groups: [MenuBarProviderGroup]) -> [MenuBarProviderGroup] {
-        var sizing: [MenuBarProviderGroup] = []
-        sizing.reserveCapacity(groups.count)
-        for group in groups.prefix(LimitProvider.allCases.count) {
-            var segments: [MenuBarLimitSegment] = []
-            segments.reserveCapacity(group.segments.count)
-            for segment in group.segments.prefix(LimitWindowSlot.allCases.count) {
-                segments.append(
-                    MenuBarLimitSegment(slot: segment.slot, value: .percent(100), window: nil))
-            }
-            sizing.append(MenuBarProviderGroup(provider: group.provider, segments: segments))
-        }
-        return sizing
     }
 
     private func stackedGroups(_ groups: [MenuBarProviderGroup]) -> [StackedLimitsView.Group] {
@@ -358,11 +341,11 @@ final class StackedLimitsView: NSView {
 
     private static let labelFont = NSFont.systemFont(ofSize: 7, weight: .bold)
     private static let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
-    private static let edgeInset: CGFloat = 5
-    private static let columnGap: CGFloat = 7
-    private static let groupGap: CGFloat = 12
+    private static let edgeInset: CGFloat = 3
+    private static let columnGap: CGFloat = 4
+    private static let groupGap: CGFloat = 6
     private static let logoSize: CGFloat = 12
-    private static let logoGap: CGFloat = 4
+    private static let logoGap: CGFloat = 2
     private static let rowGap: CGFloat = 1
 
     var desiredWidth: CGFloat {

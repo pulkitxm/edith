@@ -21,20 +21,35 @@ import Testing
         #expect(providers[1].session?.percent == 42)
     }
 
-    @Test func sizingGroupsReserveThreeDigitPercentages() {
-        let groups = [
-            MenuBarProviderGroup(
-                provider: .claude,
-                segments: [
-                    MenuBarLimitSegment(slot: .session, value: .missing, window: nil),
-                    MenuBarLimitSegment(slot: .week, value: .percent(9), window: nil),
-                    MenuBarLimitSegment(slot: .fable, value: .masked, window: nil),
+    @Test func stackedLayoutUsesCurrentValueWidths() {
+        let compact = StackedLimitsView()
+        compact.groups = [
+            .init(
+                logo: nil,
+                columns: [
+                    .init(
+                        label: "5h", value: "7", valueColor: .labelColor, labelColor: .labelColor),
+                    .init(
+                        label: "7d", value: "53", valueColor: .labelColor, labelColor: .labelColor),
+                    .init(
+                        label: "F", value: "54", valueColor: .labelColor, labelColor: .labelColor),
+                ])
+        ]
+        let maximum = StackedLimitsView()
+        maximum.groups = [
+            .init(
+                logo: nil,
+                columns: [
+                    .init(
+                        label: "5h", value: "100", valueColor: .labelColor, labelColor: .labelColor),
+                    .init(
+                        label: "7d", value: "100", valueColor: .labelColor, labelColor: .labelColor),
+                    .init(
+                        label: "F", value: "100", valueColor: .labelColor, labelColor: .labelColor),
                 ])
         ]
 
-        let sizing = LimitsStatusItem.sizingGroups(groups)
-
-        #expect(sizing[0].segments.map(\.value) == [.percent(100), .percent(100), .percent(100)])
+        #expect(compact.desiredWidth < maximum.desiredWidth)
     }
 
     @Test func titleSizingIncludesStatusButtonInsets() {
@@ -42,7 +57,7 @@ import Testing
             string: "100%  100%",
             attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)])
 
-        #expect(StatusItemSizing.titleLength(title) > ceil(title.size().width))
+        #expect(StatusItemSizing.titleLength(title) == ceil(title.size().width + 8))
     }
 
     @Test func retiredStatusItemsCannotKeepMenuBarItemsDisabled() {

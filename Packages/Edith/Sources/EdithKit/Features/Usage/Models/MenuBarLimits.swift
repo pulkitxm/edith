@@ -89,7 +89,7 @@ public enum MenuBarLimits {
     public static func style(_ defaults: UserDefaults) -> MenuBarLimitsStyle {
         MenuBarLimitsStyle(
             rawValue: defaults.string(forKey: AppStorageKeys.MenuBar.limitsStyle) ?? "")
-            ?? .stacked
+            ?? .slash
     }
 
     public static func groups(

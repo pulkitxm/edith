@@ -222,7 +222,7 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.MenuBar.limitsStyle, .string, group: "menubar",
             summary: "Layout of the menu bar limits readout.",
-            allowed: ["stacked", "tagged", "slash"], fallback: .string("stacked")),
+            allowed: ["stacked", "tagged", "slash"], fallback: .string("slash")),
         SettingDefinition(
             AppStorageKeys.MenuBar.colorMode, .string, group: "menubar",
             summary: "How the menu bar readout is tinted.",
