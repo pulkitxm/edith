@@ -504,17 +504,23 @@ struct DatabaseWorkbenchView: View {
                 }
             } else {
                 if data.editorMode != nil || data.selectedRecord != nil {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 0) {
-                            grid(connection)
-                                .frame(minWidth: UIScale.pt(480))
-                            Divider().opacity(0.35)
-                            inspectorRegion(connection).frame(width: UIScale.pt(300))
-                        }
-                        VStack(spacing: 0) {
-                            grid(connection)
-                            Divider().opacity(0.35)
-                            inspectorRegion(connection).frame(maxHeight: UIScale.pt(260))
+                    GeometryReader { proxy in
+                        let inspectorWidth = UIScale.pt(300)
+                        let splitThreshold = UIScale.pt(780) + 1
+                        if proxy.size.width >= splitThreshold {
+                            let gridWidth = proxy.size.width - inspectorWidth - 1
+                            HStack(spacing: 0) {
+                                grid(connection)
+                                    .frame(width: gridWidth)
+                                Divider().opacity(0.35)
+                                inspectorRegion(connection).frame(width: inspectorWidth)
+                            }
+                        } else {
+                            VStack(spacing: 0) {
+                                grid(connection)
+                                Divider().opacity(0.35)
+                                inspectorRegion(connection).frame(maxHeight: UIScale.pt(260))
+                            }
                         }
                     }
                 } else {

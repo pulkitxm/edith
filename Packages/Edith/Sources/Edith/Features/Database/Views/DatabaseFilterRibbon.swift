@@ -13,6 +13,26 @@ struct DatabaseFilterRibbon: View {
     @State private var editorID: UUID?
 
     var body: some View {
+        GeometryReader { proxy in
+            Group {
+                if proxy.size.width < UIScale.pt(700) {
+                    condensedRail
+                } else {
+                    expandedRail
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .frame(height: UIScale.pt(38))
+        .background(palette.panel)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(palette.line.opacity(0.72))
+                .frame(height: 1)
+        }
+    }
+
+    private var expandedRail: some View {
         HStack(spacing: UIScale.pt(7)) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: UIScale.pt(6)) {
@@ -24,30 +44,70 @@ struct DatabaseFilterRibbon: View {
             ribbonSeparator
             sortMenu
             columnsMenu
-            if data.hasActiveFilters || data.hasActiveSorts {
-                Button {
-                    data.clearFilters()
-                    data.clearSorts()
-                    apply()
-                } label: {
-                    Text("Clear")
-                        .font(.system(size: UIScale.pt(10), weight: .medium))
-                        .foregroundStyle(palette.inkFaint)
-                        .frame(height: UIScale.pt(28))
-                }
-                .buttonStyle(.plain)
-                .help("Clear filters and sorting")
-                .accessibilityLabel("Clear filters and sorting")
-            }
+            clearControl
         }
         .padding(.horizontal, UIScale.pt(10))
-        .frame(height: UIScale.pt(38))
-        .background(palette.panel)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(palette.line.opacity(0.72))
-                .frame(height: 1)
+    }
+
+    private var condensedRail: some View {
+        HStack(spacing: UIScale.pt(7)) {
+            condensedFilterMenu
+            sortMenu
+            columnsMenu
+            clearControl
         }
+        .padding(.horizontal, UIScale.pt(10))
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var clearControl: some View {
+        if data.hasActiveFilters || data.hasActiveSorts {
+            Button {
+                data.clearFilters()
+                data.clearSorts()
+                apply()
+            } label: {
+                Text("Clear")
+                    .font(.system(size: UIScale.pt(10), weight: .medium))
+                    .foregroundStyle(palette.inkFaint)
+                    .frame(minWidth: UIScale.pt(28), minHeight: UIScale.pt(28))
+            }
+            .buttonStyle(.plain)
+            .help("Clear filters and sorting")
+            .accessibilityLabel("Clear filters and sorting")
+        }
+    }
+
+    private var condensedFilterMenu: some View {
+        Menu {
+            if !data.filterClauses.isEmpty {
+                Section("Current filters") {
+                    ForEach(data.filterClauses) { clause in
+                        Button(clause.summary) {
+                            editorID = clause.id
+                        }
+                    }
+                }
+                Divider()
+            }
+            Section("Add filter") {
+                ForEach(filterableFields, id: \.path) { field in
+                    Button(field.displayName) {
+                        editorID = data.addFilterClause(
+                            field: field.path.segments.joined(separator: "."))
+                    }
+                }
+            }
+        } label: {
+            railControlLabel(condensedFilterTitle, systemImage: "line.3.horizontal.decrease")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(filterableFields.isEmpty)
+        .help(filterHelp)
+        .accessibilityLabel(filterAccessibilityLabel)
     }
 
     private var columnsMenu: some View {
@@ -284,6 +344,23 @@ struct DatabaseFilterRibbon: View {
                 RoundedRectangle(cornerRadius: UIScale.pt(6))
                     .strokeBorder(palette.line.opacity(0.68), lineWidth: 1)
             }
+    }
+
+    private var condensedFilterTitle: String {
+        data.filterClauses.isEmpty ? "Filter" : "Filters \(data.filterClauses.count)"
+    }
+
+    private var filterHelp: String {
+        guard !data.filterClauses.isEmpty else {
+            return filterableFields.isEmpty
+                ? "This result has no filterable fields" : "Add a filter"
+        }
+        return data.filterClauses.map(\.summary).joined(separator: ", ")
+    }
+
+    private var filterAccessibilityLabel: String {
+        guard !data.filterClauses.isEmpty else { return "Filter, none active" }
+        return "Filters, \(data.filterClauses.count) configured. \(filterHelp)"
     }
 
     private var sortMenuTitle: String {
