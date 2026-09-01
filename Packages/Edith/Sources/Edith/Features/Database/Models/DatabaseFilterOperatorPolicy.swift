@@ -247,6 +247,9 @@ struct DatabaseFilterOperatorPolicy {
         if type == "redis-type" {
             return .identifier
         }
+        if type == "uuid" || type == "objectid" || type == "ip" || type == "version" {
+            return .identifier
+        }
         if type.contains("array") || type.contains("map") || type.contains("tuple")
             || type.contains("object") || type.contains("json") || type == "dynamic"
         {
@@ -254,9 +257,6 @@ struct DatabaseFilterOperatorPolicy {
         }
         if type.contains("bool") {
             return .boolean
-        }
-        if type == "uuid" || type == "objectid" || type == "ip" || type == "version" {
-            return .identifier
         }
         if type.contains("timestamp") || type.contains("datetime") || type == "date"
             || type.hasPrefix("time") || type.contains("interval")
@@ -266,6 +266,7 @@ struct DatabaseFilterOperatorPolicy {
         if type.contains("int") || type.contains("serial") || type.contains("numeric")
             || type.contains("decimal") || type.contains("float") || type.contains("double")
             || type.contains("real") || type.contains("number") || type.contains("money")
+            || ["long", "short", "byte", "unsigned_long"].contains(type)
         {
             return .number
         }

@@ -212,8 +212,52 @@ struct DatabaseDataWorkspaceModelTests {
 
         #expect(
             model.state
-                == .failed("Enter two comma-separated values for the id filter."))
+                == .failed(
+                    "Enter two values as a JSON array or comma-separated list for the id filter."))
         #expect(await sender.recordedRequests().count == 1)
+    }
+
+    @Test("Membership filters accept JSON arrays with commas in text values")
+    func structuredFilterJSONArray() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)]),
+            Self.response(records: [Self.record(2)]),
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.customers"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        model.addFilterClause(
+            field: "name",
+            operation: .in,
+            valueText: #"["Doe, Jane", "Ada"]"#)
+        model.browse(connection)
+        await Self.waitUntil { model.records == [Self.record(2)] }
+
+        let request = try #require(
+            await sender.recordedRequests().compactMap(\.browseRequest).last)
+        #expect(
+            request.page.filter
+                == .predicate(
+                    DatabaseFilterPredicate(
+                        field: DatabaseFieldPath("name"),
+                        operation: .in,
+                        values: [.string("Doe, Jane"), .string("Ada")])))
+    }
+
+    @Test("Redis keeps its supported flat AND composition")
+    func redisFilterConjunction() throws {
+        let model = DatabaseDataWorkspaceModel(
+            sender: DatabaseDataScriptedSender(responses: []),
+            announcement: { _ in })
+        model.prepare(for: try Self.connection(product: .redis))
+
+        model.setFilterConjunction(.or)
+
+        #expect(model.filterConjunction == .and)
     }
 
     @Test("MongoDB objectId filters preserve their native value type")

@@ -92,7 +92,7 @@ struct DatabaseFilterRibbon: View {
                 Divider()
             }
             Section("Add filter") {
-                ForEach(filterableFields, id: \.path) { field in
+                ForEach(availableFilterFields, id: \.path) { field in
                     Button(field.displayName) {
                         editorID = data.addFilterClause(
                             field: field.path.segments.joined(separator: "."))
@@ -105,7 +105,7 @@ struct DatabaseFilterRibbon: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .disabled(filterableFields.isEmpty)
+        .disabled(availableFilterFields.isEmpty)
         .help(filterHelp)
         .accessibilityLabel(filterAccessibilityLabel)
     }
@@ -164,7 +164,7 @@ struct DatabaseFilterRibbon: View {
 
     private var addFilterMenu: some View {
         Menu {
-            ForEach(filterableFields, id: \.path) { field in
+            ForEach(availableFilterFields, id: \.path) { field in
                 Button(field.displayName) {
                     editorID = data.addFilterClause(
                         field: field.path.segments.joined(separator: "."))
@@ -176,8 +176,10 @@ struct DatabaseFilterRibbon: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .disabled(filterableFields.isEmpty)
-        .help(filterableFields.isEmpty ? "This result has no filterable fields" : "Add a filter")
+        .disabled(availableFilterFields.isEmpty)
+        .help(
+            availableFilterFields.isEmpty
+                ? "No more filters are available for this result" : "Add a filter")
     }
 
     @ViewBuilder
@@ -190,30 +192,40 @@ struct DatabaseFilterRibbon: View {
         }
     }
 
+    @ViewBuilder
     private var conjunctionControl: some View {
-        Menu {
-            ForEach(DatabaseWorkspaceFilterConjunction.allCases, id: \.self) { conjunction in
-                Button {
-                    data.setFilterConjunction(conjunction)
-                    apply()
-                } label: {
-                    if data.filterConjunction == conjunction {
-                        Label(conjunction.title, systemImage: "checkmark")
-                    } else {
-                        Text(conjunction.title)
+        if DatabaseFilterOperatorPolicy.supportsDisjunction(product: connection.product) {
+            Menu {
+                ForEach(DatabaseWorkspaceFilterConjunction.allCases, id: \.self) { conjunction in
+                    Button {
+                        data.setFilterConjunction(conjunction)
+                        apply()
+                    } label: {
+                        if data.filterConjunction == conjunction {
+                            Label(conjunction.title, systemImage: "checkmark")
+                        } else {
+                            Text(conjunction.title)
+                        }
                     }
                 }
+            } label: {
+                conjunctionLabel(data.filterConjunction.title)
             }
-        } label: {
-            Text(data.filterConjunction.title)
-                .font(.system(size: UIScale.pt(9), weight: .medium, design: .monospaced))
-                .foregroundStyle(palette.inkFaint)
-                .frame(minWidth: UIScale.pt(28), minHeight: UIScale.pt(28))
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Match all filters or any filter")
+        } else {
+            conjunctionLabel("AND")
+                .help("Redis combines key and type filters")
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Match all filters or any filter")
+    }
+
+    private func conjunctionLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: UIScale.pt(9), weight: .medium, design: .monospaced))
+            .foregroundStyle(palette.inkFaint)
+            .frame(minWidth: UIScale.pt(28), minHeight: UIScale.pt(28))
     }
 
     private func filterChip(_ clause: DatabaseWorkspaceFilterClause) -> some View {
@@ -357,7 +369,7 @@ struct DatabaseFilterRibbon: View {
 
     private var filterHelp: String {
         guard !data.filterClauses.isEmpty else {
-            return filterableFields.isEmpty
+            return availableFilterFields.isEmpty
                 ? "This result has no filterable fields" : "Add a filter"
         }
         return data.filterClauses.map(\.summary).joined(separator: ", ")
@@ -417,7 +429,7 @@ struct DatabaseFilterRibbon: View {
                 }
                 filterEditorControl("Field") {
                     Picker("Field", selection: clauseFieldBinding(id)) {
-                        ForEach(filterableFields, id: \.path) { field in
+                        ForEach(filterableFields(keeping: id), id: \.path) { field in
                             Text(field.displayName)
                                 .tag(field.path.segments.joined(separator: "."))
                         }
@@ -445,9 +457,7 @@ struct DatabaseFilterRibbon: View {
                             }
                     }
                 }
-                if connection.product.family != .keyValue,
-                    operationSupportsCaseSensitivity(clause.operation)
-                {
+                if operationSupportsCaseSensitivity(clause) {
                     filterEditorControl("Text matching") {
                         Picker("Text matching", selection: clauseSensitivityBinding(id)) {
                             Text("Database default")
@@ -498,6 +508,21 @@ struct DatabaseFilterRibbon: View {
         data.fields.filter(\.isFilterable)
     }
 
+    private var availableFilterFields: [DatabaseFieldDescriptor] {
+        filterableFields(keeping: nil)
+    }
+
+    private func filterableFields(keeping clauseID: UUID?) -> [DatabaseFieldDescriptor] {
+        guard connection.product.family == .keyValue else { return filterableFields }
+        let used = Set(
+            data.filterClauses.compactMap { clause in
+                clause.id == clauseID ? nil : clause.field
+            })
+        return filterableFields.filter {
+            !used.contains($0.path.segments.joined(separator: "."))
+        }
+    }
+
     private var sortableFields: [DatabaseFieldDescriptor] {
         data.fields.filter(\.isSortable)
     }
@@ -524,6 +549,11 @@ struct DatabaseFilterRibbon: View {
                         $0.path.segments.joined(separator: ".") == field
                     }) {
                         clause.operation = data.defaultFilterOperator(for: descriptor)
+                        clause.caseSensitivity =
+                            DatabaseFilterOperatorPolicy.defaultCaseSensitivity(
+                                product: connection.product,
+                                field: descriptor,
+                                operation: clause.operation)
                     }
                 }
             })
@@ -535,9 +565,14 @@ struct DatabaseFilterRibbon: View {
             set: { operation in
                 updateClause(id) { clause in
                     clause.operation = operation
+                    let descriptor = data.fields.first {
+                        $0.path.segments.joined(separator: ".") == clause.field
+                    }
                     clause.caseSensitivity =
-                        connection.product.family == .keyValue
-                        ? .productDefault : defaultSensitivity(operation)
+                        DatabaseFilterOperatorPolicy.defaultCaseSensitivity(
+                            product: connection.product,
+                            field: descriptor,
+                            operation: operation)
                 }
             })
     }
@@ -595,68 +630,18 @@ struct DatabaseFilterRibbon: View {
     private func operators(
         for clause: DatabaseWorkspaceFilterClause
     ) -> [DatabaseFilterOperator] {
-        let typeName =
-            data.fields.first {
+        guard
+            let field = data.fields.first(where: {
                 $0.path.segments.joined(separator: ".") == clause.field
-            }?.typeName.lowercased() ?? "text"
-        if connection.product.family == .keyValue {
-            return typeName == "redis-type"
-                ? [.equal]
-                : [.equal, .contains, .startsWith, .endsWith]
-        }
-        var options: [DatabaseFilterOperator]
-        if typeName.contains("char") || typeName.contains("text")
-            || typeName.contains("string") || typeName.contains("uuid")
-        {
-            options = [
-                .contains, .equal, .notEqual, .startsWith, .endsWith, .in, .notIn,
-            ]
-            if connection.product.family == .search || connection.product == .clickHouse {
-                options += [.regularExpression, .fullText]
-            }
-        } else if typeName.contains("bool") {
-            options = [.equal, .notEqual]
-        } else {
-            options = [
-                .equal, .notEqual, .greaterThan, .greaterThanOrEqual, .lessThan,
-                .lessThanOrEqual, .between, .in, .notIn,
-            ]
-        }
-        switch connection.product.family {
-        case .relational:
-            options += [.isNull, .isNotNull]
-        case .document, .search, .analytical:
-            options += [.isNull, .isNotNull, .isMissing, .isNotMissing]
-        case .keyValue:
-            break
-        }
-        if !options.contains(clause.operation) {
-            options.insert(clause.operation, at: 0)
-        }
-        return options
+            })
+        else { return [clause.operation] }
+        return DatabaseFilterOperatorPolicy.operators(
+            product: connection.product,
+            field: field)
     }
 
     private func operatorTitle(_ operation: DatabaseFilterOperator) -> String {
-        switch operation {
-        case .equal: "Is"
-        case .notEqual: "Is not"
-        case .greaterThan: "Greater than"
-        case .greaterThanOrEqual: "At least"
-        case .lessThan: "Less than"
-        case .lessThanOrEqual: "At most"
-        case .contains: "Contains"
-        case .startsWith: "Starts with"
-        case .endsWith: "Ends with"
-        case .in: "In list"
-        case .notIn: "Not in list"
-        case .between: "Between"
-        case .isNull: "Is null"
-        case .isNotNull: "Is not null"
-        case .isMissing: "Is missing"
-        case .isNotMissing: "Is present"
-        case .regularExpression: "Matches pattern"
-        case .fullText: "Full-text match"
-        }
+        DatabaseFilterOperatorPolicy.title(product: connection.product, operation: operation)
     }
 
     private func operationNeedsValue(_ operation: DatabaseFilterOperator) -> Bool {
@@ -668,30 +653,24 @@ struct DatabaseFilterRibbon: View {
         }
     }
 
-    private func operationSupportsCaseSensitivity(_ operation: DatabaseFilterOperator) -> Bool {
-        switch operation {
-        case .contains, .startsWith, .endsWith, .regularExpression, .fullText:
-            true
-        default:
-            false
-        }
-    }
-
-    private func defaultSensitivity(
-        _ operation: DatabaseFilterOperator
-    ) -> DatabaseFilterCaseSensitivity {
-        switch operation {
-        case .contains, .startsWith, .endsWith:
-            .insensitive
-        default:
-            .productDefault
-        }
+    private func operationSupportsCaseSensitivity(
+        _ clause: DatabaseWorkspaceFilterClause
+    ) -> Bool {
+        guard
+            let field = data.fields.first(where: {
+                $0.path.segments.joined(separator: ".") == clause.field
+            })
+        else { return false }
+        return DatabaseFilterOperatorPolicy.supportsCaseSensitivity(
+            product: connection.product,
+            field: field,
+            operation: clause.operation)
     }
 
     private func valuePlaceholder(_ operation: DatabaseFilterOperator) -> String {
         switch operation {
-        case .between: "Lower value, upper value"
-        case .in, .notIn: "Value, value"
+        case .between: "[lower, upper] or lower, upper"
+        case .in, .notIn: "JSON array or comma-separated values"
         case .regularExpression: "Pattern"
         case .fullText: "Search text"
         default: "Value"
