@@ -503,6 +503,9 @@ struct DatabasePage: View {
         _ outcome: DatabaseConnectionManagementUncertainOutcome
     ) {
         connectionManagementRoute = nil
+        focusedConnectionID = nil
+        workspaceFocusConnectionID = nil
+        connectionWorkspace.clearFilters()
         if outcome.mayDisconnectSession {
             clearWorkspaceDataIfSelected(outcome.connectionID)
             connectionWorkspace.invalidateManagedConnectionSession(outcome.connectionID)
@@ -510,6 +513,7 @@ struct DatabasePage: View {
         connectionManagement.clearFailure()
         Task {
             await connectionWorkspace.loadConnections()
+            catalogFocusConnectionID = connectionWorkspace.selectedConnectionID
             managementMessage = DatabaseConnectionManagementMessage(
                 title: "Connection outcome needs review",
                 detail: outcome.reconciliationDetail)
