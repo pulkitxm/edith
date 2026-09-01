@@ -30,7 +30,7 @@ struct DatabaseConnectionGalleryTests {
         #expect(await fixture.sender.requestCount == 1)
     }
 
-    @Test func cardControlsAndOpenRouteDoNotConnect() async throws {
+    @Test func compactCardsKeepOpenRoutingSeparateFromConnection() async throws {
         let fixture = try await Self.fixture()
         var openedConnectionID: DatabaseConnectionID?
         let openConnection: (DatabaseConnectionSummary) -> Void = { connection in
@@ -44,8 +44,8 @@ struct DatabaseConnectionGalleryTests {
 
         withGalleryHost(view, width: 1_024, height: 700) { host in
             let cardRegions = galleryKeyRegions(of: host) { frame in
-                frame.width > 250 && frame.width < 400 && frame.height > 160
-                    && frame.height < 220
+                frame.width > 250 && frame.width < 400 && frame.height > 110
+                    && frame.height < 180
             }
             #expect(cardRegions.count == fixture.connections.count)
         }
@@ -72,8 +72,8 @@ struct DatabaseConnectionGalleryTests {
 
         await withGalleryHostAsync(view, width: 1_024, height: 700) { host in
             let cardRegions = galleryKeyRegions(of: host) { frame in
-                frame.width > 250 && frame.width < 400 && frame.height > 160
-                    && frame.height < 220
+                frame.width > 250 && frame.width < 400 && frame.height > 110
+                    && frame.height < 180
             }
             let restoredRegion = cardRegions.max { $0.x < $1.x }
             #expect(galleryResponderRegion(of: host) == restoredRegion)

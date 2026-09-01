@@ -256,10 +256,19 @@ struct DatabaseWorkbenchView: View {
             Menu {
                 ForEach(explorer.groups) { group in
                     Section(group.title) {
+                        compactGroupAction(group, connection: connection)
                         ForEach(group.objects) { object in
                             Button(object.title) {
                                 explorer.select(object.identifier)
                                 data.open(object.identifier, connection: connection)
+                            }
+                        }
+                        if group.nextContinuation != nil {
+                            Button("Load more objects") {
+                                explorer.loadGroup(
+                                    group.identifier,
+                                    connection: connection,
+                                    appending: true)
                             }
                         }
                     }
@@ -269,7 +278,7 @@ struct DatabaseWorkbenchView: View {
                     .lineLimit(1)
             }
             .buttonStyle(.edith(.secondary))
-            .disabled(explorer.groups.allSatisfy { $0.objects.isEmpty })
+            .disabled(explorer.groups.isEmpty)
             Spacer(minLength: 0)
             Button {
                 explorer.load(connection, force: true)
@@ -282,6 +291,29 @@ struct DatabaseWorkbenchView: View {
         .padding(.horizontal, UIScale.pt(10))
         .frame(height: UIScale.pt(42))
         .background(palette.panel)
+    }
+
+    @ViewBuilder
+    private func compactGroupAction(
+        _ group: DatabaseExplorerGroup,
+        connection: DatabaseConnectionSummary
+    ) -> some View {
+        switch group.state {
+        case .idle:
+            Button("Load \(group.title)") {
+                explorer.loadGroup(group.identifier, connection: connection)
+            }
+        case .loading:
+            Label("Loading \(group.title)", systemImage: "arrow.triangle.2.circlepath")
+        case .loaded:
+            if group.objects.isEmpty {
+                Text("No objects")
+            }
+        case .failed:
+            Button("Retry \(group.title)") {
+                explorer.loadGroup(group.identifier, connection: connection)
+            }
+        }
     }
 
     private func filterControls(_ connection: DatabaseConnectionSummary) -> some View {
@@ -321,7 +353,10 @@ struct DatabaseWorkbenchView: View {
         switch data.state {
         case .idle:
             if explorer.state == .loading {
-                workingState("Loading objects", "Reading the first available database namespace.")
+                workingState(
+                    "Loading objects",
+                    "Reading the first available database namespace.",
+                    cancel: explorer.cancel)
             } else {
                 emptyState(
                     symbol: "sidebar.left",
@@ -329,7 +364,10 @@ struct DatabaseWorkbenchView: View {
                     detail: "Choose a table or view from the object navigator.")
             }
         case .loading where data.records.isEmpty:
-            workingState("Loading data", "Fetching the first bounded page.")
+            workingState(
+                "Loading data",
+                "Fetching the first bounded page.",
+                cancel: data.cancel)
         case .failed(let message) where data.records.isEmpty:
             emptyState(
                 symbol: "exclamationmark.triangle",
@@ -427,7 +465,11 @@ struct DatabaseWorkbenchView: View {
                 })
             Divider().opacity(0.35)
             HStack(spacing: UIScale.pt(9)) {
-                if data.isLoading { ProgressView().controlSize(.small) }
+                if data.isLoading {
+                    ProgressView().controlSize(.small)
+                    Button("Cancel", action: data.cancel)
+                        .buttonStyle(.edith(.borderless))
+                }
                 Text(resultSummary)
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(.secondary)
@@ -646,13 +688,21 @@ struct DatabaseWorkbenchView: View {
         .opacity(field.isEditable ? 1 : 0.62)
     }
 
-    private func workingState(_ title: String, _ detail: String) -> some View {
+    private func workingState(
+        _ title: String,
+        _ detail: String,
+        cancel: (() -> Void)? = nil
+    ) -> some View {
         VStack(spacing: UIScale.pt(10)) {
             ProgressView()
             Text(title).font(.system(size: UIScale.pt(15), weight: .semibold))
             Text(detail)
                 .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(.secondary)
+            if let cancel {
+                Button("Cancel", action: cancel)
+                    .buttonStyle(.edith(.secondary))
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

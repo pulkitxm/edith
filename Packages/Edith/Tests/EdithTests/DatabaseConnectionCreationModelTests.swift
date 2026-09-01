@@ -141,12 +141,38 @@ struct DatabaseConnectionCreationModelTests {
             secretStore: try InMemoryDatabaseSecretStore())
         model.updateConnectionURL("postgresql://edith@127.0.0.1:55432/app")
 
-        let saved = await model.testAndSaveConnection()
+        let saved = await model.testAndSaveConnection(applyPendingURL: true)
 
         #expect(saved?.displayName == "app")
         #expect(saved?.readOnlyPolicy == .disabled)
         #expect(model.phase == .saved)
         #expect((await sender.recordedRequests()).count == 2)
+    }
+
+    @Test("Manual entry ignores a hidden connection URL")
+    func manualEntryIgnoresHiddenURL() async throws {
+        let sender = DatabaseConnectionCreationSender(testSucceeds: true)
+        let model = DatabaseConnectionCreationModel(
+            sender: sender,
+            secretStore: try InMemoryDatabaseSecretStore())
+        model.displayName = "Manual database"
+        model.host = "manual.example.com"
+        model.port = "5432"
+        model.username = "edith"
+        model.database = "manual"
+        model.updateConnectionURL("postgresql://other@hidden.example.com/hidden")
+
+        let saved = await model.testAndSaveConnection(applyPendingURL: false)
+
+        let connection = try #require(saved)
+        guard case .network(let endpoints) = connection.location else {
+            Issue.record("Expected a network connection.")
+            return
+        }
+        #expect(connection.displayName == "Manual database")
+        #expect(endpoints.first?.host == "manual.example.com")
+        #expect(connection.namespaces.database == "manual")
+        #expect(model.connectionURL.contains("hidden.example.com"))
     }
 
     @Test("A tested connection can be saved with its Keychain reference")

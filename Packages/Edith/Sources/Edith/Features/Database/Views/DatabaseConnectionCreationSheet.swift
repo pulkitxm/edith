@@ -21,6 +21,7 @@ struct DatabaseConnectionCreationSheet: View {
     @State private var entryMode = DatabaseConnectionEntryMode.url
     @State private var revealsConnectionURL = false
     @State private var showsAdvanced = false
+    @State private var submissionTask: Task<Void, Never>?
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         AppTheme.accent.rawValue
     @Environment(\.colorScheme) private var scheme
@@ -70,7 +71,10 @@ struct DatabaseConnectionCreationSheet: View {
             minHeight: UIScale.pt(480), idealHeight: UIScale.pt(640)
         )
         .background(palette.canvas)
+        .interactiveDismissDisabled(isWorking)
         .onDisappear {
+            submissionTask?.cancel()
+            submissionTask = nil
             Task { await model.discardUnsavedCredential() }
         }
     }
@@ -85,13 +89,14 @@ struct DatabaseConnectionCreationSheet: View {
                 Text("Add connection")
                     .font(.system(size: UIScale.pt(17), weight: .semibold))
                     .foregroundStyle(palette.ink)
-                Text("Connect now. You can change advanced settings later.")
+                Text("Use a URL or individual fields to start.")
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(palette.inkFaint)
             }
             Spacer(minLength: 0)
-            Button("Cancel", action: cancel)
+            Button("Cancel", action: cancelSubmissionAndDismiss)
                 .buttonStyle(.edith(.borderless))
+                .disabled(isWorking)
         }
         .padding(.horizontal, UIScale.pt(22))
         .padding(.vertical, UIScale.pt(16))
@@ -348,8 +353,11 @@ struct DatabaseConnectionCreationSheet: View {
             phaseStatus
             Spacer(minLength: UIScale.pt(12))
             Button {
-                Task {
-                    if let connection = await model.testAndSaveConnection() {
+                submissionTask = Task {
+                    if let connection = await model.testAndSaveConnection(
+                        applyPendingURL: entryMode == .url),
+                        !Task.isCancelled
+                    {
                         saved(connection)
                     }
                 }
@@ -469,6 +477,12 @@ struct DatabaseConnectionCreationSheet: View {
 
     private var isWorking: Bool {
         model.phase == .testing || model.phase == .saving
+    }
+
+    private func cancelSubmissionAndDismiss() {
+        submissionTask?.cancel()
+        submissionTask = nil
+        cancel()
     }
 
     private var productBinding: Binding<DatabaseProduct> {

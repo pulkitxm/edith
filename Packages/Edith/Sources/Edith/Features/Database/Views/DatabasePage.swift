@@ -185,6 +185,7 @@ struct DatabasePage: View {
                     workspaceFocusConnectionID = connection.id
                     focusedConnectionID = connection.id
                     connectionListRevision &+= 1
+                    Task { await connectionWorkspace.connectSelected() }
                 },
                 cancel: { self.connectionCreation = nil })
         }
@@ -381,6 +382,7 @@ struct DatabasePage: View {
         catalogFocusConnectionID = connection.id
         workspaceFocusConnectionID = connection.id
         focusedConnectionID = connection.id
+        Task { await connectionWorkspace.connectSelected() }
     }
 
     private func leaveFocusedWorkspace() {
