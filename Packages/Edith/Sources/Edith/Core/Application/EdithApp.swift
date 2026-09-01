@@ -262,8 +262,13 @@ private func launchHelperIfNeeded() async {
     if let running = NSRunningApplication.runningApplications(
         withBundleIdentifier: helperBundleIdentifier
     ).first {
-        guard let installedAt = helperInstalledDate(helperURL),
-            let launchedAt = running.launchDate, launchedAt < installedAt
+        guard
+            shouldRelaunchHelper(
+                runningURL: running.bundleURL,
+                expectedURL: helperURL,
+                launchedAt: running.launchDate,
+                installedAt: helperInstalledDate(helperURL)
+            )
         else { return }
         await MainActor.run {
             running.forceTerminate()
@@ -275,6 +280,17 @@ private func launchHelperIfNeeded() async {
         NSWorkspace.shared.openApplication(
             at: helperURL, configuration: NSWorkspace.OpenConfiguration())
     }
+}
+
+func shouldRelaunchHelper(
+    runningURL: URL?, expectedURL: URL, launchedAt: Date?, installedAt: Date?
+) -> Bool {
+    let expected = expectedURL.standardizedFileURL.resolvingSymlinksInPath()
+    guard runningURL?.standardizedFileURL.resolvingSymlinksInPath() == expected else {
+        return true
+    }
+    guard let launchedAt, let installedAt else { return false }
+    return launchedAt < installedAt
 }
 
 private func helperInstalledDate(_ helperURL: URL) -> Date? {
