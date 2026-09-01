@@ -15,6 +15,23 @@ enum DatabaseRowEditorMode: Equatable, Sendable {
     case update(recordIndex: Int)
 }
 
+enum DatabaseDataResultMode: Equatable, Sendable {
+    case browse
+    case query
+}
+
+enum DatabaseSearchQueryOperation: String, CaseIterable, Sendable {
+    case search
+    case aggregate
+
+    var title: String {
+        switch self {
+        case .search: "Search"
+        case .aggregate: "Aggregate"
+        }
+    }
+}
+
 struct DatabaseRowFieldDraft: Identifiable, Equatable, Sendable {
     let id: String
     let typeName: String
@@ -33,7 +50,10 @@ final class DatabaseDataWorkspaceModel {
     var filterValue = ""
     var sortField = ""
     var sortDirection = DatabaseSortDirection.ascending
+    var queryText = ""
+    var searchQueryOperation = DatabaseSearchQueryOperation.search
     private(set) var state = DatabaseDataWorkspaceState.idle
+    private(set) var resultMode = DatabaseDataResultMode.browse
     private(set) var records: [DatabaseRecord] = []
     private(set) var fields: [DatabaseFieldDescriptor] = []
     private(set) var selectedRecordIndex: Int?
@@ -51,6 +71,7 @@ final class DatabaseDataWorkspaceModel {
     private var generation = UUID()
     private var activeConnectionID: DatabaseConnectionID?
     private var activeProduct: DatabaseProduct?
+    private var lastQueryRequest: DatabaseQueryRequest?
 
     init(
         sender: any DatabaseBrokerCommandSending = DatabaseBrokerCommandClient(),
@@ -113,6 +134,10 @@ final class DatabaseDataWorkspaceModel {
         filterValue = ""
         sortField = ""
         sortDirection = .ascending
+        queryText = ""
+        searchQueryOperation = .search
+        resultMode = .browse
+        lastQueryRequest = nil
         state = .idle
         targetText = connection.map(Self.initialTargetText) ?? ""
     }
@@ -121,6 +146,7 @@ final class DatabaseDataWorkspaceModel {
         guard !isLoading else { return }
         let continuation = appending ? nextContinuation : nil
         if appending, continuation == nil { return }
+        if !appending { lastQueryRequest = nil }
         let request: DatabaseBrowseRequest
         do {
             request = try browseRequest(connection, continuation: continuation)
@@ -133,6 +159,7 @@ final class DatabaseDataWorkspaceModel {
         activeTask?.cancel()
         let requestGeneration = UUID()
         generation = requestGeneration
+        resultMode = .browse
         state = .loading
         let sender = sender
         activeTask = Task { [weak self] in
@@ -143,7 +170,8 @@ final class DatabaseDataWorkspaceModel {
                     response,
                     connectionID: connection.id,
                     generation: requestGeneration,
-                    appending: appending)
+                    appending: appending,
+                    mode: .browse)
             } catch is CancellationError {
             } catch {
                 self?.fail(error, generation: requestGeneration)
@@ -159,14 +187,88 @@ final class DatabaseDataWorkspaceModel {
         _ object: DatabaseObjectIdentifier,
         connection: DatabaseConnectionSummary
     ) {
-        cancel()
-        selectedObject = object
-        targetText = object.path.joined(separator: ".")
+        prepareTarget(object, connection: connection, mode: .browse)
         browse(connection)
     }
 
+    func prepareQuery(
+        _ object: DatabaseObjectIdentifier,
+        connection: DatabaseConnectionSummary
+    ) {
+        prepareTarget(object, connection: connection, mode: .query)
+    }
+
+    func runQuery(_ connection: DatabaseConnectionSummary, appending: Bool = false) {
+        guard !isLoading else { return }
+        let continuation = appending ? nextContinuation : nil
+        if appending, continuation == nil { return }
+        let request: DatabaseQueryRequest
+        do {
+            if appending {
+                guard let continuation, let lastQueryRequest else { return }
+                request = Self.replay(lastQueryRequest, continuation: continuation)
+            } else {
+                request = try queryRequest(connection, continuation: nil)
+                lastQueryRequest = request
+            }
+        } catch {
+            resultMode = .query
+            state = .failed(Self.message(for: error))
+            announcement(Self.message(for: error))
+            return
+        }
+
+        activeTask?.cancel()
+        let requestGeneration = UUID()
+        generation = requestGeneration
+        resultMode = .query
+        state = .loading
+        let sender = sender
+        activeTask = Task { [weak self] in
+            do {
+                let response = try await sender.send(.query(request))
+                try Task.checkCancellation()
+                self?.finish(
+                    response,
+                    connectionID: connection.id,
+                    generation: requestGeneration,
+                    appending: appending,
+                    mode: .query)
+            } catch is CancellationError {
+            } catch {
+                self?.fail(error, generation: requestGeneration)
+            }
+        }
+    }
+
+    func setSearchQueryOperation(
+        _ operation: DatabaseSearchQueryOperation,
+        connection: DatabaseConnectionSummary
+    ) {
+        guard searchQueryOperation != operation else { return }
+        let replacesTemplate =
+            selectedObject.map {
+                queryText
+                    == Self.defaultQueryText(
+                        connection.product,
+                        object: $0,
+                        operation: searchQueryOperation)
+            } == true
+        searchQueryOperation = operation
+        if replacesTemplate, let selectedObject {
+            queryText = Self.defaultQueryText(
+                connection.product,
+                object: selectedObject,
+                operation: operation)
+        }
+    }
+
     func loadNextPage(_ connection: DatabaseConnectionSummary) {
-        browse(connection, appending: true)
+        if resultMode == .query {
+            runQuery(connection, appending: true)
+        } else {
+            browse(connection, appending: true)
+        }
     }
 
     func selectRecord(at index: Int) {
@@ -598,6 +700,113 @@ final class DatabaseDataWorkspaceModel {
         record.fields.first(where: { $0.name == name })?.value ?? .missing
     }
 
+    private func prepareTarget(
+        _ object: DatabaseObjectIdentifier,
+        connection: DatabaseConnectionSummary,
+        mode: DatabaseDataResultMode
+    ) {
+        let replacesTemplate =
+            queryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || selectedObject.map {
+                queryText
+                    == Self.defaultQueryText(
+                        connection.product,
+                        object: $0,
+                        operation: searchQueryOperation)
+            } == true
+        cancel()
+        selectedObject = object
+        targetText = object.path.joined(separator: ".")
+        records = []
+        fields = []
+        selectedRecordIndex = nil
+        nextContinuation = nil
+        metadata = nil
+        resultMode = mode
+        lastQueryRequest = nil
+        state = .idle
+        if replacesTemplate {
+            queryText = Self.defaultQueryText(
+                connection.product,
+                object: object,
+                operation: searchQueryOperation)
+        }
+    }
+
+    private func queryRequest(
+        _ connection: DatabaseConnectionSummary,
+        continuation: DatabaseContinuationToken?
+    ) throws -> DatabaseQueryRequest {
+        let text = queryText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            throw DatabaseDataWorkspaceInputError.invalidQuery("Enter a query to run.")
+        }
+        let page = DatabasePageRequest(
+            pageSize: try DatabasePageSize(100),
+            continuation: continuation)
+        switch connection.product {
+        case .postgresql, .mysql, .mariaDB, .sqlite:
+            return DatabaseQueryRequest(
+                target: DatabaseTargetIdentifier(connectionID: connection.id),
+                language: .sql,
+                command: text,
+                page: page)
+        case .clickHouse:
+            return DatabaseQueryRequest(
+                target: DatabaseTargetIdentifier(connectionID: connection.id),
+                language: .clickHouseSQL,
+                command: text,
+                page: page)
+        case .redis, .valkey:
+            let parts = text.split(
+                maxSplits: 1,
+                omittingEmptySubsequences: true,
+                whereSeparator: \.isWhitespace)
+            guard parts.count == 2 else {
+                throw DatabaseDataWorkspaceInputError.invalidQuery(
+                    "Enter a read command and key, such as GET session:1.")
+            }
+            return DatabaseQueryRequest(
+                target: try target(connection),
+                language: .redisCommand,
+                command: String(parts[0]),
+                parameters: [
+                    DatabaseQueryParameter(
+                        name: "key",
+                        value: .string(String(parts[1]).trimmingCharacters(in: .whitespaces)))
+                ],
+                page: page)
+        case .mongoDB:
+            let fields = try queryBody(text, preservingExtendedJSON: true)
+            return DatabaseQueryRequest(
+                target: try target(connection),
+                language: .mongoQuery,
+                command: "find",
+                body: fields.isEmpty ? nil : .object(fields),
+                page: page)
+        case .elasticsearch, .openSearch:
+            return DatabaseQueryRequest(
+                target: try target(connection),
+                language: .searchQueryDSL,
+                command: searchQueryOperation.rawValue,
+                body: .object(try queryBody(text, preservingExtendedJSON: false)),
+                page: page)
+        }
+    }
+
+    private func queryBody(
+        _ text: String,
+        preservingExtendedJSON: Bool
+    ) throws -> [DatabaseObjectField] {
+        do {
+            return try preservingExtendedJSON
+                ? DatabaseJSONDocumentCodec.decodeObject(text)
+                : DatabaseJSONDocumentCodec.decodePlainObject(text)
+        } catch {
+            throw DatabaseDataWorkspaceInputError.invalidQuery("Enter one valid JSON object.")
+        }
+    }
+
     private func browseRequest(
         _ connection: DatabaseConnectionSummary,
         continuation: DatabaseContinuationToken?
@@ -712,17 +921,29 @@ final class DatabaseDataWorkspaceModel {
         _ response: DatabaseBrokerCommandResponse,
         connectionID: DatabaseConnectionID,
         generation: UUID,
-        appending: Bool
+        appending: Bool,
+        mode: DatabaseDataResultMode
     ) {
         guard self.generation == generation, activeConnectionID == connectionID else { return }
         activeTask = nil
-        guard case .browse(let result) = response else {
-            state = .failed("The database returned an unexpected browse response.")
-            return
-        }
-        guard result.status != .failed, let page = result.payload?.page else {
-            state = .failed(Self.message(for: result.error))
-            announcement(Self.message(for: result.error))
+        let page: EdithDatabase.DatabasePage<DatabaseRecord>
+        switch (mode, response) {
+        case (.browse, .browse(let result)):
+            guard result.status != .failed, let payload = result.payload else {
+                state = .failed(Self.message(for: result.error))
+                announcement(Self.message(for: result.error))
+                return
+            }
+            page = payload.page
+        case (.query, .query(let result)):
+            guard result.status != .failed, let payload = result.payload else {
+                state = .failed(Self.message(for: result.error))
+                announcement(Self.message(for: result.error))
+                return
+            }
+            page = payload.page
+        default:
+            state = .failed("The database returned an unexpected data response.")
             return
         }
         if appending {
@@ -765,6 +986,58 @@ final class DatabaseDataWorkspaceModel {
         case .sqlite, .elasticsearch, .openSearch:
             ""
         }
+    }
+
+    private static func defaultQueryText(
+        _ product: DatabaseProduct,
+        object: DatabaseObjectIdentifier,
+        operation: DatabaseSearchQueryOperation
+    ) -> String {
+        switch product {
+        case .postgresql, .sqlite:
+            return "SELECT * FROM " + object.path.map(doubleQuoted).joined(separator: ".")
+        case .mysql, .mariaDB, .clickHouse:
+            return "SELECT * FROM " + object.path.map(backtickQuoted).joined(separator: ".")
+        case .redis, .valkey:
+            return "TYPE session:1"
+        case .mongoDB:
+            return "{}"
+        case .elasticsearch, .openSearch:
+            if operation == .aggregate {
+                return
+                    "{\n  \"aggs\": {\n    \"values\": {\n      \"terms\": { \"field\": \"field.keyword\" }\n    }\n  }\n}"
+            }
+            return "{\n  \"query\": {\n    \"match_all\": {}\n  }\n}"
+        }
+    }
+
+    private static func replay(
+        _ request: DatabaseQueryRequest,
+        continuation: DatabaseContinuationToken
+    ) -> DatabaseQueryRequest {
+        DatabaseQueryRequest(
+            version: request.version,
+            target: request.target,
+            language: request.language,
+            command: request.command,
+            parameters: request.parameters,
+            body: request.body,
+            page: DatabasePageRequest(
+                pageSize: request.page.pageSize,
+                continuation: continuation,
+                projection: request.page.projection,
+                filter: request.page.filter,
+                sorts: request.page.sorts,
+                consistency: request.page.consistency),
+            operation: request.operation)
+    }
+
+    private static func doubleQuoted(_ value: String) -> String {
+        "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
+    }
+
+    private static func backtickQuoted(_ value: String) -> String {
+        "`\(value.replacingOccurrences(of: "`", with: "``"))`"
     }
 
     private static func text(for value: DatabaseValue) -> String {
@@ -1034,6 +1307,7 @@ final class DatabaseDataWorkspaceModel {
         if let inputError = error as? DatabaseDataWorkspaceInputError {
             switch inputError {
             case .invalidTarget(let message): return message
+            case .invalidQuery(let message): return message
             }
         }
         if let client = error as? DatabaseBrokerCommandClientError {
@@ -1065,6 +1339,7 @@ final class DatabaseDataWorkspaceModel {
 
 private enum DatabaseDataWorkspaceInputError: Error {
     case invalidTarget(String)
+    case invalidQuery(String)
 }
 
 private enum DatabaseRowEditorError: Error {
