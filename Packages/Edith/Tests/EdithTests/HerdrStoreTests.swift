@@ -148,32 +148,53 @@ private actor HerdrWatchHarness {
         #expect(store.selectedTab == keep)
     }
 
-    @Test func liveAgentTabsCloseSequentiallyAndKeepCancellations() throws {
-        var decisions: [ObjectIdentifier: (Bool) -> Void] = [:]
+    @Test func liveAgentTabsDetachWithoutTerminalCloseRequests() {
         var requested: [ObjectIdentifier] = []
         let store = seededStore { holder, completion in
             requested.append(ObjectIdentifier(holder))
-            decisions[ObjectIdentifier(holder)] = completion
+            completion(false)
         }
         let keep = store.tabs[0]
-        let cancel = store.tabs[1]
-        let confirm = store.tabs[2]
+        let first = store.tabs[1]
+        let second = store.tabs[2]
+        first.holder.start(executable: "/bin/cat", arguments: [], environment: [])
+        second.holder.start(executable: "/bin/cat", arguments: [], environment: [])
 
         store.closeOthers(besides: keep.id)
 
-        #expect(requested == [ObjectIdentifier(cancel.holder)])
-        let cancelDecision = try #require(decisions[ObjectIdentifier(cancel.holder)])
-        cancelDecision(false)
-
-        #expect(store.tabs.contains { $0.id == cancel.id })
-        #expect(
-            requested
-                == [ObjectIdentifier(cancel.holder), ObjectIdentifier(confirm.holder)])
-        let confirmDecision = try #require(decisions[ObjectIdentifier(confirm.holder)])
-        confirmDecision(true)
-
-        #expect(store.tabs.map(\.id) == [keep.id, cancel.id])
+        #expect(requested.isEmpty)
+        #expect(store.tabs.map(\.id) == [keep.id])
         #expect(store.selectedTab == keep.id)
+        #expect(!first.holder.started)
+        #expect(!second.holder.started)
+    }
+
+    @Test func herdrTerminalTabsKeepTerminalCloseConfirmation() throws {
+        var decisions: [(Bool) -> Void] = []
+        var requested: [ObjectIdentifier] = []
+        let store = HerdrStore(
+            requestUserClose: { holder, completion in
+                requested.append(ObjectIdentifier(holder))
+                decisions.append(completion)
+            })
+        let terminal = HerdrMachineTerminal.agent(
+            for: .local(herdrPresent: true))
+        store.open(terminal)
+        let holder = try #require(store.tabs.first?.holder)
+
+        store.close(terminal.id)
+
+        #expect(requested == [ObjectIdentifier(holder)])
+        #expect(store.tabs.map(\.id) == [terminal.id])
+        decisions[0](false)
+        #expect(store.tabs.map(\.id) == [terminal.id])
+
+        store.close(terminal.id)
+
+        #expect(requested == [ObjectIdentifier(holder), ObjectIdentifier(holder)])
+        decisions[1](true)
+        #expect(store.tabs.isEmpty)
+        #expect(store.selectedTab == HerdrStore.boardID)
     }
 
     @Test func closeToTheRightDropsLaterTabs() {

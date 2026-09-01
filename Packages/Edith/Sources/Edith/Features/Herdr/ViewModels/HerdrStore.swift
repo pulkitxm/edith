@@ -647,6 +647,13 @@ final class HerdrStore {
             closeSequentially(remaining)
             return
         }
+        if !tabs[index].agent.isTerminal {
+            let holder = tabs[index].holder
+            holder.stop()
+            removeClosedTab(id, holder: holder)
+            closeSequentially(remaining)
+            return
+        }
         let holder = tabs[index].holder
         requestUserClose(holder) { [weak self, weak holder] confirmed in
             guard let self else { return }
