@@ -561,7 +561,8 @@ struct HerdrSessionView: View {
                 environment: Terminal.getEnvironmentVariables(termName: "xterm-256color"))
             tab.holder.start(
                 executable: request.executable, arguments: request.arguments,
-                environment: request.environment)
+                environment: request.environment,
+                allowsLocalFileLinks: tab.agent.machineIsLocal)
         } catch {
             connectError = error.localizedDescription
         }

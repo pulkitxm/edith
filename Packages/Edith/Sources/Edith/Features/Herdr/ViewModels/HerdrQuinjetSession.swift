@@ -83,7 +83,8 @@ final class HerdrQuinjetSession {
             holder.start(
                 executable: request.executableURL.path, arguments: request.arguments,
                 environment: QuinjetOperationExecution.terminalEnvironment(),
-                currentDirectory: request.currentDirectory)
+                currentDirectory: request.currentDirectory,
+                allowsLocalFileLinks: remote == nil)
             launched = configuration
         } catch {
             guard attempt == generation else { return }

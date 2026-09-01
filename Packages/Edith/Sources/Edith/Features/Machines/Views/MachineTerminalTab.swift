@@ -19,10 +19,14 @@ extension EnvironmentValues {
 @MainActor
 @Observable
 final class TerminalSessionHolder {
+    typealias GhosttyInputDelivery = @MainActor (GhosttyTerminalView, String) -> Bool
+
     private(set) var terminalView = EdithTerminalView.make()
     private(set) var generation = 0
     private(set) var started = false
     private(set) var exitMessage: String?
+    private(set) var currentTitle: String?
+    private(set) var currentWorkingDirectory: String?
     private(set) var themeApplicationCount = 0
     private(set) var ghosttyLaunch: GhosttyLaunch?
     private(set) var ghosttyView: GhosttyTerminalView?
@@ -33,28 +37,54 @@ final class TerminalSessionHolder {
     private var presentationActive: Bool?
     private var presentationWantsFocus = false
     private var focusTask: Task<Void, Never>?
+    private var queuedGhosttyInput = ""
+    private let deliverGhosttyInput: GhosttyInputDelivery
+
+    init(
+        deliverGhosttyInput: @escaping GhosttyInputDelivery = { view, text in
+            view.insertText(text)
+        }
+    ) {
+        self.deliverGhosttyInput = deliverGhosttyInput
+    }
 
     func start(
         executable: String, arguments: [String], environment: [String],
-        currentDirectory: String? = nil
+        currentDirectory: String? = nil, allowsLocalFileLinks: Bool = true
     ) {
         guard !started else { return }
+        clearQueuedGhosttyInput()
         started = true
         exitMessage = nil
+        currentTitle = nil
+        currentWorkingDirectory = currentDirectory
         guard !GhosttyTerminals.enabled else {
             ghosttyLaunch = GhosttyLaunch(
                 executable: executable, arguments: arguments, environment: environment,
-                workingDirectory: currentDirectory)
+                workingDirectory: currentDirectory, allowsLocalFileLinks: allowsLocalFileLinks)
             return
         }
-        let delegate = TerminalProcessDelegate { [weak self] code in
-            Task { @MainActor in
-                self?.exitMessage =
-                    code == nil || code == 0
-                    ? "Session ended." : "Session ended with status \(code ?? 0)."
-                self?.started = false
-            }
-        }
+        let delegateGeneration = generation
+        let delegate = TerminalProcessDelegate(
+            onExit: { [weak self] code in
+                Task { @MainActor in
+                    guard let self, self.generation == delegateGeneration else { return }
+                    self.exitMessage =
+                        code == nil || code == 0
+                        ? "Session ended." : "Session ended with status \(code ?? 0)."
+                    self.started = false
+                }
+            },
+            onTitle: { [weak self] title in
+                Task { @MainActor in
+                    self?.setCurrentTitle(title, generation: delegateGeneration)
+                }
+            },
+            onWorkingDirectory: { [weak self] directory in
+                Task { @MainActor in
+                    self?.setCurrentWorkingDirectory(directory, generation: delegateGeneration)
+                }
+            })
         delegateBox = delegate
         terminalView.processDelegate = delegate
         terminalView.startProcess(
@@ -68,10 +98,13 @@ final class TerminalSessionHolder {
         focusTask = nil
         terminalView.terminal.resetToInitialState()
         if started { terminalView.terminate() }
+        clearQueuedGhosttyInput()
         terminalView = EdithTerminalView.make()
         generation += 1
         started = false
         exitMessage = nil
+        currentTitle = nil
+        currentWorkingDirectory = nil
         delegateBox = nil
         appliedPalette = nil
         presentationActive = nil
@@ -83,15 +116,18 @@ final class TerminalSessionHolder {
 
     func stop() {
         if started { terminalView.terminate() }
+        clearQueuedGhosttyInput()
         ghosttyView?.shutdown()
         ghosttyView = nil
         ghosttyLaunch = nil
         started = false
+        currentTitle = nil
+        currentWorkingDirectory = nil
     }
 
     func sendInput(_ text: String) {
         if ghosttyLaunch != nil {
-            _ = ghosttyView?.insertText(text)
+            sendGhosttyInput(text)
         } else {
             terminalView.send(txt: text)
         }
@@ -100,17 +136,67 @@ final class TerminalSessionHolder {
     func retainedGhosttyView(launch: GhosttyLaunch, theme: GhosttyTheme) -> GhosttyTerminalView {
         if let ghosttyView {
             ghosttyView.apply(theme: theme)
+            flushQueuedGhosttyInput(to: ghosttyView)
             return ghosttyView
         }
         let view = GhosttyTerminalView(launch: launch, theme: theme)
+        let viewGeneration = generation
         view.onClose = { [weak self] in
             Task { @MainActor in
-                self?.exitMessage = "Session ended."
-                self?.started = false
+                guard let self, self.generation == viewGeneration else { return }
+                self.exitMessage = "Session ended."
+                self.started = false
             }
         }
+        view.onTitleChange = { [weak self] title in
+            Task { @MainActor in
+                self?.setCurrentTitle(title, generation: viewGeneration)
+            }
+        }
+        view.onWorkingDirectoryChange = { [weak self] directory in
+            Task { @MainActor in
+                self?.setCurrentWorkingDirectory(directory, generation: viewGeneration)
+            }
+        }
+        view.onReady = { [weak self, weak view] in
+            guard let self, let view, self.generation == viewGeneration else { return }
+            self.flushQueuedGhosttyInput(to: view)
+        }
         ghosttyView = view
+        flushQueuedGhosttyInput(to: view)
         return view
+    }
+
+    private func setCurrentTitle(_ title: String?, generation: Int) {
+        guard self.generation == generation else { return }
+        currentTitle = title?.isEmpty == false ? title : nil
+    }
+
+    private func setCurrentWorkingDirectory(_ directory: String?, generation: Int) {
+        guard self.generation == generation else { return }
+        currentWorkingDirectory = directory?.isEmpty == false ? directory : nil
+    }
+
+    private func sendGhosttyInput(_ text: String) {
+        guard !text.isEmpty else { return }
+        if let ghosttyView, queuedGhosttyInput.isEmpty,
+            deliverGhosttyInput(ghosttyView, text)
+        {
+            return
+        }
+        queuedGhosttyInput += text
+        if let ghosttyView { flushQueuedGhosttyInput(to: ghosttyView) }
+    }
+
+    private func flushQueuedGhosttyInput(to view: GhosttyTerminalView) {
+        guard ghosttyView === view, !queuedGhosttyInput.isEmpty else { return }
+        let input = queuedGhosttyInput
+        guard deliverGhosttyInput(view, input) else { return }
+        queuedGhosttyInput = ""
+    }
+
+    private func clearQueuedGhosttyInput() {
+        queuedGhosttyInput = ""
     }
 
     func applyTheme(_ palette: TerminalPalette) {
@@ -174,8 +260,8 @@ final class TerminalSessionHolder {
     }
 
     func insertText(_ text: String) {
-        if let ghosttyView {
-            _ = ghosttyView.insertText(text)
+        if ghosttyLaunch != nil {
+            sendGhosttyInput(text)
         } else {
             terminalView.send(Array(text.utf8))
         }
@@ -317,14 +403,23 @@ final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResp
 
 private final class TerminalProcessDelegate: NSObject, LocalProcessTerminalViewDelegate {
     private let onExit: (Int32?) -> Void
+    private let onTitle: (String) -> Void
+    private let onWorkingDirectory: (String?) -> Void
 
-    init(onExit: @escaping (Int32?) -> Void) {
+    init(
+        onExit: @escaping (Int32?) -> Void, onTitle: @escaping (String) -> Void,
+        onWorkingDirectory: @escaping (String?) -> Void
+    ) {
         self.onExit = onExit
+        self.onTitle = onTitle
+        self.onWorkingDirectory = onWorkingDirectory
     }
 
     func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
-    func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
-    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
+    func setTerminalTitle(source: LocalProcessTerminalView, title: String) { onTitle(title) }
+    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {
+        onWorkingDirectory(directory)
+    }
 
     func processTerminated(source: TerminalView, exitCode: Int32?) {
         onExit(exitCode)
@@ -552,7 +647,8 @@ struct MachineTerminalTab: View {
         else { return }
         holder.start(
             executable: launch.executable, arguments: launch.arguments,
-            environment: launch.environment, currentDirectory: launch.currentDirectory)
+            environment: launch.environment, currentDirectory: launch.currentDirectory,
+            allowsLocalFileLinks: session.isLocal)
     }
 
     private func startStandardShell() {
@@ -567,7 +663,8 @@ struct MachineTerminalTab: View {
             executable: SSHConnection.executable.path,
             arguments: connection.terminalArguments(),
             environment: Terminal.getEnvironmentVariables(termName: "xterm-256color")
-                + connection.terminalEnvironment())
+                + connection.terminalEnvironment(),
+            allowsLocalFileLinks: false)
     }
 
     private func startWindowsShell() {
@@ -577,7 +674,8 @@ struct MachineTerminalTab: View {
             executable: SSHConnection.executable.path,
             arguments: connection.terminalArguments(remoteCommand: command),
             environment: Terminal.getEnvironmentVariables(termName: "xterm-256color")
-                + connection.terminalEnvironment())
+                + connection.terminalEnvironment(),
+            allowsLocalFileLinks: false)
     }
 
     private func detectWindowsShells() async {
@@ -804,6 +902,6 @@ struct ContainerTerminalSheet: View {
             environment: Terminal.getEnvironmentVariables(termName: "xterm-256color"))
         holder.start(
             executable: launch.executable, arguments: launch.arguments,
-            environment: launch.environment)
+            environment: launch.environment, allowsLocalFileLinks: session.isLocal)
     }
 }

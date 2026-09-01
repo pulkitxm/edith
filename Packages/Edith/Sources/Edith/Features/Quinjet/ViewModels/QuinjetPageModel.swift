@@ -231,7 +231,8 @@ final class QuinjetPageModel {
         tab.holder.reset()
         tab.holder.start(
             executable: request.executableURL.path, arguments: request.arguments,
-            environment: environment, currentDirectory: request.currentDirectory)
+            environment: environment, currentDirectory: request.currentDirectory,
+            allowsLocalFileLinks: remote == nil)
     }
 
     func openFolder(

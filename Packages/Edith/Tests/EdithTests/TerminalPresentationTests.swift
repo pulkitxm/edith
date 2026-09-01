@@ -159,6 +159,104 @@ import Testing
         #expect(elapsed < .seconds(1))
     }
 
+    @Test func ghosttyMetadataCallbacksReachTheSharedHolder() async throws {
+        try await withGhosttyEnabled(true) {
+            let holder = TerminalSessionHolder()
+            holder.start(
+                executable: "/usr/bin/true", arguments: [], environment: [],
+                currentDirectory: "/tmp/starting")
+            let launch = try #require(holder.ghosttyLaunch)
+            let view = holder.retainedGhosttyView(
+                launch: launch, theme: GhosttyTheme(palette: .edith(dark: true)))
+
+            view.setTerminalTitle("build logs")
+            view.setWorkingDirectory("/tmp/current")
+            await Task.yield()
+
+            #expect(holder.currentTitle == "build logs")
+            #expect(holder.currentWorkingDirectory == "/tmp/current")
+            holder.reset()
+        }
+    }
+
+    @Test func swiftTermMetadataCallbacksReachTheSharedHolder() async {
+        await withGhosttyEnabled(false) {
+            let holder = TerminalSessionHolder()
+            holder.start(
+                executable: "/bin/cat", arguments: [], environment: [],
+                currentDirectory: "/tmp/starting")
+            let view = holder.terminalView
+
+            view.setTerminalTitle(source: view, title: "remote shell")
+            view.hostCurrentDirectoryUpdate(source: view, directory: "/tmp/remote")
+            await Task.yield()
+
+            #expect(holder.currentTitle == "remote shell")
+            #expect(holder.currentWorkingDirectory == "/tmp/remote")
+            holder.reset()
+        }
+    }
+
+    @Test func resetDiscardsStaleMetadataAndQueuedGhosttyInput() async throws {
+        try await withGhosttyEnabled(true) {
+            var deliveries: [String] = []
+            let holder = TerminalSessionHolder { _, text in
+                deliveries.append(text)
+                return false
+            }
+            holder.start(
+                executable: "/usr/bin/true", arguments: [], environment: [],
+                currentDirectory: "/tmp/starting")
+            holder.sendInput("stale input")
+            let launch = try #require(holder.ghosttyLaunch)
+            let view = holder.retainedGhosttyView(
+                launch: launch, theme: GhosttyTheme(palette: .edith(dark: true)))
+            view.setTerminalTitle("stale title")
+            view.setWorkingDirectory("/tmp/stale")
+
+            holder.reset()
+            await Task.yield()
+            view.setTerminalTitle("later stale title")
+            view.setWorkingDirectory("/tmp/later-stale")
+            view.onReady?()
+            await Task.yield()
+
+            #expect(holder.currentTitle == nil)
+            #expect(holder.currentWorkingDirectory == nil)
+            #expect(deliveries == ["stale input"])
+        }
+    }
+
+    @Test func queuedGhosttyInputFlushesOnceWhenTheViewIsRetained() async throws {
+        try await withGhosttyEnabled(true) {
+            var deliveries: [String] = []
+            let holder = TerminalSessionHolder { _, text in
+                deliveries.append(text)
+                return true
+            }
+            holder.start(executable: "/usr/bin/true", arguments: [], environment: [])
+            holder.sendInput("first ")
+            holder.insertText("second")
+            #expect(deliveries.isEmpty)
+
+            let launch = try #require(holder.ghosttyLaunch)
+            let theme = GhosttyTheme(palette: .edith(dark: true))
+            let first = holder.retainedGhosttyView(launch: launch, theme: theme)
+            let second = holder.retainedGhosttyView(launch: launch, theme: theme)
+            for _ in 0..<10 {
+                if !deliveries.isEmpty { break }
+                await Task.yield()
+            }
+
+            #expect(first === second)
+            #expect(deliveries == ["first second"])
+            _ = holder.retainedGhosttyView(launch: launch, theme: theme)
+            await Task.yield()
+            #expect(deliveries == ["first second"])
+            holder.reset()
+        }
+    }
+
     @Test func ghosttySurfaceIdentitySurvivesRepresentableReconstruction() {
         let key = AppStorageKeys.Herdr.ghosttyTerminal
         let previous = SharedDefaults.store.object(forKey: key)
@@ -205,5 +303,21 @@ import Testing
         #expect(!GhosttyTerminalView.shouldRender(active: true, hidden: true, windowVisible: true))
         #expect(
             !GhosttyTerminalView.shouldRender(active: true, hidden: false, windowVisible: false))
+    }
+
+    private func withGhosttyEnabled(
+        _ enabled: Bool, operation: () async throws -> Void
+    ) async rethrows {
+        let key = AppStorageKeys.Herdr.ghosttyTerminal
+        let previous = SharedDefaults.store.object(forKey: key)
+        SharedDefaults.store.set(enabled, forKey: key)
+        defer {
+            if let previous {
+                SharedDefaults.store.set(previous, forKey: key)
+            } else {
+                SharedDefaults.store.removeObject(forKey: key)
+            }
+        }
+        try await operation()
     }
 }
