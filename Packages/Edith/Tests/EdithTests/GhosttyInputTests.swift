@@ -266,6 +266,116 @@ import Testing
         #expect(GhosttyTerminalView.inputText(for: event) == "x")
     }
 
+    @Test func controlTextReturnsToTheActiveKeyboardLayout() throws {
+        let event = try #require(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: .control, timestamp: 1,
+                windowNumber: 0, context: nil, characters: "\u{1}",
+                charactersIgnoringModifiers: "a", isARepeat: false,
+                keyCode: UInt16(kVK_ANSI_A)))
+        let expected = event.characters(byApplyingModifiers: [])
+
+        #expect(GhosttyTerminalView.inputText(for: event) == expected)
+        #expect(
+            GhosttyTerminalView.inputText(for: event).map {
+                !GhosttyTerminalView.startsWithASCIIControl($0)
+            } == true)
+    }
+
+    @Test func shiftedKeysReportTheirNoModifierCodepoint() throws {
+        let event = try #require(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: .shift, timestamp: 1,
+                windowNumber: 0, context: nil, characters: "!",
+                charactersIgnoringModifiers: "!", isARepeat: false,
+                keyCode: UInt16(kVK_ANSI_1)))
+        let expected = try #require(
+            event.characters(byApplyingModifiers: [])?.unicodeScalars.first?.value)
+
+        #expect(GhosttyTerminalView.unshiftedCodepoint(for: event) == expected)
+        #expect(GhosttyTerminalView.unshiftedCodepoint(for: event) != 33)
+    }
+
+    @Test func optionAsAltFilteringPreservesDeviceAndInputSourceFlags() {
+        let original = NSEvent.ModifierFlags(
+            rawValue: NSEvent.ModifierFlags.option.rawValue
+                | NSEvent.ModifierFlags.function.rawValue
+                | NSEvent.ModifierFlags.numericPad.rawValue
+                | UInt(NX_DEVICERALTKEYMASK))
+        let translated = GhosttyTerminalView.translationFlags(
+            original: original, mods: GHOSTTY_MODS_NONE)
+
+        #expect(!translated.contains(.option))
+        #expect(translated.contains(.function))
+        #expect(translated.contains(.numericPad))
+        #expect(translated.rawValue & UInt(NX_DEVICERALTKEYMASK) != 0)
+    }
+
+    @Test func unchangedTranslationModifiersReuseTheNativeEvent() throws {
+        let event = try #require(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: .option, timestamp: 1,
+                windowNumber: 0, context: nil, characters: "´",
+                charactersIgnoringModifiers: "e", isARepeat: false,
+                keyCode: UInt16(kVK_ANSI_E)))
+
+        #expect(
+            GhosttyTerminalView.translationEvent(for: event, mods: GHOSTTY_MODS_ALT)
+                === event)
+    }
+
+    @Test func filteredTranslationModifiersRebuildTheNativeTextEvent() throws {
+        let event = try #require(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: .option, timestamp: 1,
+                windowNumber: 0, context: nil, characters: "´",
+                charactersIgnoringModifiers: "e", isARepeat: false,
+                keyCode: UInt16(kVK_ANSI_E)))
+        let expected = event.characters(byApplyingModifiers: []) ?? ""
+        let translated = GhosttyTerminalView.translationEvent(
+            for: event, mods: GHOSTTY_MODS_NONE)
+
+        #expect(translated !== event)
+        #expect(!translated.modifierFlags.contains(.option))
+        #expect(translated.characters == expected)
+        #expect(translated.keyCode == event.keyCode)
+    }
+
+    @Test func keyEventsSeparatePhysicalAndConsumedModifiers() throws {
+        let original = NSEvent.ModifierFlags(
+            rawValue: NSEvent.ModifierFlags.shift.rawValue
+                | NSEvent.ModifierFlags.control.rawValue
+                | NSEvent.ModifierFlags.option.rawValue
+                | NSEvent.ModifierFlags.command.rawValue
+                | UInt(NX_DEVICERALTKEYMASK))
+        let event = try #require(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: original, timestamp: 1,
+                windowNumber: 0, context: nil, characters: "A",
+                charactersIgnoringModifiers: "a", isARepeat: false,
+                keyCode: UInt16(kVK_ANSI_A)))
+        let key = GhosttyTerminalView.keyEvent(
+            for: event, translationFlags: [.shift, .option], action: GHOSTTY_ACTION_PRESS,
+            composing: true)
+
+        #expect(key.keycode == UInt32(kVK_ANSI_A))
+        #expect(key.mods.rawValue & GHOSTTY_MODS_SHIFT.rawValue != 0)
+        #expect(key.mods.rawValue & GHOSTTY_MODS_CTRL.rawValue != 0)
+        #expect(key.mods.rawValue & GHOSTTY_MODS_ALT.rawValue != 0)
+        #expect(key.mods.rawValue & GHOSTTY_MODS_SUPER.rawValue != 0)
+        #expect(key.consumed_mods.rawValue & GHOSTTY_MODS_SHIFT.rawValue != 0)
+        #expect(key.consumed_mods.rawValue & GHOSTTY_MODS_ALT.rawValue != 0)
+        #expect(key.consumed_mods.rawValue & GHOSTTY_MODS_CTRL.rawValue == 0)
+        #expect(key.consumed_mods.rawValue & GHOSTTY_MODS_SUPER.rawValue == 0)
+        #expect(key.composing)
+    }
+
+    @Test func ASCIIControlTextStaysWithTheGhosttyKeyEncoder() {
+        #expect(GhosttyTerminalView.startsWithASCIIControl("\r"))
+        #expect(GhosttyTerminalView.startsWithASCIIControl("\u{7F}"))
+        #expect(!GhosttyTerminalView.startsWithASCIIControl("文"))
+    }
+
     @Test func inputMethodCompositionSuppressesControlEventsOnly() {
         #expect(GhosttyTerminalView.suppresses("\r", whileComposing: true))
         #expect(GhosttyTerminalView.suppresses("\u{1B}", whileComposing: true))

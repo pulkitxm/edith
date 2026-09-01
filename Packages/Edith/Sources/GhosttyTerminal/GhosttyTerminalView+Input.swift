@@ -26,13 +26,21 @@ extension GhosttyTerminalView {
     }
 
     public override func keyDown(with event: NSEvent) {
+        guard let surface else {
+            interpretKeyEvents([event])
+            return
+        }
         let action = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
+        let translationEvent = Self.translationEvent(
+            for: event,
+            mods: ghostty_surface_key_translation_mods(
+                surface, Self.mods(from: event.modifierFlags)))
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if !flags.isDisjoint(with: [.command, .control]) {
             guard
                 send(
-                    event: event, action: action, text: Self.inputText(for: event), composing: false
-                )
+                    event: event, translationEvent: translationEvent, action: action,
+                    text: Self.inputText(for: translationEvent), composing: false)
             else {
                 super.keyDown(with: event)
                 return
@@ -41,22 +49,24 @@ extension GhosttyTerminalView {
         }
         let markedBefore = hasMarkedText()
         keyTextAccumulator = []
-        interpretKeyEvents([event])
+        interpretKeyEvents([translationEvent])
         let accumulated = keyTextAccumulator ?? []
         keyTextAccumulator = nil
         syncPreedit(clearIfNeeded: markedBefore)
         let composing = hasMarkedText() || markedBefore
         if !accumulated.isEmpty {
             for text in accumulated where !Self.suppresses(text, whileComposing: composing) {
-                _ = send(event: event, action: action, text: text, composing: false)
+                _ = send(
+                    event: event, translationEvent: translationEvent, action: action, text: text,
+                    composing: false)
             }
             return
         }
-        if Self.suppresses(event.characters, whileComposing: composing) { return }
+        if Self.suppresses(translationEvent.characters, whileComposing: composing) { return }
         guard
             send(
-                event: event, action: action, text: Self.inputText(for: event), composing: composing
-            )
+                event: event, translationEvent: translationEvent, action: action,
+                text: Self.inputText(for: translationEvent), composing: composing)
         else {
             super.keyDown(with: event)
             return
@@ -248,18 +258,14 @@ extension GhosttyTerminalView {
     }
 
     private func send(
-        event: NSEvent, action: ghostty_input_action_e, text: String?, composing: Bool
+        event: NSEvent, translationEvent: NSEvent? = nil, action: ghostty_input_action_e,
+        text: String?, composing: Bool
     ) -> Bool {
         guard let surface else { return false }
-        var key = ghostty_input_key_s()
-        key.action = action
-        key.mods = Self.mods(from: event.modifierFlags)
-        key.consumed_mods = ghostty_input_mods_e(GHOSTTY_MODS_NONE.rawValue)
-        key.keycode = UInt32(event.keyCode)
-        key.unshifted_codepoint =
-            event.charactersIgnoringModifiers?.unicodeScalars.first?.value ?? 0
-        key.composing = composing
-        guard let text else {
+        var key = Self.keyEvent(
+            for: event, translationFlags: translationEvent?.modifierFlags, action: action,
+            composing: composing)
+        guard let text, !Self.startsWithASCIIControl(text) else {
             key.text = nil
             return ghostty_surface_key(surface, key)
         }
@@ -272,11 +278,80 @@ extension GhosttyTerminalView {
     static func inputText(for event: NSEvent) -> String? {
         guard let characters = event.characters, !characters.isEmpty else { return nil }
         if characters.unicodeScalars.count == 1, let scalar = characters.unicodeScalars.first,
+            scalar.value < 0x20
+        {
+            return event.characters(
+                byApplyingModifiers: event.modifierFlags.subtracting(.control))
+        }
+        if characters.unicodeScalars.count == 1, let scalar = characters.unicodeScalars.first,
             scalar.value >= 0xF700, scalar.value <= 0xF8FF
         {
             return nil
         }
         return characters
+    }
+
+    static func translationFlags(
+        original: NSEvent.ModifierFlags, mods: ghostty_input_mods_e
+    ) -> NSEvent.ModifierFlags {
+        var result = original
+        let mappings: [(NSEvent.ModifierFlags, UInt32)] = [
+            (.shift, GHOSTTY_MODS_SHIFT.rawValue),
+            (.control, GHOSTTY_MODS_CTRL.rawValue),
+            (.option, GHOSTTY_MODS_ALT.rawValue),
+            (.command, GHOSTTY_MODS_SUPER.rawValue),
+        ]
+        for (flag, mask) in mappings {
+            if mods.rawValue & mask != 0 {
+                result.insert(flag)
+            } else {
+                result.remove(flag)
+            }
+        }
+        return result
+    }
+
+    static func translationEvent(
+        for event: NSEvent, mods: ghostty_input_mods_e
+    ) -> NSEvent {
+        let flags = translationFlags(original: event.modifierFlags, mods: mods)
+        guard flags != event.modifierFlags else { return event }
+        return NSEvent.keyEvent(
+            with: event.type, location: event.locationInWindow, modifierFlags: flags,
+            timestamp: event.timestamp, windowNumber: event.windowNumber, context: nil,
+            characters: event.characters(byApplyingModifiers: flags) ?? "",
+            charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? "",
+            isARepeat: event.isARepeat, keyCode: event.keyCode) ?? event
+    }
+
+    static func keyEvent(
+        for event: NSEvent, translationFlags: NSEvent.ModifierFlags? = nil,
+        action: ghostty_input_action_e, composing: Bool
+    ) -> ghostty_input_key_s {
+        var key = ghostty_input_key_s()
+        key.action = action
+        key.mods = mods(from: event.modifierFlags)
+        key.consumed_mods = mods(
+            from: (translationFlags ?? event.modifierFlags)
+                .subtracting([.control, .command]))
+        key.keycode = UInt32(event.keyCode)
+        key.text = nil
+        key.unshifted_codepoint = unshiftedCodepoint(for: event)
+        key.composing = composing
+        return key
+    }
+
+    static func unshiftedCodepoint(for event: NSEvent) -> UInt32 {
+        guard event.type == .keyDown || event.type == .keyUp,
+            let characters = event.characters(byApplyingModifiers: []),
+            let scalar = characters.unicodeScalars.first
+        else { return 0 }
+        return scalar.value
+    }
+
+    static func startsWithASCIIControl(_ text: String) -> Bool {
+        guard let scalar = text.unicodeScalars.first else { return false }
+        return scalar.value < 0x20 || scalar.value == 0x7F
     }
 
     static func suppresses(_ text: String?, whileComposing composing: Bool) -> Bool {
