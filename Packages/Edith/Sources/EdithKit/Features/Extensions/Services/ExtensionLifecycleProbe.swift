@@ -82,6 +82,8 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
         machineCount: { MachineRegistry.machines().count },
         adapterReadiness: { id in
             switch id {
+            case "database":
+                await DatabaseBrokerExtensionReadinessAdapter().readiness()
             case "companion": nil
             case "herdr": await herdrReadiness()
             default: await ExtensionLiveAdapters.readiness(for: id)
@@ -189,12 +191,16 @@ public struct ExtensionLifecycleProbe: Sendable {
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "quinjet": Policy(
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
+        "seoAudit": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "system": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "appMaintenance": Policy(
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "machines": Policy(
             requiresHelper: true, requiresMachine: true, toolRule: .all, adapter: true),
+        "database": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "companion": Policy(
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "systemStats": Policy(
@@ -210,6 +216,8 @@ public struct ExtensionLifecycleProbe: Sendable {
         "notchShelf": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "clipboard": Policy(
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
+        "keystrokeHighlight": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "focusDim": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),

@@ -22,6 +22,7 @@ final class MachineControlCenterModel {
     var bluetoothEnabled = false
     var airplaneMode = false
     var doNotDisturb = false
+    var caffeinateEnabled = false
     var isRefreshing = false
     var hasLoaded = false
     var requiresConnection = false
@@ -210,6 +211,7 @@ final class MachineControlCenterModel {
         if let value = next.bluetoothEnabled { bluetoothEnabled = value }
         if let value = next.airplaneMode { airplaneMode = value }
         if let value = next.doNotDisturb { doNotDisturb = value }
+        if let value = next.caffeinateEnabled { caffeinateEnabled = value }
     }
 
     private func canDisconnect(_ action: MachineControlAction) -> Bool {
@@ -391,6 +393,7 @@ struct MachineControlCenterView: View {
         if snapshot?.bluetoothEnabled != nil { height += 44 }
         if snapshot?.airplaneMode != nil { height += 44 }
         if snapshot?.doNotDisturb != nil { height += 44 }
+        if snapshot?.caffeinateEnabled != nil { height += 44 }
         if snapshot?.keyboardBacklight != nil { height += 66 }
         if hasControls, hasCooling { height += 15 }
         if hasCooling {
@@ -620,8 +623,21 @@ struct MachineControlCenterView: View {
                     success: $0 ? "Do Not Disturb turned on" : "Do Not Disturb turned off")
             }
         }
-        if snapshot?.keyboardBacklight != nil {
+        if snapshot?.caffeinateEnabled != nil {
             if hasControl(before: 7) { controlDivider }
+            toggleRow(
+                "Caffeinate",
+                symbol: model.caffeinateEnabled ? "cup.and.saucer.fill" : "cup.and.saucer",
+                value: model.caffeinateEnabled
+            ) {
+                model.caffeinateEnabled = $0
+                model.perform(
+                    .setCaffeinateEnabled($0),
+                    success: $0 ? "Caffeinate turned on" : "Caffeinate turned off")
+            }
+        }
+        if snapshot?.keyboardBacklight != nil {
+            if hasControl(before: 8) { controlDivider }
             sliderRow(
                 "Keyboard lighting", symbol: "keyboard", value: $model.keyboardBacklight,
                 onCommit: {
@@ -868,6 +884,7 @@ struct MachineControlCenterView: View {
             snapshot?.bluetoothEnabled != nil,
             snapshot?.airplaneMode != nil,
             snapshot?.doNotDisturb != nil,
+            snapshot?.caffeinateEnabled != nil,
             snapshot?.keyboardBacklight != nil,
         ]
         return available.prefix(index).contains(true)

@@ -269,6 +269,7 @@ public enum CLIEnvironment {
                 endpoint: .remote(machine: runner.machine, connection: runner.ssh))
         }
         QuinjetCLIEnvironment.reset()
+        DatabaseCLIEnvironment.reset()
     }
 
     private static func liveRemoteDirectoryTarget(

@@ -65,10 +65,10 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "attention", "usage", "quinjet", "system", "appMaintenance", "machines",
+        "attention", "usage", "quinjet", "seoAudit", "system", "appMaintenance", "machines",
         "systemStats", "micMute",
-        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "focusDim", "presenter",
-        "emoji", "colorPicker",
+        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "keystrokeHighlight",
+        "focusDim", "presenter", "emoji", "colorPicker",
     ]
 
     public static func provider(
@@ -96,6 +96,7 @@ public enum ExtensionLiveAdapters {
         case "usage": usageReadiness()
         case "quinjet":
             quinjetReadiness(defaults: defaults, executable: executableNamed("quinjet"))
+        case "seoAudit": siteAuditReadiness()
         case "system": await systemReadiness()
         case "appMaintenance": appMaintenanceReadiness()
         case "machines": machinesReadiness()
@@ -106,6 +107,7 @@ public enum ExtensionLiveAdapters {
         case "calendar": calendarReadiness()
         case "notchShelf": shelfReadiness()
         case "clipboard": clipboardReadiness()
+        case "keystrokeHighlight": keystrokeHighlightReadiness(defaults: defaults)
         case "focusDim": await focusDimReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
@@ -125,6 +127,10 @@ public enum ExtensionLiveAdapters {
             readyDetail: "Attention tracking is configured for the selected sources.",
             setupDetail: "Turn on application tracking, browser tracking, or both."
         ).readiness
+    }
+
+    static func siteAuditReadiness() -> ExtensionAdapterReadiness {
+        .ready("Site Audit is ready to store projects and run history locally.")
     }
 
     static func usageReadiness(
@@ -453,6 +459,25 @@ public enum ExtensionLiveAdapters {
             readyDetail: "Presenter protects \(protected) data categories.",
             setupDetail: "Presenter has no protected data categories enabled."
         ).readiness
+    }
+
+    static func keystrokeHighlightReadiness(
+        defaults: UserDefaults
+    ) -> ExtensionAdapterReadiness {
+        guard defaults.bool(forKey: AppStorageKeys.KeystrokeHighlight.enabled) else {
+            return .uninstalled("Keystroke Highlight is off.")
+        }
+        guard defaults.bool(forKey: AppStorageKeys.KeystrokeHighlight.active) else {
+            let shortcut =
+                defaults.string(forKey: AppStorageKeys.KeystrokeHighlight.hotKeyLabel) ?? "⌃⌥⌘K"
+            return .ready("Keystroke Highlight is ready and paused. Press \(shortcut) to start it.")
+        }
+        let error = defaults.string(forKey: AppStorageKeys.KeystrokeHighlight.runtimeError) ?? ""
+        if !error.isEmpty { return .failed(error) }
+        if defaults.bool(forKey: AppStorageKeys.KeystrokeHighlight.runtimeActive) {
+            return .ready("Key presses are being monitored and the overlay is ready.")
+        }
+        return .loading("The keystroke overlay is starting.")
     }
 
     static func colorPickerReadiness(defaults: UserDefaults) async -> ExtensionAdapterReadiness {

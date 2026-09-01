@@ -130,6 +130,18 @@ public enum AppStorageKeys {
         public static let defaultKind = "homebrewDefaultKind"
     }
 
+    public enum KeystrokeHighlight {
+        public static let active = "keystrokeHighlightActive"
+        public static let duration = "keystrokeHighlightDuration"
+        public static let enabled = "keystrokeHighlightEnabled"
+        public static let hotKeyCode = "keystrokeHighlightHotKeyCode"
+        public static let hotKeyLabel = "keystrokeHighlightHotKeyLabel"
+        public static let hotKeyMods = "keystrokeHighlightHotKeyMods"
+        public static let position = "keystrokeHighlightPosition"
+        public static let runtimeActive = "keystrokeHighlightRuntimeActive"
+        public static let runtimeError = "keystrokeHighlightRuntimeError"
+    }
+
     public enum Limits {
         public static let claudeEnabled = "claudeLimitsEnabled"
         public static let codexEnabled = "codexLimitsEnabled"
@@ -249,11 +261,13 @@ public enum AppStorageKeys {
         public static let attentionEnabled = "tabAttentionEnabled"
         public static let calendarEnabled = "tabCalendarEnabled"
         public static let companionEnabled = "tabCompanionEnabled"
+        public static let databaseEnabled = "tabDatabaseEnabled"
         public static let herdrEnabled = "tabHerdrEnabled"
         public static let machinesEnabled = "tabMachinesEnabled"
         public static let musicEnabled = "tabMusicEnabled"
         public static let order = "tabOrder"
         public static let quinjetEnabled = "tabQuinjetEnabled"
+        public static let seoAuditEnabled = "tabSEOAuditEnabled"
         public static let systemEnabled = "tabSystemEnabled"
         public static let usageEnabled = "tabUsageEnabled"
     }

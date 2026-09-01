@@ -153,6 +153,192 @@ enum JSONContract {
             mutatesTheMachine: true),
         JSONCase("ed tools ls", ["tools", "ls", "--json"]),
         JSONCase(
+            "ed database connections add",
+            [
+                "database", "connections", "add", "Analytics staging",
+                "--product", "postgresql", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase("ed database connections list", ["database", "connections", "list", "--json"]),
+        JSONCase(
+            "ed database connections get",
+            [
+                "database", "connections", "get",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
+            ]),
+        JSONCase(
+            "ed database capabilities",
+            [
+                "database", "capabilities",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
+            ]),
+        JSONCase(
+            "ed database connections test",
+            [
+                "database", "connections", "test",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
+            ]),
+        JSONCase(
+            "ed database connections edit",
+            [
+                "database", "connections", "edit",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--environment", "testing",
+                "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database connections duplicate",
+            [
+                "database", "connections", "duplicate",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "copy", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database connections rename",
+            [
+                "database", "connections", "rename",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "renamed", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database connections delete",
+            [
+                "database", "connections", "delete",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--yes", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database connect",
+            [
+                "database", "connect", "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database disconnect",
+            [
+                "database", "disconnect", "36fc476b-28f7-4c1a-ae54-4b10d793fd0f",
+                "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database browse",
+            [
+                "database", "browse", "36fc476b-28f7-4c1a-ae54-4b10d793fd0f",
+                "--path", "public", "--path", "events", "--json",
+            ]),
+        JSONCase(
+            "ed database query",
+            [
+                "database", "query", "36fc476b-28f7-4c1a-ae54-4b10d793fd0f",
+                "--file", "/path/that/does/not/exist.sql", "--json",
+            ]),
+        JSONCase(
+            "ed database saved-queries list",
+            ["database", "saved-queries", "list", "--json"]),
+        JSONCase(
+            "ed database saved-queries get",
+            [
+                "database", "saved-queries", "get",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
+            ]),
+        JSONCase(
+            "ed database saved-queries save",
+            [
+                "database", "saved-queries", "save", "probe", "--file",
+                "/path/that/does/not/exist.sql", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database saved-queries duplicate",
+            [
+                "database", "saved-queries", "duplicate",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "copy", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database saved-queries rename",
+            [
+                "database", "saved-queries", "rename",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "renamed", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database saved-queries delete",
+            [
+                "database", "saved-queries", "delete",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--yes", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database mutations key-request",
+            [
+                "database", "mutations", "key-request",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--action", "delete", "--key",
+                "probe", "--json",
+            ]),
+        JSONCase(
+            "ed database mutations row-request",
+            [
+                "database", "mutations", "row-request",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--action", "delete", "--path",
+                "public", "--path", "events", "--identity",
+                "/path/that/does/not/exist.json", "--json",
+            ]),
+        JSONCase(
+            "ed database mutations document-request",
+            [
+                "database", "mutations", "document-request",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--action", "delete", "--path",
+                "app", "--path", "people", "--document-id", "507f1f77bcf86cd799439011",
+                "--json",
+            ]),
+        JSONCase(
+            "ed database mutations preview",
+            [
+                "database", "mutations", "preview", "--request",
+                "/path/that/does/not/exist.json", "--json",
+            ]),
+        JSONCase(
+            "ed database mutations apply",
+            [
+                "database", "mutations", "apply", "--request",
+                "/path/that/does/not/exist.json", "--confirmation",
+                "/path/that/does/not/exist-confirmation.json", "--yes", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database mutations status",
+            [
+                "database", "mutations", "status", "--receipt",
+                "/path/that/does/not/exist.json", "--json",
+            ]),
+        JSONCase(
+            "ed database mutations cancel",
+            [
+                "database", "mutations", "cancel", "--receipt",
+                "/path/that/does/not/exist.json", "--yes", "--json",
+            ],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed database mutations outcome",
+            [
+                "database", "mutations", "outcome",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
+            ]),
+        JSONCase("ed database operations list", ["database", "operations", "list", "--json"]),
+        JSONCase(
+            "ed database operations get",
+            [
+                "database", "operations", "get",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
+            ]),
+        JSONCase(
+            "ed database operations cancel",
+            [
+                "database", "operations", "cancel",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
+            ]),
+        JSONCase(
             "ed tools install", ["tools", "install", "yt-dlp", "--json"],
             mutatesTheMachine: true),
         JSONCase(
@@ -572,6 +758,9 @@ enum JSONContract {
         JSONCase(
             "ed machines control dnd",
             ["machines", "control", "dnd", "nowhere-at-all", "on", "--json"]),
+        JSONCase(
+            "ed machines control caffeinate",
+            ["machines", "control", "caffeinate", "nowhere-at-all", "on", "--json"]),
         JSONCase(
             "ed machines control keyboard-light",
             ["machines", "control", "keyboard-light", "nowhere-at-all", "25", "--json"]),

@@ -1,58 +1,61 @@
 import EdithCore
+import EdithDatabase
 
 public enum UserOperationCatalog {
-    private static let machineRegistrations: [RegisteredUserOperation] =
-        MachineControlOperation.allCases.map {
+    private static let machineRegistrations: [RegisteredUserOperation] = {
+        var registrations = MachineControlOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineThermalOperation.allCases.map {
+        registrations += MachineThermalOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineExecOperation.allCases.map {
+        registrations += MachineExecOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineMountOperation.allCases.map {
+        registrations += MachineMountOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineBroadcastOperation.allCases.map {
+        registrations += MachineBroadcastOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineTerminalBroadcastOperation.allCases.map {
+        registrations += MachineTerminalBroadcastOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + DockerLifecycleOperation.allCases.map {
+        registrations += DockerLifecycleOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineMutationOperation.allCases.map {
+        registrations += MachineMutationOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachinePowerOperation.allCases.map {
+        registrations += MachinePowerOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineConnectionOperation.allCases.map {
+        registrations += MachineConnectionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + DockerDetailOperation.allCases.map {
+        registrations += DockerDetailOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + SavedSnippetOperation.allCases.map {
+        registrations += SavedSnippetOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineForwardOperation.allCases.map {
+        registrations += MachineForwardOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineSnippetOperation.allCases.map {
+        registrations += MachineSnippetOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineServiceOperation.allCases.map {
+        registrations += MachineServiceOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineProcessOperation.allCases.map {
+        registrations += MachineProcessOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
-        + MachineDockerPauseOperation.allCases.map {
+        registrations += MachineDockerPauseOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        return registrations
+    }()
 
     private static let applicationRegistrations: [RegisteredUserOperation] =
         AppInspectionOperation.allCases.map {
@@ -142,6 +145,9 @@ public enum UserOperationCatalog {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         + AppMaintenanceOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
+        + DatabaseConnectionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
         + WorkspaceOperation.allCases.map {
@@ -303,6 +309,8 @@ private extension MachineControlOperation {
             userInterface("Machine controls", "turn airplane mode on", ["box", "on", "--yes"])
         case .doNotDisturb:
             userInterface("Machine controls", "turn Do Not Disturb on", ["box", "on"])
+        case .caffeinate:
+            userInterface("Machine controls", "prevent automatic sleep", ["box", "on"])
         case .keyboardLight:
             userInterface("Machine controls", "set keyboard backlight brightness", ["box", "25"])
         }
@@ -1081,6 +1089,29 @@ private extension ColorPickerOperation {
         switch self {
         case .pick:
             userInterface("Colour picker", "open the system loupe")
+        }
+    }
+}
+
+private extension DatabaseConnectionOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .add:
+            userInterface(
+                "Database page", "test and save a database connection",
+                ["Analytics staging", "--product", "postgresql"])
+        case .edit:
+            userInterface(
+                "Database connection settings", "edit safety and display metadata",
+                ["36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--environment", "testing"])
+        case .connect:
+            userInterface(
+                "Database workbench", "open the selected database connection",
+                ["36fc476b-28f7-4c1a-ae54-4b10d793fd0f"])
+        case .disconnect:
+            userInterface(
+                "Database workbench", "close the selected database connection",
+                ["36fc476b-28f7-4c1a-ae54-4b10d793fd0f"])
         }
     }
 }

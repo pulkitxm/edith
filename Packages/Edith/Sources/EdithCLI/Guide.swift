@@ -34,6 +34,9 @@ public enum Guide {
         ed config ls                every setting, with its current value
         ed config describe <key>    one setting: type, scope, allowed values
         ed extensions ls            every extension and whether it is on
+        ed database connections     saved database connection summaries
+        ed database capabilities <id>  detected support for one connection id
+        ed database mcp             read-only database tools over MCP stdio
         ed lid-awake status          closed-lid state, session, battery and helper
         ed permissions ls           every macOS permission Edith uses
         ed color pick               open Edith's system colour sampler
@@ -109,6 +112,81 @@ public enum Guide {
         ed lid-awake status --json
         ed lid-awake off
         ```
+
+        ## Databases
+
+        Database reads go through the authenticated local broker used by the app.
+        Connection output never includes credential references or secret values.
+
+        ```
+        ed database connections
+        printf '%s\n' "$DB_PASSWORD" | ed database connections add "TUF PostgreSQL" --product postgresql --host 127.0.0.1 --port 15432 --username edith --database million_rows --password-stdin
+        ed database connections list --product postgresql --environment production
+        ed database connections get <connection-id>
+        ed database connections test <connection-id> --timeout-milliseconds 10000 --json
+        ed database connections edit <connection-id> --environment production --protection read-only
+        ed database connections duplicate <connection-id> "TUF PostgreSQL copy"
+        ed database connections rename <connection-id> "TUF PostgreSQL"
+        ed database connections delete <connection-id> --yes
+        printf 'select * from public.orders limit 100' | ed database saved-queries save "recent orders" --connection <connection-id>
+        ed database saved-queries list --connection <connection-id> --json
+        ed database saved-queries get <query-id>
+        ed database saved-queries rename <query-id> "recent orders by id"
+        ed database saved-queries delete <query-id> --yes
+        ed database capabilities <connection-id>
+        ed database capabilities <connection-id> --refresh --json
+        ed database connect <connection-id> --json
+        ed database browse <connection-id> --path public --path orders --limit 100 --json
+        printf 'select * from public.orders limit 100' | ed database query <connection-id> --json
+        ed database mutations row-request <connection-id> --action update --path public --path orders --identity identity.json --values values.json > mutation.json
+        ed database mutations document-request <connection-id> --action update --path app --path people --document-id 507f1f77bcf86cd799439011 --document person.json > mutation.json
+        ed database mutations preview --request mutation.json --json > preview.json
+        ed database mutations apply --request mutation.json --confirmation preview.json --yes --json > receipt.json
+        ed database mutations preview --request mutation.json --json | ed database mutations apply --request mutation.json --confirmation - --yes --json
+        ed database mutations status --receipt receipt.json --json
+        ed database mutations cancel --receipt receipt.json --yes --json
+        ed database mutations outcome <operation-id> --json
+        ed database operations list --connection <connection-id> --state running --json
+        ed database operations cancel <operation-id> --json
+        ed database disconnect <connection-id> --json
+        ed database mcp
+        ```
+
+        The bare `database` command defaults to `connections`, and bare `connections`
+        defaults to `list`. Use `--json` for stable fields and UUID connection ids.
+        `connections add` tests the exact connection through the broker before saving it.
+        Passwords are accepted only from stdin and stored in Keychain; arguments and
+        output contain no credential values or Keychain identifiers.
+        Connection edits preserve endpoints and credential references while changing labels,
+        grouping, favorites, colors, and safety policies. Duplicate connections intentionally
+        share their existing Keychain credentials and report that fact without printing their
+        references. Delete commands require `--yes` and disconnect active sessions first.
+        Saved query text is accepted only from stdin or a UTF-8 file, never from process
+        arguments. Lists omit query text, while `get` and `save --json` return the bounded body.
+        Capability discovery uses the cached report when possible. `--refresh` asks the
+        broker to reconnect and discover the current product, version, topology,
+        permissions, limits, supported operations, and safety limitations.
+        Browse and query return bounded pages. Use `--ndjson` for one record per line,
+        pass the opaque continuation back with `--continuation`, and set an operation
+        deadline with `--timeout-milliseconds`. Query text is read only from stdin or
+        a UTF-8 file so statements do not leak through process arguments.
+        Destructive work starts from a bounded `DatabaseDestructiveRequest` JSON file.
+        `mutations row-request` builds PostgreSQL insert, update, and delete requests with
+        quoted identifiers and bound values from typed identity and value documents.
+        `mutations document-request` builds MongoDB insert, update, and delete requests from
+        bounded JSON documents and an explicitly typed document identifier.
+        `mutations preview` returns the exact effect, impact, confirmation text, expiry,
+        and a short-lived one-time token. `mutations apply` requires the unchanged request,
+        the saved preview document, and `--yes`; it never accepts tokens or confirmation
+        text in process arguments. Save an accepted apply result to check status, request
+        cancellation, or reconcile the durable outcome after an interrupted operation.
+        `database operations` lists broker history, shows progress, and requests
+        cancellation using operation UUIDs returned by execution commands.
+
+        `ed database mcp` stays in the foreground and reserves stdout for MCP
+        protocol traffic. It exposes bounded connection and capability inspection
+        through the same authenticated broker. Tool failures remain structured MCP
+        responses, while process diagnostics use stderr.
 
         ## Machines
 

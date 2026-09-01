@@ -251,9 +251,11 @@ import Testing
             ("usage", "UsageRows", "enabled", "ExtensionsPane.swift"),
             ("herdr", "HerdrRows", "enabled", "ExtensionsPane.swift"),
             ("quinjet", "QuinjetRows", "enabled", "ExtensionsPane.swift"),
+            ("seoAudit", "SEOAuditRows", "enabled", "ExtensionsPane.swift"),
             ("system", "SystemRows", "enabled", "ExtensionsPane.swift"),
             ("appMaintenance", "AppMaintenanceRows", "enabled", "ExtensionsPane.swift"),
             ("machines", "MachinesRows", "enabled", "MachinesRows.swift"),
+            ("database", "DatabaseRows", "enabled", "ExtensionsPane.swift"),
             ("companion", "CompanionRows", "enabled", "ExtensionsPane.swift"),
             ("systemStats", "SystemStatsRows", "enabled", "ExtensionsPane.swift"),
             ("micMute", "MicMuteRows", "enabled", "ExtensionsPane.swift"),
@@ -262,6 +264,10 @@ import Testing
             ("calendar", "CalendarRows", "enabled", "ExtensionsPane.swift"),
             ("notchShelf", "NotchShelfRows", "enabled", "NotchShelfRows.swift"),
             ("clipboard", "ClipboardRows", "enabled", "ClipboardRows.swift"),
+            (
+                "keystrokeHighlight", "KeystrokeHighlightRows", "enabled",
+                "KeystrokeHighlightRows.swift"
+            ),
             ("focusDim", "FocusDimRows", "enabled", "FocusDimRows.swift"),
             ("presenter", "PresenterRows", "presenterEnabled", "PresenterRows.swift"),
             ("colorPicker", "ColorPickerRows", "colorPickerEnabled", "ColorPickerRows.swift"),
@@ -379,7 +385,7 @@ import Testing
         #expect(tools.contains("mutationCenter().install"))
     }
 
-    @Test func homeQuickActionsUseFourColumnsAndIncludeLidAwake() throws {
+    @Test func homeQuickActionsStretchEnabledActionsAcrossOneRow() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -387,8 +393,13 @@ import Testing
             .appendingPathComponent("Sources/Edith/Features/Pages/Views/HomePageView.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-        #expect(source.contains("count: 4"))
+        #expect(source.contains("private var actionCount: Int"))
+        #expect(source.contains("count: max(1, actionCount)"))
+        #expect(!source.contains("count: 4"))
         #expect(source.contains("title: \"Lid awake\""))
+        #expect(source.contains("title: \"Keystrokes\""))
+        #expect(source.contains("AppStorageKeys.KeystrokeHighlight.enabled"))
+        #expect(source.contains("AppStorageKeys.KeystrokeHighlight.active"))
         #expect(source.contains("lidAwakeOperations.perform(.on"))
         #expect(source.contains("lidAwakeOperations.perform(.off)"))
         #expect(!source.contains("IPC.Name.toggleLidAwake"))

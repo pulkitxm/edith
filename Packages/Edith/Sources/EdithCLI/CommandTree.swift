@@ -814,6 +814,249 @@ public enum CommandTree {
                         options: common, arguments: [.quinjetSession, .quinjetPath]),
                 ]),
             CommandNode(
+                "database", "Inspect saved database connections and their capabilities.",
+                children: [
+                    CommandNode(
+                        "connections", "Inspect and create saved database connections.",
+                        children: [
+                            CommandNode(
+                                "list", "List saved database connections.", aliases: ["ls"],
+                                options: [
+                                    "--json", "--help", "--search", "--product",
+                                    "--environment", "--group", "--tag", "--favorites-only",
+                                    "--order", "--limit", "--offset",
+                                ],
+                                optionValues: [
+                                    "--search": .free, "--product": .free,
+                                    "--environment": .free, "--group": .free,
+                                    "--tag": .free, "--order": .free, "--limit": .free,
+                                    "--offset": .free,
+                                ]),
+                            CommandNode(
+                                "get", "Show one saved database connection without credentials.",
+                                options: common, arguments: [.free]),
+                            CommandNode(
+                                "add", "Test and save a database connection.",
+                                options: [
+                                    "--json", "--help", "--product", "--host", "--port",
+                                    "--path", "--username", "--database",
+                                    "--authentication-database", "--password-stdin",
+                                    "--tls", "--environment", "--environment-label",
+                                    "--protection", "--read-only", "--production-policy",
+                                ],
+                                optionValues: [
+                                    "--product": .free, "--host": .free, "--port": .free,
+                                    "--path": .free, "--username": .free, "--database": .free,
+                                    "--authentication-database": .free,
+                                    "--environment": .free, "--environment-label": .free,
+                                    "--protection": .free, "--read-only": .free,
+                                    "--production-policy": .free,
+                                ],
+                                arguments: [.free]),
+                            CommandNode(
+                                "test", "Test one saved database connection.",
+                                options: ["--json", "--help", "--timeout-milliseconds"],
+                                optionValues: ["--timeout-milliseconds": .free],
+                                arguments: [.free]),
+                            CommandNode(
+                                "edit", "Edit saved connection metadata and safety policies.",
+                                options: [
+                                    "--json", "--help", "--environment", "--environment-label",
+                                    "--protection", "--read-only", "--production-policy", "--group",
+                                    "--clear-group", "--tag", "--clear-tags", "--color",
+                                    "--clear-color", "--favorite", "--not-favorite",
+                                ],
+                                optionValues: [
+                                    "--environment": .free, "--environment-label": .free,
+                                    "--protection": .free, "--read-only": .free,
+                                    "--production-policy": .free, "--group": .free,
+                                    "--tag": .free, "--color": .free,
+                                ], arguments: [.free]),
+                            CommandNode(
+                                "duplicate", "Duplicate a saved database connection.",
+                                options: common, arguments: [.free, .free]),
+                            CommandNode(
+                                "rename", "Rename a saved database connection.",
+                                options: common, arguments: [.free, .free]),
+                            CommandNode(
+                                "delete", "Delete a saved database connection.",
+                                options: ["--json", "--help", "--yes"], arguments: [.free],
+                                destructivePolicy: .previewThenYes),
+                        ]),
+                    CommandNode(
+                        "saved-queries", "Manage reusable database queries.",
+                        children: [
+                            CommandNode(
+                                "list", "List saved database queries.", aliases: ["ls"],
+                                options: [
+                                    "--json", "--help", "--search", "--connection", "--language",
+                                    "--tag", "--favorites-only", "--order", "--limit", "--offset",
+                                ],
+                                optionValues: [
+                                    "--search": .free, "--connection": .free,
+                                    "--language": .free, "--tag": .free, "--order": .free,
+                                    "--limit": .free, "--offset": .free,
+                                ]),
+                            CommandNode(
+                                "get", "Show one saved database query.", options: common,
+                                arguments: [.free]),
+                            CommandNode(
+                                "save", "Save query text read from stdin or a UTF-8 file.",
+                                options: [
+                                    "--json", "--help", "--id", "--connection", "--language",
+                                    "--file", "--tag", "--favorite",
+                                ],
+                                optionValues: [
+                                    "--id": .free, "--connection": .free, "--language": .free,
+                                    "--file": .free, "--tag": .free,
+                                ], arguments: [.free]),
+                            CommandNode(
+                                "duplicate", "Duplicate a saved database query.",
+                                options: common, arguments: [.free, .free]),
+                            CommandNode(
+                                "rename", "Rename a saved database query.",
+                                options: common, arguments: [.free, .free]),
+                            CommandNode(
+                                "delete", "Delete a saved database query.",
+                                options: ["--json", "--help", "--yes"], arguments: [.free],
+                                destructivePolicy: .previewThenYes),
+                        ]),
+                    CommandNode(
+                        "capabilities", "Show detected capabilities for one saved connection.",
+                        options: ["--json", "--help", "--refresh"], arguments: [.free]),
+                    CommandNode(
+                        "connect", "Open a broker session for one saved connection.",
+                        options: ["--json", "--help", "--timeout-milliseconds"],
+                        optionValues: ["--timeout-milliseconds": .free], arguments: [.free]),
+                    CommandNode(
+                        "disconnect", "Close a broker session for one saved connection.",
+                        options: ["--json", "--help", "--timeout-milliseconds"],
+                        optionValues: ["--timeout-milliseconds": .free], arguments: [.free]),
+                    CommandNode(
+                        "browse", "Read one bounded page from a database object.",
+                        options: [
+                            "--json", "--ndjson", "--help", "--kind", "--path", "--limit",
+                            "--continuation", "--timeout-milliseconds",
+                        ],
+                        optionValues: [
+                            "--kind": .free, "--path": .free, "--limit": .free,
+                            "--continuation": .free, "--timeout-milliseconds": .free,
+                        ], arguments: [.free]),
+                    CommandNode(
+                        "query", "Execute one bounded read query from stdin or a UTF-8 file.",
+                        options: [
+                            "--json", "--ndjson", "--help", "--language", "--file", "--kind",
+                            "--path", "--limit", "--continuation", "--timeout-milliseconds",
+                        ],
+                        optionValues: [
+                            "--language": .free, "--file": .free, "--kind": .free,
+                            "--path": .free, "--limit": .free, "--continuation": .free,
+                            "--timeout-milliseconds": .free,
+                        ], arguments: [.free]),
+                    CommandNode(
+                        "mutations", "Preview, apply, and reconcile destructive database work.",
+                        children: [
+                            CommandNode(
+                                "row-request", "Build a safe PostgreSQL row mutation request.",
+                                options: [
+                                    "--json", "--help", "--action", "--path", "--identity",
+                                    "--values",
+                                ],
+                                optionValues: [
+                                    "--action": .free, "--path": .free, "--identity": .free,
+                                    "--values": .free,
+                                ], arguments: [.free]),
+                            CommandNode(
+                                "key-request",
+                                "Build a safe Redis or Valkey string-key mutation request.",
+                                options: [
+                                    "--json", "--help", "--action", "--product",
+                                    "--logical-database", "--key", "--value",
+                                    "--ttl-milliseconds",
+                                ],
+                                optionValues: [
+                                    "--action": .free, "--product": .free,
+                                    "--logical-database": .free, "--key": .free,
+                                    "--value": .free, "--ttl-milliseconds": .free,
+                                ], arguments: [.free]),
+                            CommandNode(
+                                "document-request",
+                                "Build a safe MongoDB or Elasticsearch document mutation request.",
+                                options: [
+                                    "--json", "--help", "--product", "--action", "--path",
+                                    "--document", "--document-id", "--id-kind",
+                                    "--sequence-number", "--primary-term",
+                                ],
+                                optionValues: [
+                                    "--product": .free, "--action": .free, "--path": .free,
+                                    "--document": .free, "--document-id": .free,
+                                    "--id-kind": .free, "--sequence-number": .free,
+                                    "--primary-term": .free,
+                                ], arguments: [.free]),
+                            CommandNode(
+                                "preview", "Preview a destructive request without applying it.",
+                                options: [
+                                    "--json", "--help", "--request", "--timeout-milliseconds",
+                                ],
+                                optionValues: [
+                                    "--request": .free, "--timeout-milliseconds": .free,
+                                ]),
+                            CommandNode(
+                                "apply", "Apply the exact request bound to a fresh preview.",
+                                options: [
+                                    "--json", "--help", "--yes", "--request", "--confirmation",
+                                    "--timeout-milliseconds",
+                                ],
+                                optionValues: [
+                                    "--request": .free, "--confirmation": .free,
+                                    "--timeout-milliseconds": .free,
+                                ], destructivePolicy: .previewThenYes),
+                            CommandNode(
+                                "status", "Check an accepted asynchronous database mutation.",
+                                options: [
+                                    "--json", "--help", "--receipt", "--timeout-milliseconds",
+                                ],
+                                optionValues: [
+                                    "--receipt": .free, "--timeout-milliseconds": .free,
+                                ]),
+                            CommandNode(
+                                "cancel",
+                                "Request cancellation of an accepted asynchronous mutation.",
+                                options: [
+                                    "--json", "--help", "--yes", "--receipt",
+                                    "--timeout-milliseconds",
+                                ],
+                                optionValues: [
+                                    "--receipt": .free, "--timeout-milliseconds": .free,
+                                ], destructivePolicy: .previewThenYes),
+                            CommandNode(
+                                "outcome", "Read the durable outcome for a mutation operation.",
+                                options: common, arguments: [.free]),
+                        ]),
+                    CommandNode(
+                        "operations", "Inspect and cancel tracked database operations.",
+                        children: [
+                            CommandNode(
+                                "list", "List tracked database operations.", aliases: ["ls"],
+                                options: [
+                                    "--json", "--help", "--connection", "--state", "--kind",
+                                    "--before", "--limit",
+                                ],
+                                optionValues: [
+                                    "--connection": .free, "--state": .free, "--kind": .free,
+                                    "--before": .free, "--limit": .free,
+                                ]),
+                            CommandNode(
+                                "get", "Show one tracked database operation.",
+                                options: common, arguments: [.free]),
+                            CommandNode(
+                                "cancel", "Request cancellation of one database operation.",
+                                options: common, arguments: [.free]),
+                        ]),
+                    CommandNode(
+                        "mcp", "Serve read-only database inspection over MCP stdio."),
+                ]),
+            CommandNode(
                 "machines", "The computers Edith can reach over SSH.",
                 arguments: [.machine],
                 children: [
@@ -945,6 +1188,9 @@ public enum CommandTree {
                                 destructivePolicy: .previewThenYes),
                             CommandNode(
                                 "dnd", "Turn Do Not Disturb on or off.", options: common,
+                                arguments: [.machine, .onOff]),
+                            CommandNode(
+                                "caffeinate", "Prevent automatic sleep.", options: common,
                                 arguments: [.machine, .onOff]),
                             CommandNode(
                                 "keyboard-light", "Set keyboard backlight brightness.",

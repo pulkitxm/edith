@@ -3,6 +3,8 @@ import PackageDescription
 
 let products: [Product] = [
     .library(name: "EdithCore", targets: ["EdithCore"]),
+    .library(name: "EdithDatabase", targets: ["EdithDatabase"]),
+    .library(name: "EdithDatabaseMCP", targets: ["EdithDatabaseMCP"]),
     .library(name: "Edith", targets: ["Edith"]),
     .library(name: "EdithKit", targets: ["EdithKit"]),
     .library(name: "EdithCLI", targets: ["EdithCLI"]),
@@ -15,6 +17,17 @@ let dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.5"),
     .package(url: "https://github.com/migueldeicaza/SwiftTerm", from: "1.18.0"),
     .package(url: "https://github.com/apple/swift-argument-parser", from: "1.8.2"),
+    .package(url: "https://github.com/apple/swift-crypto.git", exact: "4.5.1"),
+    .package(url: "https://github.com/groue/GRDB.swift", from: "7.11.1"),
+    .package(url: "https://github.com/swift-server/RediStack.git", exact: "1.6.3"),
+    .package(url: "https://github.com/orlandos-nl/MongoKitten.git", exact: "7.16.3"),
+    .package(url: "https://github.com/apple/swift-log.git", exact: "1.15.0"),
+    .package(url: "https://github.com/apple/swift-nio.git", exact: "2.101.3"),
+    .package(url: "https://github.com/apple/swift-nio-ssl.git", exact: "2.37.2"),
+    .package(url: "https://github.com/apple/swift-nio-transport-services.git", exact: "1.28.0"),
+    .package(url: "https://github.com/vapor/postgres-nio.git", exact: "1.33.1"),
+    .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", exact: "0.12.1"),
+    .package(url: "https://github.com/vapor/mysql-nio.git", exact: "1.9.1"),
 ]
 
 let targets: [Target] = [
@@ -28,8 +41,66 @@ let targets: [Target] = [
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .target(
+        name: "EdithDatabase",
+        dependencies: [
+            "EdithCore",
+            .product(name: "Crypto", package: "swift-crypto"),
+            .product(name: "GRDB", package: "GRDB.swift"),
+            .product(name: "RediStack", package: "RediStack"),
+            .product(name: "NIOCore", package: "swift-nio"),
+            .product(name: "NIOPosix", package: "swift-nio"),
+            .product(name: "MongoKitten", package: "MongoKitten"),
+            .product(name: "MongoClient", package: "MongoKitten"),
+            .product(name: "MongoCore", package: "MongoKitten"),
+            .product(name: "Logging", package: "swift-log"),
+            .product(name: "NIOSSL", package: "swift-nio-ssl"),
+            .product(
+                name: "NIOTransportServices",
+                package: "swift-nio-transport-services"),
+            .product(name: "PostgresNIO", package: "postgres-nio"),
+            .product(name: "MySQLNIO", package: "mysql-nio"),
+        ],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .testTarget(
+        name: "EdithDatabaseTests",
+        dependencies: [
+            "EdithDatabase",
+            .product(name: "RediStack", package: "RediStack"),
+            .product(name: "NIOCore", package: "swift-nio"),
+            .product(name: "NIOPosix", package: "swift-nio"),
+            .product(name: "MongoKitten", package: "MongoKitten"),
+            .product(name: "MongoClient", package: "MongoKitten"),
+            .product(name: "MongoCore", package: "MongoKitten"),
+            .product(name: "NIOEmbedded", package: "swift-nio"),
+            .product(
+                name: "NIOTransportServices",
+                package: "swift-nio-transport-services"),
+        ],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .target(
+        name: "EdithDatabaseMCP",
+        dependencies: [
+            "EdithDatabase",
+            .product(name: "MCP", package: "swift-sdk"),
+            .product(name: "Logging", package: "swift-log"),
+        ],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .testTarget(
+        name: "EdithDatabaseMCPTests",
+        dependencies: [
+            "EdithDatabase",
+            "EdithDatabaseMCP",
+            .product(name: "MCP", package: "swift-sdk"),
+            .product(name: "Logging", package: "swift-log"),
+        ],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .target(
         name: "EdithKit",
-        dependencies: ["EdithCore", "EdithLidAwakeSupport"],
+        dependencies: ["EdithCore", "EdithDatabase", "EdithLidAwakeSupport"],
         resources: [
             .process("Resources"),
             .copy("ChromeExtension"),
@@ -54,6 +125,8 @@ let targets: [Target] = [
         name: "EdithCLI",
         dependencies: [
             "EdithCore",
+            "EdithDatabase",
+            "EdithDatabaseMCP",
             "EdithKit",
             "EdithLidAwakeSupport",
             .product(name: "ArgumentParser", package: "swift-argument-parser"),
@@ -96,6 +169,7 @@ let targets: [Target] = [
     .target(
         name: "Edith",
         dependencies: [
+            "EdithDatabase",
             "EdithKit",
             "EdithLidAwakeSupport",
             "GhosttyTerminal",
@@ -108,7 +182,7 @@ let targets: [Target] = [
     ),
     .executableTarget(
         name: "EdithMain",
-        dependencies: ["Edith", "EdithCLI"],
+        dependencies: ["Edith", "EdithCLI", "EdithDatabase"],
         swiftSettings: [.swiftLanguageMode(.v5)],
         linkerSettings: [
             .unsafeFlags([
@@ -136,7 +210,8 @@ let targets: [Target] = [
     .testTarget(
         name: "EdithTests",
         dependencies: [
-            "EdithCore", "Edith", "EdithKit", "EdithLidAwakeSupport", "EdithHelper",
+            "EdithCore", "Edith", "EdithDatabase", "EdithKit", "EdithLidAwakeSupport",
+            "EdithHelper",
             "EdithCLI", "Highlighter", "ed", "UsageSnapshotCrashDriver",
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]

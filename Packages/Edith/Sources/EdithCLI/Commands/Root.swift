@@ -70,6 +70,7 @@ public struct EdRoot: AsyncParsableCommand {
             HomebrewCommand.self,
             MaintenanceCommand.self,
             QuinjetCommand.self,
+            DatabaseCommand.self,
             MachinesCommand.self,
             CompanionCommand.self,
             CompleteCommand.self,

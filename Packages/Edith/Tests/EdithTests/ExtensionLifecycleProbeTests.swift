@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 import EdithCore
+import EdithDatabase
 @testable import EdithKit
 
 @Suite struct ExtensionLifecycleProbeTests {
@@ -29,6 +30,9 @@ import EdithCore
             id: "quinjet", helper: false, machine: false, toolRule: .all, adapter: true,
             requiredTools: ["quinjet"], optionalTools: []),
         MatrixRow(
+            id: "seoAudit", helper: false, machine: false, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "system", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
@@ -36,6 +40,9 @@ import EdithCore
             requiredTools: [], optionalTools: ["homebrew"]),
         MatrixRow(
             id: "machines", helper: true, machine: true, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
+            id: "database", helper: false, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
             id: "companion", helper: false, machine: false, toolRule: .all, adapter: true,
@@ -60,6 +67,9 @@ import EdithCore
             requiredTools: [], optionalTools: []),
         MatrixRow(
             id: "clipboard", helper: true, machine: false, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
+            id: "keystrokeHighlight", helper: true, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
             id: "focusDim", helper: true, machine: false, toolRule: .all, adapter: true,
@@ -325,6 +335,56 @@ import EdithCore
         #expect(lifecycle.prerequisites.first?.title == "Deploy or connect the backend")
         #expect(lifecycle.prerequisites.first?.command == "ed companion deploy")
         #expect(lifecycle.recovery.first?.command == "ed companion doctor --json")
+    }
+
+    @Test func databaseBrokerReadinessAdapterReportsReady() async {
+        let readiness = await DatabaseBrokerExtensionReadinessAdapter(
+            ensureReady: {}
+        ).readiness()
+
+        #expect(readiness == .ready("The secure local database service is ready."))
+    }
+
+    @Test func databaseBrokerReadinessAdapterReportsUnavailable() async {
+        let readiness = await DatabaseBrokerExtensionReadinessAdapter(
+            ensureReady: {
+                throw DatabaseBrokerAvailabilityError.unavailable
+            }
+        ).readiness()
+
+        #expect(readiness == .failed("The database service is unavailable."))
+    }
+
+    @Test func databaseBrokerReadinessAdapterReportsTimeouts() async {
+        let readinessTimeout = await DatabaseBrokerExtensionReadinessAdapter(
+            ensureReady: {
+                throw DatabaseBrokerAvailabilityError.readinessTimedOut
+            }
+        ).readiness()
+        let transitionTimeout = await DatabaseBrokerExtensionReadinessAdapter(
+            ensureReady: {
+                throw DatabaseBrokerAvailabilityError.versionTransitionTimedOut
+            }
+        ).readiness()
+
+        #expect(
+            readinessTimeout
+                == .failed("The database service did not become ready in time."))
+        #expect(
+            transitionTimeout
+                == .failed("The database service could not finish updating in time."))
+    }
+
+    @Test func databaseBrokerReadinessAdapterReportsUnsafePeer() async {
+        let readiness = await DatabaseBrokerExtensionReadinessAdapter(
+            ensureReady: {
+                throw DatabaseBrokerAvailabilityError.unsafePeer
+            }
+        ).readiness()
+
+        #expect(
+            readiness
+                == .failed("The database service could not verify the local app."))
     }
 
     @Test func herdrSnapshotsMapSessionAndHostHealth() {

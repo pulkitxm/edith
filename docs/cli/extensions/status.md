@@ -8,7 +8,7 @@ ed extensions status [<id>] [--json]
 
 | Argument | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `id` | one of the seventeen ids, or a defaults key | all extensions | Limit the report to one extension |
+| `id` | one of the twenty-two ids, or a defaults key | all extensions | Limit the report to one extension |
 
 | Option | Type / values | Default | What it does |
 | --- | --- | --- | --- |

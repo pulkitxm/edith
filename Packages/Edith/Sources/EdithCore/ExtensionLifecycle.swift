@@ -309,6 +309,41 @@ public enum ExtensionLifecycleCatalog {
                     "ed tools ls --json")
             ]),
         descriptor(
+            "seoAudit",
+            "Find every page in a sitemap and keep comparable search audits on this Mac.",
+            workflows: [
+                instruction(
+                    "discover", "Discover pages",
+                    "Read robots.txt and nested sitemap indexes before choosing pages."),
+                instruction(
+                    "audit", "Audit selected pages",
+                    "Inspect metadata and optionally run Lighthouse for each selected URL."),
+            ],
+            prerequisites: [
+                instruction(
+                    "site", "Choose a site", "Use a reachable HTTP or HTTPS URL.",
+                    "ed extensions enable seoAudit")
+            ],
+            examples: [
+                "ed extensions enable seoAudit", "ed extensions doctor seoAudit --json",
+            ],
+            docs: [
+                documentation(
+                    "extensions", "Extensions guide", "docs/cli/extensions/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "doctor", "Check Site Audit readiness",
+                    "Verify the extension is enabled and supported on this Mac.",
+                    "ed extensions doctor seoAudit --json")
+            ],
+            verification: [
+                instruction(
+                    "status", "Verify Site Audit",
+                    "Confirm the local audit workspace is ready.",
+                    "ed extensions doctor seoAudit --json")
+            ]),
+        descriptor(
             "system",
             "Control running apps, sleep prevention and keyboard cleaning from one panel.",
             workflows: [
@@ -430,6 +465,39 @@ public enum ExtensionLifecycleCatalog {
                 instruction(
                     "list", "List machines", "Confirm the expected hosts are configured.",
                     "ed machines ls --json")
+            ]),
+        descriptor(
+            "database", "Explore and operate databases through a guarded local workbench.",
+            workflows: [
+                instruction(
+                    "explore", "Explore database structure",
+                    "Browse catalogs, schemas, collections, indexes and rows."),
+                instruction(
+                    "mutate", "Review changes before execution",
+                    "Preview impact and confirm destructive operations exactly."),
+            ],
+            prerequisites: [
+                instruction(
+                    "connection", "Add a database connection",
+                    "Open Database and configure a reachable database endpoint.")
+            ],
+            examples: [
+                "ed extensions enable database", "ed extensions doctor database --json",
+            ],
+            docs: [
+                documentation("extensions", "Extensions guide", "docs/cli/extensions/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "doctor", "Check Database readiness",
+                    "Inspect extension availability and local broker readiness.",
+                    "ed extensions doctor database --json")
+            ],
+            verification: [
+                instruction(
+                    "status", "Verify the Database extension",
+                    "Confirm the extension is enabled and available.",
+                    "ed extensions status database --json")
             ]),
         descriptor(
             "companion", "Search and reason over your notes, activity and voice memories.",
@@ -658,6 +726,49 @@ public enum ExtensionLifecycleCatalog {
                 instruction(
                     "list", "List recent copies", "Confirm clipboard history can be read.",
                     "ed clipboard ls --json")
+            ]),
+        descriptor(
+            "keystrokeHighlight",
+            "Show keyboard input as clear keycaps that disappear automatically.",
+            workflows: [
+                instruction(
+                    "demo", "Record a demo",
+                    "Show letters, symbols, navigation keys and shortcuts as they are pressed."),
+                instruction(
+                    "position", "Place the overlay",
+                    "Keep the keycaps at the top or bottom of the screen under the pointer."),
+                instruction(
+                    "toggle", "Pause between takes",
+                    "Start or pause the overlay without removing the extension.",
+                    "ed config set keystrokeHighlightActive false"),
+            ],
+            prerequisites: [
+                instruction(
+                    "permission", "Grant Input Monitoring",
+                    "Allow Edith to observe physical key presses outside its own windows.",
+                    "ed permissions request inputMonitoring")
+            ],
+            examples: [
+                "ed extensions enable keystrokeHighlight",
+                "ed config set keystrokeHighlightActive true",
+                "ed config set keystrokeHighlightDuration 1.5",
+            ],
+            docs: [
+                documentation(
+                    "guide", "Keystroke Highlight guide",
+                    "docs/cli/keystroke-highlight/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "doctor", "Check the overlay",
+                    "Inspect the helper, permission and runtime state.",
+                    "ed extensions doctor keystrokeHighlight --json")
+            ],
+            verification: [
+                instruction(
+                    "status", "Verify monitoring",
+                    "Confirm the event monitor and overlay are ready.",
+                    "ed extensions verify keystrokeHighlight --json")
             ]),
         descriptor(
             "focusDim", "Reduce visual noise by dimming everything behind the active app.",

@@ -14,8 +14,9 @@ extension EnvironmentValues {
 }
 
 enum MainDestination: String, CaseIterable, Identifiable {
-    case home, attention, dashboard, herdr, quinjet, music, calendar, system, appMaintenance
-    case machines, companion, extensions, settings, about
+    case home, attention, dashboard, herdr, quinjet, seoAudit, music, calendar, system,
+        appMaintenance
+    case machines, database, companion, extensions, settings, about
 
     var id: String { rawValue }
 
@@ -26,11 +27,13 @@ enum MainDestination: String, CaseIterable, Identifiable {
         case .dashboard: return "Agent Usage"
         case .herdr: return "Herdr"
         case .quinjet: return "Quinjet"
+        case .seoAudit: return "Site Audit"
         case .music: return "Music"
         case .calendar: return "Calendar"
         case .system: return "System"
         case .appMaintenance: return "App Maintenance"
         case .machines: return "Machines"
+        case .database: return "Database"
         case .companion: return "Companion"
         case .extensions: return "Extensions"
         case .settings: return "Settings"
@@ -45,11 +48,13 @@ enum MainDestination: String, CaseIterable, Identifiable {
         case .dashboard: return "chart.bar.fill"
         case .herdr: return "rectangle.split.3x1.fill"
         case .quinjet: return "arrow.triangle.branch"
+        case .seoAudit: return "doc.text.magnifyingglass"
         case .music: return "music.note"
         case .calendar: return "calendar"
         case .system: return "cpu"
         case .appMaintenance: return "shippingbox.and.arrow.backward"
         case .machines: return "server.rack"
+        case .database: return "cylinder.fill"
         case .companion: return "brain.head.profile"
         case .extensions: return "puzzlepiece.extension"
         case .settings: return "gearshape"
@@ -65,8 +70,8 @@ enum MainDestination: String, CaseIterable, Identifiable {
     }
 
     static let homeItems: [MainDestination] = [
-        .home, .attention, .dashboard, .herdr, .quinjet, .music, .calendar, .system,
-        .appMaintenance, .machines, .companion,
+        .home, .attention, .dashboard, .herdr, .quinjet, .seoAudit, .music, .calendar, .system,
+        .appMaintenance, .machines, .database, .companion,
     ]
     static let appItems: [MainDestination] = [
         .extensions, .settings, .about,
@@ -257,9 +262,10 @@ struct SidebarUtilityVisibility: Equatable {
     let system: Bool
     let presenter: Bool
     let lidAwake: Bool
+    let keystrokeHighlight: Bool
 
     var hasActions: Bool {
-        system || presenter || lidAwake
+        system || presenter || lidAwake || keystrokeHighlight
     }
 }
 
@@ -444,11 +450,16 @@ struct MainWindowView: View {
         var herdrEnabled = false
     @AppStorage(AppStorageKeys.Tabs.quinjetEnabled, store: SharedDefaults.store) private
         var quinjetEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.seoAuditEnabled, store: SharedDefaults.store) private
+        var seoAuditEnabled = false
     @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
         var calendarEnabled =
         false
     @AppStorage(AppStorageKeys.Tabs.machinesEnabled, store: SharedDefaults.store) private
         var machinesEnabled =
+        false
+    @AppStorage(AppStorageKeys.Tabs.databaseEnabled, store: SharedDefaults.store) private
+        var databaseEnabled =
         false
     @AppStorage(AppStorageKeys.Tabs.companionEnabled, store: SharedDefaults.store) private
         var companionEnabled =
@@ -457,6 +468,10 @@ struct MainWindowView: View {
         var preventSleep = false
     @AppStorage(LidAwakeState.enabledKey, store: SharedDefaults.store) private
         var lidAwakeEnabled = false
+    @AppStorage(AppStorageKeys.KeystrokeHighlight.enabled, store: SharedDefaults.store) private
+        var keystrokeHighlightEnabled = false
+    @AppStorage(AppStorageKeys.KeystrokeHighlight.active, store: SharedDefaults.store) private
+        var keystrokeHighlightActive = false
     @AppStorage(AppStorageKeys.Presenter.mode, store: SharedDefaults.store) private
         var presenterMode = false
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
@@ -527,11 +542,13 @@ struct MainWindowView: View {
         case .dashboard: usageEnabled ? requested : .home
         case .herdr: herdrEnabled ? requested : .home
         case .quinjet: quinjetEnabled ? requested : .home
+        case .seoAudit: seoAuditEnabled ? requested : .home
         case .music: musicEnabled ? requested : .home
         case .calendar: calendarEnabled ? requested : .home
         case .system: systemEnabled ? requested : .home
         case .appMaintenance: appMaintenanceEnabled ? requested : .home
         case .machines: machinesEnabled ? requested : .home
+        case .database: databaseEnabled ? requested : .home
         case .companion: companionEnabled ? requested : .home
         default: requested
         }
@@ -832,7 +849,8 @@ struct MainWindowView: View {
         SidebarUtilityVisibility(
             system: systemEnabled,
             presenter: presenterEnabled,
-            lidAwake: lidAwakeEnabled)
+            lidAwake: lidAwakeEnabled,
+            keystrokeHighlight: keystrokeHighlightEnabled)
     }
 
     private var sidebarUtilityTransition: AnyTransition {
@@ -1004,11 +1022,13 @@ struct MainWindowView: View {
             case .dashboard: usageEnabled
             case .herdr: herdrEnabled
             case .quinjet: quinjetEnabled
+            case .seoAudit: seoAuditEnabled
             case .music: musicEnabled
             case .calendar: calendarEnabled
             case .system: systemEnabled
             case .appMaintenance: appMaintenanceEnabled
             case .machines: machinesEnabled
+            case .database: databaseEnabled
             case .companion: companionEnabled
             default: true
             }
@@ -1170,28 +1190,60 @@ struct MainWindowView: View {
                 }
                 .transition(sidebarUtilityTransition)
             }
-            if presenterEnabled {
-                presenterQuickActionTile
-                    .transition(sidebarUtilityTransition)
-            }
-            if lidAwakeEnabled {
-                quickActionTile(
-                    icon: "laptopcomputer", title: "Lid awake", active: lidAwakeActive,
-                    trigger: lidAwakeActive ? 1 : 0,
-                    help: "Keep this Mac running with the lid closed"
-                ) {
-                    if lidAwakeActive {
-                        lidAwakeOperations.perform(.off)
+            if lidAwakeEnabled || keystrokeHighlightEnabled {
+                VStack(spacing: UIScale.pt(8)) {
+                    if lidAwakeEnabled && keystrokeHighlightEnabled {
+                        if clampedSidebarWidth < 220 {
+                            lidAwakeQuickActionTile
+                            keystrokeHighlightQuickActionTile
+                        } else {
+                            HStack(spacing: UIScale.pt(8)) {
+                                lidAwakeQuickActionTile
+                                keystrokeHighlightQuickActionTile
+                            }
+                        }
+                    } else if lidAwakeEnabled {
+                        lidAwakeQuickActionTile
                     } else {
-                        confirmingLidAwake = true
+                        keystrokeHighlightQuickActionTile
                     }
                 }
                 .transition(sidebarUtilityTransition)
+            }
+            if presenterEnabled {
+                presenterQuickActionTile
+                    .transition(sidebarUtilityTransition)
             }
         }
         .animation(
             Motion.animation(Motion.glide, reduceMotion: reduceMotion),
             value: sidebarUtilityVisibility)
+    }
+
+    private var lidAwakeQuickActionTile: some View {
+        quickActionTile(
+            icon: "laptopcomputer", title: "Lid awake", active: lidAwakeActive,
+            trigger: lidAwakeActive ? 1 : 0,
+            help: "Keep this Mac running with the lid closed"
+        ) {
+            if lidAwakeActive {
+                lidAwakeOperations.perform(.off)
+            } else {
+                confirmingLidAwake = true
+            }
+        }
+    }
+
+    private var keystrokeHighlightQuickActionTile: some View {
+        quickActionTile(
+            icon: "keyboard.badge.ellipsis", title: "Keystrokes",
+            active: keystrokeHighlightActive,
+            trigger: keystrokeHighlightActive ? 1 : 0,
+            help: "Show keyboard input on screen"
+        ) {
+            $keystrokeHighlightActive
+                .configured(AppStorageKeys.KeystrokeHighlight.active).wrappedValue.toggle()
+        }
     }
 
     private var presenterQuickActionTile: some View {
@@ -1433,11 +1485,13 @@ struct MainWindowView: View {
         case .dashboard: DashboardView()
         case .herdr: HerdrPage()
         case .quinjet: QuinjetPage()
+        case .seoAudit: SEOAuditPage()
         case .music: MusicPage()
         case .calendar: CalendarPage()
         case .system: SystemPage()
         case .appMaintenance: AppMaintenanceView()
         case .machines: MachinesPage()
+        case .database: DatabasePage()
         case .companion: CompanionPage()
         case .extensions: ExtensionsPane()
         case .settings: SettingsPane(updater: updater)

@@ -48,6 +48,7 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed config`](./config/README.md) | Every setting the UI exposes, and the full setting catalogue |
 | [`ed app`](./app/README.md) | App identity, diagnostics, paths, external links, and one-shot actions |
 | [`ed extensions`](./extensions/README.md) | Enabling features, checking readiness, planning setup, verifying live adapters, and recovering failures |
+| [Keystroke Highlight](./keystroke-highlight/README.md) | Showing key presses on screen for demos and recordings |
 | [`ed lid-awake`](./lid-awake/README.md) | Closed-lid sessions, battery auto-pause and live state |
 | [`ed permissions`](./permissions/README.md) | Inspecting and requesting Edith's macOS permissions |
 | [`ed usage`](./usage/README.md) | Agent usage: limits, cost, tokens, projects, sources, and machine attribution |
@@ -57,6 +58,7 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed presenter`](./presenter/README.md) | Manual presenter mode at runtime |
 | [`ed herdr`](./herdr/README.md) | Live Herdr sessions on this Mac and your SSH machines |
 | [`ed quinjet`](./quinjet/README.md) | Discover, inspect and launch Quinjet review workspaces locally or on a configured machine |
+| [`ed database`](./database/README.md) | Saved database connections and capability reports through the authenticated local broker |
 | [`ed clipboard`](./clipboard/README.md) | Clipboard history: read, copy, pin and prune |
 | [`ed attention`](./attention/README.md) | Application, website, music, focus and distraction insight |
 | [`ed color`](./color/README.md) | Launching the colour picker and reading its swatch history |
@@ -81,7 +83,7 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed machines power`](./machines-power/README.md) | Power state, processes and system services |
 | [`ed machines thermal`](./machines-thermal/README.md) | Thermal readings and temporary or persistent performance profiles |
 | [`ed machines terminal`](./machines-terminal/README.md) | Send a line to terminal tabs already open in the Edith app |
-| [`ed machines control`](./machines-control/README.md) | Brightness, audio, radios, airplane mode, Do Not Disturb and keyboard lighting |
+| [`ed machines control`](./machines-control/README.md) | Brightness, audio, radios, airplane mode, Do Not Disturb, Caffeinate and keyboard lighting |
 | [`ed machines workspace`](./machines-workspace/README.md) | Workspaces and panes |
 
 ## The short version

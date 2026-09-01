@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import Edith
@@ -27,6 +28,14 @@ import Testing
         #expect(icons.allSatisfy { !$0.isEmpty })
     }
 
+    @Test func everySidebarIconResolvesToASystemSymbol() {
+        for destination in MainDestination.allCases where destination.logoName == nil {
+            #expect(
+                NSImage(systemSymbolName: destination.icon, accessibilityDescription: nil) != nil,
+                "\(destination.rawValue) has an invalid symbol")
+        }
+    }
+
     @Test func appItemsUseInformationArchitectureOrder() {
         #expect(MainDestination.appItems == [.extensions, .settings, .about])
     }
@@ -34,8 +43,9 @@ import Testing
     @Test func homeItemsUseInformationArchitectureOrder() {
         #expect(
             MainDestination.homeItems == [
-                .home, .attention, .dashboard, .herdr, .quinjet, .music, .calendar, .system,
-                .appMaintenance, .machines, .companion,
+                .home, .attention, .dashboard, .herdr, .quinjet, .seoAudit, .music, .calendar,
+                .system,
+                .appMaintenance, .machines, .database, .companion,
             ])
     }
 
@@ -86,17 +96,30 @@ import Testing
 
     @Test func everyExtensionBackedUtilityKeepsTheFooterVisible() {
         #expect(
-            !SidebarUtilityVisibility(system: false, presenter: false, lidAwake: false)
-                .hasActions)
+            !SidebarUtilityVisibility(
+                system: false, presenter: false, lidAwake: false, keystrokeHighlight: false
+            )
+            .hasActions)
         #expect(
-            SidebarUtilityVisibility(system: true, presenter: false, lidAwake: false)
-                .hasActions)
+            SidebarUtilityVisibility(
+                system: true, presenter: false, lidAwake: false, keystrokeHighlight: false
+            )
+            .hasActions)
         #expect(
-            SidebarUtilityVisibility(system: false, presenter: true, lidAwake: false)
-                .hasActions)
+            SidebarUtilityVisibility(
+                system: false, presenter: true, lidAwake: false, keystrokeHighlight: false
+            )
+            .hasActions)
         #expect(
-            SidebarUtilityVisibility(system: false, presenter: false, lidAwake: true)
-                .hasActions)
+            SidebarUtilityVisibility(
+                system: false, presenter: false, lidAwake: true, keystrokeHighlight: false
+            )
+            .hasActions)
+        #expect(
+            SidebarUtilityVisibility(
+                system: false, presenter: false, lidAwake: false, keystrokeHighlight: true
+            )
+            .hasActions)
     }
 
     @Test func extensionBackedUtilitiesShareOneAnimatedVisibilityState() throws {

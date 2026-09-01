@@ -35,6 +35,7 @@ struct ExtensionPreview: View {
         case "calendar": calendarPreview(phase: phase)
         case "notchShelf": notchPreview(phase: phase)
         case "clipboard": clipboardPreview(phase: phase)
+        case "keystrokeHighlight": keystrokeHighlightPreview(phase: phase)
         case "music": musicPreview(animating: animating)
         case "focusDim": focusDimPreview(phase: phase)
         case "presenter": presenterPreview(phase: phase)
@@ -150,6 +151,29 @@ struct ExtensionPreview: View {
                     }
                     .shadow(color: .black.opacity(0.1), radius: UIScale.pt(0), y: 2 - press * 2)
                     .offset(y: press * 2)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func keystrokeHighlightPreview(phase: Double) -> some View {
+        let active = Int(phase * 2) % 3
+        return HStack(spacing: UIScale.pt(6)) {
+            ForEach(Array(["⌘", "⇧", "A"].enumerated()), id: \.offset) { index, key in
+                Text(key)
+                    .font(.system(size: UIScale.pt(10), weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(index == active ? 1 : 0.76))
+                    .frame(width: UIScale.pt(29), height: UIScale.pt(27))
+                    .background(
+                        Color(red: 0.08, green: 0.09, blue: 0.11),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: UIScale.pt(6))
+                            .strokeBorder(.white.opacity(index == active ? 0.5 : 0.24))
+                    }
+                    .shadow(color: .black.opacity(0.45), radius: 0, y: index == active ? 1 : 3)
+                    .offset(y: index == active ? 2 : 0)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

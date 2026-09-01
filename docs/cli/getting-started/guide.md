@@ -36,7 +36,7 @@ ed guide | less
 `ed guide agent` prints a section you can paste into a repository instruction
 file so an agent working there knows `ed` exists, can discover the complete
 parser tree, can use structured output where advertised, and can inspect, set
-up, verify, and recover all seventeen extensions noninteractively.
+up, verify, and recover all twenty-two extensions noninteractively.
 
 Any topic other than `agent` exits 3 and lists the discovery forms:
 

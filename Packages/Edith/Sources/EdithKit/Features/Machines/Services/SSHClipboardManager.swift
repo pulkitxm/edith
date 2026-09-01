@@ -110,6 +110,7 @@ public struct SSHClipboardConfiguration: Codable, Equatable, Sendable {
 
 public enum SSHClipboardManagerError: LocalizedError, Equatable {
     case unsupportedAuthentication
+    case unsupportedPlatform
     case missingLocalExecutable
     case localCommandFailed(String)
     case remoteCommandFailed(String)
@@ -118,6 +119,8 @@ public enum SSHClipboardManagerError: LocalizedError, Equatable {
         switch self {
         case .unsupportedAuthentication:
             return "Clipboard sync requires passwordless SSH through your SSH agent or SSH config."
+        case .unsupportedPlatform:
+            return "Clipboard sync supports remote macOS and Linux machines."
         case .missingLocalExecutable:
             return "ssh-clipboard could not be installed because npm is unavailable."
         case let .localCommandFailed(message), let .remoteCommandFailed(message):
@@ -129,6 +132,10 @@ public enum SSHClipboardManagerError: LocalizedError, Equatable {
 public actor SSHClipboardManager {
     public static let shared = SSHClipboardManager()
     public static let packageVersion = "0.2.8"
+
+    public nonisolated static func supports(_ platform: RemoteMachinePlatform) -> Bool {
+        platform != .windows
+    }
 
     private let configFile: URL
     private let homeDirectory: URL
@@ -161,6 +168,10 @@ public actor SSHClipboardManager {
         let connection = suppliedConnection ?? SSHConnection(machine: machine)
         do {
             try await connection.connect()
+            let platform = await connection.remotePlatform ?? .linux
+            guard Self.supports(platform) else {
+                throw SSHClipboardManagerError.unsupportedPlatform
+            }
             try await installRemote(on: connection, machine: machine)
             if ownsConnection { await connection.disconnect() }
         } catch {

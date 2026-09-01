@@ -46,20 +46,21 @@ public struct SettingDefinition: Equatable, Sendable {
 public enum ConfigCatalog {
     public static let groups = [
         "appearance", "panel", "attention", "usage", "limits", "menubar", "alerts", "budget",
-        "dashboard",
+        "dashboard", "database",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
         "music",
         "calendar",
-        "clipboard",
+        "clipboard", "keystrokes",
         "notch", "focusdim", "presenter", "colorpicker", "emoji", "micmute",
         "backup", "permissions", "terminal",
     ]
 
     public static let settings: [SettingDefinition] =
         appearance + panel + attention + usageAndLimits
-        + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
-        + system + homebrew + cleaner
-        + music + calendar + clipboard + notch + focusDim + presenter + colorPicker + emoji
+        + menuBar + alerts + budget + dashboard + database + machines + herdr + quinjet + companion
+        + finder + system + homebrew + cleaner
+        + music + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
+        + colorPicker + emoji
         + micMute
         + backup + permissions + terminal
 
@@ -138,6 +139,10 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Tabs.order, .csv, group: "panel",
             summary: "Comma separated panel tab order."),
+        SettingDefinition(
+            AppStorageKeys.Tabs.seoAuditEnabled, .bool, group: "panel",
+            summary: "Site Audit extension: sitemap, metadata, and local Lighthouse reports.",
+            fallback: .bool(false)),
         SettingDefinition(
             AppStorageKeys.General.mainWindowSection, .string, group: "panel",
             summary: "Section the main window opens on."),
@@ -817,6 +822,35 @@ public enum ConfigCatalog {
             summary: "Printable label for the presenter shortcut."),
     ]
 
+    private static let keystrokeHighlight: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.KeystrokeHighlight.enabled, .bool, group: "keystrokes",
+            summary: "Make the Keystroke Highlight extension available.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.KeystrokeHighlight.active, .bool, group: "keystrokes",
+            summary: "Show key presses in an on-screen overlay.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.KeystrokeHighlight.duration, .number, group: "keystrokes",
+            summary: "Seconds each key press remains on screen.",
+            fallback: .double(KeystrokeHighlightSettings.defaultDuration)),
+        SettingDefinition(
+            AppStorageKeys.KeystrokeHighlight.position, .string, group: "keystrokes",
+            summary: "Screen edge used for the key press overlay.",
+            allowed: KeystrokeHighlightPosition.allCases.map(\.rawValue),
+            fallback: .string(KeystrokeHighlightPosition.bottom.rawValue)),
+        SettingDefinition(
+            AppStorageKeys.KeystrokeHighlight.hotKeyCode, .int, group: "keystrokes",
+            summary: "Virtual key code of the keystroke highlight shortcut.", fallback: .int(40)),
+        SettingDefinition(
+            AppStorageKeys.KeystrokeHighlight.hotKeyMods, .int, group: "keystrokes",
+            summary: "Carbon modifier mask of the keystroke highlight shortcut.",
+            fallback: .int(6400)),
+        SettingDefinition(
+            AppStorageKeys.KeystrokeHighlight.hotKeyLabel, .string, group: "keystrokes",
+            summary: "Printable label for the keystroke highlight shortcut.",
+            fallback: .string("⌃⌥⌘K")),
+    ]
+
     private static let colorPicker: [SettingDefinition] = [
         SettingDefinition(
             AppStorageKeys.ColorPicker.enabled, .bool, group: "colorpicker",
@@ -841,6 +875,13 @@ public enum ConfigCatalog {
         SettingDefinition(
             "colorPickerHotKeyLabel", .string, group: "colorpicker",
             summary: "Printable label for the colour picker shortcut."),
+    ]
+
+    private static let database: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Tabs.databaseEnabled, .bool, group: "database",
+            summary: "Database extension: guarded database exploration and operations.",
+            fallback: .bool(false))
     ]
 
     private static let emoji: [SettingDefinition] = [

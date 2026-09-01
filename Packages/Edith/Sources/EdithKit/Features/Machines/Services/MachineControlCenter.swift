@@ -27,6 +27,7 @@ public struct MachineControlSnapshot: Equatable, Sendable {
     public var bluetoothEnabled: Bool?
     public var airplaneMode: Bool?
     public var doNotDisturb: Bool?
+    public var caffeinateEnabled: Bool?
 
     public init(
         platform: MachineControlPlatform? = nil,
@@ -39,7 +40,8 @@ public struct MachineControlSnapshot: Equatable, Sendable {
         wifiEnabled: Bool? = nil,
         bluetoothEnabled: Bool? = nil,
         airplaneMode: Bool? = nil,
-        doNotDisturb: Bool? = nil
+        doNotDisturb: Bool? = nil,
+        caffeinateEnabled: Bool? = nil
     ) {
         self.platform = platform
         self.batteryLevel = batteryLevel
@@ -52,12 +54,13 @@ public struct MachineControlSnapshot: Equatable, Sendable {
         self.bluetoothEnabled = bluetoothEnabled
         self.airplaneMode = airplaneMode
         self.doNotDisturb = doNotDisturb
+        self.caffeinateEnabled = caffeinateEnabled
     }
 
     public var hasControlSettings: Bool {
         brightness != nil || volume != nil || keyboardBacklight != nil || muted != nil
             || wifiEnabled != nil || bluetoothEnabled != nil || airplaneMode != nil
-            || doNotDisturb != nil
+            || doNotDisturb != nil || caffeinateEnabled != nil
     }
 
     public var isEmpty: Bool {
@@ -74,6 +77,7 @@ public enum MachineControlAction: Equatable, Sendable {
     case setBluetoothEnabled(Bool)
     case setAirplaneMode(Bool)
     case setDoNotDisturb(Bool)
+    case setCaffeinateEnabled(Bool)
 
     public var operation: MachineControlOperation {
         switch self {
@@ -85,6 +89,7 @@ public enum MachineControlAction: Equatable, Sendable {
         case .setBluetoothEnabled: .bluetooth
         case .setAirplaneMode: .airplane
         case .setDoNotDisturb: .doNotDisturb
+        case .setCaffeinateEnabled: .caffeinate
         }
     }
 
@@ -102,6 +107,7 @@ public enum MachineControlOperation: String, CaseIterable, Equatable, Sendable {
     case bluetooth
     case airplane
     case doNotDisturb
+    case caffeinate
     case keyboardLight
 
     public var descriptor: UserOperationDescriptor {
@@ -126,6 +132,8 @@ public enum MachineControlOperation: String, CaseIterable, Equatable, Sendable {
                 requiresPreview: true)
         case .doNotDisturb:
             descriptor("dnd", "Turn Do Not Disturb on or off.", effect: .write)
+        case .caffeinate:
+            descriptor("caffeinate", "Prevent automatic sleep.", effect: .write)
         case .keyboardLight:
             descriptor("keyboard-light", "Set keyboard backlight brightness.", effect: .write)
         }
@@ -472,6 +480,42 @@ public enum MachineControlCenterCommands {
                     esac
                 fi
             fi
+
+            if command -v gsettings >/dev/null 2>&1 && command -v gnome-extensions >/dev/null 2>&1; then
+                caffeine_info=$(gnome-extensions info caffeine@patapon.info </dev/null 2>/dev/null || true)
+                if printf '%s\n' "$caffeine_info" | grep -Eq '^[[:space:]]*State:[[:space:]]*ACTIVE[[:space:]]*$'; then
+                    caffeine_schema=org.gnome.shell.extensions.caffeine
+                    caffeine_schema_dir=
+                    caffeine_keys=$(gsettings list-keys "$caffeine_schema" </dev/null 2>/dev/null || true)
+                    if [ -z "$caffeine_keys" ]; then
+                        for schema_dir in "$HOME/.local/share/gnome-shell/extensions/caffeine@patapon.info/schemas" /usr/share/gnome-shell/extensions/caffeine@patapon.info/schemas /usr/local/share/gnome-shell/extensions/caffeine@patapon.info/schemas; do
+                            [ -f "$schema_dir/gschemas.compiled" ] || continue
+                            caffeine_keys=$(gsettings --schemadir "$schema_dir" list-keys "$caffeine_schema" </dev/null 2>/dev/null || true)
+                            if [ -n "$caffeine_keys" ]; then
+                                caffeine_schema_dir=$schema_dir
+                                break
+                            fi
+                        done
+                    fi
+                    caffeine_key=
+                    if printf '%s\n' "$caffeine_keys" | grep -Fxq cli-toggle; then
+                        caffeine_key=cli-toggle
+                    elif printf '%s\n' "$caffeine_keys" | grep -Fxq toggle-state; then
+                        caffeine_key=toggle-state
+                    fi
+                    if [ -n "$caffeine_key" ]; then
+                        if [ -n "$caffeine_schema_dir" ]; then
+                            caffeine_state=$(gsettings --schemadir "$caffeine_schema_dir" get "$caffeine_schema" "$caffeine_key" </dev/null 2>/dev/null || true)
+                        else
+                            caffeine_state=$(gsettings get "$caffeine_schema" "$caffeine_key" </dev/null 2>/dev/null || true)
+                        fi
+                        case "$caffeine_state" in
+                            true) emit_bool CAFFEINATE_ENABLED 1 ;;
+                            false) emit_bool CAFFEINATE_ENABLED 0 ;;
+                        esac
+                    fi
+                fi
+            fi
         elif [ "$platform" = Darwin ]; then
             if command -v pmset >/dev/null 2>&1; then
                 battery_output=$(pmset -g batt 2>/dev/null || true)
@@ -576,6 +620,8 @@ public enum MachineControlCenterCommands {
                 if let parsed = flag(value) { snapshot.airplaneMode = parsed }
             case "EDITH_CONTROL_DO_NOT_DISTURB":
                 if let parsed = flag(value) { snapshot.doNotDisturb = parsed }
+            case "EDITH_CONTROL_CAFFEINATE_ENABLED":
+                if let parsed = flag(value) { snapshot.caffeinateEnabled = parsed }
             default:
                 continue
             }
@@ -590,7 +636,7 @@ public enum MachineControlCenterCommands {
         guard let platform else { return false }
         if platform == .windows { return false }
         switch action {
-        case .setVolume, .setMuted, .setDoNotDisturb:
+        case .setVolume, .setMuted, .setDoNotDisturb, .setCaffeinateEnabled:
             return false
         case .setWiFiEnabled:
             return true
@@ -805,6 +851,52 @@ public enum MachineControlCenterCommands {
                 actual=$(gsettings get org.gnome.desktop.notifications show-banners </dev/null 2>/dev/null || true)
                 if [ "$actual" != \(banners) ]; then
                     printf 'Do Not Disturb setting did not change.\n' >&2
+                    exit 4
+                fi
+                """
+            darwin = "exit 4"
+        case .setCaffeinateEnabled(let enabled):
+            let state = enabled ? "true" : "false"
+            linux = """
+                command -v gsettings >/dev/null 2>&1 || exit 4
+                command -v gnome-extensions >/dev/null 2>&1 || exit 4
+                caffeine_info=$(gnome-extensions info caffeine@patapon.info </dev/null 2>/dev/null || true)
+                if ! printf '%s\n' "$caffeine_info" | grep -Eq '^[[:space:]]*State:[[:space:]]*ACTIVE[[:space:]]*$'; then
+                    printf 'Caffeine extension is not active.\n' >&2
+                    exit 4
+                fi
+                caffeine_schema=org.gnome.shell.extensions.caffeine
+                caffeine_schema_dir=
+                caffeine_keys=$(gsettings list-keys "$caffeine_schema" </dev/null 2>/dev/null || true)
+                if [ -z "$caffeine_keys" ]; then
+                    for schema_dir in "$HOME/.local/share/gnome-shell/extensions/caffeine@patapon.info/schemas" /usr/share/gnome-shell/extensions/caffeine@patapon.info/schemas /usr/local/share/gnome-shell/extensions/caffeine@patapon.info/schemas; do
+                        [ -f "$schema_dir/gschemas.compiled" ] || continue
+                        caffeine_keys=$(gsettings --schemadir "$schema_dir" list-keys "$caffeine_schema" </dev/null 2>/dev/null || true)
+                        if [ -n "$caffeine_keys" ]; then
+                            caffeine_schema_dir=$schema_dir
+                            break
+                        fi
+                    done
+                fi
+                caffeine_key=
+                if printf '%s\n' "$caffeine_keys" | grep -Fxq cli-toggle; then
+                    caffeine_key=cli-toggle
+                elif printf '%s\n' "$caffeine_keys" | grep -Fxq toggle-state; then
+                    caffeine_key=toggle-state
+                fi
+                if [ -z "$caffeine_key" ]; then
+                    printf 'Caffeine extension does not expose command-line control.\n' >&2
+                    exit 4
+                fi
+                if [ -n "$caffeine_schema_dir" ]; then
+                    gsettings --schemadir "$caffeine_schema_dir" set "$caffeine_schema" "$caffeine_key" \(state) >/dev/null </dev/null || exit 4
+                    actual=$(gsettings --schemadir "$caffeine_schema_dir" get "$caffeine_schema" "$caffeine_key" </dev/null 2>/dev/null || true)
+                else
+                    gsettings set "$caffeine_schema" "$caffeine_key" \(state) >/dev/null </dev/null || exit 4
+                    actual=$(gsettings get "$caffeine_schema" "$caffeine_key" </dev/null 2>/dev/null || true)
+                fi
+                if [ "$actual" != \(state) ]; then
+                    printf 'Caffeinate setting did not change.\n' >&2
                     exit 4
                 fi
                 """

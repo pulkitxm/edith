@@ -127,6 +127,11 @@ public enum ExtensionRegistry {
             defaultsKey: "tabQuinjetEnabled", requiredCapabilities: [.localTerminal],
             requiredToolIDs: ["quinjet"]),
         ExtensionRegistryEntry(
+            id: "seoAudit", title: "Site Audit",
+            subtitle: "Crawl sitemaps, inspect page metadata, and keep every run local.",
+            symbolName: "doc.text.magnifyingglass", group: .utilities, featured: false,
+            defaultsKey: "tabSEOAuditEnabled", requiredCapabilities: [.siteAuditing]),
+        ExtensionRegistryEntry(
             id: "system", title: "System",
             subtitle: "Running apps, prevent sleep, and the keyboard-cleaning lock.",
             symbolName: "switch.2", group: .system, featured: true,
@@ -144,6 +149,11 @@ public enum ExtensionRegistry {
             symbolName: "server.rack", group: .system, featured: true,
             defaultsKey: "tabMachinesEnabled", requiredCapabilities: [.machineManagement],
             optionalCapabilities: [.notifications]),
+        ExtensionRegistryEntry(
+            id: "database", title: "Database",
+            subtitle: "Explore databases and run guarded production mutations.",
+            symbolName: "cylinder.fill", group: .utilities, featured: true,
+            defaultsKey: "tabDatabaseEnabled", requiredCapabilities: [.databaseBroker]),
         ExtensionRegistryEntry(
             id: "companion", title: "Companion",
             subtitle: "Your notes, voice memos and activity, remembered and searchable.",
@@ -190,6 +200,12 @@ public enum ExtensionRegistry {
             symbolName: "doc.on.clipboard", group: .utilities, featured: true,
             defaultsKey: "clipboardEnabled", requiredCapabilities: [.clipboardHistory],
             optionalCapabilities: [.globalPaste, .globalShortcuts]),
+        ExtensionRegistryEntry(
+            id: "keystrokeHighlight", title: "Keystroke Highlight",
+            subtitle: "Show each key press on screen for polished demos.",
+            symbolName: "keyboard.badge.ellipsis", group: .utilities, featured: true,
+            defaultsKey: "keystrokeHighlightEnabled",
+            requiredCapabilities: [.keystrokeObservation]),
         ExtensionRegistryEntry(
             id: "focusDim", title: "Focus Dim",
             subtitle: "Dims everything behind your active app.",

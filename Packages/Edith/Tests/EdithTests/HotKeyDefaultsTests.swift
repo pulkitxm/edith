@@ -52,6 +52,14 @@ import Testing
         }
     }
 
+    @Test func keystrokeHighlightHotKeyDefaults() {
+        withCleanKeys("keystrokeHighlightHotKey") {
+            #expect(KeystrokeHighlightHotKey.code == kVK_ANSI_K)
+            #expect(KeystrokeHighlightHotKey.mods == controlKey | optionKey | cmdKey)
+            #expect(KeystrokeHighlightHotKey.label == "⌃⌥⌘K")
+        }
+    }
+
     @Test func panelHotKeySaveRoundTrips() {
         withCleanKeys("hotKey") {
             HotKey.save(code: kVK_ANSI_J, mods: cmdKey | shiftKey, label: "⇧⌘J")
