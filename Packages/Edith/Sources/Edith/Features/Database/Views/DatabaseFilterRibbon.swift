@@ -263,7 +263,9 @@ struct DatabaseFilterRibbon: View {
                             }
                     }
                 }
-                if operationSupportsCaseSensitivity(clause.operation) {
+                if connection.product.family != .keyValue,
+                    operationSupportsCaseSensitivity(clause.operation)
+                {
                     filterEditorControl("Text matching") {
                         Picker("Text matching", selection: clauseSensitivityBinding(id)) {
                             Text("Database default")
@@ -351,7 +353,9 @@ struct DatabaseFilterRibbon: View {
             set: { operation in
                 updateClause(id) { clause in
                     clause.operation = operation
-                    clause.caseSensitivity = defaultSensitivity(operation)
+                    clause.caseSensitivity =
+                        connection.product.family == .keyValue
+                        ? .productDefault : defaultSensitivity(operation)
                 }
             })
     }
@@ -413,6 +417,11 @@ struct DatabaseFilterRibbon: View {
             data.fields.first {
                 $0.path.segments.joined(separator: ".") == clause.field
             }?.typeName.lowercased() ?? "text"
+        if connection.product.family == .keyValue {
+            return typeName == "redis-type"
+                ? [.equal]
+                : [.equal, .contains, .startsWith, .endsWith]
+        }
         var options: [DatabaseFilterOperator]
         if typeName.contains("char") || typeName.contains("text")
             || typeName.contains("string") || typeName.contains("uuid")
