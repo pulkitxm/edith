@@ -248,7 +248,7 @@ struct DatabaseConnectionGallery: View {
                     HStack(alignment: .top, spacing: UIScale.pt(11)) {
                         ZStack {
                             RoundedRectangle(cornerRadius: UIScale.pt(9))
-                                .fill(accent.opacity(highlighted ? 0.18 : 0.11))
+                                .fill(accent.opacity(highlighted ? 0.15 : 0.11))
                             Image(systemName: connection.product.gallerySymbolName)
                                 .font(.system(size: UIScale.pt(16), weight: .semibold))
                                 .foregroundStyle(accent)
@@ -303,17 +303,13 @@ struct DatabaseConnectionGallery: View {
                 .frame(maxWidth: .infinity, minHeight: UIScale.pt(126), alignment: .topLeading)
                 .background {
                     RoundedRectangle(cornerRadius: UIScale.pt(13))
-                        .fill(highlighted ? palette.panel : palette.panel.opacity(0.74))
+                        .fill(palette.panel.opacity(highlighted ? 0.86 : 0.74))
                         .overlay {
                             if highlighted {
                                 RoundedRectangle(cornerRadius: UIScale.pt(13))
-                                    .fill(accent.opacity(dark ? 0.1 : 0.07))
+                                    .fill(accent.opacity(dark ? 0.045 : 0.035))
                             }
                         }
-                        .shadow(
-                            color: highlighted ? accent.opacity(0.16) : .clear,
-                            radius: UIScale.pt(9),
-                            y: UIScale.pt(3))
                 }
                 .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(13)))
             }
@@ -346,6 +342,7 @@ struct DatabaseConnectionGallery: View {
             }
         }
         .onHover { isHovered in hoveredConnectionID = isHovered ? connection.id : nil }
+        .animation(nil, value: highlighted)
         .contextMenu {
             if performConnectionAction != nil {
                 connectionActions(connection)
