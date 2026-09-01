@@ -416,12 +416,6 @@ struct DatabaseWorkbenchView: View {
                             .font(.system(size: UIScale.pt(10.5), weight: .semibold))
                             .foregroundStyle(palette.ink)
                             .lineLimit(1)
-                        if let context = selectedObjectContext {
-                            Text(context)
-                                .font(.system(size: UIScale.pt(8.5)))
-                                .foregroundStyle(palette.inkFaint)
-                                .lineLimit(1)
-                        }
                     }
                     Image(systemName: "chevron.down")
                         .font(.system(size: UIScale.pt(7), weight: .bold))
@@ -442,6 +436,12 @@ struct DatabaseWorkbenchView: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .disabled(explorer.groups.isEmpty)
+            if let context = selectedObjectContext {
+                Text(context)
+                    .font(.system(size: UIScale.pt(9.5)))
+                    .foregroundStyle(palette.inkFaint)
+                    .lineLimit(1)
+            }
             Spacer(minLength: 0)
             Button {
                 explorer.load(connection, force: true)

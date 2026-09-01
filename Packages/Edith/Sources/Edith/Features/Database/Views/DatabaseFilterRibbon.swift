@@ -347,7 +347,12 @@ struct DatabaseFilterRibbon: View {
     }
 
     private var condensedFilterTitle: String {
-        data.filterClauses.isEmpty ? "Filter" : "Filters \(data.filterClauses.count)"
+        guard let first = data.filterClauses.first else { return "Filter" }
+        let summary =
+            first.summary.count > 28
+            ? "\(first.summary.prefix(27))…" : first.summary
+        let more = data.filterClauses.count > 1 ? " +\(data.filterClauses.count - 1)" : ""
+        return "\(summary)\(more)"
     }
 
     private var filterHelp: String {
