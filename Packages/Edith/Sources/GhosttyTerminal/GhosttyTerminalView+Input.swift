@@ -343,7 +343,13 @@ extension GhosttyTerminalView {
 
     private func commandClickTarget(for event: NSEvent) -> String? {
         guard surface != nil, event.modifierFlags.contains(.command) else { return nil }
-        return hoveredLink ?? terminalTargetAtPointer()
+        if let hoveredLink { return hoveredLink }
+        guard let target = terminalTargetAtPointer(),
+            Self.linkTarget(
+                for: target, workingDirectory: currentDirectory,
+                allowsLocalFiles: allowsLocalFileLinks) != nil
+        else { return nil }
+        return target
     }
 
     public override func mouseDown(with event: NSEvent) {
