@@ -70,6 +70,30 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(model.orderedSorts.map(\.summary) == ["name descending"])
     }
 
+    @Test("Page size choices are applied to browse and query requests")
+    func pageSizeSelection() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)]),
+            Self.queryResponse(records: [Self.record(2)]),
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.customers"
+        model.setPageSize(50)
+
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+        model.queryText = "SELECT * FROM public.customers"
+        model.setPageSize(25)
+        model.runQuery(connection)
+        await Self.waitUntil { model.state == .loaded && model.records == [Self.record(2)] }
+
+        let requests = await sender.recordedRequests()
+        #expect(requests[0].browseRequest?.page.pageSize.value == 50)
+        #expect(requests[1].queryRequest?.page.pageSize.value == 25)
+    }
+
     @Test("Structured filters build one conjunction level with ordered typed sorts")
     func structuredFiltersAndOrderedSorts() async throws {
         let sender = DatabaseDataScriptedSender(responses: [
@@ -188,8 +212,90 @@ struct DatabaseDataWorkspaceModelTests {
 
         #expect(
             model.state
-                == .failed("Enter two comma-separated values for the id filter."))
+                == .failed(
+                    "Enter two values as a JSON array or comma-separated list for the id filter."))
         #expect(await sender.recordedRequests().count == 1)
+    }
+
+    @Test("Failed empty filtered results can clear and retry without the rejected filter")
+    func failedEmptyFilterRecovery() async throws {
+        let fields = [
+            DatabaseFieldDescriptor(
+                path: DatabaseFieldPath("name"),
+                displayName: "name",
+                typeName: "text",
+                isNullable: false,
+                isSortable: true,
+                isFilterable: true)
+        ]
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [], fields: fields)
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.customers"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+        model.addFilterClause(field: "name", operation: .contains, valueText: "Ada")
+
+        model.browse(connection)
+        await Self.waitUntil { model.state == .failed("The database rejected this data request.") }
+
+        #expect(model.records.isEmpty)
+        #expect(model.fields == fields)
+        #expect(model.hasActiveFilters)
+        model.clearFilters()
+        #expect(!model.hasActiveFilters)
+
+        model.browse(connection)
+        await Self.waitUntil { model.state == .failed("The database rejected this data request.") }
+        #expect(await sender.recordedRequests().count == 3)
+        let retry = try #require((await sender.recordedRequests()).last?.browseRequest)
+        #expect(retry.page.filter == nil)
+    }
+
+    @Test("Membership filters accept JSON arrays with commas in text values")
+    func structuredFilterJSONArray() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)]),
+            Self.response(records: [Self.record(2)]),
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.customers"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        model.addFilterClause(
+            field: "name",
+            operation: .in,
+            valueText: #"["Doe, Jane", "Ada"]"#)
+        model.browse(connection)
+        await Self.waitUntil { model.records == [Self.record(2)] }
+
+        let request = try #require(
+            await sender.recordedRequests().compactMap(\.browseRequest).last)
+        #expect(
+            request.page.filter
+                == .predicate(
+                    DatabaseFilterPredicate(
+                        field: DatabaseFieldPath("name"),
+                        operation: .in,
+                        values: [.string("Doe, Jane"), .string("Ada")])))
+    }
+
+    @Test("Redis keeps its supported flat AND composition")
+    func redisFilterConjunction() throws {
+        let model = DatabaseDataWorkspaceModel(
+            sender: DatabaseDataScriptedSender(responses: []),
+            announcement: { _ in })
+        model.prepare(for: try Self.connection(product: .redis))
+
+        model.setFilterConjunction(.or)
+
+        #expect(model.filterConjunction == .and)
     }
 
     @Test("MongoDB objectId filters preserve their native value type")
@@ -351,6 +457,44 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(requests[0].browseRequest?.page.continuation == nil)
         #expect(requests[1].browseRequest?.page.continuation == token)
         #expect(model.records == [Self.record(1), Self.record(2)])
+        #expect(!model.hasNextPage)
+    }
+
+    @Test("Changing filters cancels a stale automatic page and starts fresh")
+    func filterChangeCancelsAutomaticPage() async throws {
+        let token = DatabaseContinuationToken(rawValue: "next-page")
+        let sender = DatabaseDataControlledSender()
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.customers"
+
+        model.browse(connection)
+        await Self.waitUntilRequestCount(1, sender: sender)
+        await sender.respond(
+            Self.response(records: [Self.record(1)], nextContinuation: token),
+            to: 0)
+        await Self.waitUntil { model.state == .loaded && model.hasNextPage }
+
+        model.loadNextPage(connection)
+        await Self.waitUntilRequestCount(2, sender: sender)
+        model.addFilterClause(field: "name", operation: .contains, valueText: "Ada")
+        model.browse(connection)
+        await Self.waitUntilRequestCount(3, sender: sender)
+        await sender.respond(Self.response(records: [Self.record(42)]), to: 2)
+        await Self.waitUntil { model.state == .loaded && model.records == [Self.record(42)] }
+
+        await sender.respond(Self.response(records: [Self.record(2)]), to: 1)
+        for _ in 0..<100 {
+            await Task.yield()
+        }
+
+        let requests = await sender.recordedRequests().compactMap(\.browseRequest)
+        #expect(requests.count == 3)
+        #expect(requests[1].page.continuation == token)
+        #expect(requests[2].page.continuation == nil)
+        #expect(requests[2].page.filter != nil)
+        #expect(model.records == [Self.record(42)])
         #expect(!model.hasNextPage)
     }
 
@@ -1528,6 +1672,10 @@ private actor DatabaseDataControlledSender: DatabaseBrokerCommandSending {
 
     func requestCount() -> Int {
         requests.count
+    }
+
+    func recordedRequests() -> [DatabaseBrokerCommandRequest] {
+        requests
     }
 
     func respond(_ response: DatabaseBrokerCommandResponse, to index: Int) {

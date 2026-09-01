@@ -12,13 +12,18 @@ struct DatabaseNativeTableView: NSViewRepresentable {
     let records: [DatabaseRecord]
     let selectedIndex: Int?
     let sorts: [DatabaseSort]
+    let nextContinuation: DatabaseContinuationToken?
+    let isLoading: Bool
+    let columnWidth: (DatabaseFieldPath) -> CGFloat?
     let text: (DatabaseValue) -> String
+    let loadMore: () -> Void
     let select: (Int) -> Void
     let open: (Int) -> Void
     let rowIsEditable: (Int) -> Bool
     let canEdit: (Int, String) -> Bool
     let edit: (Int, String, String) -> Void
     let sort: (String, Bool) -> Void
+    let resizeColumn: (DatabaseFieldPath, CGFloat) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -53,16 +58,30 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         scrollView.backgroundColor = NSColor(background)
         scrollView.borderType = .noBorder
         context.coordinator.tableView = tableView
+        context.coordinator.observeScrolling(in: scrollView)
         context.coordinator.rebuildColumns()
         return scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         context.coordinator.parent = self
+        let continuationChanged = context.coordinator.continuationDidChange(nextContinuation)
         context.coordinator.applyPalette(to: scrollView)
         context.coordinator.rebuildColumnsIfNeeded()
+        context.coordinator.applyColumnWidths()
         context.coordinator.tableView?.reloadData()
         context.coordinator.reloadSelection()
+        if continuationChanged {
+            let coordinator = context.coordinator
+            Task { @MainActor [weak coordinator] in
+                await Task.yield()
+                coordinator?.loadMoreIfNeeded()
+            }
+        }
+    }
+
+    static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
+        coordinator.stopObservingScrolling(in: scrollView)
     }
 
     @MainActor
@@ -74,6 +93,9 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         private var fieldNames: [String] = []
         private var applyingSelection = false
         private var applyingSortDescriptors = false
+        private var applyingColumnWidths = false
+        private var observedContinuation: DatabaseContinuationToken?
+        private var paginationGate = DatabaseTablePaginationGate()
 
         init(parent: DatabaseNativeTableView) {
             self.parent = parent
@@ -81,6 +103,58 @@ struct DatabaseNativeTableView: NSViewRepresentable {
 
         func numberOfRows(in tableView: NSTableView) -> Int {
             parent.records.count
+        }
+
+        func observeScrolling(in scrollView: NSScrollView) {
+            scrollView.contentView.postsBoundsChangedNotifications = true
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(visibleBoundsChanged),
+                name: NSView.boundsDidChangeNotification,
+                object: scrollView.contentView)
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(liveScrollWillStart),
+                name: NSScrollView.willStartLiveScrollNotification,
+                object: scrollView)
+        }
+
+        func stopObservingScrolling(in scrollView: NSScrollView) {
+            NotificationCenter.default.removeObserver(
+                self,
+                name: NSView.boundsDidChangeNotification,
+                object: scrollView.contentView)
+            NotificationCenter.default.removeObserver(
+                self,
+                name: NSScrollView.willStartLiveScrollNotification,
+                object: scrollView)
+        }
+
+        func continuationDidChange(_ continuation: DatabaseContinuationToken?) -> Bool {
+            defer { observedContinuation = continuation }
+            return continuation != observedContinuation
+        }
+
+        @objc private func visibleBoundsChanged() {
+            loadMoreIfNeeded()
+        }
+
+        @objc private func liveScrollWillStart() {
+            paginationGate.rearm()
+            loadMoreIfNeeded()
+        }
+
+        func loadMoreIfNeeded() {
+            guard let tableView else { return }
+            guard
+                paginationGate.shouldLoadMore(
+                    continuation: parent.nextContinuation,
+                    isLoading: parent.isLoading,
+                    visibleMaxY: tableView.visibleRect.maxY,
+                    contentMaxY: tableView.bounds.maxY,
+                    rowHeight: tableView.rowHeight)
+            else { return }
+            parent.loadMore()
         }
 
         func tableView(
@@ -94,6 +168,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                 tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView
                 ?? makeCell(identifier: identifier)
             guard let textField = cell.textField else { return cell }
+            textField.toolTip = nil
             if identifier.rawValue == Self.rowColumnIdentifier {
                 textField.stringValue = (row + 1).formatted()
                 textField.alignment = .right
@@ -108,10 +183,6 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                             ? "Editable row" : "Stable row key")
                 cell.imageView?.contentTintColor =
                     tableView.selectedRow == row ? NSColor(parent.accent) : .tertiaryLabelColor
-                textField.toolTip =
-                    parent.records[row].identity == nil
-                    ? "This row has no stable key"
-                    : "This row has a stable key"
                 textField.setAccessibilityLabel("Row \(row + 1)")
                 textField.setAccessibilityValue(
                     parent.records[row].identity == nil ? "No stable key" : "Stable key")
@@ -133,7 +204,6 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                 value.isAbsent
                 ? .monospacedSystemFont(ofSize: 11, weight: .light)
                 : .monospacedSystemFont(ofSize: 11, weight: .regular)
-            textField.toolTip = "\(field.displayName): \(rendered)"
             textField.setAccessibilityLabel(field.displayName)
             textField.setAccessibilityValue(rendered)
             textField.tag = row
@@ -161,8 +231,8 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
             let rowView = DatabaseNativeRowView()
             rowView.accentColor = NSColor(parent.accent)
+            rowView.baseColor = NSColor(parent.background)
             rowView.alternatingColor = NSColor(parent.ink).withAlphaComponent(0.025)
-            rowView.hoverColor = NSColor(parent.ink).withAlphaComponent(0.07)
             rowView.rowIndex = row
             return rowView
         }
@@ -177,6 +247,17 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                     newDescriptors: tableView.sortDescriptors)
             else { return }
             parent.sort(field, NSEvent.modifierFlags.contains(.shift))
+        }
+
+        func tableViewColumnDidResize(_ notification: Notification) {
+            guard !applyingColumnWidths,
+                let column = notification.userInfo?["NSTableColumn"] as? NSTableColumn,
+                column.identifier.rawValue != Self.rowColumnIdentifier,
+                let field = parent.fields.first(where: {
+                    $0.path.segments.joined(separator: ".") == column.identifier.rawValue
+                })
+            else { return }
+            parent.resizeColumn(field.path, column.width)
         }
 
         @objc func openSelectedRow() {
@@ -241,7 +322,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                 let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(name))
                 column.title = field.displayName
                 column.headerCell = makeHeaderCell(title: field.displayName)
-                column.width = initialWidth(for: field)
+                column.width = parent.columnWidth(field.path) ?? initialWidth(for: field)
                 column.minWidth = 90
                 column.maxWidth = 520
                 column.resizingMask = .userResizingMask
@@ -252,6 +333,21 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             }
             updateSortDescriptors()
             applyHeaderPalette()
+        }
+
+        func applyColumnWidths() {
+            guard let tableView else { return }
+            applyingColumnWidths = true
+            defer { applyingColumnWidths = false }
+            for field in parent.fields {
+                let name = field.path.segments.joined(separator: ".")
+                guard let width = parent.columnWidth(field.path),
+                    let column = tableView.tableColumn(
+                        withIdentifier: NSUserInterfaceItemIdentifier(name)),
+                    abs(column.width - width) > 0.5
+                else { continue }
+                column.width = width
+            }
         }
 
         func reloadSelection() {
@@ -393,9 +489,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             guard let tableView else { return }
             for column in tableView.tableColumns {
                 guard let cell = column.headerCell as? DatabaseNativeHeaderCell else { continue }
-                cell.fillColor = NSColor(parent.background)
-                cell.dividerColor = NSColor(parent.inkFaint).withAlphaComponent(0.2)
-                cell.textColor = NSColor(parent.inkFaint)
+                cell.textColor = .secondaryLabelColor
             }
             tableView.headerView?.needsDisplay = true
         }
@@ -424,52 +518,44 @@ struct DatabaseNativeTableView: NSViewRepresentable {
     }
 }
 
+struct DatabaseTablePaginationGate {
+    private var requestedContinuation: DatabaseContinuationToken?
+
+    mutating func shouldLoadMore(
+        continuation: DatabaseContinuationToken?,
+        isLoading: Bool,
+        visibleMaxY: CGFloat,
+        contentMaxY: CGFloat,
+        rowHeight: CGFloat
+    ) -> Bool {
+        guard let continuation,
+            !isLoading,
+            continuation != requestedContinuation,
+            visibleMaxY >= contentMaxY - max(rowHeight, 1) * 10
+        else { return false }
+        requestedContinuation = continuation
+        return true
+    }
+
+    mutating func rearm() {
+        requestedContinuation = nil
+    }
+}
+
 private final class DatabaseNativeRowView: NSTableRowView {
     var accentColor = NSColor.controlAccentColor
+    var baseColor = NSColor.controlBackgroundColor
     var alternatingColor = NSColor.labelColor.withAlphaComponent(0.025)
-    var hoverColor = NSColor.labelColor.withAlphaComponent(0.07)
     var rowIndex = 0
-    private var hovering = false
-    private var hoverTrackingArea: NSTrackingArea?
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let hoverTrackingArea {
-            removeTrackingArea(hoverTrackingArea)
-        }
-        let trackingArea = NSTrackingArea(
-            rect: .zero,
-            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(trackingArea)
-        hoverTrackingArea = trackingArea
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        hovering = true
-        needsDisplay = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        hovering = false
-        needsDisplay = true
-    }
 
     override func drawBackground(in dirtyRect: NSRect) {
+        baseColor.setFill()
+        bounds.fill()
         guard !isSelected else { return }
         if !rowIndex.isMultiple(of: 2) {
             alternatingColor.setFill()
             bounds.fill()
         }
-        guard hovering else { return }
-        hoverColor.setFill()
-        NSBezierPath(
-            roundedRect: bounds.insetBy(dx: 2, dy: 1),
-            xRadius: 4,
-            yRadius: 4
-        ).fill()
     }
 
     override func drawSelection(in dirtyRect: NSRect) {
@@ -488,14 +574,11 @@ private final class DatabaseNativeRowView: NSTableRowView {
 }
 
 private final class DatabaseNativeHeaderCell: NSTableHeaderCell {
-    var fillColor = NSColor.controlBackgroundColor
-    var dividerColor = NSColor.separatorColor
-
     override func draw(withFrame cellFrame: NSRect, in controlView: NSView) {
-        fillColor.setFill()
+        NSColor.controlBackgroundColor.setFill()
         cellFrame.fill()
         super.drawInterior(withFrame: cellFrame.insetBy(dx: 8, dy: 3), in: controlView)
-        dividerColor.setFill()
+        NSColor.separatorColor.withAlphaComponent(0.18).setFill()
         let dividerY = controlView.isFlipped ? cellFrame.maxY - 1 : cellFrame.minY
         NSRect(
             x: cellFrame.minX,

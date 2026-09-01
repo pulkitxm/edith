@@ -146,6 +146,7 @@ final class DatabaseDataWorkspaceModel {
     private(set) var selectedRecordIndex: Int?
     private(set) var nextContinuation: DatabaseContinuationToken?
     private(set) var metadata: DatabasePageMetadata?
+    private(set) var pageSize = 100
     private(set) var editorMode: DatabaseRowEditorMode?
     private(set) var editorFields: [DatabaseRowFieldDraft] = []
     private(set) var documentText = ""
@@ -179,6 +180,8 @@ final class DatabaseDataWorkspaceModel {
     var hasNextPage: Bool {
         nextContinuation != nil
     }
+
+    static let pageSizeOptions = [25, 50, 100]
 
     var isLoading: Bool {
         state == .loading
@@ -239,11 +242,7 @@ final class DatabaseDataWorkspaceModel {
     func defaultFilterOperator(
         for field: DatabaseFieldDescriptor
     ) -> DatabaseFilterOperator {
-        let type = field.typeName.lowercased()
-        if type.contains("char") || type.contains("text") || type.contains("string") {
-            return .contains
-        }
-        return .equal
+        DatabaseFilterOperatorPolicy.defaultOperator(product: activeProduct, field: field)
     }
 
     @discardableResult
@@ -264,7 +263,10 @@ final class DatabaseDataWorkspaceModel {
             ?? .contains
         let resolvedSensitivity =
             caseSensitivity
-            ?? Self.defaultCaseSensitivity(for: resolvedOperation)
+            ?? DatabaseFilterOperatorPolicy.defaultCaseSensitivity(
+                product: activeProduct,
+                field: descriptor,
+                operation: resolvedOperation)
         let clause = DatabaseWorkspaceFilterClause(
             field: normalizedField,
             operation: resolvedOperation,
@@ -289,6 +291,10 @@ final class DatabaseDataWorkspaceModel {
     }
 
     func setFilterConjunction(_ conjunction: DatabaseWorkspaceFilterConjunction) {
+        guard
+            conjunction == .and
+                || DatabaseFilterOperatorPolicy.supportsDisjunction(product: activeProduct)
+        else { return }
         guard filterConjunction != conjunction else { return }
         filterConjunction = conjunction
         resetBrowsePaging()
@@ -518,6 +524,12 @@ final class DatabaseDataWorkspaceModel {
         } else {
             browse(connection, appending: true)
         }
+    }
+
+    func setPageSize(_ size: Int) {
+        guard Self.pageSizeOptions.contains(size), pageSize != size else { return }
+        pageSize = size
+        resetBrowsePaging()
     }
 
     func selectRecord(at index: Int) {
@@ -1051,7 +1063,7 @@ final class DatabaseDataWorkspaceModel {
             throw DatabaseDataWorkspaceInputError.invalidQuery("Enter a query to run.")
         }
         let page = DatabasePageRequest(
-            pageSize: try DatabasePageSize(100),
+            pageSize: try DatabasePageSize(pageSize),
             continuation: continuation)
         switch connection.product {
         case .postgresql, .mysql, .mariaDB, .sqlite:
@@ -1120,7 +1132,7 @@ final class DatabaseDataWorkspaceModel {
         _ connection: DatabaseConnectionSummary,
         continuation: DatabaseContinuationToken?
     ) throws -> DatabaseBrowseRequest {
-        let pageSize = try DatabasePageSize(100)
+        let pageSize = try DatabasePageSize(pageSize)
         let filter = try workspaceFilter()
         let sorts = orderedSorts.map {
             DatabaseSort(field: fieldPath(named: $0.field), direction: $0.direction)
@@ -1151,6 +1163,32 @@ final class DatabaseDataWorkspaceModel {
             throw DatabaseDataWorkspaceInputError.invalidFilter(
                 "Choose a field for every enabled filter.")
         }
+        if let activeProduct,
+            let descriptor = fields.first(where: {
+                $0.path.segments.joined(separator: ".") == normalizedField
+            })
+        {
+            guard
+                DatabaseFilterOperatorPolicy.operators(
+                    product: activeProduct,
+                    field: descriptor
+                ).contains(clause.operation)
+            else {
+                throw DatabaseDataWorkspaceInputError.invalidFilter(
+                    "\(DatabaseFilterOperatorPolicy.title(product: activeProduct, operation: clause.operation)) is not available for \(descriptor.displayName)."
+                )
+            }
+            guard
+                clause.caseSensitivity == .productDefault
+                    || DatabaseFilterOperatorPolicy.supportsCaseSensitivity(
+                        product: activeProduct,
+                        field: descriptor,
+                        operation: clause.operation)
+            else {
+                throw DatabaseDataWorkspaceInputError.invalidFilter(
+                    "Case matching is not available for \(descriptor.displayName).")
+            }
+        }
         return .predicate(
             DatabaseFilterPredicate(
                 field: fieldPath(named: normalizedField),
@@ -1172,15 +1210,21 @@ final class DatabaseDataWorkspaceModel {
         let valueTexts: [String]
         switch clause.operation {
         case .in, .notIn, .between:
-            valueTexts = clause.valueText.split(separator: ",", omittingEmptySubsequences: true)
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            valueTexts = try Self.listValueTexts(
+                clause.valueText,
+                fieldName: fieldName)
         default:
             let value = clause.valueText.trimmingCharacters(in: .whitespacesAndNewlines)
             valueTexts = value.isEmpty ? [] : [value]
         }
         if clause.operation == .between, valueTexts.count != 2 {
             throw DatabaseDataWorkspaceInputError.invalidFilter(
-                "Enter two comma-separated values for the \(fieldName) filter.")
+                "Enter two values as a JSON array or comma-separated list for the \(fieldName) filter."
+            )
+        }
+        if [.in, .notIn].contains(clause.operation), valueTexts.count > 100 {
+            throw DatabaseDataWorkspaceInputError.invalidFilter(
+                "Use at most 100 values for the \(fieldName) filter.")
         }
         guard !valueTexts.isEmpty else {
             throw DatabaseDataWorkspaceInputError.invalidFilter(
@@ -1207,17 +1251,44 @@ final class DatabaseDataWorkspaceModel {
     }
 
     private func resetBrowsePaging() {
+        if isLoading {
+            cancel()
+        }
         nextContinuation = nil
     }
 
-    private static func defaultCaseSensitivity(
-        for operation: DatabaseFilterOperator
-    ) -> DatabaseFilterCaseSensitivity {
-        switch operation {
-        case .contains, .startsWith, .endsWith:
-            .insensitive
-        default:
-            .productDefault
+    private static func listValueTexts(
+        _ text: String,
+        fieldName: String
+    ) throws -> [String] {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("[") else {
+            return trimmed.split(separator: ",", omittingEmptySubsequences: true)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        }
+        guard let data = trimmed.data(using: .utf8),
+            let values = try? JSONSerialization.jsonObject(with: data) as? [Any]
+        else {
+            throw DatabaseDataWorkspaceInputError.invalidFilter(
+                "Enter a valid JSON array or comma-separated list for the \(fieldName) filter.")
+        }
+        return try values.map { value in
+            if let value = value as? String {
+                return value
+            }
+            if value is NSNull {
+                return "NULL"
+            }
+            guard value is NSNumber,
+                let data = try? JSONSerialization.data(
+                    withJSONObject: value,
+                    options: [.fragmentsAllowed]),
+                let text = String(data: data, encoding: .utf8)
+            else {
+                throw DatabaseDataWorkspaceInputError.invalidFilter(
+                    "Use only text, numbers, booleans, or null in the \(fieldName) list.")
+            }
+            return text
         }
     }
 

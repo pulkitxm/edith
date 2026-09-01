@@ -197,6 +197,17 @@ private actor HerdrWatchHarness {
         #expect(store.selectedTab == HerdrStore.boardID)
     }
 
+    @Test func closeAllReturnsToTheBoard() {
+        let store = seededStore()
+
+        #expect(store.canCloseAll)
+        store.closeAll()
+
+        #expect(store.tabs.isEmpty)
+        #expect(store.selectedTab == HerdrStore.boardID)
+        #expect(!store.canCloseAll)
+    }
+
     @Test func closeToTheRightDropsLaterTabs() {
         let store = seededStore()
         let first = store.tabs[0].id

@@ -603,6 +603,10 @@ final class HerdrStore {
         selectedTab = id
     }
 
+    func closeAll() {
+        closeWhere { _, _ in true }
+    }
+
     func closeToTheRight(of id: String) {
         if id == Self.boardID {
             closeWhere { _, _ in true }
@@ -619,6 +623,10 @@ final class HerdrStore {
 
     func canCloseOthers(besides id: String) -> Bool {
         id == Self.boardID ? !tabs.isEmpty : tabs.count > 1
+    }
+
+    var canCloseAll: Bool {
+        !tabs.isEmpty
     }
 
     func canCloseToTheRight(of id: String) -> Bool {
