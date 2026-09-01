@@ -70,6 +70,30 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(model.orderedSorts.map(\.summary) == ["name descending"])
     }
 
+    @Test("Page size choices are applied to browse and query requests")
+    func pageSizeSelection() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)]),
+            Self.queryResponse(records: [Self.record(2)]),
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.customers"
+        model.setPageSize(50)
+
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+        model.queryText = "SELECT * FROM public.customers"
+        model.setPageSize(25)
+        model.runQuery(connection)
+        await Self.waitUntil { model.state == .loaded && model.records == [Self.record(2)] }
+
+        let requests = await sender.recordedRequests()
+        #expect(requests[0].browseRequest?.page.pageSize.value == 50)
+        #expect(requests[1].queryRequest?.page.pageSize.value == 25)
+    }
+
     @Test("Structured filters build one conjunction level with ordered typed sorts")
     func structuredFiltersAndOrderedSorts() async throws {
         let sender = DatabaseDataScriptedSender(responses: [

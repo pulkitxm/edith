@@ -653,6 +653,35 @@ struct DatabaseWorkbenchView: View {
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
+                Menu {
+                    ForEach(DatabaseDataWorkspaceModel.pageSizeOptions, id: \.self) { size in
+                        Button {
+                            data.setPageSize(size)
+                            if workbenchMode == .query {
+                                data.runQuery(connection)
+                            } else {
+                                data.browse(connection)
+                            }
+                        } label: {
+                            if data.pageSize == size {
+                                Label("\(size) rows", systemImage: "checkmark")
+                            } else {
+                                Text("\(size) rows")
+                            }
+                        }
+                    }
+                } label: {
+                    Label("\(data.pageSize) per page", systemImage: "list.number")
+                        .font(.system(size: UIScale.pt(10), weight: .medium))
+                        .foregroundStyle(palette.inkFaint)
+                        .frame(minHeight: UIScale.pt(28))
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .disabled(data.isLoading)
+                .help("Rows fetched per database page")
+                .accessibilityLabel("Page size, \(data.pageSize) rows")
             }
             .padding(.horizontal, UIScale.pt(12))
             .frame(height: UIScale.pt(38))

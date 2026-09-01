@@ -146,6 +146,7 @@ final class DatabaseDataWorkspaceModel {
     private(set) var selectedRecordIndex: Int?
     private(set) var nextContinuation: DatabaseContinuationToken?
     private(set) var metadata: DatabasePageMetadata?
+    private(set) var pageSize = 100
     private(set) var editorMode: DatabaseRowEditorMode?
     private(set) var editorFields: [DatabaseRowFieldDraft] = []
     private(set) var documentText = ""
@@ -179,6 +180,8 @@ final class DatabaseDataWorkspaceModel {
     var hasNextPage: Bool {
         nextContinuation != nil
     }
+
+    static let pageSizeOptions = [25, 50, 100]
 
     var isLoading: Bool {
         state == .loading
@@ -518,6 +521,12 @@ final class DatabaseDataWorkspaceModel {
         } else {
             browse(connection, appending: true)
         }
+    }
+
+    func setPageSize(_ size: Int) {
+        guard Self.pageSizeOptions.contains(size), pageSize != size else { return }
+        pageSize = size
+        resetBrowsePaging()
     }
 
     func selectRecord(at index: Int) {
@@ -1051,7 +1060,7 @@ final class DatabaseDataWorkspaceModel {
             throw DatabaseDataWorkspaceInputError.invalidQuery("Enter a query to run.")
         }
         let page = DatabasePageRequest(
-            pageSize: try DatabasePageSize(100),
+            pageSize: try DatabasePageSize(pageSize),
             continuation: continuation)
         switch connection.product {
         case .postgresql, .mysql, .mariaDB, .sqlite:
@@ -1120,7 +1129,7 @@ final class DatabaseDataWorkspaceModel {
         _ connection: DatabaseConnectionSummary,
         continuation: DatabaseContinuationToken?
     ) throws -> DatabaseBrowseRequest {
-        let pageSize = try DatabasePageSize(100)
+        let pageSize = try DatabasePageSize(pageSize)
         let filter = try workspaceFilter()
         let sorts = orderedSorts.map {
             DatabaseSort(field: fieldPath(named: $0.field), direction: $0.direction)
