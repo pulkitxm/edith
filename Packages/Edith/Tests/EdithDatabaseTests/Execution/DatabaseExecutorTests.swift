@@ -1650,6 +1650,71 @@ private actor DatabaseExecutorBlockingSecretStore: DatabaseSecretStore {
         #expect(queryContinuations.first?.payload == adapterContinuation.payload)
     }
 
+    @Test func queryRejectsForgedProductLanguageAndTargetBeforeSessionLease() async throws {
+        let report = DatabaseExecutorFixtures.report(
+            identity: DatabaseExecutorFixtures.identity(),
+            includesQuery: true)
+        let fixture = try await DatabaseExecutorFixtures.make(report: report)
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let forgedInputs:
+            [(DatabaseQueryLanguage, DatabaseObjectIdentifier, String, DatabaseValue?)] = [
+                (
+                    .redisCommand,
+                    DatabaseObjectIdentifier(kind: .keyspace, path: ["0"]),
+                    "SCAN",
+                    nil
+                ),
+                (
+                    .mongoQuery,
+                    DatabaseObjectIdentifier(kind: .collection, path: ["app", "records"]),
+                    "find",
+                    .object([])
+                ),
+                (
+                    .searchQueryDSL,
+                    DatabaseObjectIdentifier(kind: .index, path: ["records"]),
+                    "search",
+                    .object([])
+                ),
+                (
+                    .clickHouseSQL,
+                    DatabaseObjectIdentifier(kind: .table, path: ["default", "records"]),
+                    "SELECT * FROM records",
+                    nil
+                ),
+            ]
+
+        for (index, forgedInput) in forgedInputs.enumerated() {
+            let target = DatabaseTargetIdentifier(
+                connectionID: fixture.connection.id,
+                object: forgedInput.1)
+            let result = await fixture.executor.query(
+                DatabaseQueryRequest(
+                    target: target,
+                    language: forgedInput.0,
+                    command: forgedInput.2,
+                    body: forgedInput.3,
+                    operation: DatabaseExecutorFixtures.operation(UInt8(66 + index))))
+
+            #expect(result.status == .failed)
+            #expect(result.error?.category == .invalidRequest)
+            #expect(
+                result.error?.message
+                    == "The query language does not match the database product.")
+            #expect(
+                result.error?.details
+                    == [
+                        DatabaseErrorDetail(name: "language", value: forgedInput.0.rawValue),
+                        DatabaseErrorDetail(
+                            name: "product",
+                            value: fixture.connection.productHint.rawValue),
+                    ])
+        }
+
+        #expect(await fixture.adapter.recordedInvocations().isEmpty)
+        #expect(await fixture.session.snapshot().invocations.isEmpty)
+    }
+
     @Test func connectionTestsAreEphemeralAcrossSuccessAndFailure() async throws {
         let fixture = try await DatabaseExecutorFixtures.make()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }

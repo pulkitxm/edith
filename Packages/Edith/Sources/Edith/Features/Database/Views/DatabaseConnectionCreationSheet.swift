@@ -2,11 +2,26 @@ import EdithDatabase
 import EdithKit
 import SwiftUI
 
+private enum DatabaseConnectionEntryMode: String, CaseIterable {
+    case url
+    case details
+
+    var title: String {
+        switch self {
+        case .url: "Connection URL"
+        case .details: "Enter details"
+        }
+    }
+}
+
 struct DatabaseConnectionCreationSheet: View {
     @Bindable var model: DatabaseConnectionCreationModel
     let saved: (DatabaseConnectionDefinition) -> Void
     let cancel: () -> Void
+    @State private var entryMode = DatabaseConnectionEntryMode.url
     @State private var revealsConnectionURL = false
+    @State private var showsAdvanced = false
+    @State private var submissionTask: Task<Void, Never>?
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         AppTheme.accent.rawValue
     @Environment(\.colorScheme) private var scheme
@@ -15,157 +30,250 @@ struct DatabaseConnectionCreationSheet: View {
     private var palette: DatabaseThemePalette {
         DatabaseThemePalette(dark: dark, theme: AppTheme(storedName: themeName))
     }
-    private var supportedURLProducts: String {
-        model.supportedProducts.map(\.displayName).formatted(.list(type: .and))
-    }
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.35)
             ScrollView {
-                VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                    section("Connection URL", symbol: "link") {
-                        connectionURLFields
-                    }
-                    section("Identity", symbol: "tag") {
-                        field("Connection name", required: true) {
-                            EdithTextField(
-                                placeholder: "Analytics staging",
-                                text: textBinding(\.displayName))
-                        }
-                        field("Database product", required: true) {
-                            Picker("Database product", selection: productBinding) {
-                                ForEach(model.supportedProducts, id: \.self) { product in
-                                    Text(product.displayName).tag(product)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: UIScale.pt(22)) {
+                    Picker("Connection setup", selection: $entryMode) {
+                        ForEach(DatabaseConnectionEntryMode.allCases, id: \.self) { mode in
+                            Text(mode.title).tag(mode)
                         }
                     }
-                    section("Endpoint", symbol: "network") {
-                        endpointFields
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(maxWidth: UIScale.pt(360))
+
+                    if entryMode == .url {
+                        urlSetup
+                    } else {
+                        detailsSetup
                     }
-                    if model.usesNetwork {
-                        section("Access", symbol: "key.horizontal") {
-                            accessFields
-                        }
+
+                    environmentSetup
+
+                    DisclosureGroup("Advanced options", isExpanded: $showsAdvanced) {
+                        advancedSetup
+                            .padding(.top, UIScale.pt(14))
                     }
-                    section("Safety", symbol: "checkmark.shield") {
-                        safetyFields
-                    }
+                    .font(.system(size: UIScale.pt(12), weight: .medium))
+                    .foregroundStyle(palette.inkSoft)
                 }
-                .padding(UIScale.pt(22))
+                .padding(UIScale.pt(24))
             }
             Divider().opacity(0.35)
             footer
         }
         .frame(
-            minWidth: UIScale.pt(480), idealWidth: UIScale.pt(620),
-            minHeight: UIScale.pt(520), idealHeight: UIScale.pt(680)
+            minWidth: UIScale.pt(420), idealWidth: UIScale.pt(560),
+            minHeight: UIScale.pt(480), idealHeight: UIScale.pt(640)
         )
         .background(palette.canvas)
+        .interactiveDismissDisabled(isWorking)
         .onDisappear {
+            submissionTask?.cancel()
+            submissionTask = nil
             Task { await model.discardUnsavedCredential() }
         }
     }
 
     private var header: some View {
         HStack(spacing: UIScale.pt(12)) {
-            ZStack {
-                RoundedRectangle(cornerRadius: UIScale.pt(10))
-                    .fill(palette.accent.opacity(0.12))
-                Image(systemName: "cylinder.split.1x2.fill")
-                    .font(.system(size: UIScale.pt(17), weight: .semibold))
-                    .foregroundStyle(palette.accent)
-            }
-            .frame(width: UIScale.pt(38), height: UIScale.pt(38))
+            Image(systemName: "plus.circle.fill")
+                .font(.system(size: UIScale.pt(24), weight: .semibold))
+                .foregroundStyle(palette.accent)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                Text("New database connection")
-                    .font(.system(size: UIScale.pt(16), weight: .semibold))
+                Text("Add connection")
+                    .font(.system(size: UIScale.pt(17), weight: .semibold))
                     .foregroundStyle(palette.ink)
-                Text("Paste a full URL or enter the connection details below.")
+                Text("Use a URL or individual fields to start.")
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(palette.inkFaint)
             }
             Spacer(minLength: 0)
-            Button("Cancel", action: cancel)
+            Button("Cancel", action: cancelSubmissionAndDismiss)
                 .buttonStyle(.edith(.borderless))
+                .disabled(isWorking)
         }
         .padding(.horizontal, UIScale.pt(22))
         .padding(.vertical, UIScale.pt(16))
-        .background(palette.panel.opacity(0.55))
+        .background(palette.panel.opacity(0.68))
     }
 
-    private var connectionURLFields: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            HStack(spacing: UIScale.pt(8)) {
-                Group {
-                    if revealsConnectionURL {
-                        TextField(
-                            "postgresql://user:password@host/database",
-                            text: connectionURLBinding)
-                    } else {
-                        SecureField(
-                            "postgresql://user:password@host/database",
-                            text: connectionURLBinding)
+    private var urlSetup: some View {
+        formSection(
+            "Paste a database URL",
+            detail: "Credentials stay in Keychain and are never shown on the connection card."
+        ) {
+            responsivePair {
+                pickerField("Database type", selection: productBinding) {
+                    ForEach(model.supportedProducts, id: \.self) { product in
+                        Text(product.displayName).tag(product)
                     }
                 }
-                .textFieldStyle(.plain)
-                .font(.system(size: UIScale.pt(12.5), design: .monospaced))
-                .foregroundStyle(palette.ink)
-                .edithFieldSurface(focused: false)
-                .onSubmit(model.applyConnectionURL)
-                Button {
-                    revealsConnectionURL.toggle()
-                } label: {
-                    Image(systemName: revealsConnectionURL ? "eye.slash" : "eye")
+            } second: {
+                field("Connection name") {
+                    EdithTextField(
+                        placeholder: "Filled from the URL",
+                        text: textBinding(\.displayName))
                 }
-                .buttonStyle(.edith(.borderless))
-                .help(revealsConnectionURL ? "Hide connection URL" : "Show connection URL")
-                .accessibilityLabel(
-                    revealsConnectionURL ? "Hide connection URL" : "Show connection URL")
-                Button("Use URL", action: model.applyConnectionURL)
-                    .buttonStyle(.edith(.secondary))
-                    .disabled(!model.canApplyConnectionURL)
             }
-            switch model.urlImportPhase {
-            case .editing:
-                Text("\(supportedURLProducts) URLs are supported.")
-                    .foregroundStyle(.secondary)
-            case .applied:
-                Label(
-                    "URL applied. Review the parsed details, then test the connection.",
-                    systemImage: "checkmark.circle.fill"
-                )
-                .foregroundStyle(DashSkin.ok)
-            case .failed(let detail):
-                Label(detail, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(DashSkin.danger)
+
+            field("Connection URL", required: true) {
+                HStack(spacing: UIScale.pt(8)) {
+                    Group {
+                        if revealsConnectionURL {
+                            TextField(
+                                "postgresql://user:password@host/database",
+                                text: connectionURLBinding)
+                        } else {
+                            SecureField(
+                                "postgresql://user:password@host/database",
+                                text: connectionURLBinding)
+                        }
+                    }
+                    .textFieldStyle(.plain)
+                    .font(.system(size: UIScale.pt(12), design: .monospaced))
+                    .foregroundStyle(palette.ink)
+                    .edithFieldSurface(focused: false)
+                    .onSubmit(model.applyConnectionURL)
+
+                    Button {
+                        revealsConnectionURL.toggle()
+                    } label: {
+                        Image(systemName: revealsConnectionURL ? "eye.slash" : "eye")
+                    }
+                    .buttonStyle(.edith(.borderless))
+                    .help(revealsConnectionURL ? "Hide connection URL" : "Show connection URL")
+                    .accessibilityLabel(
+                        revealsConnectionURL ? "Hide connection URL" : "Show connection URL")
+                }
+            }
+
+            urlImportStatus
+        }
+    }
+
+    private var detailsSetup: some View {
+        formSection(
+            "Connection details",
+            detail: "Use individual fields when you do not have a connection URL."
+        ) {
+            responsivePair {
+                pickerField("Database type", selection: productBinding) {
+                    ForEach(model.supportedProducts, id: \.self) { product in
+                        Text(product.displayName).tag(product)
+                    }
+                }
+            } second: {
+                field("Connection name", required: true) {
+                    EdithTextField(
+                        placeholder: "Analytics staging",
+                        text: textBinding(\.displayName))
+                }
+            }
+            endpointFields
+            if model.usesNetwork {
+                accessFields
             }
         }
-        .font(.system(size: UIScale.pt(10.5)))
+    }
+
+    private var environmentSetup: some View {
+        formSection(
+            "Environment",
+            detail:
+                "Development connections allow changes after a review. Production starts locked."
+        ) {
+            Picker("Environment", selection: environmentBinding) {
+                ForEach(DatabaseEnvironmentKind.allCases, id: \.self) { environment in
+                    Text(environment.title).tag(environment)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            if model.environmentKind == .production {
+                Label(
+                    "Production data changes are disabled until you explicitly change the policy.",
+                    systemImage: "lock.shield.fill"
+                )
+                .foregroundStyle(DashSkin.warn)
+            } else {
+                Label(
+                    "Every data change opens a review before it runs.",
+                    systemImage: "checkmark.shield.fill"
+                )
+                .foregroundStyle(palette.inkSoft)
+            }
+        }
+    }
+
+    private var advancedSetup: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(18)) {
+            if entryMode == .url, model.urlImportPhase == .applied {
+                formSection(
+                    "Parsed details",
+                    detail: "Review or adjust the endpoint and credentials extracted from the URL."
+                ) {
+                    endpointFields
+                    if model.usesNetwork {
+                        accessFields
+                    }
+                }
+            }
+
+            formSection(
+                "Data protection",
+                detail: "These policies are enforced by the shared command layer."
+            ) {
+                field("Environment label", required: true) {
+                    EdithTextField(
+                        placeholder: "Development",
+                        text: textBinding(\.environmentLabel))
+                }
+                responsivePair {
+                    pickerField("Protection", selection: enumBinding(\.environmentProtection)) {
+                        ForEach(DatabaseEnvironmentProtection.allCases, id: \.self) { protection in
+                            Text(protection.title).tag(protection)
+                        }
+                    }
+                } second: {
+                    pickerField("Data access", selection: enumBinding(\.readOnlyPolicy)) {
+                        ForEach(DatabaseReadOnlyPolicy.allCases, id: \.self) { policy in
+                            Text(policy.title).tag(policy)
+                        }
+                    }
+                }
+                pickerField("Mutation policy", selection: enumBinding(\.productionPolicy)) {
+                    ForEach(DatabaseProductionPolicy.allCases, id: \.self) { policy in
+                        Text(policy.title).tag(policy)
+                    }
+                }
+            }
+        }
     }
 
     @ViewBuilder
     private var endpointFields: some View {
         if model.usesNetwork {
-            HStack(alignment: .top, spacing: UIScale.pt(12)) {
+            responsivePair {
                 field("Host", required: true) {
                     EdithTextField(
                         placeholder: "127.0.0.1",
                         text: textBinding(\.host))
                 }
-                .frame(maxWidth: .infinity)
+            } second: {
                 field("Port", required: true) {
                     EdithTextField(
                         placeholder: "Port",
                         text: textBinding(\.port),
                         alignment: .trailing)
                 }
-                .frame(width: UIScale.pt(120))
+                .frame(maxWidth: UIScale.pt(150))
             }
         } else {
             field("SQLite file", required: true) {
@@ -182,13 +290,14 @@ struct DatabaseConnectionCreationSheet: View {
 
     private var accessFields: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            HStack(alignment: .top, spacing: UIScale.pt(12)) {
+            responsivePair {
                 field("Username", required: model.usernameRequired) {
                     EdithTextField(
                         placeholder: model.product == .redis || model.product == .valkey
                             ? "Optional ACL username" : "Database username",
                         text: textBinding(\.username))
                 }
+            } second: {
                 field("Password") {
                     SecureField("Optional password", text: textBinding(\.password))
                         .textFieldStyle(.plain)
@@ -197,12 +306,14 @@ struct DatabaseConnectionCreationSheet: View {
                         .edithFieldSurface(focused: false)
                 }
             }
+
             field(model.databaseLabel) {
                 EdithTextField(
                     placeholder: model.product == .redis || model.product == .valkey
                         ? "0" : "Optional default database",
                     text: textBinding(\.database))
             }
+
             if model.product == .mongoDB {
                 field("Authentication database", required: true) {
                     EdithTextField(
@@ -210,6 +321,7 @@ struct DatabaseConnectionCreationSheet: View {
                         text: textBinding(\.authenticationDatabase))
                 }
             }
+
             if model.supportsTLS {
                 Toggle(
                     "Require TLS with full certificate verification",
@@ -221,81 +333,46 @@ struct DatabaseConnectionCreationSheet: View {
         }
     }
 
-    private var safetyFields: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                pickerField("Environment", selection: environmentBinding) {
-                    ForEach(DatabaseEnvironmentKind.allCases, id: \.self) { environment in
-                        Text(environment.title).tag(environment)
-                    }
-                }
-                field("Environment label", required: true) {
-                    EdithTextField(
-                        placeholder: "Development",
-                        text: textBinding(\.environmentLabel))
-                }
-            }
-            HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                pickerField("Protection", selection: enumBinding(\.environmentProtection)) {
-                    ForEach(DatabaseEnvironmentProtection.allCases, id: \.self) { protection in
-                        Text(protection.title).tag(protection)
-                    }
-                }
-                pickerField("Data access", selection: enumBinding(\.readOnlyPolicy)) {
-                    ForEach(DatabaseReadOnlyPolicy.allCases, id: \.self) { policy in
-                        Text(policy.title).tag(policy)
-                    }
-                }
-            }
-            pickerField("Mutation policy", selection: enumBinding(\.productionPolicy)) {
-                ForEach(DatabaseProductionPolicy.allCases, id: \.self) { policy in
-                    Text(policy.title).tag(policy)
-                }
-            }
+    @ViewBuilder
+    private var urlImportStatus: some View {
+        switch model.urlImportPhase {
+        case .editing:
+            Text("The database type resolves URLs whose scheme is shared by several products.")
+                .foregroundStyle(palette.inkFaint)
+        case .applied:
+            Label(safeEndpointSummary, systemImage: "checkmark.circle.fill")
+                .foregroundStyle(DashSkin.ok)
+        case .failed(let detail):
+            Label(detail, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(DashSkin.danger)
         }
     }
 
     private var footer: some View {
-        HStack(spacing: UIScale.pt(10)) {
+        HStack(spacing: UIScale.pt(12)) {
             phaseStatus
             Spacer(minLength: UIScale.pt(12))
-            Button {
-                Task { await model.testConnection() }
-            } label: {
-                if model.phase == .testing {
+            Button(action: submit) {
+                if isWorking {
                     ProgressView().controlSize(.small)
                 } else {
-                    Text("Test connection")
+                    Text(model.canSave ? "Save connection" : "Test and save")
                 }
             }
-            .buttonStyle(.edith(.secondary))
-            .disabled(!model.canTest)
-            Button {
-                Task {
-                    if let connection = await model.saveConnection() {
-                        saved(connection)
-                    }
-                }
-            } label: {
-                if model.phase == .saving {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Text("Save connection")
-                }
-            }
-            .buttonStyle(.edith(.primary))
-            .disabled(!model.canSave)
+            .buttonStyle(.edith(.primary, tint: palette.accent))
+            .keyboardShortcut(.defaultAction)
+            .disabled(isWorking)
         }
         .padding(.horizontal, UIScale.pt(22))
         .padding(.vertical, UIScale.pt(14))
-        .background(palette.panel.opacity(0.55))
+        .background(palette.panel.opacity(0.68))
     }
 
     @ViewBuilder
     private var phaseStatus: some View {
         switch model.phase {
         case .editing:
-            status("Test required", symbol: "circle.dashed", color: palette.inkFaint)
+            EmptyView()
         case .testing:
             status(
                 "Testing connection", symbol: "arrow.triangle.2.circlepath",
@@ -313,31 +390,29 @@ struct DatabaseConnectionCreationSheet: View {
 
     private func status(_ text: String, symbol: String, color: Color) -> some View {
         Label(text, systemImage: symbol)
-            .font(.system(size: UIScale.pt(11), weight: .medium))
+            .font(.system(size: UIScale.pt(10.5), weight: .medium))
             .foregroundStyle(color)
             .lineLimit(2)
     }
 
-    private func section<Content: View>(
+    private func formSection<Content: View>(
         _ title: String,
-        symbol: String,
+        detail: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            Label(title, systemImage: symbol)
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
-                .foregroundStyle(palette.inkSoft)
-                .textCase(.uppercase)
-                .tracking(0.4)
+            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                Text(title)
+                    .font(.system(size: UIScale.pt(13), weight: .semibold))
+                    .foregroundStyle(palette.ink)
+                Text(detail)
+                    .font(.system(size: UIScale.pt(10.5)))
+                    .foregroundStyle(palette.inkFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(UIScale.pt(14))
-        .background(palette.panel, in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
-        .overlay {
-            RoundedRectangle(cornerRadius: UIScale.pt(12))
-                .stroke(palette.line, lineWidth: 1)
-        }
     }
 
     private func field<Content: View>(
@@ -365,6 +440,53 @@ struct DatabaseConnectionCreationSheet: View {
                 .pickerStyle(.menu)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private func responsivePair<First: View, Second: View>(
+        @ViewBuilder _ first: () -> First,
+        @ViewBuilder second: () -> Second
+    ) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: UIScale.pt(12)) {
+                first()
+                second()
+            }
+            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                first()
+                second()
+            }
+        }
+    }
+
+    private var safeEndpointSummary: String {
+        if model.product == .sqlite {
+            return model.path.isEmpty ? "SQLite connection details applied" : model.path
+        }
+        let namespace = model.database.isEmpty ? "" : " / \(model.database)"
+        return "\(model.product.displayName) · \(model.host):\(model.port)\(namespace)"
+    }
+
+    private var isWorking: Bool {
+        model.phase == .testing || model.phase == .saving
+    }
+
+    private func submit() {
+        submissionTask?.cancel()
+        let appliesPendingURL = entryMode == .url
+        submissionTask = Task {
+            guard
+                let connection = await model.testAndSaveConnection(
+                    applyPendingURL: appliesPendingURL),
+                !Task.isCancelled
+            else { return }
+            saved(connection)
+        }
+    }
+
+    private func cancelSubmissionAndDismiss() {
+        submissionTask?.cancel()
+        submissionTask = nil
+        cancel()
     }
 
     private var productBinding: Binding<DatabaseProduct> {

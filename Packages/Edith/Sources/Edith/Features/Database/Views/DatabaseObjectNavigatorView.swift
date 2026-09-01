@@ -78,7 +78,7 @@ struct DatabaseObjectNavigatorView: View {
         case .failed(let message) where explorer.groups.isEmpty:
             VStack(spacing: UIScale.pt(10)) {
                 Image(systemName: "exclamationmark.triangle")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DashSkin.warn)
                 Text(message)
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(.secondary)
@@ -160,7 +160,7 @@ struct DatabaseObjectNavigatorView: View {
             } label: {
                 Label(message, systemImage: "arrow.clockwise")
                     .font(.system(size: UIScale.pt(10.5)))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DashSkin.warn)
             }
             .buttonStyle(.edith(.borderless))
         }
