@@ -15,6 +15,18 @@ private enum DatabaseDocumentPresentation: CaseIterable {
     }
 }
 
+private enum DatabaseWorkbenchMode: String, CaseIterable {
+    case browse
+    case query
+
+    var title: String {
+        switch self {
+        case .browse: "Browse"
+        case .query: "Query"
+        }
+    }
+}
+
 struct DatabaseWorkbenchView: View {
     let connections: DatabaseConnectionWorkspaceModel
     let explorer: DatabaseObjectExplorerModel
@@ -26,6 +38,7 @@ struct DatabaseWorkbenchView: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
     @State private var documentPresentation = DatabaseDocumentPresentation.tree
+    @State private var workbenchMode = DatabaseWorkbenchMode.browse
 
     private var dark: Bool { scheme == .dark }
     private var palette: DatabaseThemePalette {
@@ -77,6 +90,7 @@ struct DatabaseWorkbenchView: View {
         case .connected:
             workspace(connection)
                 .task(id: connection.id) {
+                    workbenchMode = .browse
                     explorer.load(connection)
                 }
         case .disconnecting:
@@ -96,27 +110,36 @@ struct DatabaseWorkbenchView: View {
             if compact {
                 compactObjectPicker(connection)
                 Divider().opacity(0.35)
-                dataRegion(connection)
+                activeRegion(connection)
             } else if showsObjectNavigator {
                 HSplitView {
                     DatabaseObjectNavigatorView(
                         explorer: explorer,
                         connection: connection,
-                        open: { data.open($0, connection: connection) }
+                        open: { openObject($0, connection: connection) }
                     )
                     .frame(
                         minWidth: UIScale.pt(190), idealWidth: UIScale.pt(225),
                         maxWidth: UIScale.pt(300))
-                    dataRegion(connection)
+                    activeRegion(connection)
                         .frame(minWidth: UIScale.pt(460))
                 }
             } else {
-                dataRegion(connection)
+                activeRegion(connection)
             }
         }
         .onChange(of: explorer.selectedObject) { _, object in
             guard let object, data.selectedObject != object else { return }
-            data.open(object, connection: connection)
+            openObject(object, connection: connection)
+        }
+    }
+
+    @ViewBuilder
+    private func activeRegion(_ connection: DatabaseConnectionSummary) -> some View {
+        if workbenchMode == .browse {
+            dataRegion(connection)
+        } else {
+            queryRegion(connection)
         }
     }
 
@@ -132,7 +155,10 @@ struct DatabaseWorkbenchView: View {
         Group {
             if compact {
                 VStack(spacing: UIScale.pt(8)) {
-                    objectControls(connection)
+                    HStack(spacing: UIScale.pt(8)) {
+                        modePicker(connection)
+                        objectControls(connection)
+                    }
                     HStack(spacing: UIScale.pt(8)) {
                         filterControls(connection)
                         connectionActions(connection)
@@ -140,6 +166,8 @@ struct DatabaseWorkbenchView: View {
                 }
             } else {
                 HStack(spacing: UIScale.pt(8)) {
+                    modePicker(connection)
+                    Divider().frame(height: UIScale.pt(20))
                     objectControls(connection)
                     Divider().frame(height: UIScale.pt(20))
                     filterControls(connection)
@@ -148,6 +176,71 @@ struct DatabaseWorkbenchView: View {
             }
         }
         .padding(UIScale.pt(10))
+    }
+
+    private func queryRegion(_ connection: DatabaseConnectionSummary) -> some View {
+        VStack(spacing: 0) {
+            queryControls(connection)
+            Divider().opacity(0.35)
+            results(connection)
+        }
+    }
+
+    private func queryControls(_ connection: DatabaseConnectionSummary) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(9)) {
+            HStack(spacing: UIScale.pt(9)) {
+                modePicker(connection)
+                Label(selectedObjectTitle, systemImage: selectedObjectSymbol)
+                    .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                if connection.product == .elasticsearch || connection.product == .openSearch {
+                    Picker("Query operation", selection: searchQueryOperationBinding(connection)) {
+                        ForEach(DatabaseSearchQueryOperation.allCases, id: \.self) { operation in
+                            Text(operation.title).tag(operation)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                }
+                Text("Read only")
+                    .font(.system(size: UIScale.pt(10), weight: .medium))
+                    .foregroundStyle(palette.inkFaint)
+                Button("Run") {
+                    data.runQuery(connection)
+                }
+                .buttonStyle(.edith(.primary, tint: theme))
+                .keyboardShortcut(.return, modifiers: [.command])
+                .disabled(
+                    data.isLoading
+                        || data.queryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || explorer.selectedObject == nil)
+            }
+            TextEditor(text: queryTextBinding)
+                .font(.system(size: UIScale.pt(11.5), design: .monospaced))
+                .foregroundStyle(palette.ink)
+                .scrollContentBackground(.hidden)
+                .padding(UIScale.pt(7))
+                .frame(minHeight: UIScale.pt(86), maxHeight: UIScale.pt(150))
+                .background(palette.panel, in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                .overlay {
+                    RoundedRectangle(cornerRadius: UIScale.pt(8))
+                        .stroke(palette.line, lineWidth: 1)
+                }
+        }
+        .padding(UIScale.pt(10))
+        .background(palette.canvas)
+    }
+
+    private func modePicker(_ connection: DatabaseConnectionSummary) -> some View {
+        Picker("Workspace mode", selection: workbenchModeBinding(connection)) {
+            ForEach(DatabaseWorkbenchMode.allCases, id: \.self) { mode in
+                Text(mode.title).tag(mode)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.segmented)
+        .frame(width: UIScale.pt(142))
     }
 
     private func connectionActions(_ connection: DatabaseConnectionSummary) -> some View {
@@ -183,7 +276,7 @@ struct DatabaseWorkbenchView: View {
                     }
                 }
                 .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                .foregroundStyle(.orange)
+                .foregroundStyle(DashSkin.warn)
                 .help("Production connection")
                 .accessibilityLabel("Production connection")
             } else if connection.readOnlyPolicy != .disabled {
@@ -256,10 +349,19 @@ struct DatabaseWorkbenchView: View {
             Menu {
                 ForEach(explorer.groups) { group in
                     Section(group.title) {
+                        compactGroupAction(group, connection: connection)
                         ForEach(group.objects) { object in
                             Button(object.title) {
                                 explorer.select(object.identifier)
-                                data.open(object.identifier, connection: connection)
+                                openObject(object.identifier, connection: connection)
+                            }
+                        }
+                        if group.nextContinuation != nil {
+                            Button("Load more objects") {
+                                explorer.loadGroup(
+                                    group.identifier,
+                                    connection: connection,
+                                    appending: true)
                             }
                         }
                     }
@@ -269,7 +371,7 @@ struct DatabaseWorkbenchView: View {
                     .lineLimit(1)
             }
             .buttonStyle(.edith(.secondary))
-            .disabled(explorer.groups.allSatisfy { $0.objects.isEmpty })
+            .disabled(explorer.groups.isEmpty)
             Spacer(minLength: 0)
             Button {
                 explorer.load(connection, force: true)
@@ -282,6 +384,29 @@ struct DatabaseWorkbenchView: View {
         .padding(.horizontal, UIScale.pt(10))
         .frame(height: UIScale.pt(42))
         .background(palette.panel)
+    }
+
+    @ViewBuilder
+    private func compactGroupAction(
+        _ group: DatabaseExplorerGroup,
+        connection: DatabaseConnectionSummary
+    ) -> some View {
+        switch group.state {
+        case .idle:
+            Button("Load \(group.title)") {
+                explorer.loadGroup(group.identifier, connection: connection)
+            }
+        case .loading:
+            Label("Loading \(group.title)", systemImage: "arrow.triangle.2.circlepath")
+        case .loaded:
+            if group.objects.isEmpty {
+                Text("No objects")
+            }
+        case .failed:
+            Button("Retry \(group.title)") {
+                explorer.loadGroup(group.identifier, connection: connection)
+            }
+        }
     }
 
     private func filterControls(_ connection: DatabaseConnectionSummary) -> some View {
@@ -320,8 +445,16 @@ struct DatabaseWorkbenchView: View {
     private func results(_ connection: DatabaseConnectionSummary) -> some View {
         switch data.state {
         case .idle:
-            if explorer.state == .loading {
-                workingState("Loading objects", "Reading the first available database namespace.")
+            if workbenchMode == .query {
+                emptyState(
+                    symbol: "terminal",
+                    title: "Run a query",
+                    detail: "Use the native read-only editor above, then press Command-Return.")
+            } else if explorer.state == .loading {
+                workingState(
+                    "Loading objects",
+                    "Reading the first available database namespace.",
+                    cancel: explorer.cancel)
             } else {
                 emptyState(
                     symbol: "sidebar.left",
@@ -329,14 +462,25 @@ struct DatabaseWorkbenchView: View {
                     detail: "Choose a table or view from the object navigator.")
             }
         case .loading where data.records.isEmpty:
-            workingState("Loading data", "Fetching the first bounded page.")
+            workingState(
+                workbenchMode == .query ? "Running query" : "Loading data",
+                workbenchMode == .query
+                    ? "Fetching a bounded read-only result."
+                    : "Fetching the first bounded page.",
+                cancel: data.cancel)
         case .failed(let message) where data.records.isEmpty:
             emptyState(
                 symbol: "exclamationmark.triangle",
-                title: "Data unavailable",
+                title: workbenchMode == .query ? "Query unavailable" : "Data unavailable",
                 detail: message,
                 actionTitle: "Try again",
-                action: { data.browse(connection) })
+                action: {
+                    if workbenchMode == .query {
+                        data.runQuery(connection)
+                    } else {
+                        data.browse(connection)
+                    }
+                })
         case .loading, .loaded, .failed:
             populatedResults(connection)
         }
@@ -393,15 +537,27 @@ struct DatabaseWorkbenchView: View {
                     if data.selectedRecordIndex != index {
                         data.selectRecord(at: index)
                     }
-                    if data.supportsDataMutations(connection) {
+                    if workbenchMode == .browse, data.supportsDataMutations(connection) {
                         data.beginEditingSelectedRow(connection)
                     }
                 },
+                rowIsEditable: { index in
+                    workbenchMode == .browse
+                        && !mutations.hasTrackedMutation
+                        && data.fields.contains { field in
+                            data.canEdit(
+                                recordAt: index,
+                                field: field.path.segments.joined(separator: "."),
+                                connection: connection)
+                        }
+                },
                 canEdit: { index, field in
-                    !mutations.hasTrackedMutation
+                    workbenchMode == .browse
+                        && !mutations.hasTrackedMutation
                         && data.canEdit(recordAt: index, field: field, connection: connection)
                 },
                 edit: { index, field, text in
+                    guard workbenchMode == .browse else { return }
                     guard
                         let request = data.inlineMutationRequest(
                             recordAt: index,
@@ -412,13 +568,18 @@ struct DatabaseWorkbenchView: View {
                     mutations.requestSafetyReview(for: request)
                 },
                 sort: { field, direction in
+                    guard workbenchMode == .browse else { return }
                     data.sortField = field
                     data.sortDirection = direction
                     data.browse(connection)
                 })
             Divider().opacity(0.35)
             HStack(spacing: UIScale.pt(9)) {
-                if data.isLoading { ProgressView().controlSize(.small) }
+                if data.isLoading {
+                    ProgressView().controlSize(.small)
+                    Button("Cancel", action: data.cancel)
+                        .buttonStyle(.edith(.borderless))
+                }
                 Text(resultSummary)
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(.secondary)
@@ -464,7 +625,10 @@ struct DatabaseWorkbenchView: View {
                     .frame(width: UIScale.pt(120))
                 }
                 Spacer(minLength: 0)
-                if data.supportsDataMutations(connection), record.identity != nil {
+                if workbenchMode == .browse,
+                    data.supportsDataMutations(connection),
+                    record.identity != nil
+                {
                     Button("Edit") {
                         data.beginEditingSelectedRow(connection)
                     }
@@ -474,7 +638,7 @@ struct DatabaseWorkbenchView: View {
                         requestDelete(connection)
                     } label: {
                         Image(systemName: "trash")
-                            .foregroundStyle(.red)
+                            .foregroundStyle(DashSkin.danger)
                     }
                     .buttonStyle(.edith(.borderless))
                     .disabled(mutations.hasTrackedMutation)
@@ -544,7 +708,7 @@ struct DatabaseWorkbenchView: View {
                     if let error = data.editorError {
                         Label(error, systemImage: "exclamationmark.circle.fill")
                             .font(.system(size: UIScale.pt(11)))
-                            .foregroundStyle(.red)
+                            .foregroundStyle(DashSkin.danger)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     TextEditor(text: documentTextBinding)
@@ -566,7 +730,7 @@ struct DatabaseWorkbenchView: View {
                         if let error = data.editorError {
                             Label(error, systemImage: "exclamationmark.circle.fill")
                                 .font(.system(size: UIScale.pt(11)))
-                                .foregroundStyle(.red)
+                                .foregroundStyle(DashSkin.danger)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         ForEach(data.editorFields) { field in
@@ -637,13 +801,21 @@ struct DatabaseWorkbenchView: View {
         .opacity(field.isEditable ? 1 : 0.62)
     }
 
-    private func workingState(_ title: String, _ detail: String) -> some View {
+    private func workingState(
+        _ title: String,
+        _ detail: String,
+        cancel: (() -> Void)? = nil
+    ) -> some View {
         VStack(spacing: UIScale.pt(10)) {
             ProgressView()
             Text(title).font(.system(size: UIScale.pt(15), weight: .semibold))
             Text(detail)
                 .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(.secondary)
+            if let cancel {
+                Button("Cancel", action: cancel)
+                    .buttonStyle(.edith(.secondary))
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -676,6 +848,42 @@ struct DatabaseWorkbenchView: View {
 
     private var filterBinding: Binding<String> {
         Binding(get: { data.filterValue }, set: { data.filterValue = $0 })
+    }
+
+    private var queryTextBinding: Binding<String> {
+        Binding(get: { data.queryText }, set: { data.queryText = $0 })
+    }
+
+    private func searchQueryOperationBinding(
+        _ connection: DatabaseConnectionSummary
+    ) -> Binding<DatabaseSearchQueryOperation> {
+        Binding(
+            get: { data.searchQueryOperation },
+            set: { data.setSearchQueryOperation($0, connection: connection) })
+    }
+
+    private func workbenchModeBinding(
+        _ connection: DatabaseConnectionSummary
+    ) -> Binding<DatabaseWorkbenchMode> {
+        Binding(
+            get: { workbenchMode },
+            set: { mode in
+                guard workbenchMode != mode else { return }
+                workbenchMode = mode
+                guard let object = explorer.selectedObject else { return }
+                openObject(object, connection: connection)
+            })
+    }
+
+    private func openObject(
+        _ object: DatabaseObjectIdentifier,
+        connection: DatabaseConnectionSummary
+    ) {
+        if workbenchMode == .query {
+            data.prepareQuery(object, connection: connection)
+        } else {
+            data.open(object, connection: connection)
+        }
     }
 
     private func editorTextBinding(_ id: String) -> Binding<String> {

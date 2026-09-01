@@ -16,6 +16,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
     let text: (DatabaseValue) -> String
     let select: (Int) -> Void
     let open: (Int) -> Void
+    let rowIsEditable: (Int) -> Bool
     let canEdit: (Int, String) -> Bool
     let edit: (Int, String, String) -> Void
     let sort: (String, DatabaseSortDirection) -> Void
@@ -99,7 +100,9 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                     parent.records[row].identity == nil
                     ? nil
                     : NSImage(
-                        systemSymbolName: "key.fill", accessibilityDescription: "Editable row")
+                        systemSymbolName: "key.fill",
+                        accessibilityDescription: parent.rowIsEditable(row)
+                            ? "Editable row" : "Stable row key")
                 cell.imageView?.contentTintColor =
                     tableView.selectedRow == row ? NSColor(parent.accent) : .tertiaryLabelColor
                 textField.toolTip =

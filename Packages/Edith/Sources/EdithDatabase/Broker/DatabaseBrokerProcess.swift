@@ -185,6 +185,8 @@ enum DatabaseBrokerLiveAdapterFactory {
             MongoDBDatabaseAdapter(),
             ElasticsearchDatabaseAdapter(),
             OpenSearchDatabaseAdapter(),
+            ClickHouseDatabaseAdapter(),
+            MySQLDatabaseAdapter(),
             PostgreSQLDatabaseAdapter(),
         ]
     }

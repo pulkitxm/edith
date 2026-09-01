@@ -97,7 +97,10 @@ public enum DatabaseConnectionURLParser {
         preferredProduct: DatabaseProduct?
     ) throws -> DatabaseProduct {
         if scheme == "http" || scheme == "https" {
-            guard preferredProduct == .elasticsearch || preferredProduct == .openSearch else {
+            guard
+                preferredProduct == .elasticsearch || preferredProduct == .openSearch
+                    || preferredProduct == .clickHouse
+            else {
                 throw DatabaseConnectionURLError.unsupportedScheme(scheme)
             }
             return preferredProduct!
@@ -105,6 +108,8 @@ public enum DatabaseConnectionURLParser {
         return switch scheme {
         case "postgres", "postgresql":
             .postgresql
+        case "mysql":
+            .mysql
         case "redis", "rediss":
             .redis
         case "valkey", "valkeys":
@@ -115,6 +120,8 @@ public enum DatabaseConnectionURLParser {
             .elasticsearch
         case "opensearch", "opensearchs":
             .openSearch
+        case "clickhouse", "clickhouses":
+            .clickHouse
         case "sqlite", "sqlite3", "file":
             .sqlite
         default:
@@ -163,6 +170,18 @@ public enum DatabaseConnectionURLParser {
                 ["require", "verify-ca", "verify-full"].contains($0)
             } ?? false
         }
+        if product == .mysql {
+            let mode =
+                queryValue(named: "ssl-mode", in: components)
+                ?? queryValue(named: "sslMode", in: components)
+            if let mode {
+                return !["disabled", "preferred"].contains(mode.lowercased())
+            }
+            let value =
+                queryValue(named: "tls", in: components)
+                ?? queryValue(named: "ssl", in: components)
+            return value?.lowercased() == "true" || value == "1"
+        }
         if product == .mongoDB {
             let value =
                 queryValue(named: "tls", in: components)
@@ -171,6 +190,9 @@ public enum DatabaseConnectionURLParser {
         }
         if product == .elasticsearch || product == .openSearch {
             return scheme == "https" || scheme == "elasticsearchs" || scheme == "opensearchs"
+        }
+        if product == .clickHouse {
+            return scheme == "https" || scheme == "clickhouses"
         }
         return scheme == "rediss" || scheme == "valkeys"
     }

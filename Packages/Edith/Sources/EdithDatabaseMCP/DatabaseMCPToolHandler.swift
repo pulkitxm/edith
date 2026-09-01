@@ -15,6 +15,7 @@ public struct DatabaseMCPToolHandler: Sendable {
 
     private let sender: any DatabaseBrokerCommandSending
     private let makeOperationID: @Sendable () -> DatabaseOperationID
+    private let readScheduler = DatabaseMCPReadScheduler()
 
     public init(
         sender: any DatabaseBrokerCommandSending = DatabaseBrokerCommandClient(),
@@ -39,9 +40,17 @@ public struct DatabaseMCPToolHandler: Sendable {
             case .capabilities:
                 return try await capabilities(arguments: parameters.arguments ?? [:])
             case .browse:
-                return try await browse(arguments: parameters.arguments ?? [:])
+                let arguments = parameters.arguments ?? [:]
+                let connectionID = try Self.connectionID(in: arguments)
+                return try await readScheduler.run(connectionID: connectionID) {
+                    try await browse(arguments: arguments)
+                }
             case .query:
-                return try await query(arguments: parameters.arguments ?? [:])
+                let arguments = parameters.arguments ?? [:]
+                let connectionID = try Self.connectionID(in: arguments)
+                return try await readScheduler.run(connectionID: connectionID) {
+                    try await query(arguments: arguments)
+                }
             case .operations:
                 return try await operations(arguments: parameters.arguments ?? [:])
             case .cancelOperation:
@@ -150,7 +159,7 @@ public struct DatabaseMCPToolHandler: Sendable {
                 "connection_id", "object_kind", "object_path", "page_size", "continuation",
                 "timeout_ms",
             ])
-        let target = try Self.target(in: arguments, requiresObject: true)
+        let target = try Self.target(in: arguments, requiresObject: false)
         let response = try await sender.send(
             .browse(
                 DatabaseBrowseRequest(
@@ -1050,11 +1059,21 @@ public struct DatabaseMCPToolHandler: Sendable {
         requiresObject: Bool
     ) throws -> DatabaseTargetIdentifier {
         let connectionID = try connectionID(in: arguments)
+        let hasKind = arguments["object_kind"] != nil
+        let hasPath = arguments["object_path"] != nil
+        guard hasKind == hasPath else {
+            throw DatabaseMCPInputError(
+                message: "object_kind and object_path must be provided together.")
+        }
         let path = try stringArray("object_path", in: arguments)
         if requiresObject, path.isEmpty {
             throw DatabaseMCPInputError(message: "object_path must contain at least one item.")
         }
         guard !path.isEmpty else {
+            if hasPath {
+                throw DatabaseMCPInputError(
+                    message: "object_path must contain at least one item when provided.")
+            }
             return DatabaseTargetIdentifier(connectionID: connectionID)
         }
         let rawKind = try requiredString("object_kind", in: arguments)
@@ -1630,6 +1649,51 @@ public struct DatabaseMCPToolHandler: Sendable {
 
     private static func bounded(_ value: String) -> String {
         String(value.prefix(maximumTextCharacters))
+    }
+}
+
+private actor DatabaseMCPReadScheduler {
+    private struct Entry {
+        let token: UUID
+        let task: Task<Void, Never>
+    }
+
+    private var entries: [DatabaseConnectionID: Entry] = [:]
+
+    func run<Output: Sendable>(
+        connectionID: DatabaseConnectionID,
+        operation: @escaping @Sendable () async throws -> Output
+    ) async throws -> Output {
+        let previous = entries[connectionID]?.task
+        let token = UUID()
+        let task = Task<Output, any Error> {
+            if let previous {
+                await previous.value
+            }
+            try Task.checkCancellation()
+            return try await operation()
+        }
+        entries[connectionID] = Entry(
+            token: token,
+            task: Task { _ = await task.result })
+        do {
+            let output = try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
+            finish(connectionID: connectionID, token: token)
+            return output
+        } catch {
+            finish(connectionID: connectionID, token: token)
+            throw error
+        }
+    }
+
+    private func finish(connectionID: DatabaseConnectionID, token: UUID) {
+        if entries[connectionID]?.token == token {
+            entries[connectionID] = nil
+        }
     }
 }
 

@@ -12,8 +12,10 @@ struct DatabaseConnectionSummary: Identifiable, Equatable, Sendable {
     let environmentProtection: DatabaseEnvironmentProtection
     let readOnlyPolicy: DatabaseReadOnlyPolicy
     let productionPolicy: DatabaseProductionPolicy
+    let groupIdentity: String?
     let group: String?
     let tags: [String]
+    let color: String?
     let isFavorite: Bool
     let lastUsedAt: Date?
     let defaultDatabase: String?
@@ -34,10 +36,12 @@ struct DatabaseConnectionSummary: Identifiable, Equatable, Sendable {
         environmentProtection = definition.environment.protection
         readOnlyPolicy = definition.readOnlyPolicy
         productionPolicy = definition.productionPolicy
+        groupIdentity = definition.group
         group = DatabaseConnectionDisplayText.optional(definition.group)
         tags = definition.tags.prefix(8).map {
             DatabaseConnectionDisplayText.rendered($0, fallback: "Tag", limit: 96)
         }
+        color = DatabaseConnectionDisplayText.optional(definition.color)
         isFavorite = definition.isFavorite
         lastUsedAt = definition.lastUsedAt
         defaultDatabase = DatabaseConnectionDisplayText.optional(definition.namespaces.database)
@@ -63,6 +67,11 @@ struct DatabaseConnectionSummary: Identifiable, Equatable, Sendable {
     var productionSummary: String {
         productionPolicy.title
     }
+}
+
+struct DatabaseConnectionGroupOption: Identifiable, Equatable, Hashable, Sendable {
+    let id: String
+    let label: String
 }
 
 enum DatabaseConnectionDataQuality: Equatable, Sendable {
@@ -251,7 +260,11 @@ enum DatabaseCapabilityState: Equatable, Sendable {
 @MainActor
 @Observable
 final class DatabaseConnectionWorkspaceModel {
+    private static let connectionListLimit = 100
+
     var searchText = ""
+    var favoritesOnly = false
+    var selectedGroup: String?
     private(set) var listState = DatabaseConnectionListState.idle
     private(set) var selectedConnectionID: DatabaseConnectionID?
 
@@ -286,6 +299,23 @@ final class DatabaseConnectionWorkspaceModel {
         listState.connections
     }
 
+    var availableGroups: [DatabaseConnectionGroupOption] {
+        var groups: [String: DatabaseConnectionGroupOption] = [:]
+        for summary in summariesByID.values.prefix(Self.connectionListLimit) {
+            guard let identity = summary.groupIdentity, let label = summary.group else { continue }
+            groups[identity] = DatabaseConnectionGroupOption(id: identity, label: label)
+        }
+        var options = Array(groups.values)
+        options.sort {
+            let labelOrder = $0.label.localizedStandardCompare($1.label)
+            if labelOrder == .orderedSame {
+                return $0.id < $1.id
+            }
+            return labelOrder == .orderedAscending
+        }
+        return options
+    }
+
     var selectedConnection: DatabaseConnectionSummary? {
         guard let selectedConnectionID else { return nil }
         return summariesByID[selectedConnectionID]
@@ -315,6 +345,71 @@ final class DatabaseConnectionWorkspaceModel {
         announcement("Selected \(summariesByID[connectionID]?.name ?? "database connection").")
     }
 
+    func clearFilters() {
+        searchText = ""
+        favoritesOnly = false
+        selectedGroup = nil
+    }
+
+    func selectSavedConnection(_ connection: DatabaseConnectionDefinition) {
+        listGeneration = UUID()
+        let summary = DatabaseConnectionSummary(definition: connection)
+        summariesByID[connection.id] = summary
+        selectedConnectionID = connection.id
+        announcement("Selected \(summary.name).")
+    }
+
+    func applyManagedConnection(
+        _ connection: DatabaseConnectionDefinition,
+        disconnectsSession: Bool
+    ) {
+        listGeneration = UUID()
+        let summary = DatabaseConnectionSummary(definition: connection)
+        summariesByID[connection.id] = summary
+        if disconnectsSession {
+            invalidateManagedConnectionSession(connection.id)
+        }
+        replaceVisibleConnection(summary)
+        announcement("Updated \(summary.name).")
+    }
+
+    func invalidateManagedConnectionSession(_ connectionID: DatabaseConnectionID) {
+        sessionGenerations[connectionID] = UUID()
+        capabilityGenerations[connectionID] = UUID()
+        sessionStates[connectionID] = .disconnected
+        capabilityStates[connectionID] = .unavailable
+    }
+
+    func applyDuplicatedConnection(_ connection: DatabaseConnectionDefinition) {
+        listGeneration = UUID()
+        let summary = DatabaseConnectionSummary(definition: connection)
+        summariesByID[connection.id] = summary
+        let current = listState.connections
+        guard !current.contains(where: { $0.id == connection.id }) else { return }
+        setVisibleConnections(current + [summary])
+        announcement("Created \(summary.name).")
+    }
+
+    @discardableResult
+    func removeManagedConnection(_ connectionID: DatabaseConnectionID) -> DatabaseConnectionID? {
+        listGeneration = UUID()
+        let current = listState.connections
+        let removedIndex = current.firstIndex { $0.id == connectionID }
+        let remaining = current.filter { $0.id != connectionID }
+        summariesByID[connectionID] = nil
+        sessionGenerations[connectionID] = UUID()
+        capabilityGenerations[connectionID] = UUID()
+        sessionStates[connectionID] = nil
+        capabilityStates[connectionID] = nil
+        if selectedConnectionID == connectionID {
+            selectedConnectionID = remaining.first?.id
+        }
+        setVisibleConnections(remaining)
+        announcement("Removed database connection.")
+        guard let removedIndex, !remaining.isEmpty else { return remaining.first?.id }
+        return remaining[min(removedIndex, remaining.count - 1)].id
+    }
+
     func loadConnections() async {
         let generation = UUID()
         listGeneration = generation
@@ -330,11 +425,13 @@ final class DatabaseConnectionWorkspaceModel {
                     DatabaseConnectionListRequest(
                         search: DatabaseConnectionSearch(
                             text: search,
+                            group: selectedGroup,
+                            favoritesOnly: favoritesOnly,
                             order: .recentlyUsed,
-                            limit: 100))))
+                            limit: Self.connectionListLimit))))
             try Task.checkCancellation()
             guard listGeneration == generation else { return }
-            finishConnectionList(response, search: search)
+            finishConnectionList(response)
         } catch is CancellationError {
             guard listGeneration == generation else { return }
             listState = priorState
@@ -454,10 +551,7 @@ final class DatabaseConnectionWorkspaceModel {
         return value.isEmpty ? nil : DatabaseConnectionDisplayText.rendered(value, fallback: "")
     }
 
-    private func finishConnectionList(
-        _ response: DatabaseBrokerCommandResponse,
-        search: String?
-    ) {
+    private func finishConnectionList(_ response: DatabaseBrokerCommandResponse) {
         guard case .connectionList(let result) = response else {
             let message = "The database service returned an unexpected connection list response."
             listState = .failed(listState.connections, message)
@@ -485,8 +579,8 @@ final class DatabaseConnectionWorkspaceModel {
             listState = .stale(connections)
             announcement("Saved database connections loaded from stale information.")
         case .complete:
-            if connections.isEmpty, let search {
-                listState = .filteredEmpty(search)
+            if connections.isEmpty, let filterDescription {
+                listState = .filteredEmpty(filterDescription)
                 announcement("No saved database connections matched the search.")
             } else if connections.isEmpty {
                 listState = .empty
@@ -639,8 +733,51 @@ final class DatabaseConnectionWorkspaceModel {
         }
         if let first = connections.first {
             selectedConnectionID = first.id
-        } else if normalizedSearch == nil {
+        } else if !hasActiveFilters {
             selectedConnectionID = nil
+        }
+    }
+
+    private var hasActiveFilters: Bool {
+        normalizedSearch != nil || favoritesOnly || selectedGroup != nil
+    }
+
+    private var filterDescription: String? {
+        var values: [String] = []
+        if let normalizedSearch {
+            values.append(normalizedSearch)
+        }
+        if favoritesOnly {
+            values.append("favorites")
+        }
+        if let group = DatabaseConnectionDisplayText.optional(selectedGroup) {
+            values.append("group \(group)")
+        }
+        return values.isEmpty ? nil : values.joined(separator: ", ")
+    }
+
+    private func replaceVisibleConnection(_ connection: DatabaseConnectionSummary) {
+        let current = listState.connections
+        let updated = current.map { $0.id == connection.id ? connection : $0 }
+        if updated == current, !current.contains(where: { $0.id == connection.id }) {
+            setVisibleConnections(current + [connection])
+        } else {
+            setVisibleConnections(updated)
+        }
+    }
+
+    private func setVisibleConnections(_ connections: [DatabaseConnectionSummary]) {
+        switch listState {
+        case .idle, .empty, .filteredEmpty, .loaded:
+            listState = connections.isEmpty ? .empty : .loaded(connections)
+        case .loading:
+            listState = .loading(connections)
+        case .partial:
+            listState = .partial(connections)
+        case .stale:
+            listState = .stale(connections)
+        case .failed(_, let message):
+            listState = .failed(connections, message)
         }
     }
 

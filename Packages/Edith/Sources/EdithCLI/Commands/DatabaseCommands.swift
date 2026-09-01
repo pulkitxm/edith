@@ -553,7 +553,9 @@ struct DatabaseConnectionsAddCommand: AsyncParsableCommand {
 
     @Option(
         name: .long,
-        help: "Database product: postgresql, sqlite, redis, valkey, mongodb or elasticsearch.")
+        help:
+            "Database product: postgresql, sqlite, redis, valkey, mongodb, elasticsearch, opensearch or clickhouse."
+    )
     var product: String
 
     @Option(name: .long, help: "Network host. Defaults to 127.0.0.1.")

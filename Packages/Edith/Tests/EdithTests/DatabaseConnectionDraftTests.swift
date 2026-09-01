@@ -137,6 +137,48 @@ struct DatabaseConnectionDraftTests {
         #expect(authenticated.tls.verification == .full)
     }
 
+    @Test("ClickHouse requires a username and supports authenticated TLS")
+    func clickHouseConnections() throws {
+        let anonymous = try DatabaseConnectionDraft(
+            displayName: "TUF ClickHouse",
+            product: .clickHouse,
+            host: "127.0.0.1",
+            port: 58_123,
+            username: "default",
+            database: "analytics"
+        ).definition()
+        let reference = DatabaseSecretReference(identifier: UUID(), purpose: .password)
+        let authenticated = try DatabaseConnectionDraft(
+            displayName: "ClickHouse Cloud",
+            product: .clickHouse,
+            host: "analytics.example.com",
+            username: "edith",
+            database: "warehouse",
+            passwordReference: reference,
+            tlsMode: .required
+        ).definition()
+
+        #expect(anonymous.productHint == .clickHouse)
+        #expect(anonymous.username == "default")
+        #expect(anonymous.authentication.kind == .none)
+        #expect(anonymous.namespaces.database == "analytics")
+        #expect(authenticated.authentication.kind == .usernameAndPassword)
+        #expect(authenticated.authentication.secretReferences == [reference])
+        #expect(authenticated.tls.mode == .required)
+        #expect(authenticated.tls.verification == .full)
+    }
+
+    @Test("ClickHouse rejects a missing username")
+    func clickHouseMissingUsername() {
+        let draft = DatabaseConnectionDraft(
+            displayName: "ClickHouse",
+            product: .clickHouse)
+
+        #expect(throws: DatabaseConnectionDraftError.missingUsername) {
+            try draft.definition()
+        }
+    }
+
     @Test("SQLite uses its path and no credentials")
     func sqlite() throws {
         let draft = DatabaseConnectionDraft(
@@ -153,13 +195,21 @@ struct DatabaseConnectionDraftTests {
                     DatabaseSQLiteLocation(path: "/tmp/edith.sqlite", accessMode: .readOnly)))
     }
 
-    @Test("Unsupported live products are rejected")
-    func unsupportedProduct() {
-        let draft = DatabaseConnectionDraft(displayName: "MySQL", product: .mysql)
+    @Test("MySQL connections retain their database and TLS policy")
+    func mysql() throws {
+        let draft = DatabaseConnectionDraft(
+            displayName: "MySQL",
+            product: .mysql,
+            username: "edith",
+            database: "app",
+            tlsMode: .required)
 
-        #expect(throws: DatabaseConnectionDraftError.unsupportedProduct(.mysql)) {
-            try draft.definition()
-        }
+        let definition = try draft.definition()
+
+        #expect(definition.productHint == .mysql)
+        #expect(definition.namespaces.database == "app")
+        #expect(definition.authentication.kind == .none)
+        #expect(definition.tls.mode == .required)
     }
 
     @Test("Redis logical database must be canonical and bounded")

@@ -255,6 +255,7 @@ public actor DatabaseExecutor {
             try validator.validate(request)
             try await requireActiveOwner()
             let definition = try await connection(id: request.target.connectionID)
+            try validator.validate(request, connection: definition)
             return await execute(
                 operation: request.operation,
                 kind: .databaseQuery,

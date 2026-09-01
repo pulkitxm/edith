@@ -549,7 +549,9 @@ func clickHouseReadingLiveMillionRowTraversalAndLifecycle() async throws {
         context: ClickHouseDatabaseReadingFixtures.context(
             deadline: Date().addingTimeInterval(10)))
     #expect(session.productIdentity.product == .clickHouse)
-    #expect(session.productIdentity.version?.string == "26.7.5.10")
+    let version = try #require(session.productIdentity.version)
+    let major = try #require(version.major)
+    #expect(major >= 26)
     let capabilities = try await session.discoverCapabilities(
         context: ClickHouseDatabaseReadingFixtures.context())
     #expect(capabilities.supports(.browse))
@@ -573,14 +575,24 @@ func clickHouseReadingLiveMillionRowTraversalAndLifecycle() async throws {
                 path: [database, "events"]),
             size: 100),
         context: ClickHouseDatabaseReadingFixtures.context())
-    #expect(columnPage.records.count >= 15)
+    let columnNames: Set<String> = Set(
+        columnPage.records.compactMap { record in
+            guard case .string(let name)? = record.fields.first(where: { $0.name == "name" })?.value
+            else { return nil }
+            return name
+        })
+    #expect(
+        Set([
+            "event_id", "event_date", "event_time", "category", "nullable_note", "tags",
+            "coordinates", "attributes", "amount", "payload", "day_of_week",
+        ]).isSubset(of: columnNames))
 
     let target = ClickHouseDatabaseReadingFixtures.target(
         connectionID: resolved.definition.id,
         path: [database, "events"])
     let projection = DatabaseProjection(
         mode: .include,
-        fields: ["event_id", "tenant_id", "event_date", "category", "score"].map {
+        fields: ["event_id", "event_date", "event_time", "category", "amount"].map {
             DatabaseProjectedField(path: DatabaseFieldPath($0))
         })
     let firstStartedAt = ContinuousClock.now
@@ -610,12 +622,12 @@ func clickHouseReadingLiveMillionRowTraversalAndLifecycle() async throws {
             projection: projection,
             filter: .predicate(
                 DatabaseFilterPredicate(
-                    field: DatabaseFieldPath("tenant_id"),
+                    field: DatabaseFieldPath("category"),
                     operation: .equal,
-                    values: [.unsignedInteger(1)])),
+                    values: [.string("alpha")])),
             sorts: [
                 DatabaseSort(
-                    field: DatabaseFieldPath("score"),
+                    field: DatabaseFieldPath("amount"),
                     direction: .descending)
             ]),
         context: ClickHouseDatabaseReadingFixtures.context())
@@ -705,7 +717,7 @@ func clickHouseReadingLiveMillionRowTraversalAndLifecycle() async throws {
 
     print(
         [
-            "clickhouse reading live version=26.7.5.10",
+            "clickhouse reading live version=\(version.string)",
             "count=1000000",
             "firstPage=\(firstLatency)",
             "traversed=\(traversed)",

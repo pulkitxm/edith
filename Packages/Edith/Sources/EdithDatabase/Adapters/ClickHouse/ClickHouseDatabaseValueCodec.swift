@@ -250,10 +250,10 @@ enum ClickHouseDatabaseValueCodec {
         if let value = rawValue as? String {
             return textValue(value, type: type)
         }
-        if let value = rawValue as? Bool {
-            return .boolean(value)
-        }
         if let value = rawValue as? NSNumber {
+            if CFGetTypeID(value) == CFBooleanGetTypeID() {
+                return .boolean(value.boolValue)
+            }
             let text = value.stringValue
             if let integer = Int64(text) {
                 return .signedInteger(integer)
@@ -262,6 +262,9 @@ enum ClickHouseDatabaseValueCodec {
                 throw ClickHouseDatabaseValueCodecFailure.invalidResponse
             }
             return .floatingPoint(floatingPoint)
+        }
+        if let value = rawValue as? Bool {
+            return .boolean(value)
         }
         if let values = rawValue as? [Any] {
             guard values.count <= maximumCollectionElements else {

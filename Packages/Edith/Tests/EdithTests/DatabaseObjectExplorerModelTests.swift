@@ -219,6 +219,80 @@ struct DatabaseObjectExplorerModelTests {
             model.groups.first?.objects.map(\.identifier.kind) == [.index, .alias, .dataStream])
     }
 
+    @Test("ClickHouse discovers databases and lazily loads analytical objects")
+    func clickHouseDiscovery() async throws {
+        let sender = DatabaseObjectExplorerScriptedSender(responses: [
+            Self.response(records: [
+                Self.clickHouseDatabase("default"),
+                Self.clickHouseDatabase("app"),
+            ]),
+            Self.response(records: [
+                Self.clickHouseRelation(
+                    ".inner_id.hidden-storage", engine: "SummingMergeTree", rows: 365),
+                Self.clickHouseRelation("events", engine: "MergeTree", rows: 1_000_000),
+                Self.clickHouseRelation("daily_events", engine: "MaterializedView", rows: 365),
+                Self.clickHouseRelation("active_events", engine: "View", rows: nil),
+            ]),
+        ])
+        let model = DatabaseObjectExplorerModel(sender: sender)
+        let connection = try Self.connection(product: .clickHouse)
+
+        model.load(connection)
+        await Self.waitUntil {
+            model.groups.first(where: { $0.title == "app" })?.state == .loaded
+        }
+
+        let requests = await sender.recordedRequests().compactMap(\.browseRequest)
+        #expect(requests.count == 2)
+        #expect(requests[0].target.object == nil)
+        #expect(
+            requests[1].target.object
+                == DatabaseObjectIdentifier(kind: .database, path: ["app"]))
+        #expect(model.groups.map(\.title) == ["default", "app"])
+        #expect(model.groups.first?.state == .idle)
+        let objects = try #require(
+            model.groups.first(where: { $0.title == "app" })?.objects)
+        #expect(objects.map(\.identifier.kind) == [.table, .materializedView, .view])
+        #expect(
+            objects.map(\.identifier.path) == [
+                ["app", "events"], ["app", "daily_events"], ["app", "active_events"],
+            ])
+        #expect(objects.first?.estimatedRows == 1_000_000)
+        #expect(model.selectedObject == objects.first?.identifier)
+    }
+
+    @Test("MySQL discovers databases and loads tables from the preferred database")
+    func mysqlDiscovery() async throws {
+        let sender = DatabaseObjectExplorerScriptedSender(responses: [
+            Self.response(records: [
+                Self.mysqlDatabase("information_schema", system: true),
+                Self.mysqlDatabase("app", system: false),
+            ]),
+            Self.response(records: [
+                Self.relation("events", kind: .table),
+                Self.relation("active_events", kind: .view),
+            ]),
+        ])
+        let model = DatabaseObjectExplorerModel(sender: sender)
+        let connection = try Self.connection(product: .mysql)
+
+        model.load(connection)
+        await Self.waitUntil {
+            model.groups.first(where: { $0.title == "app" })?.state == .loaded
+        }
+
+        let requests = await sender.recordedRequests().compactMap(\.browseRequest)
+        #expect(requests.count == 2)
+        #expect(requests[0].target.object == nil)
+        #expect(
+            requests[1].target.object
+                == DatabaseObjectIdentifier(kind: .database, path: ["app"]))
+        let objects = try #require(model.groups.first(where: { $0.title == "app" })?.objects)
+        #expect(objects.map(\.identifier.kind) == [.table, .view])
+        #expect(objects.map(\.identifier.path) == [["app", "events"], ["app", "active_events"]])
+        #expect(model.selectedObject == objects.first?.identifier)
+    }
+
     private static func connection(
         product: DatabaseProduct,
         logicalDatabase: String? = nil
@@ -268,6 +342,36 @@ struct DatabaseObjectExplorerModelTests {
             DatabaseObjectField(name: "estimatedRows", value: .signedInteger(42)),
             DatabaseObjectField(name: "columnCount", value: .signedInteger(7)),
         ])
+    }
+
+    private static func clickHouseDatabase(_ name: String) -> DatabaseRecord {
+        DatabaseRecord(fields: [
+            DatabaseObjectField(name: "name", value: .string(name)),
+            DatabaseObjectField(name: "engine", value: .string("Atomic")),
+        ])
+    }
+
+    private static func mysqlDatabase(_ name: String, system: Bool) -> DatabaseRecord {
+        DatabaseRecord(fields: [
+            DatabaseObjectField(name: "name", value: .string(name)),
+            DatabaseObjectField(name: "system", value: .boolean(system)),
+        ])
+    }
+
+    private static func clickHouseRelation(
+        _ name: String,
+        engine: String,
+        rows: UInt64?
+    ) -> DatabaseRecord {
+        var fields = [
+            DatabaseObjectField(name: "database", value: .string("app")),
+            DatabaseObjectField(name: "name", value: .string(name)),
+            DatabaseObjectField(name: "engine", value: .string(engine)),
+        ]
+        if let rows {
+            fields.append(DatabaseObjectField(name: "total_rows", value: .unsignedInteger(rows)))
+        }
+        return DatabaseRecord(fields: fields)
     }
 
     private static func response(
