@@ -312,11 +312,13 @@ private actor MongoDBDatabaseAdapterTestClient: MongoDBDatabaseClient {
         firstRequest,
         context: MongoDBDatabaseAdapterFixtures.context())
 
-    #expect(first.records.compactMap { record in
-        guard case .string(let value)? = record.fields.first(where: { $0.name == "name" })?.value
-        else { return nil }
-        return value
-    } == ["events", "users"])
+    #expect(
+        first.records.compactMap { record in
+            guard
+                case .string(let value)? = record.fields.first(where: { $0.name == "name" })?.value
+            else { return nil }
+            return value
+        } == ["events", "users"])
     let continuation = try #require(first.nextContinuation)
     let secondRequest = try DatabaseAdapterPageRequest(
         target: target,
@@ -327,11 +329,13 @@ private actor MongoDBDatabaseAdapterTestClient: MongoDBDatabaseClient {
         secondRequest,
         context: MongoDBDatabaseAdapterFixtures.context())
 
-    #expect(second.records.compactMap { record in
-        guard case .string(let value)? = record.fields.first(where: { $0.name == "name" })?.value
-        else { return nil }
-        return value
-    } == ["audit"])
+    #expect(
+        second.records.compactMap { record in
+            guard
+                case .string(let value)? = record.fields.first(where: { $0.name == "name" })?.value
+            else { return nil }
+            return value
+        } == ["audit"])
     #expect(second.nextContinuation == nil)
     let plans = await client.discoveredCollectionPlans()
     #expect(plans.map(\.limit) == [3, 5])

@@ -148,7 +148,8 @@ public enum DatabaseConnectionURLParser {
             } ?? false
         }
         if product == .mongoDB {
-            let value = queryValue(named: "tls", in: components)
+            let value =
+                queryValue(named: "tls", in: components)
                 ?? queryValue(named: "ssl", in: components)
             return value?.lowercased() == "true" || value == "1"
         }

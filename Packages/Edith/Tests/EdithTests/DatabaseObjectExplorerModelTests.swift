@@ -91,7 +91,7 @@ struct DatabaseObjectExplorerModelTests {
             Self.response(records: [
                 Self.relation("customers", kind: .table),
                 Self.relation("active_customers", kind: .view),
-            ]),
+            ])
         ])
         let model = DatabaseObjectExplorerModel(sender: sender)
         let connection = try Self.connection(product: .sqlite)
@@ -114,7 +114,7 @@ struct DatabaseObjectExplorerModelTests {
     @Test("MongoDB discovers collections from its selected database")
     func mongoDBInitialDiscovery() async throws {
         let sender = DatabaseObjectExplorerScriptedSender(responses: [
-            Self.response(records: [Self.relation("events", kind: .collection)]),
+            Self.response(records: [Self.relation("events", kind: .collection)])
         ])
         let model = DatabaseObjectExplorerModel(sender: sender)
         let connection = try Self.connection(product: .mongoDB)
