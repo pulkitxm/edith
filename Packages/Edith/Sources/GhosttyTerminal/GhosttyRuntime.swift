@@ -35,6 +35,7 @@ public final class GhosttyRuntime {
     private let log = Logger(subsystem: "com.pulkit.edith", category: "ghostty")
     private var app: ghostty_app_t?
     private var config: ghostty_config_t?
+    private var ghosttyInitialized = false
     private var started = false
     private var tickScheduled = false
     private var observers: [NSObjectProtocol] = []
@@ -53,13 +54,15 @@ public final class GhosttyRuntime {
 
     public func start() {
         guard !started else { return }
-        started = true
         TerminalFontRegistry.register()
         GhosttyResourceLocator().configureEnvironment()
 
-        guard ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) == 0 else {
-            log.error("ghostty_init failed")
-            return
+        if !ghosttyInitialized {
+            guard ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) == 0 else {
+                log.error("ghostty_init failed")
+                return
+            }
+            ghosttyInitialized = true
         }
 
         guard let cfg = ghostty_config_new() else {
@@ -68,7 +71,6 @@ public final class GhosttyRuntime {
         }
         ghostty_config_load_default_files(cfg)
         ghostty_config_finalize(cfg)
-        config = cfg
 
         var runtime = ghostty_runtime_config_s()
         runtime.userdata = Unmanaged.passUnretained(self).toOpaque()
@@ -93,10 +95,13 @@ public final class GhosttyRuntime {
         }
 
         guard let created = ghostty_app_new(&runtime, cfg) else {
+            ghostty_config_free(cfg)
             log.error("ghostty_app_new failed")
             return
         }
+        config = cfg
         app = created
+        started = true
         ghostty_app_set_focus(created, NSApp.isActive)
         installApplicationObservers()
     }
