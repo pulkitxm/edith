@@ -417,16 +417,22 @@ struct AddMachineSheet: View {
             let connection = SSHConnection(machine: machine)
             do {
                 try await connection.connect()
+                let platform = await connection.remotePlatform ?? .linux
                 let result = try await connection.run(
-                    "uname -sr; id -un; command -v docker >/dev/null 2>&1 && echo docker-yes",
-                    timeout: 20)
+                    MachineConnectionProbe.command(platform: platform), timeout: 20)
                 await connection.disconnect()
                 guard !Task.isCancelled else { return }
-                let lines = result.stdoutText.split(separator: "\n").map(String.init)
+                guard result.succeeded else {
+                    let detail = result.stderrText.trimmingCharacters(
+                        in: .whitespacesAndNewlines)
+                    testState = .failure(detail.isEmpty ? "The connection probe failed." : detail)
+                    return
+                }
+                let facts = MachineConnectionProbe.parse(result.stdoutText)
                 var message = "Connected"
-                if let kernel = lines.first { message += " to \(kernel)" }
-                if lines.count > 1 { message += " as \(lines[1])" }
-                if lines.contains("docker-yes") { message += ". Docker found." }
+                if !facts.system.isEmpty { message += " to \(facts.system)" }
+                if !facts.user.isEmpty { message += " as \(facts.user)" }
+                if facts.dockerAvailable { message += ". Docker found." }
                 testState = .success(message)
             } catch {
                 await connection.disconnect()

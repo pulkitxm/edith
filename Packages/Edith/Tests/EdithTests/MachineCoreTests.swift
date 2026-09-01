@@ -121,6 +121,29 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
         #expect(!SSHConnection.supportsPlatform("FreeBSD"))
         #expect(!SSHConnection.supportsPlatform(""))
     }
+
+    @Test func connectionProbeUsesNativeCommandsForEveryPlatform() {
+        let linux = MachineConnectionProbe.command(platform: .linux)
+        let windows = MachineConnectionProbe.command(platform: .windows)
+        let windowsScript = decodedMachinePowerShell(windows)
+
+        #expect(linux.contains("uname -sr"))
+        #expect(linux.contains("command -v docker"))
+        #expect(windows.hasPrefix("powershell.exe "))
+        #expect(!windows.contains("uname"))
+        #expect(!windows.contains("/dev/null"))
+        #expect(windowsScript?.contains("Get-Command docker.exe") == true)
+        #expect(windowsScript?.contains("Environment]::UserName") == true)
+    }
+
+    @Test func connectionProbeParsesWindowsLineEndings() {
+        let result = MachineConnectionProbe.parse(
+            "Microsoft Windows 11\r\npulkit\r\ndocker-yes\r\n")
+
+        #expect(result.system == "Microsoft Windows 11")
+        #expect(result.user == "pulkit")
+        #expect(result.dockerAvailable)
+    }
 }
 
 @Suite struct PowerShellTests {
