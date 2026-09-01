@@ -54,6 +54,7 @@ public final class GhosttyRuntime {
         guard !started else { return }
         started = true
         TerminalFontRegistry.register()
+        GhosttyResourceLocator().configureEnvironment()
 
         guard ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) == 0 else {
             log.error("ghostty_init failed")
