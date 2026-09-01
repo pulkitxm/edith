@@ -304,8 +304,16 @@ import Testing
             return
         }
         #expect(snapshot.capabilities.count == 2)
+        #expect(snapshot.capabilities.map(\.capabilityID) == [.browse, .delete])
+        #expect(snapshot.supports(.browse))
+        #expect(!snapshot.supports(.delete))
+        #expect(model.selectedConnectionSupports(.browse))
+        #expect(!model.selectedConnectionSupports(.delete))
         #expect(
-            snapshot.capabilities.last?.unavailableReason
+            snapshot.unavailableReason(for: .delete)
+                == "DELETE permission is unavailable.")
+        #expect(
+            model.selectedConnectionUnavailableReason(for: .delete)
                 == "DELETE permission is unavailable.")
         #expect(capabilityQuality == .complete)
 
