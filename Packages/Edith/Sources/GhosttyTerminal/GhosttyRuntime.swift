@@ -85,8 +85,8 @@ public final class GhosttyRuntime {
         runtime.confirm_read_clipboard_cb = { userdata, confirmation, state, request in
             GhosttyRuntime.confirmClipboard(userdata, confirmation, state, request)
         }
-        runtime.write_clipboard_cb = { _, location, content, count, confirm in
-            GhosttyRuntime.writeClipboard(location, content, count, confirm)
+        runtime.write_clipboard_cb = { userdata, location, content, count, confirm in
+            GhosttyRuntime.writeClipboard(userdata, location, content, count, confirm)
         }
         runtime.close_surface_cb = { userdata, processAlive in
             GhosttySurfaceRegistry.shared.close(userdata, processAlive: processAlive)
@@ -385,7 +385,7 @@ public final class GhosttyRuntime {
     }
 
     private static func writeClipboard(
-        _ location: ghostty_clipboard_e,
+        _ userdata: UnsafeMutableRawPointer?, _ location: ghostty_clipboard_e,
         _ content: UnsafePointer<ghostty_clipboard_content_s>?, _ count: Int, _ confirm: Bool
     ) {
         guard location == GHOSTTY_CLIPBOARD_STANDARD else { return }
@@ -397,7 +397,9 @@ public final class GhosttyRuntime {
         }
         let detail = confirmationDetail(
             TerminalClipboardRead(entries: entries, availableMIMEs: []))
-        DispatchQueue.main.async {
+        let view = GhosttySurfaceRegistry.shared.view(userdata)
+        DispatchQueue.main.async { [weak view] in
+            guard let view else { return }
             let alert = NSAlert()
             alert.messageText = "Allow terminal to change the clipboard?"
             alert.informativeText = detail
@@ -408,7 +410,7 @@ public final class GhosttyRuntime {
                 guard response == .alertFirstButtonReturn else { return }
                 TerminalClipboard.write(entries, to: .general)
             }
-            if let window = NSApp.keyWindow {
+            if let window = view.window {
                 alert.beginSheetModal(for: window, completionHandler: finish)
             } else {
                 finish(alert.runModal())
