@@ -3,7 +3,7 @@ import EdithKit
 
 @MainActor
 final class SystemStatsStatusItem: NSObject, FeatureModule {
-    private let item: NSStatusItem
+    private var item: NSStatusItem!
     private var timer: Timer?
     private var previous: CPUTicks?
     private var sleepObservers: [NSObjectProtocol] = []
@@ -14,12 +14,16 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     private var percentAttributes: [NSAttributedString.Key: Any] = [:]
 
     override init() {
-        item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.autosaveName = "systemStats"
         super.init()
-        StatusItemMenu.attach(to: item, target: self, action: #selector(clicked))
+        ensureStyleCache()
         previous = SystemStatsReader.readCPUTicks()
-        update()
+        let initialTitle = title(cpu: 0, memory: SystemStatsReader.memoryUsedPercent())
+        let sizingTitle = title(cpu: 100, memory: 100)
+        item = NSStatusBar.system.statusItem(
+            withLength: StatusItemSizing.titleLength(sizingTitle))
+        item.autosaveName = "systemStats"
+        StatusItemMenu.attach(to: item, target: self, action: #selector(clicked))
+        item.button?.attributedTitle = initialTitle
         startTimer()
         let workspace = NSWorkspace.shared.notificationCenter
         sleepObservers = [
@@ -91,11 +95,15 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         }
         let memory = SystemStatsReader.memoryUsedPercent()
         ensureStyleCache()
+        item.button?.attributedTitle = title(cpu: cpu, memory: memory)
+    }
+
+    private func title(cpu: Double, memory: Double) -> NSAttributedString {
         let title = NSMutableAttributedString()
         appendStat(symbol: "cpu", value: cpu, into: title)
         title.append(NSAttributedString(string: "  "))
         appendStat(symbol: "memorychip", value: memory, into: title)
-        item.button?.attributedTitle = title
+        return title
     }
 
     private func ensureStyleCache() {
