@@ -2,7 +2,7 @@ import Foundation
 
 struct MySQLDatabaseAdapter: DatabaseAdapter {
     let id: DatabaseAdapterID = "mysql"
-    let products: Set<DatabaseProduct> = [.mysql]
+    let products: Set<DatabaseProduct> = [.mysql, .mariaDB]
     private let connector: MySQLDatabaseClientConnector
 
     init(
@@ -72,7 +72,9 @@ actor MySQLDatabaseAdapterSession: DatabaseAdapterSession {
             throw MySQLDatabaseAdapterSupport.connectionFailed
         }
         try await MySQLDatabaseAdapterSupport.check(context)
-        let report = MySQLDatabaseAdapterSupport.capabilityReport(identity: productIdentity)
+        let report = MySQLDatabaseAdapterSupport.capabilityReport(
+            identity: productIdentity,
+            connection: connection)
         try DatabaseAdapterBounds.validate(report: report, identity: productIdentity)
         return report
     }
@@ -117,15 +119,40 @@ actor MySQLDatabaseAdapterSession: DatabaseAdapterSession {
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseDestructivePlan {
         try await requireAvailableContext(context)
-        throw MySQLDatabaseAdapterSupport.capabilityUnavailable
+        return try MySQLDatabaseMutationSupport.normalize(
+            request,
+            connectionID: connection.id,
+            product: productIdentity.product)
     }
 
     func executeMutation(
         _ plan: DatabaseDestructivePlan,
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterMutationResult {
-        try await requireAvailableContext(context)
-        throw MySQLDatabaseAdapterSupport.capabilityUnavailable
+        let mutation = try MySQLDatabaseMutationSupport.executionPlan(
+            plan,
+            connectionID: connection.id,
+            product: productIdentity.product)
+        let result = try await perform(
+            context: context,
+            fallback: MySQLDatabaseAdapterSupport.mutationFailed
+        ) { client in
+            try await client.executeMutation(mutation)
+        }
+        guard result.affectedRows == 1 else {
+            return try DatabaseAdapterMutationResult(
+                disposition: .completed,
+                effect: .notApplied,
+                affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .exact),
+                error: DatabaseErrorEnvelope(
+                    category: .conflict,
+                    message: "The row no longer matched the requested mutation.",
+                    productCode: "mysql.mutation.row_not_found"))
+        }
+        return try DatabaseAdapterMutationResult(
+            disposition: .completed,
+            effect: .applied,
+            affectedRecords: DatabaseCountMetadata(value: 1, accuracy: .exact))
     }
 
     func openStream(
@@ -374,6 +401,19 @@ enum MySQLDatabaseAdapterSupport {
             productCode: "mysql.query.failed",
             retry: DatabaseRetryGuidance(action: .retry)))
 
+    static let invalidMutation = DatabaseAdapterFailure.reported(
+        DatabaseErrorEnvelope(
+            category: .invalidRequest,
+            message: "The MySQL row mutation is invalid.",
+            productCode: "mysql.mutation.invalid"))
+
+    static let mutationFailed = DatabaseAdapterFailure.reported(
+        DatabaseErrorEnvelope(
+            category: .server,
+            message: "MySQL could not apply the row mutation.",
+            productCode: "mysql.mutation.failed",
+            retry: DatabaseRetryGuidance(action: .retry)))
+
     static let readOnlyViolation = DatabaseAdapterFailure.reported(
         DatabaseErrorEnvelope(
             category: .readOnlyViolation,
@@ -423,7 +463,7 @@ enum MySQLDatabaseAdapterSupport {
             let client = try await connector(plan)
             do {
                 let identity = try await client.discoverIdentity()
-                guard identity.product == .mysql else {
+                guard identity.product == plan.product else {
                     throw connectionFailed
                 }
                 return MySQLDatabaseEstablishedClient(client: client, identity: identity)
@@ -499,7 +539,7 @@ enum MySQLDatabaseAdapterSupport {
     ) throws(DatabaseAdapterFailure) -> MySQLDatabaseConnectionPlan {
         let definition = resolved.definition
         guard definition.version == DatabaseConnectionDefinition.schemaVersion,
-            definition.productHint == .mysql,
+            definition.productHint == .mysql || definition.productHint == .mariaDB,
             definition.tunnel == nil,
             definition.options.isEmpty,
             definition.namespaces.logicalDatabase == nil,
@@ -532,6 +572,7 @@ enum MySQLDatabaseAdapterSupport {
             configured: definition.limits.connectionTimeout.milliseconds,
             deadline: context.deadline)
         return MySQLDatabaseConnectionPlan(
+            product: definition.productHint,
             host: endpoint.host,
             port: endpoint.port.value,
             username: username,
@@ -543,11 +584,12 @@ enum MySQLDatabaseAdapterSupport {
     }
 
     static func capabilityReport(
-        identity: DatabaseProductIdentity
+        identity: DatabaseProductIdentity,
+        connection: DatabaseConnectionDefinition
     ) -> DatabaseCapabilityReport {
         let pendingReason = DatabaseCapabilityUnavailableReason(
             category: .notImplemented,
-            message: "This capability is pending a MySQL adapter extension.")
+            message: "This capability is pending an adapter extension.")
         let available: [(DatabaseCapabilityID, DatabaseCapabilityRequirement)] = [
             (.connectionTest, .sharedRequired),
             (.objectDiscovery, .sharedRequired),
@@ -556,11 +598,36 @@ enum MySQLDatabaseAdapterSupport {
             (.queryCancellation, .sharedRequired),
             (.browse, .sharedRequired),
         ]
+        let serverReadOnly =
+            identity.topology.attributes.contains(where: {
+                ($0.name == "readOnly" || $0.name == "superReadOnly") && $0.value == "true"
+            })
+        let policyAllowsMutations =
+            connection.readOnlyPolicy != .required
+            && connection.environment.protection != .readOnly
+            && connection.productionPolicy != .prohibitMutations
+        let mutationsAvailable = policyAllowsMutations && !serverReadOnly
+        let mutationReason: DatabaseCapabilityUnavailableReason? =
+            if !policyAllowsMutations {
+                DatabaseCapabilityUnavailableReason(
+                    category: .connectionPolicy,
+                    message: "This connection policy does not allow data mutations.")
+            } else if serverReadOnly {
+                DatabaseCapabilityUnavailableReason(
+                    category: .topology,
+                    message: "The connected server reports read-only mode.")
+            } else {
+                nil
+            }
+        let mutations = [DatabaseCapabilityID.insert, .update, .delete].map { identifier in
+            DatabaseCapabilityStatus(
+                id: identifier,
+                requirement: .sharedRequired,
+                availability: mutationsAvailable ? .available : .unavailable,
+                reason: mutationReason)
+        }
         let pending: [(DatabaseCapabilityID, DatabaseCapabilityRequirement)] = [
             (.explain, .familyRequired),
-            (.insert, .sharedRequired),
-            (.update, .sharedRequired),
-            (.delete, .sharedRequired),
             (.bulkMutation, .sharedRequired),
             (.importData, .sharedRequired),
             (.exportData, .sharedRequired),
@@ -576,6 +643,7 @@ enum MySQLDatabaseAdapterSupport {
                     requirement: requirement,
                     availability: .available)
             }
+            + mutations
             + pending.map { identifier, requirement in
                 DatabaseCapabilityStatus(
                     id: identifier,
@@ -583,16 +651,15 @@ enum MySQLDatabaseAdapterSupport {
                     availability: .planned,
                     reason: pendingReason)
             }
-        let readOnly =
-            identity.topology.attributes.first(where: { $0.name == "readOnly" })?
-            .value == "true"
         return DatabaseCapabilityReport(
             productIdentity: identity,
             capabilities: statuses,
-            transactionModes: [.explicit, .savepoints],
+            pagingModes: [.keyset],
+            mutationModes: mutationsAvailable ? [.singleRecord] : [],
+            transactionModes: mutationsAvailable ? [.implicit] : [],
             cancellationModes: [.cooperative],
-            safetyLimitations: readOnly
-                ? ["The connected MySQL server reports read-only mode."] : [],
+            safetyLimitations: serverReadOnly
+                ? ["The connected server reports read-only mode."] : [],
             discoveredAt: Date())
     }
 
@@ -614,6 +681,8 @@ enum MySQLDatabaseAdapterSupport {
                     message: "The endpoint is not a MySQL server.",
                     productCode: "mysql.product." + product.rawValue,
                     retry: DatabaseRetryGuidance(action: .userDecision)))
+        case .invalidRequest:
+            return invalidMutation
         case let .permission(code):
             return .reported(
                 DatabaseErrorEnvelope(

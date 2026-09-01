@@ -44,6 +44,9 @@ enum MySQLDatabaseFoundationFixtures {
         tls: DatabaseTLSConfiguration = DatabaseTLSConfiguration(
             mode: .disabled,
             verification: .none),
+        readOnlyPolicy: DatabaseReadOnlyPolicy = .required,
+        productionPolicy: DatabaseProductionPolicy = .prohibitMutations,
+        environmentProtection: DatabaseEnvironmentProtection = .readOnly,
         options: [DatabaseNonSecretOption] = []
     ) throws -> DatabaseConnectionDefinition {
         let effectiveEndpoints =
@@ -67,12 +70,12 @@ enum MySQLDatabaseFoundationFixtures {
                 connectionTimeout: try DatabaseTimeout(milliseconds: 2_000),
                 operationTimeout: try DatabaseTimeout(milliseconds: 3_000),
                 poolSize: try DatabasePoolSize(2)),
-            readOnlyPolicy: .required,
-            productionPolicy: .prohibitMutations,
+            readOnlyPolicy: readOnlyPolicy,
+            productionPolicy: productionPolicy,
             environment: DatabaseEnvironmentMetadata(
                 kind: .testing,
                 label: "Testing",
-                protection: .readOnly),
+                protection: environmentProtection),
             options: options,
             createdAt: Date(timeIntervalSince1970: 1_800_000_000),
             updatedAt: Date(timeIntervalSince1970: 1_800_000_000))
@@ -321,11 +324,36 @@ private actor MySQLDatabaseFoundationTestClient: MySQLDatabaseClient {
     #expect(replica.topology.nodeCount == nil)
 }
 
-@Test func mysqlFoundationRejectsMariaDBAndUnboundedIdentity() throws {
-    #expect(throws: MySQLDatabaseDriverFailure.incompatibleProduct(.mariaDB)) {
-        try MySQLDatabaseDriverSupport.requireMySQL(
-            ("11.8.3-MariaDB", "MariaDB Server"))
-    }
+@Test func mysqlFoundationDetectsMariaDBAndRejectsUnboundedIdentity() throws {
+    #expect(
+        try MySQLDatabaseDriverSupport.product(
+            ("11.8.3-MariaDB", "MariaDB Server")) == .mariaDB)
+    #expect(
+        try MySQLDatabaseDriverSupport.product(
+            ("8.4.6", "MySQL Community Server - GPL")) == .mysql)
+    let mariaDBIdentity = try MySQLDatabaseDriverSupport.identity(
+        MySQLDatabaseIdentityValues(
+            version: "11.8.3-MariaDB",
+            versionComment: "MariaDB Server",
+            database: "edith_lab",
+            hostName: "mariadb-test",
+            serverUUID: "7",
+            readOnly: false,
+            superReadOnly: false,
+            defaultStorageEngine: "InnoDB",
+            characterSet: "utf8mb4",
+            collation: "utf8mb4_general_ci",
+            compileMachine: "aarch64",
+            compileOS: "Linux",
+            tlsCipher: "",
+            groupMemberCount: 0,
+            localMemberRole: "",
+            groupReplicaCount: 0,
+            replicaChannelCount: 0),
+        product: .mariaDB)
+    #expect(mariaDBIdentity.product == .mariaDB)
+    #expect(mariaDBIdentity.distribution == "MariaDB")
+    #expect(mariaDBIdentity.topology.kind == .unknown)
     #expect(throws: MySQLDatabaseDriverFailure.server(nil)) {
         var values = MySQLDatabaseFoundationFixtures.values
         values = MySQLDatabaseIdentityValues(
@@ -502,6 +530,7 @@ private actor MySQLDatabaseFoundationTestClient: MySQLDatabaseClient {
         context: MySQLDatabaseFoundationFixtures.context(
             deadline: Date().addingTimeInterval(10)))
     #expect(plan.host == "127.0.0.1")
+    #expect(plan.product == .mysql)
     #expect(plan.port == 53_306)
     #expect(plan.username == "edith_reader")
     #expect(plan.password == "fixture-password")
@@ -534,12 +563,11 @@ private actor MySQLDatabaseFoundationTestClient: MySQLDatabaseClient {
             MySQLDatabaseFoundationFixtures.resolved(mismatchedNamespaces),
             context: MySQLDatabaseFoundationFixtures.context())
     }
-    let wrongProduct = try MySQLDatabaseFoundationFixtures.definition(product: .mariaDB)
-    #expect(throws: DatabaseAdapterFailure.self) {
-        _ = try MySQLDatabaseAdapterSupport.connectionPlan(
-            MySQLDatabaseFoundationFixtures.resolved(wrongProduct),
-            context: MySQLDatabaseFoundationFixtures.context())
-    }
+    let mariaDBDefinition = try MySQLDatabaseFoundationFixtures.definition(product: .mariaDB)
+    let mariaDBPlan = try MySQLDatabaseAdapterSupport.connectionPlan(
+        MySQLDatabaseFoundationFixtures.resolved(mariaDBDefinition),
+        context: MySQLDatabaseFoundationFixtures.context())
+    #expect(mariaDBPlan.product == .mariaDB)
 }
 
 @Test func mysqlFoundationAdapterLifecycleAndCapabilities() async throws {
@@ -555,7 +583,11 @@ private actor MySQLDatabaseFoundationTestClient: MySQLDatabaseClient {
     #expect(report.productIdentity == MySQLDatabaseFoundationFixtures.identity)
     #expect(report.supports(.connectionTest))
     #expect(report.status(for: .browse)?.availability == .available)
-    #expect(report.transactionModes == [.explicit, .savepoints])
+    #expect(report.status(for: .insert)?.availability == .unavailable)
+    #expect(report.status(for: .update)?.availability == .unavailable)
+    #expect(report.status(for: .delete)?.availability == .unavailable)
+    #expect(report.mutationModes.isEmpty)
+    #expect(report.transactionModes.isEmpty)
     #expect(report.cancellationModes == [.cooperative])
     await session.disconnect()
     #expect(await session.lifecycleState() == .disconnected)
@@ -644,6 +676,7 @@ enum MySQLDatabaseLiveEnvironment {
         let password = try #require(
             suppliedPassword ?? values["EDITH_DATABASE_" + prefix + "_PASSWORD"])
         return MySQLDatabaseConnectionPlan(
+            product: prefix == "MARIADB" ? .mariaDB : .mysql,
             host: host,
             port: port,
             username: username,
@@ -730,15 +763,13 @@ func mysqlFoundationLiveRepeatedConnectionLifecycle() async throws {
 }
 
 @Test(.enabled(if: MySQLDatabaseLiveEnvironment.mariaDBEnabled))
-func mysqlFoundationLiveRejectsMariaDBMasqueradingAsMySQL() async throws {
+func mysqlFoundationLiveDiscoversMariaDBIdentity() async throws {
     let client = try await MySQLNIODatabaseClient.connect(
         MySQLDatabaseLiveEnvironment.plan(prefix: "MARIADB"))
-    do {
-        await #expect(throws: MySQLDatabaseDriverFailure.incompatibleProduct(.mariaDB)) {
-            _ = try await client.discoverIdentity()
-        }
-    }
+    let identity = try await client.discoverIdentity()
     await client.disconnect()
+    #expect(identity.product == .mariaDB)
+    #expect(identity.version?.major != nil)
 }
 
 @Test(.enabled(if: MySQLDatabaseLiveEnvironment.mysqlEnabled))

@@ -116,6 +116,8 @@ actor RedisValkeyDatabaseAdapterSession: DatabaseAdapterSession {
         let connectionID = connection.id
         let product = productIdentity.product
         let logicalDatabase = connection.namespaces.logicalDatabase ?? "0"
+        let supportsScanType = RedisValkeyDatabaseAdapterSupport.supportsScanType(
+            productIdentity)
         let output = try await perform(
             context: context,
             fallback: RedisValkeyDatabaseAdapterSupport.readFailed
@@ -125,6 +127,7 @@ actor RedisValkeyDatabaseAdapterSession: DatabaseAdapterSession {
                 connectionID: connectionID,
                 logicalDatabase: logicalDatabase,
                 product: product,
+                supportsScanType: supportsScanType,
                 client: client,
                 context: context,
                 deadline: deadline)
@@ -456,7 +459,7 @@ enum RedisDatabaseSetTTL: Equatable, Sendable {
 enum RedisDatabaseOperation: Equatable, Sendable {
     case ping
     case info(section: String)
-    case scan(cursor: UInt64, count: Int)
+    case scan(cursor: UInt64, count: Int, pattern: Data?, valueType: String?)
     case type(Data)
     case pttl(Data)
     case exists(Data)
@@ -1106,15 +1109,12 @@ private extension RedisDatabaseOperation {
             ("PING", [])
         case let .info(section):
             ("INFO", [RESPValue(from: section)])
-        case let .scan(cursor, count):
-            (
-                "SCAN",
-                [
-                    RESPValue(from: cursor.description),
-                    RESPValue(from: "COUNT"),
-                    RESPValue(from: count),
-                ]
-            )
+        case let .scan(cursor, count, pattern, valueType):
+            Self.scanRequest(
+                cursor: cursor,
+                count: count,
+                pattern: pattern,
+                valueType: valueType)
         case let .type(key):
             ("TYPE", [RESPValue(from: key)])
         case let .pttl(key):
@@ -1230,6 +1230,28 @@ private extension RedisDatabaseOperation {
         }
         return ("SET", arguments)
     }
+
+    private static func scanRequest(
+        cursor: UInt64,
+        count: Int,
+        pattern: Data?,
+        valueType: String?
+    ) -> (command: String, arguments: [RESPValue]) {
+        var arguments = [
+            RESPValue(from: cursor.description),
+            RESPValue(from: "COUNT"),
+            RESPValue(from: count),
+        ]
+        if let pattern {
+            arguments.append(RESPValue(from: "MATCH"))
+            arguments.append(RESPValue(from: pattern))
+        }
+        if let valueType {
+            arguments.append(RESPValue(from: "TYPE"))
+            arguments.append(RESPValue(from: valueType))
+        }
+        return ("SCAN", arguments)
+    }
 }
 
 private extension RedisDatabaseReply {
@@ -1288,6 +1310,11 @@ private struct RedisDatabaseScanReplay: Codable, Sendable {
     let cursor: UInt64
     let count: Int
     let offset: Int
+}
+
+private struct RedisDatabaseScanFilter: Sendable {
+    let pattern: Data?
+    let valueType: String?
 }
 
 private struct RedisDatabaseReadOutput: Sendable {
@@ -1678,6 +1705,11 @@ private enum RedisValkeyDatabaseAdapterSupport {
                             name: "maximumValuePreviewBytes",
                             value: UInt64(maximumValueBytes),
                             unit: "bytes")
+                    ],
+                    attributes: [
+                        DatabaseStringAttribute(
+                            name: "filters",
+                            value: supportsScanType(identity) ? "key-pattern,type" : "key-pattern")
                     ]),
                 DatabaseCapabilityStatus(
                     id: .query,
@@ -1727,12 +1759,17 @@ private enum RedisValkeyDatabaseAdapterSupport {
             cancellationModes: [.cooperative],
             safetyLimitations: [
                 "SCAN pages can contain duplicates or omit keys while the keyspace changes.",
+                "Key patterns and supported Redis value types are filtered by SCAN.",
                 "Values and collection members are returned as bounded previews.",
                 "Cancellation closes the session and requires reconnection.",
-                "String key creation, value updates, TTL changes, and single-key deletion are supported with confirmation.",
+                "String creation and value updates, plus TTL changes and deletion for supported key types, require confirmation.",
                 "Cluster, sentinel, TLS, tunnels, streaming, collection mutation, scripts, modules, transactions, pubsub, blocking operations, and arbitrary commands are unavailable.",
             ],
             discoveredAt: Date())
+    }
+
+    static func supportsScanType(_ identity: DatabaseProductIdentity) -> Bool {
+        (identity.version?.major ?? 0) >= 6
     }
 
     static func readPage(
@@ -1740,14 +1777,16 @@ private enum RedisValkeyDatabaseAdapterSupport {
         connectionID: DatabaseConnectionID,
         logicalDatabase: String,
         product: DatabaseProduct,
+        supportsScanType: Bool,
         client: any RedisDatabaseClient,
         context: DatabaseAdapterOperationContext,
         deadline: Date
     ) async throws -> RedisDatabaseReadOutput {
-        try validateReadRequest(
+        let scanFilter = try validateReadRequest(
             request,
             connectionID: connectionID,
-            logicalDatabase: logicalDatabase)
+            logicalDatabase: logicalDatabase,
+            supportsScanType: supportsScanType)
         var continuation = try continuationState(request.continuation)
         var keys: [Data] = []
         var seen = Set<Data>()
@@ -1767,7 +1806,11 @@ private enum RedisValkeyDatabaseAdapterSupport {
             let replayOffset = continuation.replay?.offset ?? 0
             let scan = try scanReply(
                 try await client.execute(
-                    .scan(cursor: scanCursor, count: requestedCount),
+                    .scan(
+                        cursor: scanCursor,
+                        count: requestedCount,
+                        pattern: scanFilter.pattern,
+                        valueType: scanFilter.valueType),
                     context: context,
                     deadline: deadline))
             scanCalls += 1
@@ -1980,14 +2023,14 @@ private enum RedisValkeyDatabaseAdapterSupport {
             typeName: "bytes",
             isNullable: false,
             isSortable: false,
-            isFilterable: false),
+            isFilterable: true),
         DatabaseFieldDescriptor(
             path: DatabaseFieldPath("type"),
             displayName: "Type",
-            typeName: "string",
+            typeName: "redis-type",
             isNullable: false,
             isSortable: false,
-            isFilterable: false),
+            isFilterable: true),
         DatabaseFieldDescriptor(
             path: DatabaseFieldPath("ttlMilliseconds"),
             displayName: "TTL milliseconds",
@@ -2031,8 +2074,9 @@ private enum RedisValkeyDatabaseAdapterSupport {
     private static func validateReadRequest(
         _ request: DatabaseAdapterPageRequest,
         connectionID: DatabaseConnectionID,
-        logicalDatabase: String
-    ) throws(DatabaseAdapterFailure) {
+        logicalDatabase: String,
+        supportsScanType: Bool
+    ) throws(DatabaseAdapterFailure) -> RedisDatabaseScanFilter {
         guard request.target.connectionID == connectionID,
             request.target.record == nil,
             let object = request.target.object,
@@ -2040,7 +2084,6 @@ private enum RedisValkeyDatabaseAdapterSupport {
             object.nativeIdentifier == nil,
             object.path.isEmpty || object.path == [logicalDatabase],
             request.projection == nil,
-            request.filter == nil,
             request.sorts.isEmpty,
             request.consistency == .productDefault
                 || request.consistency == .bestEffort,
@@ -2049,6 +2092,118 @@ private enum RedisValkeyDatabaseAdapterSupport {
         else {
             throw invalidRead
         }
+        return try scanFilter(request.filter, supportsScanType: supportsScanType)
+    }
+
+    private static func scanFilter(
+        _ filter: DatabaseFilter?,
+        supportsScanType: Bool
+    ) throws(DatabaseAdapterFailure) -> RedisDatabaseScanFilter {
+        guard let filter else {
+            return RedisDatabaseScanFilter(pattern: nil, valueType: nil)
+        }
+        let predicates: [DatabaseFilterPredicate]
+        switch filter {
+        case let .predicate(predicate):
+            predicates = [predicate]
+        case let .all(children):
+            var collected: [DatabaseFilterPredicate] = []
+            for child in children {
+                guard case let .predicate(predicate) = child else { throw invalidRead }
+                collected.append(predicate)
+            }
+            predicates = collected
+        case .any, .not:
+            throw invalidRead
+        }
+        guard !predicates.isEmpty else { throw invalidRead }
+        var pattern: Data?
+        var valueType: String?
+        for predicate in predicates {
+            if predicate.field.segments == ["key"], pattern == nil {
+                pattern = try scanPattern(predicate)
+            } else if predicate.field.segments == ["type"], valueType == nil,
+                supportsScanType
+            {
+                valueType = try scanValueType(predicate)
+            } else {
+                throw invalidRead
+            }
+        }
+        return RedisDatabaseScanFilter(pattern: pattern, valueType: valueType)
+    }
+
+    private static func scanPattern(
+        _ predicate: DatabaseFilterPredicate
+    ) throws(DatabaseAdapterFailure) -> Data {
+        guard
+            predicate.caseSensitivity == .productDefault
+                || predicate.caseSensitivity == .sensitive,
+            predicate.values.count == 1,
+            let value = bytes(predicate.values[0]),
+            value.count <= maximumKeyBytes
+        else {
+            throw invalidRead
+        }
+        let escaped = escapedGlob(value)
+        var pattern = Data()
+        switch predicate.operation {
+        case .equal:
+            pattern.append(escaped)
+        case .contains:
+            pattern.append(42)
+            pattern.append(escaped)
+            pattern.append(42)
+        case .startsWith:
+            pattern.append(escaped)
+            pattern.append(42)
+        case .endsWith:
+            pattern.append(42)
+            pattern.append(escaped)
+        default:
+            throw invalidRead
+        }
+        return pattern
+    }
+
+    private static func scanValueType(
+        _ predicate: DatabaseFilterPredicate
+    ) throws(DatabaseAdapterFailure) -> String {
+        guard predicate.operation == .equal,
+            predicate.values.count == 1,
+            case let .string(value) = predicate.values[0]
+        else {
+            throw invalidRead
+        }
+        let normalized = value.lowercased()
+        guard ["string", "hash", "list", "set", "zset", "stream"].contains(normalized)
+        else {
+            throw invalidRead
+        }
+        return normalized
+    }
+
+    private static func bytes(_ value: DatabaseValue) -> Data? {
+        switch value {
+        case let .string(value):
+            Data(value.utf8)
+        case let .binary(.complete(data, _, _)):
+            data
+        default:
+            nil
+        }
+    }
+
+    private static func escapedGlob(_ value: Data) -> Data {
+        var escaped = Data()
+        escaped.reserveCapacity(value.count * 2)
+        for byte in value {
+            if byte == 42 || byte == 63 || byte == 91 || byte == 93 || byte == 92 {
+                escaped.append(92)
+            }
+            escaped.append(byte)
+        }
+        return escaped
     }
 
     private static func validateQueryRequest(

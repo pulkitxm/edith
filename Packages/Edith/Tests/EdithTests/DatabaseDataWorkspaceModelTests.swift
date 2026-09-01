@@ -16,10 +16,12 @@ struct DatabaseDataWorkspaceModelTests {
         let connection = try Self.connection(product: .postgresql)
         model.prepare(for: connection)
         model.targetText = "analytics.orders"
-        model.filterField = "customer_name"
-        model.filterValue = "Ada"
-        model.sortField = "created_at"
-        model.sortDirection = .descending
+        model.addFilterClause(
+            field: "customer_name",
+            operation: .contains,
+            valueText: "Ada",
+            caseSensitivity: .insensitive)
+        model.setSort(field: "created_at", direction: .descending, additive: false)
 
         model.browse(connection)
         await Self.waitUntil { model.state == .loaded }
@@ -45,6 +47,149 @@ struct DatabaseDataWorkspaceModelTests {
                         direction: .descending)
                 ])
         #expect(model.records == [Self.record(1)])
+    }
+
+    @Test("Exact sort direction replaces or preserves ordered priority")
+    func exactSortDirection() {
+        let model = DatabaseDataWorkspaceModel(announcement: { _ in })
+
+        model.setSort(field: "created_at", direction: .descending, additive: false)
+        #expect(model.orderedSorts.map(\.summary) == ["created_at descending"])
+
+        model.setSort(field: "id", direction: .ascending, additive: true)
+        #expect(
+            model.orderedSorts.map(\.summary)
+                == ["created_at descending", "id ascending"])
+
+        model.setSort(field: "created_at", direction: .ascending, additive: true)
+        #expect(
+            model.orderedSorts.map(\.summary)
+                == ["created_at ascending", "id ascending"])
+
+        model.setSort(field: "name", direction: .descending, additive: false)
+        #expect(model.orderedSorts.map(\.summary) == ["name descending"])
+    }
+
+    @Test("Structured filters build one conjunction level with ordered typed sorts")
+    func structuredFiltersAndOrderedSorts() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)]),
+            Self.response(records: [Self.record(42)]),
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "analytics.orders"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        let identifier = model.addFilterClause(
+            field: "id",
+            operation: .equal,
+            valueText: "42")
+        let nameIdentifier = model.addFilterClause(field: "name", valueText: "Ada")
+        model.addFilterClause(
+            field: "ignored",
+            operation: .equal,
+            valueText: "unused",
+            isEnabled: false)
+        model.setFilterConjunction(.or)
+        model.cycleSort(field: "name", additive: false)
+        model.cycleSort(field: "id", additive: true)
+        model.cycleSort(field: "id", additive: true)
+
+        #expect(model.filterClauses[0].id == identifier)
+        #expect(model.filterClauses[1].id == nameIdentifier)
+        #expect(model.filterClauses[1].operation == .contains)
+        #expect(model.filterClauses[1].caseSensitivity == .insensitive)
+        #expect(model.activeFilterCount == 2)
+        #expect(model.activeFilterSummary == "2 filters, match any")
+        #expect(model.activeSortSummary == "name ascending, id descending")
+
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded && model.records == [Self.record(42)] }
+
+        let requests = await sender.recordedRequests().compactMap(\.browseRequest)
+        let request = try #require(requests.last)
+        #expect(
+            request.page.filter
+                == .any([
+                    .predicate(
+                        DatabaseFilterPredicate(
+                            field: DatabaseFieldPath("id"),
+                            operation: .equal,
+                            values: [.signedInteger(42)])),
+                    .predicate(
+                        DatabaseFilterPredicate(
+                            field: DatabaseFieldPath("name"),
+                            operation: .contains,
+                            values: [.string("Ada")],
+                            caseSensitivity: .insensitive)),
+                ]))
+        #expect(
+            request.page.sorts
+                == [
+                    DatabaseSort(field: DatabaseFieldPath("name"), direction: .ascending),
+                    DatabaseSort(field: DatabaseFieldPath("id"), direction: .descending),
+                ])
+    }
+
+    @Test("Filter and sort changes reset paging while sort cycling preserves priority")
+    func filterAndSortPagingReset() async throws {
+        let token = DatabaseContinuationToken(rawValue: "next-page")
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)], nextContinuation: token)
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.customers"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded && model.hasNextPage }
+
+        model.cycleSort(field: "name", additive: false)
+        #expect(!model.hasNextPage)
+        #expect(model.orderedSorts.map(\.summary) == ["name ascending"])
+
+        model.cycleSort(field: "id", additive: true)
+        model.cycleSort(field: "name", additive: true)
+        #expect(model.orderedSorts.map(\.summary) == ["name descending", "id ascending"])
+
+        model.cycleSort(field: "name", additive: true)
+        #expect(model.orderedSorts.map(\.summary) == ["id ascending"])
+
+        model.cycleSort(field: "id", additive: false)
+        #expect(model.orderedSorts.map(\.summary) == ["id descending"])
+        model.cycleSort(field: "id", additive: false)
+        #expect(model.orderedSorts.isEmpty)
+
+        let filterID = model.addFilterClause(field: "name", valueText: "Ada")
+        var clause = try #require(model.filterClauses.first(where: { $0.id == filterID }))
+        #expect(clause.summary == "name contains Ada")
+        clause.isEnabled = false
+        model.updateFilterClause(clause)
+        #expect(model.activeFilterSummary == "No active filters")
+    }
+
+    @Test("Invalid structured filter values fail before a new broker request")
+    func invalidStructuredFilter() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)])
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.customers"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+        model.addFilterClause(field: "id", operation: .between, valueText: "1")
+
+        model.browse(connection)
+
+        #expect(
+            model.state
+                == .failed("Enter two comma-separated values for the id filter."))
+        #expect(await sender.recordedRequests().count == 1)
     }
 
     @Test("Continuation browsing appends records and forwards the token")
@@ -424,6 +569,83 @@ struct DatabaseDataWorkspaceModelTests {
                 == "UPDATE \"public\".\"customers\" SET \"name\" = $1 WHERE \"id\" IS NOT DISTINCT FROM $2 RETURNING 1"
         )
         #expect(mutation.payload.parameters.map(\.value) == [.string("Inline")])
+    }
+
+    @Test(
+        "MySQL-family row editor creates bounded canonical mutations",
+        arguments: [DatabaseProduct.mysql, .mariaDB]
+    )
+    func mySQLFamilyMutationRequests(product: DatabaseProduct) async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)])
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: product)
+        model.prepare(for: connection)
+        model.targetText = "commerce.customers"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        model.selectRecord(at: 0)
+        model.beginEditingSelectedRow(connection)
+        model.updateEditorField("name", text: "Updated")
+        let update = try #require(model.editorMutationRequest(connection))
+        #expect(
+            update.payload.command
+                == "UPDATE `commerce`.`customers` SET `name` = ? WHERE `id` <=> ? LIMIT 1")
+        #expect(update.payload.product == product)
+        #expect(update.payload.parameters.map(\.value) == [.string("Updated")])
+
+        let deletion = try #require(model.deleteMutationRequest(connection))
+        #expect(
+            deletion.payload.command
+                == "DELETE FROM `commerce`.`customers` WHERE `id` <=> ? LIMIT 1")
+        #expect(deletion.payload.product == product)
+
+        model.beginInsert(connection)
+        model.updateEditorField("name", text: "Created")
+        let insert = try #require(model.editorMutationRequest(connection))
+        #expect(insert.payload.command == "INSERT INTO `commerce`.`customers` (`name`) VALUES (?)")
+        #expect(insert.payload.product == product)
+        #expect(insert.payload.parameters.map(\.value) == [.string("Created")])
+    }
+
+    @Test("SQLite row editor creates identity-bounded canonical mutations")
+    func sqliteMutationRequests() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)])
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .sqlite)
+        model.prepare(for: connection)
+        model.targetText = "customers"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        model.selectRecord(at: 0)
+        model.beginEditingSelectedRow(connection)
+        model.updateEditorField("name", text: "Updated")
+        let update = try #require(model.editorMutationRequest(connection))
+        #expect(
+            update.payload.command
+                == "UPDATE \"main\".\"customers\" SET \"name\" = ? WHERE \"id\" IS ?")
+        #expect(update.payload.product == .sqlite)
+        #expect(update.payload.parameters.map(\.value) == [.string("Updated")])
+
+        let deletion = try #require(model.deleteMutationRequest(connection))
+        #expect(
+            deletion.payload.command
+                == "DELETE FROM \"main\".\"customers\" WHERE \"id\" IS ?")
+        #expect(deletion.payload.product == .sqlite)
+
+        model.beginInsert(connection)
+        model.updateEditorField("name", text: "Created")
+        let insert = try #require(model.editorMutationRequest(connection))
+        #expect(
+            insert.payload.command
+                == "INSERT INTO \"main\".\"customers\" (\"name\") VALUES (?)")
+        #expect(insert.payload.product == .sqlite)
+        #expect(insert.payload.parameters.map(\.value) == [.string("Created")])
     }
 
     @Test("Row editor only reviews fields that changed")

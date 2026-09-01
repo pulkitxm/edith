@@ -94,7 +94,8 @@ actor SQLiteDatabaseAdapterSession: DatabaseAdapterSession {
         }
         try await SQLiteDatabaseAdapterSupport.check(context)
         let report = SQLiteDatabaseAdapterSupport.capabilityReport(
-            identity: productIdentity)
+            identity: productIdentity,
+            connection: connection)
         try DatabaseAdapterBounds.validate(report: report, identity: productIdentity)
         return report
     }
@@ -155,16 +156,51 @@ actor SQLiteDatabaseAdapterSession: DatabaseAdapterSession {
         _ request: DatabaseDestructiveRequest,
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseDestructivePlan {
-        try await requireAvailableContext(context)
-        throw SQLiteDatabaseAdapterSupport.capabilityUnavailable
+        let connectionID = connection.id
+        return try await performRead(
+            context: context,
+            failure: SQLiteDatabaseMutationSupport.invalidMutation
+        ) { database in
+            try SQLiteDatabaseMutationSupport.normalize(
+                request,
+                connectionID: connectionID,
+                database: database)
+        }
     }
 
     func executeMutation(
         _ plan: DatabaseDestructivePlan,
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterMutationResult {
-        try await requireAvailableContext(context)
-        throw SQLiteDatabaseAdapterSupport.capabilityUnavailable
+        let mutation = try SQLiteDatabaseMutationSupport.executionPlan(
+            plan,
+            connectionID: connection.id)
+        let result = try await performWrite(
+            context: context,
+            failure: SQLiteDatabaseMutationSupport.mutationFailed
+        ) { database in
+            try SQLiteDatabaseMutationSupport.execute(
+                mutation,
+                database: database)
+        }
+        guard result.affectedRows == 1 else {
+            let productCode =
+                result.affectedRows == 0
+                ? "sqlite.mutation.row_not_found"
+                : "sqlite.mutation.identity_conflict"
+            return try DatabaseAdapterMutationResult(
+                disposition: .completed,
+                effect: .notApplied,
+                affectedRecords: DatabaseCountMetadata(value: 0, accuracy: .exact),
+                error: DatabaseErrorEnvelope(
+                    category: .conflict,
+                    message: "The SQLite row no longer matched the requested mutation.",
+                    productCode: productCode))
+        }
+        return try DatabaseAdapterMutationResult(
+            disposition: .completed,
+            effect: .applied,
+            affectedRecords: DatabaseCountMetadata(value: 1, accuracy: .exact))
     }
 
     func openStream(
@@ -239,6 +275,36 @@ actor SQLiteDatabaseAdapterSession: DatabaseAdapterSession {
         failure: DatabaseAdapterFailure,
         body: @escaping @Sendable (Database) throws -> Output
     ) async throws(DatabaseAdapterFailure) -> Output {
+        try await performDatabaseOperation(
+            context: context,
+            failure: failure
+        ) { databaseQueue in
+            try await databaseQueue.unsafeRead { database in
+                try SQLiteDatabaseAdapterSupport.queryOnlyRead(
+                    database,
+                    body: body)
+            }
+        }
+    }
+
+    private func performWrite<Output: Sendable>(
+        context: DatabaseAdapterOperationContext,
+        failure: DatabaseAdapterFailure,
+        body: @escaping @Sendable (Database) throws -> Output
+    ) async throws(DatabaseAdapterFailure) -> Output {
+        try await performDatabaseOperation(
+            context: context,
+            failure: failure
+        ) { databaseQueue in
+            try await databaseQueue.writeWithoutTransaction(body)
+        }
+    }
+
+    private func performDatabaseOperation<Output: Sendable>(
+        context: DatabaseAdapterOperationContext,
+        failure: DatabaseAdapterFailure,
+        body: @escaping @Sendable (DatabaseQueue) async throws -> Output
+    ) async throws(DatabaseAdapterFailure) -> Output {
         try await SQLiteDatabaseAdapterSupport.check(context)
         let databaseQueue = try connectedDatabase()
         guard activeOperation == nil else {
@@ -276,11 +342,7 @@ actor SQLiteDatabaseAdapterSession: DatabaseAdapterSession {
 
         do {
             let output = try await withTaskCancellationHandler {
-                try await databaseQueue.unsafeRead { database in
-                    try SQLiteDatabaseAdapterSupport.queryOnlyRead(
-                        database,
-                        body: body)
-                }
+                try await body(databaseQueue)
             } onCancel: {
                 databaseQueue.interrupt()
             }
@@ -2130,6 +2192,7 @@ private enum SQLiteDatabaseAdapterSupport {
         let policyReadOnly =
             definition.readOnlyPolicy != .disabled
             || definition.environment.protection == .readOnly
+            || definition.productionPolicy == .prohibitMutations
         switch definition.location {
         case let .sqlite(location):
             guard location.fileReference == nil else {
@@ -2194,7 +2257,8 @@ private enum SQLiteDatabaseAdapterSupport {
     }
 
     static func capabilityReport(
-        identity: DatabaseProductIdentity
+        identity: DatabaseProductIdentity,
+        connection: DatabaseConnectionDefinition
     ) -> DatabaseCapabilityReport {
         let unavailableReason = DatabaseCapabilityUnavailableReason(
             category: .notImplemented,
@@ -2203,9 +2267,6 @@ private enum SQLiteDatabaseAdapterSupport {
             (.objectDiscovery, .sharedRequired),
             (.objectDescription, .familyRequired),
             (.explain, .familyRequired),
-            (.insert, .sharedRequired),
-            (.update, .sharedRequired),
-            (.delete, .sharedRequired),
             (.bulkMutation, .sharedRequired),
             (.importData, .sharedRequired),
             (.exportData, .sharedRequired),
@@ -2214,6 +2275,30 @@ private enum SQLiteDatabaseAdapterSupport {
             (.monitoring, .productRequired),
             (.administration, .productRequired),
         ]
+        let locationAllowsMutations: Bool
+        switch connection.location {
+        case let .sqlite(location):
+            locationAllowsMutations = location.accessMode != .readOnly
+        case .memory:
+            locationAllowsMutations = true
+        case .network:
+            locationAllowsMutations = false
+        }
+        let mutationsAvailable =
+            locationAllowsMutations
+            && connection.readOnlyPolicy == .disabled
+            && connection.environment.protection != .readOnly
+            && connection.productionPolicy != .prohibitMutations
+        let mutationReason = DatabaseCapabilityUnavailableReason(
+            category: .connectionPolicy,
+            message: "This connection policy does not allow SQLite row mutations.")
+        let mutations = [DatabaseCapabilityID.insert, .update, .delete].map { identifier in
+            DatabaseCapabilityStatus(
+                id: identifier,
+                requirement: .sharedRequired,
+                availability: mutationsAvailable ? .available : .unavailable,
+                reason: mutationsAvailable ? nil : mutationReason)
+        }
         let capabilities =
             [
                 DatabaseCapabilityStatus(
@@ -2233,6 +2318,7 @@ private enum SQLiteDatabaseAdapterSupport {
                     requirement: .sharedRequired,
                     availability: .available),
             ]
+            + mutations
             + unavailable.map { identifier, requirement in
                 DatabaseCapabilityStatus(
                     id: identifier,
@@ -2244,14 +2330,15 @@ private enum SQLiteDatabaseAdapterSupport {
             productIdentity: identity,
             capabilities: capabilities,
             pagingModes: [.offset],
-            mutationModes: [.unsupported],
-            transactionModes: [.none],
+            mutationModes: mutationsAvailable ? [.singleRecord] : [],
+            transactionModes: mutationsAvailable ? [.implicit] : [],
             cancellationModes: [.cooperative],
             safetyLimitations: [
                 "Offset pages can shift when another connection changes the database.",
                 "SQL query results are limited to one bounded page.",
                 "Session, snapshot, and strong consistency are unavailable.",
-                "Mutation, streaming, object discovery, and explain are not implemented.",
+                "Updates and deletes require a current primary-key or rowid identity.",
+                "Streaming, object discovery, and explain are not implemented.",
             ],
             discoveredAt: Date())
     }

@@ -146,7 +146,12 @@ struct DatabaseWorkbenchView: View {
     private func dataRegion(_ connection: DatabaseConnectionSummary) -> some View {
         VStack(spacing: 0) {
             controls(connection)
-            Divider().opacity(0.35)
+            DatabaseFilterRibbon(
+                data: data,
+                connection: connection,
+                accent: theme,
+                palette: palette,
+                apply: { data.browse(connection) })
             results(connection)
         }
     }
@@ -160,22 +165,23 @@ struct DatabaseWorkbenchView: View {
                         objectControls(connection)
                     }
                     HStack(spacing: UIScale.pt(8)) {
-                        filterControls(connection)
+                        Spacer(minLength: 0)
                         connectionActions(connection)
                     }
                 }
             } else {
                 HStack(spacing: UIScale.pt(8)) {
                     modePicker(connection)
-                    Divider().frame(height: UIScale.pt(20))
+                    Rectangle()
+                        .fill(palette.line.opacity(0.55))
+                        .frame(width: 1, height: UIScale.pt(20))
                     objectControls(connection)
-                    Divider().frame(height: UIScale.pt(20))
-                    filterControls(connection)
                     connectionActions(connection)
                 }
             }
         }
         .padding(UIScale.pt(10))
+        .background(palette.panel)
     }
 
     private func queryRegion(_ connection: DatabaseConnectionSummary) -> some View {
@@ -245,12 +251,16 @@ struct DatabaseWorkbenchView: View {
 
     private func connectionActions(_ connection: DatabaseConnectionSummary) -> some View {
         HStack(spacing: UIScale.pt(7)) {
-            if data.supportsDataMutations(connection),
-                explorer.selectedObject?.kind == .table
-                    || explorer.selectedObject?.kind == .keyspace
-                    || explorer.selectedObject?.kind == .collection
-                    || explorer.selectedObject?.kind == .index
-            {
+            Button {
+                data.browse(connection)
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(.edith(.borderless))
+            .disabled(data.isLoading || explorer.selectedObject == nil)
+            .help("Refresh data")
+            .accessibilityLabel("Refresh selected object")
+            if canInsertData(connection), selectedObjectAcceptsData {
                 Button {
                     data.beginInsert(connection)
                 } label: {
@@ -291,7 +301,7 @@ struct DatabaseWorkbenchView: View {
                 .foregroundStyle(.secondary)
                 .help("Read-only connection")
                 .accessibilityLabel("Read-only connection")
-            } else if !data.supportsDataMutations(connection) {
+            } else if !hasAnyDataMutation(connection) {
                 Group {
                     if compact {
                         Image(systemName: "eye")
@@ -301,7 +311,7 @@ struct DatabaseWorkbenchView: View {
                 }
                 .font(.system(size: UIScale.pt(10.5), weight: .medium))
                 .foregroundStyle(.secondary)
-                .help("Data editing is not available for this database yet")
+                .help(mutationUnavailableHelp(connection))
             }
             Button {
                 data.cancel()
@@ -331,15 +341,6 @@ struct DatabaseWorkbenchView: View {
                 }
             }
             Spacer(minLength: 0)
-            Button {
-                data.browse(connection)
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(.edith(.borderless))
-            .disabled(data.isLoading || explorer.selectedObject == nil)
-            .help("Refresh data")
-            .accessibilityLabel("Refresh selected object")
         }
         .frame(maxWidth: compact ? .infinity : UIScale.pt(330), alignment: .leading)
     }
@@ -407,38 +408,6 @@ struct DatabaseWorkbenchView: View {
                 explorer.loadGroup(group.identifier, connection: connection)
             }
         }
-    }
-
-    private func filterControls(_ connection: DatabaseConnectionSummary) -> some View {
-        HStack(spacing: UIScale.pt(7)) {
-            Menu {
-                Button("No filter") {
-                    data.filterField = ""
-                    data.filterValue = ""
-                }
-                ForEach(data.fields, id: \.path) { field in
-                    if field.isFilterable {
-                        Button(field.displayName) {
-                            data.filterField = field.path.segments.joined(separator: ".")
-                        }
-                    }
-                }
-            } label: {
-                Label(
-                    data.filterField.isEmpty ? "Filter" : data.filterField,
-                    systemImage: "line.3.horizontal.decrease"
-                )
-                .lineLimit(1)
-            }
-            .buttonStyle(.edith(.secondary))
-            .disabled(data.fields.isEmpty)
-            TextField("Value", text: filterBinding)
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: UIScale.pt(180))
-                .disabled(data.filterField.isEmpty)
-                .onSubmit { data.browse(connection) }
-        }
-        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     @ViewBuilder
@@ -529,20 +498,20 @@ struct DatabaseWorkbenchView: View {
                 fields: data.fields,
                 records: data.records,
                 selectedIndex: data.selectedRecordIndex,
-                sortField: data.sortField,
-                sortDirection: data.sortDirection,
+                sorts: tableSorts,
                 text: { data.text(for: $0) },
                 select: { data.selectRecord(at: $0) },
                 open: { index in
                     if data.selectedRecordIndex != index {
                         data.selectRecord(at: index)
                     }
-                    if workbenchMode == .browse, data.supportsDataMutations(connection) {
+                    if workbenchMode == .browse, canUpdateData(connection) {
                         data.beginEditingSelectedRow(connection)
                     }
                 },
                 rowIsEditable: { index in
                     workbenchMode == .browse
+                        && canUpdateData(connection)
                         && !mutations.hasTrackedMutation
                         && data.fields.contains { field in
                             data.canEdit(
@@ -553,6 +522,7 @@ struct DatabaseWorkbenchView: View {
                 },
                 canEdit: { index, field in
                     workbenchMode == .browse
+                        && canUpdateData(connection)
                         && !mutations.hasTrackedMutation
                         && data.canEdit(recordAt: index, field: field, connection: connection)
                 },
@@ -567,10 +537,9 @@ struct DatabaseWorkbenchView: View {
                     else { return }
                     mutations.requestSafetyReview(for: request)
                 },
-                sort: { field, direction in
+                sort: { field, additive in
                     guard workbenchMode == .browse else { return }
-                    data.sortField = field
-                    data.sortDirection = direction
+                    data.cycleSort(field: field, additive: additive)
                     data.browse(connection)
                 })
             Divider().opacity(0.35)
@@ -625,15 +594,14 @@ struct DatabaseWorkbenchView: View {
                     .frame(width: UIScale.pt(120))
                 }
                 Spacer(minLength: 0)
-                if workbenchMode == .browse,
-                    data.supportsDataMutations(connection),
-                    record.identity != nil
-                {
+                if workbenchMode == .browse, canUpdateData(connection), record.identity != nil {
                     Button("Edit") {
                         data.beginEditingSelectedRow(connection)
                     }
                     .buttonStyle(.edith(.borderless))
                     .disabled(mutations.hasTrackedMutation)
+                }
+                if workbenchMode == .browse, canDeleteData(connection), record.identity != nil {
                     Button {
                         requestDelete(connection)
                     } label: {
@@ -846,10 +814,6 @@ struct DatabaseWorkbenchView: View {
         .padding(UIScale.pt(26))
     }
 
-    private var filterBinding: Binding<String> {
-        Binding(get: { data.filterValue }, set: { data.filterValue = $0 })
-    }
-
     private var queryTextBinding: Binding<String> {
         Binding(get: { data.queryText }, set: { data.queryText = $0 })
     }
@@ -961,6 +925,68 @@ struct DatabaseWorkbenchView: View {
     private func requestDelete(_ connection: DatabaseConnectionSummary) {
         guard let request = data.deleteMutationRequest(connection) else { return }
         mutations.requestSafetyReview(for: request)
+    }
+
+    private var tableSorts: [DatabaseSort] {
+        data.orderedSorts.map { sort in
+            let path =
+                data.fields.first {
+                    $0.path.segments.joined(separator: ".") == sort.field
+                }?.path ?? DatabaseFieldPath(sort.field)
+            return DatabaseSort(field: path, direction: sort.direction)
+        }
+    }
+
+    private var selectedObjectAcceptsData: Bool {
+        switch explorer.selectedObject?.kind {
+        case .table, .keyspace, .collection, .index:
+            true
+        default:
+            false
+        }
+    }
+
+    private func canInsertData(_ connection: DatabaseConnectionSummary) -> Bool {
+        canUseMutationCapability(.insert, connection: connection)
+    }
+
+    private func canUpdateData(_ connection: DatabaseConnectionSummary) -> Bool {
+        canUseMutationCapability(.update, connection: connection)
+    }
+
+    private func canDeleteData(_ connection: DatabaseConnectionSummary) -> Bool {
+        canUseMutationCapability(.delete, connection: connection)
+    }
+
+    private func hasAnyDataMutation(_ connection: DatabaseConnectionSummary) -> Bool {
+        canInsertData(connection) || canUpdateData(connection) || canDeleteData(connection)
+    }
+
+    private func canUseMutationCapability(
+        _ capability: DatabaseCapabilityID,
+        connection: DatabaseConnectionSummary
+    ) -> Bool {
+        data.supportsDataMutations(connection)
+            && connections.selectedConnectionSupports(capability)
+    }
+
+    private func mutationUnavailableHelp(_ connection: DatabaseConnectionSummary) -> String {
+        if connection.readOnlyPolicy != .disabled
+            || connection.environmentProtection == .readOnly
+            || connection.productionPolicy == .prohibitMutations
+        {
+            return "This connection policy allows browsing only."
+        }
+        for capability in [
+            DatabaseCapabilityID.insert,
+            .update,
+            .delete,
+        ] {
+            if let reason = connections.selectedConnectionUnavailableReason(for: capability) {
+                return reason
+            }
+        }
+        return "The connected database adapter allows browsing only."
     }
 
     private var resultSummary: String {
