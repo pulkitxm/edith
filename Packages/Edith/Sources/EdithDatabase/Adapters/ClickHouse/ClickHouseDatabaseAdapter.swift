@@ -73,7 +73,8 @@ actor ClickHouseDatabaseAdapterSession: DatabaseAdapterSession {
             throw ClickHouseDatabaseAdapterSupport.connectionFailed
         }
         let report = ClickHouseDatabaseAdapterSupport.capabilityReport(
-            identity: productIdentity)
+            identity: productIdentity,
+            connection: connection)
         try DatabaseAdapterBounds.validate(report: report, identity: productIdentity)
         return report
     }
@@ -152,16 +153,55 @@ actor ClickHouseDatabaseAdapterSession: DatabaseAdapterSession {
         _ request: DatabaseDestructiveRequest,
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseDestructivePlan {
-        try await requireAvailableContext(context)
-        throw ClickHouseDatabaseAdapterSupport.readOnlyViolation
+        guard ClickHouseDatabaseAdapterSupport.mutationsAllowed(connection) else {
+            throw ClickHouseDatabaseAdapterSupport.readOnlyViolation
+        }
+        let target = try ClickHouseDatabaseMutationSupport.target(
+            request,
+            connectionID: connection.id)
+        let description = try await tableDescription(
+            database: target.database,
+            table: target.table,
+            refresh: true,
+            context: context)
+        return try ClickHouseDatabaseMutationSupport.normalize(
+            request,
+            connectionID: connection.id,
+            description: description)
     }
 
     func executeMutation(
         _ plan: DatabaseDestructivePlan,
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterMutationResult {
-        try await requireAvailableContext(context)
-        throw ClickHouseDatabaseAdapterSupport.readOnlyViolation
+        guard ClickHouseDatabaseAdapterSupport.mutationsAllowed(connection) else {
+            throw ClickHouseDatabaseAdapterSupport.readOnlyViolation
+        }
+        let target = try ClickHouseDatabaseMutationSupport.target(
+            plan.request,
+            connectionID: connection.id)
+        let description = try await tableDescription(
+            database: target.database,
+            table: target.table,
+            refresh: true,
+            context: context)
+        let mutation = try ClickHouseDatabaseMutationSupport.executionPlan(
+            plan,
+            connectionID: connection.id,
+            description: description)
+        _ = try await perform(
+            context: context,
+            fallback: ClickHouseDatabaseAdapterSupport.mutationFailed
+        ) { client in
+            try await client.execute(
+                query: mutation.query,
+                maximumResponseBytes: 16_384,
+                parameters: mutation.parameters)
+        }
+        return try DatabaseAdapterMutationResult(
+            disposition: .completed,
+            effect: .applied,
+            affectedRecords: DatabaseCountMetadata(value: 1, accuracy: .exact))
     }
 
     func openStream(
@@ -223,39 +263,11 @@ actor ClickHouseDatabaseAdapterSession: DatabaseAdapterSession {
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterPage {
         let startedAt = ContinuousClock.now
-        let cacheKey = "\(database)\0\(table)"
-        let description: ClickHouseDatabaseTableDescription
-        if let cached = descriptions[cacheKey] {
-            description = cached
-        } else {
-            let query = try ClickHouseDatabaseReadCompiler.descriptionQuery(
-                database: database,
-                table: table)
-            let response: ClickHouseDatabaseHTTPResponse = try await perform(
-                context: context,
-                fallback: ClickHouseDatabaseAdapterSupport.invalidResponse
-            ) { client in
-                try await client.execute(
-                    query: query,
-                    maximumResponseBytes: 1_048_576,
-                    parameters: [
-                        ClickHouseDatabaseHTTPParameter(
-                            name: "_edith_database",
-                            value: database),
-                        ClickHouseDatabaseHTTPParameter(
-                            name: "_edith_table",
-                            value: table),
-                    ])
-            }
-            description = try ClickHouseDatabaseReadCompiler.tableDescription(
-                response: response,
-                database: database,
-                table: table)
-            if descriptions.count >= 32, let oldest = descriptions.keys.sorted().first {
-                descriptions.removeValue(forKey: oldest)
-            }
-            descriptions[cacheKey] = description
-        }
+        let description = try await tableDescription(
+            database: database,
+            table: table,
+            refresh: false,
+            context: context)
         let plan = try ClickHouseDatabaseReadCompiler.compileBrowse(
             request,
             description: description,
@@ -277,6 +289,48 @@ actor ClickHouseDatabaseAdapterSession: DatabaseAdapterSession {
             startedAt: startedAt)
         try page.validate(for: request)
         return page
+    }
+
+    private func tableDescription(
+        database: String,
+        table: String,
+        refresh: Bool,
+        context: DatabaseAdapterOperationContext
+    ) async throws(DatabaseAdapterFailure) -> ClickHouseDatabaseTableDescription {
+        let cacheKey = "\(database)\0\(table)"
+        if !refresh, let cached = descriptions[cacheKey] {
+            return cached
+        }
+        let query = try ClickHouseDatabaseReadCompiler.descriptionQuery(
+            database: database,
+            table: table)
+        let response: ClickHouseDatabaseHTTPResponse = try await perform(
+            context: context,
+            fallback: ClickHouseDatabaseAdapterSupport.invalidResponse
+        ) { client in
+            try await client.execute(
+                query: query,
+                maximumResponseBytes: 1_048_576,
+                parameters: [
+                    ClickHouseDatabaseHTTPParameter(
+                        name: "_edith_database",
+                        value: database),
+                    ClickHouseDatabaseHTTPParameter(
+                        name: "_edith_table",
+                        value: table),
+                ])
+        }
+        let description = try ClickHouseDatabaseReadCompiler.tableDescription(
+            response: response,
+            database: database,
+            table: table)
+        if descriptions.count >= 32, descriptions[cacheKey] == nil,
+            let oldest = descriptions.keys.sorted().first
+        {
+            descriptions.removeValue(forKey: oldest)
+        }
+        descriptions[cacheKey] = description
+        return description
     }
 
     private func validateConnection(
@@ -591,8 +645,21 @@ enum ClickHouseDatabaseAdapterSupport {
         retry: .retry)
     static let readOnlyViolation = failure(
         category: .readOnlyViolation,
-        message: "The ClickHouse adapter does not permit mutations.",
+        message: "The ClickHouse connection policy does not permit mutations.",
         code: "clickhouse.read_only")
+    static let invalidMutation = failure(
+        category: .invalidRequest,
+        message: "The ClickHouse row insertion request is invalid.",
+        code: "clickhouse.mutation.invalid")
+    static let mutationTargetReadOnly = failure(
+        category: .unsupported,
+        message: "The ClickHouse target does not support safe inline insertion.",
+        code: "clickhouse.mutation.target_read_only")
+    static let mutationFailed = failure(
+        category: .server,
+        message: "ClickHouse could not insert the requested row.",
+        code: "clickhouse.mutation.failed",
+        retry: .userDecision)
     static let resourceLimit = failure(
         category: .resourceLimit,
         message: "The bounded ClickHouse response exceeded a resource limit.",
@@ -617,8 +684,6 @@ enum ClickHouseDatabaseAdapterSupport {
             definition.tls.serverName == nil,
             [.automatic, .standalone, .cluster, .distributed].contains(
                 definition.deploymentMode),
-            definition.readOnlyPolicy != .disabled
-                || definition.productionPolicy == .prohibitMutations,
             case let .network(endpoints) = definition.location,
             endpoints.count == 1,
             let endpoint = endpoints.first,
@@ -650,7 +715,7 @@ enum ClickHouseDatabaseAdapterSupport {
             database: database,
             tls: tls,
             requestTimeoutMilliseconds: timeout,
-            readOnly: true)
+            readOnly: !mutationsAllowed(definition))
     }
 
     static func establish(
@@ -715,19 +780,23 @@ enum ClickHouseDatabaseAdapterSupport {
 
     static func capabilityReport(
         identity: DatabaseProductIdentity,
+        connection: DatabaseConnectionDefinition,
         discoveredAt: Date = Date()
     ) -> DatabaseCapabilityReport {
         let metadataReason = DatabaseCapabilityUnavailableReason(
             category: .permission,
             message: "ClickHouse metadata is discovered lazily and may be permission limited.",
             missingPermissions: ["SELECT on system.databases, system.tables, system.columns"])
-        let unsafeReason = DatabaseCapabilityUnavailableReason(
-            category: .unsafe,
-            message: "The ClickHouse adapter is strictly read-only.")
         let unavailableReason = DatabaseCapabilityUnavailableReason(
             category: .notImplemented,
-            message: "This capability is outside the bounded ClickHouse reading slice.")
-        let productReason = DatabaseCapabilityUnavailableReason(
+            message: "This capability is outside the bounded ClickHouse explorer slice.")
+        let mutationPolicyReason = DatabaseCapabilityUnavailableReason(
+            category: .connectionPolicy,
+            message: "Writable ClickHouse inserts require an explicitly writable connection.")
+        let rowIdentityReason = DatabaseCapabilityUnavailableReason(
+            category: .product,
+            message: "ClickHouse ordering and primary keys do not prove row uniqueness.")
+        let transactionReason = DatabaseCapabilityUnavailableReason(
             category: .product,
             message: "ClickHouse does not provide transactional row editing semantics.")
         let limits = [
@@ -756,19 +825,24 @@ enum ClickHouseDatabaseAdapterSupport {
             (.objectDiscovery, .sharedRequired),
             (.objectDescription, .sharedRequired),
         ]
-        let unsafe: [(DatabaseCapabilityID, DatabaseCapabilityRequirement)] = [
-            (.insert, .sharedRequired),
-            (.update, .sharedRequired),
-            (.delete, .sharedRequired),
+        let unavailable: [(DatabaseCapabilityID, DatabaseCapabilityRequirement)] = [
             (.bulkMutation, .sharedRequired),
             (.importData, .sharedRequired),
+            (.exportData, .sharedRequired),
             (.schemaMutation, .familyRequired),
+            (.monitoring, .productRequired),
             (.administration, .productRequired),
         ]
-        let unavailable: [(DatabaseCapabilityID, DatabaseCapabilityRequirement)] = [
-            (.exportData, .sharedRequired),
-            (.monitoring, .productRequired),
-        ]
+        let insertAvailable = mutationsAllowed(connection)
+        let insert = DatabaseCapabilityStatus(
+            id: .insert,
+            requirement: .sharedRequired,
+            availability: insertAvailable ? .available : .unavailable,
+            reason: insertAvailable ? nil : mutationPolicyReason,
+            attributes: [
+                DatabaseStringAttribute(name: "scope", value: "single-row"),
+                DatabaseStringAttribute(name: "target", value: "MergeTree-table"),
+            ])
         let capabilities =
             available.map { identifier, requirement in
                 DatabaseCapabilityStatus(
@@ -785,13 +859,19 @@ enum ClickHouseDatabaseAdapterSupport {
                     reason: metadataReason,
                     limits: limits)
             }
-            + unsafe.map { identifier, requirement in
+            + [
+                insert,
                 DatabaseCapabilityStatus(
-                    id: identifier,
-                    requirement: requirement,
+                    id: .update,
+                    requirement: .sharedRequired,
                     availability: .unavailable,
-                    reason: unsafeReason)
-            }
+                    reason: rowIdentityReason),
+                DatabaseCapabilityStatus(
+                    id: .delete,
+                    requirement: .sharedRequired,
+                    availability: .unavailable,
+                    reason: rowIdentityReason),
+            ]
             + unavailable.map { identifier, requirement in
                 DatabaseCapabilityStatus(
                     id: identifier,
@@ -803,7 +883,7 @@ enum ClickHouseDatabaseAdapterSupport {
                     id: .transactions,
                     requirement: .familyRequired,
                     availability: .unavailable,
-                    reason: productReason)
+                    reason: transactionReason)
             ]
         return DatabaseCapabilityReport(
             productIdentity: identity,
@@ -811,22 +891,32 @@ enum ClickHouseDatabaseAdapterSupport {
             permissions: [
                 DatabasePermissionStatus(name: "read data", granted: true),
                 DatabasePermissionStatus(name: "read system metadata", granted: nil),
+                DatabasePermissionStatus(name: "insert data", granted: nil),
                 DatabasePermissionStatus(name: "kill own query", granted: nil),
             ],
             pagingModes: [.keyset, .streamed],
-            mutationModes: [.unsupported],
+            mutationModes: insertAvailable ? [.singleRecord] : [],
             transactionModes: [.none],
             cancellationModes: [.serverOperation],
             explainModes: [.logical, .physical, .pipeline, .indexes],
             safetyLimitations: [
-                "Only SELECT, WITH SELECT, and EXPLAIN statements are accepted.",
+                "Ad hoc SQL accepts only SELECT, WITH SELECT, and EXPLAIN statements.",
+                "Canonical single-row INSERT is limited to writable MergeTree tables.",
+                "Views, system tables, Distributed tables, and generated columns remain read-only.",
                 "Interactive browsing requires a non-null MergeTree sorting key.",
                 "Continuation tokens expire after 60 seconds and remain session-bound.",
-                "ClickHouse primary keys are ordering keys and do not enforce uniqueness.",
+                "Update and delete remain unavailable because ClickHouse keys do not enforce uniqueness.",
+                "MergeTree background merges can transform or collapse inserted rows.",
                 "Response bodies and pull-stream batches are hard bounded.",
             ],
             discoveredAt: discoveredAt,
             expiresAt: discoveredAt.addingTimeInterval(300))
+    }
+
+    static func mutationsAllowed(_ connection: DatabaseConnectionDefinition) -> Bool {
+        connection.readOnlyPolicy == .disabled
+            && connection.environment.protection != .readOnly
+            && connection.productionPolicy != .prohibitMutations
     }
 
     static func check(

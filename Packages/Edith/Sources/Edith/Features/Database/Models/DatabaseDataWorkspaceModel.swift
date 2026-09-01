@@ -156,6 +156,7 @@ final class DatabaseDataWorkspaceModel {
     private let announcement: @MainActor (String) -> Void
     private var activeTask: Task<Void, Never>?
     private var generation = UUID()
+    private var activeConnection: DatabaseConnectionSummary?
     private var activeConnectionID: DatabaseConnectionID?
     private var activeProduct: DatabaseProduct?
     private var lastQueryRequest: DatabaseQueryRequest?
@@ -185,10 +186,13 @@ final class DatabaseDataWorkspaceModel {
 
     var canSubmitEditor: Bool {
         guard let editorMode else { return false }
-        if activeProduct == .mongoDB || activeProduct == .elasticsearch
-            || activeProduct == .openSearch
-        {
-            return !documentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if let activeConnection, Self.usesDocumentEditor(activeConnection) {
+            guard let objectTarget = try? target(activeConnection) else { return false }
+            return
+                (try? documentEditorMutationRequest(
+                    product: activeConnection.product,
+                    mode: editorMode,
+                    objectTarget: objectTarget)) != nil
         }
         if editorMode == .insert, activeProduct == .redis || activeProduct == .valkey {
             var includesKey = false
@@ -363,6 +367,7 @@ final class DatabaseDataWorkspaceModel {
     func prepare(for connection: DatabaseConnectionSummary?) {
         guard activeConnectionID != connection?.id else { return }
         cancel()
+        activeConnection = connection
         activeConnectionID = connection?.id
         activeProduct = connection?.product
         records = []
@@ -532,12 +537,14 @@ final class DatabaseDataWorkspaceModel {
     }
 
     func beginInsert(_ connection: DatabaseConnectionSummary) {
-        guard supportsDataMutations(connection),
+        guard supportsDataMutation(.insert, connection: connection),
             Self.usesDocumentEditor(connection) || !fields.isEmpty
         else {
-            editorError = mutationUnavailableMessage(connection)
+            editorError = mutationUnavailableMessage(connection, capability: .insert)
             return
         }
+        activeConnection = connection
+        activeConnectionID = connection.id
         activeProduct = connection.product
         editorMode = .insert
         editorError = nil
@@ -575,14 +582,16 @@ final class DatabaseDataWorkspaceModel {
     }
 
     func beginEditingSelectedRow(_ connection: DatabaseConnectionSummary) {
-        guard supportsDataMutations(connection),
+        guard canMutateSelectedRecord(.update, connection: connection),
             let selectedRecordIndex,
             records.indices.contains(selectedRecordIndex),
             let identity = records[selectedRecordIndex].identity
         else {
-            editorError = mutationUnavailableMessage(connection)
+            editorError = mutationUnavailableMessage(connection, capability: .update)
             return
         }
+        activeConnection = connection
+        activeConnectionID = connection.id
         activeProduct = connection.product
         let record = records[selectedRecordIndex]
         var identityNames = Set<String>()
@@ -595,12 +604,13 @@ final class DatabaseDataWorkspaceModel {
             editorFields = []
             do {
                 if connection.product == .elasticsearch || connection.product == .openSearch {
-                    guard let source = documentSource(record) else {
+                    guard let source = searchEditorSource(record) else {
                         throw DatabaseJSONDocumentCodecError.unsupportedValue
                     }
                     documentText = source
                 } else {
-                    documentText = try DatabaseJSONDocumentCodec.encodeObject(record.fields)
+                    documentText = try DatabaseJSONDocumentCodec.encodeObject(
+                        record.fields.filter { $0.name != "_id" })
                 }
             } catch {
                 documentText = ""
@@ -634,12 +644,23 @@ final class DatabaseDataWorkspaceModel {
         }
     }
 
+    func canMutateSelectedRecord(
+        _ capability: DatabaseCapabilityID,
+        connection: DatabaseConnectionSummary
+    ) -> Bool {
+        guard let selectedRecordIndex else { return false }
+        return canMutateRecord(
+            at: selectedRecordIndex,
+            capability: capability,
+            connection: connection)
+    }
+
     func canEdit(
         recordAt index: Int,
         field name: String,
         connection: DatabaseConnectionSummary
     ) -> Bool {
-        guard supportsDataMutations(connection), records.indices.contains(index),
+        guard canMutateRecord(at: index, capability: .update, connection: connection),
             let identity = records[index].identity,
             !identity.components.contains(where: { $0.name == name }),
             let field = fields.first(where: {
@@ -718,6 +739,25 @@ final class DatabaseDataWorkspaceModel {
         _ connection: DatabaseConnectionSummary
     ) -> DatabaseDestructiveRequest? {
         do {
+            guard let editorMode else { throw DatabaseRowEditorError.notEditing }
+            let capability: DatabaseCapabilityID
+            switch editorMode {
+            case .insert: capability = .insert
+            case .update: capability = .update
+            }
+            guard supportsDataMutation(capability, connection: connection) else {
+                editorError = mutationUnavailableMessage(connection, capability: capability)
+                return nil
+            }
+            let objectTarget = try target(connection)
+            if Self.usesDocumentEditor(connection) {
+                let request = try documentEditorMutationRequest(
+                    product: connection.product,
+                    mode: editorMode,
+                    objectTarget: objectTarget)
+                editorError = nil
+                return request
+            }
             var values: [DatabaseObjectField] = []
             for field in editorFields where field.isIncluded {
                 values.append(
@@ -725,86 +765,7 @@ final class DatabaseDataWorkspaceModel {
                         name: field.id,
                         value: try Self.value(from: field)))
             }
-            let objectTarget = try target(connection)
             switch (connection.product, editorMode) {
-            case (.mongoDB, .insert):
-                let request = try DatabaseDocumentMutationRequests.mongoDBInsert(
-                    target: objectTarget,
-                    document: .object(try DatabaseJSONDocumentCodec.decodeObject(documentText)))
-                editorError = nil
-                return request
-            case (.mongoDB, .update(let recordIndex)):
-                guard records.indices.contains(recordIndex),
-                    let identity = records[recordIndex].identity
-                else {
-                    throw DatabaseRowEditorError.missingIdentity
-                }
-                let request = try DatabaseDocumentMutationRequests.mongoDBUpdate(
-                    target: DatabaseTargetIdentifier(
-                        connectionID: objectTarget.connectionID,
-                        object: objectTarget.object,
-                        record: identity),
-                    values: try DatabaseJSONDocumentCodec.decodeObject(documentText))
-                editorError = nil
-                return request
-            case (.elasticsearch, .insert), (.openSearch, .insert):
-                let input = try Self.searchDocumentInput(documentText)
-                guard let object = objectTarget.object, let index = object.path.first else {
-                    throw DatabaseRowEditorError.missingIdentity
-                }
-                let target = DatabaseTargetIdentifier(
-                    connectionID: objectTarget.connectionID,
-                    object: object,
-                    record: DatabaseRecordIdentity(
-                        kind: .searchDocument,
-                        components: [
-                            DatabaseIdentityComponent(name: "_index", value: .string(index)),
-                            DatabaseIdentityComponent(
-                                name: "_id", value: .string(input.identifier)),
-                        ]))
-                let request =
-                    if connection.product == .elasticsearch {
-                        try DatabaseDocumentMutationRequests.elasticsearchCreate(
-                            target: target,
-                            document: .object(input.fields))
-                    } else {
-                        try DatabaseDocumentMutationRequests.openSearchCreate(
-                            target: target,
-                            document: .object(input.fields))
-                    }
-                editorError = nil
-                return request
-            case (.elasticsearch, .update(let recordIndex)),
-                (.openSearch, .update(let recordIndex)):
-                guard records.indices.contains(recordIndex),
-                    let identity = records[recordIndex].identity
-                else {
-                    throw DatabaseRowEditorError.missingIdentity
-                }
-                let input = try Self.searchDocumentInput(documentText)
-                guard
-                    identity.components.contains(where: {
-                        $0.name == "_id" && $0.value == .string(input.identifier)
-                    })
-                else {
-                    throw DatabaseRowEditorError.changedIdentity
-                }
-                let target = DatabaseTargetIdentifier(
-                    connectionID: objectTarget.connectionID,
-                    object: objectTarget.object,
-                    record: identity)
-                let request =
-                    if connection.product == .elasticsearch {
-                        try DatabaseDocumentMutationRequests.elasticsearchReplace(
-                            target: target,
-                            document: .object(input.fields))
-                    } else {
-                        try DatabaseDocumentMutationRequests.openSearchReplace(
-                            target: target,
-                            document: .object(input.fields))
-                    }
-                editorError = nil
-                return request
             case (.postgresql, .insert):
                 let request = try DatabaseRowMutationRequests.postgreSQLInsert(
                     target: objectTarget,
@@ -867,6 +828,12 @@ final class DatabaseDataWorkspaceModel {
                     values: values)
                 editorError = nil
                 return request
+            case (.clickHouse, .insert):
+                let request = try DatabaseRowMutationRequests.clickHouseInsert(
+                    target: objectTarget,
+                    values: values)
+                editorError = nil
+                return request
             case (.redis, .insert), (.valkey, .insert):
                 guard let key = values.first(where: { $0.name == "key" })?.value,
                     let value = values.first(where: { $0.name == "value" })?.value
@@ -913,8 +880,6 @@ final class DatabaseDataWorkspaceModel {
                     ttlMilliseconds: try Self.redisTTL(values))
                 editorError = nil
                 return request
-            case (_, nil):
-                throw DatabaseRowEditorError.notEditing
             default:
                 throw DatabaseRowEditorError.unsupportedDatabase
             }
@@ -924,40 +889,100 @@ final class DatabaseDataWorkspaceModel {
         }
     }
 
+    private func documentEditorMutationRequest(
+        product: DatabaseProduct,
+        mode: DatabaseRowEditorMode,
+        objectTarget: DatabaseTargetIdentifier
+    ) throws -> DatabaseDestructiveRequest {
+        switch (product, mode) {
+        case (.mongoDB, .insert):
+            return try DatabaseDocumentMutationRequests.mongoDBInsert(
+                target: objectTarget,
+                document: .object(try DatabaseJSONDocumentCodec.decodeObject(documentText)))
+        case (.mongoDB, .update(let recordIndex)):
+            guard records.indices.contains(recordIndex),
+                let identity = records[recordIndex].identity
+            else {
+                throw DatabaseRowEditorError.missingIdentity
+            }
+            return try DatabaseDocumentMutationRequests.mongoDBUpdate(
+                target: DatabaseTargetIdentifier(
+                    connectionID: objectTarget.connectionID,
+                    object: objectTarget.object,
+                    record: identity),
+                values: try DatabaseJSONDocumentCodec.decodeObject(documentText))
+        case (.elasticsearch, .insert), (.openSearch, .insert):
+            let input = try Self.searchDocumentInput(documentText)
+            guard let object = objectTarget.object, let index = object.path.first else {
+                throw DatabaseRowEditorError.missingIdentity
+            }
+            let target = DatabaseTargetIdentifier(
+                connectionID: objectTarget.connectionID,
+                object: object,
+                record: DatabaseRecordIdentity(
+                    kind: .searchDocument,
+                    components: [
+                        DatabaseIdentityComponent(name: "_index", value: .string(index)),
+                        DatabaseIdentityComponent(name: "_id", value: .string(input.identifier)),
+                    ]))
+            if product == .elasticsearch {
+                return try DatabaseDocumentMutationRequests.elasticsearchCreate(
+                    target: target,
+                    document: .object(input.fields))
+            }
+            return try DatabaseDocumentMutationRequests.openSearchCreate(
+                target: target,
+                document: .object(input.fields))
+        case (.elasticsearch, .update(let recordIndex)),
+            (.openSearch, .update(let recordIndex)):
+            guard records.indices.contains(recordIndex),
+                let identity = records[recordIndex].identity
+            else {
+                throw DatabaseRowEditorError.missingIdentity
+            }
+            let input = try Self.searchDocumentInput(documentText)
+            guard
+                identity.components.contains(where: {
+                    $0.name == "_id" && $0.value == .string(input.identifier)
+                })
+            else {
+                throw DatabaseRowEditorError.changedIdentity
+            }
+            let target = DatabaseTargetIdentifier(
+                connectionID: objectTarget.connectionID,
+                object: objectTarget.object,
+                record: identity)
+            if product == .elasticsearch {
+                return try DatabaseDocumentMutationRequests.elasticsearchReplace(
+                    target: target,
+                    document: .object(input.fields))
+            }
+            return try DatabaseDocumentMutationRequests.openSearchReplace(
+                target: target,
+                document: .object(input.fields))
+        default:
+            throw DatabaseRowEditorError.unsupportedDatabase
+        }
+    }
+
     func deleteMutationRequest(
         _ connection: DatabaseConnectionSummary
     ) -> DatabaseDestructiveRequest? {
         do {
-            guard supportsDataMutations(connection), let record = selectedRecord,
-                let identity = record.identity
+            guard canMutateSelectedRecord(.delete, connection: connection),
+                let identity = selectedRecord?.identity
             else {
-                throw DatabaseRowEditorError.missingIdentity
+                editorError = mutationUnavailableMessage(connection, capability: .delete)
+                return nil
             }
             let objectTarget = try target(connection)
             let target = DatabaseTargetIdentifier(
                 connectionID: objectTarget.connectionID,
                 object: objectTarget.object,
                 record: identity)
-            let request: DatabaseDestructiveRequest
-            if connection.product == .redis || connection.product == .valkey {
-                request = try DatabaseKeyspaceMutationRequests.deleteKey(
-                    target: target,
-                    product: connection.product)
-            } else if connection.product == .mongoDB {
-                request = try DatabaseDocumentMutationRequests.mongoDBDelete(target: target)
-            } else if connection.product == .elasticsearch {
-                request = try DatabaseDocumentMutationRequests.elasticsearchDelete(target: target)
-            } else if connection.product == .openSearch {
-                request = try DatabaseDocumentMutationRequests.openSearchDelete(target: target)
-            } else if connection.product == .mysql || connection.product == .mariaDB {
-                request = try DatabaseRowMutationRequests.mySQLDelete(
-                    target: target,
-                    product: connection.product)
-            } else if connection.product == .sqlite {
-                request = try DatabaseRowMutationRequests.sqliteDelete(target: target)
-            } else {
-                request = try DatabaseRowMutationRequests.postgreSQLDelete(target: target)
-            }
+            let request = try Self.executableDeleteMutationRequest(
+                product: connection.product,
+                target: target)
             editorError = nil
             return request
         } catch {
@@ -976,16 +1001,8 @@ final class DatabaseDataWorkspaceModel {
     }
 
     func documentSource(_ record: DatabaseRecord) -> String? {
-        var sourceFields = record.fields.filter { $0.name != "_highlight" }
-        if let identity = record.identity,
-            identity.kind == .documentID || identity.kind == .searchDocument,
-            let identifier = identity.components.first(where: { $0.name == "_id" }),
-            !sourceFields.contains(where: { $0.name == identifier.name })
-        {
-            sourceFields.insert(
-                DatabaseObjectField(name: identifier.name, value: identifier.value), at: 0)
-        }
-        return try? DatabaseJSONDocumentCodec.encodeObject(sourceFields)
+        try? DatabaseJSONDocumentCodec.encodeObject(
+            record.fields.filter { $0.name != "_highlight" })
     }
 
     func value(named name: String, in record: DatabaseRecord) -> DatabaseValue {
@@ -1436,23 +1453,134 @@ final class DatabaseDataWorkspaceModel {
         }
     }
 
-    func supportsDataMutations(_ connection: DatabaseConnectionSummary) -> Bool {
-        (connection.product == .postgresql || connection.product == .mysql
-            || connection.product == .mariaDB || connection.product == .sqlite
-            || connection.product == .redis
-            || connection.product == .valkey || connection.product == .mongoDB
-            || connection.product == .elasticsearch || connection.product == .openSearch)
-            && connection.readOnlyPolicy == .disabled
-            && connection.environmentProtection != .readOnly
-            && connection.productionPolicy != .prohibitMutations
+    private func canMutateRecord(
+        at index: Int,
+        capability: DatabaseCapabilityID,
+        connection: DatabaseConnectionSummary
+    ) -> Bool {
+        guard capability == .update || capability == .delete,
+            supportsDataMutation(capability, connection: connection),
+            records.indices.contains(index),
+            let identity = records[index].identity,
+            let objectTarget = try? target(connection)
+        else { return false }
+        if connection.product == .mongoDB,
+            !Self.mongoDBIdentityRoundTrips(identity)
+        {
+            return false
+        }
+        if capability == .update {
+            let record = records[index]
+            if connection.product == .mongoDB,
+                (try? DatabaseJSONDocumentCodec.encodeObject(
+                    record.fields.filter { $0.name != "_id" })) == nil
+            {
+                return false
+            }
+            if connection.product == .elasticsearch || connection.product == .openSearch,
+                searchEditorSource(record) == nil
+            {
+                return false
+            }
+        }
+        let target = DatabaseTargetIdentifier(
+            connectionID: objectTarget.connectionID,
+            object: objectTarget.object,
+            record: identity)
+        guard
+            let request = try? Self.executableDeleteMutationRequest(
+                product: connection.product,
+                target: target)
+        else { return false }
+        return request.target.record == identity
     }
 
-    private func mutationUnavailableMessage(_ connection: DatabaseConnectionSummary) -> String {
+    private static func executableDeleteMutationRequest(
+        product: DatabaseProduct,
+        target: DatabaseTargetIdentifier
+    ) throws -> DatabaseDestructiveRequest {
+        switch product {
+        case .postgresql:
+            try DatabaseRowMutationRequests.postgreSQLDelete(target: target)
+        case .mysql, .mariaDB:
+            try DatabaseRowMutationRequests.mySQLDelete(target: target, product: product)
+        case .sqlite:
+            try DatabaseRowMutationRequests.sqliteDelete(target: target)
+        case .redis, .valkey:
+            try DatabaseKeyspaceMutationRequests.deleteKey(target: target, product: product)
+        case .mongoDB:
+            try DatabaseDocumentMutationRequests.mongoDBDelete(target: target)
+        case .elasticsearch:
+            try DatabaseDocumentMutationRequests.elasticsearchDelete(target: target)
+        case .openSearch:
+            try DatabaseDocumentMutationRequests.openSearchDelete(target: target)
+        case .clickHouse:
+            throw DatabaseRowEditorError.unsupportedDatabase
+        }
+    }
+
+    private static func mongoDBIdentityRoundTrips(_ identity: DatabaseRecordIdentity) -> Bool {
+        guard identity.kind == .documentID,
+            identity.components.count == 1,
+            identity.components[0].name == "_id",
+            identity.concurrencyTokens.isEmpty
+        else { return false }
+        let field = DatabaseObjectField(name: "_id", value: identity.components[0].value)
+        guard let encoded = try? DatabaseJSONDocumentCodec.encodeObject([field]),
+            let decoded = try? DatabaseJSONDocumentCodec.decodeObject(encoded),
+            decoded == [field]
+        else { return false }
+        if case let .productSpecific(value) = field.value {
+            guard value.product == nil || value.product == .mongoDB,
+                value.typeName == "objectId",
+                value.binaryRepresentation == nil,
+                value.attributes.isEmpty,
+                let text = value.textRepresentation
+            else { return false }
+            return isMongoDBObjectID(text)
+        }
+        return true
+    }
+
+    func supportsDataMutation(
+        _ capability: DatabaseCapabilityID,
+        connection: DatabaseConnectionSummary
+    ) -> Bool {
+        guard connection.readOnlyPolicy == .disabled,
+            connection.environmentProtection != .readOnly,
+            connection.productionPolicy != .prohibitMutations
+        else { return false }
+        return switch capability {
+        case .insert:
+            connection.product == .postgresql || connection.product == .mysql
+                || connection.product == .mariaDB || connection.product == .sqlite
+                || connection.product == .redis || connection.product == .valkey
+                || connection.product == .mongoDB || connection.product == .elasticsearch
+                || connection.product == .openSearch || connection.product == .clickHouse
+        case .update, .delete:
+            connection.product == .postgresql || connection.product == .mysql
+                || connection.product == .mariaDB || connection.product == .sqlite
+                || connection.product == .redis || connection.product == .valkey
+                || connection.product == .mongoDB || connection.product == .elasticsearch
+                || connection.product == .openSearch
+        default:
+            false
+        }
+    }
+
+    private func mutationUnavailableMessage(
+        _ connection: DatabaseConnectionSummary,
+        capability: DatabaseCapabilityID
+    ) -> String {
+        if connection.product == .clickHouse, capability == .update || capability == .delete {
+            return "ClickHouse rows cannot be targeted uniquely for safe editing or deletion."
+        }
         if connection.product != .postgresql && connection.product != .mysql
             && connection.product != .mariaDB && connection.product != .sqlite
             && connection.product != .redis
             && connection.product != .valkey && connection.product != .mongoDB
             && connection.product != .elasticsearch && connection.product != .openSearch
+            && connection.product != .clickHouse
         {
             return "Data editing is not available for this database yet."
         }
@@ -1462,7 +1590,9 @@ final class DatabaseDataWorkspaceModel {
         {
             return "This connection policy does not allow data editing."
         }
-        if selectedRecord?.identity == nil {
+        if capability != .insert,
+            !canMutateSelectedRecord(capability, connection: connection)
+        {
             return "This record has no stable identity for safe editing."
         }
         return "Open a table or keyspace before editing data."
@@ -1485,6 +1615,18 @@ final class DatabaseDataWorkspaceModel {
             throw DatabaseRowEditorError.missingIdentity
         }
         return (identifier, fields.filter { $0.name != "_id" })
+    }
+
+    private func searchEditorSource(_ record: DatabaseRecord) -> String? {
+        guard let identity = record.identity,
+            identity.kind == .searchDocument,
+            let identifier = identity.components.first(where: { $0.name == "_id" })
+        else { return nil }
+        var fields = record.fields.filter { $0.name != "_highlight" && $0.name != "_id" }
+        fields.insert(
+            DatabaseObjectField(name: identifier.name, value: identifier.value),
+            at: 0)
+        return try? DatabaseJSONDocumentCodec.encodeObject(fields)
     }
 
     private static func isRedisString(_ record: DatabaseRecord) -> Bool {
@@ -1582,11 +1724,33 @@ final class DatabaseDataWorkspaceModel {
     ) throws -> DatabaseValue {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let type = typeName.lowercased()
+        if type == "objectid" {
+            guard isMongoDBObjectID(trimmed) else {
+                throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
+            }
+            return .productSpecific(
+                DatabaseProductValue(
+                    product: .mongoDB,
+                    typeName: "objectId",
+                    textRepresentation: trimmed))
+        }
         if type.contains("bool") {
             guard let value = parseBoolean(trimmed) else {
                 throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
             }
             return .boolean(value)
+        }
+        if type == "unsigned_long" {
+            guard let value = UInt64(trimmed) else {
+                throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
+            }
+            return .unsignedInteger(value)
+        }
+        if type == "long" || type == "short" || type == "byte" {
+            guard let value = Int64(trimmed) else {
+                throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
+            }
+            return .signedInteger(value)
         }
         if type.contains("int") || type.contains("serial") {
             guard let value = Int64(trimmed) else {
@@ -1598,6 +1762,12 @@ final class DatabaseDataWorkspaceModel {
             return .decimal(DatabaseDecimalValue(rawValue: trimmed))
         }
         if type.contains("real") || type.contains("double") {
+            guard let value = Double(trimmed), value.isFinite else {
+                throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
+            }
+            return .floatingPoint(value)
+        }
+        if type == "float" || type == "half_float" || type == "scaled_float" {
             guard let value = Double(trimmed), value.isFinite else {
                 throw DatabaseRowEditorError.invalidValue(fieldName, typeName)
             }
@@ -1619,6 +1789,16 @@ final class DatabaseDataWorkspaceModel {
             return .time(DatabaseTimeValue(text: trimmed))
         }
         return .string(text)
+    }
+
+    private static func isMongoDBObjectID(_ value: String) -> Bool {
+        value.utf8.count == 24
+            && value.utf8.allSatisfy { byte in
+                switch byte {
+                case 48...57, 65...70, 97...102: true
+                default: false
+                }
+            }
     }
 
     private static func parseBoolean(_ value: String) -> Bool? {

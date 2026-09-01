@@ -933,7 +933,8 @@ enum ElasticsearchDatabaseReadCompiler {
         _ fields: [String: ElasticsearchDatabaseMappingResponse.Field],
         prefix: [String],
         descriptors: inout [DatabaseFieldDescriptor],
-        runtime: Bool = false
+        runtime: Bool = false,
+        insideNested: Bool = false
     ) throws(DatabaseAdapterFailure) {
         for name in fields.keys.sorted() {
             guard let field = fields[name],
@@ -958,9 +959,9 @@ enum ElasticsearchDatabaseReadCompiler {
                     displayName: path.joined(separator: "."),
                     typeName: runtime ? "runtime:" + type : type,
                     isNullable: true,
-                    isSortable: !disabled && !sortableTypes.contains(type)
+                    isSortable: !insideNested && !disabled && !sortableTypes.contains(type)
                         && field.docValues != false,
-                    isFilterable: !disabled))
+                    isFilterable: !insideNested && !disabled))
             guard descriptors.count <= DatabaseAdapterBounds.maximumPageFields else {
                 throw .limitExceeded(
                     limit: .pageFields,
@@ -971,12 +972,14 @@ enum ElasticsearchDatabaseReadCompiler {
                 field.properties ?? [:],
                 prefix: path,
                 descriptors: &descriptors,
-                runtime: runtime)
+                runtime: runtime,
+                insideNested: insideNested || type == "nested")
             try appendFields(
                 field.fields ?? [:],
                 prefix: path,
                 descriptors: &descriptors,
-                runtime: runtime)
+                runtime: runtime,
+                insideNested: insideNested || type == "nested")
         }
     }
 

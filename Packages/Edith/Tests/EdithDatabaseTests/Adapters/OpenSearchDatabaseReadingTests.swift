@@ -29,6 +29,8 @@ private enum OpenSearchDatabaseReadingFixtures {
         deploymentMode: DatabaseDeploymentMode = .automatic,
         readOnlyPolicy: DatabaseReadOnlyPolicy = .required,
         productionPolicy: DatabaseProductionPolicy = .prohibitMutations,
+        environmentKind: DatabaseEnvironmentKind = .testing,
+        environmentProtection: DatabaseEnvironmentProtection = .readOnly,
         options: [DatabaseNonSecretOption] = []
     ) throws -> DatabaseConnectionDefinition {
         let password = DatabaseSecretReference(
@@ -60,9 +62,9 @@ private enum OpenSearchDatabaseReadingFixtures {
             readOnlyPolicy: readOnlyPolicy,
             productionPolicy: productionPolicy,
             environment: DatabaseEnvironmentMetadata(
-                kind: .testing,
+                kind: environmentKind,
                 label: "Testing",
-                protection: .readOnly),
+                protection: environmentProtection),
             options: options,
             createdAt: Date(timeIntervalSince1970: 1_800_000_000),
             updatedAt: Date(timeIntervalSince1970: 1_800_000_000))
@@ -436,9 +438,27 @@ private func opensearchReadingSession(
         context: OpenSearchDatabaseReadingFixtures.context())
 }
 
+private func opensearchWritableDefinition() throws -> DatabaseConnectionDefinition {
+    try OpenSearchDatabaseReadingFixtures.definition(
+        readOnlyPolicy: .disabled,
+        productionPolicy: .requireMutationPreview,
+        environmentProtection: .confirmationRequired)
+}
+
+@Test func opensearchConnectionPlanningAcceptsWritablePolicy() throws {
+    let definition = try opensearchWritableDefinition()
+    let plan = try OpenSearchDatabaseAdapterSupport.connectionPlan(
+        OpenSearchDatabaseReadingFixtures.resolved(definition),
+        context: OpenSearchDatabaseReadingFixtures.context())
+    #expect(plan.endpoint.absoluteString == "http://127.0.0.1:59201")
+    #expect(plan.requestTimeoutMilliseconds == 3_000)
+}
+
 @Test func opensearchReadingReportsBoundedMutationCapabilities() throws {
+    let definition = try opensearchWritableDefinition()
     let report = OpenSearchDatabaseAdapterSupport.capabilityReport(
         identity: OpenSearchDatabaseReadingFixtures.identity,
+        connection: definition,
         discoveredAt: Date(timeIntervalSince1970: 1_800_000_000))
     try DatabaseAdapterBounds.validate(
         report: report,
@@ -453,6 +473,37 @@ private func opensearchReadingSession(
     #expect(report.pagingModes == [.pointInTime])
     #expect(report.mutationModes == [.singleRecord])
     #expect(Set(report.capabilities.map(\.id)).count == report.capabilities.count)
+}
+
+@Test func opensearchMutationCapabilitiesFollowEveryConnectionPolicyGuard() throws {
+    let blockedDefinitions = [
+        try OpenSearchDatabaseReadingFixtures.definition(
+            readOnlyPolicy: .preferred,
+            productionPolicy: .standard,
+            environmentProtection: .standard),
+        try OpenSearchDatabaseReadingFixtures.definition(
+            readOnlyPolicy: .disabled,
+            productionPolicy: .standard,
+            environmentProtection: .readOnly),
+        try OpenSearchDatabaseReadingFixtures.definition(
+            readOnlyPolicy: .disabled,
+            productionPolicy: .prohibitMutations,
+            environmentProtection: .standard),
+    ]
+    for definition in blockedDefinitions {
+        let report = OpenSearchDatabaseAdapterSupport.capabilityReport(
+            identity: OpenSearchDatabaseReadingFixtures.identity,
+            connection: definition,
+            discoveredAt: Date(timeIntervalSince1970: 1_800_000_000))
+        for capability in [DatabaseCapabilityID.insert, .update, .delete] {
+            #expect(report.status(for: capability)?.availability == .unavailable)
+            #expect(report.status(for: capability)?.reason?.category == .connectionPolicy)
+            #expect(report.status(for: capability)?.reason?.message.contains("read-only") == true)
+        }
+        #expect(report.mutationModes.isEmpty)
+        #expect(report.supports(.browse))
+        #expect(report.supports(.query))
+    }
 }
 
 @Test func opensearchDocumentMutationRequestsAreCanonicalAndIdentityBound() throws {
@@ -519,7 +570,7 @@ private func opensearchReadingSession(
                 sequenceNumber: 9,
                 primaryTerm: 2),
         ])
-    let definition = try OpenSearchDatabaseReadingFixtures.definition()
+    let definition = try opensearchWritableDefinition()
     let session = try await opensearchReadingSession(client: client, definition: definition)
     let createTarget = OpenSearchDatabaseReadingFixtures.identifiedTarget(
         connectionID: definition.id,
@@ -575,7 +626,7 @@ private func opensearchReadingSession(
 }
 
 @Test func opensearchDocumentMutationRejectsNoncanonicalAndStaleRequests() async throws {
-    let definition = try OpenSearchDatabaseReadingFixtures.definition()
+    let definition = try opensearchWritableDefinition()
     let client = OpenSearchDatabaseReadingClient()
     let session = try await opensearchReadingSession(client: client, definition: definition)
     let target = OpenSearchDatabaseReadingFixtures.identifiedTarget(
@@ -617,6 +668,47 @@ private func opensearchReadingSession(
         #expect(failure == OpenSearchDatabaseAdapterSupport.mutationConflict)
     }
     await conflictSession.disconnect()
+}
+
+@Test func opensearchDocumentMutationEntryPointsEnforceConnectionPolicy() async throws {
+    let blockedDefinitions = [
+        try OpenSearchDatabaseReadingFixtures.definition(
+            readOnlyPolicy: .preferred,
+            productionPolicy: .standard,
+            environmentProtection: .standard),
+        try OpenSearchDatabaseReadingFixtures.definition(
+            readOnlyPolicy: .disabled,
+            productionPolicy: .standard,
+            environmentProtection: .readOnly),
+        try OpenSearchDatabaseReadingFixtures.definition(
+            readOnlyPolicy: .disabled,
+            productionPolicy: .prohibitMutations,
+            environmentProtection: .standard),
+    ]
+    for definition in blockedDefinitions {
+        let client = OpenSearchDatabaseReadingClient()
+        let session = try await opensearchReadingSession(
+            client: client,
+            definition: definition)
+        let request = try DatabaseDocumentMutationRequests.openSearchDelete(
+            target: OpenSearchDatabaseReadingFixtures.identifiedTarget(
+                connectionID: definition.id))
+        let plan = try OpenSearchDatabaseMutationSupport.normalize(
+            request,
+            connectionID: definition.id)
+        await #expect(throws: OpenSearchDatabaseAdapterSupport.readOnlyViolation) {
+            _ = try await session.normalizeMutation(
+                request,
+                context: OpenSearchDatabaseReadingFixtures.context())
+        }
+        await #expect(throws: OpenSearchDatabaseAdapterSupport.readOnlyViolation) {
+            _ = try await session.executeMutation(
+                plan,
+                context: OpenSearchDatabaseReadingFixtures.context())
+        }
+        #expect(await client.mutations().isEmpty)
+        await session.disconnect()
+    }
 }
 
 @Test func opensearchReadingDiscoversIndexesAndAliasesLazily() async throws {
@@ -1008,12 +1100,15 @@ private func opensearchReadingSession(
 }
 
 @Test func opensearchReadingGatesStablePaginationByProductVersion() throws {
+    let definition = try OpenSearchDatabaseReadingFixtures.definition()
     let legacy = DatabaseProductIdentity(
         product: .openSearch,
         version: DatabaseVersion(string: "2.19.3", major: 2, minor: 19, patch: 3),
         distribution: "OpenSearch",
         topology: DatabaseTopology(kind: .standalone))
-    let report = OpenSearchDatabaseAdapterSupport.capabilityReport(identity: legacy)
+    let report = OpenSearchDatabaseAdapterSupport.capabilityReport(
+        identity: legacy,
+        connection: definition)
     #expect(!OpenSearchDatabaseAdapterSupport.supportsBoundedReading(legacy))
     #expect(report.status(for: .browse)?.availability == .unavailable)
     #expect(report.status(for: .browse)?.reason?.requiredVersion == "3.0")

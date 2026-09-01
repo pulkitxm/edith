@@ -77,7 +77,8 @@ actor OpenSearchDatabaseAdapterSession: DatabaseAdapterSession {
             throw OpenSearchDatabaseAdapterSupport.connectionFailed
         }
         let report = OpenSearchDatabaseAdapterSupport.capabilityReport(
-            identity: productIdentity)
+            identity: productIdentity,
+            connection: connection)
         try DatabaseAdapterBounds.validate(report: report, identity: productIdentity)
         return report
     }
@@ -125,6 +126,7 @@ actor OpenSearchDatabaseAdapterSession: DatabaseAdapterSession {
         _ request: DatabaseDestructiveRequest,
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseDestructivePlan {
+        try OpenSearchDatabaseAdapterSupport.requireMutationsAllowed(connection)
         try await requireAvailableContext(context)
         return try OpenSearchDatabaseMutationSupport.normalize(
             request,
@@ -135,6 +137,7 @@ actor OpenSearchDatabaseAdapterSession: DatabaseAdapterSession {
         _ plan: DatabaseDestructivePlan,
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterMutationResult {
+        try OpenSearchDatabaseAdapterSupport.requireMutationsAllowed(connection)
         let mutation = try OpenSearchDatabaseMutationSupport.execution(
             plan,
             connectionID: connection.id)
@@ -545,8 +548,6 @@ enum OpenSearchDatabaseAdapterSupport {
             definition.tls.clientPrivateKey == nil,
             definition.tls.serverName == nil,
             [.automatic, .standalone, .cluster].contains(definition.deploymentMode),
-            definition.readOnlyPolicy != .disabled
-                || definition.productionPolicy == .prohibitMutations,
             case let .network(endpoints) = definition.location,
             endpoints.count == 1,
             let endpoint = endpoints.first,
@@ -654,9 +655,11 @@ enum OpenSearchDatabaseAdapterSupport {
 
     static func capabilityReport(
         identity: DatabaseProductIdentity,
+        connection: DatabaseConnectionDefinition,
         discoveredAt: Date = Date()
     ) -> DatabaseCapabilityReport {
         let boundedReadingAvailable = supportsBoundedReading(identity)
+        let mutationsAvailable = mutationsAllowed(connection)
         let metadataReason = DatabaseCapabilityUnavailableReason(
             category: .permission,
             message: "Index metadata is discovered lazily and may be permission limited.",
@@ -668,15 +671,24 @@ enum OpenSearchDatabaseAdapterSupport {
         let unsafeReason = DatabaseCapabilityUnavailableReason(
             category: .unsafe,
             message: "Only guarded single-document OpenSearch mutations are available.")
+        let mutationPolicyReason = DatabaseCapabilityUnavailableReason(
+            category: .connectionPolicy,
+            message:
+                "OpenSearch document mutations require read-only mode to be disabled, writable environment protection, and a production policy that permits mutations."
+        )
         let unavailableReason = DatabaseCapabilityUnavailableReason(
             category: .notImplemented,
             message: "This capability is not provided by the bounded OpenSearch reader.")
         let alwaysAvailable: [(DatabaseCapabilityID, DatabaseCapabilityRequirement)] = [
-            (.connectionTest, .sharedRequired),
-            (.insert, .sharedRequired),
-            (.update, .sharedRequired),
-            (.delete, .sharedRequired),
+            (.connectionTest, .sharedRequired)
         ]
+        let mutations = [DatabaseCapabilityID.insert, .update, .delete].map { identifier in
+            DatabaseCapabilityStatus(
+                id: identifier,
+                requirement: .sharedRequired,
+                availability: mutationsAvailable ? .available : .unavailable,
+                reason: mutationsAvailable ? nil : mutationPolicyReason)
+        }
         let reading: [(DatabaseCapabilityID, DatabaseCapabilityRequirement)] = [
             (.query, .familyRequired),
             (.queryCancellation, .sharedRequired),
@@ -717,6 +729,7 @@ enum OpenSearchDatabaseAdapterSupport {
                     requirement: requirement,
                     availability: .available)
             }
+            + mutations
             + reading.map { identifier, requirement in
                 DatabaseCapabilityStatus(
                     id: identifier,
@@ -759,7 +772,7 @@ enum OpenSearchDatabaseAdapterSupport {
                     scope: "selected target"),
             ],
             pagingModes: boundedReadingAvailable ? [.pointInTime] : [],
-            mutationModes: [.singleRecord],
+            mutationModes: mutationsAvailable ? [.singleRecord] : [],
             transactionModes: [.none],
             cancellationModes: [.cooperative, .protocolCancellation],
             safetyLimitations: [
@@ -771,6 +784,18 @@ enum OpenSearchDatabaseAdapterSupport {
             ],
             discoveredAt: discoveredAt,
             expiresAt: discoveredAt.addingTimeInterval(300))
+    }
+
+    static func mutationsAllowed(_ connection: DatabaseConnectionDefinition) -> Bool {
+        connection.readOnlyPolicy == .disabled
+            && connection.environment.protection != .readOnly
+            && connection.productionPolicy != .prohibitMutations
+    }
+
+    static func requireMutationsAllowed(
+        _ connection: DatabaseConnectionDefinition
+    ) throws(DatabaseAdapterFailure) {
+        guard mutationsAllowed(connection) else { throw readOnlyViolation }
     }
 
     static func supportsBoundedReading(_ identity: DatabaseProductIdentity) -> Bool {

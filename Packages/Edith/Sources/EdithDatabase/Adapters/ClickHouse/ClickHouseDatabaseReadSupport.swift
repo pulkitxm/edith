@@ -7,6 +7,23 @@ struct ClickHouseDatabaseColumn: Equatable, Sendable {
     let position: UInt64
     let isPrimaryKey: Bool
     let isSortingKey: Bool
+    let defaultKind: String?
+
+    init(
+        name: String,
+        type: String,
+        position: UInt64,
+        isPrimaryKey: Bool,
+        isSortingKey: Bool,
+        defaultKind: String? = nil
+    ) {
+        self.name = name
+        self.type = type
+        self.position = position
+        self.isPrimaryKey = isPrimaryKey
+        self.isSortingKey = isSortingKey
+        self.defaultKind = defaultKind
+    }
 
     var descriptor: DatabaseFieldDescriptor {
         DatabaseFieldDescriptor(
@@ -22,7 +39,20 @@ struct ClickHouseDatabaseColumn: Equatable, Sendable {
 struct ClickHouseDatabaseTableDescription: Equatable, Sendable {
     let database: String
     let table: String
+    let engine: String
     let columns: [ClickHouseDatabaseColumn]
+
+    init(
+        database: String,
+        table: String,
+        engine: String = "Unknown",
+        columns: [ClickHouseDatabaseColumn]
+    ) {
+        self.database = database
+        self.table = table
+        self.engine = engine
+        self.columns = columns
+    }
 
     var sortingColumns: [ClickHouseDatabaseColumn] {
         columns.filter(\.isSortingKey)
@@ -95,13 +125,16 @@ enum ClickHouseDatabaseReadCompiler {
         try validateIdentifier(database)
         try validateIdentifier(table)
         return """
-            SELECT name, type, toUInt64(position) AS position,
-                toUInt64(is_in_primary_key) AS is_in_primary_key,
-                toUInt64(is_in_sorting_key) AS is_in_sorting_key
-            FROM system.columns
-            WHERE database = {_edith_database:String}
-                AND table = {_edith_table:String}
-            ORDER BY position, name
+            SELECT c.name AS name, c.type AS type, toUInt64(c.position) AS position,
+                toUInt64(c.is_in_primary_key) AS is_in_primary_key,
+                toUInt64(c.is_in_sorting_key) AS is_in_sorting_key,
+                c.default_kind AS default_kind, t.engine AS engine
+            FROM system.columns AS c
+            INNER JOIN system.tables AS t
+                ON c.database = t.database AND c.table = t.name
+            WHERE c.database = {_edith_database:String}
+                AND c.table = {_edith_table:String}
+            ORDER BY c.position, c.name
             LIMIT 513
             FORMAT JSONCompactEachRowWithNamesAndTypes
             """
@@ -115,7 +148,10 @@ enum ClickHouseDatabaseReadCompiler {
         let result = try decode(response)
         guard
             result.names
-                == ["name", "type", "position", "is_in_primary_key", "is_in_sorting_key"],
+                == [
+                    "name", "type", "position", "is_in_primary_key", "is_in_sorting_key",
+                    "default_kind", "engine",
+                ],
             !result.rows.isEmpty,
             result.rows.count <= DatabaseAdapterBounds.maximumPageFields
         else {
@@ -123,22 +159,33 @@ enum ClickHouseDatabaseReadCompiler {
         }
         var names = Set<String>()
         var columns: [ClickHouseDatabaseColumn] = []
+        var tableEngine: String?
         for row in result.rows {
-            guard row.cells.count == 5,
+            guard row.cells.count == 7,
                 let name = string(row.cells[0].value),
                 let type = string(row.cells[1].value),
                 let position = unsigned(row.cells[2].value),
                 let primary = unsigned(row.cells[3].value),
                 let sorting = unsigned(row.cells[4].value),
+                let defaultKind = string(row.cells[5].value),
+                let engine = string(row.cells[6].value),
                 !name.isEmpty,
                 !type.isEmpty,
+                !engine.isEmpty,
                 names.insert(name).inserted,
                 position > 0,
                 primary <= 1,
-                sorting <= 1
+                sorting <= 1,
+                defaultKind.utf8.count <= 64,
+                engine.utf8.count <= 256,
+                !defaultKind.unicodeScalars.contains(
+                    where: CharacterSet.controlCharacters.contains),
+                !engine.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains),
+                tableEngine == nil || tableEngine == engine
             else {
                 throw ClickHouseDatabaseAdapterSupport.invalidResponse
             }
+            tableEngine = engine
             try validateIdentifier(name)
             guard type.utf8.count <= 2_048, !type.contains("\0") else {
                 throw ClickHouseDatabaseAdapterSupport.invalidResponse
@@ -149,11 +196,16 @@ enum ClickHouseDatabaseReadCompiler {
                     type: type,
                     position: position,
                     isPrimaryKey: primary == 1,
-                    isSortingKey: sorting == 1))
+                    isSortingKey: sorting == 1,
+                    defaultKind: defaultKind.isEmpty ? nil : defaultKind))
+        }
+        guard let tableEngine else {
+            throw ClickHouseDatabaseAdapterSupport.invalidResponse
         }
         return ClickHouseDatabaseTableDescription(
             database: database,
             table: table,
+            engine: tableEngine,
             columns: columns.sorted {
                 if $0.position == $1.position { return $0.name < $1.name }
                 return $0.position < $1.position

@@ -240,6 +240,21 @@ private enum MongoDBDatabaseFoundationFixtures {
         ])
 }
 
+@Test func mongoFoundationUnsupportedIDTypesAreNeverWritableIdentities() async throws {
+    var document = Document()
+    document["_id"] = Timestamp(increment: 2, timestamp: 10)
+    document["name"] = "readable"
+    let converted = try await MongoDBDatabaseValueCodec.convertedRecord(
+        document,
+        hidesObjectID: true)
+    #expect(converted.record.identity == nil)
+    #expect(!converted.truncated)
+    #expect(
+        converted.record.fields == [
+            DatabaseObjectField(name: "name", value: .string("readable"))
+        ])
+}
+
 @Test func mongoFoundationTimestampPreservesUnsignedWords() async throws {
     var document = Document()
     document["_id"] = MongoDBDatabaseFoundationFixtures.objectIDs[0]
