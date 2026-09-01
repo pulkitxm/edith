@@ -524,6 +524,53 @@ private actor CLIDatabaseMCPRunRecorder {
         }
     }
 
+    @Test func mutationDocumentRequestBuildsBoundElasticsearchReplacement() async throws {
+        try await CLIProbe.inWorld { _ in
+            DatabaseCLIEnvironment.readQueryText = { path in
+                #expect(path == "search.json")
+                return "{\"event\":{\"$date\":\"literal\"},\"title\":\"updated\"}"
+            }
+            let result = await CLIProbe.capture([
+                "database", "mutations", "document-request", Self.connectionUUID.uuidString,
+                "--product", "elasticsearch", "--action", "update", "--path",
+                "edith-documents-v1", "--document-id", "doc-1", "--sequence-number", "7",
+                "--primary-term", "2", "--document", "search.json",
+            ])
+
+            #expect(result.code == ExitCodes.success)
+            #expect(result.stderr.isEmpty)
+            let request = try JSONDecoder().decode(
+                DatabaseDestructiveRequest.self,
+                from: Data(result.stdout.utf8))
+            #expect(request.target.object?.kind == .index)
+            #expect(request.target.object?.path == ["edith-documents-v1"])
+            #expect(request.target.record?.kind == .searchDocument)
+            #expect(
+                request.target.record?.concurrencyTokens.map(\.value) == [
+                    .signedInteger(7), .signedInteger(2),
+                ])
+            guard
+                case .search(let product, let operation, let parameters, let body) =
+                    request.payload
+            else {
+                Issue.record("expected Elasticsearch document mutation")
+                return
+            }
+            #expect(product == .elasticsearch)
+            #expect(operation == "replace")
+            #expect(parameters.isEmpty)
+            guard case .object(let fields) = body else {
+                Issue.record("expected Elasticsearch document fields")
+                return
+            }
+            #expect(
+                fields.first(where: { $0.name == "event" })?.value
+                    == .object([
+                        DatabaseObjectField(name: "$date", value: .string("literal"))
+                    ]))
+        }
+    }
+
     @Test func mutationPreviewReadsBoundedRequestAndEmitsReusableConfirmation() async throws {
         let mutation = Self.mutation()
         let preview = try Self.mutationPreview()

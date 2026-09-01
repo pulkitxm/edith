@@ -231,6 +231,66 @@ enum DatabaseConfirmationFixtures {
 }
 
 @Suite struct DatabaseConfirmationAuthorityTests {
+    @Test func elasticsearchDocumentPreviewUsesSearchMutationContract() async throws {
+        let (directory, path) = try DatabasePersistenceFixtures.temporaryStorePath()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let clock = DatabaseConfirmationTestClock(Date(timeIntervalSince1970: 900))
+        let secretStore = try InMemoryDatabaseSecretStore()
+        let metadata = try SQLiteDatabaseMetadataStore(path: path)
+        let connection = try DatabaseConfirmationFixtures.connection(
+            name: "Search primary",
+            product: .elasticsearch,
+            namespaces: DatabaseNamespaceDefaults())
+        try await metadata.seedConnection(connection)
+        let authority = try await DatabaseConfirmationFixtures.authority(
+            path: path,
+            clock: clock,
+            secretStore: secretStore)
+        let target = DatabaseTargetIdentifier(
+            connectionID: connection.id,
+            object: DatabaseObjectIdentifier(kind: .index, path: ["edith-documents-v1"]),
+            record: DatabaseRecordIdentity(
+                kind: .searchDocument,
+                components: [
+                    DatabaseIdentityComponent(
+                        name: "_index",
+                        value: .string("edith-documents-v1")),
+                    DatabaseIdentityComponent(name: "_id", value: .string("doc-new")),
+                ]))
+        let request = try DatabaseDocumentMutationRequests.elasticsearchCreate(
+            target: target,
+            document: .object([
+                DatabaseObjectField(name: "title", value: .string("Search contract"))
+            ]))
+        let plan = DatabaseDestructivePlan(
+            request: request,
+            action: .insert,
+            scope: .singleRecord,
+            impact: DatabaseMutationImpact(
+                count: DatabaseCountMetadata(value: 1, accuracy: .exact),
+                description: "Create one document"),
+            transactionBehavior: .nontransactional,
+            rollbackAvailability: .unavailable,
+            executionMode: .synchronous,
+            warnings: [
+                DatabaseWarning(
+                    code: "elasticsearch.mutation.no_rollback",
+                    message:
+                        "This Elasticsearch document change cannot be rolled back after execution.",
+                    severity: .caution,
+                    target: request.target)
+            ])
+
+        let preview = try await authority.issuePreview(for: plan)
+
+        #expect(preview.request.kind == .search)
+        #expect(
+            preview.effect.context
+                == DatabaseMutationContext(kind: .cluster, value: "Search primary"))
+        #expect(preview.effect.target == target)
+        #expect(preview.requiredConfirmation.strength == .connectionAndTarget)
+    }
+
     @Test func factorySharesOneDedicatedSigningKeyAcrossAuthorities() async throws {
         let (directory, path) = try DatabasePersistenceFixtures.temporaryStorePath()
         defer { try? FileManager.default.removeItem(at: directory) }

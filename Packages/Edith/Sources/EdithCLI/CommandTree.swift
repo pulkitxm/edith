@@ -981,14 +981,17 @@ public enum CommandTree {
                                 ], arguments: [.free]),
                             CommandNode(
                                 "document-request",
-                                "Build a safe MongoDB document mutation request.",
+                                "Build a safe MongoDB or Elasticsearch document mutation request.",
                                 options: [
-                                    "--json", "--help", "--action", "--path", "--document",
-                                    "--document-id", "--id-kind",
+                                    "--json", "--help", "--product", "--action", "--path",
+                                    "--document", "--document-id", "--id-kind",
+                                    "--sequence-number", "--primary-term",
                                 ],
                                 optionValues: [
-                                    "--action": .free, "--path": .free, "--document": .free,
-                                    "--document-id": .free, "--id-kind": .free,
+                                    "--product": .free, "--action": .free, "--path": .free,
+                                    "--document": .free, "--document-id": .free,
+                                    "--id-kind": .free, "--sequence-number": .free,
+                                    "--primary-term": .free,
                                 ], arguments: [.free]),
                             CommandNode(
                                 "preview", "Preview a destructive request without applying it.",

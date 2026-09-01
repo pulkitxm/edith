@@ -42,7 +42,10 @@ public struct ParsedDatabaseConnectionURL: Sendable {
 }
 
 public enum DatabaseConnectionURLParser {
-    public static func parse(_ input: String) throws -> ParsedDatabaseConnectionURL {
+    public static func parse(
+        _ input: String,
+        preferredProduct: DatabaseProduct? = nil
+    ) throws -> ParsedDatabaseConnectionURL {
         let value = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { throw DatabaseConnectionURLError.missingURL }
         guard
@@ -53,7 +56,7 @@ public enum DatabaseConnectionURLParser {
             throw DatabaseConnectionURLError.invalidURL
         }
 
-        let product = try product(for: rawScheme)
+        let product = try product(for: rawScheme, preferredProduct: preferredProduct)
         if product == .sqlite {
             return try sqliteResult(components: components)
         }
@@ -89,8 +92,17 @@ public enum DatabaseConnectionURLParser {
             suggestedName: suggestedName(host: host, database: database, product: product))
     }
 
-    private static func product(for scheme: String) throws -> DatabaseProduct {
-        switch scheme {
+    private static func product(
+        for scheme: String,
+        preferredProduct: DatabaseProduct?
+    ) throws -> DatabaseProduct {
+        if scheme == "http" || scheme == "https" {
+            guard preferredProduct == .elasticsearch else {
+                throw DatabaseConnectionURLError.unsupportedScheme(scheme)
+            }
+            return .elasticsearch
+        }
+        return switch scheme {
         case "postgres", "postgresql":
             .postgresql
         case "redis", "rediss":
@@ -99,6 +111,8 @@ public enum DatabaseConnectionURLParser {
             .valkey
         case "mongodb":
             .mongoDB
+        case "elasticsearch", "elasticsearchs":
+            .elasticsearch
         case "sqlite", "sqlite3", "file":
             .sqlite
         default:
@@ -152,6 +166,9 @@ public enum DatabaseConnectionURLParser {
                 queryValue(named: "tls", in: components)
                 ?? queryValue(named: "ssl", in: components)
             return value?.lowercased() == "true" || value == "1"
+        }
+        if product == .elasticsearch {
+            return scheme == "https" || scheme == "elasticsearchs"
         }
         return scheme == "rediss" || scheme == "valkeys"
     }

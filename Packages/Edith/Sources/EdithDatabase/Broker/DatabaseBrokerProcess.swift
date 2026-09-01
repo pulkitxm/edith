@@ -177,12 +177,13 @@ private actor DatabaseBrokerLiveProcessRuntimeController {
     }
 }
 
-private enum DatabaseBrokerLiveAdapterFactory {
+enum DatabaseBrokerLiveAdapterFactory {
     static func make() -> [any DatabaseAdapter] {
         [
             SQLiteDatabaseAdapter(),
             RedisValkeyDatabaseAdapter(),
             MongoDBDatabaseAdapter(),
+            ElasticsearchDatabaseAdapter(),
             PostgreSQLDatabaseAdapter(),
         ]
     }

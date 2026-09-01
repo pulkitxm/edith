@@ -207,13 +207,17 @@ struct DatabaseMutationsCommand: AsyncParsableCommand {
 struct DatabaseMutationDocumentRequestCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "document-request",
-        abstract: "Build a safe MongoDB document mutation request as JSON.")
+        abstract: "Build a safe MongoDB or Elasticsearch document mutation request as JSON.")
+
+    @Option(name: .long, help: "Database product: mongodb or elasticsearch.")
+    var product = "mongodb"
 
     @Option(name: .long, help: "Document action: insert, update or delete.")
     var action: String
 
     @Option(
-        name: .long, help: "Collection path component. Pass database and collection separately.")
+        name: .long,
+        help: "Object path component. Pass MongoDB database and collection, or one index.")
     var path: [String] = []
 
     @Option(name: .long, help: "UTF-8 JSON document file for insert or update, or - for stdin.")
@@ -225,61 +229,169 @@ struct DatabaseMutationDocumentRequestCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Document _id type: object-id, string, integer or uuid.")
     var idKind = "object-id"
 
+    @Option(name: .long, help: "Elasticsearch _seq_no for update or delete.")
+    var sequenceNumber: Int64?
+
+    @Option(name: .long, help: "Elasticsearch _primary_term for update or delete.")
+    var primaryTerm: Int64?
+
     @Flag(name: .long, help: "Emit the mutation request as JSON.")
     var json = false
 
-    @Argument(help: "The saved MongoDB connection UUID.")
+    @Argument(help: "The saved database connection UUID.")
     var connectionID: String
 
     func run() async throws {
         try await execute {
             _ = json
-            guard path.count == 2,
-                path.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+            let connectionID = try DatabaseCLI.connectionID(connectionID)
+            guard
+                path.allSatisfy({
+                    !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                })
             else {
-                throw CLIFailure.usage(
-                    "document mutations require exactly two --path values")
+                throw CLIFailure.usage("document mutation paths cannot be empty")
             }
-            let target = DatabaseTargetIdentifier(
-                connectionID: try DatabaseCLI.connectionID(connectionID),
-                object: DatabaseObjectIdentifier(kind: .collection, path: path),
-                record: try documentID.map { try identity($0) })
+            let product: DatabaseProduct
+            switch self.product.lowercased() {
+            case "mongodb": product = .mongoDB
+            case "elasticsearch": product = .elasticsearch
+            default: throw CLIFailure.usage("--product must be mongodb or elasticsearch")
+            }
             let fields = try document.map { path in
                 let text = try DatabaseCLIEnvironment.readQueryText(path == "-" ? nil : path)
                 do {
-                    return try DatabaseJSONDocumentCodec.decodeObject(text)
+                    return product == .elasticsearch
+                        ? try DatabaseJSONDocumentCodec.decodePlainObject(text)
+                        : try DatabaseJSONDocumentCodec.decodeObject(text)
                 } catch {
                     throw CLIFailure.usage("database document is not valid bounded JSON")
                 }
             }
             let mutation: DatabaseDestructiveRequest
-            switch action.lowercased() {
-            case "insert":
-                guard documentID == nil, let fields else {
+            switch product {
+            case .mongoDB:
+                guard path.count == 2, sequenceNumber == nil, primaryTerm == nil else {
                     throw CLIFailure.usage(
-                        "insert requires --document and does not accept --document-id")
+                        "MongoDB document mutations require two --path values and no concurrency options"
+                    )
                 }
-                mutation = try DatabaseDocumentMutationRequests.mongoDBInsert(
-                    target: target,
-                    document: .object(fields))
-            case "update":
-                guard documentID != nil, let fields else {
-                    throw CLIFailure.usage("update requires --document-id and --document")
-                }
-                mutation = try DatabaseDocumentMutationRequests.mongoDBUpdate(
-                    target: target,
-                    values: fields)
-            case "delete":
-                guard documentID != nil, document == nil else {
+                let target = DatabaseTargetIdentifier(
+                    connectionID: connectionID,
+                    object: DatabaseObjectIdentifier(kind: .collection, path: path),
+                    record: try documentID.map { try identity($0) })
+                mutation = try mongoDBMutation(target: target, fields: fields)
+            case .elasticsearch:
+                guard path.count == 1, let documentID, !documentID.isEmpty else {
                     throw CLIFailure.usage(
-                        "delete requires --document-id and does not accept --document")
+                        "Elasticsearch document mutations require one --path index and --document-id"
+                    )
                 }
-                mutation = try DatabaseDocumentMutationRequests.mongoDBDelete(target: target)
+                let requiresConcurrency = action.lowercased() != "insert"
+                let target = try elasticsearchTarget(
+                    connectionID: connectionID,
+                    index: path[0],
+                    identifier: documentID,
+                    requiresConcurrency: requiresConcurrency)
+                switch action.lowercased() {
+                case "insert":
+                    guard let fields, sequenceNumber == nil, primaryTerm == nil else {
+                        throw CLIFailure.usage(
+                            "Elasticsearch insert requires --document and no concurrency options")
+                    }
+                    mutation = try DatabaseDocumentMutationRequests.elasticsearchCreate(
+                        target: target,
+                        document: .object(fields))
+                case "update":
+                    guard let fields else {
+                        throw CLIFailure.usage("Elasticsearch update requires --document")
+                    }
+                    mutation = try DatabaseDocumentMutationRequests.elasticsearchReplace(
+                        target: target,
+                        document: .object(fields))
+                case "delete":
+                    guard document == nil else {
+                        throw CLIFailure.usage("Elasticsearch delete does not accept --document")
+                    }
+                    mutation = try DatabaseDocumentMutationRequests.elasticsearchDelete(
+                        target: target)
+                default:
+                    throw CLIFailure.usage("--action must be insert, update or delete")
+                }
             default:
-                throw CLIFailure.usage("--action must be insert, update or delete")
+                throw CLIFailure.usage("--product must be mongodb or elasticsearch")
             }
             CLIOut.out(try DatabaseCLI.encodeDocument(mutation))
         }
+    }
+
+    private func mongoDBMutation(
+        target: DatabaseTargetIdentifier,
+        fields: [DatabaseObjectField]?
+    ) throws -> DatabaseDestructiveRequest {
+        switch action.lowercased() {
+        case "insert":
+            guard documentID == nil, let fields else {
+                throw CLIFailure.usage(
+                    "insert requires --document and does not accept --document-id")
+            }
+            return try DatabaseDocumentMutationRequests.mongoDBInsert(
+                target: target,
+                document: .object(fields))
+        case "update":
+            guard documentID != nil, let fields else {
+                throw CLIFailure.usage("update requires --document-id and --document")
+            }
+            return try DatabaseDocumentMutationRequests.mongoDBUpdate(
+                target: target,
+                values: fields)
+        case "delete":
+            guard documentID != nil, document == nil else {
+                throw CLIFailure.usage(
+                    "delete requires --document-id and does not accept --document")
+            }
+            return try DatabaseDocumentMutationRequests.mongoDBDelete(target: target)
+        default:
+            throw CLIFailure.usage("--action must be insert, update or delete")
+        }
+    }
+
+    private func elasticsearchTarget(
+        connectionID: DatabaseConnectionID,
+        index: String,
+        identifier: String,
+        requiresConcurrency: Bool
+    ) throws -> DatabaseTargetIdentifier {
+        let concurrencyTokens: [DatabaseIdentityComponent]
+        if requiresConcurrency {
+            guard let sequenceNumber, let primaryTerm,
+                sequenceNumber >= 0, primaryTerm >= 0
+            else {
+                throw CLIFailure.usage(
+                    "Elasticsearch update and delete require non-negative --sequence-number and --primary-term"
+                )
+            }
+            concurrencyTokens = [
+                DatabaseIdentityComponent(
+                    name: "_seq_no",
+                    value: .signedInteger(sequenceNumber)),
+                DatabaseIdentityComponent(
+                    name: "_primary_term",
+                    value: .signedInteger(primaryTerm)),
+            ]
+        } else {
+            concurrencyTokens = []
+        }
+        return DatabaseTargetIdentifier(
+            connectionID: connectionID,
+            object: DatabaseObjectIdentifier(kind: .index, path: [index]),
+            record: DatabaseRecordIdentity(
+                kind: .searchDocument,
+                components: [
+                    DatabaseIdentityComponent(name: "_index", value: .string(index)),
+                    DatabaseIdentityComponent(name: "_id", value: .string(identifier)),
+                ],
+                concurrencyTokens: concurrencyTokens))
     }
 
     private func identity(_ value: String) throws -> DatabaseRecordIdentity {

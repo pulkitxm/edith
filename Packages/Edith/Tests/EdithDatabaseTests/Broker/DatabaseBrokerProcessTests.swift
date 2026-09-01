@@ -347,6 +347,12 @@ private struct DatabaseBrokerProcessTestSystem: Sendable {
 
 @Suite(.serialized)
 struct DatabaseBrokerProcessTests {
+    @Test func liveAdaptersCoverEveryOnboardedProduct() {
+        let products = Set(DatabaseBrokerLiveAdapterFactory.make().flatMap(\.products))
+
+        #expect(products.isSuperset(of: DatabaseConnectionDraft.supportedProducts))
+    }
+
     @Test func freshInstallPreparationFollowsOwnershipSafeOrdering() async {
         let system = DatabaseBrokerProcessTestSystem { runtime in
             runtime.finish(reason: .requested)

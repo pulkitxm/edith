@@ -70,7 +70,7 @@ final class DatabaseConnectionCreationModel: Identifiable {
     }
 
     var supportsTLS: Bool {
-        product == .postgresql || product == .mongoDB
+        product == .postgresql || product == .mongoDB || product == .elasticsearch
     }
 
     var databaseLabel: String {
@@ -81,7 +81,8 @@ final class DatabaseConnectionCreationModel: Identifiable {
     }
 
     var usernameRequired: Bool {
-        product == .postgresql || product == .mongoDB && !password.isEmpty
+        product == .postgresql
+            || (product == .mongoDB || product == .elasticsearch) && !password.isEmpty
     }
 
     var canTest: Bool {
@@ -129,7 +130,9 @@ final class DatabaseConnectionCreationModel: Identifiable {
 
     func applyConnectionURL() {
         do {
-            let parsed = try DatabaseConnectionURLParser.parse(connectionURL)
+            let parsed = try DatabaseConnectionURLParser.parse(
+                connectionURL,
+                preferredProduct: product)
             product = parsed.product
             host = parsed.host
             port = String(parsed.port)

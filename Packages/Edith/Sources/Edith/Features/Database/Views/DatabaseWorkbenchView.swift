@@ -43,7 +43,7 @@ struct DatabaseWorkbenchView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DashSkin.paper(dark))
-        .task(id: connections.selectedConnectionID) {
+        .task(id: connections.selectedConnection) {
             data.prepare(for: connections.selectedConnection)
             explorer.prepare(for: connections.selectedConnection)
         }
@@ -153,6 +153,7 @@ struct DatabaseWorkbenchView: View {
                 explorer.selectedObject?.kind == .table
                     || explorer.selectedObject?.kind == .keyspace
                     || explorer.selectedObject?.kind == .collection
+                    || explorer.selectedObject?.kind == .index
             {
                 Button {
                     data.beginInsert(connection)
@@ -165,7 +166,7 @@ struct DatabaseWorkbenchView: View {
                 }
                 .buttonStyle(.edith(.primary, tint: theme))
                 .disabled(
-                    (data.fields.isEmpty && connection.product != .mongoDB)
+                    (data.fields.isEmpty && !usesDocumentEditor(connection))
                         || mutations.hasTrackedMutation
                 )
                 .help(newItemHelp(connection))
@@ -445,7 +446,7 @@ struct DatabaseWorkbenchView: View {
             HStack {
                 Text(detailTitle(connection))
                     .font(.system(size: UIScale.pt(12.5), weight: .semibold))
-                if connection.product == .mongoDB {
+                if usesDocumentEditor(connection) {
                     Picker("Document view", selection: $documentPresentation) {
                         ForEach(DatabaseDocumentPresentation.allCases, id: \.self) { view in
                             Text(view.title).tag(view)
@@ -482,7 +483,7 @@ struct DatabaseWorkbenchView: View {
             .padding(UIScale.pt(12))
             Divider().opacity(0.35)
             ScrollView {
-                if connection.product == .mongoDB, documentPresentation == .source {
+                if usesDocumentEditor(connection), documentPresentation == .source {
                     if let source = data.documentSource(record) {
                         Text(source)
                             .font(.system(size: UIScale.pt(11), design: .monospaced))
@@ -490,7 +491,7 @@ struct DatabaseWorkbenchView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(UIScale.pt(12))
                     } else {
-                        Text("Source view is unavailable for one or more unsupported BSON values.")
+                        Text("Source view is unavailable for one or more unsupported values.")
                             .font(.system(size: UIScale.pt(11)))
                             .foregroundStyle(.secondary)
                             .padding(UIScale.pt(12))
@@ -526,11 +527,12 @@ struct DatabaseWorkbenchView: View {
                     .buttonStyle(.edith(.borderless))
                 Button("Review") { requestEditorMutation(connection) }
                     .buttonStyle(.edith(.primary, tint: theme))
+                    .keyboardShortcut(.return, modifiers: .command)
                     .disabled(mutations.hasTrackedMutation || !data.canSubmitEditor)
             }
             .padding(UIScale.pt(12))
             Divider().opacity(0.35)
-            if connection.product == .mongoDB {
+            if usesDocumentEditor(connection) {
                 VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                     if let error = data.editorError {
                         Label(error, systemImage: "exclamationmark.circle.fill")
@@ -548,7 +550,7 @@ struct DatabaseWorkbenchView: View {
                             RoundedRectangle(cornerRadius: UIScale.pt(7))
                                 .strokeBorder(DashSkin.line(dark))
                         }
-                        .accessibilityLabel("MongoDB document JSON")
+                        .accessibilityLabel("\(connection.product.displayName) document JSON")
                 }
                 .padding(UIScale.pt(12))
             } else {
@@ -691,7 +693,7 @@ struct DatabaseWorkbenchView: View {
         case .update:
             if connection.product.family == .keyValue {
                 "Edit key"
-            } else if connection.product.family == .document {
+            } else if usesDocumentEditor(connection) {
                 "Edit document"
             } else {
                 "Edit row"
@@ -699,7 +701,7 @@ struct DatabaseWorkbenchView: View {
         case nil:
             if connection.product.family == .keyValue {
                 "Key"
-            } else if connection.product.family == .document {
+            } else if usesDocumentEditor(connection) {
                 "Document"
             } else {
                 "Row"
@@ -709,26 +711,30 @@ struct DatabaseWorkbenchView: View {
 
     private func newItemTitle(_ connection: DatabaseConnectionSummary) -> String {
         if connection.product.family == .keyValue { return "New key" }
-        if connection.product.family == .document { return "New document" }
+        if usesDocumentEditor(connection) { return "New document" }
         return "New row"
     }
 
     private func newItemHelp(_ connection: DatabaseConnectionSummary) -> String {
         if connection.product.family == .keyValue { return "Create a string key" }
-        if connection.product.family == .document { return "Add a JSON document" }
+        if usesDocumentEditor(connection) { return "Add a JSON document" }
         return "Add a row"
     }
 
     private func detailTitle(_ connection: DatabaseConnectionSummary) -> String {
         if connection.product.family == .keyValue { return "Key details" }
-        if connection.product.family == .document { return "Document details" }
+        if usesDocumentEditor(connection) { return "Document details" }
         return "Row details"
     }
 
     private func deleteTitle(_ connection: DatabaseConnectionSummary) -> String {
         if connection.product.family == .keyValue { return "Delete key" }
-        if connection.product.family == .document { return "Delete document" }
+        if usesDocumentEditor(connection) { return "Delete document" }
         return "Delete row"
+    }
+
+    private func usesDocumentEditor(_ connection: DatabaseConnectionSummary) -> Bool {
+        connection.product == .mongoDB || connection.product == .elasticsearch
     }
 
     private func requestEditorMutation(_ connection: DatabaseConnectionSummary) {

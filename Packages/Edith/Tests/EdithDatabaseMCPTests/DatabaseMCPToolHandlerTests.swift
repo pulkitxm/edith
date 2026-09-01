@@ -467,6 +467,7 @@ import Testing
             makeOperationID: { DatabaseMCPFixtures.operationID })
         let base: [String: Value] = [
             "connection_id": .string(DatabaseMCPFixtures.connectionID.rawValue.uuidString),
+            "product": "mongodb",
             "action": "update",
             "database": "app",
             "collection": "people",
@@ -506,6 +507,50 @@ import Testing
         #expect(requests.first?.mutationPreviewRequest?.mutation == mutation)
         #expect(requests.last?.mutationApplyRequest?.mutation == mutation)
         #expect(requests.last?.mutationApplyRequest?.token.rawValue == "document-preview-token")
+    }
+
+    @Test func elasticsearchDocumentMutationCarriesConcurrencyAndPlainJSON() async throws {
+        let sender = DatabaseMCPScriptedSender([])
+        let handler = DatabaseMCPToolHandler(sender: sender)
+        _ = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_document_mutation",
+                arguments: [
+                    "mode": "preview",
+                    "connection_id": .string(
+                        DatabaseMCPFixtures.connectionID.rawValue.uuidString),
+                    "product": "elasticsearch",
+                    "action": "update",
+                    "index": "edith-documents-v1",
+                    "document_id": "doc-1",
+                    "sequence_number": 7,
+                    "primary_term": 2,
+                    "document": .object([
+                        "event": .object(["$date": "literal"]),
+                        "title": "updated",
+                    ]),
+                ]))
+
+        let requests = await sender.recordedRequests()
+        let mutation = try #require(requests.first?.mutationPreviewRequest?.mutation)
+        #expect(mutation.target.object?.kind == .index)
+        #expect(mutation.target.object?.path == ["edith-documents-v1"])
+        #expect(mutation.target.record?.kind == .searchDocument)
+        #expect(
+            mutation.target.record?.concurrencyTokens.map(\.value) == [
+                .signedInteger(7), .signedInteger(2),
+            ])
+        #expect(mutation.payload.product == .elasticsearch)
+        #expect(mutation.payload.command == "replace")
+        guard case .object(let fields) = mutation.payload.body else {
+            Issue.record("expected an Elasticsearch document body")
+            return
+        }
+        #expect(
+            fields.first(where: { $0.name == "event" })?.value
+                == .object([
+                    DatabaseObjectField(name: "$date", value: .string("literal"))
+                ]))
     }
 
     @Test func operationListPreservesFiltersProgressAndTarget() async throws {
@@ -789,6 +834,7 @@ import Testing
                     "mode": "preview",
                     "connection_id": .string(
                         DatabaseMCPFixtures.connectionID.rawValue.uuidString),
+                    "product": "mongodb",
                     "action": "insert",
                     "database": "app",
                     "collection": "people",
