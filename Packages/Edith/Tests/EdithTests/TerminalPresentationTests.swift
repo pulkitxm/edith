@@ -412,6 +412,10 @@ import Testing
         #expect(
             !GhosttyTerminalView.shouldConsumeFocusClick(
                 appActive: true, keyWindow: true, focused: true, hitSurface: true))
+        #expect(
+            !GhosttyTerminalView.shouldConsumeFocusClick(
+                appActive: true, keyWindow: true, focused: false, hitSurface: true,
+                activatesTerminalLink: true))
     }
 
     private func withGhosttyEnabled(

@@ -456,4 +456,30 @@ import Testing
         gesture.begin(active: true, at: .zero, candidate: "https://example.com")
         #expect(gesture.finish(active: false, opened: false, candidate: nil) == nil)
     }
+
+    @Test @MainActor func unfocusedCommandLinkClickSurvivesTheFocusMonitor() throws {
+        let view = GhosttyTerminalView(
+            launch: GhosttyLaunch(executable: "/bin/cat", arguments: [], environment: []))
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+        let window = NSWindow(
+            contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = view
+        view.setHoveredLink("https://example.com")
+        _ = window.makeFirstResponder(nil)
+        defer {
+            window.contentView = nil
+            view.shutdown()
+        }
+        let event = try #require(
+            NSEvent.mouseEvent(
+                with: .leftMouseDown, location: NSPoint(x: 80, y: 500),
+                modifierFlags: .command, timestamp: 1, windowNumber: window.windowNumber,
+                context: nil, eventNumber: 1, clickCount: 1, pressure: 0))
+
+        let forwarded = view.handleLocalLeftMouseDown(event)
+
+        #expect(forwarded === event)
+        #expect(window.firstResponder === view)
+        #expect(!view.suppressNextLeftMouseUp)
+    }
 }

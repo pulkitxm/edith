@@ -105,20 +105,25 @@ extension GhosttyTerminalView {
         suppressNextLeftMouseUp = false
         let focused = window.firstResponder === self
         guard !focused else { return event }
+        let activatesTerminalLink =
+            event.clickCount == 1 && event.modifierFlags.contains(.command)
+            && commandClickTarget(for: event) != nil
         window.makeFirstResponder(self)
         guard
             Self.shouldConsumeFocusClick(
                 appActive: NSApp.isActive, keyWindow: window.isKeyWindow,
-                focused: focused, hitSurface: true)
+                focused: focused, hitSurface: true,
+                activatesTerminalLink: activatesTerminalLink)
         else { return event }
         suppressNextLeftMouseUp = true
         return nil
     }
 
     static func shouldConsumeFocusClick(
-        appActive: Bool, keyWindow: Bool, focused: Bool, hitSurface: Bool
+        appActive: Bool, keyWindow: Bool, focused: Bool, hitSurface: Bool,
+        activatesTerminalLink: Bool = false
     ) -> Bool {
-        appActive && keyWindow && !focused && hitSurface
+        appActive && keyWindow && !focused && hitSurface && !activatesTerminalLink
     }
 
     public override func flagsChanged(with event: NSEvent) {
