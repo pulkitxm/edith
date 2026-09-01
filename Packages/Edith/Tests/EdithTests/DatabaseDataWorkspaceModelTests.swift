@@ -192,6 +192,142 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(await sender.recordedRequests().count == 1)
     }
 
+    @Test("MongoDB objectId filters preserve their native value type")
+    func mongoDBObjectIDFilter() async throws {
+        let fields = [
+            DatabaseFieldDescriptor(
+                path: DatabaseFieldPath("_id"),
+                displayName: "_id",
+                typeName: "objectId",
+                isNullable: false,
+                isSortable: true,
+                isFilterable: true)
+        ]
+        let response = Self.response(records: [], fields: fields)
+        let sender = DatabaseDataScriptedSender(responses: [response, response])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .mongoDB)
+        model.prepare(for: connection)
+        model.targetText = "app.people"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        model.addFilterClause(
+            field: "_id",
+            operation: .equal,
+            valueText: "507f1f77bcf86cd799439011")
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        let requests = await sender.recordedRequests().compactMap(\.browseRequest)
+        #expect(
+            requests.last?.page.filter
+                == .predicate(
+                    DatabaseFilterPredicate(
+                        field: DatabaseFieldPath("_id"),
+                        operation: .equal,
+                        values: [
+                            .productSpecific(
+                                DatabaseProductValue(
+                                    product: .mongoDB,
+                                    typeName: "objectId",
+                                    textRepresentation: "507f1f77bcf86cd799439011"))
+                        ])))
+
+        model.clearFilters()
+        model.addFilterClause(field: "_id", operation: .equal, valueText: "not-an-object-id")
+        model.browse(connection)
+        #expect(model.state == .failed("Enter a valid objectId value for the _id filter."))
+        #expect(await sender.recordedRequests().count == 2)
+    }
+
+    @Test(
+        "Search mapping numeric filters produce exact database value types",
+        arguments: [DatabaseProduct.elasticsearch, .openSearch]
+    )
+    func searchNumericFilters(product: DatabaseProduct) async throws {
+        let fields = [
+            DatabaseFieldDescriptor(
+                path: DatabaseFieldPath("event_count"), displayName: "event_count",
+                typeName: "long", isNullable: false, isSortable: true, isFilterable: true),
+            DatabaseFieldDescriptor(
+                path: DatabaseFieldPath("priority"), displayName: "priority",
+                typeName: "short", isNullable: false, isSortable: true, isFilterable: true),
+            DatabaseFieldDescriptor(
+                path: DatabaseFieldPath("status_code"), displayName: "status_code",
+                typeName: "byte", isNullable: false, isSortable: true, isFilterable: true),
+            DatabaseFieldDescriptor(
+                path: DatabaseFieldPath("score"), displayName: "score",
+                typeName: "float", isNullable: false, isSortable: true, isFilterable: true),
+            DatabaseFieldDescriptor(
+                path: DatabaseFieldPath("ratio"), displayName: "ratio",
+                typeName: "half_float", isNullable: false, isSortable: true, isFilterable: true),
+            DatabaseFieldDescriptor(
+                path: DatabaseFieldPath("price"), displayName: "price",
+                typeName: "scaled_float", isNullable: false, isSortable: true, isFilterable: true),
+            DatabaseFieldDescriptor(
+                path: DatabaseFieldPath("total"), displayName: "total",
+                typeName: "unsigned_long", isNullable: false, isSortable: true,
+                isFilterable: true),
+        ]
+        let response = Self.response(records: [], fields: fields)
+        let sender = DatabaseDataScriptedSender(responses: [response, response])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: product)
+        model.prepare(for: connection)
+        model.targetText = "events-v1"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        model.addFilterClause(field: "event_count", operation: .equal, valueText: "-42")
+        model.addFilterClause(field: "priority", operation: .equal, valueText: "12")
+        model.addFilterClause(field: "status_code", operation: .equal, valueText: "127")
+        model.addFilterClause(field: "score", operation: .equal, valueText: "1.25")
+        model.addFilterClause(field: "ratio", operation: .equal, valueText: "-2.5")
+        model.addFilterClause(field: "price", operation: .equal, valueText: "42.125")
+        model.addFilterClause(
+            field: "total",
+            operation: .equal,
+            valueText: "18446744073709551615")
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        let request = try #require(
+            await sender.recordedRequests().compactMap(\.browseRequest).last)
+        #expect(
+            request.page.filter
+                == .all([
+                    .predicate(
+                        DatabaseFilterPredicate(
+                            field: DatabaseFieldPath("event_count"), operation: .equal,
+                            values: [.signedInteger(-42)])),
+                    .predicate(
+                        DatabaseFilterPredicate(
+                            field: DatabaseFieldPath("priority"), operation: .equal,
+                            values: [.signedInteger(12)])),
+                    .predicate(
+                        DatabaseFilterPredicate(
+                            field: DatabaseFieldPath("status_code"), operation: .equal,
+                            values: [.signedInteger(127)])),
+                    .predicate(
+                        DatabaseFilterPredicate(
+                            field: DatabaseFieldPath("score"), operation: .equal,
+                            values: [.floatingPoint(1.25)])),
+                    .predicate(
+                        DatabaseFilterPredicate(
+                            field: DatabaseFieldPath("ratio"), operation: .equal,
+                            values: [.floatingPoint(-2.5)])),
+                    .predicate(
+                        DatabaseFilterPredicate(
+                            field: DatabaseFieldPath("price"), operation: .equal,
+                            values: [.floatingPoint(42.125)])),
+                    .predicate(
+                        DatabaseFilterPredicate(
+                            field: DatabaseFieldPath("total"), operation: .equal,
+                            values: [.unsignedInteger(UInt64.max)])),
+                ]))
+    }
+
     @Test("Continuation browsing appends records and forwards the token")
     func continuationBrowse() async throws {
         let token = DatabaseContinuationToken(rawValue: "next-page")
@@ -648,6 +784,39 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(insert.payload.parameters.map(\.value) == [.string("Created")])
     }
 
+    @Test("ClickHouse editor creates inserts and keeps row changes unavailable")
+    func clickHouseMutationRequests() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)])
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .clickHouse)
+        model.prepare(for: connection)
+        model.targetText = "analytics.events"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        #expect(model.supportsDataMutation(.insert, connection: connection))
+        #expect(!model.supportsDataMutation(.update, connection: connection))
+        #expect(!model.supportsDataMutation(.delete, connection: connection))
+        model.beginInsert(connection)
+        model.updateEditorField("id", text: "42")
+        model.updateEditorField("name", text: "signup")
+        let insert = try #require(model.editorMutationRequest(connection))
+        #expect(
+            insert.payload.command
+                == "INSERT INTO `analytics`.`events` (`id`, `name`) VALUES (?, ?)")
+        #expect(insert.payload.product == .clickHouse)
+        #expect(insert.payload.parameters.map(\.value) == [.signedInteger(42), .string("signup")])
+
+        model.cancelEditor()
+        model.selectRecord(at: 0)
+        model.beginEditingSelectedRow(connection)
+        #expect(model.editorMode == nil)
+        #expect(model.editorError?.contains("cannot be targeted uniquely") == true)
+        #expect(model.deleteMutationRequest(connection) == nil)
+    }
+
     @Test("Row editor only reviews fields that changed")
     func rowEditorChangeTracking() async throws {
         let sender = DatabaseDataScriptedSender(responses: [
@@ -724,6 +893,175 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(deletion.payload.parameters.map(\.value) == [.string("session:1")])
     }
 
+    @Test("MongoDB mutation eligibility requires a round-trippable document identity")
+    func mongoDBMutationEligibility() async throws {
+        let previewIdentity = DatabaseValue.productSpecific(
+            DatabaseProductValue(
+                product: .mongoDB,
+                typeName: "valuePreview",
+                textRepresentation: "unavailable"))
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.mongoDBResponse(identifier: previewIdentity)
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .mongoDB)
+        model.prepare(for: connection)
+        model.targetText = "app.people"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        model.selectRecord(at: 0)
+        #expect(!model.canMutateSelectedRecord(.update, connection: connection))
+        #expect(!model.canMutateSelectedRecord(.delete, connection: connection))
+        model.beginEditingSelectedRow(connection)
+        #expect(model.editorMode == nil)
+        #expect(model.editorError == "This record has no stable identity for safe editing.")
+        #expect(model.deleteMutationRequest(connection) == nil)
+    }
+
+    @Test("MongoDB documents with unsupported values remain deletable but not editable")
+    func mongoDBUnsupportedDocumentEditEligibility() async throws {
+        let identifier = DatabaseValue.productSpecific(
+            DatabaseProductValue(
+                product: .mongoDB,
+                typeName: "objectId",
+                textRepresentation: "507f1f77bcf86cd799439011"))
+        let record = DatabaseRecord(
+            identity: DatabaseRecordIdentity(
+                kind: .documentID,
+                components: [DatabaseIdentityComponent(name: "_id", value: identifier)]),
+            fields: [
+                DatabaseObjectField(name: "_id", value: identifier),
+                DatabaseObjectField(
+                    name: "clock",
+                    value: .productSpecific(
+                        DatabaseProductValue(
+                            product: .mongoDB,
+                            typeName: "bsonTimestamp",
+                            textRepresentation: "10:2"))),
+            ])
+        let sender = DatabaseDataScriptedSender(responses: [Self.response(records: [record])])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .mongoDB)
+        model.prepare(for: connection)
+        model.targetText = "app.people"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        model.selectRecord(at: 0)
+        #expect(!model.canMutateSelectedRecord(.update, connection: connection))
+        #expect(model.canMutateSelectedRecord(.delete, connection: connection))
+        model.beginEditingSelectedRow(connection)
+        #expect(model.editorMode == nil)
+        #expect(model.deleteMutationRequest(connection)?.payload.command == "deleteOne")
+    }
+
+    @Test(
+        "Search mutation eligibility requires the complete exact concurrency token pair",
+        arguments: [DatabaseProduct.elasticsearch, .openSearch]
+    )
+    func searchMutationEligibility(product: DatabaseProduct) async throws {
+        let incompleteTokens = [
+            [DatabaseIdentityComponent(name: "_seq_no", value: .signedInteger(7))],
+            [DatabaseIdentityComponent(name: "_primary_term", value: .signedInteger(2))],
+            [
+                DatabaseIdentityComponent(name: "_seq_no", value: .signedInteger(-1)),
+                DatabaseIdentityComponent(name: "_primary_term", value: .signedInteger(2)),
+            ],
+            [
+                DatabaseIdentityComponent(name: "_seq_no", value: .signedInteger(7)),
+                DatabaseIdentityComponent(name: "_primary_term", value: .signedInteger(2)),
+                DatabaseIdentityComponent(name: "_version", value: .signedInteger(3)),
+            ],
+        ]
+
+        for concurrencyTokens in incompleteTokens {
+            let sender = DatabaseDataScriptedSender(responses: [
+                Self.elasticsearchResponse(concurrencyTokens: concurrencyTokens)
+            ])
+            let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+            let connection = try Self.connection(product: product)
+            model.prepare(for: connection)
+            model.targetText = "edith-documents-v1"
+            model.browse(connection)
+            await Self.waitUntil { model.state == .loaded }
+
+            model.selectRecord(at: 0)
+            #expect(!model.canMutateSelectedRecord(.update, connection: connection))
+            #expect(!model.canMutateSelectedRecord(.delete, connection: connection))
+            model.beginEditingSelectedRow(connection)
+            #expect(model.editorMode == nil)
+            #expect(model.deleteMutationRequest(connection) == nil)
+        }
+    }
+
+    @Test("MongoDB editor submission requires canonical document JSON")
+    func mongoDBEditorSubmissionValidation() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [Self.mongoDBResponse()])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .mongoDB)
+        model.prepare(for: connection)
+        model.targetText = "app.people"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        model.beginInsert(connection)
+        #expect(!model.canSubmitEditor)
+        model.updateDocumentText("{")
+        #expect(!model.canSubmitEditor)
+        model.updateDocumentText("[]")
+        #expect(!model.canSubmitEditor)
+        model.updateDocumentText("{}")
+        #expect(!model.canSubmitEditor)
+        model.updateDocumentText("{\"$set\":1}")
+        #expect(!model.canSubmitEditor)
+        model.updateDocumentText("{\"name\":\"Grace Hopper\"}")
+        #expect(model.canSubmitEditor)
+
+        model.cancelEditor()
+        model.selectRecord(at: 0)
+        model.beginEditingSelectedRow(connection)
+        #expect(model.canSubmitEditor)
+        model.updateDocumentText("{\"_id\":\"unsafe\"}")
+        #expect(!model.canSubmitEditor)
+        model.updateDocumentText("{\"name\":\"Ada Lovelace\"}")
+        #expect(model.canSubmitEditor)
+    }
+
+    @Test(
+        "Search editor submission requires a canonical document payload",
+        arguments: [DatabaseProduct.elasticsearch, .openSearch]
+    )
+    func searchEditorSubmissionValidation(product: DatabaseProduct) async throws {
+        let sender = DatabaseDataScriptedSender(responses: [Self.elasticsearchResponse()])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: product)
+        model.prepare(for: connection)
+        model.targetText = "edith-documents-v1"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        model.beginInsert(connection)
+        #expect(!model.canSubmitEditor)
+        model.updateDocumentText("{")
+        #expect(!model.canSubmitEditor)
+        model.updateDocumentText("{\"title\":\"missing identity\"}")
+        #expect(!model.canSubmitEditor)
+        model.updateDocumentText("{\"_id\":\"doc-new\",\"_seq_no\":1}")
+        #expect(!model.canSubmitEditor)
+        model.updateDocumentText("{\"_id\":\"doc-new\",\"title\":\"created\"}")
+        #expect(model.canSubmitEditor)
+
+        model.cancelEditor()
+        model.selectRecord(at: 0)
+        model.beginEditingSelectedRow(connection)
+        #expect(model.canSubmitEditor)
+        model.updateDocumentText("{\"_id\":\"other\",\"title\":\"unsafe\"}")
+        #expect(!model.canSubmitEditor)
+        model.updateDocumentText("{\"_id\":\"doc-1\",\"title\":\"updated\"}")
+        #expect(model.canSubmitEditor)
+    }
+
     @Test("MongoDB document editor creates guarded insert, update, and delete requests")
     func mongoDBDocumentMutationRequests() async throws {
         let sender = DatabaseDataScriptedSender(responses: [Self.mongoDBResponse()])
@@ -735,9 +1073,12 @@ struct DatabaseDataWorkspaceModelTests {
         await Self.waitUntil { model.state == .loaded }
 
         model.selectRecord(at: 0)
+        #expect(model.canMutateSelectedRecord(.update, connection: connection))
+        #expect(model.canMutateSelectedRecord(.delete, connection: connection))
         #expect(model.documentSource(try #require(model.selectedRecord))?.contains("$oid") == true)
         model.beginEditingSelectedRow(connection)
         #expect(model.documentText.contains("Ada"))
+        #expect(!model.documentText.contains("_id"))
         model.updateDocumentText(
             """
             {"active": true, "name": "Ada Lovelace", "tags": ["math", "code"]}
@@ -769,12 +1110,15 @@ struct DatabaseDataWorkspaceModelTests {
         await Self.waitUntil { model.state == .loaded }
 
         model.selectRecord(at: 0)
+        #expect(model.canMutateSelectedRecord(.update, connection: connection))
+        #expect(model.canMutateSelectedRecord(.delete, connection: connection))
         let selectedRecord = try #require(model.selectedRecord)
         let source = try #require(model.documentSource(selectedRecord))
-        #expect(source.contains("\"_id\" : \"doc-1\""))
+        #expect(!source.contains("_id"))
         #expect(!source.contains("_highlight"))
         #expect(!model.canEdit(recordAt: 0, field: "title", connection: connection))
         model.beginEditingSelectedRow(connection)
+        #expect(model.documentText.contains("\"_id\" : \"doc-1\""))
         model.updateDocumentText(
             """
             {"_id":"doc-1","event":{"$date":"literal"},"title":"updated"}
@@ -814,8 +1158,11 @@ struct DatabaseDataWorkspaceModelTests {
     func elasticsearchEditorRestoresProductContext() throws {
         let model = DatabaseDataWorkspaceModel(announcement: { _ in })
         let connection = try Self.connection(product: .elasticsearch)
+        model.prepare(for: connection)
+        model.targetText = "edith-documents-v1"
 
         model.beginInsert(connection)
+        model.updateDocumentText("{\"_id\":\"doc-new\",\"title\":\"created\"}")
 
         #expect(model.canSubmitEditor)
     }
@@ -957,17 +1304,22 @@ struct DatabaseDataWorkspaceModelTests {
                 metadata: DatabaseResultMetadata(completeness: page.metadata.completeness)))
     }
 
-    private static func mongoDBResponse() -> DatabaseBrokerCommandResponse {
-        let identifier = DatabaseValue.productSpecific(
-            DatabaseProductValue(
-                product: .mongoDB,
-                typeName: "objectId",
-                textRepresentation: "507f1f77bcf86cd799439011"))
+    private static func mongoDBResponse(
+        identifier: DatabaseValue? = nil
+    ) -> DatabaseBrokerCommandResponse {
+        let identifier =
+            identifier
+            ?? .productSpecific(
+                DatabaseProductValue(
+                    product: .mongoDB,
+                    typeName: "objectId",
+                    textRepresentation: "507f1f77bcf86cd799439011"))
         let record = DatabaseRecord(
             identity: DatabaseRecordIdentity(
                 kind: .documentID,
                 components: [DatabaseIdentityComponent(name: "_id", value: identifier)]),
             fields: [
+                DatabaseObjectField(name: "_id", value: identifier),
                 DatabaseObjectField(name: "name", value: .string("Ada")),
                 DatabaseObjectField(name: "active", value: .boolean(true)),
                 DatabaseObjectField(
@@ -999,7 +1351,9 @@ struct DatabaseDataWorkspaceModelTests {
                 metadata: DatabaseResultMetadata(completeness: completeness)))
     }
 
-    private static func elasticsearchResponse() -> DatabaseBrokerCommandResponse {
+    private static func elasticsearchResponse(
+        concurrencyTokens: [DatabaseIdentityComponent]? = nil
+    ) -> DatabaseBrokerCommandResponse {
         let record = DatabaseRecord(
             identity: DatabaseRecordIdentity(
                 kind: .searchDocument,
@@ -1009,7 +1363,7 @@ struct DatabaseDataWorkspaceModelTests {
                         value: .string("edith-documents-v1")),
                     DatabaseIdentityComponent(name: "_id", value: .string("doc-1")),
                 ],
-                concurrencyTokens: [
+                concurrencyTokens: concurrencyTokens ?? [
                     DatabaseIdentityComponent(name: "_seq_no", value: .signedInteger(7)),
                     DatabaseIdentityComponent(name: "_primary_term", value: .signedInteger(2)),
                 ]),
@@ -1057,6 +1411,23 @@ struct DatabaseDataWorkspaceModelTests {
                 DatabaseBrowseResult(
                     page: page(records: records, nextContinuation: nextContinuation)),
                 metadata: DatabaseResultMetadata(completeness: .init(state: .complete))))
+    }
+
+    private static func response(
+        records: [DatabaseRecord],
+        fields: [DatabaseFieldDescriptor]
+    ) -> DatabaseBrokerCommandResponse {
+        let completeness = DatabaseResultCompleteness(state: .complete)
+        let page = DatabasePage(
+            records: records,
+            fields: fields,
+            metadata: DatabasePageMetadata(
+                completeness: completeness,
+                count: DatabaseCountMetadata(value: UInt64(records.count), accuracy: .exact)))
+        return .browse(
+            .success(
+                DatabaseBrowseResult(page: page),
+                metadata: DatabaseResultMetadata(completeness: completeness)))
     }
 
     private static func queryResponse(
