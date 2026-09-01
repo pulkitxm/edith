@@ -163,31 +163,23 @@ struct DatabaseWorkbenchView: View {
     }
 
     private func controls(_ connection: DatabaseConnectionSummary) -> some View {
-        Group {
-            if compact {
-                VStack(spacing: UIScale.pt(8)) {
-                    HStack(spacing: UIScale.pt(8)) {
-                        modePicker(connection)
-                        objectControls(connection)
-                    }
-                    HStack(spacing: UIScale.pt(8)) {
-                        Spacer(minLength: 0)
-                        connectionActions(connection)
-                    }
-                }
-            } else {
-                HStack(spacing: UIScale.pt(8)) {
-                    modePicker(connection)
-                    Rectangle()
-                        .fill(palette.line.opacity(0.55))
-                        .frame(width: 1, height: UIScale.pt(20))
-                    objectControls(connection)
-                    connectionActions(connection)
-                }
+        HStack(spacing: UIScale.pt(8)) {
+            modePicker(connection)
+            if !compact {
+                commandSeparator
+                objectControls(connection)
             }
+            Spacer(minLength: UIScale.pt(6))
+            connectionActions(connection)
         }
-        .padding(UIScale.pt(10))
+        .padding(.horizontal, UIScale.pt(10))
+        .frame(height: UIScale.pt(44))
         .background(palette.panel)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(palette.line.opacity(0.72))
+                .frame(height: 1)
+        }
     }
 
     private func queryRegion(_ connection: DatabaseConnectionSummary) -> some View {
@@ -245,24 +237,50 @@ struct DatabaseWorkbenchView: View {
     }
 
     private func modePicker(_ connection: DatabaseConnectionSummary) -> some View {
-        Picker("Workspace mode", selection: workbenchModeBinding(connection)) {
+        HStack(spacing: UIScale.pt(2)) {
             ForEach(DatabaseWorkbenchMode.allCases, id: \.self) { mode in
-                Text(mode.title).tag(mode)
+                Button {
+                    workbenchModeBinding(connection).wrappedValue = mode
+                } label: {
+                    Text(mode.title)
+                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                        .foregroundStyle(
+                            workbenchMode == mode ? palette.ink : palette.inkSoft
+                        )
+                        .frame(maxWidth: .infinity)
+                        .frame(height: UIScale.pt(24))
+                        .background(
+                            workbenchMode == mode
+                                ? palette.ink.opacity(dark ? 0.14 : 0.075) : .clear,
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(5)))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(workbenchMode == mode ? .isSelected : [])
             }
         }
-        .labelsHidden()
-        .pickerStyle(.segmented)
-        .frame(width: UIScale.pt(142))
+        .padding(UIScale.pt(2))
+        .frame(width: UIScale.pt(118))
+        .background(palette.canvas.opacity(0.76), in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
+        .overlay {
+            RoundedRectangle(cornerRadius: UIScale.pt(7))
+                .strokeBorder(palette.line.opacity(0.72), lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Workspace mode")
     }
 
     private func connectionActions(_ connection: DatabaseConnectionSummary) -> some View {
-        HStack(spacing: UIScale.pt(7)) {
+        HStack(spacing: UIScale.pt(6)) {
+            connectionPolicy(connection)
             Button {
                 data.browse(connection)
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
-            .buttonStyle(.edith(.borderless))
+            .buttonStyle(
+                DatabaseCommandButtonStyle(
+                    kind: .utility, dark: dark, palette: palette)
+            )
             .disabled(data.isLoading || explorer.selectedObject == nil)
             .help("Refresh data")
             .accessibilityLabel("Refresh selected object")
@@ -270,85 +288,98 @@ struct DatabaseWorkbenchView: View {
                 Button {
                     data.beginInsert(connection)
                 } label: {
-                    if compact {
-                        Image(systemName: "plus")
-                    } else {
-                        Label(newItemTitle(connection), systemImage: "plus")
-                    }
+                    Label(newItemTitle(connection), systemImage: "plus")
                 }
-                .buttonStyle(.edith(.primary, tint: theme))
+                .buttonStyle(
+                    DatabaseCommandButtonStyle(
+                        kind: .primary, dark: dark, palette: palette)
+                )
                 .disabled(
                     (data.fields.isEmpty && !usesDocumentEditor(connection))
                         || mutations.hasTrackedMutation
                 )
                 .help(newItemHelp(connection))
             }
-            if connection.environmentKind == .production {
-                Group {
-                    if compact {
-                        Image(systemName: "exclamationmark.shield.fill")
-                    } else {
-                        Label("Production", systemImage: "exclamationmark.shield.fill")
-                    }
+            Menu {
+                Button {
+                    data.cancel()
+                    Task { await connections.disconnectSelected() }
+                } label: {
+                    Label("Disconnect", systemImage: "power")
                 }
-                .font(.system(size: UIScale.pt(10.5), weight: .medium))
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                    .frame(width: UIScale.pt(30), height: UIScale.pt(30))
+                    .foregroundStyle(palette.inkSoft)
+                    .background(
+                        palette.canvas.opacity(0.72),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(7))
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: UIScale.pt(7))
+                            .strokeBorder(palette.line.opacity(0.68), lineWidth: 1)
+                    }
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("More database actions")
+            .accessibilityLabel("More database actions")
+        }
+    }
+
+    @ViewBuilder
+    private func connectionPolicy(_ connection: DatabaseConnectionSummary) -> some View {
+        if connection.environmentKind == .production {
+            Label("Production", systemImage: "exclamationmark.shield.fill")
+                .font(.system(size: UIScale.pt(10), weight: .medium))
                 .foregroundStyle(DashSkin.warn)
                 .help("Production connection")
                 .accessibilityLabel("Production connection")
-            } else if connection.readOnlyPolicy != .disabled {
-                Group {
-                    if compact {
-                        Image(systemName: "lock.fill")
-                    } else {
-                        Label("Read only", systemImage: "lock.fill")
-                    }
-                }
-                .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                .foregroundStyle(.secondary)
+        } else if connection.readOnlyPolicy != .disabled {
+            Label("Read only", systemImage: "lock.fill")
+                .font(.system(size: UIScale.pt(10), weight: .medium))
+                .foregroundStyle(palette.inkFaint)
                 .help("Read-only connection")
                 .accessibilityLabel("Read-only connection")
-            } else if !hasAnyDataMutation(connection) {
-                Group {
-                    if compact {
-                        Image(systemName: "eye")
-                    } else {
-                        Label("Browse only", systemImage: "eye")
-                    }
-                }
-                .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                .foregroundStyle(.secondary)
+        } else if !hasAnyDataMutation(connection) {
+            Label("Browse only", systemImage: "eye")
+                .font(.system(size: UIScale.pt(10), weight: .medium))
+                .foregroundStyle(palette.inkFaint)
                 .help(mutationUnavailableHelp(connection))
-            }
-            Button {
-                data.cancel()
-                Task { await connections.disconnectSelected() }
-            } label: {
-                Image(systemName: "power")
-            }
-            .buttonStyle(.edith(.borderless))
-            .help("Disconnect \(connection.name)")
-            .accessibilityLabel("Disconnect \(connection.name)")
+                .accessibilityLabel("Browse-only connection")
         }
     }
 
     private func objectControls(_ connection: DatabaseConnectionSummary) -> some View {
         HStack(spacing: UIScale.pt(7)) {
             Image(systemName: selectedObjectSymbol)
+                .font(.system(size: UIScale.pt(11), weight: .semibold))
                 .foregroundStyle(theme)
+                .frame(width: UIScale.pt(24), height: UIScale.pt(24))
+                .background(theme.opacity(0.12), in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                 Text(selectedObjectTitle)
                     .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                    .foregroundStyle(palette.ink)
                     .lineLimit(1)
                 if let selected = explorer.selectedObject, selected.path.count > 1 {
                     Text(selected.path.dropLast().joined(separator: " / "))
                         .font(.system(size: UIScale.pt(9.5)))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(palette.inkFaint)
                         .lineLimit(1)
                 }
             }
-            Spacer(minLength: 0)
         }
-        .frame(maxWidth: compact ? .infinity : UIScale.pt(330), alignment: .leading)
+        .frame(maxWidth: UIScale.pt(220), alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var commandSeparator: some View {
+        Rectangle()
+            .fill(palette.line.opacity(0.72))
+            .frame(width: 1, height: UIScale.pt(18))
     }
 
     private func compactObjectPicker(_ connection: DatabaseConnectionSummary) -> some View {
@@ -1147,6 +1178,90 @@ struct DatabaseWorkbenchView: View {
         case .document: "doc.text"
         case .search: "magnifyingglass"
         case .analytical: "chart.xyaxis.line"
+        }
+    }
+}
+
+private struct DatabaseCommandButtonStyle: ButtonStyle {
+    enum Kind {
+        case utility
+        case primary
+    }
+
+    let kind: Kind
+    let dark: Bool
+    let palette: DatabaseThemePalette
+
+    func makeBody(configuration: Configuration) -> some View {
+        DatabaseCommandButtonBody(
+            label: configuration.label,
+            kind: kind,
+            dark: dark,
+            palette: palette,
+            pressed: configuration.isPressed)
+    }
+}
+
+private struct DatabaseCommandButtonBody<Label: View>: View {
+    let label: Label
+    let kind: DatabaseCommandButtonStyle.Kind
+    let dark: Bool
+    let palette: DatabaseThemePalette
+    let pressed: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var enabled
+    @State private var hovering = false
+
+    var body: some View {
+        label
+            .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+            .padding(.horizontal, kind == .primary ? UIScale.pt(10) : 0)
+            .frame(minWidth: UIScale.pt(30))
+            .frame(height: UIScale.pt(30))
+            .foregroundStyle(foreground)
+            .background(background, in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
+            .overlay {
+                RoundedRectangle(cornerRadius: UIScale.pt(7))
+                    .strokeBorder(border, lineWidth: 1)
+            }
+            .contentShape(Rectangle())
+            .opacity(enabled ? 1 : 0.42)
+            .brightness(pressed && enabled ? -0.08 : 0)
+            .onHover { hovering = enabled && $0 }
+            .animation(
+                Motion.animation(Motion.feedback, reduceMotion: reduceMotion),
+                value: hovering
+            )
+            .animation(
+                Motion.animation(Motion.feedback, reduceMotion: reduceMotion),
+                value: pressed)
+    }
+
+    private var foreground: Color {
+        switch kind {
+        case .primary:
+            dark ? palette.canvas : .white
+        case .utility:
+            hovering ? palette.ink : palette.inkSoft
+        }
+    }
+
+    private var background: Color {
+        switch kind {
+        case .primary:
+            DashSkin.accentDeep(dark)
+        case .utility:
+            hovering ? palette.line.opacity(0.72) : palette.canvas.opacity(0.72)
+        }
+    }
+
+    private var border: Color {
+        switch kind {
+        case .primary:
+            dark ? palette.ink.opacity(0.12) : Color.white.opacity(0.28)
+        case .utility:
+            palette.line.opacity(hovering ? 0.92 : 0.68)
         }
     }
 }
