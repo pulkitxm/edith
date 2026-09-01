@@ -17,7 +17,7 @@ extension DatabaseConnectionDraftError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case let .unsupportedProduct(product):
-            "\(product.displayName) is not available in the local database broker."
+            "\(product.displayName) is not supported by this version of Database."
         case .missingName:
             "Enter a connection name."
         case .missingHost:

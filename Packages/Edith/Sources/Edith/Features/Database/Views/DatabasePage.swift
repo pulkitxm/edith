@@ -77,19 +77,19 @@ final class DatabasePageModel {
 
     private static func message(for error: Error) -> String {
         guard let availability = error as? DatabaseBrokerAvailabilityError else {
-            return "The local database broker could not be reached."
+            return "The local database service could not be reached."
         }
         switch availability {
         case .readinessTimedOut:
-            return "The local database broker did not become ready in time."
+            return "The local database service did not become ready in time."
         case .versionTransitionTimedOut:
-            return "The local database broker could not finish updating."
+            return "The local database service could not finish updating."
         case .unsafePeer:
-            return "The local database broker failed peer authentication."
+            return "The local database service could not be verified."
         case .outcomeUnknown:
-            return "The local database broker could not confirm its readiness outcome."
+            return "The local database service could not confirm its readiness."
         case .unavailable:
-            return "The local database broker is unavailable."
+            return "The local database service is unavailable."
         }
     }
 }
@@ -108,8 +108,11 @@ struct DatabasePage: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
 
-    private var theme: Color { themeColor(themeName) }
     private var dark: Bool { scheme == .dark }
+    private var palette: DatabaseThemePalette {
+        DatabaseThemePalette(dark: dark, theme: AppTheme(storedName: themeName))
+    }
+    private var theme: Color { palette.accent }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -118,7 +121,8 @@ struct DatabasePage: View {
             pageContent
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(dark))
+        .background(palette.canvas)
+        .environment(\.databaseAppTheme, palette.theme)
         .task {
             guard automaticActionsEnabled else { return }
             await model.refresh()
@@ -239,7 +243,7 @@ struct DatabasePage: View {
                     open: { dataWorkspace.open($0, connection: connection) })
             }
         }
-        .background(DashSkin.paper2(dark))
+        .background(palette.panel)
     }
 
     private var isConnected: Bool {
@@ -362,7 +366,7 @@ struct DatabasePage: View {
             .accessibilityLabel("Add database connection")
         }
         .padding(UIScale.pt(10))
-        .background(DashSkin.paper2(dark))
+        .background(palette.panel)
     }
 
     private var connections: some View {

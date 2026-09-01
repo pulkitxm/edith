@@ -11,8 +11,11 @@ struct DatabaseObjectNavigatorView: View {
         AppTheme.accent.rawValue
     @Environment(\.colorScheme) private var scheme
 
-    private var theme: Color { themeColor(themeName) }
     private var dark: Bool { scheme == .dark }
+    private var palette: DatabaseThemePalette {
+        DatabaseThemePalette(dark: dark, theme: AppTheme(storedName: themeName))
+    }
+    private var theme: Color { palette.accent }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,7 +23,7 @@ struct DatabaseObjectNavigatorView: View {
             Divider().opacity(0.35)
             content
         }
-        .background(DashSkin.paper2(dark))
+        .background(palette.panel)
         .onChange(of: explorer.groups) { _, _ in
             expandActiveGroup()
         }

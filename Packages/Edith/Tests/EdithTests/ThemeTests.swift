@@ -41,6 +41,16 @@ import Testing
         #expect(DashSkin.accent(true, theme: .blue) != DashSkin.accent(true, theme: .orange))
     }
 
+    @Test func databaseSurfacesFollowTheSelectedAppTheme() {
+        let blue = DatabaseThemePalette(dark: true, theme: .blue)
+        let orange = DatabaseThemePalette(dark: true, theme: .orange)
+
+        #expect(rgb(blue.canvas) != rgb(orange.canvas))
+        #expect(rgb(blue.panel) != rgb(orange.panel))
+        #expect(rgb(blue.grid) != rgb(orange.grid))
+        #expect(rgb(blue.accent) != rgb(orange.accent))
+    }
+
     @Test func appViewsDoNotBypassSharedThemeTokens() throws {
         let packageRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

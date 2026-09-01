@@ -459,7 +459,7 @@ final class DatabaseConnectionWorkspaceModel {
         search: String?
     ) {
         guard case .connectionList(let result) = response else {
-            let message = "The broker returned an unexpected connection list response."
+            let message = "The database service returned an unexpected connection list response."
             listState = .failed(listState.connections, message)
             announcement(message)
             return
@@ -505,7 +505,7 @@ final class DatabaseConnectionWorkspaceModel {
         guard case .connect(let result) = response else {
             failSession(
                 connectionID,
-                message: "The broker returned an unexpected connection response.")
+                message: "The database service returned an unexpected connection response.")
             return
         }
         guard result.status != .failed, let payload = result.payload else {
@@ -513,13 +513,14 @@ final class DatabaseConnectionWorkspaceModel {
             return
         }
         guard payload.connection.id == connectionID else {
-            failSession(connectionID, message: "The broker returned a different connection.")
+            failSession(
+                connectionID, message: "The database service returned a different connection.")
             return
         }
         guard payload.productIdentity.product == payload.capabilities.productIdentity.product else {
             failSession(
                 connectionID,
-                message: "The broker returned inconsistent database capabilities.")
+                message: "The database service returned inconsistent database capabilities.")
             return
         }
 
@@ -544,7 +545,7 @@ final class DatabaseConnectionWorkspaceModel {
         guard case .disconnect(let result) = response else {
             failSession(
                 connectionID,
-                message: "The broker returned an unexpected disconnect response.",
+                message: "The database service returned an unexpected disconnect response.",
                 previous: priorState.connectedSession)
             return
         }
@@ -558,7 +559,7 @@ final class DatabaseConnectionWorkspaceModel {
         guard payload.connection.id == connectionID, payload.disconnected else {
             failSession(
                 connectionID,
-                message: "The broker did not confirm the database disconnection.",
+                message: "The database service did not confirm the database disconnection.",
                 previous: priorState.connectedSession)
             return
         }
@@ -576,7 +577,7 @@ final class DatabaseConnectionWorkspaceModel {
         guard case .capabilities(let result) = response else {
             failCapabilities(
                 connectionID,
-                message: "The broker returned an unexpected capability response.",
+                message: "The database service returned an unexpected capability response.",
                 previous: previous)
             return
         }
@@ -592,7 +593,8 @@ final class DatabaseConnectionWorkspaceModel {
         {
             failCapabilities(
                 connectionID,
-                message: "The broker returned capabilities for a different database product.",
+                message:
+                    "The database service returned capabilities for a different database product.",
                 previous: previous)
             return
         }
@@ -677,13 +679,13 @@ final class DatabaseConnectionWorkspaceModel {
         }
         switch clientError {
         case .invalidRequest:
-            return "The broker rejected the database \(action.requestName)."
+            return "The database service rejected the database \(action.requestName)."
         case .timedOut:
             return "The database \(action.requestName) timed out."
         case .unavailable:
-            return "The local database broker is unavailable."
+            return "The local database service is unavailable."
         case .unsafePeer:
-            return "The local database broker failed peer authentication."
+            return "The local database service could not be verified."
         case .outcomeUnknown:
             return "The database \(action.requestName) outcome is unknown."
         }
@@ -696,7 +698,7 @@ final class DatabaseConnectionWorkspaceModel {
         guard let error else { return action.genericFailure }
         switch error.category {
         case .invalidRequest:
-            return "The broker rejected the database \(action.requestName)."
+            return "The database service rejected the database \(action.requestName)."
         case .connectionFailed, .network, .server:
             return action.genericFailure
         case .authenticationFailed:

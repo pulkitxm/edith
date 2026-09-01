@@ -1039,8 +1039,8 @@ final class DatabaseDataWorkspaceModel {
         if let client = error as? DatabaseBrokerCommandClientError {
             switch client {
             case .timedOut: return "The data request timed out."
-            case .unavailable: return "The database broker is unavailable."
-            case .unsafePeer: return "The database broker could not be verified."
+            case .unavailable: return "The database service is unavailable."
+            case .unsafePeer: return "The database service could not be verified."
             case .outcomeUnknown: return "The data request outcome could not be confirmed."
             case .invalidRequest: return "The database rejected this data request."
             }
