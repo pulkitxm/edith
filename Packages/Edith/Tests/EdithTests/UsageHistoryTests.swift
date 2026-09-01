@@ -805,6 +805,8 @@ import Testing
 
         #expect(Set(merged["sources"] as? [String] ?? []) == expectedSources)
         #expect(Set(merged["defaultSources"] as? [String] ?? []) == expectedSources)
+        let machines = merged["machines"] as? [[String: Any]] ?? []
+        #expect(machines.compactMap { $0["id"] as? String } == [currentID])
         let totals = merged["totals"] as? [String: Any]
         #expect(totals?["tokens"] as? Double == 15)
         let bySource = totals?["bySource"] as? [String: [String: Double]]
@@ -827,6 +829,12 @@ import Testing
 
         #expect(totals?["tokens"] as? Double == 30)
         #expect((merged["sources"] as? [String])?.count == 2)
+        let machines = merged["machines"] as? [[String: Any]] ?? []
+        #expect(
+            Set(machines.compactMap { $0["id"] as? String }) == [
+                "11111111-1111-1111-1111-111111111111",
+                "22222222-2222-2222-2222-222222222222",
+            ])
     }
 
     @MainActor

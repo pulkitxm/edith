@@ -125,13 +125,14 @@ import Testing
         #expect(UsageRefreshLock.acquire(at: url) != nil)
     }
 
-    @Test func publicationReplacesTheBaselineWithoutRestoringRemovedHistory() throws {
+    @Test func publicationRetainsUnavailableMachineHistory() throws {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
         let live = dir.appendingPathComponent("usage.json")
         let staged = dir.appendingPathComponent("staged.json")
         let fresh = try usage(period: "2026-08-24", source: "fresh")
-        let baseline = try usage(period: "2026-08-20", source: "forgotten-machine")
+        let machine = "machine:4303dcf1-52d8-4075-ae9b-c2fd86d3821a:cli"
+        let baseline = try usage(period: "2026-08-20", source: machine)
         try fresh.write(to: staged)
         try baseline.write(to: live)
 
@@ -139,7 +140,11 @@ import Testing
             stagedUsage: staged, baseline: UsageRefreshBaseline(usage: baseline, machines: nil),
             dataDir: dir)
 
-        #expect(try Data(contentsOf: live) == fresh)
+        let published = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: live)) as? [String: Any])
+        #expect(Set(published["sources"] as? [String] ?? []) == ["fresh", machine])
+        #expect((published["daily"] as? [[String: Any]])?.count == 2)
+        #expect((published["totals"] as? [String: Any])?["tokens"] as? Double == 2)
     }
 
     @Test func publicationRejectsAConcurrentLiveReplacement() async throws {

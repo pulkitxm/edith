@@ -350,6 +350,7 @@ public enum UsageHistory {
         for (k, v) in l["sourceMeta"] as? [String: Any] ?? [:] { meta[k] = v }
         out["sourceMeta"] = meta
         out["sessions"] = mergeSessions(l["sessions"], c["sessions"])
+        out["machines"] = mergeMachines(l["machines"], c["machines"])
         out["totals"] = totals(of: mergedDaily)
 
         return encoded(pruningUnusedMachineSources(out))
@@ -1123,6 +1124,21 @@ public enum UsageHistory {
         var out = a
         for s in b where !out.contains(s) { out.append(s) }
         return out
+    }
+
+    private static func mergeMachines(_ localValue: Any?, _ cloudValue: Any?) -> [[String: Any]] {
+        let local = localValue as? [[String: Any]] ?? []
+        let cloud = cloudValue as? [[String: Any]] ?? []
+        var merged: [String: [String: Any]] = [:]
+        var order: [String] = []
+        for machine in cloud + local {
+            guard let id = (machine["id"] as? String)?.lowercased(), !id.isEmpty else {
+                continue
+            }
+            if merged[id] == nil { order.append(id) }
+            merged[id] = machine
+        }
+        return order.compactMap { merged[$0] }
     }
 
     private static func mergeDay(
