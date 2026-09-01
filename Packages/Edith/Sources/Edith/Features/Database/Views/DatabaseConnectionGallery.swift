@@ -271,6 +271,7 @@ struct DatabaseConnectionGallery: View {
             hoveredConnectionID = isHovered ? connection.id : nil
         }
         .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
         .accessibilityLabel(
             [
                 connection.name,
