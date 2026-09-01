@@ -5,6 +5,7 @@ import SwiftUI
 struct DatabaseFilterRibbon: View {
     let data: DatabaseDataWorkspaceModel
     let connection: DatabaseConnectionSummary
+    let columns: DatabaseColumnsModel
     let accent: Color
     let palette: DatabaseThemePalette
     let apply: () -> Void
@@ -25,6 +26,7 @@ struct DatabaseFilterRibbon: View {
                 }
                 .padding(.vertical, UIScale.pt(6))
             }
+            columnsMenu
             if data.hasActiveFilters || data.hasActiveSorts {
                 Button {
                     data.clearFilters()
@@ -42,6 +44,58 @@ struct DatabaseFilterRibbon: View {
         .padding(.horizontal, UIScale.pt(10))
         .frame(minHeight: UIScale.pt(42))
         .background(palette.panel)
+    }
+
+    private var columnsMenu: some View {
+        Menu {
+            Button("Show all") {
+                columns.showAll()
+            }
+            .disabled(columns.allFieldsVisible)
+            Button("Show first only") {
+                columns.hideAll()
+            }
+            .disabled(columns.visibleCount <= 1)
+            Divider()
+            ForEach(Array(columns.columns.enumerated()), id: \.element.id) { index, column in
+                Menu {
+                    Button {
+                        columns.toggleVisibility(column.id)
+                    } label: {
+                        if column.isVisible {
+                            Label("Hide", systemImage: "eye.slash")
+                        } else {
+                            Label("Show", systemImage: "eye")
+                        }
+                    }
+                    .disabled(column.isVisible && !columns.canHide(column.id))
+                    Divider()
+                    Button("Move earlier") {
+                        columns.moveField(column.id, to: index - 1)
+                    }
+                    .disabled(index == 0)
+                    Button("Move later") {
+                        columns.moveField(column.id, to: index + 1)
+                    }
+                    .disabled(index == columns.columns.count - 1)
+                } label: {
+                    if column.isVisible {
+                        Label(column.field.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(column.field.displayName)
+                    }
+                }
+            }
+        } label: {
+            Label("Columns", systemImage: "rectangle.split.3x1")
+                .font(.system(size: UIScale.pt(10.5), weight: .medium))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .disabled(columns.columns.isEmpty)
+        .help("Choose and reorder visible columns")
+        .accessibilityLabel(
+            "Columns, \(columns.visibleCount) of \(columns.columns.count) visible")
     }
 
     private var addFilterMenu: some View {
