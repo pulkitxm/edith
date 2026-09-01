@@ -136,6 +136,20 @@ import Testing
         #expect(ended.action == .start)
     }
 
+    @Test func exitedHerdrAgentOffersRestartInsteadOfABlankPane() {
+        let ended = HerdrAgentTerminalOverlay.make(
+            connectError: nil, starting: false, started: false,
+            exitMessage: "Session ended with status 1.")
+        let running = HerdrAgentTerminalOverlay.make(
+            connectError: nil, starting: false, started: true,
+            exitMessage: "Session ended with status 1.")
+
+        #expect(ended == .ended("Session ended with status 1."))
+        #expect(ended.offersRestart)
+        #expect(running == .none)
+        #expect(!running.offersRestart)
+    }
+
     @Test func terminalResponderBypassesTypeAheadAndMediaShortcuts() {
         let responder = TerminalSessionHolder().terminalView
         let clock = ContinuousClock()

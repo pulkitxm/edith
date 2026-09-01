@@ -40,6 +40,27 @@ private enum HerdrTerminalFocus {
     case diff
 }
 
+enum HerdrAgentTerminalOverlay: Equatable {
+    case none
+    case progress
+    case failure(String)
+    case ended(String)
+
+    static func make(
+        connectError: String?, starting: Bool, started: Bool, exitMessage: String?
+    ) -> Self {
+        if let connectError { return .failure(connectError) }
+        if starting, !started { return .progress }
+        if let exitMessage, !started { return .ended(exitMessage) }
+        return .none
+    }
+
+    var offersRestart: Bool {
+        if case .ended = self { return true }
+        return false
+    }
+}
+
 struct HerdrHorizontalResizeHandle: View {
     let label: String
     let onChanged: (CGFloat) -> Void
@@ -289,17 +310,38 @@ struct HerdrSessionView: View {
                     .padding(UIScale.pt(10))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             }
-            if let connectError {
-                Text(connectError)
-                    .font(.system(size: UIScale.pt(13)))
-                    .foregroundStyle(DashSkin.warn)
-                    .padding(UIScale.pt(16))
-            } else if starting, !tab.holder.started {
-                ProgressView()
-            }
+            agentTerminalOverlay
         }
         .background(Color(nsColor: TerminalPalette.edith(dark: dark).background))
         .presenterCover(hideAgents, dark: dark)
+    }
+
+    @ViewBuilder
+    private var agentTerminalOverlay: some View {
+        switch HerdrAgentTerminalOverlay.make(
+            connectError: connectError, starting: starting, started: tab.holder.started,
+            exitMessage: tab.holder.exitMessage)
+        {
+        case .none:
+            EmptyView()
+        case .progress:
+            ProgressView()
+        case .failure(let message):
+            Text(message)
+                .font(.system(size: UIScale.pt(13)))
+                .foregroundStyle(DashSkin.warn)
+                .padding(UIScale.pt(16))
+        case .ended(let message):
+            VStack(spacing: UIScale.pt(10)) {
+                Text(message)
+                    .font(.system(size: UIScale.pt(13), weight: .semibold))
+                    .foregroundStyle(DashSkin.ink(dark))
+                Button("Restart") { Task { await startIfNeeded() } }
+                    .buttonStyle(.edith(.primary))
+                    .disabled(!launchEnabled)
+            }
+            .padding(UIScale.pt(20))
+        }
     }
 
     private func handleRemoteDrop(_ payload: TerminalDropPayload) -> Bool {
@@ -576,6 +618,7 @@ struct HerdrSessionView: View {
 
     private func startIfNeeded() async {
         guard launchEnabled, !tab.holder.started else { return }
+        connectError = nil
         starting = true
         defer { starting = false }
         do {
