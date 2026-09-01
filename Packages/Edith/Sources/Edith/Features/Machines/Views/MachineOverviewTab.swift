@@ -159,6 +159,59 @@ struct MetricCard: View {
     }
 }
 
+struct MetricsGridLayout: Layout {
+    let spacing: CGFloat
+    var minimumColumnWidth = UIScale.pt(238)
+
+    private func columnCount(width: CGFloat, itemCount: Int) -> Int {
+        let fitting = max(1, Int((width + spacing) / (minimumColumnWidth + spacing)))
+        return min(itemCount, min(3, fitting))
+    }
+
+    private func rows(width: CGFloat, subviews: Subviews) -> [(Range<Int>, CGFloat, CGFloat)] {
+        guard !subviews.isEmpty else { return [] }
+        let columns = columnCount(width: width, itemCount: subviews.count)
+        return stride(from: 0, to: subviews.count, by: columns).map { start in
+            let end = min(start + columns, subviews.count)
+            let range = start..<end
+            let itemWidth = (width - spacing * CGFloat(range.count - 1)) / CGFloat(range.count)
+            let height = range.reduce(0) { current, index in
+                max(
+                    current,
+                    subviews[index].sizeThatFits(
+                        ProposedViewSize(width: itemWidth, height: nil)
+                    ).height)
+            }
+            return (range, itemWidth, height)
+        }
+    }
+
+    func sizeThatFits(
+        proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) -> CGSize {
+        let width = proposal.width ?? minimumColumnWidth
+        let rows = rows(width: width, subviews: subviews)
+        let height = rows.reduce(0) { $0 + $1.2 } + spacing * CGFloat(max(0, rows.count - 1))
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) {
+        var y = bounds.minY
+        for row in rows(width: bounds.width, subviews: subviews) {
+            var x = bounds.minX
+            for index in row.0 {
+                subviews[index].place(
+                    at: CGPoint(x: x, y: y), anchor: .topLeading,
+                    proposal: ProposedViewSize(width: row.1, height: row.2))
+                x += row.1 + spacing
+            }
+            y += row.2 + spacing
+        }
+    }
+}
+
 struct MachineOverviewTab: View {
     let session: MachineSession
     let model: MachinesModel
@@ -249,12 +302,7 @@ struct MachineOverviewTab: View {
     }
 
     private var metricsGrid: some View {
-        LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: UIScale.pt(12)),
-                GridItem(.flexible(), spacing: UIScale.pt(12)),
-            ], spacing: UIScale.pt(12)
-        ) {
+        MetricsGridLayout(spacing: UIScale.pt(12)) {
             metricCard(
                 "CPU", value: session.sample.map { String(format: "%.0f%%", $0.cpu.total) } ?? "—",
                 fraction: (session.sample?.cpu.total ?? 0) / 100, history: session.cpuHistory,
