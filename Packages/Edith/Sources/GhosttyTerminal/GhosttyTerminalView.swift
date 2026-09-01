@@ -4,6 +4,7 @@ import GhosttyKit
 public final class GhosttyTerminalView: NSView {
     public var onClose: ((Int32?) -> Void)?
     public var onDropFiles: ((TerminalDropPayload) -> Bool)?
+    public var onFocus: (() -> Void)?
     public var onTitleChange: ((String) -> Void)?
     public var onWorkingDirectoryChange: ((String) -> Void)?
     public var onReady: (() -> Void)?
@@ -382,6 +383,7 @@ public final class GhosttyTerminalView: NSView {
         guard super.becomeFirstResponder() else { return false }
         let focused = renderingActive && window?.isKeyWindow == true
         if let surface { ghostty_surface_set_focus(surface, focused) }
+        onFocus?()
         return true
     }
 

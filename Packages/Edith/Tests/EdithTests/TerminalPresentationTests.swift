@@ -267,6 +267,23 @@ import Testing
         }
     }
 
+    @Test func stopInvalidatesTheSessionAndCreatesAFreshFallbackView() async {
+        await withGhosttyEnabled(false) {
+            let holder = TerminalSessionHolder()
+            let original = holder.terminalView
+            holder.start(executable: "/bin/cat", arguments: [], environment: [])
+            let runningGeneration = holder.generation
+
+            holder.stop()
+
+            #expect(!holder.started)
+            #expect(holder.generation == runningGeneration + 1)
+            #expect(holder.terminalView !== original)
+            #expect(holder.currentTitle == nil)
+            #expect(holder.currentWorkingDirectory == nil)
+        }
+    }
+
     @Test func queuedGhosttyInputFlushesOnceWhenTheViewIsRetained() async throws {
         try await withGhosttyEnabled(true) {
             var deliveries: [String] = []
@@ -317,6 +334,40 @@ import Testing
         let second = holder.retainedGhosttyView(launch: launch, theme: theme)
 
         #expect(first === second)
+    }
+
+    @Test func ghosttyFocusRequestsOnlyFireOnOwnershipTransitions() {
+        let coordinator = GhosttyPane.Coordinator()
+
+        #expect(coordinator.shouldRequest(active: true, wantsFocus: true))
+        #expect(!coordinator.shouldRequest(active: true, wantsFocus: true))
+        #expect(!coordinator.shouldRequest(active: false, wantsFocus: true))
+        #expect(coordinator.shouldRequest(active: true, wantsFocus: true))
+        #expect(!coordinator.shouldRequest(active: true, wantsFocus: false))
+    }
+
+    @Test func ghosttyViewReportsResponderOwnership() async throws {
+        try await withGhosttyEnabled(true) {
+            let holder = TerminalSessionHolder()
+            holder.start(executable: "/bin/cat", arguments: [], environment: [])
+            let launch = try #require(holder.ghosttyLaunch)
+            let view = holder.retainedGhosttyView(
+                launch: launch, theme: GhosttyTheme(palette: .edith(dark: true)))
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+                styleMask: [.borderless], backing: .buffered, defer: false)
+            window.contentView = view
+            _ = window.makeFirstResponder(nil)
+            var focusReports = 0
+            view.onFocus = { focusReports += 1 }
+            defer {
+                holder.stop()
+                window.contentView = nil
+            }
+
+            #expect(window.makeFirstResponder(view))
+            #expect(focusReports == 1)
+        }
     }
 
     @Test func ghosttyIsTheDefaultTerminalWithAnExplicitFallback() {

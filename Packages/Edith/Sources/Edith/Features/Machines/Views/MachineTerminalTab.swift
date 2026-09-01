@@ -115,14 +115,7 @@ final class TerminalSessionHolder {
     }
 
     func stop() {
-        if started { terminalView.terminate() }
-        clearQueuedGhosttyInput()
-        ghosttyView?.shutdown()
-        ghosttyView = nil
-        ghosttyLaunch = nil
-        started = false
-        currentTitle = nil
-        currentWorkingDirectory = nil
+        reset()
     }
 
     func sendInput(_ text: String) {
@@ -449,13 +442,15 @@ struct TerminalPane: View {
     var active = true
     var wantsFocus = true
     var onDropFiles: ((TerminalDropPayload) -> Bool)?
+    var onFocus: (() -> Void)?
 
     var body: some View {
         if GhosttyTerminals.enabled {
             if let launch = holder.ghosttyLaunch {
                 GhosttyPane(
                     holder: holder, launch: launch, theme: GhosttyTheme(palette: palette),
-                    active: active, wantsFocus: wantsFocus, onDropFiles: onDropFiles
+                    active: active, wantsFocus: wantsFocus, onDropFiles: onDropFiles,
+                    onFocus: onFocus
                 )
                 .id(holder.generation)
             }
@@ -496,6 +491,7 @@ struct MachineTerminalTab: View {
     let session: MachineSession
     var active = true
     var wantsFocus = true
+    var onFocus: (() -> Void)?
     @State private var ownHolder = TerminalSessionHolder()
     @State private var selectedWindowsShell = WindowsTerminalShell.automatic
     @State private var availableWindowsShells = [WindowsTerminalShell.automatic]
@@ -508,6 +504,7 @@ struct MachineTerminalTab: View {
         session: MachineSession, active: Bool = true, wantsFocus: Bool = true,
         context: MachineTerminalContext? = nil,
         showsStatusBar: Bool = true,
+        onFocus: (() -> Void)? = nil,
         holder: TerminalSessionHolder? = nil
     ) {
         self.session = session
@@ -516,6 +513,7 @@ struct MachineTerminalTab: View {
         injectedHolder = holder
         self.context = context
         self.showsStatusBar = showsStatusBar
+        self.onFocus = onFocus
     }
 
     private var holder: TerminalSessionHolder { injectedHolder ?? ownHolder }
@@ -535,7 +533,7 @@ struct MachineTerminalTab: View {
             if presentation.showsTerminal {
                 TerminalPane(
                     holder: holder, palette: .edith(dark: dark), active: active,
-                    wantsFocus: wantsFocus
+                    wantsFocus: wantsFocus, onFocus: onFocus
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -727,7 +725,7 @@ struct MachineTerminalTab: View {
     }
 
     private func restart() {
-        holder.stop()
+        holder.reset()
         startIfPossible()
     }
 

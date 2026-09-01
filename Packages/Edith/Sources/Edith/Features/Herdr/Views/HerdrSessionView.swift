@@ -35,6 +35,11 @@ private struct HerdrResizeCursor: NSViewRepresentable {
     }
 }
 
+private enum HerdrTerminalFocus {
+    case agent
+    case diff
+}
+
 struct HerdrHorizontalResizeHandle: View {
     let label: String
     let onChanged: (CGFloat) -> Void
@@ -83,6 +88,7 @@ struct HerdrSessionView: View {
     var hideAgents = false
     var presented = true
     var wantsFocus = true
+    var onFocus: (() -> Void)?
     var onSetView: ((HerdrAgentView) -> Void)?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -101,10 +107,19 @@ struct HerdrSessionView: View {
     @State private var confirmingAgentClose = false
     @State private var closingAgent = false
     @State private var agentCloseError: String?
+    @State private var splitTerminalFocus = HerdrTerminalFocus.agent
 
     private var dark: Bool { scheme == .dark }
     private var agent: HerdrAgent { tab.agent }
     private var command: String { HerdrAttachCommand.line(for: agent) }
+
+    private var terminalFocus: HerdrTerminalFocus {
+        switch tab.view {
+        case .agent: .agent
+        case .diff: .diff
+        case .split: splitTerminalFocus
+        }
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -251,8 +266,12 @@ struct HerdrSessionView: View {
             TerminalPane(
                 holder: tab.holder, palette: .edith(dark: dark),
                 active: presented && tab.view.showsAgent,
-                wantsFocus: wantsFocus,
-                onDropFiles: agent.machineIsLocal ? nil : handleRemoteDrop
+                wantsFocus: wantsFocus && terminalFocus == .agent,
+                onDropFiles: agent.machineIsLocal ? nil : handleRemoteDrop,
+                onFocus: {
+                    splitTerminalFocus = .agent
+                    onFocus?()
+                }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             if transferringDrop {
@@ -310,7 +329,11 @@ struct HerdrSessionView: View {
             TerminalPane(
                 holder: tab.quinjet.holder, palette: palette,
                 active: presented && tab.view.showsDiff && tab.quinjet.live,
-                wantsFocus: wantsFocus
+                wantsFocus: wantsFocus && terminalFocus == .diff,
+                onFocus: {
+                    splitTerminalFocus = .diff
+                    onFocus?()
+                }
             )
             .id(tab.quinjet.holder.generation)
             .frame(maxWidth: .infinity, maxHeight: .infinity)

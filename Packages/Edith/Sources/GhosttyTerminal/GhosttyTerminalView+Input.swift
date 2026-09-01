@@ -375,6 +375,7 @@ extension GhosttyTerminalView {
     }
 
     public override func rightMouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
         guard button(event, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT) else {
             super.rightMouseDown(with: event)
             return
@@ -406,6 +407,7 @@ extension GhosttyTerminalView {
     }
 
     public override func mouseDragged(with event: NSEvent) {
+        guard !suppressNextLeftMouseUp else { return }
         commandClickGesture.move(to: convert(event.locationInWindow, from: nil))
         moved(event)
     }

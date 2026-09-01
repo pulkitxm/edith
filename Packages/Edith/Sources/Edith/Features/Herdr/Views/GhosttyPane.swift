@@ -24,10 +24,24 @@ struct GhosttyPane: NSViewRepresentable {
     var active = true
     var wantsFocus = true
     var onDropFiles: ((TerminalDropPayload) -> Bool)?
+    var onFocus: (() -> Void)?
+
+    final class Coordinator {
+        private var requested = false
+
+        func shouldRequest(active: Bool, wantsFocus: Bool) -> Bool {
+            let next = active && wantsFocus
+            defer { requested = next }
+            return next && !requested
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> GhosttyTerminalView {
         let view = holder.retainedGhosttyView(launch: launch, theme: theme)
         view.onDropFiles = onDropFiles
+        view.onFocus = onFocus
         view.setRenderingActive(active)
         return view
     }
@@ -35,8 +49,11 @@ struct GhosttyPane: NSViewRepresentable {
     func updateNSView(_ view: GhosttyTerminalView, context: Context) {
         view.apply(theme: theme)
         view.onDropFiles = onDropFiles
+        view.onFocus = onFocus
         view.setRenderingActive(active)
-        guard active, wantsFocus else { return }
+        guard context.coordinator.shouldRequest(active: active, wantsFocus: wantsFocus) else {
+            return
+        }
         DispatchQueue.main.async { view.focusIfNeeded() }
     }
 }
