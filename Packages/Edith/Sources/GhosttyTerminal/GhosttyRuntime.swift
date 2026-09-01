@@ -15,7 +15,7 @@ public struct GhosttyLaunch: Sendable {
     ) {
         self.executable = executable
         self.arguments = arguments
-        self.environment = environment
+        self.environment = environment.filter { !$0.hasPrefix("NO_COLOR=") }
         self.workingDirectory = workingDirectory
         self.allowsLocalFileLinks = allowsLocalFileLinks
     }
@@ -53,12 +53,19 @@ public final class GhosttyRuntime {
 
     private init() {}
 
+    static func prepareProcessEnvironment(
+        unset: (String) -> Void = { _ = unsetenv($0) }
+    ) {
+        unset("NO_COLOR")
+    }
+
     public func start() {
         guard !started else { return }
         TerminalFontRegistry.register()
         GhosttyResourceLocator().configureEnvironment()
 
         if !ghosttyInitialized {
+            Self.prepareProcessEnvironment()
             guard ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) == 0 else {
                 log.error("ghostty_init failed")
                 return
