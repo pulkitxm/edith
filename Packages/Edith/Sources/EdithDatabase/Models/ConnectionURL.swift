@@ -110,6 +110,8 @@ public enum DatabaseConnectionURLParser {
             .postgresql
         case "mysql":
             .mysql
+        case "mariadb":
+            .mariaDB
         case "redis", "rediss":
             .redis
         case "valkey", "valkeys":
@@ -170,7 +172,7 @@ public enum DatabaseConnectionURLParser {
                 ["require", "verify-ca", "verify-full"].contains($0)
             } ?? false
         }
-        if product == .mysql {
+        if product == .mysql || product == .mariaDB {
             let mode =
                 queryValue(named: "ssl-mode", in: components)
                 ?? queryValue(named: "sslMode", in: components)

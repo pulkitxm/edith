@@ -9,6 +9,68 @@ public enum DatabaseRowMutationRequestError: Error, Equatable, Sendable {
 }
 
 public enum DatabaseRowMutationRequests {
+    public static func mySQLInsert(
+        target: DatabaseTargetIdentifier,
+        product: DatabaseProduct,
+        values: [DatabaseObjectField]
+    ) throws -> DatabaseDestructiveRequest {
+        let table = try mySQLTable(target, product: product, requiresIdentity: false)
+        try validateMySQLFields(values, excluding: [])
+        guard !values.isEmpty else { throw DatabaseRowMutationRequestError.missingValues }
+        let columns = values.map { mySQLQuote($0.name) }.joined(separator: ", ")
+        let placeholders = Array(repeating: "?", count: values.count).joined(separator: ", ")
+        return DatabaseDestructiveRequest(
+            target: target,
+            payload: .relational(
+                product: product,
+                statement: "INSERT INTO \(table) (\(columns)) VALUES (\(placeholders))",
+                parameters: values.map {
+                    DatabaseMutationParameter(name: $0.name, value: $0.value)
+                }))
+    }
+
+    public static func mySQLUpdate(
+        target: DatabaseTargetIdentifier,
+        product: DatabaseProduct,
+        values: [DatabaseObjectField]
+    ) throws -> DatabaseDestructiveRequest {
+        let table = try mySQLTable(target, product: product, requiresIdentity: true)
+        let identity = try mySQLIdentity(target)
+        try validateMySQLFields(values, excluding: Set(identity.map(\.name)))
+        guard !values.isEmpty else { throw DatabaseRowMutationRequestError.missingValues }
+        let assignments = values.map { field in
+            "\(mySQLQuote(field.name)) = ?"
+        }.joined(separator: ", ")
+        let predicate = identity.map { component in
+            "\(mySQLQuote(component.name)) <=> ?"
+        }.joined(separator: " AND ")
+        return DatabaseDestructiveRequest(
+            target: target,
+            payload: .relational(
+                product: product,
+                statement: "UPDATE \(table) SET \(assignments) WHERE \(predicate) LIMIT 1",
+                parameters: values.map {
+                    DatabaseMutationParameter(name: $0.name, value: $0.value)
+                }))
+    }
+
+    public static func mySQLDelete(
+        target: DatabaseTargetIdentifier,
+        product: DatabaseProduct
+    ) throws -> DatabaseDestructiveRequest {
+        let table = try mySQLTable(target, product: product, requiresIdentity: true)
+        let identity = try mySQLIdentity(target)
+        let predicate = identity.map { component in
+            "\(mySQLQuote(component.name)) <=> ?"
+        }.joined(separator: " AND ")
+        return DatabaseDestructiveRequest(
+            target: target,
+            payload: .relational(
+                product: product,
+                statement: "DELETE FROM \(table) WHERE \(predicate) LIMIT 1",
+                parameters: []))
+    }
+
     public static func postgreSQLInsert(
         target: DatabaseTargetIdentifier,
         values: [DatabaseObjectField]
@@ -85,6 +147,74 @@ public enum DatabaseRowMutationRequests {
         }
         try object.path.forEach(validateIdentifier)
         return object.path.map(quote).joined(separator: ".")
+    }
+
+    private static func mySQLTable(
+        _ target: DatabaseTargetIdentifier,
+        product: DatabaseProduct,
+        requiresIdentity: Bool
+    ) throws -> String {
+        guard product == .mysql || product == .mariaDB,
+            let object = target.object,
+            object.kind == .table,
+            object.path.count == 2,
+            object.nativeIdentifier == nil,
+            (requiresIdentity ? target.record != nil : target.record == nil)
+        else {
+            throw DatabaseRowMutationRequestError.invalidTarget
+        }
+        try object.path.forEach(validateMySQLIdentifier)
+        return object.path.map(mySQLQuote).joined(separator: ".")
+    }
+
+    private static func mySQLIdentity(
+        _ target: DatabaseTargetIdentifier
+    ) throws -> [DatabaseIdentityComponent] {
+        guard let identity = target.record,
+            identity.kind == .primaryKey || identity.kind == .uniqueKey,
+            (1...16).contains(identity.components.count),
+            identity.concurrencyTokens.isEmpty
+        else {
+            throw DatabaseRowMutationRequestError.unsupportedIdentity
+        }
+        let names = identity.components.map(\.name)
+        guard Set(names).count == names.count else {
+            throw DatabaseRowMutationRequestError.unsupportedIdentity
+        }
+        for component in identity.components {
+            try validateMySQLIdentifier(component.name)
+            guard component.value != .missing, component.value != .null else {
+                throw DatabaseRowMutationRequestError.unsupportedIdentity
+            }
+        }
+        return identity.components
+    }
+
+    private static func validateMySQLFields(
+        _ fields: [DatabaseObjectField],
+        excluding excludedNames: Set<String>
+    ) throws {
+        guard fields.count <= 256 else {
+            throw DatabaseRowMutationRequestError.missingValues
+        }
+        let names = fields.map(\.name)
+        guard Set(names).count == names.count else {
+            throw DatabaseRowMutationRequestError.duplicateField
+        }
+        guard Set(names).isDisjoint(with: excludedNames) else {
+            throw DatabaseRowMutationRequestError.unsupportedIdentity
+        }
+        try names.forEach(validateMySQLIdentifier)
+    }
+
+    private static func validateMySQLIdentifier(_ value: String) throws {
+        guard !value.isEmpty, value.utf8.count <= 64, !value.contains("\0") else {
+            throw DatabaseRowMutationRequestError.invalidIdentifier
+        }
+    }
+
+    private static func mySQLQuote(_ value: String) -> String {
+        "`\(value.replacingOccurrences(of: "`", with: "``"))`"
     }
 
     private static func postgreSQLIdentity(

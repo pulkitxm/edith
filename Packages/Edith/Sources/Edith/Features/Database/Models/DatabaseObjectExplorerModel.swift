@@ -149,7 +149,7 @@ final class DatabaseObjectExplorerModel {
             groups = [group]
             state = .loaded
             loadGroup(group.identifier, connection: connection)
-        case .mysql, .clickHouse:
+        case .mysql, .mariaDB, .clickHouse:
             loadDatabaseGroups(connection)
         default:
             state = .failed(
