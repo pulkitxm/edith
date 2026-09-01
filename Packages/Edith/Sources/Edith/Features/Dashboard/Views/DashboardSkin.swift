@@ -113,6 +113,8 @@ enum DashSkin {
     }
     static let gold = DashPalette.color("#c89b3c")
     static let sage = DashPalette.color("#6a8d73")
+    static let networkDownload = DashPalette.color("#5685a3")
+    static let networkUpload = DashPalette.color("#b27691")
     static let ok = DashPalette.color("#34C759")
     static let warn = DashPalette.color("#FF9500")
     static let danger = DashPalette.color("#FF3B30")

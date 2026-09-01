@@ -39,8 +39,14 @@ public final class MachineSession {
     public private(set) var isLocal: Bool
     public private(set) var isApplyingPlatformProfile = false
     public private(set) var platformProfileRevertsAt: Date?
+    public private(set) var internetSpeed: InternetSpeedMeasurement?
+    public private(set) var internetSpeedError: String?
+    public private(set) var isTestingInternetSpeed = false
+    public private(set) var internetDownloadHistory: [Double] = []
+    public private(set) var internetUploadHistory: [Double] = []
 
     public static let historyLength = 60
+    public nonisolated static let internetSpeedRefreshInterval: TimeInterval = 30 * 60
 
     public var sample: MachineSample? { liveMetrics.sample }
     public var cpuHistory: [Double] { liveMetrics.cpuHistory }
@@ -64,6 +70,9 @@ public final class MachineSession {
     private var probeTask: Task<Void, Never>?
     private var mountTask: Task<Void, Never>?
     private var platformProfileTask: Task<Void, Never>?
+    private var internetSpeedScheduleTask: Task<Void, Never>?
+    private var internetSpeedRunTask: Task<Void, Never>?
+    private var internetSpeedObserverCount = 0
     @ObservationIgnored private nonisolated(unsafe) var wakeObserver: NSObjectProtocol?
     private var reconnects = true
     private var rememberedForwards: [UUID: PortForward] = [:]
@@ -148,6 +157,11 @@ public final class MachineSession {
         mountTask = nil
         platformProfileTask?.cancel()
         platformProfileTask = nil
+        internetSpeedScheduleTask?.cancel()
+        internetSpeedScheduleTask = nil
+        internetSpeedRunTask?.cancel()
+        internetSpeedRunTask = nil
+        isTestingInternetSpeed = false
         metricsStream?.cancel()
         metricsStream = nil
     }
@@ -177,6 +191,7 @@ public final class MachineSession {
                     startDockerPolling()
                     startLatencyProbe()
                     startMountWatch()
+                    if internetSpeedObserverCount > 0 { startInternetSpeedSchedule() }
                     await loadFacts()
                     return
                 } catch {
@@ -243,6 +258,7 @@ public final class MachineSession {
         state = .connected(latencyMillis: 0)
         remotePlatform = .darwin
         hello = localSampler?.hello()
+        if internetSpeedObserverCount > 0 { startInternetSpeedSchedule() }
         localTask = Task { [weak self] in
             var tick = 0
             while !Task.isCancelled {
@@ -362,6 +378,73 @@ public final class MachineSession {
             next.removeFirst(next.count - historyLength)
         }
         return next
+    }
+
+    public func refreshInternetSpeed() {
+        guard state.isConnected, !isTestingInternetSpeed else { return }
+        internetSpeedRunTask?.cancel()
+        internetSpeedRunTask = Task { [weak self] in
+            guard let self else { return }
+            isTestingInternetSpeed = true
+            internetSpeedError = nil
+            do {
+                let value: InternetSpeedMeasurement
+                if isLocal {
+                    value = try await InternetSpeedTester.measureLocal()
+                } else if let connection, let remotePlatform {
+                    value = try await InternetSpeedTester.measureRemote(
+                        connection: connection, platform: remotePlatform)
+                } else {
+                    throw InternetSpeedTestError.unavailable(
+                        "The selected machine is not connected.")
+                }
+                guard !Task.isCancelled else { return }
+                apply(internetSpeed: value)
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                internetSpeedError = error.localizedDescription
+            }
+            isTestingInternetSpeed = false
+        }
+    }
+
+    public func beginInternetSpeedObservation() {
+        internetSpeedObserverCount += 1
+        if internetSpeedObserverCount == 1 { startInternetSpeedSchedule() }
+    }
+
+    public func endInternetSpeedObservation() {
+        internetSpeedObserverCount = max(0, internetSpeedObserverCount - 1)
+        guard internetSpeedObserverCount == 0 else { return }
+        internetSpeedScheduleTask?.cancel()
+        internetSpeedScheduleTask = nil
+        internetSpeedRunTask?.cancel()
+        internetSpeedRunTask = nil
+        isTestingInternetSpeed = false
+    }
+
+    func apply(internetSpeed value: InternetSpeedMeasurement) {
+        internetSpeed = value
+        internetDownloadHistory = Self.appending(
+            value.downloadBitsPerSecond, to: internetDownloadHistory)
+        internetUploadHistory = Self.appending(
+            value.uploadBitsPerSecond, to: internetUploadHistory)
+        internetSpeedError = nil
+    }
+
+    private func startInternetSpeedSchedule() {
+        internetSpeedScheduleTask?.cancel()
+        internetSpeedScheduleTask = Task { [weak self] in
+            guard let self else { return }
+            refreshInternetSpeed()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(Self.internetSpeedRefreshInterval))
+                guard !Task.isCancelled else { return }
+                refreshInternetSpeed()
+            }
+        }
     }
 
     private func startLatencyProbe() {
