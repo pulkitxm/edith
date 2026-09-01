@@ -683,6 +683,7 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
             EDITH_CONTROL_BLUETOOTH_ENABLED=1
             EDITH_CONTROL_AIRPLANE_MODE=0
             EDITH_CONTROL_DO_NOT_DISTURB=1
+            EDITH_CONTROL_CAFFEINATE_ENABLED=1
             """)
 
         #expect(
@@ -698,7 +699,8 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
                     wifiEnabled: false,
                     bluetoothEnabled: true,
                     airplaneMode: false,
-                    doNotDisturb: true
+                    doNotDisturb: true,
+                    caffeinateEnabled: true
                 ))
         #expect(!snapshot.isEmpty)
     }
@@ -817,6 +819,7 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
             EDITH_CONTROL_BLUETOOTH_ENABLED=
             EDITH_CONTROL_AIRPLANE_MODE=no
             EDITH_CONTROL_DO_NOT_DISTURB=-1
+            EDITH_CONTROL_CAFFEINATE_ENABLED=enabled
             """)
 
         #expect(snapshot.isEmpty)
@@ -888,6 +891,9 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
                 for: .setDoNotDisturb(true), platform: .linux))
         #expect(
             !MachineControlCenterCommands.shouldAttachSudoPassword(
+                for: .setCaffeinateEnabled(true), platform: .linux))
+        #expect(
+            !MachineControlCenterCommands.shouldAttachSudoPassword(
                 for: .setBrightness(50), platform: .darwin))
         #expect(
             !MachineControlCenterCommands.shouldAttachSudoPassword(
@@ -952,6 +958,27 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
         #expect(
             MachineControlCenterCommands.statusCommand.contains(
                 "NameHasOwner org.gnome.Shell"))
+    }
+
+    @Test func supportsCurrentAndLegacyCaffeineExtensionSettings() {
+        let status = MachineControlCenterCommands.statusCommand
+        let enable = MachineControlCenterCommands.command(
+            for: .setCaffeinateEnabled(true), withSudoPassword: false)
+        let disable = MachineControlCenterCommands.command(
+            for: .setCaffeinateEnabled(false), withSudoPassword: false)
+
+        for command in [status, enable, disable] {
+            #expect(command.contains("gnome-extensions info caffeine@patapon.info"))
+            #expect(command.contains("org.gnome.shell.extensions.caffeine"))
+            #expect(command.contains("cli-toggle"))
+            #expect(command.contains("toggle-state"))
+            #expect(command.contains("caffeine@patapon.info/schemas"))
+        }
+        #expect(status.contains("EDITH_CONTROL_%s=%s"))
+        #expect(status.contains("emit_bool CAFFEINATE_ENABLED"))
+        #expect(enable.contains("set \"$caffeine_schema\" \"$caffeine_key\" true"))
+        #expect(disable.contains("set \"$caffeine_schema\" \"$caffeine_key\" false"))
+        #expect(enable.contains("Caffeinate setting did not change."))
     }
 
     @Test func marksOnlyDisruptiveNetworkOperations() {
@@ -1037,6 +1064,7 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
             .setBluetoothEnabled(true),
             .setAirplaneMode(true),
             .setDoNotDisturb(true),
+            .setCaffeinateEnabled(true),
         ]
         let commands =
             [MachineControlCenterCommands.statusCommand]
@@ -1160,6 +1188,7 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
         #expect(!MachineControlAction.setWiFiEnabled(true).isDisruptive)
         #expect(!MachineControlAction.setAirplaneMode(false).isDisruptive)
         #expect(MachineControlAction.setMuted(true).operation == .mute)
+        #expect(MachineControlAction.setCaffeinateEnabled(true).operation == .caffeinate)
     }
 }
 
