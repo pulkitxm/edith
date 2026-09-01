@@ -1207,6 +1207,9 @@ final class DatabaseDataWorkspaceModel {
     }
 
     private func resetBrowsePaging() {
+        if isLoading {
+            cancel()
+        }
         nextContinuation = nil
     }
 

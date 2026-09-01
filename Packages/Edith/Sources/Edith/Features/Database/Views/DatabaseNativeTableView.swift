@@ -12,8 +12,11 @@ struct DatabaseNativeTableView: NSViewRepresentable {
     let records: [DatabaseRecord]
     let selectedIndex: Int?
     let sorts: [DatabaseSort]
+    let nextContinuation: DatabaseContinuationToken?
+    let isLoading: Bool
     let columnWidth: (DatabaseFieldPath) -> CGFloat?
     let text: (DatabaseValue) -> String
+    let loadMore: () -> Void
     let select: (Int) -> Void
     let open: (Int) -> Void
     let rowIsEditable: (Int) -> Bool
@@ -55,17 +58,30 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         scrollView.backgroundColor = NSColor(background)
         scrollView.borderType = .noBorder
         context.coordinator.tableView = tableView
+        context.coordinator.observeScrolling(in: scrollView)
         context.coordinator.rebuildColumns()
         return scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         context.coordinator.parent = self
+        let continuationChanged = context.coordinator.continuationDidChange(nextContinuation)
         context.coordinator.applyPalette(to: scrollView)
         context.coordinator.rebuildColumnsIfNeeded()
         context.coordinator.applyColumnWidths()
         context.coordinator.tableView?.reloadData()
         context.coordinator.reloadSelection()
+        if continuationChanged {
+            let coordinator = context.coordinator
+            Task { @MainActor [weak coordinator] in
+                await Task.yield()
+                coordinator?.loadMoreIfNeeded()
+            }
+        }
+    }
+
+    static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
+        coordinator.stopObservingScrolling(in: scrollView)
     }
 
     @MainActor
@@ -78,6 +94,8 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         private var applyingSelection = false
         private var applyingSortDescriptors = false
         private var applyingColumnWidths = false
+        private var observedContinuation: DatabaseContinuationToken?
+        private var paginationGate = DatabaseTablePaginationGate()
 
         init(parent: DatabaseNativeTableView) {
             self.parent = parent
@@ -85,6 +103,58 @@ struct DatabaseNativeTableView: NSViewRepresentable {
 
         func numberOfRows(in tableView: NSTableView) -> Int {
             parent.records.count
+        }
+
+        func observeScrolling(in scrollView: NSScrollView) {
+            scrollView.contentView.postsBoundsChangedNotifications = true
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(visibleBoundsChanged),
+                name: NSView.boundsDidChangeNotification,
+                object: scrollView.contentView)
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(liveScrollWillStart),
+                name: NSScrollView.willStartLiveScrollNotification,
+                object: scrollView)
+        }
+
+        func stopObservingScrolling(in scrollView: NSScrollView) {
+            NotificationCenter.default.removeObserver(
+                self,
+                name: NSView.boundsDidChangeNotification,
+                object: scrollView.contentView)
+            NotificationCenter.default.removeObserver(
+                self,
+                name: NSScrollView.willStartLiveScrollNotification,
+                object: scrollView)
+        }
+
+        func continuationDidChange(_ continuation: DatabaseContinuationToken?) -> Bool {
+            defer { observedContinuation = continuation }
+            return continuation != observedContinuation
+        }
+
+        @objc private func visibleBoundsChanged() {
+            loadMoreIfNeeded()
+        }
+
+        @objc private func liveScrollWillStart() {
+            paginationGate.rearm()
+            loadMoreIfNeeded()
+        }
+
+        func loadMoreIfNeeded() {
+            guard let tableView else { return }
+            guard
+                paginationGate.shouldLoadMore(
+                    continuation: parent.nextContinuation,
+                    isLoading: parent.isLoading,
+                    visibleMaxY: tableView.visibleRect.maxY,
+                    contentMaxY: tableView.bounds.maxY,
+                    rowHeight: tableView.rowHeight)
+            else { return }
+            parent.loadMore()
         }
 
         func tableView(
@@ -450,6 +520,30 @@ struct DatabaseNativeTableView: NSViewRepresentable {
         }
 
         private static let rowColumnIdentifier = "__database_row_number"
+    }
+}
+
+struct DatabaseTablePaginationGate {
+    private var requestedContinuation: DatabaseContinuationToken?
+
+    mutating func shouldLoadMore(
+        continuation: DatabaseContinuationToken?,
+        isLoading: Bool,
+        visibleMaxY: CGFloat,
+        contentMaxY: CGFloat,
+        rowHeight: CGFloat
+    ) -> Bool {
+        guard let continuation,
+            !isLoading,
+            continuation != requestedContinuation,
+            visibleMaxY >= contentMaxY - max(rowHeight, 1) * 10
+        else { return false }
+        requestedContinuation = continuation
+        return true
+    }
+
+    mutating func rearm() {
+        requestedContinuation = nil
     }
 }
 

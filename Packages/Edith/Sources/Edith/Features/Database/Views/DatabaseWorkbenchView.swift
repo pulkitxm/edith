@@ -587,8 +587,11 @@ struct DatabaseWorkbenchView: View {
                 records: data.records,
                 selectedIndex: data.selectedRecordIndex,
                 sorts: tableSorts,
+                nextContinuation: data.nextContinuation,
+                isLoading: data.isLoading,
                 columnWidth: { columns.width(for: $0) },
                 text: { data.text(for: $0) },
+                loadMore: { data.loadNextPage(connection) },
                 select: { data.selectRecord(at: $0) },
                 open: { index in
                     if data.selectedRecordIndex != index {
@@ -650,11 +653,6 @@ struct DatabaseWorkbenchView: View {
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                if data.hasNextPage {
-                    Button("Load more") { data.loadNextPage(connection) }
-                        .buttonStyle(.edith(.secondary))
-                        .disabled(data.isLoading)
-                }
             }
             .padding(.horizontal, UIScale.pt(12))
             .frame(height: UIScale.pt(38))

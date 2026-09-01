@@ -238,7 +238,6 @@ struct DatabaseWorkbenchRenderTests {
             DatabasePage(
                 records: records,
                 fields: fields,
-                nextContinuation: DatabaseContinuationToken(rawValue: "orders-page-2"),
                 metadata: DatabasePageMetadata(
                     completeness: DatabaseResultCompleteness(state: .sampled),
                     count: DatabaseCountMetadata(value: 12_480, accuracy: .estimated))))

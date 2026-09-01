@@ -354,6 +354,44 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(!model.hasNextPage)
     }
 
+    @Test("Changing filters cancels a stale automatic page and starts fresh")
+    func filterChangeCancelsAutomaticPage() async throws {
+        let token = DatabaseContinuationToken(rawValue: "next-page")
+        let sender = DatabaseDataControlledSender()
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.customers"
+
+        model.browse(connection)
+        await Self.waitUntilRequestCount(1, sender: sender)
+        await sender.respond(
+            Self.response(records: [Self.record(1)], nextContinuation: token),
+            to: 0)
+        await Self.waitUntil { model.state == .loaded && model.hasNextPage }
+
+        model.loadNextPage(connection)
+        await Self.waitUntilRequestCount(2, sender: sender)
+        model.addFilterClause(field: "name", operation: .contains, valueText: "Ada")
+        model.browse(connection)
+        await Self.waitUntilRequestCount(3, sender: sender)
+        await sender.respond(Self.response(records: [Self.record(42)]), to: 2)
+        await Self.waitUntil { model.state == .loaded && model.records == [Self.record(42)] }
+
+        await sender.respond(Self.response(records: [Self.record(2)]), to: 1)
+        for _ in 0..<100 {
+            await Task.yield()
+        }
+
+        let requests = await sender.recordedRequests().compactMap(\.browseRequest)
+        #expect(requests.count == 3)
+        #expect(requests[1].page.continuation == token)
+        #expect(requests[2].page.continuation == nil)
+        #expect(requests[2].page.filter != nil)
+        #expect(model.records == [Self.record(42)])
+        #expect(!model.hasNextPage)
+    }
+
     @Test("Invalid object input fails before reaching the broker")
     func invalidTarget() async throws {
         let sender = DatabaseDataScriptedSender(responses: [])
@@ -1528,6 +1566,10 @@ private actor DatabaseDataControlledSender: DatabaseBrokerCommandSending {
 
     func requestCount() -> Int {
         requests.count
+    }
+
+    func recordedRequests() -> [DatabaseBrokerCommandRequest] {
+        requests
     }
 
     func respond(_ response: DatabaseBrokerCommandResponse, to index: Int) {
