@@ -32,7 +32,7 @@ import Testing
                 == [
                     "database_connections", "database_capabilities", "database_browse",
                     "database_query", "database_operations", "database_cancel_operation",
-                    "database_test_connection", "database_session",
+                    "database_test_connection", "database_session", "database_key_mutation",
                 ])
         #expect(isError == false)
         guard case let .text(text, _, _)? = content.first else {

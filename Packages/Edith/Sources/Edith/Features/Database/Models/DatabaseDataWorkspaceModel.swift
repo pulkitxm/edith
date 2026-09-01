@@ -49,6 +49,7 @@ final class DatabaseDataWorkspaceModel {
     private var activeTask: Task<Void, Never>?
     private var generation = UUID()
     private var activeConnectionID: DatabaseConnectionID?
+    private var activeProduct: DatabaseProduct?
 
     init(
         sender: any DatabaseBrokerCommandSending = DatabaseBrokerCommandClient(),
@@ -74,13 +75,24 @@ final class DatabaseDataWorkspaceModel {
     }
 
     var canSubmitEditor: Bool {
-        editorMode != nil && editorFields.contains(where: { $0.isEditable && $0.isIncluded })
+        guard let editorMode else { return false }
+        if editorMode == .insert, activeProduct == .redis || activeProduct == .valkey {
+            var includesKey = false
+            var includesValue = false
+            for field in editorFields where field.isIncluded {
+                includesKey = includesKey || field.id == "key"
+                includesValue = includesValue || field.id == "value"
+            }
+            return includesKey && includesValue
+        }
+        return editorFields.contains(where: { $0.isEditable && $0.isIncluded })
     }
 
     func prepare(for connection: DatabaseConnectionSummary?) {
         guard activeConnectionID != connection?.id else { return }
         cancel()
         activeConnectionID = connection?.id
+        activeProduct = connection?.product
         records = []
         fields = []
         selectedRecordIndex = nil
@@ -167,27 +179,41 @@ final class DatabaseDataWorkspaceModel {
     }
 
     func beginInsert(_ connection: DatabaseConnectionSummary) {
-        guard supportsRowMutations(connection), !fields.isEmpty else {
+        guard supportsDataMutations(connection), !fields.isEmpty else {
             editorError = mutationUnavailableMessage(connection)
             return
         }
         editorMode = .insert
         editorError = nil
-        editorFields = fields.map { field in
-            let name = field.path.segments.joined(separator: ".")
-            return DatabaseRowFieldDraft(
-                id: name,
-                typeName: field.typeName,
-                originalValue: nil,
-                isIdentity: false,
-                isEditable: Self.supportsEditing(typeName: field.typeName),
-                text: "",
-                isIncluded: false)
+        if connection.product == .redis || connection.product == .valkey {
+            editorFields = [
+                DatabaseRowFieldDraft(
+                    id: "key", typeName: "string", originalValue: nil,
+                    isIdentity: true, isEditable: true, text: "", isIncluded: false),
+                DatabaseRowFieldDraft(
+                    id: "value", typeName: "string", originalValue: nil,
+                    isIdentity: false, isEditable: true, text: "", isIncluded: false),
+                DatabaseRowFieldDraft(
+                    id: "ttlMilliseconds", typeName: "int64", originalValue: nil,
+                    isIdentity: false, isEditable: true, text: "", isIncluded: false),
+            ]
+        } else {
+            editorFields = fields.map { field in
+                let name = field.path.segments.joined(separator: ".")
+                return DatabaseRowFieldDraft(
+                    id: name,
+                    typeName: field.typeName,
+                    originalValue: nil,
+                    isIdentity: false,
+                    isEditable: Self.supportsEditing(typeName: field.typeName),
+                    text: "",
+                    isIncluded: false)
+            }
         }
     }
 
     func beginEditingSelectedRow(_ connection: DatabaseConnectionSummary) {
-        guard supportsRowMutations(connection),
+        guard supportsDataMutations(connection),
             let selectedRecordIndex,
             records.indices.contains(selectedRecordIndex),
             let identity = records[selectedRecordIndex].identity
@@ -202,18 +228,27 @@ final class DatabaseDataWorkspaceModel {
         }
         editorMode = .update(recordIndex: selectedRecordIndex)
         editorError = nil
+        let redisString = Self.isRedisString(record)
         editorFields = record.fields.map { field in
             let typeName =
                 fields.first {
                     $0.path.segments.joined(separator: ".") == field.name
                 }?.typeName ?? "text"
             let isIdentity = identityNames.contains(field.name)
+            let isEditable: Bool
+            if connection.product == .redis || connection.product == .valkey {
+                isEditable =
+                    field.name == "ttlMilliseconds"
+                    || (field.name == "value" && redisString && Self.supportsEditing(field.value))
+            } else {
+                isEditable = !isIdentity && Self.supportsEditing(field.value)
+            }
             return DatabaseRowFieldDraft(
                 id: field.name,
                 typeName: typeName,
                 originalValue: field.value,
                 isIdentity: isIdentity,
-                isEditable: !isIdentity && Self.supportsEditing(field.value),
+                isEditable: isEditable,
                 text: Self.text(for: field.value),
                 isIncluded: false)
         }
@@ -224,13 +259,18 @@ final class DatabaseDataWorkspaceModel {
         field name: String,
         connection: DatabaseConnectionSummary
     ) -> Bool {
-        guard supportsRowMutations(connection), records.indices.contains(index),
+        guard supportsDataMutations(connection), records.indices.contains(index),
             let identity = records[index].identity,
             !identity.components.contains(where: { $0.name == name }),
             let field = fields.first(where: {
                 $0.path.segments.joined(separator: ".") == name
             })
         else { return false }
+        if connection.product == .redis || connection.product == .valkey {
+            if name == "ttlMilliseconds" { return true }
+            return name == "value" && Self.isRedisString(records[index])
+                && Self.supportsEditing(value(named: name, in: records[index]))
+        }
         return Self.supportsEditing(typeName: field.typeName)
     }
 
@@ -299,14 +339,14 @@ final class DatabaseDataWorkspaceModel {
                         value: try Self.value(from: field)))
             }
             let objectTarget = try target(connection)
-            switch editorMode {
-            case .insert:
+            switch (connection.product, editorMode) {
+            case (.postgresql, .insert):
                 let request = try DatabaseRowMutationRequests.postgreSQLInsert(
                     target: objectTarget,
                     values: values)
                 editorError = nil
                 return request
-            case .update(let recordIndex):
+            case (.postgresql, .update(let recordIndex)):
                 guard records.indices.contains(recordIndex),
                     let identity = records[recordIndex].identity
                 else {
@@ -320,8 +360,56 @@ final class DatabaseDataWorkspaceModel {
                     values: values)
                 editorError = nil
                 return request
-            case nil:
+            case (.redis, .insert), (.valkey, .insert):
+                guard let key = values.first(where: { $0.name == "key" })?.value,
+                    let value = values.first(where: { $0.name == "value" })?.value
+                else {
+                    throw DatabaseKeyspaceMutationRequestError.invalidValue
+                }
+                let request = try DatabaseKeyspaceMutationRequests.insertString(
+                    target: objectTarget,
+                    product: connection.product,
+                    key: key,
+                    value: value,
+                    ttlMilliseconds: try Self.redisTTL(values))
+                editorError = nil
+                return request
+            case (.redis, .update(let recordIndex)), (.valkey, .update(let recordIndex)):
+                guard records.indices.contains(recordIndex),
+                    let identity = records[recordIndex].identity
+                else {
+                    throw DatabaseRowEditorError.missingIdentity
+                }
+                let target = DatabaseTargetIdentifier(
+                    connectionID: objectTarget.connectionID,
+                    object: objectTarget.object,
+                    record: identity)
+                let value = values.first(where: { $0.name == "value" })?.value
+                let ttlField = values.first(where: { $0.name == "ttlMilliseconds" })
+                if let value {
+                    let ttl = try ttlField.map { try Self.redisTTL([$0]) }
+                    let request = try DatabaseKeyspaceMutationRequests.updateString(
+                        target: target,
+                        product: connection.product,
+                        value: value,
+                        ttlMilliseconds: ttl ?? nil,
+                        preservesExistingTTL: ttlField == nil)
+                    editorError = nil
+                    return request
+                }
+                guard ttlField != nil else {
+                    throw DatabaseRowMutationRequestError.missingValues
+                }
+                let request = try DatabaseKeyspaceMutationRequests.updateTTL(
+                    target: target,
+                    product: connection.product,
+                    ttlMilliseconds: try Self.redisTTL(values))
+                editorError = nil
+                return request
+            case (_, nil):
                 throw DatabaseRowEditorError.notEditing
+            default:
+                throw DatabaseRowEditorError.unsupportedDatabase
             }
         } catch {
             editorError = Self.editorMessage(error)
@@ -333,17 +421,24 @@ final class DatabaseDataWorkspaceModel {
         _ connection: DatabaseConnectionSummary
     ) -> DatabaseDestructiveRequest? {
         do {
-            guard supportsRowMutations(connection), let record = selectedRecord,
+            guard supportsDataMutations(connection), let record = selectedRecord,
                 let identity = record.identity
             else {
                 throw DatabaseRowEditorError.missingIdentity
             }
             let objectTarget = try target(connection)
-            let request = try DatabaseRowMutationRequests.postgreSQLDelete(
-                target: DatabaseTargetIdentifier(
-                    connectionID: objectTarget.connectionID,
-                    object: objectTarget.object,
-                    record: identity))
+            let target = DatabaseTargetIdentifier(
+                connectionID: objectTarget.connectionID,
+                object: objectTarget.object,
+                record: identity)
+            let request: DatabaseDestructiveRequest
+            if connection.product == .redis || connection.product == .valkey {
+                request = try DatabaseKeyspaceMutationRequests.deleteKey(
+                    target: target,
+                    product: connection.product)
+            } else {
+                request = try DatabaseRowMutationRequests.postgreSQLDelete(target: target)
+            }
             editorError = nil
             return request
         } catch {
@@ -555,27 +650,48 @@ final class DatabaseDataWorkspaceModel {
         }
     }
 
-    func supportsRowMutations(_ connection: DatabaseConnectionSummary) -> Bool {
-        connection.product == .postgresql
+    func supportsDataMutations(_ connection: DatabaseConnectionSummary) -> Bool {
+        (connection.product == .postgresql || connection.product == .redis
+            || connection.product == .valkey)
             && connection.readOnlyPolicy == .disabled
             && connection.environmentProtection != .readOnly
             && connection.productionPolicy != .prohibitMutations
     }
 
     private func mutationUnavailableMessage(_ connection: DatabaseConnectionSummary) -> String {
-        if connection.product != .postgresql {
-            return "Row editing is not available for this database yet."
+        if connection.product != .postgresql && connection.product != .redis
+            && connection.product != .valkey
+        {
+            return "Data editing is not available for this database yet."
         }
         if connection.readOnlyPolicy != .disabled
             || connection.environmentProtection == .readOnly
             || connection.productionPolicy == .prohibitMutations
         {
-            return "This connection policy does not allow row editing."
+            return "This connection policy does not allow data editing."
         }
         if selectedRecord?.identity == nil {
-            return "This row has no stable primary or unique key for safe editing."
+            return "This record has no stable identity for safe editing."
         }
-        return "Open a table before editing rows."
+        return "Open a table or keyspace before editing data."
+    }
+
+    private static func isRedisString(_ record: DatabaseRecord) -> Bool {
+        value(named: "type", in: record) == .string("string")
+    }
+
+    private static func value(named name: String, in record: DatabaseRecord) -> DatabaseValue {
+        record.fields.first(where: { $0.name == name })?.value ?? .missing
+    }
+
+    private static func redisTTL(_ fields: [DatabaseObjectField]) throws -> Int64? {
+        guard let field = fields.first(where: { $0.name == "ttlMilliseconds" }) else {
+            return nil
+        }
+        guard case let .signedInteger(value) = field.value, value == -1 || value > 0 else {
+            throw DatabaseKeyspaceMutationRequestError.invalidTTL
+        }
+        return value == -1 ? nil : value
     }
 
     private static func supportsEditing(_ value: DatabaseValue) -> Bool {
@@ -706,6 +822,8 @@ final class DatabaseDataWorkspaceModel {
         if let editorError = error as? DatabaseRowEditorError {
             switch editorError {
             case .notEditing: return "Open the row editor before saving."
+            case .unsupportedDatabase:
+                return "Data editing is not available for this database yet."
             case .missingIdentity:
                 return "This row has no stable primary or unique key for safe editing."
             case .invalidValue(let field, let type):
@@ -721,6 +839,15 @@ final class DatabaseDataWorkspaceModel {
                 return "This row has no supported stable identity for safe editing."
             case .invalidTarget, .invalidIdentifier, .duplicateField:
                 return "The row mutation could not be created safely."
+            }
+        }
+        if let requestError = error as? DatabaseKeyspaceMutationRequestError {
+            switch requestError {
+            case .invalidKey: return "Enter a non-empty key up to 4 KB."
+            case .invalidValue: return "Enter a string value up to 64 KB."
+            case .invalidTTL: return "Enter -1 for no expiry or a positive TTL in milliseconds."
+            case .invalidProduct, .invalidTarget:
+                return "The key mutation could not be created safely."
             }
         }
         return "The row mutation could not be created."
@@ -765,6 +892,7 @@ private enum DatabaseDataWorkspaceInputError: Error {
 
 private enum DatabaseRowEditorError: Error {
     case notEditing
+    case unsupportedDatabase
     case missingIdentity
     case invalidValue(String, String)
     case unsupportedValue(String)
