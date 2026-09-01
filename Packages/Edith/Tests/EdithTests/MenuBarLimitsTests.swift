@@ -62,15 +62,15 @@ import Testing
         #expect(groups[0].segments.map(\.value) == [.masked, .masked])
     }
 
-    @Test func styleFallsBackToSlashes() {
+    @Test func styleFallsBackToStacked() {
         let name = "test.menubar.style.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         defer { defaults.removePersistentDomain(forName: name) }
-        #expect(MenuBarLimits.style(defaults) == .slash)
+        #expect(MenuBarLimits.style(defaults) == .stacked)
         defaults.set("slash", forKey: AppStorageKeys.MenuBar.limitsStyle)
         #expect(MenuBarLimits.style(defaults) == .slash)
         defaults.set("bogus", forKey: AppStorageKeys.MenuBar.limitsStyle)
-        #expect(MenuBarLimits.style(defaults) == .slash)
+        #expect(MenuBarLimits.style(defaults) == .stacked)
     }
 }
 

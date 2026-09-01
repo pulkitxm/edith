@@ -1354,7 +1354,7 @@ private struct UsageRows: View {
     @AppStorage(AppStorageKeys.MenuBar.codexWindows, store: SharedDefaults.store) private
         var codexWindowsRaw = "session,week"
     @AppStorage(AppStorageKeys.MenuBar.limitsStyle, store: SharedDefaults.store) private
-        var limitsStyleRaw = "slash"
+        var limitsStyleRaw = "stacked"
     @AppStorage(AppStorageKeys.General.smartColor, store: SharedDefaults.store) private
         var smartColor = true
     @AppStorage(AppStorageKeys.MenuBar.subColorHex, store: SharedDefaults.store) private

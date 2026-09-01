@@ -64,10 +64,10 @@ final class LimitsStatusItem {
         let multi = groups.count > 1
         let title = NSMutableAttributedString()
         for (index, group) in groups.enumerated() {
-            if index > 0 { title.append(NSAttributedString(string: " ")) }
+            if index > 0 { title.append(NSAttributedString(string: "   ")) }
             if multi { appendLogo(group.provider, into: title) }
             for (segmentIndex, segment) in group.segments.enumerated() {
-                if segmentIndex > 0 { title.append(NSAttributedString(string: " ")) }
+                if segmentIndex > 0 { title.append(NSAttributedString(string: "  ")) }
                 appendLabel(segment.slot.menuBarLabel + " ", into: title)
                 appendValue(segment, percentSuffix: !multi, into: title)
             }
@@ -84,7 +84,7 @@ final class LimitsStatusItem {
         let separatorColor = (subColor ?? NSColor.labelColor)
             .withAlphaComponent(0.65)
         for (index, group) in groups.enumerated() {
-            if index > 0 { title.append(NSAttributedString(string: " ")) }
+            if index > 0 { title.append(NSAttributedString(string: "   ")) }
             appendLogo(group.provider, into: title)
             for (segmentIndex, segment) in group.segments.enumerated() {
                 if segmentIndex > 0 {
@@ -104,18 +104,23 @@ final class LimitsStatusItem {
     }
 
     private func renderStacked(_ groups: [MenuBarProviderGroup]) {
-        let sizingView = StackedLimitsView()
-        sizingView.groups = stackedGroups(groups)
-        ensureStatusItem(length: sizingView.desiredWidth)
-        item?.button?.attributedTitle = NSAttributedString()
+        let renderedGroups = stackedGroups(groups)
         let view = stackedView ?? StackedLimitsView()
+        view.groups = renderedGroups
+        let width = view.desiredWidth
+        ensureStatusItem(length: width)
+        guard let button = item?.button else { return }
+        button.attributedTitle = NSAttributedString(
+            string: " ", attributes: [.foregroundColor: NSColor.clear])
         if stackedView == nil, let button = item?.button {
             view.autoresizingMask = [.width, .height]
-            view.frame = button.bounds
             button.addSubview(view)
             stackedView = view
         }
-        view.groups = stackedGroups(groups)
+        view.frame = NSRect(
+            x: 0, y: 0, width: width,
+            height: max(button.bounds.height, NSStatusBar.system.thickness))
+        view.needsDisplay = true
     }
 
     private func ensureStatusItem(length: CGFloat) {
@@ -342,11 +347,11 @@ final class StackedLimitsView: NSView {
 
     private static let labelFont = NSFont.systemFont(ofSize: 7, weight: .bold)
     private static let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
-    private static let edgeInset: CGFloat = 3
-    private static let columnGap: CGFloat = 4
-    private static let groupGap: CGFloat = 6
+    private static let edgeInset: CGFloat = 5
+    private static let columnGap: CGFloat = 7
+    private static let groupGap: CGFloat = 12
     private static let logoSize: CGFloat = 12
-    private static let logoGap: CGFloat = 2
+    private static let logoGap: CGFloat = 4
     private static let rowGap: CGFloat = 1
 
     var desiredWidth: CGFloat {
