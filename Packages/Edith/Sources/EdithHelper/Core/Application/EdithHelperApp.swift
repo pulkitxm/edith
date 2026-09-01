@@ -146,10 +146,21 @@ private func anEarlierInstanceIsRunning() -> Bool {
 }
 
 @main
-struct EdithApp: App {
-    @NSApplicationDelegateAdaptor(MenuBarAppDelegate.self) private var appDelegate
+struct EdithApp {
+    @MainActor
+    static func main() {
+        let application = NSApplication.shared
+        let appDelegate = MenuBarAppDelegate()
+        application.delegate = appDelegate
+        application.setActivationPolicy(.accessory)
+        configure()
+        withExtendedLifetime(appDelegate) {
+            application.run()
+        }
+    }
 
-    init() {
+    @MainActor
+    private static func configure() {
         _ = AppProcessUptime.launchedAt
         HotKey.register()
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
@@ -292,11 +303,6 @@ struct EdithApp: App {
         PermissionsModel.shared.refresh()
     }
 
-    var body: some Scene {
-        Settings {
-            EmptyView()
-        }
-    }
 }
 
 private func dispatchGlobalHotKey(_ id: UInt32) {
@@ -610,7 +616,10 @@ func dismissPanel() {
 }
 
 func removeRetiredStatusItemDefaults(_ defaults: UserDefaults = .standard) {
-    let retiredNames = ["edithGlasses", "limits"]
+    let retiredNames = [
+        "edithGlasses", "limits", "agentUsage", "agentUsage.v2", "systemStats",
+        "systemStats.v2", "micMute", "micMute.v2",
+    ]
     for key in defaults.dictionaryRepresentation().keys
     where key.hasPrefix("NSStatusItem") && retiredNames.contains(where: key.hasSuffix) {
         defaults.removeObject(forKey: key)

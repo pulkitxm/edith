@@ -21,7 +21,6 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         let sizingTitle = title(cpu: 100, memory: 100)
         item = NSStatusBar.system.statusItem(
             withLength: StatusItemSizing.titleLength(sizingTitle))
-        item.autosaveName = "systemStats"
         StatusItemMenu.attach(to: item, target: self, action: #selector(clicked))
         item.button?.attributedTitle = initialTitle
         startTimer()

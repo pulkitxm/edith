@@ -494,7 +494,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.helper;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.helper.v2;
 				PRODUCT_NAME = EdithHelper;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
@@ -516,7 +516,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.helper;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.helper.v2;
 				PRODUCT_NAME = EdithHelper;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;

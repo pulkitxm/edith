@@ -24,6 +24,7 @@ cask "edith" do
   uninstall quit: [
     "com.pulkit.edith",
     "com.pulkit.edith.files",
+    "com.pulkit.edith.helper.v2",
     "com.pulkit.edith.helper",
     "com.pulkit.edith.statusbar",
   ]
@@ -35,6 +36,7 @@ cask "edith" do
     "~/Library/HTTPStorages/com.pulkit.edith",
     "~/Library/Preferences/com.pulkit.edith.plist",
     "~/Library/Preferences/com.pulkit.edith.shared.plist",
+    "~/Library/Preferences/com.pulkit.edith.helper.v2.plist",
     "~/Library/Preferences/com.pulkit.edith.helper.plist",
     "~/Library/Preferences/com.pulkit.edith.statusbar.plist",
     "~/Library/Saved Application State/com.pulkit.edith.savedState",
