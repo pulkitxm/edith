@@ -36,7 +36,7 @@ final class DatabaseConnectionCreationModel: Identifiable {
     var environmentKind = DatabaseEnvironmentKind.development
     var environmentLabel = "Development"
     var environmentProtection = DatabaseEnvironmentProtection.confirmationRequired
-    var readOnlyPolicy = DatabaseReadOnlyPolicy.required
+    var readOnlyPolicy = DatabaseReadOnlyPolicy.disabled
     var productionPolicy = DatabaseProductionPolicy.requireMutationPreview
     private(set) var phase = DatabaseConnectionCreationPhase.editing
     private(set) var urlImportPhase = DatabaseConnectionURLImportPhase.editing
@@ -163,8 +163,24 @@ final class DatabaseConnectionCreationModel: Identifiable {
             environmentProtection = .confirmationRequired
             readOnlyPolicy = .required
             productionPolicy = .prohibitMutations
+        } else {
+            environmentProtection = .confirmationRequired
+            readOnlyPolicy = .disabled
+            productionPolicy = .requireMutationPreview
         }
         invalidateTest()
+    }
+
+    func testAndSaveConnection() async -> DatabaseConnectionDefinition? {
+        if canApplyConnectionURL {
+            applyConnectionURL()
+            if case .failed = urlImportPhase { return nil }
+        }
+        if !canSave {
+            await testConnection()
+        }
+        guard canSave else { return nil }
+        return await saveConnection()
     }
 
     func chooseSQLiteFile() {
