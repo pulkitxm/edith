@@ -152,13 +152,6 @@ struct DatabaseWorkbenchView: View {
     private func dataRegion(_ connection: DatabaseConnectionSummary) -> some View {
         VStack(spacing: 0) {
             controls(connection)
-            DatabaseFilterRibbon(
-                data: data,
-                connection: connection,
-                columns: columns,
-                accent: theme,
-                palette: palette,
-                apply: { data.browse(connection) })
             results(connection)
         }
         .onChange(of: data.fields, initial: true) { _, _ in
@@ -502,6 +495,15 @@ struct DatabaseWorkbenchView: View {
 
     private func grid(_ connection: DatabaseConnectionSummary) -> some View {
         VStack(spacing: 0) {
+            if workbenchMode == .browse {
+                DatabaseFilterRibbon(
+                    data: data,
+                    connection: connection,
+                    columns: columns,
+                    accent: theme,
+                    palette: palette,
+                    apply: { data.browse(connection) })
+            }
             DatabaseNativeTableView(
                 accent: theme,
                 background: palette.canvas,
