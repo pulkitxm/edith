@@ -119,7 +119,7 @@ public enum WindowsMachineControlCommands {
                 New-ItemProperty -Path $path -Name NOC_GLOBAL_SETTING_TOASTS_ENABLED `
                     -PropertyType DWord -Value \(value) -Force | Out-Null
                 """
-        case .setKeyboardBacklight:
+        case .setKeyboardBacklight, .setCaffeinateEnabled:
             script = "exit 4"
         }
         return Data(script.utf8)

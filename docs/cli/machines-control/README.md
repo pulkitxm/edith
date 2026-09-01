@@ -16,6 +16,7 @@ ed machines control wifi box off --yes
 ed machines control bluetooth box on
 ed machines control airplane box on --yes
 ed machines control dnd box off
+ed machines control caffeinate box on
 ed machines control keyboard-light box 25
 ed machines control status local
 ```
@@ -36,16 +37,19 @@ has `"applied": false`. The confirmed result has `"applied": true`.
 Turning Wi-Fi on and turning airplane mode off do not require confirmation.
 Brightness, volume and keyboard lighting accept whole numbers from 0 through
 100. Mute, Wi-Fi, Bluetooth, airplane mode and Do Not Disturb accept `on` or
-`off`.
+`off`. Caffeinate accepts `on` or `off` when the GNOME Caffeine extension is
+active on a Linux target.
 
 ## Discovery and availability
 
 `status` reports only controls the target can implement. It checks Linux tools
 such as `brightnessctl`, `wpctl`, `nmcli`, `bluetoothctl`, `rfkill` and
-`gsettings`, plus the matching macOS facilities. Windows uses native CIM, Core
-Audio, network-adapter, Plug and Play, and notification settings APIs. A missing
-control is `null` in JSON and omitted from the human table. If the target reports
-no controls at all, the human command exits 4 with an availability error.
+`gsettings`, plus the matching macOS facilities. Caffeinate supports both the
+current `cli-toggle` and older `toggle-state` GNOME Caffeine keys. Windows uses
+native CIM, Core Audio, network-adapter, Plug and Play, and notification settings
+APIs. A missing control is `null` in JSON and omitted from the human table. If
+the target reports no controls at all, the human command exits 4 with an
+availability error.
 
 Some Linux controls require a stored sudo password. Edith reads the same
 Keychain entry used by the app and passes it on standard input to `sudo -S`.
@@ -63,6 +67,7 @@ Status returns one object with stable nullable fields:
   "batteryPluggedIn": true,
   "bluetoothEnabled": true,
   "brightness": 61,
+  "caffeinateEnabled": true,
   "doNotDisturb": false,
   "keyboardBacklight": 18,
   "local": false,

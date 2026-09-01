@@ -573,6 +573,9 @@ enum JSONContract {
             "ed machines control dnd",
             ["machines", "control", "dnd", "nowhere-at-all", "on", "--json"]),
         JSONCase(
+            "ed machines control caffeinate",
+            ["machines", "control", "caffeinate", "nowhere-at-all", "on", "--json"]),
+        JSONCase(
             "ed machines control keyboard-light",
             ["machines", "control", "keyboard-light", "nowhere-at-all", "25", "--json"]),
         JSONCase("ed machines kill", ["machines", "kill", "nowhere-at-all", "42", "--json"]),

@@ -947,6 +947,9 @@ public enum CommandTree {
                                 "dnd", "Turn Do Not Disturb on or off.", options: common,
                                 arguments: [.machine, .onOff]),
                             CommandNode(
+                                "caffeinate", "Prevent automatic sleep.", options: common,
+                                arguments: [.machine, .onOff]),
+                            CommandNode(
                                 "keyboard-light", "Set keyboard backlight brightness.",
                                 options: common, arguments: [.machine, .free]),
                         ]),

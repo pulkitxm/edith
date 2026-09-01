@@ -82,7 +82,7 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed machines power`](./machines-power/README.md) | Power state, processes and system services |
 | [`ed machines thermal`](./machines-thermal/README.md) | Thermal readings and temporary or persistent performance profiles |
 | [`ed machines terminal`](./machines-terminal/README.md) | Send a line to terminal tabs already open in the Edith app |
-| [`ed machines control`](./machines-control/README.md) | Brightness, audio, radios, airplane mode, Do Not Disturb and keyboard lighting |
+| [`ed machines control`](./machines-control/README.md) | Brightness, audio, radios, airplane mode, Do Not Disturb, Caffeinate and keyboard lighting |
 | [`ed machines workspace`](./machines-workspace/README.md) | Workspaces and panes |
 
 ## The short version

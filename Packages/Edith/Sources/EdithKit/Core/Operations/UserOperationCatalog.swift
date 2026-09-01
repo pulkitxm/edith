@@ -303,6 +303,8 @@ private extension MachineControlOperation {
             userInterface("Machine controls", "turn airplane mode on", ["box", "on", "--yes"])
         case .doNotDisturb:
             userInterface("Machine controls", "turn Do Not Disturb on", ["box", "on"])
+        case .caffeinate:
+            userInterface("Machine controls", "prevent automatic sleep", ["box", "on"])
         case .keyboardLight:
             userInterface("Machine controls", "set keyboard backlight brightness", ["box", "25"])
         }

@@ -289,7 +289,7 @@ tabs, and 1 when only some running tabs receive the line.
 - [`ed machines power`](../machines-power/README.md) for power state, systemd units,
   processes and `broadcast`.
 - [`ed machines control`](../machines-control/README.md) for brightness, audio, radios,
-  airplane mode, Do Not Disturb and keyboard lighting.
+  airplane mode, Do Not Disturb, Caffeinate and keyboard lighting.
 - [`ed machines workspace`](../machines-workspace/README.md) for the saved multi-pane
   layouts.
 - [`ed machines terminal`](../machines-terminal/README.md) for terminal tabs already
