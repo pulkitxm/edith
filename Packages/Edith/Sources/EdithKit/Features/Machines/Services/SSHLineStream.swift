@@ -58,6 +58,39 @@ private final class StreamCompletion: @unchecked Sendable {
     }
 }
 
+private final class StreamOutputCoordinator: @unchecked Sendable {
+    private let lock = NSLock()
+    private let queue = DispatchQueue(label: "com.pulkit.edith.ssh-line-stream.output")
+    private let reads = DispatchGroup()
+    private var finishing = false
+
+    func beginRead() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !finishing else { return false }
+        reads.enter()
+        return true
+    }
+
+    func completeRead(_ work: @escaping @Sendable () -> Void) {
+        queue.async {
+            work()
+            self.reads.leave()
+        }
+    }
+
+    func finish(_ work: @escaping @Sendable () -> Void) {
+        lock.lock()
+        guard !finishing else {
+            lock.unlock()
+            return
+        }
+        finishing = true
+        lock.unlock()
+        reads.notify(queue: queue, execute: work)
+    }
+}
+
 public final class SSHLineStream: @unchecked Sendable {
     private let process: Process
     private let stdinData: Data?
@@ -68,7 +101,7 @@ public final class SSHLineStream: @unchecked Sendable {
     private let stdoutSplitter = LineSplitter()
     private let stderrSplitter = LineSplitter()
     private let completion = StreamCompletion()
-    private let outputQueue = DispatchQueue(label: "com.pulkit.edith.ssh-line-stream.output")
+    private let output = StreamOutputCoordinator()
 
     public init(
         process: Process, stdinData: Data? = nil,
@@ -97,21 +130,23 @@ public final class SSHLineStream: @unchecked Sendable {
             }
             deliver(line, isStderr)
         }
-        let outputQueue = outputQueue
+        let output = output
         stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+            guard output.beginRead() else { return }
             var lines: [String] = []
             PipeReading.consume(handle) { lines = stdout.receive($0) }
-            guard !lines.isEmpty else { return }
-            outputQueue.async {
-                for line in lines { deliverFiltered(line, false) }
+            let deliveredLines = lines
+            output.completeRead {
+                for line in deliveredLines { deliverFiltered(line, false) }
             }
         }
         stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+            guard output.beginRead() else { return }
             var lines: [String] = []
             PipeReading.consume(handle) { lines = stderr.receive($0) }
-            guard !lines.isEmpty else { return }
-            outputQueue.async {
-                for line in lines { deliverFiltered(line, true) }
+            let deliveredLines = lines
+            output.completeRead {
+                for line in deliveredLines { deliverFiltered(line, true) }
             }
         }
         let finish = onExit
@@ -119,7 +154,8 @@ public final class SSHLineStream: @unchecked Sendable {
         process.terminationHandler = { [stdoutPipe, stderrPipe, completion] finished in
             stdoutPipe.fileHandleForReading.readabilityHandler = nil
             stderrPipe.fileHandleForReading.readabilityHandler = nil
-            outputQueue.async {
+            let status = finished.terminationStatus
+            output.finish {
                 for line in stdout.receive(
                     stdoutPipe.fileHandleForReading.readDataToEndOfFile())
                 {
@@ -132,8 +168,8 @@ public final class SSHLineStream: @unchecked Sendable {
                     deliverFiltered(line, true)
                 }
                 for line in stderr.flush() { deliverFiltered(line, true) }
-                completion.finish(finished.terminationStatus)
-                finish(finished.terminationStatus)
+                completion.finish(status)
+                finish(status)
             }
         }
         if let stdinData {

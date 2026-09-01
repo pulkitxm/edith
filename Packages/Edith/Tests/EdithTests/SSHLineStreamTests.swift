@@ -87,15 +87,21 @@ private final class StreamLines: @unchecked Sendable {
     }
 
     @Test func stdoutAndStderrStaySeparated() async throws {
-        let lines = StreamLines()
-        let stream = SSHLineStream(
-            process: process("printf 'out\\n'; printf 'err\\n' >&2"),
-            onLine: { lines.append($0, $1) }, onExit: { _ in })
-        try stream.start()
-        #expect(await stream.waitForExit() == 0)
-        let values = lines.read()
-        #expect(values.contains { value in value.0 == "out" && !value.1 })
-        #expect(values.contains { value in value.0 == "err" && value.1 })
+        for iteration in 0..<100 {
+            let lines = StreamLines()
+            let stream = SSHLineStream(
+                process: process("printf 'out\\n'; printf 'err\\n' >&2"),
+                onLine: { lines.append($0, $1) }, onExit: { _ in })
+            try stream.start()
+            #expect(await stream.waitForExit() == 0)
+            let values = lines.read()
+            #expect(
+                values.contains { value in value.0 == "out" && !value.1 },
+                "stdout was lost on iteration \(iteration)")
+            #expect(
+                values.contains { value in value.0 == "err" && value.1 },
+                "stderr was lost on iteration \(iteration)")
+        }
     }
 
     @Test func standardInputIsDeliveredBeforeTheStreamCompletes() async throws {
