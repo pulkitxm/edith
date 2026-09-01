@@ -29,6 +29,18 @@ describe("build install lifecycle", () => {
     expect(script).toContain('mv "$binary.arm64" "$binary"');
   });
 
+  test("signs nested runtime libraries before their bundles", () => {
+    const runtimeSigning = script.indexOf(
+      'for library in "$APP"/Contents/Frameworks/*.dylib "$HELPER"/Contents/Frameworks/*.dylib; do',
+    );
+    const helperSigning = script.indexOf('sign "$HELPER"');
+    const appSigning = script.indexOf('sign "$APP"');
+
+    expect(runtimeSigning).toBeGreaterThan(-1);
+    expect(helperSigning).toBeGreaterThan(runtimeSigning);
+    expect(appSigning).toBeGreaterThan(helperSigning);
+  });
+
   test("shares resources with the nested login item", () => {
     expect(script).toContain(
       'ln -s ../../../../../Resources/AppIcon.icns "$HELPER/Contents/Resources/AppIcon.icns"',
