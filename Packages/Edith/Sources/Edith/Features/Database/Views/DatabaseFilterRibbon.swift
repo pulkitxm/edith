@@ -94,8 +94,7 @@ struct DatabaseFilterRibbon: View {
             Section("Add filter") {
                 ForEach(availableFilterFields, id: \.path) { field in
                     Button(field.displayName) {
-                        editorID = data.addFilterClause(
-                            field: field.path.segments.joined(separator: "."))
+                        addFilter(field)
                     }
                 }
             }
@@ -166,8 +165,7 @@ struct DatabaseFilterRibbon: View {
         Menu {
             ForEach(availableFilterFields, id: \.path) { field in
                 Button(field.displayName) {
-                    editorID = data.addFilterClause(
-                        field: field.path.segments.joined(separator: "."))
+                    addFilter(field)
                 }
             }
         } label: {
@@ -625,6 +623,16 @@ struct DatabaseFilterRibbon: View {
             direction: direction,
             additive: !data.orderedSorts.isEmpty)
         apply()
+    }
+
+    private func addFilter(_ field: DatabaseFieldDescriptor) {
+        let id = data.addFilterClause(
+            field: field.path.segments.joined(separator: "."))
+        Task { @MainActor in
+            await Task.yield()
+            guard data.filterClauses.contains(where: { $0.id == id }) else { return }
+            editorID = id
+        }
     }
 
     private func operators(
