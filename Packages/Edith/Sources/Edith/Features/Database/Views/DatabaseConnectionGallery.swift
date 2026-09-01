@@ -59,17 +59,11 @@ struct DatabaseConnectionGallery: View {
     }
 
     private var catalogHeader: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                    Text("Connections")
-                        .font(.system(size: UIScale.pt(compact ? 17 : 20), weight: .semibold))
-                        .foregroundStyle(palette.ink)
-                    Text("Choose a saved database to open its workspace.")
-                        .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(palette.inkSoft)
-                        .lineLimit(2)
-                }
+                Text("Connections")
+                    .font(.system(size: UIScale.pt(compact ? 17 : 20), weight: .semibold))
+                    .foregroundStyle(palette.ink)
                 Spacer(minLength: 0)
                 Button(action: reload) {
                     Image(systemName: "arrow.clockwise")
@@ -250,7 +244,7 @@ struct DatabaseConnectionGallery: View {
             Button {
                 openConnection(connection)
             } label: {
-                VStack(alignment: .leading, spacing: UIScale.pt(15)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                     HStack(alignment: .top, spacing: UIScale.pt(11)) {
                         ZStack {
                             RoundedRectangle(cornerRadius: UIScale.pt(9))
@@ -274,23 +268,15 @@ struct DatabaseConnectionGallery: View {
                                         .accessibilityHidden(true)
                                 }
                             }
-                            Text(connection.product.displayName)
+                            Text(connectionSubtitle(connection))
                                 .font(.system(size: UIScale.pt(10.5), weight: .medium))
                                 .foregroundStyle(palette.inkSoft)
+                                .lineLimit(1)
                         }
                         Spacer(minLength: 0)
                         Color.clear
                             .frame(width: UIScale.pt(26), height: UIScale.pt(26))
                             .accessibilityHidden(true)
-                    }
-                    HStack(spacing: UIScale.pt(6)) {
-                        badge(
-                            connection.environmentKind.title,
-                            tint: connection.environmentKind == .production
-                                ? DashSkin.warn : palette.accent)
-                        badge(
-                            protectionTitle(connection),
-                            tint: protectionColor(connection))
                     }
                     HStack(spacing: UIScale.pt(7)) {
                         Image(systemName: namespaceSymbol(connection))
@@ -302,25 +288,19 @@ struct DatabaseConnectionGallery: View {
                             .foregroundStyle(palette.inkSoft)
                             .lineLimit(1)
                         Spacer(minLength: 0)
-                    }
-                    Divider().opacity(0.45)
-                    HStack(spacing: UIScale.pt(7)) {
-                        Image(systemName: sessionSymbol(session))
-                            .font(.system(size: UIScale.pt(9.5), weight: .semibold))
-                            .foregroundStyle(sessionColor(session))
-                            .accessibilityHidden(true)
-                        Text(sessionTitle(session))
-                            .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                            .foregroundStyle(palette.inkSoft)
-                        Spacer(minLength: 0)
-                        Text(connection.readOnlySummary)
-                            .font(.system(size: UIScale.pt(9.5), weight: .medium))
-                            .foregroundStyle(palette.inkSoft)
-                            .lineLimit(1)
+                        if session != .disconnected {
+                            Image(systemName: sessionSymbol(session))
+                                .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                                .foregroundStyle(sessionColor(session))
+                                .accessibilityHidden(true)
+                            Text(sessionTitle(session))
+                                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                                .foregroundStyle(palette.inkSoft)
+                        }
                     }
                 }
-                .padding(UIScale.pt(16))
-                .frame(maxWidth: .infinity, minHeight: UIScale.pt(178), alignment: .topLeading)
+                .padding(UIScale.pt(14))
+                .frame(maxWidth: .infinity, minHeight: UIScale.pt(126), alignment: .topLeading)
                 .background(
                     highlighted ? palette.panel : palette.panel.opacity(0.74),
                     in: RoundedRectangle(cornerRadius: UIScale.pt(13))
@@ -424,16 +404,6 @@ struct DatabaseConnectionGallery: View {
         } label: {
             Label("Delete", systemImage: "trash")
         }
-    }
-
-    private func badge(_ title: String, tint: Color) -> some View {
-        Text(title)
-            .font(.system(size: UIScale.pt(9.5), weight: .semibold))
-            .foregroundStyle(palette.inkSoft)
-            .padding(.horizontal, UIScale.pt(7))
-            .padding(.vertical, UIScale.pt(4))
-            .background(tint.opacity(0.1), in: Capsule())
-            .lineLimit(1)
     }
 
     private func stateNotice(
@@ -541,20 +511,11 @@ struct DatabaseConnectionGallery: View {
             visibleConnectionIDs: model.visibleConnections.map(\.id))
     }
 
-    private func protectionTitle(_ connection: DatabaseConnectionSummary) -> String {
-        switch connection.environmentProtection {
-        case .standard: "Standard"
-        case .confirmationRequired: "Confirm changes"
-        case .readOnly: "Read-only environment"
+    private func connectionSubtitle(_ connection: DatabaseConnectionSummary) -> String {
+        if connection.environmentKind == .development {
+            return connection.product.displayName
         }
-    }
-
-    private func protectionColor(_ connection: DatabaseConnectionSummary) -> Color {
-        switch connection.environmentProtection {
-        case .standard: palette.inkFaint
-        case .confirmationRequired: DashSkin.warn
-        case .readOnly: palette.accent
-        }
+        return "\(connection.product.displayName) · \(connection.environmentKind.title)"
     }
 
     private func namespaceTitle(_ connection: DatabaseConnectionSummary) -> String {
@@ -791,7 +752,10 @@ struct DatabaseFocusedConnectionHeader: View {
     }
 
     private var contextTitle: String {
-        "\(connection.product.displayName) · \(connection.environmentLabel) · \(connection.environmentProtection.title) · \(connection.readOnlySummary)"
+        let namespace =
+            connection.defaultDatabase ?? connection.logicalDatabase ?? connection.defaultSchema
+        guard let namespace, !namespace.isEmpty else { return connection.product.displayName }
+        return "\(connection.product.displayName) · \(namespace)"
     }
 
     private var sessionTitle: String {

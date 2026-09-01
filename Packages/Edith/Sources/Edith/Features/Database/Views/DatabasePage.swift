@@ -185,6 +185,7 @@ struct DatabasePage: View {
                     workspaceFocusConnectionID = connection.id
                     focusedConnectionID = connection.id
                     connectionListRevision &+= 1
+                    Task { await connectionWorkspace.connectSelected() }
                 },
                 cancel: { self.connectionCreation = nil })
         }
@@ -338,7 +339,7 @@ struct DatabasePage: View {
         VStack(spacing: UIScale.pt(18)) {
             Image(systemName: "wrench.and.screwdriver.fill")
                 .font(.system(size: UIScale.pt(34), weight: .medium))
-                .foregroundStyle(.orange)
+                .foregroundStyle(DashSkin.warn)
                 .accessibilityHidden(true)
             VStack(spacing: UIScale.pt(7)) {
                 Text("Database needs a quick repair")
@@ -381,6 +382,7 @@ struct DatabasePage: View {
         catalogFocusConnectionID = connection.id
         workspaceFocusConnectionID = connection.id
         focusedConnectionID = connection.id
+        Task { await connectionWorkspace.connectSelected() }
     }
 
     private func leaveFocusedWorkspace() {
@@ -564,7 +566,7 @@ struct DatabasePage: View {
                 systemName: workspace.hasTrackedMutation
                     ? "clock.arrow.circlepath" : "info.circle.fill"
             )
-            .foregroundStyle(workspace.hasTrackedMutation ? Color.orange : theme)
+            .foregroundStyle(workspace.hasTrackedMutation ? DashSkin.warn : theme)
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 Text(
                     workspace.hasTrackedMutation ? "Change needs attention" : "Change status"
@@ -607,7 +609,7 @@ struct DatabasePage: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(UIScale.pt(14))
-        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+        .background(DashSkin.warn.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
     }
 
 }
