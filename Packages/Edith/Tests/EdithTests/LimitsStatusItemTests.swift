@@ -53,6 +53,8 @@ import Testing
         defaults.set(42, forKey: "NSStatusItem Preferred Position edithGlasses")
         defaults.set(false, forKey: "NSStatusItem VisibleCC limits")
         defaults.set(false, forKey: "NSStatusItem VisibleCC systemStats")
+        defaults.set(false, forKey: "NSStatusItem VisibleCC systemStats.v2")
+        defaults.set(false, forKey: "NSStatusItem VisibleCC micMute.v2")
 
         removeRetiredStatusItemDefaults(defaults)
 
@@ -60,6 +62,8 @@ import Testing
         #expect(defaults.object(forKey: "NSStatusItem Preferred Position edithGlasses") == nil)
         #expect(defaults.object(forKey: "NSStatusItem VisibleCC limits") == nil)
         #expect(defaults.object(forKey: "NSStatusItem VisibleCC systemStats") == nil)
+        #expect(defaults.object(forKey: "NSStatusItem VisibleCC systemStats.v2") == nil)
+        #expect(defaults.object(forKey: "NSStatusItem VisibleCC micMute.v2") == nil)
     }
 
     @Test func legacyFixedTintsBecomeAutomatic() {

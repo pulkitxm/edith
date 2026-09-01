@@ -611,7 +611,8 @@ func dismissPanel() {
 
 func removeRetiredStatusItemDefaults(_ defaults: UserDefaults = .standard) {
     let retiredNames = [
-        "edithGlasses", "limits", "agentUsage", "systemStats", "micMute",
+        "edithGlasses", "limits", "agentUsage", "agentUsage.v2", "systemStats",
+        "systemStats.v2", "micMute", "micMute.v2",
     ]
     for key in defaults.dictionaryRepresentation().keys
     where key.hasPrefix("NSStatusItem") && retiredNames.contains(where: key.hasSuffix) {
