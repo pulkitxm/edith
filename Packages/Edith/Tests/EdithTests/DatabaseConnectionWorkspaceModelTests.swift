@@ -115,6 +115,38 @@ import Testing
         #expect(requests[1].connectionListRequest?.search.text == "new")
     }
 
+    @Test func savedConnectionSelectionSurvivesAnOverlappingSearchReload() async throws {
+        let existing = try Self.connection(id: 31, name: "Existing")
+        let saved = try Self.connection(id: 32, name: "Newly saved")
+        let sender = DatabaseConnectionScriptedSender()
+        await sender.succeed(Self.listResponse([existing]), at: 0)
+        let model = Self.model(sender)
+        await model.loadConnections()
+        model.searchText = "old"
+
+        let oldReload = Task { @MainActor in await model.loadConnections() }
+        await sender.waitUntilRequested(2)
+        model.selectSavedConnection(saved)
+
+        #expect(model.selectedConnectionID == saved.id)
+        #expect(model.selectedConnection?.name == "Newly saved")
+
+        await sender.succeed(Self.listResponse([existing]), at: 1)
+        await oldReload.value
+
+        #expect(model.selectedConnectionID == saved.id)
+        #expect(model.selectedConnection?.name == "Newly saved")
+
+        model.searchText = ""
+        let currentReload = Task { @MainActor in await model.loadConnections() }
+        await sender.waitUntilRequested(3)
+        await sender.succeed(Self.listResponse([existing, saved]), at: 2)
+        await currentReload.value
+
+        #expect(model.selectedConnectionID == saved.id)
+        #expect(model.visibleConnections.map(\.id) == [existing.id, saved.id])
+    }
+
     @Test func loadingAndFailureKeepPreviouslyLoadedConnectionsVisible() async throws {
         let connection = try Self.connection(id: 10, name: "Retained")
         let sender = DatabaseConnectionScriptedSender()

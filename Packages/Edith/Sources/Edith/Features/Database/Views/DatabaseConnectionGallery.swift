@@ -1,3 +1,4 @@
+import AppKit
 import EdithDatabase
 import EdithKit
 import SwiftUI
@@ -6,6 +7,9 @@ struct DatabaseConnectionGallery: View {
     @Bindable var model: DatabaseConnectionWorkspaceModel
     let createConnection: () -> Void
     let openConnection: (DatabaseConnectionSummary) -> Void
+    var reloadConnections: (() -> Void)? = nil
+    var restoreFocusConnectionID: DatabaseConnectionID? = nil
+    var focusRestored: ((DatabaseConnectionID) -> Void)? = nil
     @State private var hoveredConnectionID: DatabaseConnectionID?
     @FocusState private var focusedConnectionID: DatabaseConnectionID?
     @Environment(\.colorScheme) private var scheme
@@ -52,7 +56,7 @@ struct DatabaseConnectionGallery: View {
                         .foregroundStyle(palette.ink)
                     Text("Choose a saved database to open its workspace.")
                         .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(palette.inkFaint)
+                        .foregroundStyle(palette.inkSoft)
                         .lineLimit(2)
                 }
                 Spacer(minLength: 0)
@@ -161,7 +165,7 @@ struct DatabaseConnectionGallery: View {
         if connections.isEmpty {
             Text("No connection entries are available in this result.")
                 .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(palette.inkFaint)
+                .foregroundStyle(palette.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityLabel("No connection entries are available in this result")
         } else {
@@ -207,7 +211,7 @@ struct DatabaseConnectionGallery: View {
                         }
                         Text(connection.product.displayName)
                             .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                            .foregroundStyle(palette.inkFaint)
+                            .foregroundStyle(palette.inkSoft)
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "arrow.up.right")
@@ -243,11 +247,11 @@ struct DatabaseConnectionGallery: View {
                         .accessibilityHidden(true)
                     Text(sessionTitle(session))
                         .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                        .foregroundStyle(sessionColor(session))
+                        .foregroundStyle(palette.inkSoft)
                     Spacer(minLength: 0)
                     Text(connection.readOnlySummary)
                         .font(.system(size: UIScale.pt(9.5), weight: .medium))
-                        .foregroundStyle(palette.inkFaint)
+                        .foregroundStyle(palette.inkSoft)
                         .lineLimit(1)
                 }
             }
@@ -267,6 +271,13 @@ struct DatabaseConnectionGallery: View {
         }
         .buttonStyle(.edith(.borderless))
         .focused($focusedConnectionID, equals: connection.id)
+        .background {
+            DatabaseKeyboardFocusAnchor(active: focusRequest.target == connection.id) {
+                guard focusRequest.target == connection.id else { return }
+                focusRestored?(connection.id)
+            }
+            .accessibilityHidden(true)
+        }
         .onHover { isHovered in
             hoveredConnectionID = isHovered ? connection.id : nil
         }
@@ -288,7 +299,7 @@ struct DatabaseConnectionGallery: View {
     private func badge(_ title: String, tint: Color) -> some View {
         Text(title)
             .font(.system(size: UIScale.pt(9.5), weight: .semibold))
-            .foregroundStyle(tint)
+            .foregroundStyle(palette.inkSoft)
             .padding(.horizontal, UIScale.pt(7))
             .padding(.vertical, UIScale.pt(4))
             .background(tint.opacity(0.1), in: Capsule())
@@ -319,7 +330,7 @@ struct DatabaseConnectionGallery: View {
                     .foregroundStyle(palette.ink)
                 Text(detail)
                     .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(palette.inkFaint)
+                    .foregroundStyle(palette.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
@@ -358,7 +369,7 @@ struct DatabaseConnectionGallery: View {
                     .foregroundStyle(palette.ink)
                 Text(detail)
                     .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(palette.inkFaint)
+                    .foregroundStyle(palette.inkSoft)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -372,11 +383,21 @@ struct DatabaseConnectionGallery: View {
     }
 
     private func reload() {
-        Task { await model.loadConnections() }
+        if let reloadConnections {
+            reloadConnections()
+        } else {
+            Task { await model.loadConnections() }
+        }
     }
 
     private func clearSearch() {
         model.searchText = ""
+    }
+
+    private var focusRequest: DatabaseConnectionGalleryFocusRequest {
+        DatabaseConnectionGalleryFocusRequest(
+            requestedConnectionID: restoreFocusConnectionID,
+            visibleConnectionIDs: model.visibleConnections.map(\.id))
     }
 
     private func protectionTitle(_ connection: DatabaseConnectionSummary) -> String {
@@ -440,7 +461,10 @@ struct DatabaseFocusedConnectionHeader: View {
     let connection: DatabaseConnectionSummary
     let sessionState: DatabaseConnectionSessionState
     let backDisabled: Bool
+    let focusRequested: Bool
+    let focusCompleted: () -> Void
     let back: () -> Void
+    @FocusState private var backFocused: Bool
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.databaseAppTheme) private var appTheme
@@ -487,6 +511,14 @@ struct DatabaseFocusedConnectionHeader: View {
             Label("All connections", systemImage: "chevron.left")
         }
         .buttonStyle(.edith(.secondary))
+        .focused($backFocused)
+        .background {
+            DatabaseKeyboardFocusAnchor(
+                active: focusRequested && !backDisabled,
+                focusCompleted: focusCompleted
+            )
+            .accessibilityHidden(true)
+        }
         .disabled(backDisabled)
         .help(
             backDisabled
@@ -496,7 +528,8 @@ struct DatabaseFocusedConnectionHeader: View {
         .accessibilityHint(
             backDisabled
                 ? "Resolve the active database change before returning"
-                : "Return to the saved connection cards")
+                : "Return to the saved connection cards"
+        )
     }
 
     private var identityRow: some View {
@@ -525,7 +558,7 @@ struct DatabaseFocusedConnectionHeader: View {
                 }
                 Text(contextTitle)
                     .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                    .foregroundStyle(palette.inkFaint)
+                    .foregroundStyle(palette.inkSoft)
                     .lineLimit(compact ? 2 : 1)
             }
         }
@@ -548,7 +581,7 @@ struct DatabaseFocusedConnectionHeader: View {
                 .accessibilityHidden(true)
             Text(sessionTitle)
                 .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                .foregroundStyle(sessionColor)
+                .foregroundStyle(palette.inkSoft)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(sessionTitle)
@@ -599,5 +632,134 @@ private extension DatabaseProduct {
         case .search: "magnifyingglass.circle"
         case .analytical: "chart.xyaxis.line"
         }
+    }
+}
+
+struct DatabaseConnectionGalleryFocusRequest: Hashable {
+    let requestedConnectionID: DatabaseConnectionID?
+    let visibleConnectionIDs: [DatabaseConnectionID]
+
+    var target: DatabaseConnectionID? {
+        guard let requestedConnectionID,
+            visibleConnectionIDs.contains(requestedConnectionID)
+        else { return nil }
+        return requestedConnectionID
+    }
+}
+
+private struct DatabaseKeyboardFocusAnchor: NSViewRepresentable {
+    let active: Bool
+    let focusCompleted: () -> Void
+
+    func makeNSView(context: Context) -> DatabaseKeyboardFocusAnchorView {
+        let view = DatabaseKeyboardFocusAnchorView()
+        view.focusCompleted = focusCompleted
+        view.active = active
+        return view
+    }
+
+    func updateNSView(_ nsView: DatabaseKeyboardFocusAnchorView, context: Context) {
+        nsView.focusCompleted = focusCompleted
+        nsView.active = active
+        nsView.requestFocus()
+    }
+}
+
+@MainActor
+private final class DatabaseKeyboardFocusAnchorView: NSView {
+    var focusCompleted: (() -> Void)?
+    var active = false {
+        didSet {
+            guard active != oldValue else { return }
+            NSObject.cancelPreviousPerformRequests(
+                withTarget: self,
+                selector: #selector(runFocusRequest),
+                object: nil)
+            attempts = 0
+            requestScheduled = false
+            didFocus = false
+            requestFocus()
+        }
+    }
+
+    private var attempts = 0
+    private var requestScheduled = false
+    private var didFocus = false
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil else {
+            NSObject.cancelPreviousPerformRequests(
+                withTarget: self,
+                selector: #selector(runFocusRequest),
+                object: nil)
+            requestScheduled = false
+            return
+        }
+        attempts = 0
+        requestFocus()
+    }
+
+    override func layout() {
+        super.layout()
+        requestFocus()
+    }
+
+    func requestFocus() {
+        guard active, !didFocus, attempts < 8 else { return }
+        if let window, let candidate = focusCandidate(in: window) {
+            NSObject.cancelPreviousPerformRequests(
+                withTarget: self,
+                selector: #selector(runFocusRequest),
+                object: nil)
+            requestScheduled = false
+            didFocus = window.firstResponder === candidate || window.makeFirstResponder(candidate)
+            if didFocus {
+                NSAccessibility.post(element: candidate, notification: .focusedUIElementChanged)
+                let focusCompleted = focusCompleted
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(10))
+                    focusCompleted?()
+                }
+                return
+            }
+        }
+        guard !requestScheduled else { return }
+        requestScheduled = true
+        perform(#selector(runFocusRequest), with: nil, afterDelay: 0.01)
+    }
+
+    @objc private func runFocusRequest() {
+        requestScheduled = false
+        guard active, !didFocus else { return }
+        attempts += 1
+        requestFocus()
+    }
+
+    private func focusCandidate(in window: NSWindow) -> NSView? {
+        guard let contentView = window.contentView else { return nil }
+        window.recalculateKeyViewLoop()
+        let center = convert(NSPoint(x: bounds.midX, y: bounds.midY), to: contentView)
+        let candidates = descendants(of: contentView)
+            .filter { view in
+                guard view !== self, !view.isHidden, !isDescendant(of: view),
+                    view.nextKeyView != nil || view.previousKeyView != nil
+                else {
+                    return false
+                }
+                return view.convert(view.bounds, to: contentView).contains(center)
+            }
+
+        return
+            candidates
+            .min { first, second in
+                let firstFrame = first.convert(first.bounds, to: contentView)
+                let secondFrame = second.convert(second.bounds, to: contentView)
+                return firstFrame.width * firstFrame.height < secondFrame.width * secondFrame.height
+            }
+    }
+
+    private func descendants(of view: NSView) -> [NSView] {
+        view.subviews + view.subviews.flatMap(descendants)
     }
 }

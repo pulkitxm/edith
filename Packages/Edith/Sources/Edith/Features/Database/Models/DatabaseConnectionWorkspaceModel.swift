@@ -315,6 +315,14 @@ final class DatabaseConnectionWorkspaceModel {
         announcement("Selected \(summariesByID[connectionID]?.name ?? "database connection").")
     }
 
+    func selectSavedConnection(_ connection: DatabaseConnectionDefinition) {
+        listGeneration = UUID()
+        let summary = DatabaseConnectionSummary(definition: connection)
+        summariesByID[connection.id] = summary
+        selectedConnectionID = connection.id
+        announcement("Selected \(summary.name).")
+    }
+
     func loadConnections() async {
         let generation = UUID()
         listGeneration = generation

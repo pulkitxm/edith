@@ -103,6 +103,9 @@ struct DatabasePage: View {
     @State private var workspace = DatabaseWorkspaceModel()
     @State private var showsServiceDetails = false
     @State private var focusedConnectionID: DatabaseConnectionID?
+    @State private var catalogFocusConnectionID: DatabaseConnectionID?
+    @State private var workspaceFocusConnectionID: DatabaseConnectionID?
+    @State private var connectionListRevision: UInt = 0
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         AppTheme.accent.rawValue
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
@@ -128,11 +131,7 @@ struct DatabasePage: View {
             guard automaticActionsEnabled else { return }
             await model.refresh()
         }
-        .task(id: model.readiness) {
-            guard automaticActionsEnabled, model.readiness == .ready else { return }
-            await connectionWorkspace.loadConnections()
-        }
-        .task(id: connectionWorkspace.searchText) {
+        .task(id: connectionListTaskID) {
             guard automaticActionsEnabled, model.readiness == .ready else { return }
             let search = connectionWorkspace.searchText.trimmingCharacters(
                 in: .whitespacesAndNewlines)
@@ -176,12 +175,12 @@ struct DatabasePage: View {
                 model: connectionCreation,
                 saved: { connection in
                     self.connectionCreation = nil
-                    Task {
-                        connectionWorkspace.searchText = ""
-                        await connectionWorkspace.loadConnections()
-                        connectionWorkspace.selectConnection(connection.id)
-                        focusedConnectionID = connection.id
-                    }
+                    connectionWorkspace.selectSavedConnection(connection)
+                    connectionWorkspace.searchText = ""
+                    catalogFocusConnectionID = connection.id
+                    workspaceFocusConnectionID = connection.id
+                    focusedConnectionID = connection.id
+                    connectionListRevision &+= 1
                 },
                 cancel: { self.connectionCreation = nil })
         }
@@ -221,7 +220,13 @@ struct DatabasePage: View {
         DatabaseConnectionGallery(
             model: connectionWorkspace,
             createConnection: beginConnectionCreation,
-            openConnection: openConnection)
+            openConnection: openConnection,
+            reloadConnections: requestConnectionReload,
+            restoreFocusConnectionID: catalogFocusConnectionID,
+            focusRestored: { connectionID in
+                guard catalogFocusConnectionID == connectionID else { return }
+                catalogFocusConnectionID = nil
+            })
     }
 
     @ViewBuilder
@@ -246,6 +251,11 @@ struct DatabasePage: View {
                 connection: connection,
                 sessionState: connectionWorkspace.selectedSessionState,
                 backDisabled: workspace.hasTrackedMutation,
+                focusRequested: workspaceFocusConnectionID == connection.id,
+                focusCompleted: {
+                    guard workspaceFocusConnectionID == connection.id else { return }
+                    workspaceFocusConnectionID = nil
+                },
                 back: leaveFocusedWorkspace)
             Divider().opacity(0.35)
             workbench
@@ -312,12 +322,25 @@ struct DatabasePage: View {
 
     private func openConnection(_ connection: DatabaseConnectionSummary) {
         connectionWorkspace.selectConnection(connection.id)
+        catalogFocusConnectionID = connection.id
+        workspaceFocusConnectionID = connection.id
         focusedConnectionID = connection.id
     }
 
     private func leaveFocusedWorkspace() {
         guard !workspace.hasTrackedMutation else { return }
         focusedConnectionID = nil
+    }
+
+    private func requestConnectionReload() {
+        connectionListRevision &+= 1
+    }
+
+    private var connectionListTaskID: DatabaseConnectionListTaskID {
+        DatabaseConnectionListTaskID(
+            readiness: model.readiness,
+            searchText: connectionWorkspace.searchText,
+            revision: connectionListRevision)
     }
 
     private var workbench: some View {
@@ -388,4 +411,10 @@ struct DatabasePage: View {
         .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
     }
 
+}
+
+private struct DatabaseConnectionListTaskID: Hashable {
+    let readiness: DatabasePageModel.Readiness
+    let searchText: String
+    let revision: UInt
 }
