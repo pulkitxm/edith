@@ -700,6 +700,58 @@ private func elasticsearchReadingSession(
     await session.disconnect()
 }
 
+@Test func elasticsearchMappingHidesNestedDescendantsFromFlatFiltersAndSorts() throws {
+    let keyword = ElasticsearchDatabaseMappingResponse.Field(
+        type: "keyword",
+        index: true,
+        enabled: nil,
+        docValues: true,
+        properties: nil,
+        fields: nil)
+    let mapping = ElasticsearchDatabaseMappingResponse(
+        indices: [
+            "edith-documents-v1": ElasticsearchDatabaseMappingResponse.Index(
+                mappings: ElasticsearchDatabaseMappingResponse.Mapping(
+                    dynamic: nil,
+                    properties: [
+                        "author": ElasticsearchDatabaseMappingResponse.Field(
+                            type: "object",
+                            index: nil,
+                            enabled: true,
+                            docValues: nil,
+                            properties: ["name": keyword],
+                            fields: nil),
+                        "comments": ElasticsearchDatabaseMappingResponse.Field(
+                            type: "nested",
+                            index: nil,
+                            enabled: true,
+                            docValues: nil,
+                            properties: [
+                                "message": keyword,
+                                "reviewer": ElasticsearchDatabaseMappingResponse.Field(
+                                    type: "object",
+                                    index: nil,
+                                    enabled: true,
+                                    docValues: nil,
+                                    properties: ["name": keyword],
+                                    fields: nil),
+                            ],
+                            fields: nil),
+                    ],
+                    runtime: nil))
+        ])
+
+    let descriptors = try ElasticsearchDatabaseReadCompiler.fieldDescriptors(mapping)
+    let byName = Dictionary(uniqueKeysWithValues: descriptors.map { ($0.displayName, $0) })
+
+    #expect(byName["author.name"]?.isFilterable == true)
+    #expect(byName["author.name"]?.isSortable == true)
+    #expect(byName["comments.message"]?.isFilterable == false)
+    #expect(byName["comments.message"]?.isSortable == false)
+    #expect(byName["comments.reviewer.name"]?.isFilterable == false)
+    #expect(byName["comments.reviewer.name"]?.isSortable == false)
+}
+
 @Test func elasticsearchReadingUsesStablePITPagesAndMappingCache() async throws {
     let definition = try ElasticsearchDatabaseReadingFixtures.definition()
     let firstResponse = ElasticsearchDatabaseReadingFixtures.response(
