@@ -54,7 +54,8 @@ final class MicMuteEngine: NSObject, FeatureModule {
             SharedDefaults.store.object(forKey: AppStorageKeys.Mic.muteInMenuBar) as? Bool ?? true
         if wanted, statusItem == nil {
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-            item.autosaveName = "micMute"
+            item.autosaveName = "micMute.v2"
+            item.isVisible = true
             StatusItemMenu.attach(to: item, target: self, action: #selector(statusClicked))
             statusItem = item
             updateIcon()

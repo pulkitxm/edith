@@ -125,7 +125,7 @@ final class LimitsStatusItem {
         if let item { NSStatusBar.system.removeStatusItem(item) }
         stackedView = nil
         let next = NSStatusBar.system.statusItem(withLength: length)
-        next.autosaveName = "agentUsage"
+        next.autosaveName = "agentUsage.v2"
         next.isVisible = true
         StatusItemMenu.attach(to: next, target: self, action: #selector(clicked))
         item = next

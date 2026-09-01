@@ -59,7 +59,7 @@ import Testing
         #expect(defaults.object(forKey: "NSStatusItem VisibleCC edithGlasses") == nil)
         #expect(defaults.object(forKey: "NSStatusItem Preferred Position edithGlasses") == nil)
         #expect(defaults.object(forKey: "NSStatusItem VisibleCC limits") == nil)
-        #expect(defaults.object(forKey: "NSStatusItem VisibleCC systemStats") as? Bool == false)
+        #expect(defaults.object(forKey: "NSStatusItem VisibleCC systemStats") == nil)
     }
 
     @Test func legacyFixedTintsBecomeAutomatic() {
