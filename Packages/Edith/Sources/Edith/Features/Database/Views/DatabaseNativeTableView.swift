@@ -424,9 +424,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             guard let tableView else { return }
             for column in tableView.tableColumns {
                 guard let cell = column.headerCell as? DatabaseNativeHeaderCell else { continue }
-                cell.fillColor = NSColor(parent.background)
-                cell.dividerColor = NSColor(parent.inkFaint).withAlphaComponent(0.2)
-                cell.textColor = NSColor(parent.inkFaint)
+                cell.textColor = .secondaryLabelColor
             }
             tableView.headerView?.needsDisplay = true
         }
@@ -522,14 +520,11 @@ private final class DatabaseNativeRowView: NSTableRowView {
 }
 
 private final class DatabaseNativeHeaderCell: NSTableHeaderCell {
-    var fillColor = NSColor.controlBackgroundColor
-    var dividerColor = NSColor.separatorColor
-
     override func draw(withFrame cellFrame: NSRect, in controlView: NSView) {
-        fillColor.setFill()
+        NSColor.controlBackgroundColor.setFill()
         cellFrame.fill()
         super.drawInterior(withFrame: cellFrame.insetBy(dx: 8, dy: 3), in: controlView)
-        dividerColor.setFill()
+        NSColor.separatorColor.withAlphaComponent(0.18).setFill()
         let dividerY = controlView.isFlipped ? cellFrame.maxY - 1 : cellFrame.minY
         NSRect(
             x: cellFrame.minX,
