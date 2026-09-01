@@ -25,7 +25,7 @@ struct DatabaseConnectionEditDraft: Equatable, Sendable {
     var productionPolicy: DatabaseProductionPolicy
     var group: String
     var tags: [String]
-    var colorToken: DatabaseConnectionColorToken?
+    var color: String?
     var isFavorite: Bool
 
     init(definition: DatabaseConnectionDefinition) {
@@ -38,7 +38,7 @@ struct DatabaseConnectionEditDraft: Equatable, Sendable {
         productionPolicy = definition.productionPolicy
         group = definition.group ?? ""
         tags = definition.tags
-        colorToken = definition.color.flatMap(DatabaseConnectionColorToken.init(rawValue:))
+        color = definition.color
         isFavorite = definition.isFavorite
     }
 }
@@ -305,7 +305,7 @@ final class DatabaseConnectionManagementModel {
                 protection: draft.environmentProtection),
             group: group,
             tags: tags,
-            color: draft.colorToken?.rawValue,
+            color: draft.color,
             isFavorite: draft.isFavorite,
             options: connection.options,
             createdAt: connection.createdAt,

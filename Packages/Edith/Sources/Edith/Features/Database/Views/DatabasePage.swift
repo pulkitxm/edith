@@ -97,7 +97,11 @@ final class DatabasePageModel {
 struct DatabasePage: View {
     @State private var model = DatabasePageModel()
     @State private var connectionWorkspace = DatabaseConnectionWorkspaceModel()
+    @State private var connectionManagement = DatabaseConnectionManagementModel()
     @State private var connectionCreation: DatabaseConnectionCreationModel?
+    @State private var connectionManagementRoute: DatabaseConnectionManagementRoute?
+    @State private var actionConfirmation: DatabaseConnectionActionConfirmation?
+    @State private var managementMessage: DatabaseConnectionManagementMessage?
     @State private var dataWorkspace = DatabaseDataWorkspaceModel()
     @State private var objectExplorer = DatabaseObjectExplorerModel()
     @State private var workspace = DatabaseWorkspaceModel()
@@ -184,6 +188,53 @@ struct DatabasePage: View {
                 },
                 cancel: { self.connectionCreation = nil })
         }
+        .sheet(item: $connectionManagementRoute) { route in
+            DatabaseConnectionManagementSheet(
+                connection: route.connection,
+                model: connectionManagement,
+                presentation: route.presentation,
+                edited: finishManagedUpdate,
+                renamed: finishManagedUpdate,
+                duplicated: finishDuplicate,
+                cancel: dismissConnectionManagement)
+        }
+        .confirmationDialog(
+            actionConfirmation?.title ?? "Confirm connection change",
+            isPresented: Binding(
+                get: { actionConfirmation != nil },
+                set: { presented in
+                    if !presented {
+                        actionConfirmation = nil
+                    }
+                }),
+            titleVisibility: .visible
+        ) {
+            if let confirmation = actionConfirmation {
+                switch confirmation {
+                case .favorite(let connection):
+                    Button(connection.isFavorite ? "Remove from favorites" : "Add to favorites") {
+                        actionConfirmation = nil
+                        Task { await toggleFavorite(connection) }
+                    }
+                case .delete(let connection):
+                    Button("Delete saved connection", role: .destructive) {
+                        actionConfirmation = nil
+                        Task { await deleteConnection(connection) }
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                actionConfirmation = nil
+            }
+        } message: {
+            Text(actionConfirmation?.detail ?? "")
+        }
+        .alert(item: $managementMessage) { message in
+            Alert(
+                title: Text(message.title),
+                message: Text(message.detail),
+                dismissButton: .default(Text("OK")))
+        }
     }
 
     @ViewBuilder
@@ -226,7 +277,9 @@ struct DatabasePage: View {
             focusRestored: { connectionID in
                 guard catalogFocusConnectionID == connectionID else { return }
                 catalogFocusConnectionID = nil
-            })
+            },
+            busyConnectionID: connectionManagement.activeConnectionID,
+            performConnectionAction: performConnectionAction)
     }
 
     @ViewBuilder
@@ -256,7 +309,9 @@ struct DatabasePage: View {
                     guard workspaceFocusConnectionID == connection.id else { return }
                     workspaceFocusConnectionID = nil
                 },
-                back: leaveFocusedWorkspace)
+                back: leaveFocusedWorkspace,
+                busyConnectionID: connectionManagement.activeConnectionID,
+                performConnectionAction: performConnectionAction)
             Divider().opacity(0.35)
             workbench
         }
@@ -336,10 +391,126 @@ struct DatabasePage: View {
         connectionListRevision &+= 1
     }
 
+    private func performConnectionAction(
+        _ action: DatabaseConnectionCardAction,
+        connection: DatabaseConnectionSummary
+    ) {
+        if workspace.hasTrackedMutation,
+            connectionWorkspace.selectedConnectionID == connection.id
+        {
+            managementMessage = DatabaseConnectionManagementMessage(
+                title: "Finish the active change first",
+                detail:
+                    "Resolve or cancel the current database change before managing this connection."
+            )
+            return
+        }
+        switch action {
+        case .favorite:
+            if case .disconnected = connectionWorkspace.sessionState(for: connection.id) {
+                Task { await toggleFavorite(connection) }
+            } else {
+                actionConfirmation = .favorite(connection)
+            }
+        case .rename:
+            presentConnectionManagement(.rename, connection: connection)
+        case .edit:
+            presentConnectionManagement(.edit, connection: connection)
+        case .duplicate:
+            presentConnectionManagement(.duplicate, connection: connection)
+        case .delete:
+            actionConfirmation = .delete(connection)
+        }
+    }
+
+    private func presentConnectionManagement(
+        _ presentation: DatabaseConnectionManagementPresentation,
+        connection: DatabaseConnectionSummary
+    ) {
+        connectionManagement.clearFailure()
+        connectionManagementRoute = DatabaseConnectionManagementRoute(
+            presentation: presentation,
+            connection: connection)
+    }
+
+    private func dismissConnectionManagement() {
+        connectionManagement.clearFailure()
+        connectionManagementRoute = nil
+    }
+
+    private func finishManagedUpdate(_ connection: DatabaseConnectionDefinition) {
+        connectionManagementRoute = nil
+        clearWorkspaceDataIfSelected(connection.id)
+        connectionWorkspace.applyManagedConnection(connection, disconnectsSession: true)
+        connectionListRevision &+= 1
+    }
+
+    private func finishDuplicate(_ result: DatabaseConnectionDuplicateResult) {
+        connectionManagementRoute = nil
+        connectionWorkspace.applyDuplicatedConnection(result.connection)
+        focusedConnectionID = nil
+        catalogFocusConnectionID = result.connection.id
+        connectionListRevision &+= 1
+        if result.sharesCredentials {
+            managementMessage = DatabaseConnectionManagementMessage(
+                title: "Connection duplicated",
+                detail:
+                    "The copy uses the same saved credential references as the original connection."
+            )
+        }
+    }
+
+    private func toggleFavorite(_ connection: DatabaseConnectionSummary) async {
+        if let updated = await connectionManagement.toggleFavorite(connectionID: connection.id) {
+            clearWorkspaceDataIfSelected(connection.id)
+            connectionWorkspace.applyManagedConnection(updated, disconnectsSession: true)
+            connectionListRevision &+= 1
+        } else {
+            showManagementFailure()
+        }
+    }
+
+    private func deleteConnection(_ connection: DatabaseConnectionSummary) async {
+        guard let result = await connectionManagement.deleteConnection(connectionID: connection.id)
+        else {
+            showManagementFailure()
+            return
+        }
+        clearWorkspaceDataIfSelected(connection.id)
+        let nextFocus = connectionWorkspace.removeManagedConnection(connection.id)
+        if focusedConnectionID == connection.id {
+            focusedConnectionID = nil
+            workspaceFocusConnectionID = nil
+        }
+        catalogFocusConnectionID = nextFocus
+        connectionListRevision &+= 1
+        if !result.deleted {
+            managementMessage = DatabaseConnectionManagementMessage(
+                title: "Connection already removed",
+                detail: "The saved connection was already absent, so its stale card was cleared."
+            )
+        }
+    }
+
+    private func clearWorkspaceDataIfSelected(_ connectionID: DatabaseConnectionID) {
+        guard connectionWorkspace.selectedConnectionID == connectionID else { return }
+        dataWorkspace.prepare(for: nil)
+        objectExplorer.prepare(for: nil)
+    }
+
+    private func showManagementFailure() {
+        managementMessage = DatabaseConnectionManagementMessage(
+            title: "Connection change failed",
+            detail: connectionManagement.failure ?? "The saved connection could not be changed."
+        )
+    }
+
     private var connectionListTaskID: DatabaseConnectionListTaskID {
         DatabaseConnectionListTaskID(
             readiness: model.readiness,
             searchText: connectionWorkspace.searchText,
+            favoritesOnly: connectionWorkspace.favoritesOnly,
+            selectedGroup: connectionWorkspace.selectedGroup,
             revision: connectionListRevision)
     }
 
@@ -416,5 +587,51 @@ struct DatabasePage: View {
 private struct DatabaseConnectionListTaskID: Hashable {
     let readiness: DatabasePageModel.Readiness
     let searchText: String
+    let favoritesOnly: Bool
+    let selectedGroup: String?
     let revision: UInt
+}
+
+private struct DatabaseConnectionManagementRoute: Identifiable {
+    let id = UUID()
+    let presentation: DatabaseConnectionManagementPresentation
+    let connection: DatabaseConnectionSummary
+}
+
+private struct DatabaseConnectionManagementMessage: Identifiable {
+    let id = UUID()
+    let title: String
+    let detail: String
+}
+
+private enum DatabaseConnectionActionConfirmation: Identifiable {
+    case favorite(DatabaseConnectionSummary)
+    case delete(DatabaseConnectionSummary)
+
+    var id: String {
+        switch self {
+        case .favorite(let connection): "favorite:\(connection.id.rawValue.uuidString)"
+        case .delete(let connection): "delete:\(connection.id.rawValue.uuidString)"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .favorite(let connection):
+            connection.isFavorite
+                ? "Remove \(connection.name) from favorites?"
+                : "Add \(connection.name) to favorites?"
+        case .delete(let connection):
+            "Delete \(connection.name)?"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .favorite:
+            "Updating this favorite closes its active session. You can reconnect from the workspace."
+        case .delete:
+            "This removes the saved connection and may close its active session. The database and its data are not changed."
+        }
+    }
 }

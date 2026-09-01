@@ -31,7 +31,7 @@ struct DatabaseConnectionManagementModelTests {
         #expect(draft?.productionPolicy == .requireMutationPreview)
         #expect(draft?.group == "Commerce")
         #expect(draft?.tags == ["Critical", "Orders"])
-        #expect(draft?.colorToken == .purple)
+        #expect(draft?.color == "purple")
         #expect(draft?.isFavorite == true)
         #expect(model.activeConnectionID == nil)
         #expect(model.operation == nil)
@@ -76,7 +76,7 @@ struct DatabaseConnectionManagementModelTests {
         draft.productionPolicy = .prohibitMutations
         draft.group = "  Payments  "
         draft.tags = [" Critical ", "critical", "Orders", "orders ", ""]
-        draft.colorToken = .teal
+        draft.color = "teal"
         draft.isFavorite = true
 
         let saved = await model.saveEditDraft(draft)
@@ -113,6 +113,32 @@ struct DatabaseConnectionManagementModelTests {
         #expect(!String(decoding: encoded, as: UTF8.self).contains(credentialMaterial))
         #expect(try await secretStore.read(credential) == Data(credentialMaterial.utf8))
         #expect(model.failure == nil)
+    }
+
+    @Test("Unrelated edits preserve custom colors and comma-containing tags")
+    func savePreservesCustomMetadata() async throws {
+        let connection = try Self.connection(
+            name: "Orders",
+            tags: ["sales,east", "priority"],
+            color: "#5a67d8")
+        let sender = DatabaseConnectionManagementSender([
+            .response(Self.getResponse(connection)),
+            .response(Self.getResponse(connection)),
+            .echoEdit,
+        ])
+        let model = DatabaseConnectionManagementModel(sender: sender)
+        var draft = try #require(await model.loadEditDraft(connectionID: connection.id))
+        draft.displayName = "Orders primary"
+
+        let saved = await model.saveEditDraft(draft)
+
+        #expect(saved?.displayName == "Orders primary")
+        #expect(saved?.color == "#5a67d8")
+        #expect(saved?.tags == ["sales,east", "priority"])
+        let request = try #require(
+            (await sender.recordedRequests()).last?.connectionEditRequest)
+        #expect(request.connection.color == "#5a67d8")
+        #expect(request.connection.tags == ["sales,east", "priority"])
     }
 
     @Test("Favorite toggling fetches fresh state and changes no other fields")
