@@ -135,24 +135,36 @@ final class LimitsStatusItem {
     static func stableProviders(
         _ providers: [ProviderLimits], defaults: UserDefaults
     ) -> [ProviderLimits] {
-        let available = Dictionary(uniqueKeysWithValues: providers.map { ($0.provider, $0) })
+        var available: [LimitProvider: ProviderLimits] = [:]
+        for provider in providers.prefix(LimitProvider.allCases.count) {
+            available[provider.provider] = provider
+        }
         let enabled = UsageStore.enabledLimitProviders(
             claude: defaults.object(forKey: AppStorageKeys.Limits.claudeEnabled) as? Bool ?? true,
             codex: defaults.object(forKey: AppStorageKeys.Limits.codexEnabled) as? Bool ?? true)
-        return enabled.map {
-            available[$0]
-                ?? ProviderLimits(provider: $0, session: nil, week: nil)
+        var stable: [ProviderLimits] = []
+        stable.reserveCapacity(enabled.count)
+        for provider in enabled.prefix(LimitProvider.allCases.count) {
+            stable.append(
+                available[provider]
+                    ?? ProviderLimits(provider: provider, session: nil, week: nil))
         }
+        return stable
     }
 
     static func sizingGroups(_ groups: [MenuBarProviderGroup]) -> [MenuBarProviderGroup] {
-        groups.map { group in
-            MenuBarProviderGroup(
-                provider: group.provider,
-                segments: group.segments.map {
-                    MenuBarLimitSegment(slot: $0.slot, value: .percent(100), window: nil)
-                })
+        var sizing: [MenuBarProviderGroup] = []
+        sizing.reserveCapacity(groups.count)
+        for group in groups.prefix(LimitProvider.allCases.count) {
+            var segments: [MenuBarLimitSegment] = []
+            segments.reserveCapacity(group.segments.count)
+            for segment in group.segments.prefix(LimitWindowSlot.allCases.count) {
+                segments.append(
+                    MenuBarLimitSegment(slot: segment.slot, value: .percent(100), window: nil))
+            }
+            sizing.append(MenuBarProviderGroup(provider: group.provider, segments: segments))
         }
+        return sizing
     }
 
     private func stackedGroups(_ groups: [MenuBarProviderGroup]) -> [StackedLimitsView.Group] {
