@@ -622,9 +622,19 @@ struct DatabaseFocusedConnectionHeader: View {
     private var navigationButton: some View {
         Button(action: back) {
             Label("All connections", systemImage: "chevron.left")
+                .font(.system(size: UIScale.pt(11), weight: .medium))
+                .foregroundStyle(backFocused ? palette.ink : palette.inkSoft)
+                .padding(.horizontal, UIScale.pt(8))
+                .frame(minHeight: UIScale.pt(28))
+                .background(
+                    palette.ink.opacity(backFocused ? (dark ? 0.1 : 0.06) : 0),
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                )
+                .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(6)))
         }
-        .buttonStyle(.edith(.secondary))
+        .buttonStyle(.edith(.borderless))
         .focused($backFocused)
+        .focusEffectDisabled()
         .background {
             DatabaseKeyboardFocusAnchor(
                 active: focusRequested && !backDisabled,

@@ -168,6 +168,7 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                 tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView
                 ?? makeCell(identifier: identifier)
             guard let textField = cell.textField else { return cell }
+            textField.toolTip = nil
             if identifier.rawValue == Self.rowColumnIdentifier {
                 textField.stringValue = (row + 1).formatted()
                 textField.alignment = .right
@@ -182,10 +183,6 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                             ? "Editable row" : "Stable row key")
                 cell.imageView?.contentTintColor =
                     tableView.selectedRow == row ? NSColor(parent.accent) : .tertiaryLabelColor
-                textField.toolTip =
-                    parent.records[row].identity == nil
-                    ? "This row has no stable key"
-                    : "This row has a stable key"
                 textField.setAccessibilityLabel("Row \(row + 1)")
                 textField.setAccessibilityValue(
                     parent.records[row].identity == nil ? "No stable key" : "Stable key")
@@ -207,7 +204,6 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                 value.isAbsent
                 ? .monospacedSystemFont(ofSize: 11, weight: .light)
                 : .monospacedSystemFont(ofSize: 11, weight: .regular)
-            textField.toolTip = "\(field.displayName): \(rendered)"
             textField.setAccessibilityLabel(field.displayName)
             textField.setAccessibilityValue(rendered)
             textField.tag = row
@@ -237,7 +233,6 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             rowView.accentColor = NSColor(parent.accent)
             rowView.baseColor = NSColor(parent.background)
             rowView.alternatingColor = NSColor(parent.ink).withAlphaComponent(0.025)
-            rowView.hoverColor = NSColor(parent.ink).withAlphaComponent(0.07)
             rowView.rowIndex = row
             return rowView
         }
@@ -551,35 +546,7 @@ private final class DatabaseNativeRowView: NSTableRowView {
     var accentColor = NSColor.controlAccentColor
     var baseColor = NSColor.controlBackgroundColor
     var alternatingColor = NSColor.labelColor.withAlphaComponent(0.025)
-    var hoverColor = NSColor.labelColor.withAlphaComponent(0.07)
     var rowIndex = 0
-    private var hovering = false
-    private var hoverTrackingArea: NSTrackingArea?
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let hoverTrackingArea {
-            removeTrackingArea(hoverTrackingArea)
-        }
-        let trackingArea = NSTrackingArea(
-            rect: .zero,
-            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(trackingArea)
-        hoverTrackingArea = trackingArea
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        hovering = true
-        needsDisplay = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        hovering = false
-        needsDisplay = true
-    }
 
     override func drawBackground(in dirtyRect: NSRect) {
         baseColor.setFill()
@@ -589,13 +556,6 @@ private final class DatabaseNativeRowView: NSTableRowView {
             alternatingColor.setFill()
             bounds.fill()
         }
-        guard hovering else { return }
-        hoverColor.setFill()
-        NSBezierPath(
-            roundedRect: bounds.insetBy(dx: 2, dy: 1),
-            xRadius: 4,
-            yRadius: 4
-        ).fill()
     }
 
     override func drawSelection(in dirtyRect: NSRect) {
