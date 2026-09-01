@@ -47,6 +47,128 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(model.records == [Self.record(1)])
     }
 
+    @Test("Structured filters build one conjunction level with ordered typed sorts")
+    func structuredFiltersAndOrderedSorts() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)]),
+            Self.response(records: [Self.record(42)]),
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "analytics.orders"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        let identifier = model.addFilterClause(
+            field: "id",
+            operation: .equal,
+            valueText: "42")
+        let nameIdentifier = model.addFilterClause(field: "name", valueText: "Ada")
+        model.addFilterClause(
+            field: "ignored",
+            operation: .equal,
+            valueText: "unused",
+            isEnabled: false)
+        model.setFilterConjunction(.or)
+        model.cycleSort(field: "name", additive: false)
+        model.cycleSort(field: "id", additive: true)
+        model.cycleSort(field: "id", additive: true)
+
+        #expect(model.filterClauses[0].id == identifier)
+        #expect(model.filterClauses[1].id == nameIdentifier)
+        #expect(model.filterClauses[1].operation == .contains)
+        #expect(model.filterClauses[1].caseSensitivity == .insensitive)
+        #expect(model.activeFilterCount == 2)
+        #expect(model.activeFilterSummary == "2 filters, match any")
+        #expect(model.activeSortSummary == "name ascending, id descending")
+
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded && model.records == [Self.record(42)] }
+
+        let requests = await sender.recordedRequests().compactMap(\.browseRequest)
+        let request = try #require(requests.last)
+        #expect(
+            request.page.filter
+                == .any([
+                    .predicate(
+                        DatabaseFilterPredicate(
+                            field: DatabaseFieldPath("id"),
+                            operation: .equal,
+                            values: [.signedInteger(42)])),
+                    .predicate(
+                        DatabaseFilterPredicate(
+                            field: DatabaseFieldPath("name"),
+                            operation: .contains,
+                            values: [.string("Ada")],
+                            caseSensitivity: .insensitive)),
+                ]))
+        #expect(
+            request.page.sorts
+                == [
+                    DatabaseSort(field: DatabaseFieldPath("name"), direction: .ascending),
+                    DatabaseSort(field: DatabaseFieldPath("id"), direction: .descending),
+                ])
+    }
+
+    @Test("Filter and sort changes reset paging while sort cycling preserves priority")
+    func filterAndSortPagingReset() async throws {
+        let token = DatabaseContinuationToken(rawValue: "next-page")
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)], nextContinuation: token)
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.customers"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded && model.hasNextPage }
+
+        model.cycleSort(field: "name", additive: false)
+        #expect(!model.hasNextPage)
+        #expect(model.orderedSorts.map(\.summary) == ["name ascending"])
+
+        model.cycleSort(field: "id", additive: true)
+        model.cycleSort(field: "name", additive: true)
+        #expect(model.orderedSorts.map(\.summary) == ["name descending", "id ascending"])
+
+        model.cycleSort(field: "name", additive: true)
+        #expect(model.orderedSorts.map(\.summary) == ["id ascending"])
+
+        model.cycleSort(field: "id", additive: false)
+        #expect(model.orderedSorts.map(\.summary) == ["id descending"])
+        model.cycleSort(field: "id", additive: false)
+        #expect(model.orderedSorts.isEmpty)
+
+        let filterID = model.addFilterClause(field: "name", valueText: "Ada")
+        var clause = try #require(model.filterClauses.first(where: { $0.id == filterID }))
+        #expect(clause.summary == "name contains Ada")
+        clause.isEnabled = false
+        model.updateFilterClause(clause)
+        #expect(model.activeFilterSummary == "No active filters")
+    }
+
+    @Test("Invalid structured filter values fail before a new broker request")
+    func invalidStructuredFilter() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)])
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.customers"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+        model.addFilterClause(field: "id", operation: .between, valueText: "1")
+
+        model.browse(connection)
+
+        #expect(
+            model.state
+                == .failed("Enter two comma-separated values for the id filter."))
+        #expect(await sender.recordedRequests().count == 1)
+    }
+
     @Test("Continuation browsing appends records and forwards the token")
     func continuationBrowse() async throws {
         let token = DatabaseContinuationToken(rawValue: "next-page")
