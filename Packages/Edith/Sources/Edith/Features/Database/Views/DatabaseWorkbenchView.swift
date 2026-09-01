@@ -677,7 +677,7 @@ struct DatabaseWorkbenchView: View {
         connection: DatabaseConnectionSummary
     ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
+            HStack(spacing: UIScale.pt(8)) {
                 Text(detailTitle(connection))
                     .font(.system(size: UIScale.pt(12.5), weight: .semibold))
                 if usesDocumentEditor(connection) {
@@ -691,38 +691,58 @@ struct DatabaseWorkbenchView: View {
                     .frame(width: UIScale.pt(120))
                 }
                 Spacer(minLength: 0)
-                if workbenchMode == .browse,
-                    canUpdateData(connection),
-                    data.canMutateSelectedRecord(.update, connection: connection)
-                {
-                    Button("Edit") {
-                        data.beginEditingSelectedRow(connection)
-                    }
-                    .buttonStyle(.edith(.borderless))
-                    .disabled(mutations.hasTrackedMutation)
-                }
-                if workbenchMode == .browse,
-                    canDeleteData(connection),
-                    data.canMutateSelectedRecord(.delete, connection: connection)
-                {
+                if showsSelectedRecordEditAction(connection) {
                     Button {
+                        data.beginEditingSelectedRow(connection)
+                    } label: {
+                        Image(systemName: "pencil")
+                    }
+                    .buttonStyle(
+                        DatabaseInspectorActionButtonStyle(
+                            kind: .neutral, palette: palette)
+                    )
+                    .disabled(mutations.hasTrackedMutation)
+                    .help(editorTitle(connection))
+                    .accessibilityLabel(editorTitle(connection))
+                }
+                if showsSelectedRecordDeleteAction(connection) {
+                    Button(role: .destructive) {
                         requestDelete(connection)
                     } label: {
                         Image(systemName: "trash")
-                            .foregroundStyle(DashSkin.danger)
                     }
-                    .buttonStyle(.edith(.borderless))
+                    .buttonStyle(
+                        DatabaseInspectorActionButtonStyle(
+                            kind: .danger, palette: palette)
+                    )
                     .disabled(mutations.hasTrackedMutation)
+                    .help(deleteTitle(connection))
                     .accessibilityLabel(deleteTitle(connection))
+                    .accessibilityHint("Opens a safety review before deletion")
+                }
+                if showsSelectedRecordEditAction(connection)
+                    || showsSelectedRecordDeleteAction(connection)
+                {
+                    Rectangle()
+                        .fill(palette.line.opacity(0.72))
+                        .frame(width: 1, height: UIScale.pt(16))
+                        .padding(.horizontal, UIScale.pt(2))
                 }
                 Button {
                     if let index = data.selectedRecordIndex { data.selectRecord(at: index) }
                 } label: {
                     Image(systemName: "xmark")
                 }
-                .buttonStyle(.edith(.borderless))
+                .buttonStyle(
+                    DatabaseInspectorActionButtonStyle(
+                        kind: .neutral, palette: palette)
+                )
+                .keyboardShortcut(.cancelAction)
+                .help(closeDetailTitle(connection))
+                .accessibilityLabel(closeDetailTitle(connection))
             }
-            .padding(UIScale.pt(12))
+            .padding(.horizontal, UIScale.pt(12))
+            .frame(height: UIScale.pt(38))
             Divider().opacity(0.35)
             if usesDocumentEditor(connection) {
                 documentMetadata(record)
@@ -1076,10 +1096,32 @@ struct DatabaseWorkbenchView: View {
         return "Row details"
     }
 
+    private func showsSelectedRecordEditAction(
+        _ connection: DatabaseConnectionSummary
+    ) -> Bool {
+        workbenchMode == .browse
+            && canUpdateData(connection)
+            && data.canMutateSelectedRecord(.update, connection: connection)
+    }
+
+    private func showsSelectedRecordDeleteAction(
+        _ connection: DatabaseConnectionSummary
+    ) -> Bool {
+        workbenchMode == .browse
+            && canDeleteData(connection)
+            && data.canMutateSelectedRecord(.delete, connection: connection)
+    }
+
     private func deleteTitle(_ connection: DatabaseConnectionSummary) -> String {
         if connection.product.family == .keyValue { return "Delete key" }
         if usesDocumentEditor(connection) { return "Delete document" }
         return "Delete row"
+    }
+
+    private func closeDetailTitle(_ connection: DatabaseConnectionSummary) -> String {
+        if connection.product.family == .keyValue { return "Close key details" }
+        if usesDocumentEditor(connection) { return "Close document details" }
+        return "Close row details"
     }
 
     private func usesDocumentEditor(_ connection: DatabaseConnectionSummary) -> Bool {
@@ -1225,6 +1267,77 @@ struct DatabaseWorkbenchView: View {
         case .document: "doc.text"
         case .search: "magnifyingglass"
         case .analytical: "chart.xyaxis.line"
+        }
+    }
+}
+
+private struct DatabaseInspectorActionButtonStyle: ButtonStyle {
+    enum Kind {
+        case neutral
+        case danger
+    }
+
+    let kind: Kind
+    let palette: DatabaseThemePalette
+
+    func makeBody(configuration: Configuration) -> some View {
+        DatabaseInspectorActionButtonBody(
+            label: configuration.label,
+            kind: kind,
+            palette: palette,
+            pressed: configuration.isPressed)
+    }
+}
+
+private struct DatabaseInspectorActionButtonBody<Label: View>: View {
+    let label: Label
+    let kind: DatabaseInspectorActionButtonStyle.Kind
+    let palette: DatabaseThemePalette
+    let pressed: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.isFocused) private var focused
+    @State private var hovering = false
+
+    var body: some View {
+        label
+            .font(.system(size: UIScale.pt(12), weight: .medium))
+            .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+            .foregroundStyle(foreground)
+            .background(background, in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
+            .overlay {
+                RoundedRectangle(cornerRadius: UIScale.pt(6))
+                    .strokeBorder(focused ? palette.accent : .clear, lineWidth: 2)
+            }
+            .contentShape(Rectangle())
+            .opacity(enabled ? 1 : 0.38)
+            .brightness(pressed && enabled ? -0.08 : 0)
+            .onHover { hovering = enabled && $0 }
+            .animation(
+                Motion.animation(Motion.feedback, reduceMotion: reduceMotion),
+                value: hovering
+            )
+            .animation(
+                Motion.animation(Motion.feedback, reduceMotion: reduceMotion),
+                value: pressed)
+    }
+
+    private var foreground: Color {
+        switch kind {
+        case .neutral:
+            hovering ? palette.ink : palette.inkSoft
+        case .danger:
+            DashSkin.danger.opacity(hovering ? 1 : 0.82)
+        }
+    }
+
+    private var background: Color {
+        switch kind {
+        case .neutral:
+            palette.line.opacity(pressed ? 0.72 : hovering ? 0.52 : 0)
+        case .danger:
+            DashSkin.danger.opacity(pressed ? 0.22 : hovering ? 0.12 : 0)
         }
     }
 }
