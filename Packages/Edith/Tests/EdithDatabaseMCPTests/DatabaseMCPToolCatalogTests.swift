@@ -11,6 +11,7 @@ import Testing
                     "database_connections", "database_capabilities", "database_browse",
                     "database_query", "database_operations", "database_cancel_operation",
                     "database_test_connection", "database_session", "database_key_mutation",
+                    "database_document_mutation",
                 ])
 
         for tool in DatabaseMCPToolCatalog.tools {
@@ -18,10 +19,16 @@ import Testing
                 tool.annotations.readOnlyHint
                     == ([
                         "database_cancel_operation", "database_session", "database_key_mutation",
+                        "database_document_mutation",
                     ].contains(tool.name)
                         ? false : true))
-            #expect(tool.annotations.destructiveHint == (tool.name == "database_key_mutation"))
-            #expect(tool.annotations.idempotentHint == (tool.name != "database_key_mutation"))
+            #expect(
+                tool.annotations.destructiveHint
+                    == (["database_key_mutation", "database_document_mutation"].contains(tool.name))
+            )
+            #expect(
+                tool.annotations.idempotentHint
+                    == !["database_key_mutation", "database_document_mutation"].contains(tool.name))
             #expect(tool.annotations.openWorldHint == false)
             #expect(tool.inputSchema.objectValue?["type"]?.stringValue == "object")
             #expect(tool.inputSchema.objectValue?["additionalProperties"]?.boolValue == false)
@@ -61,5 +68,6 @@ import Testing
         #expect(DatabaseMCPToolCatalog.testConnection.annotations.readOnlyHint == true)
         #expect(DatabaseMCPToolCatalog.session.annotations.readOnlyHint == false)
         #expect(DatabaseMCPToolCatalog.keyMutation.annotations.destructiveHint == true)
+        #expect(DatabaseMCPToolCatalog.documentMutation.annotations.destructiveHint == true)
     }
 }

@@ -139,6 +139,7 @@ public enum Guide {
         ed database browse <connection-id> --path public --path orders --limit 100 --json
         printf 'select * from public.orders limit 100' | ed database query <connection-id> --json
         ed database mutations row-request <connection-id> --action update --path public --path orders --identity identity.json --values values.json > mutation.json
+        ed database mutations document-request <connection-id> --action update --path app --path people --document-id 507f1f77bcf86cd799439011 --document person.json > mutation.json
         ed database mutations preview --request mutation.json --json > preview.json
         ed database mutations apply --request mutation.json --confirmation preview.json --yes --json > receipt.json
         ed database mutations preview --request mutation.json --json | ed database mutations apply --request mutation.json --confirmation - --yes --json
@@ -172,6 +173,8 @@ public enum Guide {
         Destructive work starts from a bounded `DatabaseDestructiveRequest` JSON file.
         `mutations row-request` builds PostgreSQL insert, update, and delete requests with
         quoted identifiers and bound values from typed identity and value documents.
+        `mutations document-request` builds MongoDB insert, update, and delete requests from
+        bounded JSON documents and an explicitly typed document identifier.
         `mutations preview` returns the exact effect, impact, confirmation text, expiry,
         and a short-lived one-time token. `mutations apply` requires the unchanged request,
         the saved preview document, and `--yes`; it never accepts tokens or confirmation

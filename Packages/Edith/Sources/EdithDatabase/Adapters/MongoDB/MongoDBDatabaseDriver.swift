@@ -47,12 +47,33 @@ struct MongoDBDatabaseCollectionResult: Sendable {
     let hasMore: Bool
 }
 
+enum MongoDBDatabaseMutationOperation: Sendable {
+    case insert(Document)
+    case update(filter: Document, values: Document)
+    case delete(filter: Document)
+}
+
+struct MongoDBDatabaseMutationPlan: Sendable {
+    let database: String
+    let collection: String
+    let operation: MongoDBDatabaseMutationOperation
+    let maximumTimeMilliseconds: Int32
+}
+
+struct MongoDBDatabaseMutationResult: Sendable {
+    let insertedCount: Int
+    let matchedCount: Int
+    let modifiedCount: Int
+    let deletedCount: Int
+}
+
 protocol MongoDBDatabaseClient: Sendable {
     func discoverIdentity() async throws -> DatabaseProductIdentity
     func listCollections(
         _ plan: MongoDBDatabaseCollectionPlan
     ) async throws -> MongoDBDatabaseCollectionResult
     func read(_ plan: MongoDBDatabaseReadPlan) async throws -> MongoDBDatabaseReadResult
+    func mutate(_ plan: MongoDBDatabaseMutationPlan) async throws -> MongoDBDatabaseMutationResult
     func disconnect() async throws
 }
 
@@ -170,10 +191,110 @@ actor MongoKittenDatabaseClient: MongoDBDatabaseClient {
         }
     }
 
+    func mutate(
+        _ plan: MongoDBDatabaseMutationPlan
+    ) async throws -> MongoDBDatabaseMutationResult {
+        guard let transport else {
+            throw MongoDBDatabaseDriverFailure.connection
+        }
+        let connection = try await transport.activeConnection()
+        do {
+            await connection.setDatabaseQueryTimeout(
+                .milliseconds(Int64(plan.maximumTimeMilliseconds)))
+            let namespace = MongoNamespace(to: "$cmd", inDatabase: plan.database)
+            switch plan.operation {
+            case let .insert(document):
+                var command = InsertCommand(
+                    documents: [document],
+                    inCollection: plan.collection)
+                command.ordered = true
+                let reply = try await connection.executeCodable(
+                    command,
+                    decodeAs: InsertReply.self,
+                    namespace: namespace,
+                    sessionId: connection.implicitSessionId,
+                    traceLabel: "DatabaseInsert")
+                try Self.validateWriteReply(
+                    ok: reply.ok,
+                    writeErrors: reply.writeErrors,
+                    writeConcernError: reply.writeConcernError)
+                return MongoDBDatabaseMutationResult(
+                    insertedCount: reply.insertCount,
+                    matchedCount: 0,
+                    modifiedCount: 0,
+                    deletedCount: 0)
+            case let .update(filter, values):
+                var request = UpdateCommand.UpdateRequest(
+                    where: filter,
+                    setting: values,
+                    unsetting: nil)
+                request.multi = false
+                request.upsert = false
+                var command = UpdateCommand(
+                    updates: [request],
+                    inCollection: plan.collection)
+                command.ordered = true
+                let reply = try await connection.executeCodable(
+                    command,
+                    decodeAs: UpdateReply.self,
+                    namespace: namespace,
+                    sessionId: connection.implicitSessionId,
+                    traceLabel: "DatabaseUpdate")
+                try Self.validateWriteReply(
+                    ok: reply.ok,
+                    writeErrors: reply.writeErrors,
+                    writeConcernError: reply.writeConcernError)
+                return MongoDBDatabaseMutationResult(
+                    insertedCount: 0,
+                    matchedCount: reply.updatableCount,
+                    modifiedCount: reply.updatedCount,
+                    deletedCount: 0)
+            case let .delete(filter):
+                var command = DeleteCommand(
+                    where: filter,
+                    limit: .one,
+                    fromCollection: plan.collection)
+                command.ordered = true
+                let reply = try await connection.executeCodable(
+                    command,
+                    decodeAs: DeleteReply.self,
+                    namespace: namespace,
+                    sessionId: connection.implicitSessionId,
+                    traceLabel: "DatabaseDelete")
+                try Self.validateWriteReply(
+                    ok: reply.ok,
+                    writeErrors: reply.writeErrors,
+                    writeConcernError: reply.writeConcernError)
+                return MongoDBDatabaseMutationResult(
+                    insertedCount: 0,
+                    matchedCount: 0,
+                    modifiedCount: 0,
+                    deletedCount: reply.deletes)
+            }
+        } catch let failure as MongoDBDatabaseDriverFailure {
+            throw failure
+        } catch {
+            throw try MongoDBDatabaseDriverErrorClassifier.classify(error)
+        }
+    }
+
     func disconnect() async throws {
         guard let transport else { return }
         try await transport.close()
         self.transport = nil
+    }
+
+    private static func validateWriteReply(
+        ok: Int,
+        writeErrors: [MongoWriteError]?,
+        writeConcernError: WriteConcernError?
+    ) throws {
+        guard ok == 1,
+            writeErrors?.isEmpty != false,
+            writeConcernError == nil
+        else {
+            throw MongoDBDatabaseDriverFailure.server(nil)
+        }
     }
 
     private static func collect(

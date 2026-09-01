@@ -192,15 +192,30 @@ actor MongoDBDatabaseAdapterSession: DatabaseAdapterSession {
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseDestructivePlan {
         try await requireAvailableContext(context)
-        throw MongoDBDatabaseAdapterSupport.readOnlyViolation
+        return try MongoDBDatabaseMutationSupport.normalize(
+            request,
+            connectionID: connection.id)
     }
 
     func executeMutation(
         _ plan: DatabaseDestructivePlan,
         context: DatabaseAdapterOperationContext
     ) async throws(DatabaseAdapterFailure) -> DatabaseAdapterMutationResult {
-        try await requireAvailableContext(context)
-        throw MongoDBDatabaseAdapterSupport.readOnlyViolation
+        let operation = try MongoDBDatabaseMutationSupport.execution(
+            plan,
+            connectionID: connection.id,
+            maximumTimeMilliseconds: try MongoDBDatabaseAdapterSupport.maximumTimeMilliseconds(
+                connection: connection,
+                context: context))
+        let result = try await perform(
+            context: context,
+            fallback: MongoDBDatabaseMutationSupport.mutationFailed
+        ) { client in
+            try await client.mutate(operation)
+        }
+        return try MongoDBDatabaseMutationSupport.result(
+            result,
+            operation: operation.operation)
     }
 
     func openStream(
@@ -977,8 +992,8 @@ enum MongoDBDatabaseAdapterSupport {
             category: .notImplemented,
             message: "This capability is not implemented by the read-only MongoDB adapter.")
         let mutationReason = DatabaseCapabilityUnavailableReason(
-            category: .unsafe,
-            message: "The MongoDB adapter intentionally exposes no mutation path.")
+            category: .notImplemented,
+            message: "This MongoDB mutation capability is not implemented.")
         let capabilities = [
             DatabaseCapabilityStatus(
                 id: .connectionTest,
@@ -1017,8 +1032,17 @@ enum MongoDBDatabaseAdapterSupport {
             DatabaseCapabilityStatus(
                 id: .objectDiscovery,
                 requirement: .sharedRequired,
-                availability: .unavailable,
-                reason: unavailableReason),
+                availability: .available,
+                limits: [
+                    DatabaseCapabilityLimit(
+                        name: "collections",
+                        value: UInt64(maximumDiscoveredCollections),
+                        unit: "objects")
+                ],
+                attributes: [
+                    DatabaseStringAttribute(name: "scope", value: "database"),
+                    DatabaseStringAttribute(name: "object", value: "collection"),
+                ]),
             DatabaseCapabilityStatus(
                 id: .objectDescription,
                 requirement: .familyRequired,
@@ -1032,18 +1056,27 @@ enum MongoDBDatabaseAdapterSupport {
             DatabaseCapabilityStatus(
                 id: .insert,
                 requirement: .sharedRequired,
-                availability: .unavailable,
-                reason: mutationReason),
+                availability: .available,
+                attributes: [
+                    DatabaseStringAttribute(name: "operation", value: "insertOne"),
+                    DatabaseStringAttribute(name: "maximumDocuments", value: "1"),
+                ]),
             DatabaseCapabilityStatus(
                 id: .update,
                 requirement: .sharedRequired,
-                availability: .unavailable,
-                reason: mutationReason),
+                availability: .available,
+                attributes: [
+                    DatabaseStringAttribute(name: "operation", value: "updateOne"),
+                    DatabaseStringAttribute(name: "identity", value: "_id"),
+                ]),
             DatabaseCapabilityStatus(
                 id: .delete,
                 requirement: .sharedRequired,
-                availability: .unavailable,
-                reason: mutationReason),
+                availability: .available,
+                attributes: [
+                    DatabaseStringAttribute(name: "operation", value: "deleteOne"),
+                    DatabaseStringAttribute(name: "identity", value: "_id"),
+                ]),
             DatabaseCapabilityStatus(
                 id: .bulkMutation,
                 requirement: .sharedRequired,
@@ -1084,7 +1117,7 @@ enum MongoDBDatabaseAdapterSupport {
             productIdentity: identity,
             capabilities: capabilities,
             pagingModes: [.keyset],
-            mutationModes: [.unsupported],
+            mutationModes: [.singleRecord],
             transactionModes: [.none],
             cancellationModes: [.cooperative],
             safetyLimitations: [
@@ -1092,7 +1125,9 @@ enum MongoDBDatabaseAdapterSupport {
                 "Pagination requires an ObjectId _id and either no sort or an _id sort.",
                 "Cancelling a request closes the session and requires reconnecting.",
                 "Session, snapshot, and strong consistency are unavailable.",
-                "Mutation, streaming, discovery, explain, and administration are unavailable.",
+                "Bulk mutation, streaming, field description, explain, and administration are unavailable.",
+                "Document updates and deletes require one exact _id identity.",
+                "Document mutations are synchronous and cannot be rolled back.",
                 "Custom trust stores, client certificates, tunnels, and connection options are unavailable.",
             ],
             discoveredAt: Date())

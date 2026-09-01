@@ -1,4 +1,3 @@
-import AppKit
 import EdithDatabase
 import EdithKit
 import SwiftUI
@@ -10,8 +9,10 @@ struct DatabaseObjectNavigatorView: View {
     @State private var expandedGroups = Set<DatabaseObjectIdentifier>()
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         AppTheme.accent.rawValue
+    @Environment(\.colorScheme) private var scheme
 
     private var theme: Color { themeColor(themeName) }
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -19,7 +20,7 @@ struct DatabaseObjectNavigatorView: View {
             Divider().opacity(0.35)
             content
         }
-        .background(Color(nsColor: .underPageBackgroundColor))
+        .background(DashSkin.paper2(dark))
         .onChange(of: explorer.groups) { _, _ in
             expandActiveGroup()
         }
@@ -36,7 +37,7 @@ struct DatabaseObjectNavigatorView: View {
                     .foregroundStyle(.primary)
                 Spacer(minLength: 0)
                 Button {
-                    explorer.load(connection)
+                    explorer.load(connection, force: true)
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -79,7 +80,7 @@ struct DatabaseObjectNavigatorView: View {
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                Button("Try again") { explorer.load(connection) }
+                Button("Try again") { explorer.load(connection, force: true) }
                     .buttonStyle(.edith(.secondary))
             }
             .padding(UIScale.pt(16))

@@ -229,6 +229,40 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(deletion.payload.parameters.map(\.value) == [.string("session:1")])
     }
 
+    @Test("MongoDB document editor creates guarded insert, update, and delete requests")
+    func mongoDBDocumentMutationRequests() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [Self.mongoDBResponse()])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .mongoDB)
+        model.prepare(for: connection)
+        model.targetText = "app.people"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        model.selectRecord(at: 0)
+        #expect(model.documentSource(try #require(model.selectedRecord))?.contains("$oid") == true)
+        model.beginEditingSelectedRow(connection)
+        #expect(model.documentText.contains("Ada"))
+        model.updateDocumentText(
+            """
+            {"active": true, "name": "Ada Lovelace", "tags": ["math", "code"]}
+            """)
+        let update = try #require(model.editorMutationRequest(connection))
+        #expect(update.payload.command == "updateOne")
+        #expect(update.target.record?.kind == .documentID)
+        #expect(update.payload.body?.objectFields?.map(\.name) == ["active", "name", "tags"])
+
+        let deletion = try #require(model.deleteMutationRequest(connection))
+        #expect(deletion.payload.command == "deleteOne")
+
+        model.beginInsert(connection)
+        model.updateDocumentText("{\"name\":\"Grace Hopper\",\"active\":true}")
+        let insert = try #require(model.editorMutationRequest(connection))
+        #expect(insert.payload.command == "insertOne")
+        #expect(insert.target.record == nil)
+        #expect(insert.payload.body?.objectFields?.count == 2)
+    }
+
     private static func connection(
         product: DatabaseProduct
     ) throws -> DatabaseConnectionSummary {
@@ -312,6 +346,48 @@ struct DatabaseDataWorkspaceModelTests {
                 metadata: DatabaseResultMetadata(completeness: page.metadata.completeness)))
     }
 
+    private static func mongoDBResponse() -> DatabaseBrokerCommandResponse {
+        let identifier = DatabaseValue.productSpecific(
+            DatabaseProductValue(
+                product: .mongoDB,
+                typeName: "objectId",
+                textRepresentation: "507f1f77bcf86cd799439011"))
+        let record = DatabaseRecord(
+            identity: DatabaseRecordIdentity(
+                kind: .documentID,
+                components: [DatabaseIdentityComponent(name: "_id", value: identifier)]),
+            fields: [
+                DatabaseObjectField(name: "name", value: .string("Ada")),
+                DatabaseObjectField(name: "active", value: .boolean(true)),
+                DatabaseObjectField(
+                    name: "profile",
+                    value: .object([
+                        DatabaseObjectField(name: "language", value: .string("Swift"))
+                    ])),
+            ])
+        let completeness = DatabaseResultCompleteness(state: .sampled)
+        let page = DatabasePage(
+            records: [record],
+            fields: [
+                DatabaseFieldDescriptor(
+                    path: DatabaseFieldPath("name"), displayName: "name", typeName: "string",
+                    isNullable: true, isSortable: true, isFilterable: true),
+                DatabaseFieldDescriptor(
+                    path: DatabaseFieldPath("active"), displayName: "active", typeName: "boolean",
+                    isNullable: true, isSortable: true, isFilterable: true),
+                DatabaseFieldDescriptor(
+                    path: DatabaseFieldPath("profile"), displayName: "profile", typeName: "object",
+                    isNullable: true, isSortable: false, isFilterable: false),
+            ],
+            metadata: DatabasePageMetadata(
+                completeness: completeness,
+                count: DatabaseCountMetadata(value: nil, accuracy: .estimated)))
+        return .browse(
+            .success(
+                DatabaseBrowseResult(page: page),
+                metadata: DatabaseResultMetadata(completeness: completeness)))
+    }
+
     private static func response(
         records: [DatabaseRecord],
         nextContinuation: DatabaseContinuationToken? = nil
@@ -381,5 +457,12 @@ private extension DatabaseBrokerCommandRequest {
     var browseRequest: DatabaseBrowseRequest? {
         guard case .browse(let request) = self else { return nil }
         return request
+    }
+}
+
+private extension DatabaseValue {
+    var objectFields: [DatabaseObjectField]? {
+        guard case .object(let fields) = self else { return nil }
+        return fields
     }
 }

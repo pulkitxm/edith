@@ -392,6 +392,122 @@ import Testing
         #expect(requests.last?.mutationApplyRequest?.token.rawValue == "preview-token")
     }
 
+    @Test func documentMutationUsesTheSamePreviewBoundContract() async throws {
+        let target = DatabaseTargetIdentifier(
+            connectionID: DatabaseMCPFixtures.connectionID,
+            object: DatabaseObjectIdentifier(kind: .collection, path: ["app", "people"]),
+            record: DatabaseRecordIdentity(
+                kind: .documentID,
+                components: [
+                    DatabaseIdentityComponent(
+                        name: "_id",
+                        value: .productSpecific(
+                            DatabaseProductValue(
+                                product: .mongoDB,
+                                typeName: "objectId",
+                                textRepresentation: "507f1f77bcf86cd799439011")))
+                ]))
+        let mutation = try DatabaseDocumentMutationRequests.mongoDBUpdate(
+            target: target,
+            values: [
+                DatabaseObjectField(name: "active", value: .boolean(true)),
+                DatabaseObjectField(name: "name", value: .string("Ada")),
+                DatabaseObjectField(
+                    name: "tags",
+                    value: .array([.string("math"), .string("code")])),
+            ])
+        let effect = DatabaseDestructiveEffect(
+            action: .update,
+            connection: try DatabaseMCPFixtures.connection().identity,
+            context: DatabaseMutationContext(kind: .database, value: "app"),
+            target: target,
+            selectedRecords: [],
+            predicate: nil,
+            scope: .singleRecord,
+            impact: DatabaseMutationImpact(
+                count: DatabaseCountMetadata(value: 1, accuracy: .exact),
+                description: "Update one identified document"),
+            transactionBehavior: .nontransactional,
+            rollbackAvailability: .unavailable,
+            executionMode: .synchronous,
+            executionDigest: "document-execution-digest",
+            displayDigest: "document-display-digest")
+        let preview = DatabaseDestructivePreview(
+            effect: effect,
+            request: DatabaseMutationPreview(
+                product: .mongoDB,
+                kind: .document,
+                command: "updateOne",
+                parameters: [],
+                body: mutation.payload.body),
+            warnings: [],
+            requiredConfirmation: DatabaseRequiredConfirmation(
+                strength: .target,
+                text: "Primary orders / app / people"),
+            issuedAt: DatabaseMCPFixtures.now,
+            expiresAt: DatabaseMCPFixtures.now.addingTimeInterval(60),
+            token: DatabaseConfirmationToken(rawValue: "document-preview-token"))
+        let sender = DatabaseMCPScriptedSender([
+            .success(
+                .mutationPreview(
+                    .success(
+                        DatabaseMutationPreviewResult(preview: preview),
+                        metadata: DatabaseMCPFixtures.completeMetadata))),
+            .success(
+                .mutationApply(
+                    .success(
+                        DatabaseMutationApplyResult(
+                            disposition: .completed,
+                            effect: .applied,
+                            affectedRecords: DatabaseCountMetadata(value: 1, accuracy: .exact)),
+                        metadata: DatabaseMCPFixtures.completeMetadata))),
+        ])
+        let handler = DatabaseMCPToolHandler(
+            sender: sender,
+            makeOperationID: { DatabaseMCPFixtures.operationID })
+        let base: [String: Value] = [
+            "connection_id": .string(DatabaseMCPFixtures.connectionID.rawValue.uuidString),
+            "action": "update",
+            "database": "app",
+            "collection": "people",
+            "document_id": "507f1f77bcf86cd799439011",
+            "document": .object([
+                "active": true,
+                "name": "Ada",
+                "tags": .array(["math", "code"]),
+            ]),
+        ]
+        var previewArguments = base
+        previewArguments["mode"] = "preview"
+        let previewResult = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_document_mutation",
+                arguments: previewArguments))
+        #expect(previewResult.isError == false)
+        #expect(
+            previewResult.structuredContent?.objectValue?["data"]?.objectValue?[
+                "confirmation_token"
+            ]?.stringValue == "document-preview-token")
+
+        var applyArguments = base
+        applyArguments["mode"] = "apply"
+        applyArguments["confirmation_token"] = "document-preview-token"
+        applyArguments["confirmation_text"] = "Primary orders / app / people"
+        let applyResult = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_document_mutation",
+                arguments: applyArguments))
+        #expect(applyResult.isError == false)
+        #expect(
+            applyResult.structuredContent?.objectValue?["data"]?.objectValue?["effect"]?
+                .stringValue == "applied")
+
+        let requests = await sender.recordedRequests()
+        #expect(requests.first?.mutationPreviewRequest?.mutation == mutation)
+        #expect(requests.last?.mutationApplyRequest?.mutation == mutation)
+        #expect(requests.last?.mutationApplyRequest?.token.rawValue == "document-preview-token")
+    }
+
     @Test func operationListPreservesFiltersProgressAndTarget() async throws {
         let operation = try DatabaseMCPFixtures.operation()
         let sender = DatabaseMCPScriptedSender([
@@ -660,6 +776,29 @@ import Testing
         #expect(Self.category(invalidID) == "invalidRequest")
         #expect(unknownArgument.isError == true)
         #expect(Self.category(unknownArgument) == "invalidRequest")
+        #expect(await sender.recordedRequests().isEmpty)
+    }
+
+    @Test func rejectsOversizedDocumentMutationBeforeCallingTheBroker() async {
+        let sender = DatabaseMCPScriptedSender([])
+        let handler = DatabaseMCPToolHandler(sender: sender)
+        let result = await handler.callTool(
+            CallTool.Parameters(
+                name: "database_document_mutation",
+                arguments: [
+                    "mode": "preview",
+                    "connection_id": .string(
+                        DatabaseMCPFixtures.connectionID.rawValue.uuidString),
+                    "action": "insert",
+                    "database": "app",
+                    "collection": "people",
+                    "document": .object([
+                        "payload": .string(String(repeating: "x", count: 1_048_576))
+                    ]),
+                ]))
+
+        #expect(result.isError == true)
+        #expect(Self.category(result) == "invalidRequest")
         #expect(await sender.recordedRequests().isEmpty)
     }
 

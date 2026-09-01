@@ -3,6 +3,18 @@ import EdithDatabase
 import EdithKit
 import SwiftUI
 
+private enum DatabaseDocumentPresentation: CaseIterable {
+    case tree
+    case source
+
+    var title: String {
+        switch self {
+        case .tree: "Tree"
+        case .source: "Source"
+        }
+    }
+}
+
 struct DatabaseWorkbenchView: View {
     let connections: DatabaseConnectionWorkspaceModel
     let explorer: DatabaseObjectExplorerModel
@@ -13,6 +25,7 @@ struct DatabaseWorkbenchView: View {
         AppTheme.accent.rawValue
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
+    @State private var documentPresentation = DatabaseDocumentPresentation.tree
 
     private var theme: Color { themeColor(themeName) }
     private var dark: Bool { scheme == .dark }
@@ -139,6 +152,7 @@ struct DatabaseWorkbenchView: View {
             if data.supportsDataMutations(connection),
                 explorer.selectedObject?.kind == .table
                     || explorer.selectedObject?.kind == .keyspace
+                    || explorer.selectedObject?.kind == .collection
             {
                 Button {
                     data.beginInsert(connection)
@@ -150,7 +164,10 @@ struct DatabaseWorkbenchView: View {
                     }
                 }
                 .buttonStyle(.edith(.primary, tint: theme))
-                .disabled(data.fields.isEmpty || mutations.hasTrackedMutation)
+                .disabled(
+                    (data.fields.isEmpty && connection.product != .mongoDB)
+                        || mutations.hasTrackedMutation
+                )
                 .help(newItemHelp(connection))
             }
             if connection.environmentKind == .production {
@@ -251,7 +268,7 @@ struct DatabaseWorkbenchView: View {
             .disabled(explorer.groups.allSatisfy { $0.objects.isEmpty })
             Spacer(minLength: 0)
             Button {
-                explorer.load(connection)
+                explorer.load(connection, force: true)
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
@@ -260,7 +277,7 @@ struct DatabaseWorkbenchView: View {
         }
         .padding(.horizontal, UIScale.pt(10))
         .frame(height: UIScale.pt(42))
-        .background(Color(nsColor: .underPageBackgroundColor))
+        .background(DashSkin.paper2(dark))
     }
 
     private func filterControls(_ connection: DatabaseConnectionSummary) -> some View {
@@ -406,7 +423,7 @@ struct DatabaseWorkbenchView: View {
             }
             .padding(.horizontal, UIScale.pt(12))
             .frame(height: UIScale.pt(38))
-            .background(Color(nsColor: .underPageBackgroundColor))
+            .background(DashSkin.paper2(dark))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -428,6 +445,16 @@ struct DatabaseWorkbenchView: View {
             HStack {
                 Text(detailTitle(connection))
                     .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                if connection.product == .mongoDB {
+                    Picker("Document view", selection: $documentPresentation) {
+                        ForEach(DatabaseDocumentPresentation.allCases, id: \.self) { view in
+                            Text(view.title).tag(view)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: UIScale.pt(120))
+                }
                 Spacer(minLength: 0)
                 if data.supportsDataMutations(connection), record.identity != nil {
                     Button("Edit") {
@@ -455,23 +482,38 @@ struct DatabaseWorkbenchView: View {
             .padding(UIScale.pt(12))
             Divider().opacity(0.35)
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                    ForEach(Array(record.fields.enumerated()), id: \.offset) { _, field in
-                        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                            Text(field.name)
-                                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                                .foregroundStyle(.secondary)
-                            Text(data.text(for: field.value))
-                                .font(.system(size: UIScale.pt(11), design: .monospaced))
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                if connection.product == .mongoDB, documentPresentation == .source {
+                    if let source = data.documentSource(record) {
+                        Text(source)
+                            .font(.system(size: UIScale.pt(11), design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(UIScale.pt(12))
+                    } else {
+                        Text("Source view is unavailable for one or more unsupported BSON values.")
+                            .font(.system(size: UIScale.pt(11)))
+                            .foregroundStyle(.secondary)
+                            .padding(UIScale.pt(12))
+                    }
+                } else {
+                    LazyVStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                        ForEach(Array(record.fields.enumerated()), id: \.offset) { _, field in
+                            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                                Text(field.name)
+                                    .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                Text(data.text(for: field.value))
+                                    .font(.system(size: UIScale.pt(11), design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                         }
                     }
+                    .padding(UIScale.pt(12))
                 }
-                .padding(UIScale.pt(12))
             }
         }
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(DashSkin.paper2(dark))
     }
 
     private func editor(_ connection: DatabaseConnectionSummary) -> some View {
@@ -488,22 +530,45 @@ struct DatabaseWorkbenchView: View {
             }
             .padding(UIScale.pt(12))
             Divider().opacity(0.35)
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: UIScale.pt(11)) {
+            if connection.product == .mongoDB {
+                VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                     if let error = data.editorError {
                         Label(error, systemImage: "exclamationmark.circle.fill")
                             .font(.system(size: UIScale.pt(11)))
                             .foregroundStyle(.red)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    ForEach(data.editorFields) { field in
-                        editorField(field, connection: connection)
-                    }
+                    TextEditor(text: documentTextBinding)
+                        .font(.system(size: UIScale.pt(11), design: .monospaced))
+                        .scrollContentBackground(.hidden)
+                        .padding(UIScale.pt(6))
+                        .background(DashSkin.paper(dark))
+                        .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(7)))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: UIScale.pt(7))
+                                .strokeBorder(DashSkin.line(dark))
+                        }
+                        .accessibilityLabel("MongoDB document JSON")
                 }
                 .padding(UIScale.pt(12))
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: UIScale.pt(11)) {
+                        if let error = data.editorError {
+                            Label(error, systemImage: "exclamationmark.circle.fill")
+                                .font(.system(size: UIScale.pt(11)))
+                                .foregroundStyle(.red)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        ForEach(data.editorFields) { field in
+                            editorField(field, connection: connection)
+                        }
+                    }
+                    .padding(UIScale.pt(12))
+                }
             }
         }
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(DashSkin.paper2(dark))
     }
 
     private func editorField(
@@ -610,6 +675,10 @@ struct DatabaseWorkbenchView: View {
             set: { data.updateEditorField(id, text: $0) })
     }
 
+    private var documentTextBinding: Binding<String> {
+        Binding(get: { data.documentText }, set: { data.updateDocumentText($0) })
+    }
+
     private func editorIncludedBinding(_ id: String) -> Binding<Bool> {
         Binding(
             get: { data.editorFields.first(where: { $0.id == id })?.isIncluded ?? false },
@@ -619,25 +688,47 @@ struct DatabaseWorkbenchView: View {
     private func editorTitle(_ connection: DatabaseConnectionSummary) -> String {
         switch data.editorMode {
         case .insert: newItemTitle(connection)
-        case .update: connection.product.family == .keyValue ? "Edit key" : "Edit row"
-        case nil: connection.product.family == .keyValue ? "Key" : "Row"
+        case .update:
+            if connection.product.family == .keyValue {
+                "Edit key"
+            } else if connection.product.family == .document {
+                "Edit document"
+            } else {
+                "Edit row"
+            }
+        case nil:
+            if connection.product.family == .keyValue {
+                "Key"
+            } else if connection.product.family == .document {
+                "Document"
+            } else {
+                "Row"
+            }
         }
     }
 
     private func newItemTitle(_ connection: DatabaseConnectionSummary) -> String {
-        connection.product.family == .keyValue ? "New key" : "New row"
+        if connection.product.family == .keyValue { return "New key" }
+        if connection.product.family == .document { return "New document" }
+        return "New row"
     }
 
     private func newItemHelp(_ connection: DatabaseConnectionSummary) -> String {
-        connection.product.family == .keyValue ? "Create a string key" : "Add a row"
+        if connection.product.family == .keyValue { return "Create a string key" }
+        if connection.product.family == .document { return "Add a JSON document" }
+        return "Add a row"
     }
 
     private func detailTitle(_ connection: DatabaseConnectionSummary) -> String {
-        connection.product.family == .keyValue ? "Key details" : "Row details"
+        if connection.product.family == .keyValue { return "Key details" }
+        if connection.product.family == .document { return "Document details" }
+        return "Row details"
     }
 
     private func deleteTitle(_ connection: DatabaseConnectionSummary) -> String {
-        connection.product.family == .keyValue ? "Delete key" : "Delete row"
+        if connection.product.family == .keyValue { return "Delete key" }
+        if connection.product.family == .document { return "Delete document" }
+        return "Delete row"
     }
 
     private func requestEditorMutation(_ connection: DatabaseConnectionSummary) {

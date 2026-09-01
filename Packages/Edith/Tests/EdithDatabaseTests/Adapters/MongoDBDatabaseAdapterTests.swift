@@ -40,6 +40,12 @@ private enum MongoDBDatabaseAdapterFixtures {
             verification: .none),
         tunnel: DatabaseTunnelDefinition? = nil,
         options: [DatabaseNonSecretOption] = [],
+        readOnlyPolicy: DatabaseReadOnlyPolicy = .required,
+        productionPolicy: DatabaseProductionPolicy = .prohibitMutations,
+        environment: DatabaseEnvironmentMetadata = DatabaseEnvironmentMetadata(
+            kind: .testing,
+            label: "Testing",
+            protection: .readOnly),
         connectionTimeoutMilliseconds: UInt64 = 2_000
     ) throws -> DatabaseConnectionDefinition {
         let effectiveLocation: DatabaseConnectionLocation
@@ -69,12 +75,9 @@ private enum MongoDBDatabaseAdapterFixtures {
                     milliseconds: connectionTimeoutMilliseconds),
                 operationTimeout: try DatabaseTimeout(milliseconds: 2_000),
                 poolSize: try DatabasePoolSize(2)),
-            readOnlyPolicy: .required,
-            productionPolicy: .prohibitMutations,
-            environment: DatabaseEnvironmentMetadata(
-                kind: .testing,
-                label: "Testing",
-                protection: .readOnly),
+            readOnlyPolicy: readOnlyPolicy,
+            productionPolicy: productionPolicy,
+            environment: environment,
             options: options,
             createdAt: Date(timeIntervalSince1970: 1_800_000_000),
             updatedAt: Date(timeIntervalSince1970: 1_800_000_000))
@@ -110,6 +113,26 @@ private enum MongoDBDatabaseAdapterFixtures {
             object: DatabaseObjectIdentifier(
                 kind: kind,
                 path: [database, collection]))
+    }
+
+    static func identifiedTarget(
+        connectionID: DatabaseConnectionID,
+        identifier: MongoAdapterValue = .productSpecific(
+            DatabaseProductValue(
+                product: .mongoDB,
+                typeName: "objectId",
+                textRepresentation: objectIDs[0].hexString))
+    ) -> DatabaseTargetIdentifier {
+        DatabaseTargetIdentifier(
+            connectionID: connectionID,
+            object: DatabaseObjectIdentifier(
+                kind: .collection,
+                path: ["edith_scale", "events"]),
+            record: DatabaseRecordIdentity(
+                kind: .documentID,
+                components: [
+                    DatabaseIdentityComponent(name: "_id", value: identifier)
+                ]))
     }
 
     static func request(
@@ -215,9 +238,11 @@ private actor MongoDBDatabaseAdapterTestClient: MongoDBDatabaseClient {
     private let failsDisconnect: Bool
     private let cancellationAfterRead: DatabaseAdapterCancellationSignal?
     private let collectionNames: [String]
+    private var mutationResults: [MongoDBDatabaseMutationResult]
     private var disconnected = false
     private var readPlans: [MongoDBDatabaseReadPlan] = []
     private var collectionPlans: [MongoDBDatabaseCollectionPlan] = []
+    private var mutationPlans: [MongoDBDatabaseMutationPlan] = []
     private var disconnects = 0
 
     init(
@@ -226,7 +251,8 @@ private actor MongoDBDatabaseAdapterTestClient: MongoDBDatabaseClient {
         suspendsReads: Bool = false,
         failsDisconnect: Bool = false,
         cancellationAfterRead: DatabaseAdapterCancellationSignal? = nil,
-        collectionNames: [String] = []
+        collectionNames: [String] = [],
+        mutationResults: [MongoDBDatabaseMutationResult] = []
     ) {
         self.identity = identity
         self.outcomes = outcomes
@@ -234,6 +260,7 @@ private actor MongoDBDatabaseAdapterTestClient: MongoDBDatabaseClient {
         self.failsDisconnect = failsDisconnect
         self.cancellationAfterRead = cancellationAfterRead
         self.collectionNames = collectionNames
+        self.mutationResults = mutationResults
     }
 
     func discoverIdentity() async throws -> DatabaseProductIdentity {
@@ -275,6 +302,20 @@ private actor MongoDBDatabaseAdapterTestClient: MongoDBDatabaseClient {
             hasMore: collectionNames.count > names.count)
     }
 
+    func mutate(
+        _ plan: MongoDBDatabaseMutationPlan
+    ) async throws -> MongoDBDatabaseMutationResult {
+        mutationPlans.append(plan)
+        guard !mutationResults.isEmpty else {
+            return MongoDBDatabaseMutationResult(
+                insertedCount: 0,
+                matchedCount: 0,
+                modifiedCount: 0,
+                deletedCount: 0)
+        }
+        return mutationResults.removeFirst()
+    }
+
     func disconnect() async throws {
         disconnected = true
         disconnects += 1
@@ -289,6 +330,10 @@ private actor MongoDBDatabaseAdapterTestClient: MongoDBDatabaseClient {
 
     func discoveredCollectionPlans() -> [MongoDBDatabaseCollectionPlan] {
         collectionPlans
+    }
+
+    func mutations() -> [MongoDBDatabaseMutationPlan] {
+        mutationPlans
     }
 
     func disconnectCount() -> Int {
@@ -523,7 +568,7 @@ private actor MongoDBDatabaseConversionCancellationProbe {
     }
 }
 
-@Test func mongoReadingCapabilitiesAreHonestAndReadOnly() async throws {
+@Test func mongoReadingCapabilitiesExposeGuardedSingleDocumentMutations() async throws {
     let client = MongoDBDatabaseAdapterTestClient()
     let (session, _) = try await MongoDBDatabaseAdapterFixtures.connect(client: client)
     let report = try await session.discoverCapabilities(
@@ -532,12 +577,17 @@ private actor MongoDBDatabaseConversionCancellationProbe {
     #expect(report.supports(.browse))
     #expect(report.supports(.query))
     #expect(report.supports(.queryCancellation))
-    #expect(!report.supports(.objectDiscovery))
-    #expect(!report.supports(.insert))
-    #expect(!report.supports(.update))
-    #expect(!report.supports(.delete))
+    #expect(report.supports(.objectDiscovery))
+    #expect(
+        report.status(for: .objectDiscovery)?.limits.contains(where: {
+            $0.name == "collections" && $0.value == 10_000
+        }) == true)
+    #expect(report.supports(.insert))
+    #expect(report.supports(.update))
+    #expect(report.supports(.delete))
+    #expect(!report.supports(.bulkMutation))
     #expect(report.pagingModes == [.keyset])
-    #expect(report.mutationModes == [.unsupported])
+    #expect(report.mutationModes == [.singleRecord])
     #expect(report.cancellationModes == [.cooperative])
     #expect(report.safetyLimitations.contains(where: { $0.contains("requires reconnecting") }))
     await session.disconnect()
@@ -1040,7 +1090,130 @@ private actor MongoDBDatabaseConversionCancellationProbe {
     await secondSession.disconnect()
 }
 
-@Test func mongoReadingMutationRequestsNeverReachTheDriver() async throws {
+@Test func mongoDocumentMutationRequestsAreCanonicalAndIdentityBound() throws {
+    let connectionID = DatabaseConnectionID()
+    let collection = MongoDBDatabaseAdapterFixtures.target(connectionID: connectionID)
+    let identified = MongoDBDatabaseAdapterFixtures.identifiedTarget(
+        connectionID: connectionID)
+    let insert = try DatabaseDocumentMutationRequests.mongoDBInsert(
+        target: collection,
+        document: .object([
+            DatabaseObjectField(name: "name", value: .string("created")),
+            DatabaseObjectField(name: "sequence", value: .signedInteger(8)),
+        ]))
+    #expect(insert.payload.command == "insertOne")
+    #expect(insert.target.record == nil)
+    let update = try DatabaseDocumentMutationRequests.mongoDBUpdate(
+        target: identified,
+        values: [DatabaseObjectField(name: "name", value: .string("updated"))])
+    #expect(update.payload.command == "updateOne")
+    #expect(update.target.record?.kind == .documentID)
+    let delete = try DatabaseDocumentMutationRequests.mongoDBDelete(target: identified)
+    #expect(delete.payload.command == "deleteOne")
+    #expect(delete.payload.body == .null)
+    #expect(throws: DatabaseDocumentMutationRequestError.self) {
+        try DatabaseDocumentMutationRequests.mongoDBUpdate(
+            target: identified,
+            values: [DatabaseObjectField(name: "_id", value: .string("replacement"))])
+    }
+    #expect(throws: DatabaseDocumentMutationRequestError.self) {
+        try DatabaseDocumentMutationRequests.mongoDBInsert(
+            target: collection,
+            document: .object([
+                DatabaseObjectField(name: "$where", value: .string("unsafe"))
+            ]))
+    }
+}
+
+@Test func mongoDocumentMutationsNormalizeAndExecuteOneDocument() async throws {
+    let client = MongoDBDatabaseAdapterTestClient(
+        mutationResults: [
+            MongoDBDatabaseMutationResult(
+                insertedCount: 1,
+                matchedCount: 0,
+                modifiedCount: 0,
+                deletedCount: 0),
+            MongoDBDatabaseMutationResult(
+                insertedCount: 0,
+                matchedCount: 1,
+                modifiedCount: 1,
+                deletedCount: 0),
+            MongoDBDatabaseMutationResult(
+                insertedCount: 0,
+                matchedCount: 0,
+                modifiedCount: 0,
+                deletedCount: 1),
+        ])
+    let (session, definition) = try await MongoDBDatabaseAdapterFixtures.connect(client: client)
+    let collection = MongoDBDatabaseAdapterFixtures.target(connectionID: definition.id)
+    let identified = MongoDBDatabaseAdapterFixtures.identifiedTarget(
+        connectionID: definition.id)
+    let requests = [
+        try DatabaseDocumentMutationRequests.mongoDBInsert(
+            target: collection,
+            document: .object([
+                DatabaseObjectField(name: "name", value: .string("created"))
+            ])),
+        try DatabaseDocumentMutationRequests.mongoDBUpdate(
+            target: identified,
+            values: [DatabaseObjectField(name: "name", value: .string("updated"))]),
+        try DatabaseDocumentMutationRequests.mongoDBDelete(target: identified),
+    ]
+    let expectedActions: [DatabaseDestructiveAction] = [.insert, .update, .delete]
+    for (request, action) in zip(requests, expectedActions) {
+        let plan = try await session.normalizeMutation(
+            request,
+            context: MongoDBDatabaseAdapterFixtures.context())
+        #expect(plan.action == action)
+        #expect(plan.impact.count == DatabaseCountMetadata(value: 1, accuracy: .exact))
+        #expect(plan.transactionBehavior == .nontransactional)
+        #expect(plan.rollbackAvailability == .unavailable)
+        let result = try await session.executeMutation(
+            plan,
+            context: MongoDBDatabaseAdapterFixtures.context())
+        #expect(result.disposition == .completed)
+        #expect(result.effect == .applied)
+        #expect(result.affectedRecords.value == 1)
+    }
+    let plans = await client.mutations()
+    #expect(plans.count == 3)
+    #expect(plans.allSatisfy { $0.database == "edith_scale" })
+    #expect(plans.allSatisfy { $0.collection == "events" })
+    guard case let .update(filter, values) = plans[1].operation else {
+        Issue.record("Expected a MongoDB update plan")
+        return
+    }
+    #expect(filter["_id"] as? ObjectId == MongoDBDatabaseAdapterFixtures.objectIDs[0])
+    #expect(values["name"] as? String == "updated")
+    await session.disconnect()
+}
+
+@Test func mongoDocumentMutationMissingIdentityReturnsExactConflict() async throws {
+    let client = MongoDBDatabaseAdapterTestClient(
+        mutationResults: [
+            MongoDBDatabaseMutationResult(
+                insertedCount: 0,
+                matchedCount: 0,
+                modifiedCount: 0,
+                deletedCount: 0)
+        ])
+    let (session, definition) = try await MongoDBDatabaseAdapterFixtures.connect(client: client)
+    let request = try DatabaseDocumentMutationRequests.mongoDBDelete(
+        target: MongoDBDatabaseAdapterFixtures.identifiedTarget(
+            connectionID: definition.id))
+    let plan = try await session.normalizeMutation(
+        request,
+        context: MongoDBDatabaseAdapterFixtures.context())
+    let result = try await session.executeMutation(
+        plan,
+        context: MongoDBDatabaseAdapterFixtures.context())
+    #expect(result.effect == .notApplied)
+    #expect(result.affectedRecords == DatabaseCountMetadata(value: 0, accuracy: .exact))
+    #expect(result.error?.category == .conflict)
+    await session.disconnect()
+}
+
+@Test func mongoDocumentMutationRejectsNonCanonicalRequestsBeforeTheDriver() async throws {
     let client = MongoDBDatabaseAdapterTestClient()
     let (session, definition) = try await MongoDBDatabaseAdapterFixtures.connect(client: client)
     let request = DatabaseDestructiveRequest(
@@ -1054,11 +1227,11 @@ private actor MongoDBDatabaseConversionCancellationProbe {
         _ = try await session.normalizeMutation(
             request,
             context: MongoDBDatabaseAdapterFixtures.context())
-        Issue.record("Expected read-only rejection")
+        Issue.record("Expected invalid mutation rejection")
     } catch let failure {
-        #expect(MongoDBDatabaseAdapterFixtures.reportedCategory(failure) == .readOnlyViolation)
+        #expect(MongoDBDatabaseAdapterFixtures.reportedCategory(failure) == .invalidRequest)
     }
-    #expect(await client.plans().isEmpty)
+    #expect(await client.mutations().isEmpty)
     await session.disconnect()
 }
 
@@ -1149,5 +1322,133 @@ func mongoReadingLiveAuthenticatedBrowseAndQuery() async throws {
     print(
         "mongodb live verified version=\(version) "
             + "browse=\(page.records.count) query=\(queryPage.records.count)")
+    await session.disconnect()
+}
+
+@Test(.enabled(if: MongoDBDatabaseLiveEnvironment.isEnabled))
+func mongoDocumentMutationsLiveAuthenticatedRoundTrip() async throws {
+    let environment = MongoDBDatabaseLiveEnvironment.values
+    let host = try #require(environment["EDITH_DATABASE_MONGODB_HOST"])
+    let portText = try #require(environment["EDITH_DATABASE_MONGODB_PORT"])
+    let port = try #require(Int(portText))
+    let database = try #require(environment["EDITH_DATABASE_MONGODB_DATABASE"])
+    let authSource = try #require(environment["EDITH_DATABASE_MONGODB_AUTH_SOURCE"])
+    let username = try #require(environment["EDITH_DATABASE_MONGODB_USERNAME"])
+    let password = try #require(environment["EDITH_DATABASE_MONGODB_PASSWORD"])
+    let passwordReference = DatabaseSecretReference(identifier: UUID(), purpose: .password)
+    let definition = try MongoDBDatabaseAdapterFixtures.definition(
+        location: .network([
+            DatabaseNetworkEndpoint(
+                host: host,
+                port: try DatabasePort(port),
+                role: .seed)
+        ]),
+        username: username,
+        database: database,
+        authentication: DatabaseAuthentication(
+            kind: .scram,
+            secretReferences: [passwordReference],
+            source: authSource),
+        readOnlyPolicy: .disabled,
+        productionPolicy: .standard,
+        environment: DatabaseEnvironmentMetadata(
+            kind: .testing,
+            label: "TUF MongoDB",
+            protection: .standard))
+    let session = try await MongoDBDatabaseAdapter().connect(
+        try MongoDBDatabaseAdapterFixtures.resolved(
+            definition,
+            secrets: [passwordReference: Data(password.utf8)]),
+        context: MongoDBDatabaseAdapterFixtures.context(
+            deadline: Date().addingTimeInterval(15)))
+    let identifier = "edith-mutation-\(UUID().uuidString.lowercased())"
+    let collection = MongoDBDatabaseAdapterFixtures.target(
+        connectionID: definition.id,
+        database: database,
+        collection: "records")
+    let identified = DatabaseTargetIdentifier(
+        connectionID: definition.id,
+        object: collection.object,
+        record: DatabaseRecordIdentity(
+            kind: .documentID,
+            components: [
+                DatabaseIdentityComponent(name: "_id", value: .string(identifier))
+            ]))
+    let operationContext = {
+        MongoDBDatabaseAdapterFixtures.context(deadline: Date().addingTimeInterval(15))
+    }
+    do {
+        let insert = try DatabaseDocumentMutationRequests.mongoDBInsert(
+            target: collection,
+            document: .object([
+                DatabaseObjectField(name: "_id", value: .string(identifier)),
+                DatabaseObjectField(name: "name", value: .string("before")),
+                DatabaseObjectField(name: "sequence", value: .signedInteger(1)),
+            ]))
+        let insertPlan = try await session.normalizeMutation(
+            insert,
+            context: operationContext())
+        let insertResult = try await session.executeMutation(
+            insertPlan,
+            context: operationContext())
+        #expect(insertResult.effect == .applied)
+        #expect(insertResult.affectedRecords.value == 1)
+
+        let update = try DatabaseDocumentMutationRequests.mongoDBUpdate(
+            target: identified,
+            values: [
+                DatabaseObjectField(name: "name", value: .string("after")),
+                DatabaseObjectField(name: "sequence", value: .signedInteger(2)),
+            ])
+        let updatePlan = try await session.normalizeMutation(
+            update,
+            context: operationContext())
+        let updateResult = try await session.executeMutation(
+            updatePlan,
+            context: operationContext())
+        #expect(updateResult.effect == .applied)
+        #expect(updateResult.affectedRecords.value == 1)
+
+        let query = try DatabaseAdapterQueryRequest(
+            request: DatabaseQueryRequest(
+                target: collection,
+                language: .mongoQuery,
+                command: "find",
+                body: .object([
+                    DatabaseObjectField(name: "_id", value: .string(identifier))
+                ]),
+                page: DatabasePageRequest(pageSize: try DatabasePageSize(1))),
+            continuation: nil)
+        let updatedPage = try await session.query(query, context: operationContext())
+        #expect(updatedPage.records.count == 1)
+        #expect(
+            updatedPage.records[0].fields.first(where: { $0.name == "name" })?.value
+                == .string("after"))
+
+        let delete = try DatabaseDocumentMutationRequests.mongoDBDelete(target: identified)
+        let deletePlan = try await session.normalizeMutation(
+            delete,
+            context: operationContext())
+        let deleteResult = try await session.executeMutation(
+            deletePlan,
+            context: operationContext())
+        #expect(deleteResult.effect == .applied)
+        #expect(deleteResult.affectedRecords.value == 1)
+        let deletedPage = try await session.query(query, context: operationContext())
+        #expect(deletedPage.records.isEmpty)
+        print("mongodb mutation live verified insert=1 update=1 delete=1")
+    } catch {
+        if let cleanup = try? DatabaseDocumentMutationRequests.mongoDBDelete(target: identified),
+            let cleanupPlan = try? await session.normalizeMutation(
+                cleanup,
+                context: operationContext())
+        {
+            _ = try? await session.executeMutation(
+                cleanupPlan,
+                context: operationContext())
+        }
+        await session.disconnect()
+        throw error
+    }
     await session.disconnect()
 }
