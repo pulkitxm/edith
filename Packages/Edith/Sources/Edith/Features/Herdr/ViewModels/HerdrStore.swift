@@ -148,7 +148,7 @@ final class HerdrStore {
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
     private let agentCloser: HerdrAgentCloser
-    private let expectedHostCount: Int
+    private var expectedHostCount: Int
     private var restoringDefaults = true
     private var collapseCountsReady = false
     private var agentsCollapsedCount: Int?
@@ -160,16 +160,16 @@ final class HerdrStore {
     private var pendingHosts: [HerdrHostSnapshot]?
     private var detachedTabs: [String: HerdrOpenTab] = [:]
     private var watchGeneration = 0
+    @ObservationIgnored nonisolated(unsafe) private var machinesObserver: NSObjectProtocol?
 
     init(
         defaults: UserDefaults = SharedDefaults.store,
         liveWatcher: @escaping HerdrLiveWatcher = { yield in await HerdrLive.watch(yield) },
-        expectedHostCount: Int = MachineRegistry.machines().count + 1,
         agentCloser: @escaping HerdrAgentCloser = { try await HerdrAgentCloseExecution.close($0) }
     ) {
         self.defaults = defaults
         self.liveWatcher = liveWatcher
-        self.expectedHostCount = expectedHostCount
+        expectedHostCount = MachineRegistry.machines().count + 1
         self.agentCloser = agentCloser
         railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
         railWidth = HerdrPaneSizing.rail(
@@ -194,6 +194,15 @@ final class HerdrStore {
         collapsedSpaceCounts = Self.spaceCounts(
             defaults.dictionary(forKey: AppStorageKeys.Herdr.collapsedSpaceCounts) ?? [:])
         restoringDefaults = false
+        machinesObserver = IPC.observe(IPC.Name.machinesChanged) { [weak self] in
+            Task { @MainActor in
+                await self?.machinesDidChange()
+            }
+        }
+    }
+
+    deinit {
+        if let machinesObserver { IPC.stopObserving(machinesObserver) }
     }
 
     var agents: [HerdrAgent] { hosts.flatMap(\.agents) }
@@ -332,6 +341,7 @@ final class HerdrStore {
 
     func watch() async {
         guard watchTask == nil else { return }
+        expectedHostCount = MachineRegistry.machines().count + 1
         if hosts.isEmpty { settling = true }
         watchGeneration += 1
         let generation = watchGeneration
@@ -358,6 +368,12 @@ final class HerdrStore {
         settleTask = nil
         pendingHosts = nil
         settling = false
+    }
+
+    func machinesDidChange() async {
+        guard watchTask != nil else { return }
+        stopWatching()
+        await watch()
     }
 
     func refresh() async {
@@ -389,7 +405,32 @@ final class HerdrStore {
     private func flush() {
         guard let latest = pendingHosts else { return }
         pendingHosts = nil
-        apply(latest, collapseSnapshotComplete: latest.count >= expectedHostCount)
+        let complete = latest.count >= expectedHostCount
+        apply(
+            complete ? latest : retainingConfiguredHosts(in: latest),
+            collapseSnapshotComplete: complete)
+    }
+
+    private func retainingConfiguredHosts(
+        in snapshots: [HerdrHostSnapshot]
+    ) -> [HerdrHostSnapshot] {
+        var incoming: Set<String> = []
+        for snapshot in snapshots { incoming.insert(snapshot.id) }
+        var configured: Set<String> = [HerdrHostSnapshot.localID]
+        var order = [HerdrHostSnapshot.localID: 0]
+        for (index, machine) in MachineRegistry.machines().enumerated() {
+            let id = machine.id.uuidString
+            configured.insert(id)
+            order[id] = index + 1
+        }
+        var merged = snapshots
+        for host in hosts where configured.contains(host.id) && !incoming.contains(host.id) {
+            merged.append(host)
+        }
+        merged.sort {
+            order[$0.id, default: Int.max] < order[$1.id, default: Int.max]
+        }
+        return merged
     }
 
     func apply(_ snapshots: [HerdrHostSnapshot]) {

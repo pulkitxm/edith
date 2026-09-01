@@ -236,6 +236,38 @@ private actor HerdrWatchHarness {
         #expect(store.hosts.first?.agents.first?.pane == "fresh")
     }
 
+    @Test func machineChangesRebuildTheLiveFleet() async {
+        let harness = HerdrWatchHarness()
+        let store = HerdrStore { callback in await harness.watch(callback) }
+        defer { store.stopWatching() }
+        let stale = HerdrHostSnapshot.local(
+            herdrPresent: true, agents: [agent("Codex", pane: "stale")])
+        let fresh = HerdrHostSnapshot.local(
+            herdrPresent: true, agents: [agent("Codex", pane: "fresh")])
+
+        await store.watch()
+        await harness.waitForCallbacks(1)
+        await store.machinesDidChange()
+        await harness.waitForCallbacks(2)
+        await harness.send([stale], through: 0)
+        await harness.send([fresh], through: 1)
+        try? await Task.sleep(for: HerdrStore.settleWindow * 3)
+
+        #expect(store.hosts.first?.agents.first?.pane == "fresh")
+    }
+
+    @Test func partialReplacementSnapshotsKeepConfiguredHostsVisible() async {
+        let store = HerdrStore()
+        let local = HerdrHostSnapshot.local(
+            herdrPresent: true, agents: [agent("Codex", pane: "visible")])
+        store.apply([local])
+
+        store.settle([])
+        try? await Task.sleep(for: HerdrStore.settleWindow * 3)
+
+        #expect(store.hosts.map(\.id) == [HerdrHostSnapshot.localID])
+    }
+
     @Test func localAgentAttachmentUsesTheRawTerminalBridge() async throws {
         let store = HerdrStore()
         let selected = agent("Codex", pane: "pane-1")
