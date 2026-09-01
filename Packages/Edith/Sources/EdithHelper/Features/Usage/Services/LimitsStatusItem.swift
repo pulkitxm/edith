@@ -119,9 +119,10 @@ final class LimitsStatusItem {
     }
 
     private func ensureStatusItem(length: CGFloat) {
-        if let item, abs(item.length - length) < 0.5 { return }
-        if let item { NSStatusBar.system.removeStatusItem(item) }
-        stackedView = nil
+        if let item {
+            item.length = length
+            return
+        }
         let next = NSStatusBar.system.statusItem(withLength: length)
         StatusItemMenu.attach(to: next, target: self, action: #selector(clicked))
         item = next
