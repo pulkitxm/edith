@@ -102,7 +102,7 @@ private struct PostgreSQLDatabaseTextParameter: PostgresDynamicTypeEncodable {
     }
 }
 
-private enum PostgreSQLDatabaseReadDriver {
+enum PostgreSQLDatabaseReadDriver {
     static func bindings(
         _ values: [DatabaseValue]
     ) throws -> PostgresBindings {
