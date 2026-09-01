@@ -4,6 +4,7 @@ import SwiftUI
 
 struct DatabaseConnectionSidebar: View {
     @Bindable var model: DatabaseConnectionWorkspaceModel
+    let createConnection: () -> Void
     @Environment(\.colorScheme) private var scheme
 
     private var dark: Bool { scheme == .dark }
@@ -24,7 +25,6 @@ struct DatabaseConnectionSidebar: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(UIScale.pt(14))
-        .background(DashSkin.paper2(dark).opacity(0.55))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Saved database connections")
     }
@@ -37,6 +37,13 @@ struct DatabaseConnectionSidebar: View {
                 .textCase(.uppercase)
                 .tracking(0.5)
             Spacer(minLength: 0)
+            Button(action: createConnection) {
+                Image(systemName: "plus")
+                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+            }
+            .buttonStyle(.edith(.borderless))
+            .help("Add a database connection")
+            .accessibilityLabel("Add a database connection")
             Button(action: reload) {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
@@ -68,8 +75,10 @@ struct DatabaseConnectionSidebar: View {
             emptyState(
                 symbol: "cylinder.split.1x2",
                 title: "No saved connections",
-                detail: "Create a saved connection with the database CLI, then reload this list.",
-                actionTitle: "Reload")
+                detail:
+                    "Add a database connection here, test it through the local broker, then save it.",
+                actionTitle: "Add connection",
+                action: createConnection)
         case .filteredEmpty(let search):
             emptyState(
                 symbol: "magnifyingglass",

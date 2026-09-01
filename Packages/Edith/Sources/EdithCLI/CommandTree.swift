@@ -817,7 +817,7 @@ public enum CommandTree {
                 "database", "Inspect saved database connections and their capabilities.",
                 children: [
                     CommandNode(
-                        "connections", "Inspect saved database connections.",
+                        "connections", "Inspect and create saved database connections.",
                         children: [
                             CommandNode(
                                 "list", "List saved database connections.", aliases: ["ls"],
@@ -835,6 +835,24 @@ public enum CommandTree {
                             CommandNode(
                                 "get", "Show one saved database connection without credentials.",
                                 options: common, arguments: [.free]),
+                            CommandNode(
+                                "add", "Test and save a database connection.",
+                                options: [
+                                    "--json", "--help", "--product", "--host", "--port",
+                                    "--path", "--username", "--database",
+                                    "--authentication-database", "--password-stdin",
+                                    "--tls", "--environment", "--environment-label",
+                                    "--protection", "--read-only", "--production-policy",
+                                ],
+                                optionValues: [
+                                    "--product": .free, "--host": .free, "--port": .free,
+                                    "--path": .free, "--username": .free, "--database": .free,
+                                    "--authentication-database": .free,
+                                    "--environment": .free, "--environment-label": .free,
+                                    "--protection": .free, "--read-only": .free,
+                                    "--production-policy": .free,
+                                ],
+                                arguments: [.free]),
                         ]),
                     CommandNode(
                         "capabilities", "Show detected capabilities for one saved connection.",

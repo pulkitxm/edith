@@ -14,6 +14,7 @@ The bare command runs `ed database connections`, which in turn runs
 | --- | --- |
 | `ed database` | Runs the default connection listing. |
 | [`ed database connections`](./connections.md) | Lists connections by default or selects one by UUID. |
+| [`ed database connections add`](./connections-add.md) | Tests and saves a connection with credentials stored in Keychain. |
 | [`ed database connections list`](./connections-list.md) | Lists bounded saved connection summaries with server-side filters. |
 | [`ed database connections get`](./connections-get.md) | Shows one saved connection without credentials or secret references. |
 | [`ed database capabilities`](./capabilities.md) | Shows the shared capability report, optionally refreshing discovery. |

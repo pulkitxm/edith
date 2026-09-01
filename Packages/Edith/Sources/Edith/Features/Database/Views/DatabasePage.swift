@@ -103,6 +103,7 @@ final class DatabasePageModel {
 struct DatabasePage: View {
     @State private var model = DatabasePageModel()
     @State private var connectionWorkspace = DatabaseConnectionWorkspaceModel()
+    @State private var connectionCreation: DatabaseConnectionCreationModel?
     @State private var workspace = DatabaseWorkspaceModel()
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.colorScheme) private var scheme
@@ -124,6 +125,7 @@ struct DatabasePage: View {
                                 .frame(minHeight: UIScale.pt(360))
                         }
                         .frame(width: UIScale.pt(250))
+                        .background(DashSkin.paper2(dark).opacity(0.55))
                         Divider().opacity(0.35)
                         ScrollView { workbench }
                     }
@@ -165,6 +167,18 @@ struct DatabasePage: View {
                 cancelOperation: { workspace.cancelSafetyOperation() },
                 dismiss: { workspace.dismissSafetyReview() })
         }
+        .sheet(item: $connectionCreation) { connectionCreation in
+            DatabaseConnectionCreationSheet(
+                model: connectionCreation,
+                saved: { connection in
+                    self.connectionCreation = nil
+                    Task {
+                        await connectionWorkspace.loadConnections()
+                        connectionWorkspace.selectConnection(connection.id)
+                    }
+                },
+                cancel: { self.connectionCreation = nil })
+        }
     }
 
     private var status: some View {
@@ -196,7 +210,13 @@ struct DatabasePage: View {
     }
 
     private var connections: some View {
-        DatabaseConnectionSidebar(model: connectionWorkspace)
+        DatabaseConnectionSidebar(
+            model: connectionWorkspace,
+            createConnection: beginConnectionCreation)
+    }
+
+    private func beginConnectionCreation() {
+        connectionCreation = DatabaseConnectionCreationModel()
     }
 
     private var workbench: some View {

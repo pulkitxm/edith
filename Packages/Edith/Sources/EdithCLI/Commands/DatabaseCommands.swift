@@ -17,8 +17,12 @@ struct DatabaseCommand: AsyncParsableCommand {
 struct DatabaseConnectionsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "connections",
-        abstract: "Inspect saved database connections.",
-        subcommands: [DatabaseConnectionsListCommand.self, DatabaseConnectionsGetCommand.self],
+        abstract: "Inspect and create saved database connections.",
+        subcommands: [
+            DatabaseConnectionsListCommand.self,
+            DatabaseConnectionsGetCommand.self,
+            DatabaseConnectionsAddCommand.self,
+        ],
         defaultSubcommand: DatabaseConnectionsListCommand.self)
 }
 
@@ -51,6 +55,42 @@ enum DatabaseCLI {
         try resolveOne(value, from: DatabaseConnectionOrder.allCases, name: "connection order") {
             $0.rawValue
         }
+    }
+
+    static func product(_ value: String) throws -> DatabaseProduct {
+        try resolveOne(
+            value,
+            from: DatabaseConnectionDraft.supportedProducts,
+            name: "supported database product"
+        ) { $0.rawValue }
+    }
+
+    static func environment(_ value: String) throws -> DatabaseEnvironmentKind {
+        try resolveOne(value, from: DatabaseEnvironmentKind.allCases, name: "environment") {
+            $0.rawValue
+        }
+    }
+
+    static func protection(_ value: String) throws -> DatabaseEnvironmentProtection {
+        try resolveOne(
+            value,
+            from: DatabaseEnvironmentProtection.allCases,
+            name: "environment protection"
+        ) { $0.rawValue }
+    }
+
+    static func readOnlyPolicy(_ value: String) throws -> DatabaseReadOnlyPolicy {
+        try resolveOne(value, from: DatabaseReadOnlyPolicy.allCases, name: "read-only policy") {
+            $0.rawValue
+        }
+    }
+
+    static func productionPolicy(_ value: String) throws -> DatabaseProductionPolicy {
+        try resolveOne(
+            value,
+            from: DatabaseProductionPolicy.allCases,
+            name: "production policy"
+        ) { $0.rawValue }
     }
 
     static func send(
@@ -488,6 +528,131 @@ enum DatabaseCLI {
     private static func signedJSON(_ value: Int64) -> JSONValue {
         guard let converted = Int(exactly: value) else { return .string(String(value)) }
         return .int(converted)
+    }
+}
+
+struct DatabaseConnectionsAddCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "add",
+        abstract: "Test and save a database connection.")
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Option(name: .long, help: "Database product: postgresql, sqlite, redis, valkey or mongodb.")
+    var product: String
+
+    @Option(name: .long, help: "Network host. Defaults to 127.0.0.1.")
+    var host = "127.0.0.1"
+
+    @Option(name: .long, help: "Network port. Defaults to the product's standard port.")
+    var port: Int?
+
+    @Option(name: .long, help: "SQLite database file path.")
+    var path = ""
+
+    @Option(name: .long, help: "Database username.")
+    var username = ""
+
+    @Option(name: .long, help: "Default database or Redis logical database.")
+    var database = ""
+
+    @Option(
+        name: .customLong("authentication-database"),
+        help: "MongoDB authentication database. Defaults to admin.")
+    var authenticationDatabase = "admin"
+
+    @Flag(
+        name: .customLong("password-stdin"),
+        help: "Read the database password from stdin and store it in Keychain.")
+    var passwordStdin = false
+
+    @Flag(name: .long, help: "Require TLS with full certificate verification.")
+    var tls = false
+
+    @Option(name: .long, help: "Environment kind.")
+    var environment = "development"
+
+    @Option(name: .customLong("environment-label"), help: "Human-readable environment label.")
+    var environmentLabel: String?
+
+    @Option(name: .long, help: "Environment protection policy.")
+    var protection = "confirmation-required"
+
+    @Option(name: .customLong("read-only"), help: "Read-only policy.")
+    var readOnly = "required"
+
+    @Option(name: .customLong("production-policy"), help: "Mutation policy.")
+    var productionPolicy = "require-mutation-preview"
+
+    @Argument(help: "Connection name.")
+    var name: String
+
+    func run() async throws {
+        try await execute {
+            let resolvedProduct = try DatabaseCLI.product(product)
+            let resolvedEnvironment = try DatabaseCLI.environment(environment)
+            let password = passwordStdin ? try DatabaseCLIEnvironment.readPassword() : nil
+            let reference = password.map { _ in
+                DatabaseSecretReference(identifier: UUID(), purpose: .password)
+            }
+            let draft = DatabaseConnectionDraft(
+                displayName: name,
+                product: resolvedProduct,
+                host: host,
+                port: port ?? DatabaseConnectionDraft.defaultPort(for: resolvedProduct),
+                path: path,
+                username: username,
+                database: database,
+                authenticationDatabase: authenticationDatabase,
+                passwordReference: reference,
+                tlsMode: tls ? .required : .disabled,
+                environmentKind: resolvedEnvironment,
+                environmentLabel: environmentLabel ?? resolvedEnvironment.rawValue.capitalized,
+                environmentProtection: try DatabaseCLI.protection(protection),
+                readOnlyPolicy: try DatabaseCLI.readOnlyPolicy(readOnly),
+                productionPolicy: try DatabaseCLI.productionPolicy(productionPolicy))
+            let definition = try draft.definition()
+            let secretStore = try DatabaseCLIEnvironment.makeSecretStore()
+            var storedReference: DatabaseSecretReference?
+            do {
+                if let password, let reference {
+                    try await secretStore.store(Data(password.utf8), for: reference)
+                    storedReference = reference
+                }
+                let testResponse = try await DatabaseCLI.send(
+                    .connectionTest(DatabaseConnectionTestRequest(connection: definition)))
+                let test = try DatabaseCLI.payload(
+                    testResponse.connectionTestResult,
+                    response: testResponse,
+                    expected: .connectionTest)
+                let saveResponse = try await DatabaseCLI.send(
+                    .connectionSave(DatabaseConnectionSaveRequest(connection: definition)))
+                let saved = try DatabaseCLI.payload(
+                    saveResponse.connectionSaveResult,
+                    response: saveResponse,
+                    expected: .connectionSave)
+                storedReference = nil
+                if json {
+                    CLIOut.json(
+                        .object([
+                            "connection": DatabaseCLI.connectionJSON(saved.connection),
+                            "latencyMilliseconds": .int(Int(test.latencyMilliseconds)),
+                            "testedProduct": .string(test.productIdentity.product.rawValue),
+                        ]))
+                } else {
+                    CLIOut.out("saved \(saved.connection.displayName)")
+                    CLIOut.out("id: \(saved.connection.id.rawValue.uuidString.lowercased())")
+                    CLIOut.out("product: \(test.productIdentity.product.displayName)")
+                    CLIOut.out("test latency: \(test.latencyMilliseconds) ms")
+                }
+            } catch {
+                if let storedReference {
+                    try? await secretStore.delete(storedReference)
+                }
+                throw error
+            }
+        }
     }
 }
 

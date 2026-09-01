@@ -4,6 +4,7 @@ Groups read-only saved connection inspection.
 
 ```
 ed database connections
+ed database connections add <name> --product <product>
 ed database connections list
 ed database connections get <connection-id>
 ```
@@ -16,6 +17,7 @@ a listing.
 
 - [`ed database connections list`](./connections-list.md)
 - [`ed database connections get`](./connections-get.md)
+- [`ed database connections add`](./connections-add.md)
 
 ## Where to go next
 
