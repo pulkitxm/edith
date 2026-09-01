@@ -7,10 +7,13 @@ public struct QuinjetRemote: Equatable, Sendable {
     public let controlPath: String
     public let platform: RemoteMachinePlatform
     public let homeDirectory: String?
+    public let executablePath: String?
+    public let distributionID: String
 
     public init(
         machineID: UUID, machineName: String, target: String, controlPath: String,
-        platform: RemoteMachinePlatform = .linux, homeDirectory: String? = nil
+        platform: RemoteMachinePlatform = .linux, homeDirectory: String? = nil,
+        executablePath: String? = nil, distributionID: String? = nil
     ) {
         self.machineID = machineID
         self.machineName = machineName
@@ -18,6 +21,8 @@ public struct QuinjetRemote: Equatable, Sendable {
         self.controlPath = controlPath
         self.platform = platform
         self.homeDirectory = homeDirectory
+        self.executablePath = executablePath
+        self.distributionID = distributionID ?? platform.rawValue
     }
 
     public func resolve(_ path: String) -> String {
@@ -26,7 +31,7 @@ public struct QuinjetRemote: Equatable, Sendable {
 
     public static func connected(
         machineID: UUID, machineName: String, target: String, connection: SSHConnection
-    ) async -> QuinjetRemote {
+    ) async throws -> QuinjetRemote {
         let platform = await connection.remotePlatform ?? .linux
         let result = try? await connection.run(
             FilePlaces.homeDirectoryCommand(platform: platform), timeout: 20)
@@ -34,10 +39,13 @@ public struct QuinjetRemote: Equatable, Sendable {
             result?.succeeded == true
             ? result?.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines) : nil
         let home = reportedHome.flatMap { QuinjetPath.isAbsolute($0) ? $0 : nil }
+        let executable = try await QuinjetRemoteExecutable.resolve(
+            platform: platform, connection: connection)
         return QuinjetRemote(
             machineID: machineID, machineName: machineName, target: target,
             controlPath: connection.controlSocketPath, platform: platform,
-            homeDirectory: home)
+            homeDirectory: home, executablePath: executable.path,
+            distributionID: executable.distributionID)
     }
 }
 
@@ -187,6 +195,8 @@ public enum QuinjetHostAction: Equatable, Sendable {
 
 public enum QuinjetClientError: Error, Equatable, LocalizedError {
     case notInstalled
+    case remoteNotInstalled(
+        machine: String, platform: RemoteMachinePlatform, distributionID: String)
     case launchFailed(String)
     case commandFailed(String)
     case invalidResponse
@@ -195,6 +205,17 @@ public enum QuinjetClientError: Error, Equatable, LocalizedError {
         switch self {
         case .notInstalled:
             return "Quinjet is not installed. Install it with `brew install pulkitxm/tap/quinjet`."
+        case let .remoteNotInstalled(machine, platform, distributionID):
+            let instruction =
+                switch platform {
+                case .darwin: "Install it there with `brew install pulkitxm/tap/quinjet`."
+                case .windows: "Install it there with `winget install Pulkitxm.Quinjet`."
+                case .linux where ["ubuntu", "debian"].contains(distributionID.lowercased()):
+                    "Install it there from the Quinjet apt repository or with the shell installer."
+                case .linux:
+                    "Install it there with the Quinjet shell installer."
+                }
+            return "Quinjet is not installed on \(machine). \(instruction)"
         case let .launchFailed(message):
             return "Quinjet could not start: \(message)"
         case let .commandFailed(message):

@@ -722,7 +722,7 @@ final class HerdrStore {
             throw HerdrQuinjetError.machineUnavailable
         }
         let connection = try await connection(for: machine)
-        return await QuinjetRemote.connected(
+        return try await QuinjetRemote.connected(
             machineID: machine.id, machineName: machine.name, target: machine.sshTarget,
             connection: connection)
     }

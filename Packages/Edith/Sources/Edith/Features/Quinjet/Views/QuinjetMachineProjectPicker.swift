@@ -21,11 +21,23 @@ struct QuinjetProjectPicker: View {
                 QuinjetLocalProjectPicker(
                     model: model, tab: tab, machines: machines, selectMachine: select)
             } else if let machine = selectedMachine, let picker = tab.folderPicker,
-                let remote = remote(for: machine)
+                let remote = tab.remote
             {
                 QuinjetRemoteProjectPicker(
                     model: model, tab: tab, machines: machines, machine: machine, remote: remote,
                     picker: picker, selectMachine: select)
+            } else if let machine = selectedMachine, let picker = tab.folderPicker,
+                let error = picker.errorMessage ?? tab.errorMessage
+            {
+                ContentUnavailableView {
+                    Label("Machine unavailable", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(error)
+                } actions: {
+                    Button("Try again") { select(machine) }
+                    Button("Use This Mac") { select(machines.localMachine) }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ProgressView("Preparing machine")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -44,36 +56,46 @@ struct QuinjetProjectPicker: View {
             return
         }
         guard !machines.isLocal(machine.id) else { return }
-        if tab.folderPicker == nil {
+        if tab.folderPicker == nil || tab.remote == nil {
             select(machine)
-        } else if let remote = remote(for: machine), model.projects(for: remote).isEmpty {
+        } else if let remote = tab.remote, model.projects(for: remote).isEmpty {
             Task { await model.refreshProjects(for: remote) }
         }
     }
 
     private func select(_ machine: Machine) {
         tab.machineID = machine.id
+        tab.errorMessage = nil
         model.projectError = nil
         guard !machines.isLocal(machine.id) else {
             tab.folderPicker = nil
+            tab.remote = nil
             if model.projects.isEmpty { Task { await model.refreshProjects() } }
             return
         }
         let picker = QuinjetFolderPickerModel(session: machines.session(for: machine.id))
         tab.folderPicker = picker
+        tab.remote = nil
         Task {
             await picker.start()
-            if let remote = remote(for: machine) { await model.refreshProjects(for: remote) }
+            guard tab.machineID == machine.id, picker.errorMessage == nil else { return }
+            let session = machines.session(for: machine.id)
+            guard let connection = session.connectionRef else {
+                tab.errorMessage = "The machine connection could not be prepared."
+                return
+            }
+            do {
+                let remote = try await QuinjetRemote.connected(
+                    machineID: machine.id, machineName: machine.name, target: machine.sshTarget,
+                    connection: connection)
+                guard tab.machineID == machine.id else { return }
+                tab.remote = remote
+                await model.refreshProjects(for: remote)
+            } catch {
+                guard tab.machineID == machine.id else { return }
+                tab.errorMessage = error.localizedDescription
+            }
         }
-    }
-
-    private func remote(for machine: Machine) -> QuinjetRemote? {
-        let session = machines.session(for: machine.id)
-        guard let connection = session.connectionRef else { return nil }
-        return QuinjetRemote(
-            machineID: machine.id, machineName: machine.name, target: machine.sshTarget,
-            controlPath: connection.controlSocketPath,
-            platform: session.remotePlatform ?? .linux)
     }
 }
 
