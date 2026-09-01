@@ -182,11 +182,11 @@ struct DatabaseConnectionGalleryTests {
             #expect(connection.readOnlySummary == "Read-only preferred")
             #expect(navigationRegions.count == 1)
             #expect(galleryResponderRegion(of: host) == navigationRegions.first)
+            #expect(await galleryEventually { focusCompleted })
         }
         back()
 
         #expect(returnedToCatalog)
-        #expect(focusCompleted)
         #expect(fixture.model.selectedSessionState == .disconnected)
         #expect(await fixture.sender.requestCount == 1)
     }
@@ -462,6 +462,19 @@ private func withGalleryHost<Content: View, Result>(
     host.displayIfNeeded()
     RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
     return try body(host)
+}
+
+@MainActor
+private func galleryEventually(
+    timeout: Duration = .seconds(1),
+    _ condition: () -> Bool
+) async -> Bool {
+    let deadline = ContinuousClock.now + timeout
+    while ContinuousClock.now < deadline {
+        if condition() { return true }
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+    return condition()
 }
 
 @MainActor

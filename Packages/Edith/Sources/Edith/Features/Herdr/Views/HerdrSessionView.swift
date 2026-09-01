@@ -35,6 +35,32 @@ private struct HerdrResizeCursor: NSViewRepresentable {
     }
 }
 
+private enum HerdrTerminalFocus {
+    case agent
+    case diff
+}
+
+enum HerdrAgentTerminalOverlay: Equatable {
+    case none
+    case progress
+    case failure(String)
+    case ended(String)
+
+    static func make(
+        connectError: String?, starting: Bool, started: Bool, exitMessage: String?
+    ) -> Self {
+        if let connectError { return .failure(connectError) }
+        if starting, !started { return .progress }
+        if let exitMessage, !started { return .ended(exitMessage) }
+        return .none
+    }
+
+    var offersRestart: Bool {
+        if case .ended = self { return true }
+        return false
+    }
+}
+
 struct HerdrHorizontalResizeHandle: View {
     let label: String
     let onChanged: (CGFloat) -> Void
@@ -83,6 +109,7 @@ struct HerdrSessionView: View {
     var hideAgents = false
     var presented = true
     var wantsFocus = true
+    var onFocus: (() -> Void)?
     var onSetView: ((HerdrAgentView) -> Void)?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -101,10 +128,19 @@ struct HerdrSessionView: View {
     @State private var confirmingAgentClose = false
     @State private var closingAgent = false
     @State private var agentCloseError: String?
+    @State private var splitTerminalFocus = HerdrTerminalFocus.agent
 
     private var dark: Bool { scheme == .dark }
     private var agent: HerdrAgent { tab.agent }
     private var command: String { HerdrAttachCommand.line(for: agent) }
+
+    private var terminalFocus: HerdrTerminalFocus {
+        switch tab.view {
+        case .agent: .agent
+        case .diff: .diff
+        case .split: splitTerminalFocus
+        }
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -251,8 +287,12 @@ struct HerdrSessionView: View {
             TerminalPane(
                 holder: tab.holder, palette: .edith(dark: dark),
                 active: presented && tab.view.showsAgent,
-                wantsFocus: wantsFocus,
-                onDropFiles: agent.machineIsLocal ? nil : handleRemoteDrop
+                wantsFocus: wantsFocus && terminalFocus == .agent,
+                onDropFiles: agent.machineIsLocal ? nil : handleRemoteDrop,
+                onFocus: {
+                    splitTerminalFocus = .agent
+                    onFocus?()
+                }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             if transferringDrop {
@@ -270,17 +310,38 @@ struct HerdrSessionView: View {
                     .padding(UIScale.pt(10))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             }
-            if let connectError {
-                Text(connectError)
-                    .font(.system(size: UIScale.pt(13)))
-                    .foregroundStyle(DashSkin.warn)
-                    .padding(UIScale.pt(16))
-            } else if starting, !tab.holder.started {
-                ProgressView()
-            }
+            agentTerminalOverlay
         }
         .background(Color(nsColor: TerminalPalette.edith(dark: dark).background))
         .presenterCover(hideAgents, dark: dark)
+    }
+
+    @ViewBuilder
+    private var agentTerminalOverlay: some View {
+        switch HerdrAgentTerminalOverlay.make(
+            connectError: connectError, starting: starting, started: tab.holder.started,
+            exitMessage: tab.holder.exitMessage)
+        {
+        case .none:
+            EmptyView()
+        case .progress:
+            ProgressView()
+        case .failure(let message):
+            Text(message)
+                .font(.system(size: UIScale.pt(13)))
+                .foregroundStyle(DashSkin.warn)
+                .padding(UIScale.pt(16))
+        case .ended(let message):
+            VStack(spacing: UIScale.pt(10)) {
+                Text(message)
+                    .font(.system(size: UIScale.pt(13), weight: .semibold))
+                    .foregroundStyle(DashSkin.ink(dark))
+                Button("Restart") { Task { await startIfNeeded() } }
+                    .buttonStyle(.edith(.primary))
+                    .disabled(!launchEnabled)
+            }
+            .padding(UIScale.pt(20))
+        }
     }
 
     private func handleRemoteDrop(_ payload: TerminalDropPayload) -> Bool {
@@ -310,7 +371,11 @@ struct HerdrSessionView: View {
             TerminalPane(
                 holder: tab.quinjet.holder, palette: palette,
                 active: presented && tab.view.showsDiff && tab.quinjet.live,
-                wantsFocus: wantsFocus
+                wantsFocus: wantsFocus && terminalFocus == .diff,
+                onFocus: {
+                    splitTerminalFocus = .diff
+                    onFocus?()
+                }
             )
             .id(tab.quinjet.holder.generation)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -553,6 +618,7 @@ struct HerdrSessionView: View {
 
     private func startIfNeeded() async {
         guard launchEnabled, !tab.holder.started else { return }
+        connectError = nil
         starting = true
         defer { starting = false }
         do {
@@ -561,7 +627,8 @@ struct HerdrSessionView: View {
                 environment: Terminal.getEnvironmentVariables(termName: "xterm-256color"))
             tab.holder.start(
                 executable: request.executable, arguments: request.arguments,
-                environment: request.environment)
+                environment: request.environment,
+                allowsLocalFileLinks: tab.agent.machineIsLocal)
         } catch {
             connectError = error.localizedDescription
         }

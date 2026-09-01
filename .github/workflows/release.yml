@@ -119,15 +119,20 @@ jobs:
       - name: Cache libghostty
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
-          path: Packages/Edith/vendor/GhosttyKit.xcframework
+          path: |
+            Packages/Edith/vendor/GhosttyKit.xcframework
+            Packages/Edith/vendor/GhosttyResources
           key: ghostty-${{ runner.os }}-${{ hashFiles('scripts/build-ghostty.sh') }}
 
       - name: Build libghostty
         run: |
-          if grep -q 'name: "GhosttyKit"' Packages/Edith/Package.swift \
-            && [ ! -d Packages/Edith/vendor/GhosttyKit.xcframework ]; then
-            command -v zig >/dev/null 2>&1 || brew install zig
-            make ghostty
+          if grep -q 'name: "GhosttyKit"' Packages/Edith/Package.swift; then
+            if [ ! -d Packages/Edith/vendor/GhosttyKit.xcframework ] \
+              || [ ! -d Packages/Edith/vendor/GhosttyResources/ghostty/shell-integration ] \
+              || [ ! -f Packages/Edith/vendor/GhosttyResources/terminfo/78/xterm-ghostty ]; then
+              command -v zig >/dev/null 2>&1 || brew install zig
+              make ghostty
+            fi
           fi
 
       - name: Stamp the release version

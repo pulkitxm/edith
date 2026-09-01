@@ -127,6 +127,7 @@ public enum CLIToolEnvironment {
         fileManager: FileManager = .default
     ) -> [String: String] {
         var environment = processEnvironment
+        environment.removeValue(forKey: "NO_COLOR")
         let directories = commonDirectories(
             processEnvironment: processEnvironment, fileManager: fileManager)
         let existing = processEnvironment["PATH"]?.split(separator: ":").map(String.init) ?? []

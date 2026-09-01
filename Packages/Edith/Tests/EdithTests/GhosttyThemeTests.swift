@@ -41,12 +41,25 @@ import Testing
         #expect(text.contains("palette = 1=#ff0000"))
         #expect(text.contains("palette = 2=#00ff00"))
         #expect(text.contains("font-size = 13"))
-        #expect(text.contains("copy-on-select = clipboard"))
         #expect(text.contains("mouse-shift-capture = false"))
+        #expect(text.contains("link-url = true"))
+        #expect(text.contains("link-osc8 = true"))
+        #expect(text.contains("link-previews = true"))
+        #expect(text.contains(#"selection-word-chars = "\t '\"│`|;,()[]{}<>$""#))
         #expect(text.contains("font-codepoint-map = U+E000-U+F8FF=Symbols Nerd Font Mono"))
         #expect(text.contains("font-codepoint-map = U+F0000-U+FFFFD=Symbols Nerd Font Mono"))
         #expect(text.contains("font-codepoint-map = U+100000-U+10FFFD=Symbols Nerd Font Mono"))
         #expect(text.contains(#"keybind = shift+enter=text:\x1b\r"#))
+    }
+
+    @Test func theConfigLeavesClipboardAndClosePoliciesAtGhosttyDefaults() {
+        let theme = GhosttyTheme(background: "#000000", foreground: "#ffffff", cursor: "#ffffff")
+        let text = theme.configuration
+
+        #expect(!text.contains("confirm-close-surface"))
+        #expect(!text.contains("clipboard-read"))
+        #expect(!text.contains("clipboard-write"))
+        #expect(!text.contains("copy-on-select"))
     }
 
     @Test func bundledSymbolsAreAvailableToTerminalRenderers() {

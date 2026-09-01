@@ -187,18 +187,24 @@ final class QuinjetPageModel {
             tab.errorMessage = QuinjetClientError.notInstalled.localizedDescription
             return
         }
-        let request = QuinjetOperationExecution.launchRequest(
-            executableURL: executable, worktreePath: worktree.path, remote: remote,
-            configuration: configuration, managedByEdith: configuration.terminal == .embedded,
-            localHomeDirectory: FileManager.default.homeDirectoryForCurrentUser.path)
+        let request: QuinjetLaunchRequest
+        do {
+            request = try QuinjetOperationExecution.launchRequest(
+                executableURL: executable, worktreePath: worktree.path, remote: remote,
+                configuration: configuration,
+                managedByEdith: configuration.terminal == .embedded,
+                localHomeDirectory: FileManager.default.homeDirectoryForCurrentUser.path)
+        } catch {
+            tab.errorMessage = error.localizedDescription
+            return
+        }
         if configuration.terminal == .cmux {
             tab.holder.stop()
             let replacing = tab.externalWorkspaceID
             Task { [weak tab] in
                 do {
                     let workspaceID = try await QuinjetCMUXLauncher.launch(
-                        quinjet: request.executableURL, arguments: request.arguments,
-                        currentDirectory: request.currentDirectory, replacing: replacing)
+                        request: request, replacing: replacing)
                     guard
                         let tab,
                         tab.externalLaunchGeneration == externalLaunchGeneration
@@ -227,11 +233,13 @@ final class QuinjetPageModel {
             guard let self, let tab else { return }
             self.handleHostPayload(payload, from: tab)
         }
-        let environment = QuinjetOperationExecution.terminalEnvironment()
+        let environment = QuinjetOperationExecution.terminalEnvironment(
+            overrides: request.environment)
         tab.holder.reset()
         tab.holder.start(
             executable: request.executableURL.path, arguments: request.arguments,
-            environment: environment, currentDirectory: request.currentDirectory)
+            environment: environment, currentDirectory: request.currentDirectory,
+            allowsLocalFileLinks: remote == nil)
     }
 
     func openFolder(

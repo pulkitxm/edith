@@ -9,6 +9,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 vendor="$root/vendor"
 src="$vendor/ghostty"
 out="$root/Packages/Edith/vendor/GhosttyKit.xcframework"
+resources_out="$root/Packages/Edith/vendor/GhosttyResources"
 
 zig_bin="$(command -v zig || true)"
 if [ -n "$zig_bin" ] && [ "$("$zig_bin" version)" = "$ZIG_VERSION" ]; then
@@ -53,6 +54,14 @@ if [ ! -d "$built" ]; then
   exit 1
 fi
 
+shell_integration="$src/zig-out/share/ghostty/shell-integration"
+terminfo="$src/zig-out/share/terminfo"
+if [ ! -f "$shell_integration/zsh/ghostty-integration" ] \
+  || [ ! -f "$terminfo/78/xterm-ghostty" ]; then
+  echo "Ghostty resources were not produced by the pinned build" >&2
+  exit 1
+fi
+
 mkdir -p "$(dirname "$out")"
 rm -rf "$out"
 cp -R "$built" "$out"
@@ -64,4 +73,9 @@ if [ "$symbols" != "1" ]; then
   exit 1
 fi
 
-echo "GhosttyKit.xcframework ready at $out"
+rm -rf "$resources_out"
+mkdir -p "$resources_out/ghostty"
+cp -R "$shell_integration" "$resources_out/ghostty/shell-integration"
+cp -R "$terminfo" "$resources_out/terminfo"
+
+echo "GhosttyKit.xcframework ready at $out with resources at $resources_out"

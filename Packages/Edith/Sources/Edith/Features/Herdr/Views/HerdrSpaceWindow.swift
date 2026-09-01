@@ -470,11 +470,13 @@ private struct HerdrSpacePaneView: View {
                     HerdrSessionView(
                         store: store, tab: agent, launchEnabled: launchEnabled,
                         presented: active, wantsFocus: focused,
+                        onFocus: { tab.focus(pane.id) },
                         onSetView: { tab.setAgentView($0) })
                 case let .terminal(holder):
                     HerdrSpaceTerminalView(
                         target: target, holder: holder, machines: machines,
-                        active: active, wantsFocus: focused)
+                        active: active, wantsFocus: focused,
+                        onFocus: { tab.focus(pane.id) })
                 }
             } else {
                 Color(nsColor: TerminalPalette.edith(dark: dark).background)
@@ -503,6 +505,7 @@ private struct HerdrSpaceTerminalView: View {
     let machines: MachinesModel
     let active: Bool
     let wantsFocus: Bool
+    var onFocus: (() -> Void)?
 
     @Environment(\.terminalLaunchEnabled) private var launchEnabled
     @Environment(\.colorScheme) private var scheme
@@ -518,6 +521,7 @@ private struct HerdrSpaceTerminalView: View {
                     session: session, active: active, wantsFocus: wantsFocus,
                     context: MachineTerminalContext(startingDirectory: target.argument),
                     showsStatusBar: false,
+                    onFocus: onFocus,
                     holder: holder
                 )
                 .task(id: active) { connectIfNeeded() }

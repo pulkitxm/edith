@@ -2,40 +2,50 @@ import AppKit
 import GhosttyKit
 
 public final class GhosttyTerminalView: NSView {
-    public var onClose: (() -> Void)?
+    public var onClose: ((Int32?) -> Void)?
+    public var onCloseRequestCancelled: (() -> Void)?
     public var onDropFiles: ((TerminalDropPayload) -> Bool)?
+    public var onFocus: (() -> Void)?
     public var onTitleChange: ((String) -> Void)?
     public var onWorkingDirectoryChange: ((String) -> Void)?
+    public var onReady: (() -> Void)?
 
     private(set) var surface: ghostty_surface_t?
     public internal(set) var currentDirectory: String?
     public internal(set) var hoveredLink: String?
+    public let allowsLocalFileLinks: Bool
     private var launch: GhosttyLaunch?
     private var theme: GhosttyTheme?
     private var themeConfig: ghostty_config_t?
     private var owned: GhosttyConfigStrings?
     var temporaryDropFiles = Set<URL>()
     private var closed = false
+    private var closePromptVisible = false
+    private var closeAlert: NSAlert?
+    private var pendingExitCode: Int32?
     private var drawScheduled = false
-    private var renderingActive = true
+    private(set) var renderingActive = true
+    private var secureInputRequested = false
     var terminalCursor = NSCursor.iBeam
-    var cursorHidden = false
-    var commandClickReleaseActive = false
+    var mouseOverSurface = false
     var commandClickOpenedTarget = false
-    var lastMousePoint: NSPoint?
+    var commandClickGesture = TerminalCommandClickGesture()
     let linkHoverView = TerminalLinkHoverView(frame: .zero)
     let searchBar = TerminalSearchBar(frame: .zero)
     let progressStrip = TerminalProgressStrip(frame: .zero)
     var searchTotal: Int?
     var searchSelected: Int?
+    var accessibilitySelectionTask: Task<Void, Never>?
     let markedText = NSMutableAttributedString()
     var keyTextAccumulator: [String]?
+    var localEventMonitor: Any?
+    var suppressNextLeftMouseUp = false
+    private var windowObservers: [NSObjectProtocol] = []
+    var openResolvedURL: (URL) -> Void = { _ = NSWorkspace.shared.open($0) }
 
     public override var isFlipped: Bool { false }
 
     public override var acceptsFirstResponder: Bool { true }
-
-    public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     public var hasSelection: Bool {
         guard let surface else { return false }
@@ -66,12 +76,20 @@ public final class GhosttyTerminalView: NSView {
         window.makeFirstResponder(self)
     }
 
+    @discardableResult
+    public func requestClose() -> Bool {
+        guard let surface, !closed else { return false }
+        ghostty_surface_request_close(surface)
+        return true
+    }
+
     public override var wantsUpdateLayer: Bool { false }
 
     public init(launch: GhosttyLaunch, theme: GhosttyTheme? = nil) {
         self.launch = launch
         self.theme = theme
         currentDirectory = launch.workingDirectory
+        allowsLocalFileLinks = launch.allowsLocalFileLinks
         super.init(frame: .zero)
         wantsLayer = true
         registerForDraggedTypes(Array(Self.dropTypes))
@@ -98,18 +116,33 @@ public final class GhosttyTerminalView: NSView {
         searchBar.onClose = { [weak self] in
             _ = self?.performBindingAction("end_search")
         }
+        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyUp, .leftMouseDown]) {
+            [weak self] event in
+            self?.handleLocalEvent(event) ?? event
+        }
         GhosttySurfaceRegistry.shared.register(self)
     }
 
     required init?(coder: NSCoder) { nil }
 
     deinit {
-        if cursorHidden { NSCursor.unhide() }
+        accessibilitySelectionTask?.cancel()
+        if let localEventMonitor { NSEvent.removeMonitor(localEventMonitor) }
+        removeWindowObservers()
         shutdown()
         GhosttySurfaceRegistry.shared.unregister(self)
     }
 
     public func shutdown() {
+        secureInputRequested = false
+        GhosttySecureInput.shared.removeScoped(ObjectIdentifier(self))
+        closed = true
+        removeWindowObservers()
+        closePromptVisible = false
+        if let closeAlert, let parent = closeAlert.window.sheetParent {
+            parent.endSheet(closeAlert.window, returnCode: .cancel)
+        }
+        closeAlert = nil
         if let surface {
             ghostty_surface_free(surface)
             self.surface = nil
@@ -125,14 +158,19 @@ public final class GhosttyTerminalView: NSView {
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard let window else { return }
-        window.acceptsMouseMovedEvents = true
-        startIfNeeded()
+        removeWindowObservers()
+        mouseOverSurface = false
+        if let window {
+            window.acceptsMouseMovedEvents = true
+            observeWindow(window)
+            startIfNeeded()
+        }
+        syncFocus()
         applyPresentationState()
     }
 
     private func startIfNeeded() {
-        guard surface == nil, let launch else { return }
+        guard !closed, surface == nil, let launch else { return }
         GhosttyRuntime.shared.start()
         guard let app = GhosttyRuntime.shared.handle else { return }
 
@@ -163,8 +201,9 @@ public final class GhosttyTerminalView: NSView {
         ghostty_surface_set_content_scale(
             surface, config.scale_factor, config.scale_factor)
         applySize()
-        ghostty_surface_set_focus(surface, window?.firstResponder === self)
+        syncFocus()
         applyPresentationState()
+        onReady?()
     }
 
     public func apply(theme newTheme: GhosttyTheme) {
@@ -193,10 +232,65 @@ public final class GhosttyTerminalView: NSView {
         }
     }
 
-    func reportClosed() {
+    func childExited(_ exitCode: Int32) {
+        pendingExitCode = exitCode
+        DispatchQueue.main.async { [weak self] in
+            guard let surface = self?.surface else { return }
+            ghostty_surface_request_close(surface)
+        }
+    }
+
+    func reportClosed(processAlive: Bool) {
+        DispatchQueue.main.async { [weak self] in
+            self?.handleClose(processAlive: processAlive)
+        }
+    }
+
+    private func handleClose(processAlive: Bool) {
+        guard !closed else { return }
+        guard processAlive else {
+            finishClose()
+            return
+        }
+        guard !closePromptVisible else { return }
+        closePromptVisible = true
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Close Terminal?"
+        alert.informativeText =
+            "The terminal still has a running process. Closing it will stop that process."
+        alert.addButton(withTitle: "Close Terminal")
+        alert.addButton(withTitle: "Cancel")
+        closeAlert = alert
+        let finish: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard let self, self.closePromptVisible else { return }
+            self.closePromptVisible = false
+            self.closeAlert = nil
+            if response == .alertFirstButtonReturn {
+                self.finishClose()
+            } else {
+                self.onCloseRequestCancelled?()
+            }
+        }
+        if let window {
+            alert.beginSheetModal(for: window, completionHandler: finish)
+        } else {
+            finish(alert.runModal())
+        }
+    }
+
+    private func finishClose() {
         guard !closed else { return }
         closed = true
-        onClose?()
+        closePromptVisible = false
+        if let closeAlert, let parent = closeAlert.window.sheetParent {
+            parent.endSheet(closeAlert.window, returnCode: .cancel)
+        }
+        closeAlert = nil
+        let exitCode = pendingExitCode
+        let onClose = onClose
+        shutdown()
+        onClose?(exitCode)
     }
 
     private func applySize() {
@@ -234,13 +328,71 @@ public final class GhosttyTerminalView: NSView {
     public func setRenderingActive(_ active: Bool) {
         guard renderingActive != active else { return }
         renderingActive = active
+        if !active { mouseOverSurface = false }
+        syncFocus()
         applyPresentationState()
+    }
+
+    private func observeWindow(_ window: NSWindow) {
+        for name in [
+            NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification,
+            NSWindow.didChangeOcclusionStateNotification,
+        ] {
+            windowObservers.append(
+                NotificationCenter.default.addObserver(
+                    forName: name, object: window, queue: .main
+                ) { [weak self] _ in
+                    self?.syncFocus()
+                    self?.applyPresentationState()
+                })
+        }
+    }
+
+    private func removeWindowObservers() {
+        for observer in windowObservers { NotificationCenter.default.removeObserver(observer) }
+        windowObservers.removeAll()
+    }
+
+    private func syncFocus() {
+        let focused = Self.shouldFocus(
+            active: renderingActive, keyWindow: window?.isKeyWindow == true,
+            firstResponder: window?.firstResponder === self)
+        if !focused { suppressNextLeftMouseUp = false }
+        if let surface { ghostty_surface_set_focus(surface, focused) }
+        syncSecureInput(focused: focused)
+    }
+
+    func setSecureInput(_ mode: ghostty_action_secure_input_e) {
+        switch mode {
+        case GHOSTTY_SECURE_INPUT_ON:
+            secureInputRequested = true
+        case GHOSTTY_SECURE_INPUT_OFF:
+            secureInputRequested = false
+        case GHOSTTY_SECURE_INPUT_TOGGLE:
+            secureInputRequested.toggle()
+        default:
+            return
+        }
+        syncSecureInput(
+            focused: Self.shouldFocus(
+                active: renderingActive, keyWindow: window?.isKeyWindow == true,
+                firstResponder: window?.firstResponder === self))
+    }
+
+    private func syncSecureInput(focused: Bool) {
+        let identifier = ObjectIdentifier(self)
+        if secureInputRequested {
+            GhosttySecureInput.shared.setScoped(identifier, focused: focused)
+        } else {
+            GhosttySecureInput.shared.removeScoped(identifier)
+        }
     }
 
     private func applyPresentationState() {
         guard let surface else { return }
         let visible = Self.shouldRender(
-            active: renderingActive, hidden: isHidden, windowVisible: window != nil)
+            active: renderingActive, hidden: isHidden,
+            windowVisible: window?.occlusionState.contains(.visible) == true)
         ghostty_surface_set_occlusion(surface, visible)
         if let number = window?.screen?.deviceDescription[.init("NSScreenNumber")] as? NSNumber {
             ghostty_surface_set_display_id(surface, number.uint32Value)
@@ -254,6 +406,10 @@ public final class GhosttyTerminalView: NSView {
         active && !hidden && windowVisible
     }
 
+    static func shouldFocus(active: Bool, keyWindow: Bool, firstResponder: Bool) -> Bool {
+        active && keyWindow && firstResponder
+    }
+
     public override func layout() {
         super.layout()
         linkHoverView.frame = bounds
@@ -265,13 +421,18 @@ public final class GhosttyTerminalView: NSView {
 
     public override func becomeFirstResponder() -> Bool {
         guard super.becomeFirstResponder() else { return false }
-        if let surface { ghostty_surface_set_focus(surface, true) }
+        let focused = renderingActive && window?.isKeyWindow == true
+        if let surface { ghostty_surface_set_focus(surface, focused) }
+        syncSecureInput(focused: focused)
+        onFocus?()
         return true
     }
 
     public override func resignFirstResponder() -> Bool {
         guard super.resignFirstResponder() else { return false }
+        suppressNextLeftMouseUp = false
         if let surface { ghostty_surface_set_focus(surface, false) }
+        syncSecureInput(focused: false)
         return true
     }
 }

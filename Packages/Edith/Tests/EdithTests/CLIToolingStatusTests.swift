@@ -100,6 +100,18 @@ import Testing
         #expect(status.onPath)
     }
 
+    @Test func sanitizedToolEnvironmentRemovesNoColor() {
+        let environment = CLIToolEnvironment.sanitized(
+            processEnvironment: [
+                "PATH": "/usr/bin",
+                "NO_COLOR": "1",
+                "PRESERVED": "value",
+            ])
+
+        #expect(environment["NO_COLOR"] == nil)
+        #expect(environment["PRESERVED"] == "value")
+    }
+
     @Test func terminalToolingDescriptorsAreRegisteredAndExact() {
         let descriptors = TerminalToolingOperation.allCases.map(\.descriptor)
         #expect(
