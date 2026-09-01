@@ -345,7 +345,7 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
         let command = SSHClipboardManager.remoteInstallCommand(version: "0.2.10")
         #expect(
             command.contains(
-                "https://github.com/pulkitxm/ssh-clipboard/releases/download/v0.2.10/ssh-clipboard-0.2.10.tgz"
+                "https://raw.githubusercontent.com/pulkitxm/ssh-clipboard/5f41edfa86e30c090e2f5bca5d48692dd2ca6137/dist/ssh-clipboard-0.2.10.tgz"
             ))
         #expect(command.contains("vendor/$os-$arch/ssh-clipboard"))
         #expect(command.contains("$HOME/.local/bin/ssh-clipboard"))

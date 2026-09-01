@@ -134,7 +134,7 @@ public actor SSHClipboardManager {
     public static let packageVersion = "0.2.10"
 
     static func packageSource(version: String) -> String {
-        "https://github.com/pulkitxm/ssh-clipboard/releases/download/v\(version)/ssh-clipboard-\(version).tgz"
+        "https://raw.githubusercontent.com/pulkitxm/ssh-clipboard/5f41edfa86e30c090e2f5bca5d48692dd2ca6137/dist/ssh-clipboard-\(version).tgz"
     }
 
     public nonisolated static func supports(_ platform: RemoteMachinePlatform) -> Bool {
