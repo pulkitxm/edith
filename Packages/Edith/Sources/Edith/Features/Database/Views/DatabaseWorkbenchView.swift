@@ -638,7 +638,7 @@ struct DatabaseWorkbenchView: View {
                         requestDelete(connection)
                     } label: {
                         Image(systemName: "trash")
-                            .foregroundStyle(.red)
+                            .foregroundStyle(DashSkin.danger)
                     }
                     .buttonStyle(.edith(.borderless))
                     .disabled(mutations.hasTrackedMutation)
@@ -708,7 +708,7 @@ struct DatabaseWorkbenchView: View {
                     if let error = data.editorError {
                         Label(error, systemImage: "exclamationmark.circle.fill")
                             .font(.system(size: UIScale.pt(11)))
-                            .foregroundStyle(.red)
+                            .foregroundStyle(DashSkin.danger)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     TextEditor(text: documentTextBinding)
@@ -730,7 +730,7 @@ struct DatabaseWorkbenchView: View {
                         if let error = data.editorError {
                             Label(error, systemImage: "exclamationmark.circle.fill")
                                 .font(.system(size: UIScale.pt(11)))
-                                .foregroundStyle(.red)
+                                .foregroundStyle(DashSkin.danger)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         ForEach(data.editorFields) { field in
