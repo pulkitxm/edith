@@ -123,8 +123,15 @@ public enum Guide {
         printf '%s\n' "$DB_PASSWORD" | ed database connections add "TUF PostgreSQL" --product postgresql --host 127.0.0.1 --port 15432 --username edith --database million_rows --password-stdin
         ed database connections list --product postgresql --environment production
         ed database connections get <connection-id>
+        ed database connections test <connection-id> --timeout-milliseconds 10000 --json
         ed database capabilities <connection-id>
         ed database capabilities <connection-id> --refresh --json
+        ed database connect <connection-id> --json
+        ed database browse <connection-id> --path public --path orders --limit 100 --json
+        printf 'select * from public.orders limit 100' | ed database query <connection-id> --json
+        ed database operations list --connection <connection-id> --state running --json
+        ed database operations cancel <operation-id> --json
+        ed database disconnect <connection-id> --json
         ed database mcp
         ```
 
@@ -136,6 +143,12 @@ public enum Guide {
         Capability discovery uses the cached report when possible. `--refresh` asks the
         broker to reconnect and discover the current product, version, topology,
         permissions, limits, supported operations, and safety limitations.
+        Browse and query return bounded pages. Use `--ndjson` for one record per line,
+        pass the opaque continuation back with `--continuation`, and set an operation
+        deadline with `--timeout-milliseconds`. Query text is read only from stdin or
+        a UTF-8 file so statements do not leak through process arguments.
+        `database operations` lists broker history, shows progress, and requests
+        cancellation using operation UUIDs returned by execution commands.
 
         `ed database mcp` stays in the foreground and reserves stdout for MCP
         protocol traffic. It exposes bounded connection and capability inspection

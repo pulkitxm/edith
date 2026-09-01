@@ -853,10 +853,64 @@ public enum CommandTree {
                                     "--production-policy": .free,
                                 ],
                                 arguments: [.free]),
+                            CommandNode(
+                                "test", "Test one saved database connection.",
+                                options: ["--json", "--help", "--timeout-milliseconds"],
+                                optionValues: ["--timeout-milliseconds": .free],
+                                arguments: [.free]),
                         ]),
                     CommandNode(
                         "capabilities", "Show detected capabilities for one saved connection.",
                         options: ["--json", "--help", "--refresh"], arguments: [.free]),
+                    CommandNode(
+                        "connect", "Open a broker session for one saved connection.",
+                        options: ["--json", "--help", "--timeout-milliseconds"],
+                        optionValues: ["--timeout-milliseconds": .free], arguments: [.free]),
+                    CommandNode(
+                        "disconnect", "Close a broker session for one saved connection.",
+                        options: ["--json", "--help", "--timeout-milliseconds"],
+                        optionValues: ["--timeout-milliseconds": .free], arguments: [.free]),
+                    CommandNode(
+                        "browse", "Read one bounded page from a database object.",
+                        options: [
+                            "--json", "--ndjson", "--help", "--kind", "--path", "--limit",
+                            "--continuation", "--timeout-milliseconds",
+                        ],
+                        optionValues: [
+                            "--kind": .free, "--path": .free, "--limit": .free,
+                            "--continuation": .free, "--timeout-milliseconds": .free,
+                        ], arguments: [.free]),
+                    CommandNode(
+                        "query", "Execute one bounded read query from stdin or a UTF-8 file.",
+                        options: [
+                            "--json", "--ndjson", "--help", "--language", "--file", "--kind",
+                            "--path", "--limit", "--continuation", "--timeout-milliseconds",
+                        ],
+                        optionValues: [
+                            "--language": .free, "--file": .free, "--kind": .free,
+                            "--path": .free, "--limit": .free, "--continuation": .free,
+                            "--timeout-milliseconds": .free,
+                        ], arguments: [.free]),
+                    CommandNode(
+                        "operations", "Inspect and cancel tracked database operations.",
+                        children: [
+                            CommandNode(
+                                "list", "List tracked database operations.", aliases: ["ls"],
+                                options: [
+                                    "--json", "--help", "--connection", "--state", "--kind",
+                                    "--before", "--limit",
+                                ],
+                                optionValues: [
+                                    "--connection": .free, "--state": .free, "--kind": .free,
+                                    "--before": .free, "--limit": .free,
+                                ]),
+                            CommandNode(
+                                "get", "Show one tracked database operation.",
+                                options: common, arguments: [.free]),
+                            CommandNode(
+                                "cancel", "Request cancellation of one database operation.",
+                                options: common, arguments: [.free]),
+                        ]),
                     CommandNode(
                         "mcp", "Serve read-only database inspection over MCP stdio."),
                 ]),
