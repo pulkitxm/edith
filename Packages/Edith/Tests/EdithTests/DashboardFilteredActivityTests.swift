@@ -62,13 +62,13 @@ import Testing
 
     @Test func denseModelAndSourceChartsAggregateTheirLongTails() throws {
         let sourceIDs = (1...12).map { "source-\($0)" }
-        let sourceRows = sourceIDs.enumerated().map { index, source in
+        let sourceRows: String = sourceIDs.enumerated().map { index, source in
             let value = index + 1
             return "\"\(source)\":[{\"modelName\":\"model-\(value)\",\"inputTokens\":\(value)}]"
         }.joined(separator: ",")
-        let daily =
+        let daily: String =
             "{\"period\":\"2026-06-01\",\"bySource\":{\(sourceRows)},\"projects\":[],\"hours\":[]}"
-        let sources = sourceIDs.map { "\"\($0)\"" }.joined(separator: ",")
+        let sources: String = sourceIDs.map { "\"\($0)\"" }.joined(separator: ",")
         let dashboard = try model(daily, sources: sources)
 
         let modelSeries = Set(dashboard.chartData.modelTime.map(\.series))
@@ -85,7 +85,7 @@ import Testing
     @Test func longRangeStackedChartsUseMatchingWeeklyCostBuckets() async throws {
         let start = try #require(DashboardModel.ymd.date(from: "2026-06-01"))
         let calendar = Calendar(identifier: .gregorian)
-        let daily = try (0...60).map { offset in
+        let daily: String = try (0...60).map { offset in
             let date = try #require(calendar.date(byAdding: .day, value: offset, to: start))
             let period = DashboardModel.ymd.string(from: date)
             return

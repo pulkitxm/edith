@@ -152,6 +152,19 @@ enum JSONContract {
             "ed presenter stop", ["presenter", "stop", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed tools ls", ["tools", "ls", "--json"]),
+        JSONCase("ed database connections list", ["database", "connections", "list", "--json"]),
+        JSONCase(
+            "ed database connections get",
+            [
+                "database", "connections", "get",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
+            ]),
+        JSONCase(
+            "ed database capabilities",
+            [
+                "database", "capabilities",
+                "36fc476b-28f7-4c1a-ae54-4b10d793fd0f", "--json",
+            ]),
         JSONCase(
             "ed tools install", ["tools", "install", "yt-dlp", "--json"],
             mutatesTheMachine: true),

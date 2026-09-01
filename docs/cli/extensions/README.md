@@ -33,10 +33,10 @@ enables immediately and reports missing grants in plain text or JSON.
 | `ed extensions enable <id>` | Turns one on, and names on stderr any required permission still missing |
 | `ed extensions disable <id>` | Turns one off |
 | `ed extensions info <id>` | Describes one: name, summary, key, group, state, permissions |
-| `ed extensions status [id]` | Summarises readiness for one extension or all twenty |
+| `ed extensions status [id]` | Summarises readiness for one extension or all twenty-two |
 | `ed extensions setup <id>` | Enables one and reports the setup that remains |
 | `ed extensions verify <id>` | Runs every readiness check for one extension |
-| `ed extensions doctor [id]` | Diagnoses one extension or all twenty, with recovery commands |
+| `ed extensions doctor [id]` | Diagnoses one extension or all twenty-two, with recovery commands |
 
 The Extensions pane and each extension settings modal use these same typed read
 operations. Marketplace browsing maps to `ls`, opening a modal maps to `info`,
@@ -51,8 +51,8 @@ operations as their command-line equivalents.
 
 ## The registry
 
-`ExtensionRegistry.entries` in EdithKit is the single list every command here
-walks, and its order is the order `ls` prints. Twenty entries, in this order:
+`ExtensionRegistry.entries` in EdithCore is the single list every command here
+walks, and its order is the order `ls` prints. Twenty-two entries, in this order:
 
 | ID | Name | Group | What it does |
 | --- | --- | --- | --- |
@@ -60,9 +60,11 @@ walks, and its order is the order `ls` prints. Twenty entries, in this order:
 | `usage` | Agent Usage | Agent | Claude and Codex limits, usage stats, and alerts |
 | `herdr` | Herdr | Agent | Live Herdr sessions on this Mac and your SSH machines |
 | `quinjet` | Quinjet | Agent | Pull request and live workspace review in a native terminal |
+| `seoAudit` | Site Audit | Utilities | Crawl sitemaps, inspect page metadata, and keep every run local |
 | `system` | System | System | Running apps, prevent sleep, and the keyboard-cleaning lock |
 | `appMaintenance` | App Maintenance | System | Packages, verified installs, updates, and review-first removal |
 | `machines` | Machines | System | Your other computers over SSH: stats, files, Docker, and a terminal |
+| `database` | Database | Utilities | Guarded database exploration and production mutations |
 | `companion` | Companion | Agent | Your notes, voice memos and activity, remembered and searchable |
 | `systemStats` | CPU & Memory in menu bar | System | Live CPU and memory readout as a menu bar item |
 | `micMute` | Mic Mute | System | Mute every microphone system-wide with ⌘⇧M or the menu bar icon |
@@ -77,9 +79,9 @@ walks, and its order is the order `ls` prints. Twenty entries, in this order:
 | `emoji` | Emoji Picker | Utilities | Every macOS emoji on a hotkey |
 | `colorPicker` | Color Picker | Utilities | System loupe on a hotkey, sampled color to your clipboard |
 
-The same twenty, with what each one is made of. `Key` is the preference the app
+The same twenty-two, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the
-ten the welcome tour shows before you ask it for all of them.
+eleven the welcome tour shows before you ask it for all of them.
 
 | ID | Key | Featured | Required permissions | Optional permissions | Required tools | Optional tools |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -87,9 +89,11 @@ ten the welcome tour shows before you ask it for all of them.
 | `usage` | `tabUsageEnabled` | yes | none | `notifications` | `claude`, `codex` | none |
 | `herdr` | `tabHerdrEnabled` | yes | none | none | none | none |
 | `quinjet` | `tabQuinjetEnabled` | yes | none | none | `quinjet` | none |
+| `seoAudit` | `tabSEOAuditEnabled` | no | none | none | none | none |
 | `system` | `tabSystemEnabled` | yes | none | `accessibility`, `inputMonitoring` | none | none |
 | `appMaintenance` | `appMaintenanceEnabled` | yes | none | none | none | `homebrew` |
 | `machines` | `tabMachinesEnabled` | yes | none | `notifications` | none | none |
+| `database` | `tabDatabaseEnabled` | yes | none | none | none | none |
 | `companion` | `tabCompanionEnabled` | no | none | none | none | none |
 | `systemStats` | `menuBarSystemStats` | no | none | none | none | none |
 | `micMute` | `micMuteEnabled` | no | none | none | none | none |
@@ -114,9 +118,11 @@ the current platform, and which missing implementations merely degrade it:
 | `usage` | `usageCollection` | `notifications` |
 | `herdr` | `herdrSessions` | none |
 | `quinjet` | `localTerminal` | none |
+| `seoAudit` | `siteAuditing` | none |
 | `system` | `runningApplications` | `preventSleep`, `inputSuppression` |
 | `appMaintenance` | `runningApplications` | `packageManagement` |
 | `machines` | `machineManagement` | `notifications` |
+| `database` | `databaseBroker` | none |
 | `companion` | `companionService` | none |
 | `systemStats` | `systemMetrics` | none |
 | `micMute` | `microphoneControl` | `globalShortcuts` |

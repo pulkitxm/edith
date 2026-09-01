@@ -79,6 +79,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case system
     case appMaintenance
     case machines
+    case database
     case companion
     case systemStats
     case micMute

@@ -46,7 +46,7 @@ public struct SettingDefinition: Equatable, Sendable {
 public enum ConfigCatalog {
     public static let groups = [
         "appearance", "panel", "attention", "usage", "limits", "menubar", "alerts", "budget",
-        "dashboard",
+        "dashboard", "database",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
         "music",
         "calendar",
@@ -57,8 +57,8 @@ public enum ConfigCatalog {
 
     public static let settings: [SettingDefinition] =
         appearance + panel + attention + usageAndLimits
-        + menuBar + alerts + budget + dashboard + machines + herdr + quinjet + companion + finder
-        + system + homebrew + cleaner
+        + menuBar + alerts + budget + dashboard + database + machines + herdr + quinjet + companion
+        + finder + system + homebrew + cleaner
         + music + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
         + colorPicker + emoji
         + micMute
@@ -875,6 +875,13 @@ public enum ConfigCatalog {
         SettingDefinition(
             "colorPickerHotKeyLabel", .string, group: "colorpicker",
             summary: "Printable label for the colour picker shortcut."),
+    ]
+
+    private static let database: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Tabs.databaseEnabled, .bool, group: "database",
+            summary: "Database extension: guarded database exploration and operations.",
+            fallback: .bool(false))
     ]
 
     private static let emoji: [SettingDefinition] = [

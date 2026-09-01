@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 import EdithCore
+import EdithDatabase
 @testable import EdithKit
 
 @Suite struct ExtensionLifecycleProbeTests {
@@ -39,6 +40,9 @@ import EdithCore
             requiredTools: [], optionalTools: ["homebrew"]),
         MatrixRow(
             id: "machines", helper: true, machine: true, toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
+            id: "database", helper: false, machine: false, toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
             id: "companion", helper: false, machine: false, toolRule: .all, adapter: true,
@@ -331,6 +335,56 @@ import EdithCore
         #expect(lifecycle.prerequisites.first?.title == "Deploy or connect the backend")
         #expect(lifecycle.prerequisites.first?.command == "ed companion deploy")
         #expect(lifecycle.recovery.first?.command == "ed companion doctor --json")
+    }
+
+    @Test func databaseBrokerReadinessAdapterReportsReady() async {
+        let readiness = await DatabaseBrokerExtensionReadinessAdapter(
+            ensureReady: {}
+        ).readiness()
+
+        #expect(readiness == .ready("The authenticated local database broker is ready."))
+    }
+
+    @Test func databaseBrokerReadinessAdapterReportsUnavailable() async {
+        let readiness = await DatabaseBrokerExtensionReadinessAdapter(
+            ensureReady: {
+                throw DatabaseBrokerAvailabilityError.unavailable
+            }
+        ).readiness()
+
+        #expect(readiness == .failed("The local database broker is unavailable."))
+    }
+
+    @Test func databaseBrokerReadinessAdapterReportsTimeouts() async {
+        let readinessTimeout = await DatabaseBrokerExtensionReadinessAdapter(
+            ensureReady: {
+                throw DatabaseBrokerAvailabilityError.readinessTimedOut
+            }
+        ).readiness()
+        let transitionTimeout = await DatabaseBrokerExtensionReadinessAdapter(
+            ensureReady: {
+                throw DatabaseBrokerAvailabilityError.versionTransitionTimedOut
+            }
+        ).readiness()
+
+        #expect(
+            readinessTimeout
+                == .failed("The local database broker did not become ready in time."))
+        #expect(
+            transitionTimeout
+                == .failed("The local database broker could not finish updating in time."))
+    }
+
+    @Test func databaseBrokerReadinessAdapterReportsUnsafePeer() async {
+        let readiness = await DatabaseBrokerExtensionReadinessAdapter(
+            ensureReady: {
+                throw DatabaseBrokerAvailabilityError.unsafePeer
+            }
+        ).readiness()
+
+        #expect(
+            readiness
+                == .failed("The local database broker failed peer authentication."))
     }
 
     @Test func herdrSnapshotsMapSessionAndHostHealth() {

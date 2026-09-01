@@ -814,6 +814,35 @@ public enum CommandTree {
                         options: common, arguments: [.quinjetSession, .quinjetPath]),
                 ]),
             CommandNode(
+                "database", "Inspect saved database connections and their capabilities.",
+                children: [
+                    CommandNode(
+                        "connections", "Inspect saved database connections.",
+                        children: [
+                            CommandNode(
+                                "list", "List saved database connections.", aliases: ["ls"],
+                                options: [
+                                    "--json", "--help", "--search", "--product",
+                                    "--environment", "--group", "--tag", "--favorites-only",
+                                    "--order", "--limit", "--offset",
+                                ],
+                                optionValues: [
+                                    "--search": .free, "--product": .free,
+                                    "--environment": .free, "--group": .free,
+                                    "--tag": .free, "--order": .free, "--limit": .free,
+                                    "--offset": .free,
+                                ]),
+                            CommandNode(
+                                "get", "Show one saved database connection without credentials.",
+                                options: common, arguments: [.free]),
+                        ]),
+                    CommandNode(
+                        "capabilities", "Show detected capabilities for one saved connection.",
+                        options: ["--json", "--help", "--refresh"], arguments: [.free]),
+                    CommandNode(
+                        "mcp", "Serve read-only database inspection over MCP stdio."),
+                ]),
+            CommandNode(
                 "machines", "The computers Edith can reach over SSH.",
                 arguments: [.machine],
                 children: [

@@ -5,7 +5,16 @@ import Dispatch
 import Foundation
 
 @testable import EdithCLI
+@testable import EdithDatabase
 @testable import EdithKit
+
+private struct CLIUnavailableDatabaseBrokerSender: DatabaseBrokerCommandSending {
+    func send(
+        _ request: DatabaseBrokerCommandRequest
+    ) async throws -> DatabaseBrokerCommandResponse {
+        throw DatabaseBrokerCommandClientError.unavailable
+    }
+}
 
 actor CLIGate {
     static let shared = CLIGate()
@@ -187,6 +196,8 @@ final class CLIWorld: @unchecked Sendable {
         QuinjetCLIEnvironment.client = {
             QuinjetClient { _ in throw QuinjetClientError.notInstalled }
         }
+        DatabaseCLIEnvironment.makeSender = { CLIUnavailableDatabaseBrokerSender() }
+        DatabaseCLIEnvironment.runMCPServer = {}
         CLIEnvironment.installedAppURL = { nil }
         CLIEnvironment.appContributors = { [] }
         CLIEnvironment.appInspectionCenter = { [weak self] in

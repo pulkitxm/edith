@@ -16,7 +16,7 @@ extension EnvironmentValues {
 enum MainDestination: String, CaseIterable, Identifiable {
     case home, attention, dashboard, herdr, quinjet, seoAudit, music, calendar, system,
         appMaintenance
-    case machines, companion, extensions, settings, about
+    case machines, database, companion, extensions, settings, about
 
     var id: String { rawValue }
 
@@ -33,6 +33,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
         case .system: return "System"
         case .appMaintenance: return "App Maintenance"
         case .machines: return "Machines"
+        case .database: return "Database"
         case .companion: return "Companion"
         case .extensions: return "Extensions"
         case .settings: return "Settings"
@@ -53,6 +54,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
         case .system: return "cpu"
         case .appMaintenance: return "shippingbox.and.arrow.backward"
         case .machines: return "server.rack"
+        case .database: return "cylinder.fill"
         case .companion: return "brain.head.profile"
         case .extensions: return "puzzlepiece.extension"
         case .settings: return "gearshape"
@@ -69,7 +71,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
 
     static let homeItems: [MainDestination] = [
         .home, .attention, .dashboard, .herdr, .quinjet, .seoAudit, .music, .calendar, .system,
-        .appMaintenance, .machines, .companion,
+        .appMaintenance, .machines, .database, .companion,
     ]
     static let appItems: [MainDestination] = [
         .extensions, .settings, .about,
@@ -456,6 +458,9 @@ struct MainWindowView: View {
     @AppStorage(AppStorageKeys.Tabs.machinesEnabled, store: SharedDefaults.store) private
         var machinesEnabled =
         false
+    @AppStorage(AppStorageKeys.Tabs.databaseEnabled, store: SharedDefaults.store) private
+        var databaseEnabled =
+        false
     @AppStorage(AppStorageKeys.Tabs.companionEnabled, store: SharedDefaults.store) private
         var companionEnabled =
         false
@@ -543,6 +548,7 @@ struct MainWindowView: View {
         case .system: systemEnabled ? requested : .home
         case .appMaintenance: appMaintenanceEnabled ? requested : .home
         case .machines: machinesEnabled ? requested : .home
+        case .database: databaseEnabled ? requested : .home
         case .companion: companionEnabled ? requested : .home
         default: requested
         }
@@ -1022,6 +1028,7 @@ struct MainWindowView: View {
             case .system: systemEnabled
             case .appMaintenance: appMaintenanceEnabled
             case .machines: machinesEnabled
+            case .database: databaseEnabled
             case .companion: companionEnabled
             default: true
             }
@@ -1484,6 +1491,7 @@ struct MainWindowView: View {
         case .system: SystemPage()
         case .appMaintenance: AppMaintenanceView()
         case .machines: MachinesPage()
+        case .database: DatabasePage()
         case .companion: CompanionPage()
         case .extensions: ExtensionsPane()
         case .settings: SettingsPane(updater: updater)
