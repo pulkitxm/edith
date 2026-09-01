@@ -301,20 +301,25 @@ struct DatabaseConnectionGallery: View {
                 }
                 .padding(UIScale.pt(14))
                 .frame(maxWidth: .infinity, minHeight: UIScale.pt(126), alignment: .topLeading)
-                .background(
-                    highlighted ? palette.panel : palette.panel.opacity(0.74),
-                    in: RoundedRectangle(cornerRadius: UIScale.pt(13))
-                )
-                .overlay {
+                .background {
                     RoundedRectangle(cornerRadius: UIScale.pt(13))
-                        .stroke(
-                            highlighted ? accent.opacity(0.72) : palette.line,
-                            lineWidth: highlighted ? 1.5 : 1)
+                        .fill(highlighted ? palette.panel : palette.panel.opacity(0.74))
+                        .overlay {
+                            if highlighted {
+                                RoundedRectangle(cornerRadius: UIScale.pt(13))
+                                    .fill(accent.opacity(dark ? 0.1 : 0.07))
+                            }
+                        }
+                        .shadow(
+                            color: highlighted ? accent.opacity(0.16) : .clear,
+                            radius: UIScale.pt(9),
+                            y: UIScale.pt(3))
                 }
                 .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(13)))
             }
             .buttonStyle(.edith(.borderless))
             .focused($focusedConnectionID, equals: connection.id)
+            .focusEffectDisabled()
             .background {
                 DatabaseKeyboardFocusAnchor(active: focusRequest.target == connection.id) {
                     guard focusRequest.target == connection.id else { return }
