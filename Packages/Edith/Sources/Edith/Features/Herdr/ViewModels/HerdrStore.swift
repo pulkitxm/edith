@@ -52,6 +52,11 @@ enum HerdrPaneSizing {
 @MainActor
 @Observable
 final class HerdrStore {
+    typealias UserCloseRequester =
+        @MainActor (
+            TerminalSessionHolder, @escaping @MainActor (Bool) -> Void
+        ) -> Void
+
     static let shared = HerdrStore()
     static let boardID = "board"
 
@@ -149,6 +154,7 @@ final class HerdrStore {
     private let liveWatcher: HerdrLiveWatcher
     private let agentCloser: HerdrAgentCloser
     private let machinesProvider: () -> [Machine]
+    private let requestUserClose: UserCloseRequester
     private var expectedHostCount: Int
     private var restoringDefaults = true
     private var collapseCountsReady = false
@@ -167,12 +173,16 @@ final class HerdrStore {
         defaults: UserDefaults = SharedDefaults.store,
         liveWatcher: @escaping HerdrLiveWatcher = { yield in await HerdrLive.watch(yield) },
         agentCloser: @escaping HerdrAgentCloser = { try await HerdrAgentCloseExecution.close($0) },
-        machinesProvider: @escaping () -> [Machine] = { MachineRegistry.machines() }
+        machinesProvider: @escaping () -> [Machine] = { MachineRegistry.machines() },
+        requestUserClose: @escaping UserCloseRequester = { holder, completion in
+            holder.requestUserClose(completion)
+        }
     ) {
         self.defaults = defaults
         self.liveWatcher = liveWatcher
         self.agentCloser = agentCloser
         self.machinesProvider = machinesProvider
+        self.requestUserClose = requestUserClose
         expectedHostCount = machinesProvider().count + 1
         railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
         railWidth = HerdrPaneSizing.rail(
@@ -627,16 +637,31 @@ final class HerdrStore {
             predicate(item.offset, item.element) ? item.element.id : nil
         }
         guard !ids.isEmpty else { return }
-        let selectedClosed = ids.contains(selectedTab)
-        for id in ids {
-            guard let index = tabs.firstIndex(where: { $0.id == id }) else { continue }
-            tabs[index].holder.stop()
-            tabs[index].quinjet.stop()
-            tabs.remove(at: index)
+        closeSequentially(ids[...])
+    }
+
+    private func closeSequentially(_ ids: ArraySlice<String>) {
+        guard let id = ids.first else { return }
+        let remaining = ids.dropFirst()
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else {
+            closeSequentially(remaining)
+            return
         }
-        if selectedClosed {
-            selectedTab = tabs.last?.id ?? Self.boardID
+        let holder = tabs[index].holder
+        requestUserClose(holder) { [weak self, weak holder] confirmed in
+            guard let self else { return }
+            if confirmed, let holder { self.removeClosedTab(id, holder: holder) }
+            self.closeSequentially(remaining)
         }
+    }
+
+    private func removeClosedTab(_ id: String, holder: TerminalSessionHolder) {
+        guard let index = tabs.firstIndex(where: { $0.id == id && $0.holder === holder }) else {
+            return
+        }
+        tabs[index].quinjet.stop()
+        tabs.remove(at: index)
+        if selectedTab == id { selectedTab = tabs.last?.id ?? Self.boardID }
     }
 
     func selectBoard() {

@@ -233,6 +233,57 @@ import Testing
         }
     }
 
+    @Test func cancellingGhosttyCloseLeavesTheSessionAndClearsTheRequest() async throws {
+        try await withGhosttyEnabled(true) {
+            var closeRequests = 0
+            let holder = TerminalSessionHolder(requestGhosttyClose: { _ in
+                closeRequests += 1
+                return true
+            })
+            holder.start(executable: "/bin/cat", arguments: [], environment: [])
+            let launch = try #require(holder.ghosttyLaunch)
+            let view = holder.retainedGhosttyView(
+                launch: launch, theme: GhosttyTheme(palette: .edith(dark: true)))
+            var decisions: [Bool] = []
+
+            holder.requestUserClose { decisions.append($0) }
+            view.onCloseRequestCancelled?()
+            await Task.yield()
+
+            #expect(closeRequests == 1)
+            #expect(decisions == [false])
+            #expect(holder.started)
+            #expect(holder.ghosttyView === view)
+            #expect(holder.ghosttyLaunch != nil)
+
+            view.onClose?(0)
+            await Task.yield()
+
+            #expect(decisions == [false])
+            #expect(holder.ghosttyView == nil)
+            #expect(holder.ghosttyLaunch == nil)
+        }
+    }
+
+    @Test func confirmingGhosttyCloseCompletesTheUserRequest() async throws {
+        try await withGhosttyEnabled(true) {
+            let holder = TerminalSessionHolder(requestGhosttyClose: { _ in true })
+            holder.start(executable: "/bin/cat", arguments: [], environment: [])
+            let launch = try #require(holder.ghosttyLaunch)
+            let view = holder.retainedGhosttyView(
+                launch: launch, theme: GhosttyTheme(palette: .edith(dark: true)))
+            var decisions: [Bool] = []
+
+            holder.requestUserClose { decisions.append($0) }
+            view.onClose?(0)
+            await Task.yield()
+
+            #expect(decisions == [true])
+            #expect(holder.ghosttyView == nil)
+            #expect(holder.ghosttyLaunch == nil)
+        }
+    }
+
     @Test func swiftTermMetadataCallbacksReachTheSharedHolder() async {
         await withGhosttyEnabled(false) {
             let holder = TerminalSessionHolder()
@@ -254,10 +305,10 @@ import Testing
     @Test func resetDiscardsStaleMetadataAndQueuedGhosttyInput() async throws {
         try await withGhosttyEnabled(true) {
             var deliveries: [String] = []
-            let holder = TerminalSessionHolder { _, text in
+            let holder = TerminalSessionHolder(deliverGhosttyInput: { _, text in
                 deliveries.append(text)
                 return false
-            }
+            })
             holder.start(
                 executable: "/usr/bin/true", arguments: [], environment: [],
                 currentDirectory: "/tmp/starting")
@@ -301,10 +352,10 @@ import Testing
     @Test func queuedGhosttyInputFlushesOnceWhenTheViewIsRetained() async throws {
         try await withGhosttyEnabled(true) {
             var deliveries: [String] = []
-            let holder = TerminalSessionHolder { _, text in
+            let holder = TerminalSessionHolder(deliverGhosttyInput: { _, text in
                 deliveries.append(text)
                 return true
-            }
+            })
             holder.start(executable: "/usr/bin/true", arguments: [], environment: [])
             holder.sendInput("first ")
             holder.insertText("second")

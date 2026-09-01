@@ -20,6 +20,13 @@ extension EnvironmentValues {
 @Observable
 final class TerminalSessionHolder {
     typealias GhosttyInputDelivery = @MainActor (GhosttyTerminalView, String) -> Bool
+    typealias GhosttyCloseRequest = @MainActor (GhosttyTerminalView) -> Bool
+
+    private struct PendingUserClose {
+        let viewID: ObjectIdentifier
+        let generation: Int
+        let completion: @MainActor (Bool) -> Void
+    }
 
     private(set) var terminalView = EdithTerminalView.make()
     private(set) var generation = 0
@@ -38,13 +45,17 @@ final class TerminalSessionHolder {
     private var presentationWantsFocus = false
     private var focusTask: Task<Void, Never>?
     private var queuedGhosttyInput = ""
+    private var pendingUserClose: PendingUserClose?
+    private let requestGhosttyClose: GhosttyCloseRequest
     private let deliverGhosttyInput: GhosttyInputDelivery
 
     init(
+        requestGhosttyClose: @escaping GhosttyCloseRequest = { view in view.requestClose() },
         deliverGhosttyInput: @escaping GhosttyInputDelivery = { view, text in
             view.insertText(text)
         }
     ) {
+        self.requestGhosttyClose = requestGhosttyClose
         self.deliverGhosttyInput = deliverGhosttyInput
     }
 
@@ -93,6 +104,7 @@ final class TerminalSessionHolder {
     }
 
     func reset() {
+        pendingUserClose = nil
         presentationGeneration += 1
         focusTask?.cancel()
         focusTask = nil
@@ -116,6 +128,28 @@ final class TerminalSessionHolder {
 
     func stop() {
         reset()
+    }
+
+    func requestUserClose(_ completion: @escaping @MainActor (Bool) -> Void) {
+        guard pendingUserClose == nil else {
+            completion(false)
+            return
+        }
+        guard let ghosttyView else {
+            stop()
+            completion(true)
+            return
+        }
+        let request = PendingUserClose(
+            viewID: ObjectIdentifier(ghosttyView), generation: generation,
+            completion: completion)
+        pendingUserClose = request
+        guard requestGhosttyClose(ghosttyView) else {
+            pendingUserClose = nil
+            stop()
+            completion(true)
+            return
+        }
     }
 
     func sendInput(_ text: String) {
@@ -142,6 +176,12 @@ final class TerminalSessionHolder {
                 self.finishGhosttySession(view, exitCode: exitCode)
             }
         }
+        view.onCloseRequestCancelled = { [weak self, weak view] in
+            Task { @MainActor in
+                guard let self, let view else { return }
+                self.cancelUserClose(for: view, generation: viewGeneration)
+            }
+        }
         view.onTitleChange = { [weak self] title in
             Task { @MainActor in
                 self?.setCurrentTitle(title, generation: viewGeneration)
@@ -162,6 +202,7 @@ final class TerminalSessionHolder {
     }
 
     private func finishGhosttySession(_ view: GhosttyTerminalView, exitCode: Int32?) {
+        let closeCompletion = takeUserCloseCompletion(for: view, generation: generation)
         focusTask?.cancel()
         focusTask = nil
         clearQueuedGhosttyInput()
@@ -175,6 +216,21 @@ final class TerminalSessionHolder {
         exitMessage =
             exitCode == nil || exitCode == 0
             ? "Session ended." : "Session ended with status \(exitCode ?? 0)."
+        closeCompletion?(true)
+    }
+
+    private func cancelUserClose(for view: GhosttyTerminalView, generation: Int) {
+        takeUserCloseCompletion(for: view, generation: generation)?(false)
+    }
+
+    private func takeUserCloseCompletion(
+        for view: GhosttyTerminalView, generation: Int
+    ) -> (@MainActor (Bool) -> Void)? {
+        guard let request = pendingUserClose,
+            request.viewID == ObjectIdentifier(view), request.generation == generation
+        else { return nil }
+        pendingUserClose = nil
+        return request.completion
     }
 
     private func setCurrentTitle(_ title: String?, generation: Int) {

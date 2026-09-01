@@ -278,6 +278,40 @@ import Testing
         #expect(inputs == ["uptime\n"])
     }
 
+    @MainActor @Test func terminalTabWaitsForGhosttyCloseConfirmation() throws {
+        var decide: ((Bool) -> Void)?
+        let model = TerminalTabsModel { _, completion in decide = completion }
+        let first = model.addTab(named: "One")
+        let second = model.addTab(named: "Two")
+
+        model.closeTab(second.id)
+
+        #expect(model.tabs.map(\.id) == [first.id, second.id])
+        #expect(model.selected == second.id)
+        let cancel = try #require(decide)
+        cancel(false)
+        #expect(model.tabs.map(\.id) == [first.id, second.id])
+        #expect(model.selected == second.id)
+
+        model.closeTab(second.id)
+        let confirm = try #require(decide)
+        confirm(true)
+
+        #expect(model.tabs.map(\.id) == [first.id])
+        #expect(model.selected == first.id)
+    }
+
+    @MainActor @Test func terminalTabWithoutALiveGhosttySurfaceClosesImmediately() {
+        let model = TerminalTabsModel()
+        let first = model.addTab(named: "One")
+        let second = model.addTab(named: "Two")
+
+        model.closeTab(second.id)
+
+        #expect(model.tabs.map(\.id) == [first.id])
+        #expect(model.selected == first.id)
+    }
+
     @MainActor @Test func terminalBroadcastIPCIsCorrelatedAndScopedByMachineIdentity() throws {
         let first = TerminalTabsModel()
         let firstLive = first.addTab(named: "One")

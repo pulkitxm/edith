@@ -7,6 +7,11 @@ import SwiftUI
 @MainActor
 @Observable
 final class TerminalTabsModel {
+    typealias UserCloseRequester =
+        @MainActor (
+            TerminalSessionHolder, @escaping @MainActor (Bool) -> Void
+        ) -> Void
+
     struct Tab: Identifiable {
         let id = UUID()
         var title: String
@@ -16,6 +21,15 @@ final class TerminalTabsModel {
     private(set) var tabs: [Tab] = []
     var selected: UUID?
     var broadcast = false
+    private let requestUserClose: UserCloseRequester
+
+    init(
+        requestUserClose: @escaping UserCloseRequester = { holder, completion in
+            holder.requestUserClose(completion)
+        }
+    ) {
+        self.requestUserClose = requestUserClose
+    }
 
     func ensureFirstTab(named title: String) {
         guard tabs.isEmpty else { return }
@@ -32,7 +46,17 @@ final class TerminalTabsModel {
 
     func closeTab(_ id: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-        tabs[index].holder.stop()
+        let holder = tabs[index].holder
+        requestUserClose(holder) { [weak self, weak holder] confirmed in
+            guard confirmed, let self, let holder else { return }
+            self.removeTab(id, holder: holder)
+        }
+    }
+
+    private func removeTab(_ id: UUID, holder: TerminalSessionHolder) {
+        guard let index = tabs.firstIndex(where: { $0.id == id && $0.holder === holder }) else {
+            return
+        }
         tabs.remove(at: index)
         if selected == id { selected = tabs.last?.id }
     }

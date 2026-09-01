@@ -3,6 +3,7 @@ import GhosttyKit
 
 public final class GhosttyTerminalView: NSView {
     public var onClose: ((Int32?) -> Void)?
+    public var onCloseRequestCancelled: (() -> Void)?
     public var onDropFiles: ((TerminalDropPayload) -> Bool)?
     public var onFocus: (() -> Void)?
     public var onTitleChange: ((String) -> Void)?
@@ -73,6 +74,13 @@ public final class GhosttyTerminalView: NSView {
     public func focusIfNeeded() {
         guard let window, window.firstResponder !== self else { return }
         window.makeFirstResponder(self)
+    }
+
+    @discardableResult
+    public func requestClose() -> Bool {
+        guard let surface, !closed else { return false }
+        ghostty_surface_request_close(surface)
+        return true
     }
 
     public override var wantsUpdateLayer: Bool { false }
@@ -255,10 +263,14 @@ public final class GhosttyTerminalView: NSView {
         alert.addButton(withTitle: "Cancel")
         closeAlert = alert
         let finish: (NSApplication.ModalResponse) -> Void = { [weak self] response in
-            guard let self else { return }
+            guard let self, self.closePromptVisible else { return }
             self.closePromptVisible = false
             self.closeAlert = nil
-            if response == .alertFirstButtonReturn { self.finishClose() }
+            if response == .alertFirstButtonReturn {
+                self.finishClose()
+            } else {
+                self.onCloseRequestCancelled?()
+            }
         }
         if let window {
             alert.beginSheetModal(for: window, completionHandler: finish)

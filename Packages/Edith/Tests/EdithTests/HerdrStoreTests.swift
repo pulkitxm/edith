@@ -148,6 +148,34 @@ private actor HerdrWatchHarness {
         #expect(store.selectedTab == keep)
     }
 
+    @Test func liveAgentTabsCloseSequentiallyAndKeepCancellations() throws {
+        var decisions: [ObjectIdentifier: (Bool) -> Void] = [:]
+        var requested: [ObjectIdentifier] = []
+        let store = seededStore { holder, completion in
+            requested.append(ObjectIdentifier(holder))
+            decisions[ObjectIdentifier(holder)] = completion
+        }
+        let keep = store.tabs[0]
+        let cancel = store.tabs[1]
+        let confirm = store.tabs[2]
+
+        store.closeOthers(besides: keep.id)
+
+        #expect(requested == [ObjectIdentifier(cancel.holder)])
+        let cancelDecision = try #require(decisions[ObjectIdentifier(cancel.holder)])
+        cancelDecision(false)
+
+        #expect(store.tabs.contains { $0.id == cancel.id })
+        #expect(
+            requested
+                == [ObjectIdentifier(cancel.holder), ObjectIdentifier(confirm.holder)])
+        let confirmDecision = try #require(decisions[ObjectIdentifier(confirm.holder)])
+        confirmDecision(true)
+
+        #expect(store.tabs.map(\.id) == [keep.id, cancel.id])
+        #expect(store.selectedTab == keep.id)
+    }
+
     @Test func closeToTheRightDropsLaterTabs() {
         let store = seededStore()
         let first = store.tabs[0].id
@@ -169,8 +197,12 @@ private actor HerdrWatchHarness {
         #expect(store.canCloseToTheRight(of: last) == false)
     }
 
-    private func seededStore() -> HerdrStore {
-        let store = HerdrStore()
+    private func seededStore(
+        requestUserClose: @escaping HerdrStore.UserCloseRequester = { holder, completion in
+            holder.requestUserClose(completion)
+        }
+    ) -> HerdrStore {
+        let store = HerdrStore(requestUserClose: requestUserClose)
         store.tabs = [
             HerdrOpenTab(
                 agent: agent("Claude Code", pane: "a"), machine: nil,
