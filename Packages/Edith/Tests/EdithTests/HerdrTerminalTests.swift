@@ -211,6 +211,21 @@ import Testing
         #expect(!line.contains("pane close"))
     }
 
+    @Test func closingAWindowsAgentUsesPowerShellInsteadOfUnixExports() {
+        let agent = HerdrAgent.make(
+            machineID: "windows", machineName: "Windows", machineIsLocal: false,
+            sshTarget: "windows", session: "work session", pane: "w2:p1",
+            kind: "Codex", status: .working, title: "Work", workspace: "edith",
+            cwd: "C:\\repo")
+        let line = HerdrAgentCloseCommand.shellLine(for: agent, platform: .windows)
+        let script = decodedPowerShell(line)
+
+        #expect(line.hasPrefix("powershell.exe "))
+        #expect(!line.contains("export PATH"))
+        #expect(script?.contains("agent', 'send-keys'") == true)
+        #expect(script?.contains("'ctrl+c', 'ctrl+c'") == true)
+    }
+
     @Test func aPlainPaneIsNotListedAsAnAgent() {
         let json = """
             {"id":"s","result":{"type":"session_snapshot","snapshot":{"panes":[{"pane_id":"w2:p1","agent":"claude","agent_status":"working","terminal_title_stripped":"Work","workspace_id":"w2"},{"pane_id":"w1:pA","agent_status":"unknown","workspace_id":"w1"}],"agents":[],"workspaces":[]}}}
@@ -253,4 +268,11 @@ import Testing
     private let host = HerdrHostSnapshot(
         id: "60E1AA8E-9B9C-487D-BA0F-D7D664D97CEB", name: "tuf-wired", isLocal: false,
         sshTarget: "tuf-wired", herdrPresent: true, reachable: true)
+}
+
+private func decodedPowerShell(_ command: String) -> String? {
+    guard let encoded = command.split(separator: " ").last,
+        let data = Data(base64Encoded: String(encoded))
+    else { return nil }
+    return String(data: data, encoding: .utf16LittleEndian)
 }

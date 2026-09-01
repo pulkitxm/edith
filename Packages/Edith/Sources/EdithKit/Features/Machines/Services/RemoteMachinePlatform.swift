@@ -111,3 +111,45 @@ public enum PowerShell {
         return "powershell.exe \(options) -EncodedCommand \(data.base64EncodedString())"
     }
 }
+
+public struct MachineConnectionProbeResult: Equatable, Sendable {
+    public let system: String
+    public let user: String
+    public let dockerAvailable: Bool
+
+    public init(system: String, user: String, dockerAvailable: Bool) {
+        self.system = system
+        self.user = user
+        self.dockerAvailable = dockerAvailable
+    }
+}
+
+public enum MachineConnectionProbe {
+    public static func command(platform: RemoteMachinePlatform) -> String {
+        if platform == .windows {
+            return PowerShell.command(
+                """
+                $system = if ($null -ne $PSVersionTable.OS) {
+                    $PSVersionTable.OS
+                } else {
+                    [Environment]::OSVersion.VersionString
+                }
+                [Console]::Out.WriteLine($system)
+                [Console]::Out.WriteLine([Environment]::UserName)
+                if ($null -ne (Get-Command docker.exe -ErrorAction SilentlyContinue)) {
+                    [Console]::Out.WriteLine('docker-yes')
+                }
+                """)
+        }
+        return "uname -sr; id -un; command -v docker >/dev/null 2>&1 && echo docker-yes"
+    }
+
+    public static func parse(_ output: String) -> MachineConnectionProbeResult {
+        let lines = output.split(whereSeparator: \.isNewline).map {
+            String($0).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return MachineConnectionProbeResult(
+            system: lines.first ?? "", user: lines.count > 1 ? lines[1] : "",
+            dockerAvailable: lines.dropFirst(2).contains("docker-yes"))
+    }
+}
