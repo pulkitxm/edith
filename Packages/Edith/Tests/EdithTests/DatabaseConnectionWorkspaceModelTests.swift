@@ -30,6 +30,7 @@ import Testing
         #expect(summary.environmentProtection == .confirmationRequired)
         #expect(summary.readOnlyPolicy == .required)
         #expect(summary.productionPolicy == .requireMutationPreview)
+        #expect(summary.groupIdentity == "payments")
         #expect(summary.group == "payments")
         #expect(summary.tags.count == 8)
         #expect(summary.isFavorite)
@@ -63,7 +64,8 @@ import Testing
         #expect(summary.color == "teal")
         #expect(summary.group == "payments")
         #expect(summary.isFavorite)
-        #expect(model.availableGroups == ["payments"])
+        #expect(model.availableGroups.map(\.id) == ["payments"])
+        #expect(model.availableGroups.map(\.label) == ["payments"])
 
         let requests = await sender.recordedRequests()
         let search = try #require(requests.first?.connectionListRequest?.search)
@@ -78,6 +80,35 @@ import Testing
         #expect(!model.favoritesOnly)
     }
 
+    @Test func groupFilterUsesRawIdentityWhileDisplayingSanitizedText() async throws {
+        let rawGroup = "payments\n\u{202E}" + String(repeating: "archive", count: 30)
+        let connection = try Self.connection(
+            id: 18,
+            name: "Long group",
+            group: rawGroup)
+        let sender = DatabaseConnectionScriptedSender()
+        await sender.succeed(Self.listResponse([connection]), at: 0)
+        await sender.succeed(Self.listResponse([connection]), at: 1)
+        let model = Self.model(sender)
+
+        await model.loadConnections()
+
+        let summary = try #require(model.visibleConnections.first)
+        let group = try #require(model.availableGroups.first)
+        #expect(summary.groupIdentity == rawGroup)
+        #expect(summary.group == group.label)
+        #expect(group.id == rawGroup)
+        #expect(group.label != rawGroup)
+        #expect(group.label.contains("\\u{000A}"))
+        #expect(group.label.count <= 160)
+
+        model.selectedGroup = group.id
+        await model.loadConnections()
+
+        let requests = await sender.recordedRequests()
+        #expect(requests[1].connectionListRequest?.search.group == rawGroup)
+    }
+
     @Test func completeEmptyListDistinguishesInitialAndFilteredResults() async {
         let sender = DatabaseConnectionScriptedSender()
         await sender.succeed(Self.listResponse([]), at: 0)
@@ -90,6 +121,38 @@ import Testing
         model.searchText = "missing"
         await model.loadConnections()
         #expect(model.listState == .filteredEmpty("missing"))
+    }
+
+    @Test func favoriteFilterEmptyResultPreservesThePriorSelection() async throws {
+        let connection = try Self.connection(id: 19, name: "Favorite")
+        let sender = DatabaseConnectionScriptedSender()
+        await sender.succeed(Self.listResponse([connection]), at: 0)
+        await sender.succeed(Self.listResponse([]), at: 1)
+        let model = Self.model(sender)
+
+        await model.loadConnections()
+        model.favoritesOnly = true
+        await model.loadConnections()
+
+        #expect(model.listState == .filteredEmpty("favorites"))
+        #expect(model.selectedConnectionID == connection.id)
+        #expect(model.selectedConnection?.id == connection.id)
+    }
+
+    @Test func groupFilterEmptyResultPreservesThePriorSelection() async throws {
+        let connection = try Self.connection(id: 20, name: "Analytics")
+        let sender = DatabaseConnectionScriptedSender()
+        await sender.succeed(Self.listResponse([connection]), at: 0)
+        await sender.succeed(Self.listResponse([]), at: 1)
+        let model = Self.model(sender)
+
+        await model.loadConnections()
+        model.selectedGroup = "analytics"
+        await model.loadConnections()
+
+        #expect(model.listState == .filteredEmpty("group analytics"))
+        #expect(model.selectedConnectionID == connection.id)
+        #expect(model.selectedConnection?.id == connection.id)
     }
 
     @Test func connectionListLabelsPartialAndStaleBrokerResults() async throws {

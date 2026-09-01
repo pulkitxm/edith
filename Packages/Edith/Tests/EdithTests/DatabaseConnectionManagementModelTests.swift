@@ -141,6 +141,79 @@ struct DatabaseConnectionManagementModelTests {
         #expect(request.connection.tags == ["sales,east", "priority"])
     }
 
+    @Test("Saving rejects a stale draft before it can weaken concurrent safety changes")
+    func saveRejectsConcurrentSafetyChanges() async throws {
+        let original = try Self.connection(
+            name: "Orders",
+            readOnlyPolicy: .disabled,
+            productionPolicy: .standard,
+            environmentProtection: .standard,
+            updatedAt: Date(timeIntervalSince1970: 2_000))
+        let concurrent = try Self.connection(
+            name: "Orders",
+            readOnlyPolicy: .required,
+            productionPolicy: .prohibitMutations,
+            environmentProtection: .readOnly,
+            updatedAt: Date(timeIntervalSince1970: 2_001))
+        let sender = DatabaseConnectionManagementSender([
+            .response(Self.getResponse(original)),
+            .response(Self.getResponse(concurrent)),
+            .echoEdit,
+        ])
+        let model = DatabaseConnectionManagementModel(sender: sender)
+        var draft = try #require(await model.loadEditDraft(connectionID: original.id))
+        draft.displayName = "Orders primary"
+
+        let saved = await model.saveEditDraft(draft)
+
+        #expect(saved == nil)
+        #expect(model.revisionConflictConnectionID == original.id)
+        #expect(model.uncertainOutcome == nil)
+        #expect(
+            model.failure
+                == "This connection changed after you opened it. Reload the latest settings before editing again."
+        )
+        let requests = await sender.recordedRequests()
+        #expect(requests.count == 2)
+        #expect(requests.allSatisfy { $0.connectionEditRequest == nil })
+    }
+
+    @Test("Unknown mutation outcomes retain operation and session impact")
+    func outcomeUnknownRetainsTypedContext() async throws {
+        let connection = try Self.connection(name: "Orders")
+        let editSender = DatabaseConnectionManagementSender([
+            .response(Self.getResponse(connection)),
+            .response(Self.getResponse(connection)),
+            .failure(.outcomeUnknown),
+        ])
+        let editModel = DatabaseConnectionManagementModel(sender: editSender)
+        let draft = try #require(await editModel.loadEditDraft(connectionID: connection.id))
+
+        let edited = await editModel.saveEditDraft(draft)
+
+        #expect(edited == nil)
+        #expect(
+            editModel.uncertainOutcome
+                == DatabaseConnectionManagementUncertainOutcome(
+                    connectionID: connection.id,
+                    operation: .savingEdit))
+        #expect(editModel.uncertainOutcome?.mayDisconnectSession == true)
+
+        let duplicateSender = DatabaseConnectionManagementSender([
+            .failure(.outcomeUnknown)
+        ])
+        let duplicateModel = DatabaseConnectionManagementModel(sender: duplicateSender)
+        let duplicated = await duplicateModel.duplicate(
+            connectionID: connection.id,
+            displayName: "Orders copy")
+
+        #expect(duplicated == nil)
+        #expect(duplicateModel.uncertainOutcome?.operation == .duplicating)
+        #expect(duplicateModel.uncertainOutcome?.mayDisconnectSession == false)
+        duplicateModel.clearFailure()
+        #expect(duplicateModel.uncertainOutcome == nil)
+    }
+
     @Test("Favorite toggling fetches fresh state and changes no other fields")
     func toggleFavoriteUsesFreshConnection() async throws {
         let fresh = try Self.connection(
@@ -303,7 +376,11 @@ struct DatabaseConnectionManagementModelTests {
         group: String? = "Payments",
         tags: [String] = ["critical", "orders"],
         color: String? = "indigo",
-        isFavorite: Bool = false
+        isFavorite: Bool = false,
+        readOnlyPolicy: DatabaseReadOnlyPolicy = .required,
+        productionPolicy: DatabaseProductionPolicy = .requireMutationPreview,
+        environmentProtection: DatabaseEnvironmentProtection = .confirmationRequired,
+        updatedAt: Date = Date(timeIntervalSince1970: 2_000)
     ) throws -> DatabaseConnectionDefinition {
         let password = DatabaseSecretReference(
             identifier: uuid(credentialSeed),
@@ -360,12 +437,12 @@ struct DatabaseConnectionManagementModelTests {
                 poolSize: try DatabasePoolSize(6),
                 idleTimeout: try DatabaseTimeout(milliseconds: 120_000),
                 keepaliveInterval: try DatabaseTimeout(milliseconds: 30_000)),
-            readOnlyPolicy: .required,
-            productionPolicy: .requireMutationPreview,
+            readOnlyPolicy: readOnlyPolicy,
+            productionPolicy: productionPolicy,
             environment: DatabaseEnvironmentMetadata(
                 kind: .staging,
                 label: "Staging east",
-                protection: .confirmationRequired),
+                protection: environmentProtection),
             group: group,
             tags: tags,
             color: color,
@@ -375,7 +452,7 @@ struct DatabaseConnectionManagementModelTests {
                 DatabaseNonSecretOption(name: "loadBalance", value: .boolean(true)),
             ],
             createdAt: Date(timeIntervalSince1970: 1_000),
-            updatedAt: Date(timeIntervalSince1970: 2_000),
+            updatedAt: updatedAt,
             lastTestedAt: Date(timeIntervalSince1970: 2_500),
             lastUsedAt: Date(timeIntervalSince1970: 3_000))
     }

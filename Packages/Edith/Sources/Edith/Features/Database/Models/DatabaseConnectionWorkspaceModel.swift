@@ -12,6 +12,7 @@ struct DatabaseConnectionSummary: Identifiable, Equatable, Sendable {
     let environmentProtection: DatabaseEnvironmentProtection
     let readOnlyPolicy: DatabaseReadOnlyPolicy
     let productionPolicy: DatabaseProductionPolicy
+    let groupIdentity: String?
     let group: String?
     let tags: [String]
     let color: String?
@@ -35,6 +36,7 @@ struct DatabaseConnectionSummary: Identifiable, Equatable, Sendable {
         environmentProtection = definition.environment.protection
         readOnlyPolicy = definition.readOnlyPolicy
         productionPolicy = definition.productionPolicy
+        groupIdentity = definition.group
         group = DatabaseConnectionDisplayText.optional(definition.group)
         tags = definition.tags.prefix(8).map {
             DatabaseConnectionDisplayText.rendered($0, fallback: "Tag", limit: 96)
@@ -65,6 +67,11 @@ struct DatabaseConnectionSummary: Identifiable, Equatable, Sendable {
     var productionSummary: String {
         productionPolicy.title
     }
+}
+
+struct DatabaseConnectionGroupOption: Identifiable, Equatable, Hashable, Sendable {
+    let id: String
+    let label: String
 }
 
 enum DatabaseConnectionDataQuality: Equatable, Sendable {
@@ -290,9 +297,19 @@ final class DatabaseConnectionWorkspaceModel {
         listState.connections
     }
 
-    var availableGroups: [String] {
-        Array(Set(summariesByID.values.compactMap(\.group))).sorted {
-            $0.localizedStandardCompare($1) == .orderedAscending
+    var availableGroups: [DatabaseConnectionGroupOption] {
+        let groups = summariesByID.values.reduce(
+            into: [String: DatabaseConnectionGroupOption]()
+        ) { result, summary in
+            guard let identity = summary.groupIdentity, let label = summary.group else { return }
+            result[identity] = DatabaseConnectionGroupOption(id: identity, label: label)
+        }
+        return groups.values.sorted {
+            let labelOrder = $0.label.localizedStandardCompare($1.label)
+            if labelOrder == .orderedSame {
+                return $0.id < $1.id
+            }
+            return labelOrder == .orderedAscending
         }
     }
 
@@ -347,13 +364,17 @@ final class DatabaseConnectionWorkspaceModel {
         let summary = DatabaseConnectionSummary(definition: connection)
         summariesByID[connection.id] = summary
         if disconnectsSession {
-            sessionGenerations[connection.id] = UUID()
-            capabilityGenerations[connection.id] = UUID()
-            sessionStates[connection.id] = .disconnected
-            capabilityStates[connection.id] = .unavailable
+            invalidateManagedConnectionSession(connection.id)
         }
         replaceVisibleConnection(summary)
         announcement("Updated \(summary.name).")
+    }
+
+    func invalidateManagedConnectionSession(_ connectionID: DatabaseConnectionID) {
+        sessionGenerations[connectionID] = UUID()
+        capabilityGenerations[connectionID] = UUID()
+        sessionStates[connectionID] = .disconnected
+        capabilityStates[connectionID] = .unavailable
     }
 
     func applyDuplicatedConnection(_ connection: DatabaseConnectionDefinition) {
@@ -709,16 +730,20 @@ final class DatabaseConnectionWorkspaceModel {
         }
         if let first = connections.first {
             selectedConnectionID = first.id
-        } else if normalizedSearch == nil {
+        } else if !hasActiveFilters {
             selectedConnectionID = nil
         }
+    }
+
+    private var hasActiveFilters: Bool {
+        normalizedSearch != nil || favoritesOnly || selectedGroup != nil
     }
 
     private var filterDescription: String? {
         let values = [
             normalizedSearch,
             favoritesOnly ? "favorites" : nil,
-            selectedGroup.map { "group \($0)" },
+            DatabaseConnectionDisplayText.optional(selectedGroup).map { "group \($0)" },
         ].compactMap { $0 }
         return values.isEmpty ? nil : values.joined(separator: ", ")
     }

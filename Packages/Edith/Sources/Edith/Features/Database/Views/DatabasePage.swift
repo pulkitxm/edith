@@ -196,6 +196,7 @@ struct DatabasePage: View {
                 edited: finishManagedUpdate,
                 renamed: finishManagedUpdate,
                 duplicated: finishDuplicate,
+                uncertain: beginUncertainManagementReconciliation,
                 cancel: dismissConnectionManagement)
         }
         .confirmationDialog(
@@ -465,6 +466,8 @@ struct DatabasePage: View {
             clearWorkspaceDataIfSelected(connection.id)
             connectionWorkspace.applyManagedConnection(updated, disconnectsSession: true)
             connectionListRevision &+= 1
+        } else if let outcome = connectionManagement.uncertainOutcome {
+            beginUncertainManagementReconciliation(outcome)
         } else {
             showManagementFailure()
         }
@@ -473,7 +476,11 @@ struct DatabasePage: View {
     private func deleteConnection(_ connection: DatabaseConnectionSummary) async {
         guard let result = await connectionManagement.deleteConnection(connectionID: connection.id)
         else {
-            showManagementFailure()
+            if let outcome = connectionManagement.uncertainOutcome {
+                beginUncertainManagementReconciliation(outcome)
+            } else {
+                showManagementFailure()
+            }
             return
         }
         clearWorkspaceDataIfSelected(connection.id)
@@ -489,6 +496,23 @@ struct DatabasePage: View {
                 title: "Connection already removed",
                 detail: "The saved connection was already absent, so its stale card was cleared."
             )
+        }
+    }
+
+    private func beginUncertainManagementReconciliation(
+        _ outcome: DatabaseConnectionManagementUncertainOutcome
+    ) {
+        connectionManagementRoute = nil
+        if outcome.mayDisconnectSession {
+            clearWorkspaceDataIfSelected(outcome.connectionID)
+            connectionWorkspace.invalidateManagedConnectionSession(outcome.connectionID)
+        }
+        connectionManagement.clearFailure()
+        Task {
+            await connectionWorkspace.loadConnections()
+            managementMessage = DatabaseConnectionManagementMessage(
+                title: "Connection outcome needs review",
+                detail: outcome.reconciliationDetail)
         }
     }
 
@@ -632,6 +656,25 @@ private enum DatabaseConnectionActionConfirmation: Identifiable {
             "Updating this favorite closes its active session. You can reconnect from the workspace."
         case .delete:
             "This removes the saved connection and may close its active session. The database and its data are not changed."
+        }
+    }
+}
+
+private extension DatabaseConnectionManagementUncertainOutcome {
+    var reconciliationDetail: String {
+        switch operation {
+        case .savingEdit:
+            "The changes may have been saved. Review this connection before trying again."
+        case .renaming:
+            "The connection may have been renamed. Review the list before trying again."
+        case .duplicating:
+            "The copy may have been created. Review the list before trying again."
+        case .togglingFavorite:
+            "The favorite may have changed. Review the card before trying again."
+        case .deleting:
+            "The connection may have been removed. Review the list before trying again."
+        case .loadingEdit:
+            "The connection could not be reloaded. Review the saved connections before trying again."
         }
     }
 }

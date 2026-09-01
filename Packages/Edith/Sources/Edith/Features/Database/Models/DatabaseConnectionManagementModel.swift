@@ -17,6 +17,7 @@ enum DatabaseConnectionColorToken: String, CaseIterable, Hashable, Identifiable,
 
 struct DatabaseConnectionEditDraft: Equatable, Sendable {
     let connectionID: DatabaseConnectionID
+    let originalUpdatedAt: Date
     var displayName: String
     var environmentKind: DatabaseEnvironmentKind
     var environmentLabel: String
@@ -30,6 +31,7 @@ struct DatabaseConnectionEditDraft: Equatable, Sendable {
 
     init(definition: DatabaseConnectionDefinition) {
         connectionID = definition.id
+        originalUpdatedAt = definition.updatedAt
         displayName = definition.displayName
         environmentKind = definition.environment.kind
         environmentLabel = definition.environment.label
@@ -52,6 +54,20 @@ enum DatabaseConnectionManagementOperation: String, Equatable, Sendable {
     case deleting
 }
 
+struct DatabaseConnectionManagementUncertainOutcome: Equatable, Sendable {
+    let connectionID: DatabaseConnectionID
+    let operation: DatabaseConnectionManagementOperation
+
+    var mayDisconnectSession: Bool {
+        switch operation {
+        case .savingEdit, .renaming, .togglingFavorite, .deleting:
+            true
+        case .loadingEdit, .duplicating:
+            false
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class DatabaseConnectionManagementModel {
@@ -60,6 +76,8 @@ final class DatabaseConnectionManagementModel {
     private(set) var activeConnectionID: DatabaseConnectionID?
     private(set) var operation: DatabaseConnectionManagementOperation?
     private(set) var failure: String?
+    private(set) var revisionConflictConnectionID: DatabaseConnectionID?
+    private(set) var uncertainOutcome: DatabaseConnectionManagementUncertainOutcome?
 
     private let sender: any DatabaseBrokerCommandSending
 
@@ -73,6 +91,8 @@ final class DatabaseConnectionManagementModel {
 
     func clearFailure() {
         failure = nil
+        revisionConflictConnectionID = nil
+        uncertainOutcome = nil
     }
 
     func loadEditDraft(
@@ -89,6 +109,9 @@ final class DatabaseConnectionManagementModel {
     ) async -> DatabaseConnectionDefinition? {
         await perform(connectionID: draft.connectionID, operation: .savingEdit) {
             let fresh = try await self.loadConnection(draft.connectionID)
+            guard fresh.updatedAt == draft.originalUpdatedAt else {
+                throw DatabaseConnectionManagementFailure.connectionChanged
+            }
             let edited = try Self.editedConnection(fresh, draft: draft)
             let response = try await self.sender.send(
                 .connectionEdit(
@@ -218,6 +241,8 @@ final class DatabaseConnectionManagementModel {
             return nil
         }
         failure = nil
+        revisionConflictConnectionID = nil
+        uncertainOutcome = nil
         activeConnectionID = connectionID
         self.operation = operation
         defer {
@@ -229,6 +254,18 @@ final class DatabaseConnectionManagementModel {
         } catch is CancellationError {
             return nil
         } catch {
+            if let managementFailure = error as? DatabaseConnectionManagementFailure,
+                managementFailure.isConnectionChanged
+            {
+                revisionConflictConnectionID = connectionID
+            }
+            if error as? DatabaseBrokerCommandClientError == .outcomeUnknown,
+                operation != .loadingEdit
+            {
+                uncertainOutcome = DatabaseConnectionManagementUncertainOutcome(
+                    connectionID: connectionID,
+                    operation: operation)
+            }
             failure = Self.bounded(Self.message(for: error))
             return nil
         }
@@ -422,6 +459,7 @@ final class DatabaseConnectionManagementModel {
 }
 
 private enum DatabaseConnectionManagementFailure: LocalizedError {
+    case connectionChanged
     case connectionNotFound
     case invalidField(String)
     case mismatchedConnection
@@ -431,6 +469,8 @@ private enum DatabaseConnectionManagementFailure: LocalizedError {
 
     var errorDescription: String? {
         switch self {
+        case .connectionChanged:
+            "This connection changed after you opened it. Reload the latest settings before editing again."
         case .connectionNotFound:
             "The saved database connection no longer exists."
         case .invalidField(let field):
@@ -444,5 +484,10 @@ private enum DatabaseConnectionManagementFailure: LocalizedError {
         case .unexpectedResponse:
             "The database service returned an unexpected response."
         }
+    }
+
+    var isConnectionChanged: Bool {
+        if case .connectionChanged = self { return true }
+        return false
     }
 }

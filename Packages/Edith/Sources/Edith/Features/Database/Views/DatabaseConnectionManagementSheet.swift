@@ -17,6 +17,7 @@ struct DatabaseConnectionManagementSheet: View {
     let edited: (DatabaseConnectionDefinition) -> Void
     let renamed: (DatabaseConnectionDefinition) -> Void
     let duplicated: (DatabaseConnectionDuplicateResult) -> Void
+    let uncertain: (DatabaseConnectionManagementUncertainOutcome) -> Void
     let cancel: () -> Void
 
     @State private var draft: DatabaseConnectionEditDraft?
@@ -32,6 +33,7 @@ struct DatabaseConnectionManagementSheet: View {
         edited: @escaping (DatabaseConnectionDefinition) -> Void,
         renamed: @escaping (DatabaseConnectionDefinition) -> Void,
         duplicated: @escaping (DatabaseConnectionDuplicateResult) -> Void,
+        uncertain: @escaping (DatabaseConnectionManagementUncertainOutcome) -> Void,
         cancel: @escaping () -> Void
     ) {
         self.connection = connection
@@ -40,6 +42,7 @@ struct DatabaseConnectionManagementSheet: View {
         self.edited = edited
         self.renamed = renamed
         self.duplicated = duplicated
+        self.uncertain = uncertain
         self.cancel = cancel
         _name = State(
             initialValue: presentation == .duplicate
@@ -314,10 +317,17 @@ struct DatabaseConnectionManagementSheet: View {
                     symbol: "exclamationmark.triangle.fill",
                     tint: DashSkin.danger)
                 if presentation == .edit, !isBusy {
-                    Button("Try again") {
-                        Task { await prepare() }
+                    if draft == nil {
+                        Button("Try again") {
+                            Task { await prepare() }
+                        }
+                        .buttonStyle(.edith(.secondary))
+                    } else if model.revisionConflictConnectionID == connection.id {
+                        Button("Reload latest settings") {
+                            reloadLatestDraft()
+                        }
+                        .buttonStyle(.edith(.secondary))
                     }
-                    .buttonStyle(.edith(.secondary))
                 }
             }
         }
@@ -426,7 +436,15 @@ struct DatabaseConnectionManagementSheet: View {
                     duplicated(result)
                 }
             }
+            if let outcome = model.uncertainOutcome {
+                uncertain(outcome)
+            }
         }
+    }
+
+    private func reloadLatestDraft() {
+        draft = nil
+        Task { await prepare() }
     }
 
     private func draftBinding<Value>(

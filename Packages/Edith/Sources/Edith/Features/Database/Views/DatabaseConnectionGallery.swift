@@ -124,13 +124,13 @@ struct DatabaseConnectionGallery: View {
                         Text("All groups")
                     }
                 }
-                ForEach(model.availableGroups, id: \.self) { group in
+                ForEach(model.availableGroups) { group in
                     Button {
-                        model.selectedGroup = group
+                        model.selectedGroup = group.id
                     } label: {
                         Label(
-                            group,
-                            systemImage: model.selectedGroup == group ? "checkmark" : "folder")
+                            group.label,
+                            systemImage: model.selectedGroup == group.id ? "checkmark" : "folder")
                     }
                 }
             }
