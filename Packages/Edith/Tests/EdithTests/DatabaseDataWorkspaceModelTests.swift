@@ -153,6 +153,42 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(mutation.payload.parameters.map(\.value) == [.string("Inline")])
     }
 
+    @Test("Row editor only reviews fields that changed")
+    func rowEditorChangeTracking() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)])
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.targetText = "public.customers"
+        model.browse(connection)
+        await Self.waitUntil { model.state == .loaded }
+
+        model.selectRecord(at: 0)
+        model.beginEditingSelectedRow(connection)
+        #expect(!model.canSubmitEditor)
+
+        model.updateEditorField("name", text: "Updated")
+        #expect(model.canSubmitEditor)
+        #expect(model.editorFields.first(where: { $0.id == "name" })?.isIncluded == true)
+
+        model.updateEditorField("name", text: "Customer 1")
+        #expect(!model.canSubmitEditor)
+        #expect(model.editorFields.first(where: { $0.id == "name" })?.isIncluded == false)
+
+        model.updateEditorField("name", text: "Updated again")
+        model.resetEditorField("name")
+        #expect(!model.canSubmitEditor)
+        #expect(model.editorFields.first(where: { $0.id == "name" })?.text == "Customer 1")
+
+        model.beginInsert(connection)
+        model.setEditorFieldIncluded("name", included: true)
+        #expect(model.canSubmitEditor)
+        let insert = try #require(model.editorMutationRequest(connection))
+        #expect(insert.payload.parameters.map(\.value) == [.string("")])
+    }
+
     private static func connection(
         product: DatabaseProduct
     ) throws -> DatabaseConnectionSummary {

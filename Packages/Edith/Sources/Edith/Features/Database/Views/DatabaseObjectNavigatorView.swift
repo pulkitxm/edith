@@ -8,9 +8,10 @@ struct DatabaseObjectNavigatorView: View {
     let connection: DatabaseConnectionSummary
     let open: (DatabaseObjectIdentifier) -> Void
     @State private var expandedGroups = Set<DatabaseObjectIdentifier>()
-    @Environment(\.colorScheme) private var scheme
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        AppTheme.accent.rawValue
 
-    private var dark: Bool { scheme == .dark }
+    private var theme: Color { themeColor(themeName) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,9 +31,9 @@ struct DatabaseObjectNavigatorView: View {
     private var header: some View {
         VStack(spacing: UIScale.pt(9)) {
             HStack {
-                Text("Objects")
+                Text(navigatorTitle)
                     .font(.system(size: UIScale.pt(11.5), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
+                    .foregroundStyle(.primary)
                 Spacer(minLength: 0)
                 Button {
                     explorer.load(connection)
@@ -43,7 +44,7 @@ struct DatabaseObjectNavigatorView: View {
                 .help("Reload database objects")
                 .accessibilityLabel("Reload database objects")
             }
-            TextField("Search database objects", text: searchBinding)
+            TextField("Search \(navigatorTitle.lowercased())", text: searchBinding)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(size: UIScale.pt(11)))
         }
@@ -59,7 +60,7 @@ struct DatabaseObjectNavigatorView: View {
                 ProgressView().controlSize(.small)
                 Text("Loading objects")
                     .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .loading where explorer.groups.isEmpty:
@@ -67,16 +68,16 @@ struct DatabaseObjectNavigatorView: View {
                 ProgressView().controlSize(.small)
                 Text("Loading objects")
                     .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message) where explorer.groups.isEmpty:
             VStack(spacing: UIScale.pt(10)) {
                 Image(systemName: "exclamationmark.triangle")
-                    .foregroundStyle(DashSkin.warn)
+                    .foregroundStyle(.orange)
                 Text(message)
                     .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                 Button("Try again") { explorer.load(connection) }
                     .buttonStyle(.edith(.secondary))
@@ -96,7 +97,7 @@ struct DatabaseObjectNavigatorView: View {
                 } label: {
                     HStack(spacing: UIScale.pt(7)) {
                         Image(systemName: groupSymbol(group.identifier.kind))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .foregroundStyle(.secondary)
                         Text(group.title)
                             .font(.system(size: UIScale.pt(11), weight: .semibold))
                             .lineLimit(1)
@@ -106,7 +107,7 @@ struct DatabaseObjectNavigatorView: View {
                         } else if !group.objects.isEmpty {
                             Text(group.objects.count.formatted())
                                 .font(.system(size: UIScale.pt(9.5), weight: .medium))
-                                .foregroundStyle(DashSkin.inkFaint(dark))
+                                .foregroundStyle(.secondary)
                         }
                     }
                     .opacity(group.isAvailable ? 1 : 0.5)
@@ -120,7 +121,7 @@ struct DatabaseObjectNavigatorView: View {
             if explorer.filteredGroups.isEmpty {
                 Text("No matching objects")
                     .font(.system(size: UIScale.pt(11.5)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -138,7 +139,7 @@ struct DatabaseObjectNavigatorView: View {
                 if let estimatedRows = object.estimatedRows {
                     Text(estimatedRows.formatted(.number.notation(.compactName)))
                         .font(.system(size: UIScale.pt(9.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .foregroundStyle(.secondary)
                 }
             }
             .tag(object.identifier)
@@ -147,7 +148,7 @@ struct DatabaseObjectNavigatorView: View {
         if group.state == .loaded, group.objects.isEmpty {
             Text("No tables or views")
                 .font(.system(size: UIScale.pt(10.5)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+                .foregroundStyle(.secondary)
         }
         if case .failed(let message) = group.state {
             Button {
@@ -155,7 +156,7 @@ struct DatabaseObjectNavigatorView: View {
             } label: {
                 Label(message, systemImage: "arrow.clockwise")
                     .font(.system(size: UIScale.pt(10.5)))
-                    .foregroundStyle(DashSkin.warn)
+                    .foregroundStyle(.orange)
             }
             .buttonStyle(.edith(.borderless))
         }
@@ -165,7 +166,7 @@ struct DatabaseObjectNavigatorView: View {
             }
             .buttonStyle(.edith(.borderless))
             .font(.system(size: UIScale.pt(10.5), weight: .medium))
-            .foregroundStyle(DashSkin.accent(dark))
+            .foregroundStyle(theme)
         }
     }
 
@@ -240,8 +241,17 @@ struct DatabaseObjectNavigatorView: View {
 
     private func objectColor(_ kind: DatabaseObjectKind) -> Color {
         switch kind {
-        case .view, .materializedView: DashSkin.inkFaint(dark)
-        default: DashSkin.accent(dark)
+        case .view, .materializedView: .secondary
+        default: theme
+        }
+    }
+
+    private var navigatorTitle: String {
+        switch connection.product.family {
+        case .relational, .analytical: "Tables"
+        case .keyValue: "Keys"
+        case .document: "Collections"
+        case .search: "Indexes"
         }
     }
 }

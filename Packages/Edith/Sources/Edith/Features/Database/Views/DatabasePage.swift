@@ -102,11 +102,12 @@ struct DatabasePage: View {
     @State private var objectExplorer = DatabaseObjectExplorerModel()
     @State private var workspace = DatabaseWorkspaceModel()
     @State private var showsServiceDetails = false
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        AppTheme.accent.rawValue
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
-    private var dark: Bool { scheme == .dark }
+    private var theme: Color { themeColor(themeName) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -179,12 +180,12 @@ struct DatabasePage: View {
         switch model.readiness {
         case .checking:
             serviceProgress(
-                title: "Preparing database tools",
-                detail: "Starting the secure local database service.")
+                title: "Preparing Database",
+                detail: "Starting the local tools used by your connections.")
         case .repairing:
             serviceProgress(
-                title: "Repairing database tools",
-                detail: "Replacing the local service and checking it again.")
+                title: "Repairing Database",
+                detail: "Refreshing the local tools, then reopening your connections.")
         case .failed(let detail):
             serviceRecovery(detail)
         case .ready:
@@ -268,20 +269,20 @@ struct DatabasePage: View {
                 .foregroundStyle(.orange)
                 .accessibilityHidden(true)
             VStack(spacing: UIScale.pt(7)) {
-                Text("Database tools need attention")
+                Text("Database needs a quick repair")
                     .font(.system(size: UIScale.pt(20), weight: .semibold))
                 Text(
-                    "Edith can safely replace its local database service and reconnect automatically."
+                    "Edith can repair its local database tools and reopen your saved connections."
                 )
                 .font(.system(size: UIScale.pt(13)))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             }
-            Button("Repair database service") {
+            Button("Repair and continue") {
                 Task { await model.repair() }
             }
-            .buttonStyle(.edith(.primary, tint: .accentColor))
+            .buttonStyle(.edith(.primary, tint: theme))
             DisclosureGroup("Technical details", isExpanded: $showsServiceDetails) {
                 Text(detail)
                     .font(.system(size: UIScale.pt(11), design: .monospaced))
@@ -303,7 +304,7 @@ struct DatabasePage: View {
         VStack(spacing: UIScale.pt(20)) {
             Image(systemName: "cylinder.split.1x2")
                 .font(.system(size: UIScale.pt(42), weight: .light))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(theme)
                 .accessibilityHidden(true)
             VStack(spacing: UIScale.pt(8)) {
                 Text("Connect your first database")
@@ -317,7 +318,7 @@ struct DatabasePage: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
             Button("Add connection", action: beginConnectionCreation)
-                .buttonStyle(.edith(.primary, tint: .accentColor))
+                .buttonStyle(.edith(.primary, tint: theme))
         }
         .frame(maxWidth: UIScale.pt(520))
         .padding(UIScale.pt(36))
@@ -355,7 +356,7 @@ struct DatabasePage: View {
             } label: {
                 Image(systemName: "plus")
             }
-            .buttonStyle(.edith(.primary, tint: DashSkin.accent(dark)))
+            .buttonStyle(.edith(.primary, tint: theme))
             .accessibilityLabel("Add database connection")
         }
         .padding(UIScale.pt(10))
@@ -395,30 +396,28 @@ struct DatabasePage: View {
                 systemName: workspace.hasTrackedMutation
                     ? "clock.arrow.circlepath" : "info.circle.fill"
             )
-            .foregroundStyle(
-                workspace.hasTrackedMutation ? DashSkin.warn : DashSkin.accent(dark))
+            .foregroundStyle(workspace.hasTrackedMutation ? Color.orange : theme)
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 Text(
-                    workspace.hasTrackedMutation ? "Mutation requires tracking" : "Mutation status"
+                    workspace.hasTrackedMutation ? "Change needs attention" : "Change status"
                 )
                 .font(.system(size: UIScale.pt(13), weight: .semibold))
                 Text(detail)
                     .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if workspace.hasTrackedMutation {
                     HStack(spacing: UIScale.pt(8)) {
                         if workspace.safetyPhase.allowsOperationCancellation {
                             Button(
-                                workspace.acceptedMutation == nil
-                                    ? "Cancel operation" : "Cancel mutation"
+                                "Cancel change"
                             ) {
                                 workspace.cancelSafetyOperation()
                             }
                             .buttonStyle(.edith(.secondary))
                         }
                         if workspace.safetyPhase.allowsReconciliation {
-                            Button("Check mutation status") {
+                            Button("Check status") {
                                 Task { await workspace.reconcileSafetyOperation() }
                             }
                             .buttonStyle(.edith(.secondary))
@@ -432,7 +431,7 @@ struct DatabasePage: View {
                                     ? "Cancelling" : "Checking status"
                             )
                             .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -440,7 +439,7 @@ struct DatabasePage: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(UIScale.pt(14))
-        .background(DashSkin.warn.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
     }
 
 }
