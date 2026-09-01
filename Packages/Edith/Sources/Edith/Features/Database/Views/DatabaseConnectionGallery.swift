@@ -265,7 +265,7 @@ struct DatabaseConnectionGallery: View {
             }
             .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(13)))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .focused($focusedConnectionID, equals: connection.id)
         .onHover { isHovered in
             hoveredConnectionID = isHovered ? connection.id : nil
