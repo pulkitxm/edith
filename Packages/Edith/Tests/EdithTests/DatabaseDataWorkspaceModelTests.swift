@@ -86,6 +86,279 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(await sender.recordedRequests().isEmpty)
     }
 
+    @Test(
+        "PostgreSQL, MySQL, and SQLite queries map to exact SQL requests",
+        arguments: [DatabaseProduct.postgresql, .mysql, .sqlite]
+    )
+    func relationalQueryRequests(product: DatabaseProduct) async throws {
+        let captured = try await Self.capturedQuery(
+            product: product,
+            text: "  SELECT id, name FROM customers ORDER BY id  ")
+
+        #expect(
+            captured.request
+                == DatabaseQueryRequest(
+                    target: DatabaseTargetIdentifier(connectionID: captured.connection.id),
+                    language: .sql,
+                    command: "SELECT id, name FROM customers ORDER BY id",
+                    page: DatabasePageRequest(pageSize: try DatabasePageSize(100)),
+                    operation: captured.request.operation))
+    }
+
+    @Test(
+        "Redis and Valkey queries split the command and key into an exact request",
+        arguments: [DatabaseProduct.redis, .valkey]
+    )
+    func keyspaceQueryRequests(product: DatabaseProduct) async throws {
+        let object = DatabaseObjectIdentifier(kind: .keyspace, path: ["3"])
+        let captured = try await Self.capturedQuery(
+            product: product,
+            object: object,
+            text: "  GET   session:customer:1  ")
+
+        #expect(
+            captured.request
+                == DatabaseQueryRequest(
+                    target: DatabaseTargetIdentifier(
+                        connectionID: captured.connection.id,
+                        object: object),
+                    language: .redisCommand,
+                    command: "GET",
+                    parameters: [
+                        DatabaseQueryParameter(
+                            name: "key",
+                            value: .string("session:customer:1"))
+                    ],
+                    page: DatabasePageRequest(pageSize: try DatabasePageSize(100)),
+                    operation: captured.request.operation))
+    }
+
+    @Test("MongoDB query maps extended JSON into native database values")
+    func mongoDBQueryRequest() async throws {
+        let object = DatabaseObjectIdentifier(kind: .collection, path: ["app", "people"])
+        let captured = try await Self.capturedQuery(
+            product: .mongoDB,
+            object: object,
+            text:
+                """
+                {"_id":{"$oid":"507f1f77bcf86cd799439011"},"createdAt":{"$date":"2024-01-02T03:04:05Z"}}
+                """)
+
+        #expect(
+            captured.request
+                == DatabaseQueryRequest(
+                    target: DatabaseTargetIdentifier(
+                        connectionID: captured.connection.id,
+                        object: object),
+                    language: .mongoQuery,
+                    command: "find",
+                    body: .object([
+                        DatabaseObjectField(
+                            name: "_id",
+                            value: .productSpecific(
+                                DatabaseProductValue(
+                                    product: .mongoDB,
+                                    typeName: "objectId",
+                                    textRepresentation: "507f1f77bcf86cd799439011"))),
+                        DatabaseObjectField(
+                            name: "createdAt",
+                            value: .timestamp(
+                                DatabaseTimestampValue(text: "2024-01-02T03:04:05Z"))),
+                    ]),
+                    page: DatabasePageRequest(pageSize: try DatabasePageSize(100)),
+                    operation: captured.request.operation))
+    }
+
+    @Test(
+        "Elasticsearch and OpenSearch preserve dollar keys for search and aggregate commands",
+        arguments: [DatabaseProduct.elasticsearch, .openSearch]
+    )
+    func searchQueryRequests(product: DatabaseProduct) async throws {
+        let object = DatabaseObjectIdentifier(kind: .index, path: ["events-v1"])
+        let body = DatabaseValue.object([
+            DatabaseObjectField(
+                name: "event",
+                value: .object([
+                    DatabaseObjectField(name: "$date", value: .string("literal"))
+                ]))
+        ])
+        let search = try await Self.capturedQuery(
+            product: product,
+            object: object,
+            text: "{\"event\":{\"$date\":\"literal\"}}")
+        let aggregate = try await Self.capturedQuery(
+            product: product,
+            object: object,
+            text: "{\"event\":{\"$date\":\"literal\"}}",
+            operation: .aggregate)
+
+        #expect(
+            search.request
+                == DatabaseQueryRequest(
+                    target: DatabaseTargetIdentifier(
+                        connectionID: search.connection.id,
+                        object: object),
+                    language: .searchQueryDSL,
+                    command: "search",
+                    body: body,
+                    page: DatabasePageRequest(pageSize: try DatabasePageSize(100)),
+                    operation: search.request.operation))
+        #expect(
+            aggregate.request
+                == DatabaseQueryRequest(
+                    target: DatabaseTargetIdentifier(
+                        connectionID: aggregate.connection.id,
+                        object: object),
+                    language: .searchQueryDSL,
+                    command: "aggregate",
+                    body: body,
+                    page: DatabasePageRequest(pageSize: try DatabasePageSize(100)),
+                    operation: aggregate.request.operation))
+    }
+
+    @Test("ClickHouse query maps to an exact native SQL request")
+    func clickHouseQueryRequest() async throws {
+        let captured = try await Self.capturedQuery(
+            product: .clickHouse,
+            text: "  SELECT count() FROM app.events  ")
+
+        #expect(
+            captured.request
+                == DatabaseQueryRequest(
+                    target: DatabaseTargetIdentifier(connectionID: captured.connection.id),
+                    language: .clickHouseSQL,
+                    command: "SELECT count() FROM app.events",
+                    page: DatabasePageRequest(pageSize: try DatabasePageSize(100)),
+                    operation: captured.request.operation))
+    }
+
+    @Test("Invalid query input fails before reaching the broker")
+    func invalidQuery() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.queryText = " \n\t "
+
+        model.runQuery(connection)
+
+        #expect(model.state == .failed("Enter a query to run."))
+        #expect(await sender.recordedRequests().isEmpty)
+    }
+
+    @Test("Query continuation appends and replays the original request")
+    func continuationQuery() async throws {
+        let token = DatabaseContinuationToken(rawValue: "query-next-page")
+        let sender = DatabaseDataScriptedSender(
+            responses: [
+                Self.queryResponse(records: [Self.record(1)], nextContinuation: token),
+                Self.queryResponse(records: [Self.record(2)]),
+            ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.queryText = "SELECT * FROM public.customers ORDER BY id"
+
+        model.runQuery(connection)
+        await Self.waitUntil { model.state == .loaded && model.hasNextPage }
+        model.queryText = "SELECT * FROM public.orders"
+        model.loadNextPage(connection)
+        await Self.waitUntil { model.state == .loaded && model.records.count == 2 }
+
+        let requests = await sender.recordedRequests().compactMap(\.queryRequest)
+        #expect(requests.count == 2)
+        #expect(requests[0].page.continuation == nil)
+        #expect(requests[1].page.continuation == token)
+        #expect(requests[1].command == requests[0].command)
+        #expect(requests[1].target == requests[0].target)
+        #expect(requests[1].language == requests[0].language)
+        #expect(requests[1].parameters == requests[0].parameters)
+        #expect(requests[1].body == requests[0].body)
+        #expect(model.records == [Self.record(1), Self.record(2)])
+    }
+
+    @Test("Query response type mismatch fails closed")
+    func queryResponseTypeMismatch() async throws {
+        let sender = DatabaseDataScriptedSender(responses: [
+            Self.response(records: [Self.record(1)])
+        ])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try Self.connection(product: .postgresql)
+        model.prepare(for: connection)
+        model.queryText = "SELECT * FROM public.customers"
+
+        model.runQuery(connection)
+        await Self.waitUntil { model.state != .loading }
+
+        #expect(model.state == .failed("The database returned an unexpected data response."))
+        #expect(model.records.isEmpty)
+    }
+
+    @Test("Default relational query templates quote every identifier")
+    func defaultQueryTemplatesQuoteIdentifiers() throws {
+        let scenarios: [(DatabaseProduct, DatabaseObjectIdentifier, String)] = [
+            (
+                .postgresql,
+                DatabaseObjectIdentifier(kind: .table, path: ["sales", "order\"items"]),
+                "SELECT * FROM \"sales\".\"order\"\"items\""
+            ),
+            (
+                .sqlite,
+                DatabaseObjectIdentifier(kind: .table, path: ["order\"items"]),
+                "SELECT * FROM \"order\"\"items\""
+            ),
+            (
+                .mysql,
+                DatabaseObjectIdentifier(kind: .table, path: ["sales", "order`items"]),
+                "SELECT * FROM `sales`.`order``items`"
+            ),
+            (
+                .clickHouse,
+                DatabaseObjectIdentifier(kind: .table, path: ["sales", "order`items"]),
+                "SELECT * FROM `sales`.`order``items`"
+            ),
+        ]
+
+        for (product, object, expected) in scenarios {
+            let model = DatabaseDataWorkspaceModel(announcement: { _ in })
+            let connection = try Self.connection(product: product)
+            model.prepare(for: connection)
+            model.prepareQuery(object, connection: connection)
+
+            #expect(model.queryText == expected)
+        }
+    }
+
+    @Test("Cancelled stale query response cannot replace current results")
+    func staleQueryResponse() async throws {
+        let sender = DatabaseDataControlledSender()
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let firstConnection = try Self.connection(product: .postgresql)
+        let secondConnection = try Self.connection(
+            id: DatabaseConnectionID(
+                rawValue: UUID(uuidString: "11309269-B668-4E06-B189-0282821598FE")!),
+            product: .postgresql)
+        model.prepare(for: firstConnection)
+        model.queryText = "SELECT * FROM public.old_records"
+        model.runQuery(firstConnection)
+        await Self.waitUntilRequestCount(1, sender: sender)
+
+        model.prepare(for: secondConnection)
+        model.queryText = "SELECT * FROM public.current_records"
+        model.runQuery(secondConnection)
+        await Self.waitUntilRequestCount(2, sender: sender)
+        await sender.respond(Self.queryResponse(records: [Self.record(2)]), to: 1)
+        await Self.waitUntil { model.state == .loaded }
+
+        await sender.respond(Self.queryResponse(records: [Self.record(1)]), to: 0)
+        for _ in 0..<100 {
+            await Task.yield()
+        }
+
+        #expect(model.records == [Self.record(2)])
+        #expect(model.state == .loaded)
+    }
+
     @Test("Row editor creates canonical update, insert, and delete requests")
     func rowMutationRequests() async throws {
         let sender = DatabaseDataScriptedSender(responses: [
@@ -355,13 +628,37 @@ struct DatabaseDataWorkspaceModelTests {
         #expect(insert.target.record?.concurrencyTokens.isEmpty == true)
     }
 
+    private static func capturedQuery(
+        product: DatabaseProduct,
+        object: DatabaseObjectIdentifier? = nil,
+        text: String,
+        operation: DatabaseSearchQueryOperation = .search
+    ) async throws -> (request: DatabaseQueryRequest, connection: DatabaseConnectionSummary) {
+        let sender = DatabaseDataScriptedSender(responses: [queryResponse(records: [])])
+        let model = DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        let connection = try connection(product: product)
+        model.prepare(for: connection)
+        if let object {
+            model.prepareQuery(object, connection: connection)
+        }
+        model.searchQueryOperation = operation
+        model.queryText = text
+
+        model.runQuery(connection)
+        await waitUntil { model.state == .loaded }
+
+        let request = try #require((await sender.recordedRequests()).first?.queryRequest)
+        return (request, connection)
+    }
+
     private static func connection(
+        id: DatabaseConnectionID = DatabaseConnectionID(
+            rawValue: UUID(uuidString: "86DFA58A-C6A6-498C-AE13-C66BB49CF891")!),
         product: DatabaseProduct
     ) throws -> DatabaseConnectionSummary {
         DatabaseConnectionSummary(
             definition: DatabaseConnectionDefinition(
-                id: DatabaseConnectionID(
-                    rawValue: UUID(uuidString: "86DFA58A-C6A6-498C-AE13-C66BB49CF891")!),
+                id: id,
                 displayName: "Data workspace",
                 productHint: product,
                 location: .network([
@@ -533,8 +830,30 @@ struct DatabaseDataWorkspaceModelTests {
         records: [DatabaseRecord],
         nextContinuation: DatabaseContinuationToken? = nil
     ) -> DatabaseBrokerCommandResponse {
+        .browse(
+            .success(
+                DatabaseBrowseResult(
+                    page: page(records: records, nextContinuation: nextContinuation)),
+                metadata: DatabaseResultMetadata(completeness: .init(state: .complete))))
+    }
+
+    private static func queryResponse(
+        records: [DatabaseRecord],
+        nextContinuation: DatabaseContinuationToken? = nil
+    ) -> DatabaseBrokerCommandResponse {
+        .query(
+            .success(
+                DatabaseQueryResult(
+                    page: page(records: records, nextContinuation: nextContinuation)),
+                metadata: DatabaseResultMetadata(completeness: .init(state: .complete))))
+    }
+
+    private static func page(
+        records: [DatabaseRecord],
+        nextContinuation: DatabaseContinuationToken?
+    ) -> EdithDatabase.DatabasePage<DatabaseRecord> {
         let completeness = DatabaseResultCompleteness(state: .complete)
-        let page = DatabasePage(
+        return DatabasePage(
             records: records,
             fields: [
                 DatabaseFieldDescriptor(
@@ -556,10 +875,6 @@ struct DatabaseDataWorkspaceModelTests {
             metadata: DatabasePageMetadata(
                 completeness: completeness,
                 count: DatabaseCountMetadata(value: UInt64(records.count), accuracy: .exact)))
-        return .browse(
-            .success(
-                DatabaseBrowseResult(page: page),
-                metadata: DatabaseResultMetadata(completeness: completeness)))
     }
 
     private static func waitUntil(_ condition: () -> Bool) async {
@@ -568,6 +883,17 @@ struct DatabaseDataWorkspaceModelTests {
             await Task.yield()
         }
         Issue.record("The data workspace did not reach the expected state.")
+    }
+
+    private static func waitUntilRequestCount(
+        _ expectedCount: Int,
+        sender: DatabaseDataControlledSender
+    ) async {
+        for _ in 0..<10_000 {
+            if await sender.requestCount() == expectedCount { return }
+            await Task.yield()
+        }
+        Issue.record("The data workspace did not send the expected request.")
     }
 }
 
@@ -594,9 +920,40 @@ private actor DatabaseDataScriptedSender: DatabaseBrokerCommandSending {
     }
 }
 
+private actor DatabaseDataControlledSender: DatabaseBrokerCommandSending {
+    private var requests: [DatabaseBrokerCommandRequest] = []
+    private var continuations: [CheckedContinuation<DatabaseBrokerCommandResponse, Never>?] = []
+
+    func send(
+        _ request: DatabaseBrokerCommandRequest
+    ) async throws -> DatabaseBrokerCommandResponse {
+        requests.append(request)
+        return await withCheckedContinuation { continuation in
+            continuations.append(continuation)
+        }
+    }
+
+    func requestCount() -> Int {
+        requests.count
+    }
+
+    func respond(_ response: DatabaseBrokerCommandResponse, to index: Int) {
+        guard continuations.indices.contains(index), let continuation = continuations[index] else {
+            return
+        }
+        continuations[index] = nil
+        continuation.resume(returning: response)
+    }
+}
+
 private extension DatabaseBrokerCommandRequest {
     var browseRequest: DatabaseBrowseRequest? {
         guard case .browse(let request) = self else { return nil }
+        return request
+    }
+
+    var queryRequest: DatabaseQueryRequest? {
+        guard case .query(let request) = self else { return nil }
         return request
     }
 }

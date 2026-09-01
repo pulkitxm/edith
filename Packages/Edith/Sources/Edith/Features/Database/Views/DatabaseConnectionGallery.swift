@@ -3,6 +3,14 @@ import EdithDatabase
 import EdithKit
 import SwiftUI
 
+enum DatabaseConnectionCardAction: Hashable {
+    case favorite
+    case rename
+    case edit
+    case duplicate
+    case delete
+}
+
 struct DatabaseConnectionGallery: View {
     @Bindable var model: DatabaseConnectionWorkspaceModel
     let createConnection: () -> Void
@@ -10,6 +18,9 @@ struct DatabaseConnectionGallery: View {
     var reloadConnections: (() -> Void)? = nil
     var restoreFocusConnectionID: DatabaseConnectionID? = nil
     var focusRestored: ((DatabaseConnectionID) -> Void)? = nil
+    var busyConnectionID: DatabaseConnectionID? = nil
+    var performConnectionAction:
+        ((DatabaseConnectionCardAction, DatabaseConnectionSummary) -> Void)? = nil
     @State private var hoveredConnectionID: DatabaseConnectionID?
     @FocusState private var focusedConnectionID: DatabaseConnectionID?
     @Environment(\.colorScheme) private var scheme
@@ -48,17 +59,11 @@ struct DatabaseConnectionGallery: View {
     }
 
     private var catalogHeader: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                    Text("Connections")
-                        .font(.system(size: UIScale.pt(compact ? 17 : 20), weight: .semibold))
-                        .foregroundStyle(palette.ink)
-                    Text("Choose a saved database to open its workspace.")
-                        .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(palette.inkSoft)
-                        .lineLimit(2)
-                }
+                Text("Connections")
+                    .font(.system(size: UIScale.pt(compact ? 17 : 20), weight: .semibold))
+                    .foregroundStyle(palette.ink)
                 Spacer(minLength: 0)
                 Button(action: reload) {
                     Image(systemName: "arrow.clockwise")
@@ -66,6 +71,7 @@ struct DatabaseConnectionGallery: View {
                 .buttonStyle(.edith(.secondary))
                 .help("Reload saved connections")
                 .accessibilityLabel("Reload saved database connections")
+                connectionFilterMenu
                 Button(action: createConnection) {
                     if compact {
                         Image(systemName: "plus")
@@ -90,6 +96,55 @@ struct DatabaseConnectionGallery: View {
         .padding(.horizontal, UIScale.pt(compact ? 16 : 28))
         .padding(.vertical, UIScale.pt(compact ? 14 : 18))
         .background(palette.panel.opacity(0.64))
+    }
+
+    private var connectionFilterMenu: some View {
+        Menu {
+            Button {
+                model.favoritesOnly.toggle()
+            } label: {
+                Label(
+                    "Favorites only",
+                    systemImage: model.favoritesOnly ? "checkmark" : "star")
+            }
+            if !model.availableGroups.isEmpty {
+                Divider()
+                Button {
+                    model.selectedGroup = nil
+                } label: {
+                    if model.selectedGroup == nil {
+                        Label("All groups", systemImage: "checkmark")
+                    } else {
+                        Text("All groups")
+                    }
+                }
+                ForEach(model.availableGroups) { group in
+                    Button {
+                        model.selectedGroup = group.id
+                    } label: {
+                        Label(
+                            group.label,
+                            systemImage: model.selectedGroup == group.id ? "checkmark" : "folder")
+                    }
+                }
+            }
+            if model.favoritesOnly || model.selectedGroup != nil {
+                Divider()
+                Button("Clear filters") {
+                    model.clearFilters()
+                }
+            }
+        } label: {
+            Image(
+                systemName: model.favoritesOnly || model.selectedGroup != nil
+                    ? "line.3.horizontal.decrease.circle.fill"
+                    : "line.3.horizontal.decrease.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Filter saved connections")
+        .accessibilityLabel("Filter saved database connections")
     }
 
     @ViewBuilder
@@ -124,9 +179,11 @@ struct DatabaseConnectionGallery: View {
             emptyState(
                 symbol: "magnifyingglass",
                 title: "No matching connections",
-                detail: "No saved connection matches \"\(search)\".",
-                actionTitle: "Clear search",
-                action: clearSearch)
+                detail: hasStructuredFilters
+                    ? "No saved connection matches the current filters."
+                    : "No saved connection matches \"\(search)\".",
+                actionTitle: hasStructuredFilters ? "Clear filters" : "Clear search",
+                action: clearFilters)
         case .loaded(let connections):
             connectionCards(connections)
         case .partial(let connections):
@@ -182,128 +239,171 @@ struct DatabaseConnectionGallery: View {
         let hovered = hoveredConnectionID == connection.id
         let focused = focusedConnectionID == connection.id
         let highlighted = hovered || focused
-        return Button {
-            openConnection(connection)
-        } label: {
-            VStack(alignment: .leading, spacing: UIScale.pt(15)) {
-                HStack(alignment: .top, spacing: UIScale.pt(11)) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: UIScale.pt(9))
-                            .fill(palette.accent.opacity(highlighted ? 0.18 : 0.11))
-                        Image(systemName: connection.product.gallerySymbolName)
-                            .font(.system(size: UIScale.pt(16), weight: .semibold))
-                            .foregroundStyle(palette.accent)
-                    }
-                    .frame(width: UIScale.pt(38), height: UIScale.pt(38))
-                    .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                        HStack(spacing: UIScale.pt(6)) {
-                            Text(connection.name)
-                                .font(.system(size: UIScale.pt(14), weight: .semibold))
-                                .foregroundStyle(palette.ink)
-                                .lineLimit(2)
-                            if connection.isFavorite {
-                                Image(systemName: "star.fill")
-                                    .font(.system(size: UIScale.pt(9)))
-                                    .foregroundStyle(DashSkin.gold)
-                                    .accessibilityHidden(true)
-                            }
+        let accent = connectionAccent(connection)
+        return ZStack(alignment: .topTrailing) {
+            Button {
+                openConnection(connection)
+            } label: {
+                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                    HStack(alignment: .top, spacing: UIScale.pt(11)) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: UIScale.pt(9))
+                                .fill(accent.opacity(highlighted ? 0.18 : 0.11))
+                            Image(systemName: connection.product.gallerySymbolName)
+                                .font(.system(size: UIScale.pt(16), weight: .semibold))
+                                .foregroundStyle(accent)
                         }
-                        Text(connection.product.displayName)
-                            .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                            .foregroundStyle(palette.inkSoft)
+                        .frame(width: UIScale.pt(38), height: UIScale.pt(38))
+                        .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                            HStack(spacing: UIScale.pt(6)) {
+                                Text(connection.name)
+                                    .font(.system(size: UIScale.pt(14), weight: .semibold))
+                                    .foregroundStyle(palette.ink)
+                                    .lineLimit(2)
+                                if connection.isFavorite {
+                                    Image(systemName: "star.fill")
+                                        .font(.system(size: UIScale.pt(9)))
+                                        .foregroundStyle(DashSkin.gold)
+                                        .accessibilityHidden(true)
+                                }
+                            }
+                            Text(connectionSubtitle(connection))
+                                .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                                .foregroundStyle(palette.inkSoft)
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                        Color.clear
+                            .frame(width: UIScale.pt(26), height: UIScale.pt(26))
+                            .accessibilityHidden(true)
                     }
-                    Spacer(minLength: 0)
-                    Image(systemName: "arrow.up.right")
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
-                        .foregroundStyle(highlighted ? palette.accent : palette.inkFaint)
-                        .accessibilityHidden(true)
+                    HStack(spacing: UIScale.pt(7)) {
+                        Image(systemName: namespaceSymbol(connection))
+                            .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                            .foregroundStyle(palette.inkFaint)
+                            .accessibilityHidden(true)
+                        Text(namespaceTitle(connection))
+                            .font(.system(size: UIScale.pt(10.5), design: .monospaced))
+                            .foregroundStyle(palette.inkSoft)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        if session != .disconnected {
+                            Image(systemName: sessionSymbol(session))
+                                .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                                .foregroundStyle(sessionColor(session))
+                                .accessibilityHidden(true)
+                            Text(sessionTitle(session))
+                                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                                .foregroundStyle(palette.inkSoft)
+                        }
+                    }
                 }
-                HStack(spacing: UIScale.pt(6)) {
-                    badge(
-                        connection.environmentKind.title,
-                        tint: connection.environmentKind == .production
-                            ? DashSkin.warn : palette.accent)
-                    badge(
-                        protectionTitle(connection),
-                        tint: protectionColor(connection))
+                .padding(UIScale.pt(14))
+                .frame(maxWidth: .infinity, minHeight: UIScale.pt(126), alignment: .topLeading)
+                .background(
+                    highlighted ? palette.panel : palette.panel.opacity(0.74),
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(13))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: UIScale.pt(13))
+                        .stroke(
+                            highlighted ? accent.opacity(0.72) : palette.line,
+                            lineWidth: highlighted ? 1.5 : 1)
                 }
-                HStack(spacing: UIScale.pt(7)) {
-                    Image(systemName: namespaceSymbol(connection))
-                        .font(.system(size: UIScale.pt(9.5), weight: .medium))
-                        .foregroundStyle(palette.inkFaint)
-                        .accessibilityHidden(true)
-                    Text(namespaceTitle(connection))
-                        .font(.system(size: UIScale.pt(10.5), design: .monospaced))
-                        .foregroundStyle(palette.inkSoft)
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                }
-                Divider().opacity(0.45)
-                HStack(spacing: UIScale.pt(7)) {
-                    Image(systemName: sessionSymbol(session))
-                        .font(.system(size: UIScale.pt(9.5), weight: .semibold))
-                        .foregroundStyle(sessionColor(session))
-                        .accessibilityHidden(true)
-                    Text(sessionTitle(session))
-                        .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                        .foregroundStyle(palette.inkSoft)
-                    Spacer(minLength: 0)
-                    Text(connection.readOnlySummary)
-                        .font(.system(size: UIScale.pt(9.5), weight: .medium))
-                        .foregroundStyle(palette.inkSoft)
-                        .lineLimit(1)
-                }
+                .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(13)))
             }
-            .padding(UIScale.pt(16))
-            .frame(maxWidth: .infinity, minHeight: UIScale.pt(178), alignment: .topLeading)
-            .background(
-                highlighted ? palette.panel : palette.panel.opacity(0.74),
-                in: RoundedRectangle(cornerRadius: UIScale.pt(13))
+            .buttonStyle(.edith(.borderless))
+            .focused($focusedConnectionID, equals: connection.id)
+            .background {
+                DatabaseKeyboardFocusAnchor(active: focusRequest.target == connection.id) {
+                    guard focusRequest.target == connection.id else { return }
+                    focusRestored?(connection.id)
+                }
+                .accessibilityHidden(true)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(
+                [
+                    connection.name,
+                    connection.product.displayName,
+                    connection.environmentSummary,
+                    connection.readOnlySummary,
+                    connection.isFavorite ? "Favorite" : nil,
+                    sessionTitle(session),
+                ].compactMap { $0 }.joined(separator: ", ")
             )
-            .overlay {
-                RoundedRectangle(cornerRadius: UIScale.pt(13))
-                    .stroke(
-                        highlighted ? palette.accent.opacity(0.72) : palette.line,
-                        lineWidth: highlighted ? 1.5 : 1)
+            .accessibilityHint("Open this database workspace")
+
+            if performConnectionAction != nil {
+                connectionActionMenu(connection)
             }
-            .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(13)))
         }
-        .buttonStyle(.edith(.borderless))
-        .focused($focusedConnectionID, equals: connection.id)
-        .background {
-            DatabaseKeyboardFocusAnchor(active: focusRequest.target == connection.id) {
-                guard focusRequest.target == connection.id else { return }
-                focusRestored?(connection.id)
+        .onHover { isHovered in hoveredConnectionID = isHovered ? connection.id : nil }
+        .contextMenu {
+            if performConnectionAction != nil {
+                connectionActions(connection)
             }
-            .accessibilityHidden(true)
         }
-        .onHover { isHovered in
-            hoveredConnectionID = isHovered ? connection.id : nil
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(
-            [
-                connection.name,
-                connection.product.displayName,
-                connection.environmentSummary,
-                connection.readOnlySummary,
-                connection.isFavorite ? "Favorite" : nil,
-                sessionTitle(session),
-            ].compactMap { $0 }.joined(separator: ", ")
-        )
-        .accessibilityHint("Open this database workspace")
     }
 
-    private func badge(_ title: String, tint: Color) -> some View {
-        Text(title)
-            .font(.system(size: UIScale.pt(9.5), weight: .semibold))
-            .foregroundStyle(palette.inkSoft)
-            .padding(.horizontal, UIScale.pt(7))
-            .padding(.vertical, UIScale.pt(4))
-            .background(tint.opacity(0.1), in: Capsule())
-            .lineLimit(1)
+    private func connectionActionMenu(_ connection: DatabaseConnectionSummary) -> some View {
+        Menu {
+            connectionActions(connection)
+        } label: {
+            Image(systemName: busyConnectionID == connection.id ? "ellipsis" : "ellipsis.circle")
+                .font(.system(size: UIScale.pt(13), weight: .semibold))
+                .foregroundStyle(palette.inkSoft)
+                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+                .background(palette.panel.opacity(0.94), in: Circle())
+                .overlay(Circle().stroke(palette.line, lineWidth: 1))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .padding(UIScale.pt(10))
+        .disabled(busyConnectionID != nil)
+        .help("Manage \(connection.name)")
+        .accessibilityLabel("Actions for \(connection.name)")
+    }
+
+    @ViewBuilder
+    private func connectionActions(_ connection: DatabaseConnectionSummary) -> some View {
+        Button {
+            openConnection(connection)
+        } label: {
+            Label("Open", systemImage: "arrow.up.right.square")
+        }
+        Button {
+            performConnectionAction?(.favorite, connection)
+        } label: {
+            Label(
+                connection.isFavorite ? "Remove from favorites" : "Add to favorites",
+                systemImage: connection.isFavorite ? "star.slash" : "star")
+        }
+        Divider()
+        Button {
+            performConnectionAction?(.rename, connection)
+        } label: {
+            Label("Rename", systemImage: "pencil")
+        }
+        Button {
+            performConnectionAction?(.edit, connection)
+        } label: {
+            Label("Edit metadata and safety", systemImage: "slider.horizontal.3")
+        }
+        Button {
+            performConnectionAction?(.duplicate, connection)
+        } label: {
+            Label("Duplicate", systemImage: "plus.square.on.square")
+        }
+        Divider()
+        Button(role: .destructive) {
+            performConnectionAction?(.delete, connection)
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
     }
 
     private func stateNotice(
@@ -390,8 +490,19 @@ struct DatabaseConnectionGallery: View {
         }
     }
 
-    private func clearSearch() {
-        model.searchText = ""
+    private func clearFilters() {
+        model.clearFilters()
+    }
+
+    private var hasStructuredFilters: Bool {
+        model.favoritesOnly || model.selectedGroup != nil
+    }
+
+    private func connectionAccent(_ connection: DatabaseConnectionSummary) -> Color {
+        guard let color = connection.color, let theme = AppTheme(rawValue: color) else {
+            return palette.accent
+        }
+        return DashSkin.accent(dark, theme: theme)
     }
 
     private var focusRequest: DatabaseConnectionGalleryFocusRequest {
@@ -400,20 +511,11 @@ struct DatabaseConnectionGallery: View {
             visibleConnectionIDs: model.visibleConnections.map(\.id))
     }
 
-    private func protectionTitle(_ connection: DatabaseConnectionSummary) -> String {
-        switch connection.environmentProtection {
-        case .standard: "Standard"
-        case .confirmationRequired: "Confirm changes"
-        case .readOnly: "Read-only environment"
+    private func connectionSubtitle(_ connection: DatabaseConnectionSummary) -> String {
+        if connection.environmentKind == .development {
+            return connection.product.displayName
         }
-    }
-
-    private func protectionColor(_ connection: DatabaseConnectionSummary) -> Color {
-        switch connection.environmentProtection {
-        case .standard: palette.inkFaint
-        case .confirmationRequired: DashSkin.warn
-        case .readOnly: palette.accent
-        }
+        return "\(connection.product.displayName) · \(connection.environmentKind.title)"
     }
 
     private func namespaceTitle(_ connection: DatabaseConnectionSummary) -> String {
@@ -464,6 +566,9 @@ struct DatabaseFocusedConnectionHeader: View {
     let focusRequested: Bool
     let focusCompleted: () -> Void
     let back: () -> Void
+    var busyConnectionID: DatabaseConnectionID? = nil
+    var performConnectionAction:
+        ((DatabaseConnectionCardAction, DatabaseConnectionSummary) -> Void)? = nil
     @FocusState private var backFocused: Bool
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
@@ -487,6 +592,9 @@ struct DatabaseFocusedConnectionHeader: View {
                     Divider().frame(height: UIScale.pt(32))
                     identityRow
                     Spacer(minLength: 0)
+                    if performConnectionAction != nil {
+                        connectionActionMenu
+                    }
                     sessionLabel
                 }
             }
@@ -502,6 +610,9 @@ struct DatabaseFocusedConnectionHeader: View {
         HStack(spacing: UIScale.pt(10)) {
             navigationButton
             Spacer(minLength: 0)
+            if performConnectionAction != nil {
+                connectionActionMenu
+            }
             sessionLabel
         }
     }
@@ -533,13 +644,14 @@ struct DatabaseFocusedConnectionHeader: View {
     }
 
     private var identityRow: some View {
-        HStack(spacing: UIScale.pt(10)) {
+        let accent = connectionAccent
+        return HStack(spacing: UIScale.pt(10)) {
             ZStack {
                 RoundedRectangle(cornerRadius: UIScale.pt(8))
-                    .fill(palette.accent.opacity(0.11))
+                    .fill(accent.opacity(0.11))
                 Image(systemName: connection.product.gallerySymbolName)
                     .font(.system(size: UIScale.pt(14), weight: .semibold))
-                    .foregroundStyle(palette.accent)
+                    .foregroundStyle(accent)
             }
             .frame(width: UIScale.pt(34), height: UIScale.pt(34))
             .accessibilityHidden(true)
@@ -573,6 +685,58 @@ struct DatabaseFocusedConnectionHeader: View {
             ].compactMap { $0 }.joined(separator: ", "))
     }
 
+    private var connectionActionMenu: some View {
+        Menu {
+            Button {
+                performConnectionAction?(.favorite, connection)
+            } label: {
+                Label(
+                    connection.isFavorite ? "Remove from favorites" : "Add to favorites",
+                    systemImage: connection.isFavorite ? "star.slash" : "star")
+            }
+            Divider()
+            Button {
+                performConnectionAction?(.rename, connection)
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+            Button {
+                performConnectionAction?(.edit, connection)
+            } label: {
+                Label("Edit metadata and safety", systemImage: "slider.horizontal.3")
+            }
+            Button {
+                performConnectionAction?(.duplicate, connection)
+            } label: {
+                Label("Duplicate", systemImage: "plus.square.on.square")
+            }
+            Divider()
+            Button(role: .destructive) {
+                performConnectionAction?(.delete, connection)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: UIScale.pt(14), weight: .semibold))
+                .foregroundStyle(palette.inkSoft)
+                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(busyConnectionID != nil)
+        .help("Manage \(connection.name)")
+        .accessibilityLabel("Actions for \(connection.name)")
+    }
+
+    private var connectionAccent: Color {
+        guard let color = connection.color, let theme = AppTheme(rawValue: color) else {
+            return palette.accent
+        }
+        return DashSkin.accent(dark, theme: theme)
+    }
+
     private var sessionLabel: some View {
         HStack(spacing: UIScale.pt(6)) {
             Image(systemName: sessionSymbol)
@@ -588,7 +752,10 @@ struct DatabaseFocusedConnectionHeader: View {
     }
 
     private var contextTitle: String {
-        "\(connection.product.displayName) · \(connection.environmentLabel) · \(connection.environmentProtection.title) · \(connection.readOnlySummary)"
+        let namespace =
+            connection.defaultDatabase ?? connection.logicalDatabase ?? connection.defaultSchema
+        guard let namespace, !namespace.isEmpty else { return connection.product.displayName }
+        return "\(connection.product.displayName) · \(namespace)"
     }
 
     private var sessionTitle: String {
