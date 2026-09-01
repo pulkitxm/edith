@@ -35,6 +35,7 @@ public final class GhosttyRuntime {
     private let log = Logger(subsystem: "com.pulkit.edith", category: "ghostty")
     private var app: ghostty_app_t?
     private var config: ghostty_config_t?
+    private var autoSecureInput = true
     private var ghosttyInitialized = false
     private var started = false
     private var tickScheduled = false
@@ -71,6 +72,15 @@ public final class GhosttyRuntime {
         }
         ghostty_config_load_default_files(cfg)
         ghostty_config_finalize(cfg)
+        var configuredAutoSecureInput = true
+        let autoSecureInputKey = "macos-auto-secure-input"
+        if !ghostty_config_get(
+            cfg, &configuredAutoSecureInput, autoSecureInputKey,
+            UInt(autoSecureInputKey.lengthOfBytes(using: .utf8)))
+        {
+            configuredAutoSecureInput = true
+        }
+        autoSecureInput = configuredAutoSecureInput
 
         var runtime = ghostty_runtime_config_s()
         runtime.userdata = Unmanaged.passUnretained(self).toOpaque()
@@ -202,6 +212,11 @@ public final class GhosttyRuntime {
             guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
             let exitCode = Int32(bitPattern: action.action.child_exited.exit_code)
             onMain { view.childExited(exitCode) }
+            return true
+        case GHOSTTY_ACTION_SECURE_INPUT:
+            guard autoSecureInput else { return true }
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            onMain { view.setSecureInput(action.action.secure_input) }
             return true
         case GHOSTTY_ACTION_MOUSE_SHAPE:
             guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }

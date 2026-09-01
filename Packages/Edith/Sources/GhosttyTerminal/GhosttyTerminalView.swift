@@ -24,6 +24,7 @@ public final class GhosttyTerminalView: NSView {
     private var pendingExitCode: Int32?
     private var drawScheduled = false
     private(set) var renderingActive = true
+    private var secureInputRequested = false
     var terminalCursor = NSCursor.iBeam
     var mouseOverSurface = false
     var commandClickOpenedTarget = false
@@ -125,6 +126,8 @@ public final class GhosttyTerminalView: NSView {
     }
 
     public func shutdown() {
+        secureInputRequested = false
+        GhosttySecureInput.shared.removeScoped(ObjectIdentifier(self))
         closed = true
         removeWindowObservers()
         closePromptVisible = false
@@ -339,13 +342,38 @@ public final class GhosttyTerminalView: NSView {
     }
 
     private func syncFocus() {
-        guard let surface else { return }
         let focused = Self.shouldFocus(
             active: renderingActive, keyWindow: window?.isKeyWindow == true,
             firstResponder: window?.firstResponder === self)
         if !focused { suppressNextLeftMouseUp = false }
-        ghostty_surface_set_focus(
-            surface, focused)
+        if let surface { ghostty_surface_set_focus(surface, focused) }
+        syncSecureInput(focused: focused)
+    }
+
+    func setSecureInput(_ mode: ghostty_action_secure_input_e) {
+        switch mode {
+        case GHOSTTY_SECURE_INPUT_ON:
+            secureInputRequested = true
+        case GHOSTTY_SECURE_INPUT_OFF:
+            secureInputRequested = false
+        case GHOSTTY_SECURE_INPUT_TOGGLE:
+            secureInputRequested.toggle()
+        default:
+            return
+        }
+        syncSecureInput(
+            focused: Self.shouldFocus(
+                active: renderingActive, keyWindow: window?.isKeyWindow == true,
+                firstResponder: window?.firstResponder === self))
+    }
+
+    private func syncSecureInput(focused: Bool) {
+        let identifier = ObjectIdentifier(self)
+        if secureInputRequested {
+            GhosttySecureInput.shared.setScoped(identifier, focused: focused)
+        } else {
+            GhosttySecureInput.shared.removeScoped(identifier)
+        }
     }
 
     private func applyPresentationState() {
@@ -383,6 +411,7 @@ public final class GhosttyTerminalView: NSView {
         guard super.becomeFirstResponder() else { return false }
         let focused = renderingActive && window?.isKeyWindow == true
         if let surface { ghostty_surface_set_focus(surface, focused) }
+        syncSecureInput(focused: focused)
         onFocus?()
         return true
     }
@@ -391,6 +420,7 @@ public final class GhosttyTerminalView: NSView {
         guard super.resignFirstResponder() else { return false }
         suppressNextLeftMouseUp = false
         if let surface { ghostty_surface_set_focus(surface, false) }
+        syncSecureInput(focused: false)
         return true
     }
 }
