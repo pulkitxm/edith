@@ -36,7 +36,7 @@ final class DatabaseConnectionCreationModel: Identifiable {
     var environmentKind = DatabaseEnvironmentKind.development
     var environmentLabel = "Development"
     var environmentProtection = DatabaseEnvironmentProtection.confirmationRequired
-    var readOnlyPolicy = DatabaseReadOnlyPolicy.required
+    var readOnlyPolicy = DatabaseReadOnlyPolicy.disabled
     var productionPolicy = DatabaseProductionPolicy.requireMutationPreview
     private(set) var phase = DatabaseConnectionCreationPhase.editing
     private(set) var urlImportPhase = DatabaseConnectionURLImportPhase.editing
@@ -70,7 +70,8 @@ final class DatabaseConnectionCreationModel: Identifiable {
     }
 
     var supportsTLS: Bool {
-        product == .postgresql || product == .mongoDB || product == .elasticsearch
+        product == .postgresql || product == .mysql || product == .mongoDB
+            || product == .elasticsearch
             || product == .openSearch || product == .clickHouse
     }
 
@@ -82,7 +83,7 @@ final class DatabaseConnectionCreationModel: Identifiable {
     }
 
     var usernameRequired: Bool {
-        product == .postgresql || product == .clickHouse
+        product == .postgresql || product == .mysql || product == .clickHouse
             || (product == .mongoDB || product == .elasticsearch || product == .openSearch)
                 && !password.isEmpty
     }
@@ -162,8 +163,24 @@ final class DatabaseConnectionCreationModel: Identifiable {
             environmentProtection = .confirmationRequired
             readOnlyPolicy = .required
             productionPolicy = .prohibitMutations
+        } else {
+            environmentProtection = .confirmationRequired
+            readOnlyPolicy = .disabled
+            productionPolicy = .requireMutationPreview
         }
         invalidateTest()
+    }
+
+    func testAndSaveConnection(applyPendingURL: Bool) async -> DatabaseConnectionDefinition? {
+        if applyPendingURL, canApplyConnectionURL {
+            applyConnectionURL()
+            if case .failed = urlImportPhase { return nil }
+        }
+        if !canSave {
+            await testConnection()
+        }
+        guard !Task.isCancelled, canSave else { return nil }
+        return await saveConnection()
     }
 
     func chooseSQLiteFile() {
@@ -188,6 +205,7 @@ final class DatabaseConnectionCreationModel: Identifiable {
             let definition = try draft.definition(createdAt: currentDate())
             let response = try await sender.send(
                 .connectionTest(DatabaseConnectionTestRequest(connection: definition)))
+            try Task.checkCancellation()
             guard case .connectionTest(let result) = response,
                 result.status == .succeeded,
                 let payload = result.payload
@@ -201,6 +219,11 @@ final class DatabaseConnectionCreationModel: Identifiable {
             phase = .tested(
                 "Connected to \(payload.productIdentity.product.displayName)\(version) in \(payload.latencyMilliseconds) ms."
             )
+        } catch is CancellationError {
+            await discardSecret()
+            testedDraft = nil
+            testedPassword = nil
+            phase = .editing
         } catch {
             await discardSecret()
             testedDraft = nil

@@ -31,6 +31,19 @@ struct DatabaseConnectionURLParserTests {
         #expect(!result.tlsEnabled)
     }
 
+    @Test func parsesMySQLCredentialsTLSAndDatabase() throws {
+        let result = try DatabaseConnectionURLParser.parse(
+            "mysql://edith:p%40ss@mysql.example.com:13306/app?ssl-mode=REQUIRED")
+
+        #expect(result.product == .mysql)
+        #expect(result.host == "mysql.example.com")
+        #expect(result.port == 13_306)
+        #expect(result.username == "edith")
+        #expect(result.password == "p@ss")
+        #expect(result.database == "app")
+        #expect(result.tlsEnabled)
+    }
+
     @Test func parsesMongoAuthenticationSourceAndTLS() throws {
         let result = try DatabaseConnectionURLParser.parse(
             "mongodb://edith:secret@mongo.example.com/app?authSource=users&tls=true")
@@ -120,8 +133,8 @@ struct DatabaseConnectionURLParserTests {
     }
 
     @Test func rejectsUnsupportedAndSecureRedisSchemes() {
-        #expect(throws: DatabaseConnectionURLError.unsupportedScheme("mysql")) {
-            try DatabaseConnectionURLParser.parse("mysql://localhost/app")
+        #expect(throws: DatabaseConnectionURLError.unsupportedScheme("mariadb")) {
+            try DatabaseConnectionURLParser.parse("mariadb://localhost/app")
         }
         #expect(throws: DatabaseConnectionURLError.secureRedisUnsupported) {
             try DatabaseConnectionURLParser.parse("rediss://localhost/0")

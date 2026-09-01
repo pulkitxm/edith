@@ -105,9 +105,60 @@ struct MySQLDatabaseIdentityValues: Equatable, Sendable {
     let replicaChannelCount: UInt64
 }
 
+enum MySQLDatabaseBind: Equatable, Sendable {
+    case null
+    case boolean(Bool)
+    case signedInteger(Int64)
+    case unsignedInteger(UInt64)
+    case decimal(String)
+    case floatingPoint(Double)
+    case string(String)
+    case binary(Data)
+}
+
+struct MySQLDatabaseReadPlan: Equatable, Sendable {
+    let sql: String
+    let binds: [MySQLDatabaseBind]
+    let maximumResponseBytes: Int
+
+    func validate() throws {
+        guard !sql.isEmpty, sql.utf8.count <= 1_048_576,
+            !sql.contains("\0"),
+            binds.count <= DatabaseExecutionValidator.maximumParameterCount,
+            maximumResponseBytes > 0,
+            maximumResponseBytes <= DatabaseAdapterBounds.maximumPageBytes
+        else {
+            throw MySQLDatabaseDriverFailure.configuration
+        }
+    }
+}
+
+struct MySQLDatabaseReadColumn: Equatable, Sendable {
+    let name: String
+    let typeName: String
+    let isNullable: Bool
+    let isPrimaryKey: Bool
+}
+
+struct MySQLDatabaseReadRow: Equatable, Sendable {
+    let values: [DatabaseValue]
+}
+
+struct MySQLDatabaseReadResult: Equatable, Sendable {
+    let columns: [MySQLDatabaseReadColumn]
+    let rows: [MySQLDatabaseReadRow]
+}
+
 protocol MySQLDatabaseClient: Sendable {
     func discoverIdentity() async throws -> DatabaseProductIdentity
+    func read(_ plan: MySQLDatabaseReadPlan) async throws -> MySQLDatabaseReadResult
     func disconnect() async
+}
+
+extension MySQLDatabaseClient {
+    func read(_ plan: MySQLDatabaseReadPlan) async throws -> MySQLDatabaseReadResult {
+        throw MySQLDatabaseDriverFailure.server(nil)
+    }
 }
 
 typealias MySQLDatabaseClientConnector =
@@ -203,6 +254,40 @@ final class MySQLNIODatabaseClient: MySQLDatabaseClient, @unchecked Sendable {
                 throw MySQLDatabaseDriverFailure.tls
             }
             return identity
+        } catch let failure as MySQLDatabaseDriverFailure {
+            throw failure
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw try MySQLDatabaseDriverErrorClassifier.classify(error)
+        }
+    }
+
+    func read(_ plan: MySQLDatabaseReadPlan) async throws -> MySQLDatabaseReadResult {
+        guard let resource = lock.withLock({ resource }) else {
+            throw MySQLDatabaseDriverFailure.connection
+        }
+        do {
+            try plan.validate()
+            guard resource.responseGuard.begin(maximumBytes: plan.maximumResponseBytes) else {
+                throw MySQLDatabaseDriverFailure.connection
+            }
+            defer {
+                resource.responseGuard.end()
+            }
+            let rows: [MySQLRow]
+            do {
+                rows = try await resource.connection.query(
+                    plan.sql,
+                    try plan.binds.map(MySQLDatabaseValueCodec.bind)
+                ).get()
+            } catch {
+                if resource.responseGuard.exceededLimit {
+                    throw MySQLDatabaseDriverFailure.resourceLimit
+                }
+                throw error
+            }
+            return try MySQLDatabaseValueCodec.result(rows)
         } catch let failure as MySQLDatabaseDriverFailure {
             throw failure
         } catch is CancellationError {

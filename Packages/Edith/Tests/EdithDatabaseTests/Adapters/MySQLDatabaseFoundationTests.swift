@@ -1,4 +1,5 @@
 import Foundation
+import MySQLNIO
 import NIOCore
 import NIOEmbedded
 import NIOPosix
@@ -8,7 +9,7 @@ import Testing
 
 private struct MySQLDatabaseFoundationUnknownFailure: Error {}
 
-private enum MySQLDatabaseFoundationFixtures {
+enum MySQLDatabaseFoundationFixtures {
     static let values = MySQLDatabaseIdentityValues(
         version: "8.4.6",
         versionComment: "MySQL Community Server - GPL",
@@ -169,6 +170,26 @@ private actor MySQLDatabaseFoundationTestClient: MySQLDatabaseClient {
 
     func discoveries() -> Int {
         discoveryCount
+    }
+}
+
+@Test func mysqlFoundationValueCodecBuildsTypedBindsAndEmptyResults() throws {
+    let signed = try MySQLDatabaseValueCodec.bind(.signedInteger(-42))
+    let unsigned = try MySQLDatabaseValueCodec.bind(.unsignedInteger(UInt64.max))
+    let binary = try MySQLDatabaseValueCodec.bind(.binary(Data([0, 1, 255])))
+
+    #expect(signed.int64 == -42)
+    #expect(!signed.isUnsigned)
+    #expect(unsigned.uint64 == UInt64.max)
+    #expect(unsigned.isUnsigned)
+    #expect(binary.buffer.map { Data($0.readableBytesView) } == Data([0, 1, 255]))
+    #expect(try MySQLDatabaseValueCodec.result([]).rows.isEmpty)
+    #expect(throws: MySQLDatabaseDriverFailure.configuration) {
+        try MySQLDatabaseReadPlan(
+            sql: "SELECT 1",
+            binds: [],
+            maximumResponseBytes: DatabaseAdapterBounds.maximumPageBytes + 1
+        ).validate()
     }
 }
 
@@ -533,7 +554,7 @@ private actor MySQLDatabaseFoundationTestClient: MySQLDatabaseClient {
         context: MySQLDatabaseFoundationFixtures.context())
     #expect(report.productIdentity == MySQLDatabaseFoundationFixtures.identity)
     #expect(report.supports(.connectionTest))
-    #expect(report.status(for: .browse)?.availability == .planned)
+    #expect(report.status(for: .browse)?.availability == .available)
     #expect(report.transactionModes == [.explicit, .savepoints])
     #expect(report.cancellationModes == [.cooperative])
     await session.disconnect()
@@ -591,7 +612,7 @@ private actor MySQLDatabaseFoundationTestClient: MySQLDatabaseClient {
     #expect(await deadlineClient.disconnects() == 1)
 }
 
-private enum MySQLDatabaseLiveEnvironment {
+enum MySQLDatabaseLiveEnvironment {
     static let values = ProcessInfo.processInfo.environment
     static let mysqlKeys = [
         "EDITH_DATABASE_MYSQL_HOST",
@@ -764,7 +785,7 @@ func mysqlFoundationLiveAdapterCapabilityDiscovery() async throws {
     #expect(report.productIdentity.product == .mysql)
     #expect(report.productIdentity.version?.major == 8)
     #expect(report.supports(.connectionTest))
-    #expect(report.status(for: .query)?.availability == .planned)
+    #expect(report.status(for: .query)?.availability == .available)
 }
 
 private func withMySQLDatabaseStalledServer<Output: Sendable>(

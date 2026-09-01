@@ -90,6 +90,91 @@ struct DatabaseConnectionCreationModelTests {
         #expect(model.usernameRequired)
     }
 
+    @Test("A MySQL URL fills the relational connection fields")
+    func mysqlConnectionURL() throws {
+        let model = DatabaseConnectionCreationModel(
+            sender: DatabaseConnectionCreationSender(testSucceeds: true),
+            secretStore: try InMemoryDatabaseSecretStore())
+
+        model.updateConnectionURL(
+            "mysql://edith:secret@127.0.0.1:53306/app?ssl-mode=REQUIRED")
+        model.applyConnectionURL()
+
+        #expect(model.urlImportPhase == .applied)
+        #expect(model.product == .mysql)
+        #expect(model.displayName == "app")
+        #expect(model.port == "53306")
+        #expect(model.username == "edith")
+        #expect(model.password == "secret")
+        #expect(model.database == "app")
+        #expect(model.supportsTLS)
+        #expect(model.usernameRequired)
+    }
+
+    @Test("Development connections allow guarded data changes by default")
+    func developmentDefaults() throws {
+        let model = DatabaseConnectionCreationModel(
+            sender: DatabaseConnectionCreationSender(testSucceeds: true),
+            secretStore: try InMemoryDatabaseSecretStore())
+
+        #expect(model.environmentKind == .development)
+        #expect(model.environmentProtection == .confirmationRequired)
+        #expect(model.readOnlyPolicy == .disabled)
+        #expect(model.productionPolicy == .requireMutationPreview)
+
+        model.selectEnvironment(.production)
+
+        #expect(model.readOnlyPolicy == .required)
+        #expect(model.productionPolicy == .prohibitMutations)
+
+        model.selectEnvironment(.staging)
+
+        #expect(model.readOnlyPolicy == .disabled)
+        #expect(model.productionPolicy == .requireMutationPreview)
+    }
+
+    @Test("A URL can be tested and saved in one action")
+    func testAndSaveURL() async throws {
+        let sender = DatabaseConnectionCreationSender(testSucceeds: true)
+        let model = DatabaseConnectionCreationModel(
+            sender: sender,
+            secretStore: try InMemoryDatabaseSecretStore())
+        model.updateConnectionURL("postgresql://edith@127.0.0.1:55432/app")
+
+        let saved = await model.testAndSaveConnection(applyPendingURL: true)
+
+        #expect(saved?.displayName == "app")
+        #expect(saved?.readOnlyPolicy == .disabled)
+        #expect(model.phase == .saved)
+        #expect((await sender.recordedRequests()).count == 2)
+    }
+
+    @Test("Manual entry ignores a hidden connection URL")
+    func manualEntryIgnoresHiddenURL() async throws {
+        let sender = DatabaseConnectionCreationSender(testSucceeds: true)
+        let model = DatabaseConnectionCreationModel(
+            sender: sender,
+            secretStore: try InMemoryDatabaseSecretStore())
+        model.displayName = "Manual database"
+        model.host = "manual.example.com"
+        model.port = "5432"
+        model.username = "edith"
+        model.database = "manual"
+        model.updateConnectionURL("postgresql://other@hidden.example.com/hidden")
+
+        let saved = await model.testAndSaveConnection(applyPendingURL: false)
+
+        let connection = try #require(saved)
+        guard case .network(let endpoints) = connection.location else {
+            Issue.record("Expected a network connection.")
+            return
+        }
+        #expect(connection.displayName == "Manual database")
+        #expect(endpoints.first?.host == "manual.example.com")
+        #expect(connection.namespaces.database == "manual")
+        #expect(model.connectionURL.contains("hidden.example.com"))
+    }
+
     @Test("A tested connection can be saved with its Keychain reference")
     func testAndSave() async throws {
         let sender = DatabaseConnectionCreationSender(testSucceeds: true)
