@@ -33,6 +33,7 @@ public final class GhosttyTerminalView: NSView {
     var accessibilitySelectionTask: Task<Void, Never>?
     let markedText = NSMutableAttributedString()
     var keyTextAccumulator: [String]?
+    var keyUpMonitor: Any?
 
     public override var isFlipped: Bool { false }
 
@@ -102,6 +103,9 @@ public final class GhosttyTerminalView: NSView {
         searchBar.onClose = { [weak self] in
             _ = self?.performBindingAction("end_search")
         }
+        keyUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyUp) { [weak self] event in
+            self?.handleLocalKeyUp(event) ?? event
+        }
         GhosttySurfaceRegistry.shared.register(self)
     }
 
@@ -109,6 +113,7 @@ public final class GhosttyTerminalView: NSView {
 
     deinit {
         accessibilitySelectionTask?.cancel()
+        if let keyUpMonitor { NSEvent.removeMonitor(keyUpMonitor) }
         if cursorHidden { NSCursor.unhide() }
         shutdown()
         GhosttySurfaceRegistry.shared.unregister(self)

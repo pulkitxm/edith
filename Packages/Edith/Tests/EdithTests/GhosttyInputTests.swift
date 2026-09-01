@@ -186,6 +186,13 @@ import Testing
         #expect(GhosttyTerminalView.shouldHandleCopyShortcut(hasSelection: true))
     }
 
+    @Test func shortSearchesDebounceWhileEmptyAndLongQueriesApplyImmediately() {
+        #expect(!TerminalSearchBar.shouldDebounce(""))
+        #expect(TerminalSearchBar.shouldDebounce("a"))
+        #expect(TerminalSearchBar.shouldDebounce("ab"))
+        #expect(!TerminalSearchBar.shouldDebounce("abc"))
+    }
+
     @Test func modifierTransitionsSendPressAndRelease() throws {
         let pressed = try #require(
             NSEvent.keyEvent(
@@ -200,6 +207,21 @@ import Testing
 
         #expect(GhosttyTerminalView.modifierAction(for: pressed) == GHOSTTY_ACTION_PRESS)
         #expect(GhosttyTerminalView.modifierAction(for: released) == GHOSTTY_ACTION_RELEASE)
+    }
+
+    @Test func commandKeyReleaseMonitorOnlyOwnsTheFocusedSurfaceWindow() {
+        #expect(
+            GhosttyTerminalView.shouldHandleLocalKeyUp(
+                flags: .command, matchesWindow: true, focused: true))
+        #expect(
+            !GhosttyTerminalView.shouldHandleLocalKeyUp(
+                flags: [], matchesWindow: true, focused: true))
+        #expect(
+            !GhosttyTerminalView.shouldHandleLocalKeyUp(
+                flags: .command, matchesWindow: false, focused: true))
+        #expect(
+            !GhosttyTerminalView.shouldHandleLocalKeyUp(
+                flags: .command, matchesWindow: true, focused: false))
     }
 
     @Test func webAndLocalhostLinksResolveWithoutFilesystemAccess() {

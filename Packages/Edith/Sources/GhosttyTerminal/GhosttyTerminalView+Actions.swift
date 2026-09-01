@@ -101,6 +101,7 @@ final class TerminalSearchBar: NSVisualEffectView, NSSearchFieldDelegate {
     var onQuery: ((String) -> Void)?
     var onNavigate: ((Bool) -> Void)?
     var onClose: (() -> Void)?
+    private var queryTask: Task<Void, Never>?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -143,11 +144,30 @@ final class TerminalSearchBar: NSVisualEffectView, NSSearchFieldDelegate {
 
     required init?(coder: NSCoder) { nil }
 
-    func controlTextDidChange(_ notification: Notification) {
-        onQuery?(field.stringValue)
+    deinit {
+        queryTask?.cancel()
     }
 
+    func controlTextDidChange(_ notification: Notification) {
+        let query = field.stringValue
+        queryTask?.cancel()
+        guard Self.shouldDebounce(query) else {
+            onQuery?(query)
+            return
+        }
+        queryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled, let self else { return }
+            onQuery?(query)
+            queryTask = nil
+        }
+    }
+
+    static func shouldDebounce(_ query: String) -> Bool { (1...2).contains(query.count) }
+
     func begin(_ needle: String, in window: NSWindow?) {
+        queryTask?.cancel()
+        queryTask = nil
         field.stringValue = needle
         isHidden = false
         onQuery?(needle)

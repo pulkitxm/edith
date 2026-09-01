@@ -54,6 +54,22 @@ extension GhosttyTerminalView {
         _ = send(event: event, action: GHOSTTY_ACTION_RELEASE, text: nil, composing: false)
     }
 
+    func handleLocalKeyUp(_ event: NSEvent) -> NSEvent? {
+        guard
+            Self.shouldHandleLocalKeyUp(
+                flags: event.modifierFlags, matchesWindow: event.window === window,
+                focused: window?.firstResponder === self)
+        else { return event }
+        keyUp(with: event)
+        return nil
+    }
+
+    static func shouldHandleLocalKeyUp(
+        flags: NSEvent.ModifierFlags, matchesWindow: Bool, focused: Bool
+    ) -> Bool {
+        flags.contains(.command) && matchesWindow && focused
+    }
+
     public override func flagsChanged(with event: NSEvent) {
         guard let surface else { return }
         var key = ghostty_input_key_s()
@@ -115,6 +131,10 @@ extension GhosttyTerminalView {
             return true
         case "f":
             startTerminalSearch(nil)
+            return true
+        case "e":
+            guard hasSelection else { return super.performKeyEquivalent(with: event) }
+            _ = performBindingAction("search_selection")
             return true
         case "g":
             _ = performBindingAction("navigate_search:next")
