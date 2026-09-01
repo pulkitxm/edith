@@ -3,7 +3,9 @@ import GhosttyKit
 
 final class TerminalLinkHoverView: NSView {
     private let backdrop = NSVisualEffectView(frame: .zero)
+    private let icon = NSImageView()
     private let label = NSTextField(labelWithString: "")
+    private let hint = NSTextField(labelWithString: "⌘ click to open")
 
     override var acceptsFirstResponder: Bool { false }
 
@@ -25,16 +27,32 @@ final class TerminalLinkHoverView: NSView {
         label.lineBreakMode = .byTruncatingMiddle
         label.maximumNumberOfLines = 1
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.image = NSImage(
+            systemSymbolName: "arrow.up.forward.square", accessibilityDescription: nil)
+        icon.contentTintColor = .secondaryLabelColor
+        hint.translatesAutoresizingMaskIntoConstraints = false
+        hint.font = .systemFont(ofSize: 10.5, weight: .medium)
+        hint.textColor = .secondaryLabelColor
+        hint.setContentCompressionResistancePriority(.required, for: .horizontal)
         addSubview(backdrop)
+        backdrop.addSubview(icon)
         backdrop.addSubview(label)
+        backdrop.addSubview(hint)
         NSLayoutConstraint.activate([
             backdrop.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             backdrop.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
             backdrop.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
-            label.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor, constant: 8),
-            label.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor, constant: -8),
+            icon.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor, constant: 8),
+            icon.centerYAnchor.constraint(equalTo: backdrop.centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 12),
+            icon.heightAnchor.constraint(equalToConstant: 12),
+            label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 6),
+            label.trailingAnchor.constraint(equalTo: hint.leadingAnchor, constant: -10),
             label.topAnchor.constraint(equalTo: backdrop.topAnchor, constant: 5),
             label.bottomAnchor.constraint(equalTo: backdrop.bottomAnchor, constant: -5),
+            hint.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor, constant: -8),
+            hint.centerYAnchor.constraint(equalTo: backdrop.centerYAnchor),
         ])
     }
 
@@ -43,7 +61,7 @@ final class TerminalLinkHoverView: NSView {
     func show(_ value: String?) {
         let value = value?.isEmpty == false ? value : nil
         label.stringValue = value ?? ""
-        label.setAccessibilityLabel(value)
+        setAccessibilityLabel(value.map { "Link \($0). Command-click to open." })
         isHidden = value == nil
     }
 }

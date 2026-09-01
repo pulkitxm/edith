@@ -198,8 +198,32 @@ extension GhosttyTerminalView {
             surface, state, which, Self.mods(from: event.modifierFlags))
     }
 
+    private func commandClickTarget(for event: NSEvent) -> String? {
+        guard let surface, event.modifierFlags.contains(.command) else { return nil }
+        var key = ghostty_input_key_s()
+        key.action = GHOSTTY_ACTION_PRESS
+        key.mods = Self.mods(from: event.modifierFlags)
+        key.consumed_mods = ghostty_input_mods_e(GHOSTTY_MODS_NONE.rawValue)
+        key.keycode = 55
+        key.text = nil
+        key.unshifted_codepoint = 0
+        key.composing = false
+        _ = ghostty_surface_key(surface, key)
+        if hoveredLink == nil, !ghostty_surface_mouse_captured(surface) {
+            let position = point(for: event)
+            ghostty_surface_mouse_pos(surface, -1, -1, key.mods)
+            ghostty_surface_mouse_pos(surface, position.0, position.1, key.mods)
+        }
+        return hoveredLink ?? terminalTargetAtPointer()
+    }
+
     public override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        let local = convert(event.locationInWindow, from: nil)
+        let commandClick = event.clickCount == 1 && event.modifierFlags.contains(.command)
+        commandClickGesture.begin(
+            active: commandClick, at: local,
+            candidate: commandClick ? commandClickTarget(for: event) : nil)
         if event.clickCount == 1 {
             button(event, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT)
         } else if let surface {
@@ -210,16 +234,16 @@ extension GhosttyTerminalView {
     }
 
     public override func mouseUp(with event: NSEvent) {
-        let selectionWasActive = hasSelection
-        commandClickReleaseActive = event.modifierFlags.contains(.command)
+        commandClickGesture.move(to: convert(event.locationInWindow, from: nil))
+        let target = hoveredLink ?? terminalTargetAtPointer()
         commandClickOpenedTarget = false
         button(event, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT)
-        if commandClickReleaseActive, !commandClickOpenedTarget, !selectionWasActive,
-            let target = terminalTargetAtPointer()
+        if let target = commandClickGesture.finish(
+            active: event.modifierFlags.contains(.command), opened: commandClickOpenedTarget,
+            candidate: target)
         {
             _ = openTerminalTarget(target)
         }
-        commandClickReleaseActive = false
     }
 
     public override func rightMouseDown(with event: NSEvent) {
@@ -256,6 +280,7 @@ extension GhosttyTerminalView {
     }
 
     public override func mouseDragged(with event: NSEvent) {
+        commandClickGesture.move(to: convert(event.locationInWindow, from: nil))
         moved(event)
     }
 

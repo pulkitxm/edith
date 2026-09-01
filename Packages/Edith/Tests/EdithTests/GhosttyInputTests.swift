@@ -226,4 +226,26 @@ import Testing
                 for: "data:text/plain,secret", workingDirectory: nil,
                 fileExists: { _ in false }) == nil)
     }
+
+    @Test func commandClickOpensAfterAnOldSelectionAndDoesNotDuplicateCoreOpening() {
+        var gesture = TerminalCommandClickGesture()
+        gesture.begin(active: true, at: .zero, candidate: "https://example.com")
+
+        #expect(
+            gesture.finish(active: true, opened: false, candidate: nil)
+                == "https://example.com")
+
+        gesture.begin(active: true, at: .zero, candidate: "https://example.com")
+        #expect(gesture.finish(active: true, opened: true, candidate: nil) == nil)
+    }
+
+    @Test func commandClickDragAndMissingModifierDoNotOpen() {
+        var gesture = TerminalCommandClickGesture()
+        gesture.begin(active: true, at: .zero, candidate: "https://example.com")
+        gesture.move(to: NSPoint(x: 4, y: 0))
+        #expect(gesture.finish(active: true, opened: false, candidate: nil) == nil)
+
+        gesture.begin(active: true, at: .zero, candidate: "https://example.com")
+        #expect(gesture.finish(active: false, opened: false, candidate: nil) == nil)
+    }
 }
