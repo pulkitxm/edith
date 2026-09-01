@@ -5,24 +5,22 @@ import EdithKit
 final class LimitsStatusItem {
     nonisolated(unsafe) static private(set) weak var button: NSStatusBarButton?
 
-    private let item: NSStatusItem
+    private var item: NSStatusItem?
     private var stackedView: StackedLimitsView?
 
     init() {
-        item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.autosaveName = "agentUsage"
-        item.isVisible = true
-        StatusItemMenu.attach(to: item, target: self, action: #selector(clicked))
-        Self.button = item.button
         showUnavailable()
     }
 
     func remove() {
-        NSStatusBar.system.removeStatusItem(item)
+        if let item { NSStatusBar.system.removeStatusItem(item) }
+        item = nil
+        stackedView = nil
         Self.button = nil
     }
 
     @objc private func clicked() {
+        guard let item else { return }
         StatusItemMenu.handleClick(on: item) { MainApp.open(section: "dashboard") }
     }
 
@@ -32,32 +30,39 @@ final class LimitsStatusItem {
             PresenterState.shared.active
             && (defaults.object(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
                 as? Bool ?? false)
-        let source =
-            providers.isEmpty
-            ? [ProviderLimits(provider: .claude, session: nil, week: nil)] : providers
+        let source = Self.stableProviders(providers, defaults: defaults)
         let groups = MenuBarLimits.groups(
             providers: source,
             selection: { MenuBarLimits.selection(for: $0, defaults: defaults) },
             masked: masked)
-        item.isVisible = !groups.isEmpty
-        guard !groups.isEmpty else { return }
+        guard !groups.isEmpty else {
+            item?.isVisible = false
+            return
+        }
         switch MenuBarLimits.style(defaults) {
         case .stacked: renderStacked(groups)
         case .tagged: renderTagged(groups)
         case .slash: renderSlash(groups)
         }
+        item?.isVisible = true
     }
 
     func showUnavailable() { update([]) }
 
-    private func setTitle(_ title: NSAttributedString) {
+    private func setTitle(
+        _ title: NSAttributedString, sizingTitle: NSAttributedString
+    ) {
+        ensureStatusItem(length: StatusItemSizing.titleLength(sizingTitle))
         stackedView?.removeFromSuperview()
         stackedView = nil
-        item.length = NSStatusItem.variableLength
-        item.button?.attributedTitle = title
+        item?.button?.attributedTitle = title
     }
 
     private func renderTagged(_ groups: [MenuBarProviderGroup]) {
+        setTitle(taggedTitle(groups), sizingTitle: taggedTitle(Self.sizingGroups(groups)))
+    }
+
+    private func taggedTitle(_ groups: [MenuBarProviderGroup]) -> NSAttributedString {
         let multi = groups.count > 1
         let title = NSMutableAttributedString()
         for (index, group) in groups.enumerated() {
@@ -69,10 +74,14 @@ final class LimitsStatusItem {
                 appendValue(segment, percentSuffix: !multi, into: title)
             }
         }
-        setTitle(title)
+        return title
     }
 
     private func renderSlash(_ groups: [MenuBarProviderGroup]) {
+        setTitle(slashTitle(groups), sizingTitle: slashTitle(Self.sizingGroups(groups)))
+    }
+
+    private func slashTitle(_ groups: [MenuBarProviderGroup]) -> NSAttributedString {
         let title = NSMutableAttributedString()
         let separatorColor = (subColor ?? NSColor.labelColor)
             .withAlphaComponent(0.65)
@@ -93,21 +102,62 @@ final class LimitsStatusItem {
                 appendValue(segment, percentSuffix: false, into: title)
             }
         }
-        setTitle(title)
+        return title
     }
 
     private func renderStacked(_ groups: [MenuBarProviderGroup]) {
-        item.button?.attributedTitle = NSAttributedString()
+        let sizingView = StackedLimitsView()
+        sizingView.groups = stackedGroups(Self.sizingGroups(groups))
+        ensureStatusItem(length: sizingView.desiredWidth)
+        item?.button?.attributedTitle = NSAttributedString()
         let view = stackedView ?? StackedLimitsView()
-        if stackedView == nil, let button = item.button {
+        if stackedView == nil, let button = item?.button {
             view.autoresizingMask = [.width, .height]
             view.frame = button.bounds
             button.addSubview(view)
             stackedView = view
         }
+        view.groups = stackedGroups(groups)
+    }
+
+    private func ensureStatusItem(length: CGFloat) {
+        if let item, abs(item.length - length) < 0.5 { return }
+        if let item { NSStatusBar.system.removeStatusItem(item) }
+        stackedView = nil
+        let next = NSStatusBar.system.statusItem(withLength: length)
+        next.autosaveName = "agentUsage"
+        next.isVisible = true
+        StatusItemMenu.attach(to: next, target: self, action: #selector(clicked))
+        item = next
+        Self.button = next.button
+    }
+
+    static func stableProviders(
+        _ providers: [ProviderLimits], defaults: UserDefaults
+    ) -> [ProviderLimits] {
+        let available = Dictionary(uniqueKeysWithValues: providers.map { ($0.provider, $0) })
+        let enabled = UsageStore.enabledLimitProviders(
+            claude: defaults.object(forKey: AppStorageKeys.Limits.claudeEnabled) as? Bool ?? true,
+            codex: defaults.object(forKey: AppStorageKeys.Limits.codexEnabled) as? Bool ?? true)
+        return enabled.map {
+            available[$0]
+                ?? ProviderLimits(provider: $0, session: nil, week: nil)
+        }
+    }
+
+    static func sizingGroups(_ groups: [MenuBarProviderGroup]) -> [MenuBarProviderGroup] {
+        groups.map { group in
+            MenuBarProviderGroup(
+                provider: group.provider,
+                segments: group.segments.map {
+                    MenuBarLimitSegment(slot: $0.slot, value: .percent(100), window: nil)
+                })
+        }
+    }
+
+    private func stackedGroups(_ groups: [MenuBarProviderGroup]) -> [StackedLimitsView.Group] {
         let multi = groups.count > 1
-        view.groups = groups.map { stackedGroup($0, multi: multi) }
-        item.length = view.desiredWidth
+        return groups.map { stackedGroup($0, multi: multi) }
     }
 
     private func stackedGroup(
