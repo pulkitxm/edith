@@ -13,19 +13,16 @@ struct DatabaseFilterRibbon: View {
     @State private var editorID: UUID?
 
     var body: some View {
-        HStack(spacing: UIScale.pt(8)) {
+        HStack(spacing: UIScale.pt(7)) {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: UIScale.pt(7)) {
+                HStack(spacing: UIScale.pt(6)) {
                     addFilterMenu
                     filterClauses
-                    if !data.orderedSorts.isEmpty {
-                        ribbonSeparator
-                    }
-                    addSortMenu
-                    sortClauses
                 }
-                .padding(.vertical, UIScale.pt(6))
             }
+            .layoutPriority(1)
+            ribbonSeparator
+            sortMenu
             columnsMenu
             if data.hasActiveFilters || data.hasActiveSorts {
                 Button {
@@ -33,17 +30,24 @@ struct DatabaseFilterRibbon: View {
                     data.clearSorts()
                     apply()
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
+                    Text("Clear")
+                        .font(.system(size: UIScale.pt(10), weight: .medium))
+                        .foregroundStyle(palette.inkFaint)
+                        .frame(height: UIScale.pt(28))
                 }
-                .buttonStyle(.edith(.borderless))
-                .foregroundStyle(palette.inkFaint)
+                .buttonStyle(.plain)
                 .help("Clear filters and sorting")
                 .accessibilityLabel("Clear filters and sorting")
             }
         }
         .padding(.horizontal, UIScale.pt(10))
-        .frame(minHeight: UIScale.pt(42))
+        .frame(height: UIScale.pt(38))
         .background(palette.panel)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(palette.line.opacity(0.72))
+                .frame(height: 1)
+        }
     }
 
     private var columnsMenu: some View {
@@ -87,10 +91,10 @@ struct DatabaseFilterRibbon: View {
                 }
             }
         } label: {
-            Label("Columns", systemImage: "rectangle.split.3x1")
-                .font(.system(size: UIScale.pt(10.5), weight: .medium))
+            railControlLabel("Columns", systemImage: "rectangle.split.3x1")
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .fixedSize()
         .disabled(columns.columns.isEmpty)
         .help("Choose and reorder visible columns")
@@ -107,10 +111,10 @@ struct DatabaseFilterRibbon: View {
                 }
             }
         } label: {
-            Label("Filter", systemImage: "line.3.horizontal.decrease")
-                .font(.system(size: UIScale.pt(10.5), weight: .medium))
+            railControlLabel("Filter", systemImage: "plus")
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .fixedSize()
         .disabled(filterableFields.isEmpty)
         .help(filterableFields.isEmpty ? "This result has no filterable fields" : "Add a filter")
@@ -142,11 +146,12 @@ struct DatabaseFilterRibbon: View {
             }
         } label: {
             Text(data.filterConjunction.title)
-                .font(.system(size: UIScale.pt(8.5), weight: .bold))
+                .font(.system(size: UIScale.pt(9), weight: .medium, design: .monospaced))
                 .foregroundStyle(palette.inkFaint)
-                .padding(.horizontal, UIScale.pt(2))
+                .frame(minWidth: UIScale.pt(28), minHeight: UIScale.pt(28))
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .fixedSize()
         .help("Match all filters or any filter")
     }
@@ -156,26 +161,40 @@ struct DatabaseFilterRibbon: View {
             editorID = clause.id
         } label: {
             HStack(spacing: UIScale.pt(5)) {
-                Image(systemName: clause.isEnabled ? "line.3.horizontal.decrease" : "pause.fill")
-                    .font(.system(size: UIScale.pt(8.5), weight: .semibold))
-                Text(clause.summary)
+                if clause.isEnabled {
+                    Circle()
+                        .fill(accent)
+                        .frame(width: UIScale.pt(5), height: UIScale.pt(5))
+                } else {
+                    Image(systemName: "pause.fill")
+                        .font(.system(size: UIScale.pt(7.5), weight: .semibold))
+                }
+                Text(clause.field)
+                    .font(.system(size: UIScale.pt(10), weight: .semibold, design: .monospaced))
                     .lineLimit(1)
+                Text(operatorTitle(clause.operation))
+                    .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                    .foregroundStyle(palette.inkFaint)
+                    .lineLimit(1)
+                if operationNeedsValue(clause.operation) {
+                    Text(clause.valueText)
+                        .font(.system(size: UIScale.pt(10), design: .monospaced))
+                        .lineLimit(1)
+                }
                 Image(systemName: "chevron.down")
-                    .font(.system(size: UIScale.pt(7.5), weight: .bold))
+                    .font(.system(size: UIScale.pt(7), weight: .bold))
+                    .foregroundStyle(palette.inkFaint)
             }
-            .font(.system(size: UIScale.pt(10.5), weight: .medium))
             .foregroundStyle(clause.isEnabled ? palette.ink : palette.inkFaint)
-            .padding(.horizontal, UIScale.pt(8))
-            .frame(height: UIScale.pt(26))
+            .padding(.horizontal, UIScale.pt(7))
+            .frame(height: UIScale.pt(28))
             .background(
-                clause.isEnabled ? accent.opacity(0.12) : palette.canvas,
-                in: Capsule()
+                clause.isEnabled ? palette.canvas : palette.canvas.opacity(0.54),
+                in: RoundedRectangle(cornerRadius: UIScale.pt(6))
             )
             .overlay {
-                Capsule()
-                    .stroke(
-                        clause.isEnabled ? accent.opacity(0.32) : palette.line.opacity(0.55),
-                        lineWidth: 1)
+                RoundedRectangle(cornerRadius: UIScale.pt(6))
+                    .strokeBorder(palette.line.opacity(0.72), lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
@@ -185,94 +204,121 @@ struct DatabaseFilterRibbon: View {
         }
     }
 
-    private var addSortMenu: some View {
+    private var sortMenu: some View {
         Menu {
-            ForEach(sortableFields, id: \.path) { field in
-                Menu(field.displayName) {
-                    Button("Ascending") {
-                        setSort(field, direction: .ascending)
+            if !data.orderedSorts.isEmpty {
+                Section("Current sorting") {
+                    ForEach(Array(data.orderedSorts.enumerated()), id: \.element.id) {
+                        priority, sort in
+                        Menu(sortMenuItemTitle(sort, priority: priority)) {
+                            Button("Ascending") {
+                                data.setSort(
+                                    field: sort.field, direction: .ascending, additive: true)
+                                apply()
+                            }
+                            Button("Descending") {
+                                data.setSort(
+                                    field: sort.field, direction: .descending, additive: true)
+                                apply()
+                            }
+                            Divider()
+                            Button("Move earlier") {
+                                data.moveSort(field: sort.field, to: priority - 1)
+                                apply()
+                            }
+                            .disabled(priority == 0)
+                            Button("Move later") {
+                                data.moveSort(field: sort.field, to: priority + 1)
+                                apply()
+                            }
+                            .disabled(priority == data.orderedSorts.count - 1)
+                            Button("Remove sort") {
+                                data.removeSort(field: sort.field)
+                                apply()
+                            }
+                        }
                     }
-                    Button("Descending") {
-                        setSort(field, direction: .descending)
+                }
+                Divider()
+            }
+            Section("Add sort") {
+                ForEach(sortableFields, id: \.path) { field in
+                    Menu(field.displayName) {
+                        Button("Ascending") {
+                            setSort(field, direction: .ascending)
+                        }
+                        Button("Descending") {
+                            setSort(field, direction: .descending)
+                        }
                     }
                 }
             }
         } label: {
-            Label("Sort", systemImage: "arrow.up.arrow.down")
-                .font(.system(size: UIScale.pt(10.5), weight: .medium))
+            railControlLabel(sortMenuTitle, systemImage: "arrow.up.arrow.down")
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .fixedSize()
         .disabled(sortableFields.isEmpty)
-        .help(sortableFields.isEmpty ? "This result has no sortable fields" : "Add sorting")
-    }
-
-    @ViewBuilder
-    private var sortClauses: some View {
-        ForEach(Array(data.orderedSorts.enumerated()), id: \.element.id) { index, sort in
-            sortChip(sort, priority: index)
-        }
-    }
-
-    private func sortChip(_ sort: DatabaseWorkspaceSort, priority: Int) -> some View {
-        Menu {
-            Button("Ascending") {
-                data.setSort(field: sort.field, direction: .ascending, additive: true)
-                apply()
-            }
-            Button("Descending") {
-                data.setSort(field: sort.field, direction: .descending, additive: true)
-                apply()
-            }
-            Divider()
-            Button("Move earlier") {
-                data.moveSort(field: sort.field, to: priority - 1)
-                apply()
-            }
-            .disabled(priority == 0)
-            Button("Move later") {
-                data.moveSort(field: sort.field, to: priority + 1)
-                apply()
-            }
-            .disabled(priority == data.orderedSorts.count - 1)
-            Button("Remove sort") {
-                data.removeSort(field: sort.field)
-                apply()
-            }
-        } label: {
-            HStack(spacing: UIScale.pt(5)) {
-                Text((priority + 1).formatted())
-                    .font(.system(size: UIScale.pt(8), weight: .bold, design: .rounded))
-                    .foregroundStyle(accent)
-                    .frame(width: UIScale.pt(16), height: UIScale.pt(16))
-                    .background(accent.opacity(0.13), in: Circle())
-                Text(sort.field)
-                    .lineLimit(1)
-                Image(
-                    systemName: sort.direction == .ascending
-                        ? "arrow.up" : "arrow.down"
-                )
-                .font(.system(size: UIScale.pt(8.5), weight: .bold))
-            }
-            .font(.system(size: UIScale.pt(10.5), weight: .medium))
-            .foregroundStyle(palette.ink)
-            .padding(.horizontal, UIScale.pt(7))
-            .frame(height: UIScale.pt(26))
-            .background(palette.canvas, in: Capsule())
-            .overlay {
-                Capsule().stroke(palette.line.opacity(0.55), lineWidth: 1)
-            }
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .help("Sort priority \(priority + 1): \(sort.summary)")
+        .help(sortHelp)
+        .accessibilityLabel(sortAccessibilityLabel)
     }
 
     private var ribbonSeparator: some View {
         Rectangle()
-            .fill(palette.line.opacity(0.55))
+            .fill(palette.line.opacity(0.72))
             .frame(width: 1, height: UIScale.pt(18))
-            .padding(.horizontal, UIScale.pt(2))
+    }
+
+    private func railControlLabel(_ title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.system(size: UIScale.pt(10), weight: .medium))
+            .foregroundStyle(palette.inkSoft)
+            .lineLimit(1)
+            .padding(.horizontal, UIScale.pt(6))
+            .frame(height: UIScale.pt(28))
+            .background(
+                palette.canvas.opacity(0.72), in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: UIScale.pt(6))
+                    .strokeBorder(palette.line.opacity(0.68), lineWidth: 1)
+            }
+    }
+
+    private var sortMenuTitle: String {
+        guard let first = data.orderedSorts.first else { return "Sort" }
+        let direction = first.direction == .ascending ? "↑" : "↓"
+        let more = data.orderedSorts.count > 1 ? " +\(data.orderedSorts.count - 1)" : ""
+        return "\(sortFieldTitle(first.field)) \(direction)\(more)"
+    }
+
+    private var sortHelp: String {
+        guard !data.orderedSorts.isEmpty else {
+            return sortableFields.isEmpty ? "This result has no sortable fields" : "Add sorting"
+        }
+        return data.orderedSorts.enumerated().map {
+            "\($0.offset + 1). \($0.element.summary)"
+        }.joined(separator: ", ")
+    }
+
+    private var sortAccessibilityLabel: String {
+        guard !data.orderedSorts.isEmpty else { return "Sort, none active" }
+        return "Sort, \(data.orderedSorts.count) active. \(sortHelp)"
+    }
+
+    private func sortMenuItemTitle(
+        _ sort: DatabaseWorkspaceSort,
+        priority: Int
+    ) -> String {
+        let direction = sort.direction == .ascending ? "Ascending" : "Descending"
+        return "\(priority + 1). \(sortFieldTitle(sort.field)), \(direction)"
+    }
+
+    private func sortFieldTitle(_ path: String) -> String {
+        data.fields.first {
+            $0.path.segments.joined(separator: ".") == path
+        }?.displayName ?? path
     }
 
     @ViewBuilder
