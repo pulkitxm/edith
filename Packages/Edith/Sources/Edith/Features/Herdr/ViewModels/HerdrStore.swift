@@ -414,18 +414,23 @@ final class HerdrStore {
     private func retainingConfiguredHosts(
         in snapshots: [HerdrHostSnapshot]
     ) -> [HerdrHostSnapshot] {
-        let incoming = Set(snapshots.map(\.id))
-        let configured = Set(
-            [HerdrHostSnapshot.localID] + MachineRegistry.machines().map { $0.id.uuidString })
-        let retained = hosts.filter { configured.contains($0.id) && !incoming.contains($0.id) }
-        let order = Dictionary(
-            uniqueKeysWithValues: ([HerdrHostSnapshot.localID]
-                + MachineRegistry.machines().map { $0.id.uuidString }).enumerated().map {
-                    ($0.element, $0.offset)
-                })
-        return (snapshots + retained).sorted {
+        var incoming: Set<String> = []
+        for snapshot in snapshots { incoming.insert(snapshot.id) }
+        var configured: Set<String> = [HerdrHostSnapshot.localID]
+        var order = [HerdrHostSnapshot.localID: 0]
+        for (index, machine) in MachineRegistry.machines().enumerated() {
+            let id = machine.id.uuidString
+            configured.insert(id)
+            order[id] = index + 1
+        }
+        var merged = snapshots
+        for host in hosts where configured.contains(host.id) && !incoming.contains(host.id) {
+            merged.append(host)
+        }
+        merged.sort {
             order[$0.id, default: Int.max] < order[$1.id, default: Int.max]
         }
+        return merged
     }
 
     func apply(_ snapshots: [HerdrHostSnapshot]) {
