@@ -24,6 +24,7 @@ private enum ClickHouseDatabaseReadingFixtures {
         product: DatabaseProduct = .clickHouse,
         readOnly: DatabaseReadOnlyPolicy = .required,
         productionPolicy: DatabaseProductionPolicy = .prohibitMutations,
+        environmentProtection: DatabaseEnvironmentProtection = .readOnly,
         authentication: DatabaseAuthentication = DatabaseAuthentication(kind: .none),
         username: String? = "reader",
         namespaces: DatabaseNamespaceDefaults = DatabaseNamespaceDefaults(
@@ -56,7 +57,7 @@ private enum ClickHouseDatabaseReadingFixtures {
             environment: DatabaseEnvironmentMetadata(
                 kind: .testing,
                 label: "Testing",
-                protection: .readOnly),
+                protection: environmentProtection),
             createdAt: Date(timeIntervalSince1970: 1_800_000_000),
             updatedAt: Date(timeIntervalSince1970: 1_800_000_000))
     }
@@ -143,12 +144,15 @@ private enum ClickHouseDatabaseReadingFixtures {
 
     static func descriptionResponse() throws -> ClickHouseDatabaseHTTPResponse {
         try response(
-            names: ["name", "type", "position", "is_in_primary_key", "is_in_sorting_key"],
-            types: ["String", "String", "UInt64", "UInt64", "UInt64"],
+            names: [
+                "name", "type", "position", "is_in_primary_key", "is_in_sorting_key",
+                "default_kind", "engine",
+            ],
+            types: ["String", "String", "UInt64", "UInt64", "UInt64", "String", "String"],
             rows: [
-                ["event_id", "UInt64", "1", "1", "1"],
-                ["category", "String", "2", "0", "0"],
-                ["score", "Float64", "3", "0", "0"],
+                ["event_id", "UInt64", "1", "1", "1", "", "MergeTree"],
+                ["category", "String", "2", "0", "0", "", "MergeTree"],
+                ["score", "Float64", "3", "0", "0", "", "MergeTree"],
             ])
     }
 
@@ -223,16 +227,24 @@ private final class ClickHouseDatabaseReadingClient: ClickHouseDatabaseClient,
     }
 }
 
-@Test func clickHouseReadingRequiresExplicitReadOnlyConnection() throws {
+@Test func clickHouseReadingConnectionPlanHonorsMutationPolicy() throws {
     let definition = try ClickHouseDatabaseReadingFixtures.definition(
         readOnly: .disabled,
-        productionPolicy: .standard)
+        productionPolicy: .standard,
+        environmentProtection: .standard)
     let resolved = try ClickHouseDatabaseReadingFixtures.resolved(definition)
-    #expect(throws: ClickHouseDatabaseAdapterSupport.invalidConnection) {
-        _ = try ClickHouseDatabaseAdapterSupport.connectionPlan(
-            resolved,
-            context: ClickHouseDatabaseReadingFixtures.context())
-    }
+    let writable = try ClickHouseDatabaseAdapterSupport.connectionPlan(
+        resolved,
+        context: ClickHouseDatabaseReadingFixtures.context())
+    #expect(writable.readOnly == false)
+
+    let protectedDefinition = try ClickHouseDatabaseReadingFixtures.definition(
+        readOnly: .disabled,
+        productionPolicy: .standard)
+    let protected = try ClickHouseDatabaseAdapterSupport.connectionPlan(
+        try ClickHouseDatabaseReadingFixtures.resolved(protectedDefinition),
+        context: ClickHouseDatabaseReadingFixtures.context())
+    #expect(protected.readOnly)
 }
 
 @Test func clickHouseReadingDiscoversCapabilitiesAndMetadata() async throws {
