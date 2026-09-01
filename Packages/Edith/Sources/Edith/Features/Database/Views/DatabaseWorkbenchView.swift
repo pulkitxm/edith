@@ -256,7 +256,7 @@ struct DatabaseWorkbenchView: View {
                                 ? palette.ink.opacity(dark ? 0.14 : 0.075) : .clear,
                             in: RoundedRectangle(cornerRadius: UIScale.pt(5)))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .accessibilityAddTraits(workbenchMode == mode ? .isSelected : [])
             }
         }
