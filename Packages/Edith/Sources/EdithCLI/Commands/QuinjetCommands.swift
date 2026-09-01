@@ -481,7 +481,7 @@ struct QuinjetCommandTarget: Sendable {
         }
         return QuinjetCommandTarget(
             name: machine.name, local: false,
-            remote: await QuinjetRemote.connected(
+            remote: try await QuinjetRemote.connected(
                 machineID: machine.id, machineName: machine.name, target: machine.sshTarget,
                 connection: connection),
             connection: connection)
@@ -537,7 +537,9 @@ enum QuinjetCLIEnvironment {
         let process = Process()
         process.executableURL = request.executableURL
         process.arguments = request.arguments
-        process.environment = CLIToolEnvironment.sanitized()
+        var environment = CLIToolEnvironment.sanitized()
+        environment.merge(request.environment) { _, replacement in replacement }
+        process.environment = environment
         process.standardInput = noninteractive ? FileHandle.nullDevice : FileHandle.standardInput
         process.standardOutput =
             noninteractive ? CLIOut.stderrHandle : FileHandle.standardOutput
@@ -569,7 +571,7 @@ enum QuinjetCLI {
         guard let executable = CLIEnvironment.executableNamed("quinjet") else {
             throw missingTool()
         }
-        let request = QuinjetOperationExecution.launchRequest(
+        let request = try QuinjetOperationExecution.launchRequest(
             executableURL: executable, worktreePath: selection.worktree.path,
             remote: target.remote, configuration: configuration, managedByEdith: false,
             localHomeDirectory: CLIEnvironment.homeDirectory.path)
@@ -583,6 +585,8 @@ enum QuinjetCLI {
             switch error {
             case .notInstalled:
                 throw missingTool()
+            case .remoteNotInstalled:
+                throw CLIFailure.unavailable(error.localizedDescription)
             case let .launchFailed(message):
                 throw CLIFailure.unavailable("Quinjet could not start", hint: message)
             case let .commandFailed(message):

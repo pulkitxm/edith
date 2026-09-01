@@ -2,13 +2,27 @@ import Foundation
 
 public struct QuinjetClient: Sendable {
     public typealias Execute = @Sendable ([String]) async throws -> Data
+    public typealias RemoteExecute = @Sendable (QuinjetRemote, [String]) async throws -> Data
 
     private let execute: Execute
+    private let executeRemote: RemoteExecute
     private let remoteProbeLimit: Int
 
     public init(remoteProbeLimit: Int = 4, execute: @escaping Execute) {
         self.remoteProbeLimit = max(1, remoteProbeLimit)
         self.execute = execute
+        executeRemote = { remote, arguments in
+            try await execute(Self.remoteArguments(arguments, remote: remote))
+        }
+    }
+
+    public init(
+        remoteProbeLimit: Int = 4, execute: @escaping Execute,
+        executeRemote: @escaping RemoteExecute
+    ) {
+        self.remoteProbeLimit = max(1, remoteProbeLimit)
+        self.execute = execute
+        self.executeRemote = executeRemote
     }
 
     public func recentProjects() async throws -> [QuinjetProject] {
@@ -36,6 +50,7 @@ public struct QuinjetClient: Sendable {
     }
 
     public func recentProjects(remote: QuinjetRemote) async throws -> [QuinjetProject] {
+        try requireExecutable(on: remote)
         let folders = try decode(
             QuinjetRemoteFolders.self, from: await execute(["remote", "list", "--json"]))
         let candidates = folders.remotes.filter {
@@ -107,16 +122,19 @@ public struct QuinjetClient: Sendable {
     public func worktrees(at path: String, remote: QuinjetRemote? = nil) async throws
         -> [QuinjetWorktree]
     {
-        var arguments: [String] = []
+        let arguments = [
+            "-C", remote?.resolve(path) ?? path, "worktree", "list", "--json",
+        ]
+        let data: Data
         if let remote {
-            arguments += [
-                "--remote", remote.target, "--ssh-control-path", remote.controlPath,
-            ]
+            try requireExecutable(on: remote)
+            data = try await executeRemote(remote, arguments)
+        } else {
+            data = try await execute(arguments)
         }
-        arguments += ["-C", remote?.resolve(path) ?? path, "worktree", "list", "--json"]
         return try decode(
             [QuinjetWorktree].self,
-            from: await execute(arguments))
+            from: data)
     }
 
     private func decode<Value: Decodable>(_ type: Value.Type, from data: Data) throws -> Value {
@@ -127,13 +145,34 @@ public struct QuinjetClient: Sendable {
         }
     }
 
-    public static let live = QuinjetClient { arguments in
+    private func requireExecutable(on remote: QuinjetRemote) throws {
+        guard remote.executablePath != nil else {
+            throw QuinjetClientError.remoteNotInstalled(
+                machine: remote.machineName, platform: remote.platform,
+                distributionID: remote.distributionID)
+        }
+    }
+
+    public static let live = QuinjetClient(
+        execute: { arguments in
+            try await executeLive(arguments: arguments, remote: nil)
+        },
+        executeRemote: { remote, arguments in
+            try await executeLive(arguments: arguments, remote: remote)
+        })
+
+    private static func remoteArguments(_ arguments: [String], remote: QuinjetRemote) -> [String] {
+        ["--remote", remote.target, "--ssh-control-path", remote.controlPath] + arguments
+    }
+
+    private static func executeLive(arguments: [String], remote: QuinjetRemote?) async throws
+        -> Data
+    {
         guard let executable = CLIToolEnvironment.executable(named: "quinjet") else {
             throw QuinjetClientError.notInstalled
         }
-        let request = CLICommandRequest(
-            executableURL: executable, arguments: arguments,
-            environment: CLIToolEnvironment.sanitized())
+        let request = try liveRequest(
+            arguments: arguments, remote: remote, executable: executable)
         let result: CLICommandResult
         do {
             result = try await CLICommandRunner.run(request) { _ in }
@@ -141,10 +180,42 @@ public struct QuinjetClient: Sendable {
             throw QuinjetClientError.launchFailed(error.localizedDescription)
         }
         guard result.terminationStatus == 0 else {
+            let output =
+                remote?.platform == .windows
+                ? PowerShell.decodedError(result.output) : result.output
             throw QuinjetClientError.commandFailed(
-                result.output.trimmingCharacters(in: .whitespacesAndNewlines))
+                output.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         return result.standardOutputData
+    }
+
+    static func liveRequest(
+        arguments: [String], remote: QuinjetRemote?, executable: URL
+    ) throws -> CLICommandRequest {
+        var environment = CLIToolEnvironment.sanitized()
+        if let remote {
+            guard let remoteExecutable = remote.executablePath else {
+                throw QuinjetClientError.remoteNotInstalled(
+                    machine: remote.machineName, platform: remote.platform,
+                    distributionID: remote.distributionID)
+            }
+            if remote.platform == .windows {
+                let command = PowerShell.command(
+                    PowerShell.invocation([remoteExecutable] + arguments)!)
+                return CLICommandRequest(
+                    executableURL: SSHConnection.executable,
+                    arguments: ["-T", "-S", remote.controlPath, "--", remote.target, command],
+                    environment: environment)
+            } else {
+                environment["QUINJET_REMOTE_BINARY"] = remoteExecutable
+                return CLICommandRequest(
+                    executableURL: executable,
+                    arguments: remoteArguments(arguments, remote: remote),
+                    environment: environment)
+            }
+        }
+        return CLICommandRequest(
+            executableURL: executable, arguments: arguments, environment: environment)
     }
 }
 

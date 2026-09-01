@@ -74,6 +74,7 @@ private enum PostgreSQLDatabaseReadingFixtures {
         pageSize: Int,
         continuation: DatabaseAdapterContinuation? = nil,
         projection: DatabaseProjection? = nil,
+        filter: DatabaseFilter? = nil,
         sorts: [DatabaseSort] = []
     ) throws -> DatabaseAdapterPageRequest {
         try DatabaseAdapterPageRequest(
@@ -81,6 +82,7 @@ private enum PostgreSQLDatabaseReadingFixtures {
             page: DatabasePageRequest(
                 pageSize: try DatabasePageSize(pageSize),
                 projection: projection,
+                filter: filter,
                 sorts: sorts),
             continuation: continuation)
     }
@@ -241,6 +243,35 @@ private actor PostgreSQLDatabaseReadingClient: PostgreSQLDatabaseClient {
     func disconnects() -> Int {
         disconnectCount
     }
+}
+
+@Test func postgresqlReadingBuildsValidCaseInsensitiveLikeEscape() async throws {
+    let definition = try PostgreSQLDatabaseReadingFixtures.definition()
+    let client = PostgreSQLDatabaseReadingClient(outputs: [
+        PostgreSQLDatabaseReadingFixtures.descriptor(),
+        PostgreSQLDatabaseReadingFixtures.dataRows([(1, "50%_off\\")]),
+    ])
+    let session = PostgreSQLDatabaseAdapterSession(
+        connection: definition,
+        productIdentity: PostgreSQLDatabaseReadingFixtures.identity,
+        client: client)
+    let filter = DatabaseFilter.predicate(
+        DatabaseFilterPredicate(
+            field: DatabaseFieldPath("notes"),
+            operation: .contains,
+            values: [.string("50%_off\\")],
+            caseSensitivity: .insensitive))
+
+    _ = try await session.readPage(
+        PostgreSQLDatabaseReadingFixtures.pageRequest(
+            connectionID: definition.id,
+            pageSize: 2,
+            filter: filter),
+        context: PostgreSQLDatabaseReadingFixtures.context())
+
+    let plan = try #require(await client.capturedPlans().last)
+    #expect(plan.sql.contains(#""_edith_relation"."notes" ILIKE $1 ESCAPE '\'"#))
+    #expect(plan.parameters == [.string("%50\\%\\_off\\\\%")])
 }
 
 @Test func postgresqlReadingBrowsesWithBoundedKeysetContinuations() async throws {

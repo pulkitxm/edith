@@ -248,7 +248,7 @@ struct DatabaseConnectionGallery: View {
                     HStack(alignment: .top, spacing: UIScale.pt(11)) {
                         ZStack {
                             RoundedRectangle(cornerRadius: UIScale.pt(9))
-                                .fill(accent.opacity(highlighted ? 0.18 : 0.11))
+                                .fill(accent.opacity(highlighted ? 0.15 : 0.11))
                             Image(systemName: connection.product.gallerySymbolName)
                                 .font(.system(size: UIScale.pt(16), weight: .semibold))
                                 .foregroundStyle(accent)
@@ -301,20 +301,21 @@ struct DatabaseConnectionGallery: View {
                 }
                 .padding(UIScale.pt(14))
                 .frame(maxWidth: .infinity, minHeight: UIScale.pt(126), alignment: .topLeading)
-                .background(
-                    highlighted ? palette.panel : palette.panel.opacity(0.74),
-                    in: RoundedRectangle(cornerRadius: UIScale.pt(13))
-                )
-                .overlay {
+                .background {
                     RoundedRectangle(cornerRadius: UIScale.pt(13))
-                        .stroke(
-                            highlighted ? accent.opacity(0.72) : palette.line,
-                            lineWidth: highlighted ? 1.5 : 1)
+                        .fill(palette.panel.opacity(highlighted ? 0.86 : 0.74))
+                        .overlay {
+                            if highlighted {
+                                RoundedRectangle(cornerRadius: UIScale.pt(13))
+                                    .fill(accent.opacity(dark ? 0.045 : 0.035))
+                            }
+                        }
                 }
                 .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(13)))
             }
             .buttonStyle(.edith(.borderless))
             .focused($focusedConnectionID, equals: connection.id)
+            .focusEffectDisabled()
             .background {
                 DatabaseKeyboardFocusAnchor(active: focusRequest.target == connection.id) {
                     guard focusRequest.target == connection.id else { return }
@@ -341,6 +342,7 @@ struct DatabaseConnectionGallery: View {
             }
         }
         .onHover { isHovered in hoveredConnectionID = isHovered ? connection.id : nil }
+        .animation(nil, value: highlighted)
         .contextMenu {
             if performConnectionAction != nil {
                 connectionActions(connection)
@@ -620,9 +622,19 @@ struct DatabaseFocusedConnectionHeader: View {
     private var navigationButton: some View {
         Button(action: back) {
             Label("All connections", systemImage: "chevron.left")
+                .font(.system(size: UIScale.pt(11), weight: .medium))
+                .foregroundStyle(backFocused ? palette.ink : palette.inkSoft)
+                .padding(.horizontal, UIScale.pt(8))
+                .frame(minHeight: UIScale.pt(28))
+                .background(
+                    palette.ink.opacity(backFocused ? (dark ? 0.1 : 0.06) : 0),
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                )
+                .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(6)))
         }
-        .buttonStyle(.edith(.secondary))
+        .buttonStyle(.edith(.borderless))
         .focused($backFocused)
+        .focusEffectDisabled()
         .background {
             DatabaseKeyboardFocusAnchor(
                 active: focusRequested && !backDisabled,

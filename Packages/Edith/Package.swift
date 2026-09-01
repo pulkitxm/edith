@@ -163,7 +163,10 @@ let targets: [Target] = [
     .target(
         name: "GhosttyTerminal",
         dependencies: ["GhosttyKit"],
-        resources: [.copy("Resources/Fonts")],
+        resources: [
+            .copy("Resources/Fonts"),
+            .copy("../../vendor/GhosttyResources"),
+        ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .target(

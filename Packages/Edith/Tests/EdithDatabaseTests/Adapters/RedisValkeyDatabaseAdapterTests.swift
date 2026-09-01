@@ -221,7 +221,7 @@ private actor FakeRedisClient: RedisDatabaseClient {
             return .bytes(Data("PONG".utf8))
         case let .info(section):
             return .bytes(info(section))
-        case let .scan(cursor, count):
+        case let .scan(cursor, count, pattern, valueType):
             if pauseOnScan {
                 scanPaused = true
                 await withCheckedContinuation { continuation in
@@ -229,7 +229,10 @@ private actor FakeRedisClient: RedisDatabaseClient {
                 }
                 guard !closed else { throw RedisDatabaseClientFailure.connection }
             }
-            let keys = values.keys.sorted(by: { $0.lexicographicallyPrecedes($1) })
+            let keys = values.keys.filter { key in
+                (valueType == nil || values[key]?.type == valueType)
+                    && Self.matches(key, pattern: pattern)
+            }.sorted(by: { $0.lexicographicallyPrecedes($1) })
             let start = min(Int(cursor), keys.count)
             let end = min(start + count + scanExtraKeys, keys.count)
             let next = end == keys.count ? UInt64(0) : UInt64(end)
@@ -387,6 +390,47 @@ private actor FakeRedisClient: RedisDatabaseClient {
         ttls[key]
     }
 
+    func contains(_ key: Data) -> Bool {
+        values[key] != nil
+    }
+
+    private static func matches(_ value: Data, pattern: Data?) -> Bool {
+        guard let pattern else { return true }
+        var tokens: [FakeRedisGlobToken] = []
+        var escaped = false
+        for byte in pattern {
+            if escaped {
+                tokens.append(.literal(byte))
+                escaped = false
+            } else if byte == 92 {
+                escaped = true
+            } else if byte == 42 {
+                tokens.append(.anySequence)
+            } else {
+                tokens.append(.literal(byte))
+            }
+        }
+        if escaped {
+            tokens.append(.literal(92))
+        }
+        let bytes = Array(value)
+        var positions: Set<Int> = [0]
+        for token in tokens {
+            switch token {
+            case .anySequence:
+                guard let first = positions.min() else { return false }
+                positions = Set(first...bytes.count)
+            case let .literal(byte):
+                positions = Set(
+                    positions.compactMap { position in
+                        guard position < bytes.count, bytes[position] == byte else { return nil }
+                        return position + 1
+                    })
+            }
+        }
+        return positions.contains(bytes.count)
+    }
+
     private func info(_ section: String) -> Data {
         switch section {
         case "server":
@@ -404,6 +448,11 @@ private actor FakeRedisClient: RedisDatabaseClient {
             return Data("cluster_enabled:0\r\n".utf8)
         }
     }
+}
+
+private enum FakeRedisGlobToken {
+    case anySequence
+    case literal(UInt8)
 }
 
 private actor FakeRedisClientFactory: RedisDatabaseClientFactory {
@@ -1109,6 +1158,9 @@ struct RedisValkeyDatabaseAdapterTests {
         #expect(report.supports(.insert))
         #expect(report.supports(.update))
         #expect(report.supports(.delete))
+        #expect(
+            report.status(for: .browse)?.attributes.first(where: { $0.name == "filters" })?.value
+                == "key-pattern,type")
         #expect(report.status(for: .bulkMutation)?.availability == .unavailable)
         #expect(report.pagingModes == [.scanCursor])
         #expect(report.mutationModes == [.singleRecord])
@@ -1188,6 +1240,63 @@ struct RedisValkeyDatabaseAdapterTests {
             context: RedisValkeyAdapterFixtures.context())
         #expect(deleted.effect == .applied)
         #expect(await client.stringValue(for: keyData) == nil)
+        await session.disconnect()
+    }
+
+    @Test("expires and deletes every supported Redis value family")
+    func collectionKeyMutations() async throws {
+        let values: [Data: FakeRedisValue] = [
+            Data("string".utf8): .string(Data("value".utf8)),
+            Data("hash".utf8): .hash([(Data("field".utf8), Data("value".utf8))]),
+            Data("list".utf8): .list([Data("value".utf8)]),
+            Data("set".utf8): .set([Data("value".utf8)]),
+            Data("zset".utf8): .sortedSet([(Data("value".utf8), Data("1".utf8))]),
+            Data("stream".utf8): .stream([
+                (Data("1-0".utf8), [(Data("field".utf8), Data("value".utf8))])
+            ]),
+        ]
+        let definition = try RedisValkeyAdapterFixtures.definition()
+        let client = FakeRedisClient(product: .redis, values: values)
+        let session = try await RedisValkeyDatabaseAdapter(
+            clientFactory: FakeRedisClientFactory(client: client)
+        ).connect(
+            try RedisValkeyAdapterFixtures.resolved(definition),
+            context: RedisValkeyAdapterFixtures.context())
+        for key in values.keys {
+            let target = DatabaseTargetIdentifier(
+                connectionID: definition.id,
+                object: RedisValkeyAdapterFixtures.target(definition.id).object,
+                record: DatabaseRecordIdentity(
+                    kind: .key,
+                    components: [
+                        DatabaseIdentityComponent(
+                            name: "key",
+                            value: .binary(
+                                .complete(data: key, mediaType: nil, digest: nil)))
+                    ]))
+            let expiration = try DatabaseKeyspaceMutationRequests.updateTTL(
+                target: target,
+                product: .redis,
+                ttlMilliseconds: 30_000)
+            let expired = try await session.executeMutation(
+                try await session.normalizeMutation(
+                    expiration,
+                    context: RedisValkeyAdapterFixtures.context()),
+                context: RedisValkeyAdapterFixtures.context())
+            #expect(expired.effect == .applied)
+            #expect(await client.ttl(for: key) == 30_000)
+
+            let deletion = try DatabaseKeyspaceMutationRequests.deleteKey(
+                target: target,
+                product: .redis)
+            let deleted = try await session.executeMutation(
+                try await session.normalizeMutation(
+                    deletion,
+                    context: RedisValkeyAdapterFixtures.context()),
+                context: RedisValkeyAdapterFixtures.context())
+            #expect(deleted.effect == .applied)
+            #expect(await client.contains(key) == false)
+        }
         await session.disconnect()
     }
 
@@ -1306,6 +1415,120 @@ struct RedisValkeyDatabaseAdapterTests {
         #expect(second.metadata.completeness.state == .sampled)
         #expect(first.metadata.count.accuracy == .unknown)
         #expect(second.metadata.count.accuracy == .unknown)
+        await session.disconnect()
+    }
+
+    @Test("pushes escaped key and type filters into bounded SCAN")
+    func filteredScan() async throws {
+        let literalKey = Data("session:*".utf8)
+        let values: [Data: FakeRedisValue] = [
+            literalKey: .hash([(Data("field".utf8), Data("value".utf8))]),
+            Data("session:1".utf8): .hash([(Data("field".utf8), Data("other".utf8))]),
+            Data("other:*".utf8): .hash([(Data("field".utf8), Data("other".utf8))]),
+            Data("session:list".utf8): .list([Data("value".utf8)]),
+        ]
+        let definition = try RedisValkeyAdapterFixtures.definition()
+        let client = FakeRedisClient(product: .redis, values: values)
+        let session = try await RedisValkeyDatabaseAdapter(
+            clientFactory: FakeRedisClientFactory(client: client)
+        ).connect(
+            try RedisValkeyAdapterFixtures.resolved(definition),
+            context: RedisValkeyAdapterFixtures.context())
+        let filter = DatabaseFilter.all([
+            .predicate(
+                DatabaseFilterPredicate(
+                    field: DatabaseFieldPath("key"),
+                    operation: .contains,
+                    values: [.string("session:*")],
+                    caseSensitivity: .sensitive)),
+            .predicate(
+                DatabaseFilterPredicate(
+                    field: DatabaseFieldPath("type"),
+                    operation: .equal,
+                    values: [.string("HASH")])),
+        ])
+
+        let page = try await session.readPage(
+            try RedisValkeyAdapterFixtures.pageRequest(
+                definition.id,
+                pageSize: 10,
+                filter: filter),
+            context: RedisValkeyAdapterFixtures.context())
+
+        #expect(page.records.count == 1)
+        #expect(page.records[0].identity?.components.first?.value == .string("session:*"))
+        #expect(
+            page.fields.first(where: { $0.path == DatabaseFieldPath("key") })?.isFilterable
+                == true)
+        #expect(
+            page.fields.first(where: { $0.path == DatabaseFieldPath("type") })?.isFilterable
+                == true)
+        #expect(
+            page.fields.first(where: { $0.path == DatabaseFieldPath("type") })?.typeName
+                == "redis-type")
+        #expect(
+            await client.snapshot().contains(
+                .scan(
+                    cursor: 0,
+                    count: 10,
+                    pattern: Data("*session:\\**".utf8),
+                    valueType: "hash")))
+        await session.disconnect()
+    }
+
+    @Test("rejects Redis filters that SCAN cannot represent safely")
+    func rejectedScanFilters() async throws {
+        let definition = try RedisValkeyAdapterFixtures.definition()
+        let client = FakeRedisClient(
+            product: .redis,
+            values: [Data("session:1".utf8): .string(Data("value".utf8))])
+        let session = try await RedisValkeyDatabaseAdapter(
+            clientFactory: FakeRedisClientFactory(client: client)
+        ).connect(
+            try RedisValkeyAdapterFixtures.resolved(definition),
+            context: RedisValkeyAdapterFixtures.context())
+        let filters: [DatabaseFilter] = [
+            .predicate(
+                DatabaseFilterPredicate(
+                    field: DatabaseFieldPath("key"),
+                    operation: .contains,
+                    values: [.string("SESSION")],
+                    caseSensitivity: .insensitive)),
+            .predicate(
+                DatabaseFilterPredicate(
+                    field: DatabaseFieldPath("type"),
+                    operation: .notEqual,
+                    values: [.string("string")])),
+            .predicate(
+                DatabaseFilterPredicate(
+                    field: DatabaseFieldPath("value"),
+                    operation: .equal,
+                    values: [.string("value")])),
+            .any([
+                .predicate(
+                    DatabaseFilterPredicate(
+                        field: DatabaseFieldPath("type"),
+                        operation: .equal,
+                        values: [.string("string")])),
+                .predicate(
+                    DatabaseFilterPredicate(
+                        field: DatabaseFieldPath("type"),
+                        operation: .equal,
+                        values: [.string("hash")])),
+            ]),
+        ]
+        let operationCount = await client.snapshot().count
+        for filter in filters {
+            let envelope = await RedisValkeyAdapterFixtures.envelope {
+                _ = try await session.readPage(
+                    try RedisValkeyAdapterFixtures.pageRequest(
+                        definition.id,
+                        filter: filter),
+                    context: RedisValkeyAdapterFixtures.context())
+            }
+            #expect(envelope?.productCode == "redis.read.invalid")
+        }
+        #expect(await client.snapshot().count == operationCount)
         await session.disconnect()
     }
 

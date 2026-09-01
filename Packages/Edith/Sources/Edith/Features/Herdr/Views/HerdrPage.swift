@@ -475,8 +475,12 @@ struct HerdrPage: View {
             store.closeToTheLeft(of: id)
         }
         .disabled(!store.canCloseToTheLeft(of: id))
+        Divider()
+        Button("Close All", role: .destructive) {
+            store.closeAll()
+        }
+        .disabled(!store.canCloseAll)
         if closable {
-            Divider()
             Button("Close", role: .destructive) {
                 store.close(id)
             }

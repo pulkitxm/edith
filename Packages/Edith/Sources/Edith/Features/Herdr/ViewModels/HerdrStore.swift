@@ -52,6 +52,11 @@ enum HerdrPaneSizing {
 @MainActor
 @Observable
 final class HerdrStore {
+    typealias UserCloseRequester =
+        @MainActor (
+            TerminalSessionHolder, @escaping @MainActor (Bool) -> Void
+        ) -> Void
+
     static let shared = HerdrStore()
     static let boardID = "board"
 
@@ -148,6 +153,8 @@ final class HerdrStore {
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
     private let agentCloser: HerdrAgentCloser
+    private let machinesProvider: () -> [Machine]
+    private let requestUserClose: UserCloseRequester
     private var expectedHostCount: Int
     private var restoringDefaults = true
     private var collapseCountsReady = false
@@ -165,12 +172,18 @@ final class HerdrStore {
     init(
         defaults: UserDefaults = SharedDefaults.store,
         liveWatcher: @escaping HerdrLiveWatcher = { yield in await HerdrLive.watch(yield) },
-        agentCloser: @escaping HerdrAgentCloser = { try await HerdrAgentCloseExecution.close($0) }
+        agentCloser: @escaping HerdrAgentCloser = { try await HerdrAgentCloseExecution.close($0) },
+        machinesProvider: @escaping () -> [Machine] = { MachineRegistry.machines() },
+        requestUserClose: @escaping UserCloseRequester = { holder, completion in
+            holder.requestUserClose(completion)
+        }
     ) {
         self.defaults = defaults
         self.liveWatcher = liveWatcher
-        expectedHostCount = MachineRegistry.machines().count + 1
         self.agentCloser = agentCloser
+        self.machinesProvider = machinesProvider
+        self.requestUserClose = requestUserClose
+        expectedHostCount = machinesProvider().count + 1
         railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
         railWidth = HerdrPaneSizing.rail(
             defaults.object(forKey: AppStorageKeys.Herdr.railWidth) as? Double
@@ -341,7 +354,7 @@ final class HerdrStore {
 
     func watch() async {
         guard watchTask == nil else { return }
-        expectedHostCount = MachineRegistry.machines().count + 1
+        expectedHostCount = machinesProvider().count + 1
         if hosts.isEmpty { settling = true }
         watchGeneration += 1
         let generation = watchGeneration
@@ -418,7 +431,7 @@ final class HerdrStore {
         for snapshot in snapshots { incoming.insert(snapshot.id) }
         var configured: Set<String> = [HerdrHostSnapshot.localID]
         var order = [HerdrHostSnapshot.localID: 0]
-        for (index, machine) in MachineRegistry.machines().enumerated() {
+        for (index, machine) in machinesProvider().enumerated() {
             let id = machine.id.uuidString
             configured.insert(id)
             order[id] = index + 1
@@ -590,6 +603,10 @@ final class HerdrStore {
         selectedTab = id
     }
 
+    func closeAll() {
+        closeWhere { _, _ in true }
+    }
+
     func closeToTheRight(of id: String) {
         if id == Self.boardID {
             closeWhere { _, _ in true }
@@ -608,6 +625,10 @@ final class HerdrStore {
         id == Self.boardID ? !tabs.isEmpty : tabs.count > 1
     }
 
+    var canCloseAll: Bool {
+        !tabs.isEmpty
+    }
+
     func canCloseToTheRight(of id: String) -> Bool {
         if id == Self.boardID { return !tabs.isEmpty }
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return false }
@@ -624,16 +645,38 @@ final class HerdrStore {
             predicate(item.offset, item.element) ? item.element.id : nil
         }
         guard !ids.isEmpty else { return }
-        let selectedClosed = ids.contains(selectedTab)
-        for id in ids {
-            guard let index = tabs.firstIndex(where: { $0.id == id }) else { continue }
-            tabs[index].holder.stop()
-            tabs[index].quinjet.stop()
-            tabs.remove(at: index)
+        closeSequentially(ids[...])
+    }
+
+    private func closeSequentially(_ ids: ArraySlice<String>) {
+        guard let id = ids.first else { return }
+        let remaining = ids.dropFirst()
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else {
+            closeSequentially(remaining)
+            return
         }
-        if selectedClosed {
-            selectedTab = tabs.last?.id ?? Self.boardID
+        if !tabs[index].agent.isTerminal {
+            let holder = tabs[index].holder
+            holder.stop()
+            removeClosedTab(id, holder: holder)
+            closeSequentially(remaining)
+            return
         }
+        let holder = tabs[index].holder
+        requestUserClose(holder) { [weak self, weak holder] confirmed in
+            guard let self else { return }
+            if confirmed, let holder { self.removeClosedTab(id, holder: holder) }
+            self.closeSequentially(remaining)
+        }
+    }
+
+    private func removeClosedTab(_ id: String, holder: TerminalSessionHolder) {
+        guard let index = tabs.firstIndex(where: { $0.id == id && $0.holder === holder }) else {
+            return
+        }
+        tabs[index].quinjet.stop()
+        tabs.remove(at: index)
+        if selectedTab == id { selectedTab = tabs.last?.id ?? Self.boardID }
     }
 
     func selectBoard() {
@@ -687,7 +730,7 @@ final class HerdrStore {
             throw HerdrQuinjetError.machineUnavailable
         }
         let connection = try await connection(for: machine)
-        return await QuinjetRemote.connected(
+        return try await QuinjetRemote.connected(
             machineID: machine.id, machineName: machine.name, target: machine.sshTarget,
             connection: connection)
     }

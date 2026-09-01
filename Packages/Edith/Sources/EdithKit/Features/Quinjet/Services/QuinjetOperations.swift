@@ -227,22 +227,35 @@ public struct QuinjetLaunchRequest: Equatable, Sendable {
     public let arguments: [String]
     public let currentDirectory: String?
     public let terminal: QuinjetTerminal
+    public let environment: [String: String]
 
     public init(
         executableURL: URL, arguments: [String], currentDirectory: String?,
-        terminal: QuinjetTerminal
+        terminal: QuinjetTerminal, environment: [String: String] = [:]
     ) {
         self.executableURL = executableURL
         self.arguments = arguments
         self.currentDirectory = currentDirectory
         self.terminal = terminal
+        self.environment = environment
     }
 
     public init(
         executableURL: URL, worktreePath: String, remote: QuinjetRemote?,
         configuration: QuinjetLaunchConfiguration, managedByEdith: Bool,
         localHomeDirectory: String
-    ) {
+    ) throws {
+        let remoteExecutable: String?
+        if let remote {
+            guard let executable = remote.executablePath else {
+                throw QuinjetClientError.remoteNotInstalled(
+                    machine: remote.machineName, platform: remote.platform,
+                    distributionID: remote.distributionID)
+            }
+            remoteExecutable = executable
+        } else {
+            remoteExecutable = nil
+        }
         var quinjetArguments: [String] = []
         if managedByEdith { quinjetArguments += ["--client", "edith"] }
         quinjetArguments += ["-C", worktreePath, "tui"]
@@ -252,10 +265,11 @@ public struct QuinjetLaunchRequest: Equatable, Sendable {
             quinjetArguments += ["--theme", configuration.theme.rawValue]
         }
         quinjetArguments += ["--appearance", configuration.appearance.rawValue]
-        if let remote, remote.platform == .windows {
+        var environment: [String: String] = [:]
+        if let remote, let remoteExecutable, remote.platform == .windows {
             self.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
             let command = PowerShell.interactiveCommand(
-                PowerShell.invocation(["quinjet"] + quinjetArguments)!)
+                PowerShell.invocation([remoteExecutable] + quinjetArguments)!)
             self.arguments = [
                 "-tt", "-S", remote.controlPath, "--", remote.target, command,
             ]
@@ -265,10 +279,14 @@ public struct QuinjetLaunchRequest: Equatable, Sendable {
                 arguments += [
                     "--remote", remote.target, "--ssh-control-path", remote.controlPath,
                 ]
+                if let remoteExecutable {
+                    environment["QUINJET_REMOTE_BINARY"] = remoteExecutable
+                }
             }
             self.executableURL = executableURL
             self.arguments = arguments + quinjetArguments
         }
+        self.environment = environment
         self.terminal = configuration.terminal
         switch (configuration.terminal, remote) {
         case (.embedded, .some): currentDirectory = nil
@@ -280,15 +298,21 @@ public struct QuinjetLaunchRequest: Equatable, Sendable {
     public var shellCommand: String {
         QuinjetShellCommand.make(
             executable: executableURL.path, arguments: arguments,
-            currentDirectory: currentDirectory)
+            currentDirectory: currentDirectory, environment: environment)
     }
 }
 
 public enum QuinjetShellCommand {
     public static func make(
-        executable: String, arguments: [String], currentDirectory: String? = nil
+        executable: String, arguments: [String], currentDirectory: String? = nil,
+        environment: [String: String] = [:]
     ) -> String {
-        let launch = "exec " + ([executable] + arguments).map(quote).joined(separator: " ")
+        var words = [executable] + arguments
+        if !environment.isEmpty {
+            let values = environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+            words = ["/usr/bin/env"] + values + words
+        }
+        let launch = "exec " + words.map(quote).joined(separator: " ")
         guard let currentDirectory else { return launch }
         return "cd \(quote(currentDirectory)) && \(launch)"
     }
@@ -588,10 +612,11 @@ public enum QuinjetOperationExecution {
         return worktrees.first(where: \.current) ?? worktrees.first
     }
 
-    public static func terminalEnvironment() -> [String] {
+    public static func terminalEnvironment(overrides: [String: String] = [:]) -> [String] {
         var environment = CLIToolEnvironment.sanitized()
         environment["TERM"] = "xterm-256color"
         environment["COLORTERM"] = "truecolor"
+        environment.merge(overrides) { _, replacement in replacement }
         return environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
     }
 
@@ -599,8 +624,8 @@ public enum QuinjetOperationExecution {
         executableURL: URL, worktreePath: String, remote: QuinjetRemote?,
         configuration: QuinjetLaunchConfiguration, managedByEdith: Bool,
         localHomeDirectory: String
-    ) -> QuinjetLaunchRequest {
-        QuinjetLaunchRequest(
+    ) throws -> QuinjetLaunchRequest {
+        try QuinjetLaunchRequest(
             executableURL: executableURL, worktreePath: worktreePath, remote: remote,
             configuration: configuration, managedByEdith: managedByEdith,
             localHomeDirectory: localHomeDirectory)

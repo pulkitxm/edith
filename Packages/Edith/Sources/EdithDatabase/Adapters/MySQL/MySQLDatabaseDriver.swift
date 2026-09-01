@@ -10,6 +10,7 @@ enum MySQLDatabaseDriverFailure: Error, Equatable, Sendable {
     case configuration
     case connection
     case incompatibleProduct(DatabaseProduct)
+    case invalidRequest
     case permission(String?)
     case resourceLimit
     case server(String?)
@@ -24,6 +25,7 @@ enum MySQLDatabaseTLSPlan: Sendable {
 }
 
 struct MySQLDatabaseConnectionPlan: Sendable {
+    let product: DatabaseProduct
     let host: String
     let port: Int
     let username: String
@@ -33,8 +35,31 @@ struct MySQLDatabaseConnectionPlan: Sendable {
     let tlsServerName: String?
     let connectTimeoutMilliseconds: UInt64
 
+    init(
+        product: DatabaseProduct = .mysql,
+        host: String,
+        port: Int,
+        username: String,
+        password: String?,
+        database: String?,
+        tls: MySQLDatabaseTLSPlan,
+        tlsServerName: String?,
+        connectTimeoutMilliseconds: UInt64
+    ) {
+        self.product = product
+        self.host = host
+        self.port = port
+        self.username = username
+        self.password = password
+        self.database = database
+        self.tls = tls
+        self.tlsServerName = tlsServerName
+        self.connectTimeoutMilliseconds = connectTimeoutMilliseconds
+    }
+
     func validate() throws {
-        guard (1...65_535).contains(port),
+        guard product == .mysql || product == .mariaDB,
+            (1...65_535).contains(port),
             connectTimeoutMilliseconds > 0,
             connectTimeoutMilliseconds <= 86_400_000,
             Self.valid(host, maximumBytes: 1_024, allowWhitespace: false),
@@ -152,12 +177,21 @@ struct MySQLDatabaseReadResult: Equatable, Sendable {
 protocol MySQLDatabaseClient: Sendable {
     func discoverIdentity() async throws -> DatabaseProductIdentity
     func read(_ plan: MySQLDatabaseReadPlan) async throws -> MySQLDatabaseReadResult
+    func executeMutation(
+        _ plan: MySQLDatabaseMutationPlan
+    ) async throws -> MySQLDatabaseMutationResult
     func disconnect() async
 }
 
 extension MySQLDatabaseClient {
     func read(_ plan: MySQLDatabaseReadPlan) async throws -> MySQLDatabaseReadResult {
         throw MySQLDatabaseDriverFailure.server(nil)
+    }
+
+    func executeMutation(
+        _ plan: MySQLDatabaseMutationPlan
+    ) async throws -> MySQLDatabaseMutationResult {
+        throw MySQLDatabaseDriverFailure.invalidRequest
     }
 }
 
@@ -170,7 +204,7 @@ final class MySQLNIODatabaseClient: MySQLDatabaseClient, @unchecked Sendable {
 
     private static let detectionQuery =
         "SELECT @@version AS server_version, @@version_comment AS version_comment"
-    private static let identityQuery = """
+    private static let mySQLIdentityQuery = """
         SELECT
             @@version AS server_version,
             @@version_comment AS version_comment,
@@ -212,11 +246,42 @@ final class MySQLNIODatabaseClient: MySQLDatabaseClient, @unchecked Sendable {
             ) AS replica_channel_count
         """
 
+    private static let mariaDBIdentityQuery = """
+        SELECT
+            @@version AS server_version,
+            @@version_comment AS version_comment,
+            DATABASE() AS database_name,
+            @@hostname AS host_name,
+            CAST(@@server_id AS CHAR) AS server_uuid,
+            IF(LOWER(CAST(@@read_only AS CHAR)) IN ('0', 'off'), 0, 1) AS read_only,
+            0 AS super_read_only,
+            @@default_storage_engine AS default_storage_engine,
+            @@character_set_server AS character_set_server,
+            @@collation_server AS collation_server,
+            @@version_compile_machine AS compile_machine,
+            @@version_compile_os AS compile_os,
+            COALESCE((
+                SELECT VARIABLE_VALUE
+                FROM information_schema.SESSION_STATUS
+                WHERE VARIABLE_NAME = 'SSL_CIPHER'
+                LIMIT 1
+            ), '') AS ssl_cipher,
+            0 AS group_member_count,
+            '' AS local_member_role,
+            0 AS group_replica_count,
+            0 AS replica_channel_count
+        """
+
     private let lock = NSLock()
+    private let expectedProduct: DatabaseProduct
     private var resource: MySQLDatabaseResource?
 
-    private init(resource: MySQLDatabaseResource) {
+    private init(
+        resource: MySQLDatabaseResource,
+        expectedProduct: DatabaseProduct
+    ) {
         self.resource = resource
+        self.expectedProduct = expectedProduct
     }
 
     static func connect(
@@ -225,7 +290,9 @@ final class MySQLNIODatabaseClient: MySQLDatabaseClient, @unchecked Sendable {
         do {
             try plan.validate()
             let resource = try await MySQLDatabaseTransport.connect(plan)
-            return MySQLNIODatabaseClient(resource: resource)
+            return MySQLNIODatabaseClient(
+                resource: resource,
+                expectedProduct: plan.product)
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -243,13 +310,21 @@ final class MySQLNIODatabaseClient: MySQLDatabaseClient, @unchecked Sendable {
                 maximumResponseBytes: Self.maximumDetectionResponseBytes,
                 resource: resource)
             let detection = try MySQLDatabaseDriverSupport.detection(detectionRows)
-            try MySQLDatabaseDriverSupport.requireMySQL(detection)
+            let detectedProduct = try MySQLDatabaseDriverSupport.product(detection)
+            guard detectedProduct == expectedProduct else {
+                throw MySQLDatabaseDriverFailure.incompatibleProduct(detectedProduct)
+            }
             let identityRows = try await boundedQuery(
-                Self.identityQuery,
+                detectedProduct == .mariaDB
+                    ? Self.mariaDBIdentityQuery : Self.mySQLIdentityQuery,
                 maximumResponseBytes: Self.maximumIdentityResponseBytes,
                 resource: resource)
-            let values = try MySQLDatabaseDriverSupport.identityValues(identityRows)
-            let identity = try MySQLDatabaseDriverSupport.identity(values)
+            let values = try MySQLDatabaseDriverSupport.identityValues(
+                identityRows,
+                product: detectedProduct)
+            let identity = try MySQLDatabaseDriverSupport.identity(
+                values,
+                product: detectedProduct)
             if resource.requiresEncryption && values.tlsCipher.isEmpty {
                 throw MySQLDatabaseDriverFailure.tls
             }
@@ -287,7 +362,33 @@ final class MySQLNIODatabaseClient: MySQLDatabaseClient, @unchecked Sendable {
                 }
                 throw error
             }
-            return try MySQLDatabaseValueCodec.result(rows)
+            return try MySQLDatabaseValueCodec.result(rows, product: expectedProduct)
+        } catch let failure as MySQLDatabaseDriverFailure {
+            throw failure
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw try MySQLDatabaseDriverErrorClassifier.classify(error)
+        }
+    }
+
+    func executeMutation(
+        _ plan: MySQLDatabaseMutationPlan
+    ) async throws -> MySQLDatabaseMutationResult {
+        guard let resource = lock.withLock({ resource }) else {
+            throw MySQLDatabaseDriverFailure.connection
+        }
+        do {
+            let metadata = MySQLDatabaseMutationMetadataCapture()
+            let rows = try await resource.connection.query(
+                plan.sql,
+                try plan.binds.map(MySQLDatabaseValueCodec.bind),
+                onMetadata: { metadata.record($0.affectedRows) }
+            ).get()
+            guard rows.isEmpty, let affectedRows = metadata.singleValue(), affectedRows <= 1 else {
+                throw MySQLDatabaseDriverFailure.invalidRequest
+            }
+            return MySQLDatabaseMutationResult(affectedRows: affectedRows)
         } catch let failure as MySQLDatabaseDriverFailure {
             throw failure
         } catch is CancellationError {
@@ -760,26 +861,25 @@ enum MySQLDatabaseDriverSupport {
         )
     }
 
-    static func requireMySQL(
+    static func product(
         _ detection: (version: String, versionComment: String)
-    ) throws {
+    ) throws -> DatabaseProduct {
         guard valid(detection.version, maximumBytes: 256),
             valid(detection.versionComment, maximumBytes: 1_024)
         else {
             throw MySQLDatabaseDriverFailure.server(nil)
         }
         let signature = (detection.version + " " + detection.versionComment).lowercased()
-        if signature.contains("mariadb") {
-            throw MySQLDatabaseDriverFailure.incompatibleProduct(.mariaDB)
-        }
         let version = parsedVersion(detection.version)
         guard version.major != nil, version.minor != nil, version.patch != nil else {
             throw MySQLDatabaseDriverFailure.server(nil)
         }
+        return signature.contains("mariadb") ? .mariaDB : .mysql
     }
 
     static func identityValues(
-        _ rows: [MySQLRow]
+        _ rows: [MySQLRow],
+        product expectedProduct: DatabaseProduct = .mysql
     ) throws -> MySQLDatabaseIdentityValues {
         let expected = [
             "server_version", "version_comment", "database_name", "host_name", "server_uuid",
@@ -807,14 +907,19 @@ enum MySQLDatabaseDriverSupport {
             localMemberRole: try requiredString(row, name: "local_member_role", allowEmpty: true),
             groupReplicaCount: try unsignedInteger(row, name: "group_replica_count"),
             replicaChannelCount: try unsignedInteger(row, name: "replica_channel_count"))
-        try requireMySQL((values.version, values.versionComment))
+        let detectedProduct = try product((values.version, values.versionComment))
+        guard detectedProduct == expectedProduct else {
+            throw MySQLDatabaseDriverFailure.incompatibleProduct(detectedProduct)
+        }
         return values
     }
 
     static func identity(
-        _ values: MySQLDatabaseIdentityValues
+        _ values: MySQLDatabaseIdentityValues,
+        product expectedProduct: DatabaseProduct = .mysql
     ) throws -> DatabaseProductIdentity {
-        guard valid(values.version, maximumBytes: 256),
+        guard expectedProduct == .mysql || expectedProduct == .mariaDB,
+            valid(values.version, maximumBytes: 256),
             valid(values.versionComment, maximumBytes: 1_024),
             validOptional(values.database, maximumBytes: 1_024),
             valid(values.hostName, maximumBytes: 1_024),
@@ -842,10 +947,18 @@ enum MySQLDatabaseDriverSupport {
         else {
             throw MySQLDatabaseDriverFailure.server(nil)
         }
-        try requireMySQL((values.version, values.versionComment))
+        let detectedProduct = try product((values.version, values.versionComment))
+        guard detectedProduct == expectedProduct else {
+            throw MySQLDatabaseDriverFailure.incompatibleProduct(detectedProduct)
+        }
         let parsed = parsedVersion(values.version)
         let topology: DatabaseTopology
-        if values.groupMemberCount > 0 {
+        if expectedProduct == .mariaDB {
+            topology = DatabaseTopology(
+                kind: .unknown,
+                localRole: values.readOnly ? "read-only" : nil,
+                attributes: attributes(values))
+        } else if values.groupMemberCount > 0 {
             topology = DatabaseTopology(
                 kind: .cluster,
                 localRole: memberRole.lowercased(),
@@ -867,13 +980,13 @@ enum MySQLDatabaseDriverSupport {
                 attributes: attributes(values))
         }
         return DatabaseProductIdentity(
-            product: .mysql,
+            product: expectedProduct,
             version: DatabaseVersion(
                 string: values.version,
                 major: parsed.major,
                 minor: parsed.minor,
                 patch: parsed.patch),
-            distribution: "MySQL",
+            distribution: expectedProduct.displayName,
             topology: topology,
             serverIdentifier: values.serverUUID)
     }

@@ -28,6 +28,7 @@ private enum SQLiteDatabaseAdapterFixtures {
             verification: .none),
         tunnel: DatabaseTunnelDefinition? = nil,
         readOnlyPolicy: DatabaseReadOnlyPolicy = .disabled,
+        productionPolicy: DatabaseProductionPolicy = .standard,
         environmentProtection: DatabaseEnvironmentProtection = .standard,
         options: [DatabaseNonSecretOption] = []
     ) throws -> DatabaseConnectionDefinition {
@@ -48,7 +49,7 @@ private enum SQLiteDatabaseAdapterFixtures {
                 operationTimeout: try DatabaseTimeout(milliseconds: 2_000),
                 poolSize: try DatabasePoolSize(1)),
             readOnlyPolicy: readOnlyPolicy,
-            productionPolicy: .standard,
+            productionPolicy: productionPolicy,
             environment: DatabaseEnvironmentMetadata(
                 kind: .testing,
                 label: "Testing",
@@ -396,6 +397,11 @@ private enum SQLiteDatabaseAdapterFixtures {
         let readOnly = try await SQLiteDatabaseAdapterFixtures.connect(readOnlyDefinition)
         let readOnlySession = try #require(readOnly as? SQLiteDatabaseAdapterSession)
         #expect(await readOnlySession.readOnlyEnforcementIsActive())
+        let readOnlyReport = try await readOnly.discoverCapabilities(
+            context: SQLiteDatabaseAdapterFixtures.context())
+        #expect(readOnlyReport.status(for: .insert)?.availability == .unavailable)
+        #expect(readOnlyReport.status(for: .update)?.availability == .unavailable)
+        #expect(readOnlyReport.status(for: .delete)?.availability == .unavailable)
         await readOnly.disconnect()
 
         let policyDefinition = try SQLiteDatabaseAdapterFixtures.definition(
@@ -623,6 +629,181 @@ private enum SQLiteDatabaseAdapterFixtures {
         #expect(shadowedIdentity.components.first?.name == "rowid")
         #expect(shadowedIdentity.components.first?.value == .signedInteger(1))
         #expect(shadowed.fields.first(where: { $0.displayName == "rowid" })?.isNullable == false)
+        await session.disconnect()
+    }
+
+    @Test func performsCanonicalBoundCRUDWithTrustedPrimaryKeyIdentity() async throws {
+        let directory = try SQLiteDatabaseAdapterFixtures.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("mutations.sqlite").path
+        try SQLiteDatabaseAdapterFixtures.createFixture(at: path, rowCount: 2)
+        let definition = try SQLiteDatabaseAdapterFixtures.definition(
+            location: .sqlite(DatabaseSQLiteLocation(path: path)))
+        let session = try await SQLiteDatabaseAdapterFixtures.connect(definition)
+        let context = SQLiteDatabaseAdapterFixtures.context()
+        let target = SQLiteDatabaseAdapterFixtures.target(connectionID: definition.id)
+        let injectedName = "new'); DELETE FROM items; --"
+
+        let insert = try DatabaseRowMutationRequests.sqliteInsert(
+            target: target,
+            values: [
+                DatabaseObjectField(name: "id", value: .signedInteger(3)),
+                DatabaseObjectField(name: "name", value: .string(injectedName)),
+                DatabaseObjectField(name: "score", value: .floatingPoint(3.5)),
+            ])
+        let insertPlan = try await session.normalizeMutation(insert, context: context)
+        #expect(insertPlan.action == .insert)
+        #expect(insertPlan.scope == .entireObject)
+        #expect(insertPlan.impact.count == DatabaseCountMetadata(value: 1, accuracy: .exact))
+        #expect(insertPlan.transactionBehavior == .transactional)
+        #expect(insertPlan.rollbackAvailability == .available)
+        #expect(
+            insert.payload.command
+                == "INSERT INTO \"main\".\"items\" (\"id\", \"name\", \"score\") VALUES (?, ?, ?)")
+        let inserted = try await session.executeMutation(insertPlan, context: context)
+        #expect(inserted.effect == .applied)
+        #expect(inserted.affectedRecords.value == 1)
+
+        let identity = DatabaseRecordIdentity(
+            kind: .primaryKey,
+            components: [
+                DatabaseIdentityComponent(name: "id", value: .signedInteger(1))
+            ])
+        let identifiedTarget = DatabaseTargetIdentifier(
+            connectionID: definition.id,
+            object: target.object,
+            record: identity)
+        let update = try DatabaseRowMutationRequests.sqliteUpdate(
+            target: identifiedTarget,
+            values: [
+                DatabaseObjectField(name: "name", value: .string("updated"))
+            ])
+        let updatePlan = try await session.normalizeMutation(update, context: context)
+        #expect(updatePlan.action == .update)
+        #expect(updatePlan.scope == .singleRecord)
+        #expect(
+            update.payload.command
+                == "UPDATE \"main\".\"items\" SET \"name\" = ? WHERE \"id\" IS ?")
+        let updated = try await session.executeMutation(updatePlan, context: context)
+        #expect(updated.effect == .applied)
+        #expect(updated.affectedRecords.value == 1)
+
+        let deleteIdentity = DatabaseRecordIdentity(
+            kind: .primaryKey,
+            components: [
+                DatabaseIdentityComponent(name: "id", value: .signedInteger(2))
+            ])
+        let delete = try DatabaseRowMutationRequests.sqliteDelete(
+            target: DatabaseTargetIdentifier(
+                connectionID: definition.id,
+                object: target.object,
+                record: deleteIdentity))
+        let deletePlan = try await session.normalizeMutation(delete, context: context)
+        let deleted = try await session.executeMutation(deletePlan, context: context)
+        #expect(deleted.effect == .applied)
+        let staleDelete = try await session.executeMutation(deletePlan, context: context)
+        #expect(staleDelete.effect == .notApplied)
+        #expect(staleDelete.affectedRecords.value == 0)
+        #expect(staleDelete.error?.category == .conflict)
+        #expect(staleDelete.error?.productCode == "sqlite.mutation.row_not_found")
+
+        let rows = try await session.query(
+            try SQLiteDatabaseAdapterFixtures.queryRequest(
+                connectionID: definition.id,
+                command: "SELECT id, name FROM items ORDER BY id"),
+            context: context)
+        #expect(rows.records.count == 2)
+        #expect(SQLiteDatabaseAdapterFixtures.field("id", in: rows.records[0]) == .signedInteger(1))
+        #expect(
+            SQLiteDatabaseAdapterFixtures.field("name", in: rows.records[0]) == .string("updated"))
+        #expect(SQLiteDatabaseAdapterFixtures.field("id", in: rows.records[1]) == .signedInteger(3))
+        #expect(
+            SQLiteDatabaseAdapterFixtures.field("name", in: rows.records[1])
+                == .string(injectedName))
+
+        #expect(throws: DatabaseRowMutationRequestError.unsupportedIdentity) {
+            try DatabaseRowMutationRequests.sqliteUpdate(
+                target: identifiedTarget,
+                values: [
+                    DatabaseObjectField(name: "id", value: .signedInteger(9))
+                ])
+        }
+        await session.disconnect()
+    }
+
+    @Test func updatesRowsUsingReaderIssuedRowIDAndRejectsForgedIdentity() async throws {
+        let directory = try SQLiteDatabaseAdapterFixtures.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let path = directory.appendingPathComponent("rowid-mutations.sqlite").path
+        try SQLiteDatabaseAdapterFixtures.createFixture(at: path, rowCount: 2)
+        let definition = try SQLiteDatabaseAdapterFixtures.definition(
+            location: .sqlite(DatabaseSQLiteLocation(path: path)))
+        let session = try await SQLiteDatabaseAdapterFixtures.connect(definition)
+        let context = SQLiteDatabaseAdapterFixtures.context()
+        let page = try await session.readPage(
+            try SQLiteDatabaseAdapterFixtures.pageRequest(
+                connectionID: definition.id,
+                path: ["main", "quoted\"table"]),
+            context: context)
+        let identity = try #require(page.records.first?.identity)
+        #expect(identity.kind == .rowID)
+        let target = DatabaseTargetIdentifier(
+            connectionID: definition.id,
+            object: DatabaseObjectIdentifier(
+                kind: .table,
+                path: ["main", "quoted\"table"]),
+            record: identity)
+        let update = try DatabaseRowMutationRequests.sqliteUpdate(
+            target: target,
+            values: [
+                DatabaseObjectField(name: "odd\"column", value: .string("changed"))
+            ])
+        let plan = try await session.normalizeMutation(update, context: context)
+        let result = try await session.executeMutation(plan, context: context)
+        #expect(result.effect == .applied)
+        let refreshed = try await session.readPage(
+            try SQLiteDatabaseAdapterFixtures.pageRequest(
+                connectionID: definition.id,
+                path: ["main", "quoted\"table"]),
+            context: context)
+        #expect(
+            SQLiteDatabaseAdapterFixtures.field("odd\"column", in: refreshed.records[0])
+                == .string("changed"))
+
+        let forgedTarget = DatabaseTargetIdentifier(
+            connectionID: definition.id,
+            object: DatabaseObjectIdentifier(kind: .table, path: ["main", "items"]),
+            record: DatabaseRecordIdentity(
+                kind: .primaryKey,
+                components: [
+                    DatabaseIdentityComponent(
+                        name: "category",
+                        value: .string("even"))
+                ]))
+        let forged = try DatabaseRowMutationRequests.sqliteDelete(target: forgedTarget)
+        await #expect(throws: SQLiteDatabaseMutationSupport.invalidMutation) {
+            _ = try await session.normalizeMutation(forged, context: context)
+        }
+
+        let canonical = try DatabaseRowMutationRequests.sqliteUpdate(
+            target: DatabaseTargetIdentifier(
+                connectionID: definition.id,
+                object: DatabaseObjectIdentifier(kind: .table, path: ["main", "items"]),
+                record: DatabaseRecordIdentity(
+                    kind: .primaryKey,
+                    components: [
+                        DatabaseIdentityComponent(name: "id", value: .signedInteger(1))
+                    ])),
+            values: [DatabaseObjectField(name: "name", value: .string("unsafe"))])
+        let noncanonical = DatabaseDestructiveRequest(
+            target: canonical.target,
+            payload: .relational(
+                product: .sqlite,
+                statement: "UPDATE items SET name = 'unsafe'",
+                parameters: canonical.payload.parameters))
+        await #expect(throws: SQLiteDatabaseMutationSupport.invalidMutation) {
+            _ = try await session.normalizeMutation(noncanonical, context: context)
+        }
         await session.disconnect()
     }
 
@@ -1345,9 +1526,6 @@ private enum SQLiteDatabaseAdapterFixtures {
             .objectDiscovery,
             .objectDescription,
             .explain,
-            .insert,
-            .update,
-            .delete,
             .bulkMutation,
             .importData,
             .exportData,
@@ -1362,7 +1540,10 @@ private enum SQLiteDatabaseAdapterFixtures {
         #expect(report.status(for: .browse)?.availability == .available)
         #expect(report.status(for: .query)?.availability == .available)
         #expect(report.status(for: .queryCancellation)?.availability == .available)
-        #expect(report.capabilities.count == expectedUnavailable.count + 4)
+        #expect(report.status(for: .insert)?.availability == .available)
+        #expect(report.status(for: .update)?.availability == .available)
+        #expect(report.status(for: .delete)?.availability == .available)
+        #expect(report.capabilities.count == expectedUnavailable.count + 7)
         for identifier in expectedUnavailable {
             let status = report.status(for: identifier)
             #expect(status?.availability == .unavailable)
@@ -1370,17 +1551,33 @@ private enum SQLiteDatabaseAdapterFixtures {
             #expect(status?.isAvailable == false)
         }
         #expect(report.pagingModes == [.offset])
-        #expect(report.mutationModes == [.unsupported])
-        #expect(report.transactionModes == [.none])
+        #expect(report.mutationModes == [.singleRecord])
+        #expect(report.transactionModes == [.implicit])
         #expect(report.cancellationModes == [.cooperative])
         #expect(report.importFormats.isEmpty)
         #expect(report.exportFormats.isEmpty)
         #expect(report.explainModes.isEmpty)
 
         await session.disconnect()
+
+        let prohibitedDefinition = try SQLiteDatabaseAdapterFixtures.definition(
+            productionPolicy: .prohibitMutations)
+        let prohibited = try await SQLiteDatabaseAdapterFixtures.connect(prohibitedDefinition)
+        let prohibitedSession = try #require(prohibited as? SQLiteDatabaseAdapterSession)
+        let prohibitedReport = try await prohibited.discoverCapabilities(
+            context: SQLiteDatabaseAdapterFixtures.context())
+        #expect(await prohibitedSession.readOnlyEnforcementIsActive())
+        #expect(prohibitedReport.status(for: .insert)?.availability == .unavailable)
+        #expect(prohibitedReport.status(for: .update)?.availability == .unavailable)
+        #expect(prohibitedReport.status(for: .delete)?.availability == .unavailable)
+        #expect(
+            prohibitedReport.status(for: .delete)?.reason?.category == .connectionPolicy)
+        #expect(prohibitedReport.mutationModes.isEmpty)
+        #expect(prohibitedReport.transactionModes.isEmpty)
+        await prohibited.disconnect()
     }
 
-    @Test func unsupportedOperationsUseOneStableRedactedFailure() async throws {
+    @Test func invalidMutationsAndUnsupportedStreamingUseStableFailures() async throws {
         let definition = try SQLiteDatabaseAdapterFixtures.definition()
         let session = try await SQLiteDatabaseAdapterFixtures.connect(definition)
         let destructiveRequest = SQLiteDatabaseAdapterFixtures.destructiveRequest(
@@ -1392,25 +1589,26 @@ private enum SQLiteDatabaseAdapterFixtures {
         let stream = DatabaseAdapterStreamRequest(source: .browse(page))
         let context = SQLiteDatabaseAdapterFixtures.context()
 
-        let failures = [
-            await SQLiteDatabaseAdapterFixtures.failure {
-                try await session.normalizeMutation(destructiveRequest, context: context)
-            },
-            await SQLiteDatabaseAdapterFixtures.failure {
-                try await session.executeMutation(destructivePlan, context: context)
-            },
-            await SQLiteDatabaseAdapterFixtures.failure {
-                try await session.openStream(stream, context: context)
-            },
-        ]
-        let expected = DatabaseAdapterFailure.reported(
+        let normalizationFailure = await SQLiteDatabaseAdapterFixtures.failure {
+            try await session.normalizeMutation(destructiveRequest, context: context)
+        }
+        let executionFailure = await SQLiteDatabaseAdapterFixtures.failure {
+            try await session.executeMutation(destructivePlan, context: context)
+        }
+        #expect(normalizationFailure == SQLiteDatabaseMutationSupport.invalidMutation)
+        #expect(executionFailure == SQLiteDatabaseMutationSupport.invalidMutation)
+
+        let streamingFailure = await SQLiteDatabaseAdapterFixtures.failure {
+            try await session.openStream(stream, context: context)
+        }
+        let unavailable = DatabaseAdapterFailure.reported(
             DatabaseErrorEnvelope(
                 category: .unsupported,
                 message: "The requested SQLite capability is unavailable.",
                 productCode: "sqlite.capability.not_implemented",
                 retry: DatabaseRetryGuidance(action: .none)))
 
-        #expect(failures.allSatisfy { $0 == expected })
+        #expect(streamingFailure == unavailable)
         let cancellation = await session.cancel(DatabaseOperationID())
         #expect(cancellation.support == .cooperative)
         #expect(cancellation.disposition == .alreadyFinished)

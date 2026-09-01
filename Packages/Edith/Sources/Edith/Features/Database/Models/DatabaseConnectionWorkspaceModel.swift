@@ -160,10 +160,16 @@ enum DatabaseConnectionSessionState: Equatable, Sendable {
 }
 
 struct DatabaseCapabilitySummary: Identifiable, Equatable, Sendable {
-    let id: String
+    let capabilityID: DatabaseCapabilityID
     let name: String
     let availability: DatabaseCapabilityAvailability
     let unavailableReason: String?
+
+    var id: String { capabilityID.rawValue }
+
+    var isAvailable: Bool {
+        availability == .available || availability == .degraded
+    }
 
     var availabilityTitle: String {
         switch availability {
@@ -203,12 +209,12 @@ struct DatabaseCapabilitySnapshot: Equatable, Sendable {
         product = report.productIdentity.product
         version = DatabaseConnectionDisplayText.optional(report.productIdentity.version?.string)
         topology = report.productIdentity.topology.kind
-        capabilities = report.capabilities.prefix(64).enumerated().map { index, status in
+        capabilities = report.capabilities.prefix(64).map { status in
             let name = DatabaseConnectionDisplayText.rendered(
                 status.id.rawValue,
                 fallback: "Capability")
             return DatabaseCapabilitySummary(
-                id: "\(index):\(name)",
+                capabilityID: status.id,
                 name: name,
                 availability: status.availability,
                 unavailableReason: DatabaseConnectionDisplayText.optional(status.reason?.message))
@@ -233,6 +239,14 @@ struct DatabaseCapabilitySnapshot: Equatable, Sendable {
         capabilities.count {
             $0.availability == .unavailable || $0.availability == .planned
         }
+    }
+
+    func supports(_ capabilityID: DatabaseCapabilityID) -> Bool {
+        capabilities.first { $0.capabilityID == capabilityID }?.isAvailable == true
+    }
+
+    func unavailableReason(for capabilityID: DatabaseCapabilityID) -> String? {
+        capabilities.first { $0.capabilityID == capabilityID }?.unavailableReason
     }
 }
 
@@ -329,6 +343,16 @@ final class DatabaseConnectionWorkspaceModel {
     var selectedCapabilityState: DatabaseCapabilityState {
         guard let selectedConnectionID else { return .unavailable }
         return capabilityState(for: selectedConnectionID)
+    }
+
+    func selectedConnectionSupports(_ capabilityID: DatabaseCapabilityID) -> Bool {
+        selectedCapabilityState.snapshot?.supports(capabilityID) == true
+    }
+
+    func selectedConnectionUnavailableReason(
+        for capabilityID: DatabaseCapabilityID
+    ) -> String? {
+        selectedCapabilityState.snapshot?.unavailableReason(for: capabilityID)
     }
 
     func sessionState(for connectionID: DatabaseConnectionID) -> DatabaseConnectionSessionState {

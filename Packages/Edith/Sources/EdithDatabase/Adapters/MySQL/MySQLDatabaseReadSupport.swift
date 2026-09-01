@@ -714,7 +714,7 @@ enum MySQLDatabaseReadSupport {
         return statement
     }
 
-    private static func bind(
+    static func bind(
         _ value: DatabaseValue
     ) throws -> MySQLDatabaseBind {
         switch value {

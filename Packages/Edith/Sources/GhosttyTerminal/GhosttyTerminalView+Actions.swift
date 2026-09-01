@@ -3,7 +3,9 @@ import GhosttyKit
 
 final class TerminalLinkHoverView: NSView {
     private let backdrop = NSVisualEffectView(frame: .zero)
+    private let icon = NSImageView()
     private let label = NSTextField(labelWithString: "")
+    private let hint = NSTextField(labelWithString: "⌘ click to open")
 
     override var acceptsFirstResponder: Bool { false }
 
@@ -25,16 +27,32 @@ final class TerminalLinkHoverView: NSView {
         label.lineBreakMode = .byTruncatingMiddle
         label.maximumNumberOfLines = 1
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.image = NSImage(
+            systemSymbolName: "arrow.up.forward.square", accessibilityDescription: nil)
+        icon.contentTintColor = .secondaryLabelColor
+        hint.translatesAutoresizingMaskIntoConstraints = false
+        hint.font = .systemFont(ofSize: 10.5, weight: .medium)
+        hint.textColor = .secondaryLabelColor
+        hint.setContentCompressionResistancePriority(.required, for: .horizontal)
         addSubview(backdrop)
+        backdrop.addSubview(icon)
         backdrop.addSubview(label)
+        backdrop.addSubview(hint)
         NSLayoutConstraint.activate([
             backdrop.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             backdrop.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
             backdrop.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
-            label.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor, constant: 8),
-            label.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor, constant: -8),
+            icon.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor, constant: 8),
+            icon.centerYAnchor.constraint(equalTo: backdrop.centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 12),
+            icon.heightAnchor.constraint(equalToConstant: 12),
+            label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 6),
+            label.trailingAnchor.constraint(equalTo: hint.leadingAnchor, constant: -10),
             label.topAnchor.constraint(equalTo: backdrop.topAnchor, constant: 5),
             label.bottomAnchor.constraint(equalTo: backdrop.bottomAnchor, constant: -5),
+            hint.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor, constant: -8),
+            hint.centerYAnchor.constraint(equalTo: backdrop.centerYAnchor),
         ])
     }
 
@@ -43,7 +61,7 @@ final class TerminalLinkHoverView: NSView {
     func show(_ value: String?) {
         let value = value?.isEmpty == false ? value : nil
         label.stringValue = value ?? ""
-        label.setAccessibilityLabel(value)
+        setAccessibilityLabel(value.map { "Link \($0). Command-click to open." })
         isHidden = value == nil
     }
 }
@@ -83,6 +101,7 @@ final class TerminalSearchBar: NSVisualEffectView, NSSearchFieldDelegate {
     var onQuery: ((String) -> Void)?
     var onNavigate: ((Bool) -> Void)?
     var onClose: (() -> Void)?
+    private var queryTask: Task<Void, Never>?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -125,11 +144,30 @@ final class TerminalSearchBar: NSVisualEffectView, NSSearchFieldDelegate {
 
     required init?(coder: NSCoder) { nil }
 
-    func controlTextDidChange(_ notification: Notification) {
-        onQuery?(field.stringValue)
+    deinit {
+        queryTask?.cancel()
     }
 
+    func controlTextDidChange(_ notification: Notification) {
+        let query = field.stringValue
+        queryTask?.cancel()
+        guard Self.shouldDebounce(query) else {
+            onQuery?(query)
+            return
+        }
+        queryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled, let self else { return }
+            onQuery?(query)
+            queryTask = nil
+        }
+    }
+
+    static func shouldDebounce(_ query: String) -> Bool { (1...2).contains(query.count) }
+
     func begin(_ needle: String, in window: NSWindow?) {
+        queryTask?.cancel()
+        queryTask = nil
         field.stringValue = needle
         isHidden = false
         onQuery?(needle)
@@ -208,6 +246,7 @@ extension GhosttyTerminalView {
 
     static func linkTarget(
         for rawValue: String, workingDirectory: String?,
+        allowsLocalFiles: Bool = true,
         fileExists: (String) -> Bool = FileManager.default.fileExists(atPath:)
     ) -> URL? {
         var value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -228,9 +267,14 @@ extension GhosttyTerminalView {
 
         if let url = URL(string: value), let scheme = url.scheme?.lowercased(), !scheme.isEmpty {
             guard scheme != "javascript", scheme != "data" else { return nil }
-            if scheme == "file" { return url.standardizedFileURL }
+            if scheme == "file" {
+                guard allowsLocalFiles else { return nil }
+                return url.standardizedFileURL
+            }
             return url
         }
+
+        guard allowsLocalFiles else { return nil }
 
         var path = value
         if path.hasPrefix("~") {
@@ -257,15 +301,37 @@ extension GhosttyTerminalView {
         return URL(fileURLWithPath: path).standardizedFileURL
     }
 
-    func openTerminalTarget(_ rawValue: String) -> Bool {
-        guard let url = Self.linkTarget(for: rawValue, workingDirectory: currentDirectory) else {
+    func openTerminalTarget(
+        _ rawValue: String,
+        kind: ghostty_action_open_url_kind_e = GHOSTTY_ACTION_OPEN_URL_KIND_UNKNOWN
+    ) -> Bool {
+        if kind == GHOSTTY_ACTION_OPEN_URL_KIND_OSC8 {
+            commandClickOpenedTarget = true
+            let target = TerminalUntrustedURL(
+                value: rawValue, allowsLocalFiles: allowsLocalFileLinks)
+            let presentingWindow = window
+            DispatchQueue.main.async {
+                TerminalUntrustedURLPresenter.open(target, from: presentingWindow)
+            }
+            return true
+        }
+        guard
+            let url = Self.linkTarget(
+                for: rawValue, workingDirectory: currentDirectory,
+                allowsLocalFiles: allowsLocalFileLinks)
+        else {
             return false
         }
         commandClickOpenedTarget = true
-        return NSWorkspace.shared.open(url)
+        let openResolvedURL = openResolvedURL
+        DispatchQueue.main.async {
+            openResolvedURL(url)
+        }
+        return true
     }
 
     func setHoveredLink(_ value: String?) {
+        let value = value.flatMap { $0.isEmpty ? nil : $0 }
         hoveredLink = value
         linkHoverView.show(value)
     }
@@ -312,21 +378,21 @@ extension GhosttyTerminalView {
             terminalCursor = .arrow
         }
         window?.invalidateCursorRects(for: self)
-        terminalCursor.set()
     }
 
     func setMouseVisible(_ visible: Bool) {
-        guard visible == cursorHidden else { return }
-        cursorHidden = !visible
-        if visible {
-            NSCursor.unhide()
-        } else {
-            NSCursor.hide()
-        }
+        guard renderingActive, !isHidden, mouseOverSurface else { return }
+        NSCursor.setHiddenUntilMouseMoves(!visible)
     }
 
     func selectionChanged() {
-        NSAccessibility.post(element: self, notification: .selectedTextChanged)
+        accessibilitySelectionTask?.cancel()
+        accessibilitySelectionTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(100))
+            guard !Task.isCancelled, let self else { return }
+            NSAccessibility.post(element: self, notification: .selectedTextChanged)
+            accessibilitySelectionTask = nil
+        }
     }
 
     func beginSearch(_ needle: String) {
@@ -355,11 +421,4 @@ extension GhosttyTerminalView {
         progressStrip.update(state, progress: progress)
     }
 
-    public override func isAccessibilityElement() -> Bool { true }
-
-    public override func accessibilityRole() -> NSAccessibility.Role? { .textArea }
-
-    public override func accessibilityValue() -> Any? { selectedText() ?? "" }
-
-    public override func accessibilitySelectedText() -> String? { selectedText() }
 }

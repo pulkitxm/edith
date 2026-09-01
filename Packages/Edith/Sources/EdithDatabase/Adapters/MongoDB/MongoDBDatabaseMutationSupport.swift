@@ -60,7 +60,7 @@ enum MongoDBDatabaseMutationSupport {
         case .insert:
             affectedRecords = try bounded(result.insertedCount)
             applied = result.insertedCount == 1
-        case .update:
+        case .replace:
             guard result.matchedCount == 0 || result.matchedCount == 1,
                 result.modifiedCount == 0 || result.modifiedCount == 1,
                 result.modifiedCount <= result.matchedCount
@@ -128,12 +128,18 @@ enum MongoDBDatabaseMutationSupport {
                 canonical = try DatabaseDocumentMutationRequests.mongoDBUpdate(
                     target: request.target,
                     values: values)
-                mutationOperation = .update(
-                    filter: try identityFilter(request.target),
-                    values: try MongoDBDatabaseValueCodec.queryDocument(body))
+                let filter = try identityFilter(request.target)
+                var document = try MongoDBDatabaseValueCodec.queryDocument(body)
+                guard let identifier = filter["_id"], document["_id"] == nil else {
+                    throw DatabaseDocumentMutationRequestError.invalidIdentity
+                }
+                document["_id"] = identifier
+                mutationOperation = .replace(
+                    filter: filter,
+                    document: document)
                 action = .update
                 scope = .singleRecord
-                description = "Update one identified document"
+                description = "Replace one identified document"
             case "deleteOne":
                 guard body == .null else {
                     throw DatabaseDocumentMutationRequestError.invalidDocument

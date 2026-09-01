@@ -31,7 +31,13 @@ enum MySQLDatabaseValueCodec {
         }
     }
 
-    static func result(_ rows: [MySQLRow]) throws -> MySQLDatabaseReadResult {
+    static func result(
+        _ rows: [MySQLRow],
+        product: DatabaseProduct = .mysql
+    ) throws -> MySQLDatabaseReadResult {
+        guard product == .mysql || product == .mariaDB else {
+            throw MySQLDatabaseDriverFailure.configuration
+        }
         guard let first = rows.first else {
             return MySQLDatabaseReadResult(columns: [], rows: [])
         }
@@ -49,7 +55,8 @@ enum MySQLDatabaseValueCodec {
                             format: row.format,
                             buffer: buffer,
                             isUnsigned: column.flags.contains(.COLUMN_UNSIGNED)),
-                        column: column)
+                        column: column,
+                        product: product)
                 })
         }
         return MySQLDatabaseReadResult(columns: columns, rows: decodedRows)
@@ -79,7 +86,8 @@ enum MySQLDatabaseValueCodec {
 
     private static func value(
         _ data: MySQLData,
-        column: MySQLProtocol.ColumnDefinition41
+        column: MySQLProtocol.ColumnDefinition41,
+        product: DatabaseProduct
     ) throws -> DatabaseValue {
         guard data.buffer != nil else { return .null }
         switch column.columnType {
@@ -121,33 +129,45 @@ enum MySQLDatabaseValueCodec {
             guard let value = String(data: try rawBytes(data), encoding: .utf8) else {
                 throw MySQLDatabaseDriverFailure.server(nil)
             }
-            return try productText(data, typeName: "JSON", fallback: value)
+            return try productText(
+                data,
+                typeName: "JSON",
+                product: product,
+                fallback: value)
         case .geometry:
-            return try productBinary(data, typeName: "GEOMETRY")
+            return try productBinary(data, typeName: "GEOMETRY", product: product)
         case .blob, .tinyBlob, .mediumBlob,
             .longBlob where column.characterSet == .binary:
             return try binary(data)
         case .varchar, .varString, .string, .enum, .set, .blob, .tinyBlob, .mediumBlob,
             .longBlob:
             guard let value = data.string else { throw MySQLDatabaseDriverFailure.server(nil) }
-            return boundedString(value, typeName: typeName(column))
+            return boundedString(value, typeName: typeName(column), product: product)
         case .null:
             return .null
         default:
             if let value = data.string {
-                return try productText(data, typeName: typeName(column), fallback: value)
+                return try productText(
+                    data,
+                    typeName: typeName(column),
+                    product: product,
+                    fallback: value)
             }
-            return try productBinary(data, typeName: typeName(column))
+            return try productBinary(data, typeName: typeName(column), product: product)
         }
     }
 
-    private static func boundedString(_ value: String, typeName: String) -> DatabaseValue {
+    private static func boundedString(
+        _ value: String,
+        typeName: String,
+        product: DatabaseProduct
+    ) -> DatabaseValue {
         let bytes = Array(value.utf8)
         guard bytes.count > maximumInlineBytes else { return .string(value) }
         let prefix = String(decoding: bytes.prefix(maximumInlineBytes), as: UTF8.self)
         return .productSpecific(
             DatabaseProductValue(
-                product: .mysql,
+                product: product,
                 typeName: typeName,
                 textRepresentation: prefix,
                 attributes: [
@@ -172,16 +192,17 @@ enum MySQLDatabaseValueCodec {
     private static func productText(
         _ data: MySQLData,
         typeName: String,
+        product: DatabaseProduct,
         fallback: String? = nil
     ) throws -> DatabaseValue {
         guard let text = fallback ?? data.string else {
             throw MySQLDatabaseDriverFailure.server(nil)
         }
-        let bounded = boundedString(text, typeName: typeName)
+        let bounded = boundedString(text, typeName: typeName, product: product)
         if case .string(let value) = bounded {
             return .productSpecific(
                 DatabaseProductValue(
-                    product: .mysql,
+                    product: product,
                     typeName: typeName,
                     textRepresentation: value))
         }
@@ -190,12 +211,13 @@ enum MySQLDatabaseValueCodec {
 
     private static func productBinary(
         _ data: MySQLData,
-        typeName: String
+        typeName: String,
+        product: DatabaseProduct
     ) throws -> DatabaseValue {
         let bytes = try rawBytes(data)
         return .productSpecific(
             DatabaseProductValue(
-                product: .mysql,
+                product: product,
                 typeName: typeName,
                 binaryRepresentation: Data(bytes.prefix(maximumInlineBytes)),
                 attributes: bytes.count > maximumInlineBytes

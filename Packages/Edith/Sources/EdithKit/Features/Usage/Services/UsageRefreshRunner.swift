@@ -246,6 +246,9 @@ public enum UsageRefreshRunner {
                 at: stagedUsage, maximumBytes: UsageDataFiles.maximumUsageDocumentBytes),
             UsageHistory.isValidDocument(fresh)
         else { throw UsageDataFileError.unsafe(stagedUsage.path) }
+        guard let merged = UsageHistory.merge(local: fresh, cloud: baseline.usage),
+            UsageHistory.isValidDocument(merged)
+        else { throw UsageDataFileError.unsafe(stagedUsage.path) }
         try UsageDataLock.withLock(dataDirectory: dataDir) {
             let current = try UsageDataFiles.readRegularFile(
                 at: dataDir.appendingPathComponent("usage.json"),
@@ -255,7 +258,7 @@ public enum UsageRefreshRunner {
             guard current == baseline.usage, machines == baseline.machines else {
                 throw UsageDataFileError.unsafe(stagedUsage.path)
             }
-            try UsageDataFiles.write(fresh, to: dataDir.appendingPathComponent("usage.json"))
+            try UsageDataFiles.write(merged, to: dataDir.appendingPathComponent("usage.json"))
         }
     }
 

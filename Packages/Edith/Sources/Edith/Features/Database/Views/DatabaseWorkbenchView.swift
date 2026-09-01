@@ -39,6 +39,7 @@ struct DatabaseWorkbenchView: View {
     @Environment(\.colorScheme) private var scheme
     @State private var documentPresentation = DatabaseDocumentPresentation.tree
     @State private var workbenchMode = DatabaseWorkbenchMode.browse
+    @State private var columns = DatabaseColumnsModel()
 
     private var dark: Bool { scheme == .dark }
     private var palette: DatabaseThemePalette {
@@ -62,6 +63,11 @@ struct DatabaseWorkbenchView: View {
         .task(id: connections.selectedConnection) {
             data.prepare(for: connections.selectedConnection)
             explorer.prepare(for: connections.selectedConnection)
+            if let connection = connections.selectedConnection {
+                synchronizeColumns(connection)
+            } else {
+                columns.clear()
+            }
         }
     }
 
@@ -146,36 +152,34 @@ struct DatabaseWorkbenchView: View {
     private func dataRegion(_ connection: DatabaseConnectionSummary) -> some View {
         VStack(spacing: 0) {
             controls(connection)
-            Divider().opacity(0.35)
             results(connection)
+        }
+        .onChange(of: data.fields, initial: true) { _, _ in
+            synchronizeColumns(connection)
+        }
+        .onChange(of: data.selectedObject) { _, _ in
+            synchronizeColumns(connection)
         }
     }
 
     private func controls(_ connection: DatabaseConnectionSummary) -> some View {
-        Group {
-            if compact {
-                VStack(spacing: UIScale.pt(8)) {
-                    HStack(spacing: UIScale.pt(8)) {
-                        modePicker(connection)
-                        objectControls(connection)
-                    }
-                    HStack(spacing: UIScale.pt(8)) {
-                        filterControls(connection)
-                        connectionActions(connection)
-                    }
-                }
-            } else {
-                HStack(spacing: UIScale.pt(8)) {
-                    modePicker(connection)
-                    Divider().frame(height: UIScale.pt(20))
-                    objectControls(connection)
-                    Divider().frame(height: UIScale.pt(20))
-                    filterControls(connection)
-                    connectionActions(connection)
-                }
+        HStack(spacing: UIScale.pt(8)) {
+            modePicker(connection)
+            if !compact {
+                commandSeparator
+                objectControls(connection)
             }
+            Spacer(minLength: UIScale.pt(6))
+            connectionActions(connection)
         }
-        .padding(UIScale.pt(10))
+        .padding(.horizontal, UIScale.pt(10))
+        .frame(height: UIScale.pt(44))
+        .background(palette.panel)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(palette.line.opacity(0.72))
+                .frame(height: 1)
+        }
     }
 
     private func queryRegion(_ connection: DatabaseConnectionSummary) -> some View {
@@ -190,9 +194,11 @@ struct DatabaseWorkbenchView: View {
         VStack(alignment: .leading, spacing: UIScale.pt(9)) {
             HStack(spacing: UIScale.pt(9)) {
                 modePicker(connection)
-                Label(selectedObjectTitle, systemImage: selectedObjectSymbol)
-                    .font(.system(size: UIScale.pt(11.5), weight: .semibold))
-                    .lineLimit(1)
+                if !compact {
+                    Label(selectedObjectTitle, systemImage: selectedObjectSymbol)
+                        .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                        .lineLimit(1)
+                }
                 Spacer(minLength: 0)
                 if connection.product == .elasticsearch || connection.product == .openSearch {
                     Picker("Query operation", selection: searchQueryOperationBinding(connection)) {
@@ -233,115 +239,149 @@ struct DatabaseWorkbenchView: View {
     }
 
     private func modePicker(_ connection: DatabaseConnectionSummary) -> some View {
-        Picker("Workspace mode", selection: workbenchModeBinding(connection)) {
+        HStack(spacing: UIScale.pt(2)) {
             ForEach(DatabaseWorkbenchMode.allCases, id: \.self) { mode in
-                Text(mode.title).tag(mode)
+                Button {
+                    workbenchModeBinding(connection).wrappedValue = mode
+                } label: {
+                    Text(mode.title)
+                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                        .foregroundStyle(
+                            workbenchMode == mode ? palette.ink : palette.inkSoft
+                        )
+                        .frame(maxWidth: .infinity)
+                        .frame(height: UIScale.pt(24))
+                        .background(
+                            workbenchMode == mode
+                                ? palette.ink.opacity(dark ? 0.14 : 0.075) : .clear,
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(5)))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(workbenchMode == mode ? .isSelected : [])
             }
         }
-        .labelsHidden()
-        .pickerStyle(.segmented)
-        .frame(width: UIScale.pt(142))
+        .padding(UIScale.pt(2))
+        .frame(width: UIScale.pt(118))
+        .background(palette.canvas.opacity(0.76), in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
+        .overlay {
+            RoundedRectangle(cornerRadius: UIScale.pt(7))
+                .strokeBorder(palette.line.opacity(0.72), lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Workspace mode")
     }
 
     private func connectionActions(_ connection: DatabaseConnectionSummary) -> some View {
-        HStack(spacing: UIScale.pt(7)) {
-            if data.supportsDataMutations(connection),
-                explorer.selectedObject?.kind == .table
-                    || explorer.selectedObject?.kind == .keyspace
-                    || explorer.selectedObject?.kind == .collection
-                    || explorer.selectedObject?.kind == .index
-            {
+        HStack(spacing: UIScale.pt(6)) {
+            connectionPolicy(connection)
+            Button {
+                data.browse(connection)
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(
+                DatabaseCommandButtonStyle(
+                    kind: .utility, dark: dark, palette: palette)
+            )
+            .disabled(data.isLoading || explorer.selectedObject == nil)
+            .help("Refresh data")
+            .accessibilityLabel("Refresh selected object")
+            if canInsertData(connection) {
                 Button {
                     data.beginInsert(connection)
                 } label: {
-                    if compact {
-                        Image(systemName: "plus")
-                    } else {
-                        Label(newItemTitle(connection), systemImage: "plus")
-                    }
+                    Label(newItemTitle(connection), systemImage: "plus")
                 }
-                .buttonStyle(.edith(.primary, tint: theme))
+                .buttonStyle(
+                    DatabaseCommandButtonStyle(
+                        kind: .primary, dark: dark, palette: palette)
+                )
                 .disabled(
                     (data.fields.isEmpty && !usesDocumentEditor(connection))
                         || mutations.hasTrackedMutation
                 )
                 .help(newItemHelp(connection))
             }
-            if connection.environmentKind == .production {
-                Group {
-                    if compact {
-                        Image(systemName: "exclamationmark.shield.fill")
-                    } else {
-                        Label("Production", systemImage: "exclamationmark.shield.fill")
-                    }
+            Menu {
+                Button {
+                    data.cancel()
+                    Task { await connections.disconnectSelected() }
+                } label: {
+                    Label("Disconnect", systemImage: "power")
                 }
-                .font(.system(size: UIScale.pt(10.5), weight: .medium))
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                    .frame(width: UIScale.pt(30), height: UIScale.pt(30))
+                    .foregroundStyle(palette.inkSoft)
+                    .background(
+                        palette.canvas.opacity(0.72),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(7))
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: UIScale.pt(7))
+                            .strokeBorder(palette.line.opacity(0.68), lineWidth: 1)
+                    }
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("More database actions")
+            .accessibilityLabel("More database actions")
+        }
+    }
+
+    @ViewBuilder
+    private func connectionPolicy(_ connection: DatabaseConnectionSummary) -> some View {
+        if connection.environmentKind == .production {
+            Label("Production", systemImage: "exclamationmark.shield.fill")
+                .font(.system(size: UIScale.pt(10), weight: .medium))
                 .foregroundStyle(DashSkin.warn)
                 .help("Production connection")
                 .accessibilityLabel("Production connection")
-            } else if connection.readOnlyPolicy != .disabled {
-                Group {
-                    if compact {
-                        Image(systemName: "lock.fill")
-                    } else {
-                        Label("Read only", systemImage: "lock.fill")
-                    }
-                }
-                .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                .foregroundStyle(.secondary)
+        } else if connection.readOnlyPolicy != .disabled {
+            Label("Read only", systemImage: "lock.fill")
+                .font(.system(size: UIScale.pt(10), weight: .medium))
+                .foregroundStyle(palette.inkFaint)
                 .help("Read-only connection")
                 .accessibilityLabel("Read-only connection")
-            } else if !data.supportsDataMutations(connection) {
-                Group {
-                    if compact {
-                        Image(systemName: "eye")
-                    } else {
-                        Label("Browse only", systemImage: "eye")
-                    }
-                }
-                .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                .foregroundStyle(.secondary)
-                .help("Data editing is not available for this database yet")
-            }
-            Button {
-                data.cancel()
-                Task { await connections.disconnectSelected() }
-            } label: {
-                Image(systemName: "power")
-            }
-            .buttonStyle(.edith(.borderless))
-            .help("Disconnect \(connection.name)")
-            .accessibilityLabel("Disconnect \(connection.name)")
+        } else if !hasAnyDataMutation(connection) {
+            Label("Browse only", systemImage: "eye")
+                .font(.system(size: UIScale.pt(10), weight: .medium))
+                .foregroundStyle(palette.inkFaint)
+                .help(mutationUnavailableHelp(connection))
+                .accessibilityLabel("Browse-only connection")
         }
     }
 
     private func objectControls(_ connection: DatabaseConnectionSummary) -> some View {
         HStack(spacing: UIScale.pt(7)) {
             Image(systemName: selectedObjectSymbol)
+                .font(.system(size: UIScale.pt(11), weight: .semibold))
                 .foregroundStyle(theme)
+                .frame(width: UIScale.pt(24), height: UIScale.pt(24))
+                .background(theme.opacity(0.12), in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                 Text(selectedObjectTitle)
                     .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                    .foregroundStyle(palette.ink)
                     .lineLimit(1)
                 if let selected = explorer.selectedObject, selected.path.count > 1 {
                     Text(selected.path.dropLast().joined(separator: " / "))
                         .font(.system(size: UIScale.pt(9.5)))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(palette.inkFaint)
                         .lineLimit(1)
                 }
             }
-            Spacer(minLength: 0)
-            Button {
-                data.browse(connection)
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(.edith(.borderless))
-            .disabled(data.isLoading || explorer.selectedObject == nil)
-            .help("Refresh data")
-            .accessibilityLabel("Refresh selected object")
         }
-        .frame(maxWidth: compact ? .infinity : UIScale.pt(330), alignment: .leading)
+        .frame(maxWidth: UIScale.pt(220), alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var commandSeparator: some View {
+        Rectangle()
+            .fill(palette.line.opacity(0.72))
+            .frame(width: 1, height: UIScale.pt(18))
     }
 
     private func compactObjectPicker(_ connection: DatabaseConnectionSummary) -> some View {
@@ -367,18 +407,52 @@ struct DatabaseWorkbenchView: View {
                     }
                 }
             } label: {
-                Label(selectedObjectTitle, systemImage: selectedObjectSymbol)
+                HStack(spacing: UIScale.pt(7)) {
+                    Image(systemName: selectedObjectSymbol)
+                        .font(.system(size: UIScale.pt(11), weight: .semibold))
+                        .foregroundStyle(theme)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(selectedObjectTitle)
+                            .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                            .foregroundStyle(palette.ink)
+                            .lineLimit(1)
+                    }
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: UIScale.pt(7), weight: .bold))
+                        .foregroundStyle(palette.inkFaint)
+                }
+                .padding(.horizontal, UIScale.pt(8))
+                .frame(height: UIScale.pt(32))
+                .background(
+                    palette.canvas.opacity(0.72),
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(7))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: UIScale.pt(7))
+                        .strokeBorder(palette.line.opacity(0.68), lineWidth: 1)
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .disabled(explorer.groups.isEmpty)
+            if let context = selectedObjectContext {
+                Text(context)
+                    .font(.system(size: UIScale.pt(9.5)))
+                    .foregroundStyle(palette.inkFaint)
                     .lineLimit(1)
             }
-            .buttonStyle(.edith(.secondary))
-            .disabled(explorer.groups.isEmpty)
             Spacer(minLength: 0)
             Button {
                 explorer.load(connection, force: true)
             } label: {
-                Image(systemName: "arrow.clockwise")
+                Image(systemName: "arrow.triangle.2.circlepath")
             }
-            .buttonStyle(.edith(.borderless))
+            .buttonStyle(
+                DatabaseCommandButtonStyle(
+                    kind: .utility, dark: dark, palette: palette)
+            )
+            .help("Reload database objects")
             .accessibilityLabel("Reload database objects")
         }
         .padding(.horizontal, UIScale.pt(10))
@@ -409,38 +483,6 @@ struct DatabaseWorkbenchView: View {
         }
     }
 
-    private func filterControls(_ connection: DatabaseConnectionSummary) -> some View {
-        HStack(spacing: UIScale.pt(7)) {
-            Menu {
-                Button("No filter") {
-                    data.filterField = ""
-                    data.filterValue = ""
-                }
-                ForEach(data.fields, id: \.path) { field in
-                    if field.isFilterable {
-                        Button(field.displayName) {
-                            data.filterField = field.path.segments.joined(separator: ".")
-                        }
-                    }
-                }
-            } label: {
-                Label(
-                    data.filterField.isEmpty ? "Filter" : data.filterField,
-                    systemImage: "line.3.horizontal.decrease"
-                )
-                .lineLimit(1)
-            }
-            .buttonStyle(.edith(.secondary))
-            .disabled(data.fields.isEmpty)
-            TextField("Value", text: filterBinding)
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: UIScale.pt(180))
-                .disabled(data.filterField.isEmpty)
-                .onSubmit { data.browse(connection) }
-        }
-        .frame(maxWidth: .infinity, alignment: .trailing)
-    }
-
     @ViewBuilder
     private func results(_ connection: DatabaseConnectionSummary) -> some View {
         switch data.state {
@@ -469,18 +511,16 @@ struct DatabaseWorkbenchView: View {
                     : "Fetching the first bounded page.",
                 cancel: data.cancel)
         case .failed(let message) where data.records.isEmpty:
-            emptyState(
-                symbol: "exclamationmark.triangle",
-                title: workbenchMode == .query ? "Query unavailable" : "Data unavailable",
-                detail: message,
-                actionTitle: "Try again",
-                action: {
-                    if workbenchMode == .query {
-                        data.runQuery(connection)
-                    } else {
-                        data.browse(connection)
-                    }
-                })
+            if workbenchMode == .browse {
+                populatedResults(connection)
+            } else {
+                emptyState(
+                    symbol: "exclamationmark.triangle",
+                    title: "Query unavailable",
+                    detail: message,
+                    actionTitle: "Try again",
+                    action: { data.runQuery(connection) })
+            }
         case .loading, .loaded, .failed:
             populatedResults(connection)
         }
@@ -498,17 +538,23 @@ struct DatabaseWorkbenchView: View {
                 }
             } else {
                 if data.editorMode != nil || data.selectedRecord != nil {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 0) {
-                            grid(connection)
-                                .frame(minWidth: UIScale.pt(480))
-                            Divider().opacity(0.35)
-                            inspectorRegion(connection).frame(width: UIScale.pt(300))
-                        }
-                        VStack(spacing: 0) {
-                            grid(connection)
-                            Divider().opacity(0.35)
-                            inspectorRegion(connection).frame(maxHeight: UIScale.pt(260))
+                    GeometryReader { proxy in
+                        let inspectorWidth = UIScale.pt(300)
+                        let splitThreshold = UIScale.pt(780) + 1
+                        if proxy.size.width >= splitThreshold {
+                            let gridWidth = proxy.size.width - inspectorWidth - 1
+                            HStack(spacing: 0) {
+                                grid(connection)
+                                    .frame(width: gridWidth)
+                                Divider().opacity(0.35)
+                                inspectorRegion(connection).frame(width: inspectorWidth)
+                            }
+                        } else {
+                            VStack(spacing: 0) {
+                                grid(connection)
+                                Divider().opacity(0.35)
+                                inspectorRegion(connection).frame(maxHeight: UIScale.pt(260))
+                            }
                         }
                     }
                 } else {
@@ -520,29 +566,48 @@ struct DatabaseWorkbenchView: View {
 
     private func grid(_ connection: DatabaseConnectionSummary) -> some View {
         VStack(spacing: 0) {
+            if workbenchMode == .browse {
+                DatabaseFilterRibbon(
+                    data: data,
+                    connection: connection,
+                    columns: columns,
+                    accent: theme,
+                    palette: palette,
+                    apply: { data.browse(connection) })
+                if case .failed(let message) = data.state {
+                    browseFailureNotice(message, connection: connection)
+                }
+            }
             DatabaseNativeTableView(
                 accent: theme,
                 background: palette.canvas,
                 grid: palette.grid,
                 ink: palette.ink,
                 inkFaint: palette.inkFaint,
-                fields: data.fields,
+                fields: displayedFields(connection),
                 records: data.records,
                 selectedIndex: data.selectedRecordIndex,
-                sortField: data.sortField,
-                sortDirection: data.sortDirection,
+                sorts: tableSorts,
+                nextContinuation: data.nextContinuation,
+                isLoading: data.isLoading,
+                columnWidth: { columns.width(for: $0) },
                 text: { data.text(for: $0) },
+                loadMore: { data.loadNextPage(connection) },
                 select: { data.selectRecord(at: $0) },
                 open: { index in
                     if data.selectedRecordIndex != index {
                         data.selectRecord(at: index)
                     }
-                    if workbenchMode == .browse, data.supportsDataMutations(connection) {
+                    if workbenchMode == .browse,
+                        canUpdateData(connection),
+                        data.canMutateSelectedRecord(.update, connection: connection)
+                    {
                         data.beginEditingSelectedRow(connection)
                     }
                 },
                 rowIsEditable: { index in
                     workbenchMode == .browse
+                        && canUpdateData(connection)
                         && !mutations.hasTrackedMutation
                         && data.fields.contains { field in
                             data.canEdit(
@@ -553,6 +618,7 @@ struct DatabaseWorkbenchView: View {
                 },
                 canEdit: { index, field in
                     workbenchMode == .browse
+                        && canUpdateData(connection)
                         && !mutations.hasTrackedMutation
                         && data.canEdit(recordAt: index, field: field, connection: connection)
                 },
@@ -567,12 +633,16 @@ struct DatabaseWorkbenchView: View {
                     else { return }
                     mutations.requestSafetyReview(for: request)
                 },
-                sort: { field, direction in
+                sort: { field, additive in
                     guard workbenchMode == .browse else { return }
-                    data.sortField = field
-                    data.sortDirection = direction
+                    data.cycleSort(field: field, additive: additive)
                     data.browse(connection)
-                })
+                },
+                resizeColumn: { field, width in
+                    columns.setWidth(width, for: field)
+                }
+            )
+            .clipped()
             Divider().opacity(0.35)
             HStack(spacing: UIScale.pt(9)) {
                 if data.isLoading {
@@ -584,17 +654,83 @@ struct DatabaseWorkbenchView: View {
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                if data.hasNextPage {
-                    Button("Load more") { data.loadNextPage(connection) }
-                        .buttonStyle(.edith(.secondary))
-                        .disabled(data.isLoading)
+                Menu {
+                    ForEach(DatabaseDataWorkspaceModel.pageSizeOptions, id: \.self) { size in
+                        Button {
+                            data.setPageSize(size)
+                            if workbenchMode == .query {
+                                data.runQuery(connection)
+                            } else {
+                                data.browse(connection)
+                            }
+                        } label: {
+                            if data.pageSize == size {
+                                Label("\(size) rows", systemImage: "checkmark")
+                            } else {
+                                Text("\(size) rows")
+                            }
+                        }
+                    }
+                } label: {
+                    Label("\(data.pageSize) per page", systemImage: "list.number")
+                        .font(.system(size: UIScale.pt(10), weight: .medium))
+                        .foregroundStyle(palette.inkFaint)
+                        .frame(minHeight: UIScale.pt(28))
                 }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .disabled(data.isLoading)
+                .help("Rows fetched per database page")
+                .accessibilityLabel("Page size, \(data.pageSize) rows")
             }
             .padding(.horizontal, UIScale.pt(12))
             .frame(height: UIScale.pt(38))
             .background(palette.panel)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func browseFailureNotice(
+        _ message: String,
+        connection: DatabaseConnectionSummary
+    ) -> some View {
+        HStack(spacing: UIScale.pt(9)) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .foregroundStyle(DashSkin.warn)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(
+                    data.hasActiveFilters
+                        ? "Filter could not be applied" : "Data could not be refreshed"
+                )
+                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                .foregroundStyle(palette.ink)
+                Text(message)
+                    .font(.system(size: UIScale.pt(9.5)))
+                    .foregroundStyle(palette.inkSoft)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: UIScale.pt(8))
+            if data.hasActiveFilters {
+                Button("Clear filters") {
+                    data.clearFilters()
+                    data.browse(connection)
+                }
+                .buttonStyle(.edith(.secondary))
+            }
+            Button("Try again") {
+                data.browse(connection)
+            }
+            .buttonStyle(.edith(.borderless))
+        }
+        .padding(.horizontal, UIScale.pt(12))
+        .padding(.vertical, UIScale.pt(7))
+        .background(DashSkin.warn.opacity(dark ? 0.08 : 0.06))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(
+            "\(data.hasActiveFilters ? "Filter could not be applied" : "Data could not be refreshed"). \(message)"
+        )
     }
 
     @ViewBuilder
@@ -611,7 +747,7 @@ struct DatabaseWorkbenchView: View {
         connection: DatabaseConnectionSummary
     ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
+            HStack(spacing: UIScale.pt(8)) {
                 Text(detailTitle(connection))
                     .font(.system(size: UIScale.pt(12.5), weight: .semibold))
                 if usesDocumentEditor(connection) {
@@ -625,48 +761,65 @@ struct DatabaseWorkbenchView: View {
                     .frame(width: UIScale.pt(120))
                 }
                 Spacer(minLength: 0)
-                if workbenchMode == .browse,
-                    data.supportsDataMutations(connection),
-                    record.identity != nil
-                {
-                    Button("Edit") {
-                        data.beginEditingSelectedRow(connection)
-                    }
-                    .buttonStyle(.edith(.borderless))
-                    .disabled(mutations.hasTrackedMutation)
+                if showsSelectedRecordEditAction(connection) {
                     Button {
+                        data.beginEditingSelectedRow(connection)
+                    } label: {
+                        Image(systemName: "pencil")
+                    }
+                    .buttonStyle(
+                        DatabaseInspectorActionButtonStyle(
+                            kind: .neutral, palette: palette)
+                    )
+                    .disabled(mutations.hasTrackedMutation)
+                    .help(editorTitle(connection))
+                    .accessibilityLabel(editorTitle(connection))
+                }
+                if showsSelectedRecordDeleteAction(connection) {
+                    Button(role: .destructive) {
                         requestDelete(connection)
                     } label: {
                         Image(systemName: "trash")
-                            .foregroundStyle(DashSkin.danger)
                     }
-                    .buttonStyle(.edith(.borderless))
+                    .buttonStyle(
+                        DatabaseInspectorActionButtonStyle(
+                            kind: .danger, palette: palette)
+                    )
                     .disabled(mutations.hasTrackedMutation)
+                    .help(deleteTitle(connection))
                     .accessibilityLabel(deleteTitle(connection))
+                    .accessibilityHint("Opens a safety review before deletion")
+                }
+                if showsSelectedRecordEditAction(connection)
+                    || showsSelectedRecordDeleteAction(connection)
+                {
+                    Rectangle()
+                        .fill(palette.line.opacity(0.72))
+                        .frame(width: 1, height: UIScale.pt(16))
+                        .padding(.horizontal, UIScale.pt(2))
                 }
                 Button {
                     if let index = data.selectedRecordIndex { data.selectRecord(at: index) }
                 } label: {
                     Image(systemName: "xmark")
                 }
-                .buttonStyle(.edith(.borderless))
+                .buttonStyle(
+                    DatabaseInspectorActionButtonStyle(
+                        kind: .neutral, palette: palette)
+                )
+                .keyboardShortcut(.cancelAction)
+                .help(closeDetailTitle(connection))
+                .accessibilityLabel(closeDetailTitle(connection))
             }
-            .padding(UIScale.pt(12))
+            .padding(.horizontal, UIScale.pt(12))
+            .frame(height: UIScale.pt(38))
             Divider().opacity(0.35)
+            if usesDocumentEditor(connection) {
+                documentMetadata(record)
+            }
             ScrollView {
-                if usesDocumentEditor(connection), documentPresentation == .source {
-                    if let source = data.documentSource(record) {
-                        Text(source)
-                            .font(.system(size: UIScale.pt(11), design: .monospaced))
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(UIScale.pt(12))
-                    } else {
-                        Text("Source view is unavailable for one or more unsupported values.")
-                            .font(.system(size: UIScale.pt(11)))
-                            .foregroundStyle(.secondary)
-                            .padding(UIScale.pt(12))
-                    }
+                if usesDocumentEditor(connection) {
+                    documentInspector(record)
                 } else {
                     LazyVStack(alignment: .leading, spacing: UIScale.pt(12)) {
                         ForEach(Array(record.fields.enumerated()), id: \.offset) { _, field in
@@ -686,6 +839,81 @@ struct DatabaseWorkbenchView: View {
             }
         }
         .background(palette.panel)
+    }
+
+    @ViewBuilder
+    private func documentMetadata(_ record: DatabaseRecord) -> some View {
+        let metadata = documentMetadataComponents(record)
+        if !metadata.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: UIScale.pt(6)) {
+                    ForEach(Array(metadata.enumerated()), id: \.offset) { _, component in
+                        HStack(spacing: UIScale.pt(4)) {
+                            Text(component.name)
+                                .foregroundStyle(.secondary)
+                            Text(data.text(for: component.value))
+                                .textSelection(.enabled)
+                        }
+                        .font(.system(size: UIScale.pt(9.5), design: .monospaced))
+                        .padding(.horizontal, UIScale.pt(7))
+                        .padding(.vertical, UIScale.pt(4))
+                        .background(palette.canvas)
+                        .clipShape(Capsule())
+                    }
+                }
+                .padding(.horizontal, UIScale.pt(12))
+                .padding(.vertical, UIScale.pt(8))
+            }
+            Divider().opacity(0.35)
+        }
+    }
+
+    @ViewBuilder
+    private func documentInspector(_ record: DatabaseRecord) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            if documentPresentation == .source {
+                if let source = data.documentSource(record) {
+                    Text(source)
+                        .font(.system(size: UIScale.pt(11), design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Text("Source view is unavailable for one or more unsupported values.")
+                        .font(.system(size: UIScale.pt(11)))
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                DatabaseDocumentOutline(
+                    nodes: DatabaseDocumentNode.fields(documentSourceFields(record)),
+                    text: { data.text(for: $0) })
+            }
+            if let highlight = documentHighlight(record) {
+                Divider().opacity(0.35)
+                Text("Highlights")
+                    .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                    .foregroundStyle(.secondary)
+                DatabaseDocumentOutline(
+                    nodes: DatabaseDocumentNode.value(highlight, name: "matches"),
+                    text: { data.text(for: $0) })
+            }
+        }
+        .padding(UIScale.pt(12))
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func documentSourceFields(_ record: DatabaseRecord) -> [DatabaseObjectField] {
+        record.fields.filter { $0.name != "_highlight" }
+    }
+
+    private func documentHighlight(_ record: DatabaseRecord) -> DatabaseValue? {
+        record.fields.first(where: { $0.name == "_highlight" })?.value
+    }
+
+    private func documentMetadataComponents(
+        _ record: DatabaseRecord
+    ) -> [DatabaseIdentityComponent] {
+        guard record.identity?.kind == .searchDocument else { return [] }
+        return (record.identity?.components ?? []) + (record.identity?.concurrencyTokens ?? [])
     }
 
     private func editor(_ connection: DatabaseConnectionSummary) -> some View {
@@ -846,10 +1074,6 @@ struct DatabaseWorkbenchView: View {
         .padding(UIScale.pt(26))
     }
 
-    private var filterBinding: Binding<String> {
-        Binding(get: { data.filterValue }, set: { data.filterValue = $0 })
-    }
-
     private var queryTextBinding: Binding<String> {
         Binding(get: { data.queryText }, set: { data.queryText = $0 })
     }
@@ -942,10 +1166,32 @@ struct DatabaseWorkbenchView: View {
         return "Row details"
     }
 
+    private func showsSelectedRecordEditAction(
+        _ connection: DatabaseConnectionSummary
+    ) -> Bool {
+        workbenchMode == .browse
+            && canUpdateData(connection)
+            && data.canMutateSelectedRecord(.update, connection: connection)
+    }
+
+    private func showsSelectedRecordDeleteAction(
+        _ connection: DatabaseConnectionSummary
+    ) -> Bool {
+        workbenchMode == .browse
+            && canDeleteData(connection)
+            && data.canMutateSelectedRecord(.delete, connection: connection)
+    }
+
     private func deleteTitle(_ connection: DatabaseConnectionSummary) -> String {
         if connection.product.family == .keyValue { return "Delete key" }
         if usesDocumentEditor(connection) { return "Delete document" }
         return "Delete row"
+    }
+
+    private func closeDetailTitle(_ connection: DatabaseConnectionSummary) -> String {
+        if connection.product.family == .keyValue { return "Close key details" }
+        if usesDocumentEditor(connection) { return "Close document details" }
+        return "Close row details"
     }
 
     private func usesDocumentEditor(_ connection: DatabaseConnectionSummary) -> Bool {
@@ -963,6 +1209,96 @@ struct DatabaseWorkbenchView: View {
         mutations.requestSafetyReview(for: request)
     }
 
+    private var tableSorts: [DatabaseSort] {
+        data.orderedSorts.map { sort in
+            let path =
+                data.fields.first {
+                    $0.path.segments.joined(separator: ".") == sort.field
+                }?.path ?? DatabaseFieldPath(sort.field)
+            return DatabaseSort(field: path, direction: sort.direction)
+        }
+    }
+
+    private func canInsertData(_ connection: DatabaseConnectionSummary) -> Bool {
+        canUseMutationCapability(.insert, connection: connection)
+    }
+
+    private func canUpdateData(_ connection: DatabaseConnectionSummary) -> Bool {
+        canUseMutationCapability(.update, connection: connection)
+    }
+
+    private func canDeleteData(_ connection: DatabaseConnectionSummary) -> Bool {
+        canUseMutationCapability(.delete, connection: connection)
+    }
+
+    private func hasAnyDataMutation(_ connection: DatabaseConnectionSummary) -> Bool {
+        canInsertData(connection) || canUpdateData(connection) || canDeleteData(connection)
+    }
+
+    private func canUseMutationCapability(
+        _ capability: DatabaseCapabilityID,
+        connection: DatabaseConnectionSummary
+    ) -> Bool {
+        data.supportsDataMutation(capability, connection: connection)
+            && selectedObjectAllowsMutation(connection)
+            && connections.selectedConnectionSupports(capability)
+    }
+
+    private func selectedObjectAllowsMutation(
+        _ connection: DatabaseConnectionSummary
+    ) -> Bool {
+        guard let kind = explorer.selectedObject?.kind else { return false }
+        return switch connection.product.family {
+        case .relational, .analytical: kind == .table
+        case .keyValue: kind == .keyspace
+        case .document: kind == .collection
+        case .search: kind == .index
+        }
+    }
+
+    private func synchronizeColumns(_ connection: DatabaseConnectionSummary) {
+        guard let object = data.selectedObject else {
+            columns.clear()
+            return
+        }
+        columns.synchronize(
+            connectionID: connection.id,
+            object: object,
+            fields: data.fields)
+    }
+
+    private func displayedFields(
+        _ connection: DatabaseConnectionSummary
+    ) -> [DatabaseFieldDescriptor] {
+        guard columns.connectionID == connection.id,
+            columns.object == data.selectedObject,
+            !columns.columns.isEmpty
+        else { return data.fields }
+        return columns.visibleFields
+    }
+
+    private func mutationUnavailableHelp(_ connection: DatabaseConnectionSummary) -> String {
+        if connection.readOnlyPolicy != .disabled
+            || connection.environmentProtection == .readOnly
+            || connection.productionPolicy == .prohibitMutations
+        {
+            return "This connection policy allows browsing only."
+        }
+        if !selectedObjectAllowsMutation(connection) {
+            return "The selected object is read-only."
+        }
+        for capability in [
+            DatabaseCapabilityID.insert,
+            .update,
+            .delete,
+        ] {
+            if let reason = connections.selectedConnectionUnavailableReason(for: capability) {
+                return reason
+            }
+        }
+        return "The connected database adapter allows browsing only."
+    }
+
     private var resultSummary: String {
         var parts = ["\(data.records.count.formatted()) shown"]
         if let metadata = data.metadata {
@@ -976,6 +1312,11 @@ struct DatabaseWorkbenchView: View {
 
     private var selectedObjectTitle: String {
         explorer.selectedObject?.path.last ?? "Select an object"
+    }
+
+    private var selectedObjectContext: String? {
+        guard let selected = explorer.selectedObject, selected.path.count > 1 else { return nil }
+        return selected.path.dropLast().joined(separator: " / ")
     }
 
     private var selectedObjectSymbol: String {
@@ -996,6 +1337,235 @@ struct DatabaseWorkbenchView: View {
         case .document: "doc.text"
         case .search: "magnifyingglass"
         case .analytical: "chart.xyaxis.line"
+        }
+    }
+}
+
+private struct DatabaseInspectorActionButtonStyle: ButtonStyle {
+    enum Kind {
+        case neutral
+        case danger
+    }
+
+    let kind: Kind
+    let palette: DatabaseThemePalette
+
+    func makeBody(configuration: Configuration) -> some View {
+        DatabaseInspectorActionButtonBody(
+            label: configuration.label,
+            kind: kind,
+            palette: palette,
+            pressed: configuration.isPressed)
+    }
+}
+
+private struct DatabaseInspectorActionButtonBody<Label: View>: View {
+    let label: Label
+    let kind: DatabaseInspectorActionButtonStyle.Kind
+    let palette: DatabaseThemePalette
+    let pressed: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.isFocused) private var focused
+    @State private var hovering = false
+
+    var body: some View {
+        label
+            .font(.system(size: UIScale.pt(12), weight: .medium))
+            .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+            .foregroundStyle(foreground)
+            .background(background, in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
+            .overlay {
+                RoundedRectangle(cornerRadius: UIScale.pt(6))
+                    .strokeBorder(focused ? palette.accent : .clear, lineWidth: 2)
+            }
+            .contentShape(Rectangle())
+            .opacity(enabled ? 1 : 0.38)
+            .brightness(pressed && enabled ? -0.08 : 0)
+            .onHover { hovering = enabled && $0 }
+            .animation(
+                Motion.animation(Motion.feedback, reduceMotion: reduceMotion),
+                value: hovering
+            )
+            .animation(
+                Motion.animation(Motion.feedback, reduceMotion: reduceMotion),
+                value: pressed)
+    }
+
+    private var foreground: Color {
+        switch kind {
+        case .neutral:
+            hovering ? palette.ink : palette.inkSoft
+        case .danger:
+            DashSkin.danger.opacity(hovering ? 1 : 0.82)
+        }
+    }
+
+    private var background: Color {
+        switch kind {
+        case .neutral:
+            palette.line.opacity(pressed ? 0.72 : hovering ? 0.52 : 0)
+        case .danger:
+            DashSkin.danger.opacity(pressed ? 0.22 : hovering ? 0.12 : 0)
+        }
+    }
+}
+
+private struct DatabaseCommandButtonStyle: ButtonStyle {
+    enum Kind {
+        case utility
+        case primary
+    }
+
+    let kind: Kind
+    let dark: Bool
+    let palette: DatabaseThemePalette
+
+    func makeBody(configuration: Configuration) -> some View {
+        DatabaseCommandButtonBody(
+            label: configuration.label,
+            kind: kind,
+            dark: dark,
+            palette: palette,
+            pressed: configuration.isPressed)
+    }
+}
+
+private struct DatabaseCommandButtonBody<Label: View>: View {
+    let label: Label
+    let kind: DatabaseCommandButtonStyle.Kind
+    let dark: Bool
+    let palette: DatabaseThemePalette
+    let pressed: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var enabled
+    @State private var hovering = false
+
+    var body: some View {
+        label
+            .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+            .padding(.horizontal, kind == .primary ? UIScale.pt(10) : 0)
+            .frame(minWidth: UIScale.pt(30))
+            .frame(height: UIScale.pt(30))
+            .foregroundStyle(foreground)
+            .background(background, in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
+            .overlay {
+                RoundedRectangle(cornerRadius: UIScale.pt(7))
+                    .strokeBorder(border, lineWidth: 1)
+            }
+            .contentShape(Rectangle())
+            .opacity(enabled ? 1 : 0.42)
+            .brightness(pressed && enabled ? -0.08 : 0)
+            .onHover { hovering = enabled && $0 }
+            .animation(
+                Motion.animation(Motion.feedback, reduceMotion: reduceMotion),
+                value: hovering
+            )
+            .animation(
+                Motion.animation(Motion.feedback, reduceMotion: reduceMotion),
+                value: pressed)
+    }
+
+    private var foreground: Color {
+        switch kind {
+        case .primary:
+            dark ? palette.canvas : .white
+        case .utility:
+            hovering ? palette.ink : palette.inkSoft
+        }
+    }
+
+    private var background: Color {
+        switch kind {
+        case .primary:
+            DashSkin.accentDeep(dark)
+        case .utility:
+            hovering ? palette.line.opacity(0.72) : palette.canvas.opacity(0.72)
+        }
+    }
+
+    private var border: Color {
+        switch kind {
+        case .primary:
+            dark ? palette.ink.opacity(0.12) : Color.white.opacity(0.28)
+        case .utility:
+            palette.line.opacity(hovering ? 0.92 : 0.68)
+        }
+    }
+}
+
+private struct DatabaseDocumentNode: Identifiable {
+    let id: String
+    let name: String
+    let value: DatabaseValue
+    let children: [DatabaseDocumentNode]?
+
+    static func fields(
+        _ fields: [DatabaseObjectField],
+        prefix: String = "root"
+    ) -> [DatabaseDocumentNode] {
+        fields.enumerated().map { index, field in
+            node(
+                value: field.value,
+                name: field.name,
+                id: "\(prefix).\(index).\(field.name)")
+        }
+    }
+
+    static func value(_ value: DatabaseValue, name: String) -> [DatabaseDocumentNode] {
+        [node(value: value, name: name, id: "root.\(name)")]
+    }
+
+    private static func node(
+        value: DatabaseValue,
+        name: String,
+        id: String
+    ) -> DatabaseDocumentNode {
+        let children: [DatabaseDocumentNode]?
+        switch value {
+        case .object(let fields):
+            children = Self.fields(fields, prefix: id)
+        case .array(let values):
+            children = values.enumerated().map { index, child in
+                node(value: child, name: "[\(index)]", id: "\(id).\(index)")
+            }
+        default:
+            children = nil
+        }
+        return DatabaseDocumentNode(id: id, name: name, value: value, children: children)
+    }
+
+    var collectionSummary: String? {
+        switch value {
+        case .object(let fields): "{\(fields.count) fields}"
+        case .array(let values): "[\(values.count) values]"
+        default: nil
+        }
+    }
+}
+
+private struct DatabaseDocumentOutline: View {
+    let nodes: [DatabaseDocumentNode]
+    let text: (DatabaseValue) -> String
+
+    var body: some View {
+        LazyVStack(alignment: .leading, spacing: UIScale.pt(7)) {
+            OutlineGroup(nodes, children: \.children) { node in
+                HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
+                    Text(node.name)
+                        .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: UIScale.pt(8))
+                    Text(node.collectionSummary ?? text(node.value))
+                        .font(.system(size: UIScale.pt(11), design: .monospaced))
+                        .foregroundStyle(node.collectionSummary == nil ? .primary : .secondary)
+                        .textSelection(.enabled)
+                        .multilineTextAlignment(.trailing)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 }

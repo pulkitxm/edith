@@ -1433,7 +1433,7 @@ extension PostgreSQLDatabaseReadSupport {
                 let marker = "$\(nextParameter)"
                 nextParameter += 1
                 return PostgreSQLDatabaseReadSQLFragment(
-                    sql: "\(field) \(operation) \(marker) ESCAPE '\\\\'",
+                    sql: "\(field) \(operation) \(marker) ESCAPE '\\'",
                     parameters: [.string(pattern)])
             case .isMissing, .isNotMissing, .regularExpression, .fullText:
                 throw failure

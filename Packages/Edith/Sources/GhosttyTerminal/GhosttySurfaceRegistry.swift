@@ -53,11 +53,25 @@ final class GhosttySurfaceRegistry {
     func requestClose(_ target: ghostty_target_s) {
         guard target.tag == GHOSTTY_TARGET_SURFACE else { return }
         guard let surface = target.target.surface else { return }
-        guard let userdata = ghostty_surface_userdata(surface) else { return }
-        view(userdata)?.reportClosed()
+        ghostty_surface_request_close(surface)
     }
 
-    func close(_ userdata: UnsafeMutableRawPointer?) {
-        view(userdata)?.reportClosed()
+    func close(_ userdata: UnsafeMutableRawPointer?, processAlive: Bool) {
+        view(userdata)?.reportClosed(processAlive: processAlive)
+    }
+
+    func forwardModifierChange(_ event: NSEvent) {
+        let registered = lock.withLock { views.values.compactMap(\.value) }
+        let eventWindow = event.window ?? NSApp.keyWindow
+        for view in registered {
+            let matchesWindow = eventWindow != nil && eventWindow === view.window
+            guard
+                GhosttyTerminalView.shouldForwardLocalModifier(
+                    matchesWindow: matchesWindow, focused: view.window?.firstResponder === view)
+            else { continue }
+            let mouseOverSurface =
+                view.renderingActive && !view.isHidden && view.mouseOverSurface
+            view.applyModifierChange(event, mouseOverSurface: mouseOverSurface)
+        }
     }
 }
