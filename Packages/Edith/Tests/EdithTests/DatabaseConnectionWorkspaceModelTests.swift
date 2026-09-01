@@ -43,6 +43,35 @@ import Testing
         #expect(request.search.offset == 0)
     }
 
+    @Test func groupAndFavoriteFiltersPropagateAndColorIsProjected() async throws {
+        let connection = try Self.connection(
+            id: 12,
+            name: "Payments primary",
+            group: "payments",
+            color: "teal",
+            isFavorite: true)
+        let sender = DatabaseConnectionScriptedSender()
+        await sender.succeed(Self.listResponse([connection]), at: 0)
+        let model = Self.model(sender)
+        model.searchText = "primary"
+        model.selectedGroup = "payments"
+        model.favoritesOnly = true
+
+        await model.loadConnections()
+
+        let summary = try #require(model.visibleConnections.first)
+        #expect(summary.color == "teal")
+        #expect(summary.group == "payments")
+        #expect(summary.isFavorite)
+        #expect(model.availableGroups == ["payments"])
+
+        let requests = await sender.recordedRequests()
+        let search = try #require(requests.first?.connectionListRequest?.search)
+        #expect(search.text == "primary")
+        #expect(search.group == "payments")
+        #expect(search.favoritesOnly)
+    }
+
     @Test func completeEmptyListDistinguishesInitialAndFilteredResults() async {
         let sender = DatabaseConnectionScriptedSender()
         await sender.succeed(Self.listResponse([]), at: 0)
@@ -256,6 +285,72 @@ import Testing
         #expect(requests[2].disconnectRequest?.connectionID == connection.id)
     }
 
+    @Test func managedEditInvalidatesTheActiveSessionAndCapabilities() async throws {
+        let connection = try Self.connection(id: 13, name: "Orders")
+        let edited = try Self.connection(
+            id: 13,
+            name: "Orders primary",
+            group: "operations",
+            color: "indigo",
+            isFavorite: false)
+        let report = Self.capabilityReport(product: .postgresql, version: "17.4")
+        let sender = DatabaseConnectionScriptedSender()
+        await sender.succeed(Self.listResponse([connection]), at: 0)
+        await sender.succeed(Self.connectResponse(connection, report: report), at: 1)
+        let model = Self.model(sender)
+
+        await model.loadConnections()
+        await model.connectSelected()
+        #expect(model.selectedSessionState.connectedSession?.connectionID == connection.id)
+        guard case .loaded = model.selectedCapabilityState else {
+            Issue.record("Expected capabilities from the active connection.")
+            return
+        }
+
+        model.applyManagedConnection(edited, disconnectsSession: true)
+
+        #expect(model.selectedConnection?.name == "Orders primary")
+        #expect(model.selectedConnection?.group == "operations")
+        #expect(model.selectedConnection?.color == "indigo")
+        #expect(model.selectedConnection?.isFavorite == false)
+        #expect(model.selectedSessionState == .disconnected)
+        #expect(model.selectedCapabilityState == .unavailable)
+        #expect(model.visibleConnections.map(\.name) == ["Orders primary"])
+    }
+
+    @Test func duplicateIsAddedAndRemovalReturnsTheNearestRemainingConnection() async throws {
+        let primary = try Self.connection(id: 14, name: "Primary")
+        let reporting = try Self.connection(id: 15, name: "Reporting")
+        let archive = try Self.connection(id: 16, name: "Archive")
+        let duplicate = try Self.connection(
+            id: 17,
+            name: "Reporting copy",
+            group: "analytics",
+            color: "purple")
+        let sender = DatabaseConnectionScriptedSender()
+        await sender.succeed(Self.listResponse([primary, reporting, archive]), at: 0)
+        let model = Self.model(sender)
+
+        await model.loadConnections()
+        model.applyDuplicatedConnection(duplicate)
+
+        #expect(
+            model.visibleConnections.map(\.id)
+                == [primary.id, reporting.id, archive.id, duplicate.id])
+        #expect(model.visibleConnections.last?.name == "Reporting copy")
+        #expect(model.visibleConnections.last?.color == "purple")
+
+        let nextAfterReporting = model.removeManagedConnection(reporting.id)
+        #expect(nextAfterReporting == archive.id)
+        #expect(
+            model.visibleConnections.map(\.id)
+                == [primary.id, archive.id, duplicate.id])
+
+        let nextAfterDuplicate = model.removeManagedConnection(duplicate.id)
+        #expect(nextAfterDuplicate == archive.id)
+        #expect(model.visibleConnections.map(\.id) == [primary.id, archive.id])
+    }
+
     @Test func explicitCapabilityRefreshRejectsLateResultsAndLabelsQuality() async throws {
         let connection = try Self.connection(id: 8, name: "Warehouse")
         let connectedReport = Self.capabilityReport(product: .postgresql, version: "17.4")
@@ -438,7 +533,10 @@ import Testing
         id: UInt8,
         name: String,
         product: DatabaseProduct = .postgresql,
-        tags: [String] = ["critical", "orders"]
+        tags: [String] = ["critical", "orders"],
+        group: String? = "payments",
+        color: String? = nil,
+        isFavorite: Bool = true
     ) throws -> DatabaseConnectionDefinition {
         let secret = DatabaseSecretReference(
             identifier: uuid(id + 100),
@@ -468,9 +566,10 @@ import Testing
                 kind: .production,
                 label: "customer-a",
                 protection: .confirmationRequired),
-            group: "payments",
+            group: group,
             tags: tags,
-            isFavorite: true,
+            color: color,
+            isFavorite: isFavorite,
             createdAt: Date(timeIntervalSince1970: 1_000),
             updatedAt: Date(timeIntervalSince1970: 2_000),
             lastUsedAt: Date(timeIntervalSince1970: 3_000))

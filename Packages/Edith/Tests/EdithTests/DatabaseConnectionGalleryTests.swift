@@ -227,6 +227,47 @@ struct DatabaseConnectionGalleryTests {
         }
     }
 
+    @Test func managementMenusRenderAcrossCatalogAndFocusedWorkspace() async throws {
+        let fixture = try await Self.fixture()
+        let connection = try #require(fixture.model.selectedConnection)
+        let perform: (DatabaseConnectionCardAction, DatabaseConnectionSummary) -> Void = { _, _ in }
+
+        for dark in [false, true] {
+            let scheme: ColorScheme = dark ? .dark : .light
+            #expect(
+                galleryRenders(
+                    DatabaseConnectionGallery(
+                        model: fixture.model,
+                        createConnection: {},
+                        openConnection: { _ in },
+                        busyConnectionID: connection.id,
+                        performConnectionAction: perform
+                    )
+                    .environment(\.databaseAppTheme, .purple)
+                    .preferredColorScheme(scheme),
+                    width: 1_024,
+                    height: 700),
+                "management gallery failed in \(dark ? "dark" : "light") mode")
+            #expect(
+                galleryRenders(
+                    DatabaseFocusedConnectionHeader(
+                        connection: connection,
+                        sessionState: .disconnected,
+                        backDisabled: false,
+                        focusRequested: false,
+                        focusCompleted: {},
+                        back: {},
+                        busyConnectionID: connection.id,
+                        performConnectionAction: perform
+                    )
+                    .environment(\.databaseAppTheme, .purple)
+                    .preferredColorScheme(scheme),
+                    width: 1_024,
+                    height: 90),
+                "management header failed in \(dark ? "dark" : "light") mode")
+        }
+    }
+
     private static func fixture() async throws -> DatabaseConnectionGalleryFixture {
         let connections = [
             try connection(
