@@ -73,7 +73,7 @@ struct DatabaseFilterRibbon: View {
                     .foregroundStyle(palette.inkFaint)
                     .frame(minWidth: UIScale.pt(28), minHeight: UIScale.pt(28))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .help("Clear filters and sorting")
             .accessibilityLabel("Clear filters and sorting")
         }
@@ -267,7 +267,7 @@ struct DatabaseFilterRibbon: View {
                     .strokeBorder(palette.line.opacity(0.72), lineWidth: 1)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .help(clause.summary)
         .popover(isPresented: editorPresentation(clause.id), arrowEdge: .bottom) {
             filterEditor(clause.id)
