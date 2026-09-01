@@ -18,9 +18,8 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         ensureStyleCache()
         previous = SystemStatsReader.readCPUTicks()
         let initialTitle = title(cpu: 0, memory: SystemStatsReader.memoryUsedPercent())
-        let sizingTitle = title(cpu: 100, memory: 100)
         item = NSStatusBar.system.statusItem(
-            withLength: StatusItemSizing.titleLength(sizingTitle))
+            withLength: StatusItemSizing.titleLength(initialTitle))
         StatusItemMenu.attach(to: item, target: self, action: #selector(clicked))
         item.button?.attributedTitle = initialTitle
         startTimer()
@@ -94,13 +93,15 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         }
         let memory = SystemStatsReader.memoryUsedPercent()
         ensureStyleCache()
-        item.button?.attributedTitle = title(cpu: cpu, memory: memory)
+        let title = title(cpu: cpu, memory: memory)
+        item.length = StatusItemSizing.titleLength(title)
+        item.button?.attributedTitle = title
     }
 
     private func title(cpu: Double, memory: Double) -> NSAttributedString {
         let title = NSMutableAttributedString()
         appendStat(symbol: "cpu", value: cpu, into: title)
-        title.append(NSAttributedString(string: "  "))
+        title.append(NSAttributedString(string: " "))
         appendStat(symbol: "memorychip", value: memory, into: title)
         return title
     }

@@ -1257,7 +1257,7 @@ final class DatabaseDataWorkspaceModel {
         nextContinuation = nil
     }
 
-    private static func listValueTexts(
+    private nonisolated static func listValueTexts(
         _ text: String,
         fieldName: String
     ) throws -> [String] {

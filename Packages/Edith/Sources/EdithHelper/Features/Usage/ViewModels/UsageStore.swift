@@ -479,7 +479,7 @@ final class UsageStore: FeatureModule {
     }
 
     func syncStatusItem() {
-        guard NSApp?.isRunning == true else { return }
+        guard NSApp != nil else { return }
         let on =
             SharedDefaults.store.object(forKey: AppStorageKeys.Limits.inMenuBar) as? Bool ?? true
         if on, statusItem == nil {

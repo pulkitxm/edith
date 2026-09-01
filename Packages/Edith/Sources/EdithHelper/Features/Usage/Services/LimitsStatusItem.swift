@@ -49,17 +49,15 @@ final class LimitsStatusItem {
 
     func showUnavailable() { update([]) }
 
-    private func setTitle(
-        _ title: NSAttributedString, sizingTitle: NSAttributedString
-    ) {
-        ensureStatusItem(length: StatusItemSizing.titleLength(sizingTitle))
+    private func setTitle(_ title: NSAttributedString) {
+        ensureStatusItem(length: StatusItemSizing.titleLength(title))
         stackedView?.removeFromSuperview()
         stackedView = nil
         item?.button?.attributedTitle = title
     }
 
     private func renderTagged(_ groups: [MenuBarProviderGroup]) {
-        setTitle(taggedTitle(groups), sizingTitle: taggedTitle(Self.sizingGroups(groups)))
+        setTitle(taggedTitle(groups))
     }
 
     private func taggedTitle(_ groups: [MenuBarProviderGroup]) -> NSAttributedString {
@@ -78,7 +76,7 @@ final class LimitsStatusItem {
     }
 
     private func renderSlash(_ groups: [MenuBarProviderGroup]) {
-        setTitle(slashTitle(groups), sizingTitle: slashTitle(Self.sizingGroups(groups)))
+        setTitle(slashTitle(groups))
     }
 
     private func slashTitle(_ groups: [MenuBarProviderGroup]) -> NSAttributedString {
@@ -106,24 +104,30 @@ final class LimitsStatusItem {
     }
 
     private func renderStacked(_ groups: [MenuBarProviderGroup]) {
-        let sizingView = StackedLimitsView()
-        sizingView.groups = stackedGroups(Self.sizingGroups(groups))
-        ensureStatusItem(length: sizingView.desiredWidth)
-        item?.button?.attributedTitle = NSAttributedString()
+        let renderedGroups = stackedGroups(groups)
         let view = stackedView ?? StackedLimitsView()
+        view.groups = renderedGroups
+        let width = view.desiredWidth
+        ensureStatusItem(length: width)
+        guard let button = item?.button else { return }
+        button.attributedTitle = NSAttributedString(
+            string: " ", attributes: [.foregroundColor: NSColor.clear])
         if stackedView == nil, let button = item?.button {
             view.autoresizingMask = [.width, .height]
-            view.frame = button.bounds
             button.addSubview(view)
             stackedView = view
         }
-        view.groups = stackedGroups(groups)
+        view.frame = NSRect(
+            x: 0, y: 0, width: width,
+            height: max(button.bounds.height, NSStatusBar.system.thickness))
+        view.needsDisplay = true
     }
 
     private func ensureStatusItem(length: CGFloat) {
-        if let item, abs(item.length - length) < 0.5 { return }
-        if let item { NSStatusBar.system.removeStatusItem(item) }
-        stackedView = nil
+        if let item {
+            item.length = length
+            return
+        }
         let next = NSStatusBar.system.statusItem(withLength: length)
         StatusItemMenu.attach(to: next, target: self, action: #selector(clicked))
         item = next
@@ -148,21 +152,6 @@ final class LimitsStatusItem {
                     ?? ProviderLimits(provider: provider, session: nil, week: nil))
         }
         return stable
-    }
-
-    static func sizingGroups(_ groups: [MenuBarProviderGroup]) -> [MenuBarProviderGroup] {
-        var sizing: [MenuBarProviderGroup] = []
-        sizing.reserveCapacity(groups.count)
-        for group in groups.prefix(LimitProvider.allCases.count) {
-            var segments: [MenuBarLimitSegment] = []
-            segments.reserveCapacity(group.segments.count)
-            for segment in group.segments.prefix(LimitWindowSlot.allCases.count) {
-                segments.append(
-                    MenuBarLimitSegment(slot: segment.slot, value: .percent(100), window: nil))
-            }
-            sizing.append(MenuBarProviderGroup(provider: group.provider, segments: segments))
-        }
-        return sizing
     }
 
     private func stackedGroups(_ groups: [MenuBarProviderGroup]) -> [StackedLimitsView.Group] {
