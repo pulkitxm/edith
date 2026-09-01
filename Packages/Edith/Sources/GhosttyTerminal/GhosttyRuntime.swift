@@ -38,6 +38,7 @@ public final class GhosttyRuntime {
     private var started = false
     private var tickScheduled = false
     private var observers: [NSObjectProtocol] = []
+    private var modifierMonitor: Any?
 
     public var isReady: Bool { app != nil }
 
@@ -165,6 +166,10 @@ public final class GhosttyRuntime {
                 guard let app = self?.app else { return }
                 ghostty_app_keyboard_changed(app)
             })
+        modifierMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+            GhosttySurfaceRegistry.shared.forwardModifierChange(event)
+            return event
+        }
     }
 
     private func perform(action: ghostty_action_s, target: ghostty_target_s) -> Bool {

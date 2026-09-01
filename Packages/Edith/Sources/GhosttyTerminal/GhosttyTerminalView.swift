@@ -19,7 +19,7 @@ public final class GhosttyTerminalView: NSView {
     var temporaryDropFiles = Set<URL>()
     private var closed = false
     private var drawScheduled = false
-    private var renderingActive = true
+    private(set) var renderingActive = true
     var terminalCursor = NSCursor.iBeam
     var cursorHidden = false
     var commandClickOpenedTarget = false
@@ -34,6 +34,7 @@ public final class GhosttyTerminalView: NSView {
     let markedText = NSMutableAttributedString()
     var keyTextAccumulator: [String]?
     var keyUpMonitor: Any?
+    var openResolvedURL: (URL) -> Void = { _ = NSWorkspace.shared.open($0) }
 
     public override var isFlipped: Bool { false }
 

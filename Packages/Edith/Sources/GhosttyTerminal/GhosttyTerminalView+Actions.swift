@@ -323,13 +323,15 @@ extension GhosttyTerminalView {
             return false
         }
         commandClickOpenedTarget = true
+        let openResolvedURL = openResolvedURL
         DispatchQueue.main.async {
-            NSWorkspace.shared.open(url)
+            openResolvedURL(url)
         }
         return true
     }
 
     func setHoveredLink(_ value: String?) {
+        let value = value.flatMap { $0.isEmpty ? nil : $0 }
         hoveredLink = value
         linkHoverView.show(value)
     }

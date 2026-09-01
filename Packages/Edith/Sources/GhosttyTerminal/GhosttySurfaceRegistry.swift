@@ -60,4 +60,17 @@ final class GhosttySurfaceRegistry {
     func close(_ userdata: UnsafeMutableRawPointer?) {
         view(userdata)?.reportClosed()
     }
+
+    func forwardModifierChange(_ event: NSEvent) {
+        let registered = lock.withLock { views.values.compactMap(\.value) }
+        let eventWindow = event.window ?? NSApp.keyWindow
+        for view in registered
+        where GhosttyTerminalView.shouldForwardLocalModifier(
+            matchesWindow: eventWindow === view.window,
+            focused: view.window?.firstResponder === view,
+            visible: view.renderingActive && !view.isHidden)
+        {
+            view.flagsChanged(with: event)
+        }
+    }
 }
