@@ -49,7 +49,7 @@ struct MongoDBDatabaseCollectionResult: Sendable {
 
 enum MongoDBDatabaseMutationOperation: Sendable {
     case insert(Document)
-    case update(filter: Document, values: Document)
+    case replace(filter: Document, document: Document)
     case delete(filter: Document)
 }
 
@@ -223,11 +223,10 @@ actor MongoKittenDatabaseClient: MongoDBDatabaseClient {
                     matchedCount: 0,
                     modifiedCount: 0,
                     deletedCount: 0)
-            case let .update(filter, values):
+            case let .replace(filter, document):
                 var request = UpdateCommand.UpdateRequest(
                     where: filter,
-                    setting: values,
-                    unsetting: nil)
+                    to: document)
                 request.multi = false
                 request.upsert = false
                 var command = UpdateCommand(

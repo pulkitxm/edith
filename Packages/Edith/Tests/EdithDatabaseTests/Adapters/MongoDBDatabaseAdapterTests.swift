@@ -1179,12 +1179,15 @@ private actor MongoDBDatabaseConversionCancellationProbe {
     #expect(plans.count == 3)
     #expect(plans.allSatisfy { $0.database == "edith_scale" })
     #expect(plans.allSatisfy { $0.collection == "events" })
-    guard case let .update(filter, values) = plans[1].operation else {
-        Issue.record("Expected a MongoDB update plan")
+    guard case let .replace(filter, document) = plans[1].operation else {
+        Issue.record("Expected a MongoDB replacement plan")
         return
     }
     #expect(filter["_id"] as? ObjectId == MongoDBDatabaseAdapterFixtures.objectIDs[0])
-    #expect(values["name"] as? String == "updated")
+    #expect(document["_id"] as? ObjectId == MongoDBDatabaseAdapterFixtures.objectIDs[0])
+    #expect(document["name"] as? String == "updated")
+    #expect(document["sequence"] == nil)
+    #expect(document["$set"] == nil)
     await session.disconnect()
 }
 

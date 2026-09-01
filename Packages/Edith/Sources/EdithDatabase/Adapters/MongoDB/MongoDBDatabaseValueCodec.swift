@@ -78,23 +78,18 @@ enum MongoDBDatabaseValueCodec {
         let objectID = document["_id"] as? ObjectId
         let identity: DatabaseRecordIdentity?
         if let rawIdentity = document["_id"] {
-            var identityBudget = MongoDBDatabaseValueCodecBudget(
-                remainingBytes: 32_768,
-                remainingElements: 32)
-            let convertedIdentity = try await outputValue(
+            let convertedIdentity = try await writableIdentityValue(
                 rawIdentity,
-                depth: 0,
-                budget: &identityBudget,
                 cancellationCheck: cancellationCheck)
-            if convertedIdentity.truncated {
-                identity = nil
-                truncated = true
-            } else {
+            truncated = truncated || convertedIdentity.truncated
+            if let value = convertedIdentity.value {
                 identity = DatabaseRecordIdentity(
                     kind: .documentID,
                     components: [
-                        DatabaseIdentityComponent(name: "_id", value: convertedIdentity.value)
+                        DatabaseIdentityComponent(name: "_id", value: value)
                     ])
+            } else {
+                identity = nil
             }
         } else {
             identity = nil
@@ -144,6 +139,50 @@ enum MongoDBDatabaseValueCodec {
         case let .productSpecific(value):
             value.typeName
         }
+    }
+
+    private static func writableIdentityValue(
+        _ primitive: Primitive,
+        cancellationCheck: @escaping @Sendable () async throws -> Void
+    ) async throws -> (value: DatabaseValue?, truncated: Bool) {
+        if primitive is Null {
+            return (nil, false)
+        }
+        if let document = primitive as? Document, document.isArray {
+            return (nil, false)
+        }
+        var budget = MongoDBDatabaseValueCodecBudget(
+            remainingBytes: 32_768,
+            remainingElements: 32)
+        let converted: (value: DatabaseValue, truncated: Bool)
+        do {
+            converted = try await outputValue(
+                primitive,
+                depth: 0,
+                budget: &budget,
+                cancellationCheck: cancellationCheck)
+        } catch MongoDBDatabaseValueCodecFailure.invalidValue {
+            return (nil, false)
+        } catch MongoDBDatabaseValueCodecFailure.resourceLimit {
+            return (nil, true)
+        }
+        guard !converted.truncated else {
+            return (nil, true)
+        }
+        let encoded: Primitive
+        do {
+            encoded = try queryPrimitive(converted.value)
+        } catch {
+            return (nil, false)
+        }
+        var source = Document()
+        source["_id"] = primitive
+        var roundTrip = Document()
+        roundTrip["_id"] = encoded
+        guard source.makeData() == roundTrip.makeData() else {
+            return (nil, false)
+        }
+        return (converted.value, false)
     }
 
     private static func queryPrimitive(
