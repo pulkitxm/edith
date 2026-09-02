@@ -424,11 +424,26 @@ import Testing
             "error: Not a Git repository: fatal: not a git repository"
         )
 
+        #expect(error.isNotGitRepository)
         #expect(
             error.localizedDescription
                 == "This folder is not a Git repository. "
                 + "Choose the project folder that contains .git."
         )
+        #expect(!QuinjetClientError.commandFailed("permission denied").isNotGitRepository)
+    }
+
+    @Test func nonRepositoryLaunchUsesTheOriginalDirectory() throws {
+        let request = try QuinjetOperationExecution.launchRequest(
+            executableURL: URL(fileURLWithPath: "/opt/homebrew/bin/quinjet"),
+            worktreePath: "/tmp/non-repository", remote: nil,
+            configuration: .default, managedByEdith: false,
+            localHomeDirectory: "/Users/pulkit")
+
+        #expect(
+            Array(request.arguments.prefix(3))
+                == ["-C", "/tmp/non-repository", "tui"])
+        #expect(request.currentDirectory == "/tmp/non-repository")
     }
 
     @Test func mapsManagedHostPayloads() {

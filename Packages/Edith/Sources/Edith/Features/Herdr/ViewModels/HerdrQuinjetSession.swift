@@ -70,15 +70,28 @@ final class HerdrQuinjetSession {
             guard let executable = CLIToolEnvironment.executable(named: "quinjet") else {
                 throw QuinjetClientError.notInstalled
             }
-            let selection = try await QuinjetOperationExecution.openSelection(
-                at: directory, remote: remote, using: client)
+            let request: QuinjetLaunchRequest
+            do {
+                let selection = try await QuinjetOperationExecution.openSelection(
+                    at: directory, remote: remote, using: client)
+                guard attempt == generation else { return }
+                worktree = selection.worktree
+                projectName = selection.projectName
+                request = try QuinjetLaunchRequest(
+                    executableURL: executable, worktreePath: selection.worktree.path,
+                    remote: remote,
+                    configuration: configuration, managedByEdith: false,
+                    localHomeDirectory: FileManager.default.homeDirectoryForCurrentUser.path)
+            } catch let error as QuinjetClientError where error.isNotGitRepository {
+                guard attempt == generation else { return }
+                worktree = nil
+                projectName = nil
+                request = try QuinjetLaunchRequest(
+                    executableURL: executable, worktreePath: directory, remote: remote,
+                    configuration: configuration, managedByEdith: false,
+                    localHomeDirectory: FileManager.default.homeDirectoryForCurrentUser.path)
+            }
             guard attempt == generation else { return }
-            worktree = selection.worktree
-            projectName = selection.projectName
-            let request = try QuinjetLaunchRequest(
-                executableURL: executable, worktreePath: selection.worktree.path, remote: remote,
-                configuration: configuration, managedByEdith: false,
-                localHomeDirectory: FileManager.default.homeDirectoryForCurrentUser.path)
             holder.reset()
             holder.start(
                 executable: request.executableURL.path, arguments: request.arguments,

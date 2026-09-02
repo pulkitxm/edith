@@ -201,6 +201,11 @@ public enum QuinjetClientError: Error, Equatable, LocalizedError {
     case commandFailed(String)
     case invalidResponse
 
+    public var isNotGitRepository: Bool {
+        guard case let .commandFailed(message) = self else { return false }
+        return message.localizedCaseInsensitiveContains("not a git repository")
+    }
+
     public var errorDescription: String? {
         switch self {
         case .notInstalled:
