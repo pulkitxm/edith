@@ -249,8 +249,9 @@ struct HomebrewMaintenanceView: View {
             HomebrewCard {
                 HStack(alignment: .top, spacing: 12) {
                     if model.isBusy {
-                        ProgressView()
-                            .controlSize(.small)
+                        SkeletonGroup {
+                            SkeletonBlock(width: 16, height: 16, corner: 8)
+                        }
                     } else {
                         Image(
                             systemName: model.errorMessage == nil
@@ -306,11 +307,7 @@ struct HomebrewMaintenanceView: View {
                 }
                 .padding(.bottom, 12)
 
-                if model.isBusy && model.packages.isEmpty {
-                    ProgressView(model.operationTitle ?? "Loading")
-                        .controlSize(.small)
-                        .frame(maxWidth: .infinity, minHeight: 180)
-                } else if model.packages.isEmpty {
+                if model.packages.isEmpty {
                     VStack(spacing: 10) {
                         Image(systemName: model.mode == .search ? "magnifyingglass" : "shippingbox")
                             .font(.system(size: 25))
@@ -375,12 +372,16 @@ struct HomebrewMaintenanceView: View {
 }
 
 struct HomebrewPageSkeleton: View {
+    @Environment(\.compactLayout) private var compact
+
     var body: some View {
         SkeletonGroup {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 190), spacing: 12)],
+                        columns: [
+                            GridItem(.adaptive(minimum: compact ? 150 : 190), spacing: 12)
+                        ],
                         spacing: 12
                     ) {
                         ForEach(0..<3, id: \.self) { index in

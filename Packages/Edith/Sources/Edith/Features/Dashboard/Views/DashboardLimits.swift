@@ -163,7 +163,9 @@ struct LimitsRefreshButton: View {
         } label: {
             Group {
                 if refreshing {
-                    ProgressView().controlSize(.mini)
+                    SkeletonGroup {
+                        SkeletonBlock(width: 16, height: 16, corner: 8)
+                    }
                 } else {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: UIScale.pt(11)))

@@ -269,9 +269,6 @@ struct DownloadSheet: View {
                 ForEach(DownloadKind.allCases, id: \.rawValue) { kind in
                     sizeChip(kind)
                 }
-                if estimating {
-                    ProgressView().controlSize(.small)
-                }
                 Spacer()
             }
             .font(.system(size: UIScale.pt(11)))
@@ -283,7 +280,14 @@ struct DownloadSheet: View {
         let selected = kind == downloadKind
         return HStack(spacing: UIScale.pt(4)) {
             Image(systemName: kind == .audio ? "waveform" : "film")
-            Text("\(kind.title) \(sizeText(kind))")
+            Text(kind.title)
+            if estimating {
+                SkeletonGroup {
+                    SkeletonBlock(width: 34, height: 8, corner: 4)
+                }
+            } else {
+                Text(sizeText(kind))
+            }
         }
         .foregroundStyle(selected ? theme : Color.secondary)
         .padding(.horizontal, UIScale.pt(8))
@@ -504,14 +508,13 @@ struct DownloadSheet: View {
                                 .font(.system(size: UIScale.pt(12)))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                         case .resolving:
-                            ProgressView()
-                                .progressViewStyle(.circular)
-                                .scaleEffect(0.55)
+                            SkeletonGroup {
+                                SkeletonBlock(width: 15, height: 15, corner: 8)
+                            }
                         case .downloading:
-                            ProgressView()
-                                .progressViewStyle(.circular)
-                                .scaleEffect(0.55)
-                                .tint(theme)
+                            SkeletonGroup {
+                                SkeletonBlock(width: 15, height: 15, corner: 8)
+                            }
                         case .done:
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.system(size: UIScale.pt(15)))
@@ -873,10 +876,19 @@ private struct DownloadThumb: View {
         ZStack {
             RoundedRectangle(cornerRadius: UIScale.pt(5)).fill(DashSkin.paper2(dark))
             if let thumb = YoutubeDownloader.thumbnailURL(for: url) {
-                AsyncImage(url: thumb) { image in
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    placeholder
+                AsyncImage(url: thumb) { phase in
+                    switch phase {
+                    case .empty:
+                        SkeletonGroup {
+                            SkeletonBlock(corner: 5)
+                        }
+                    case let .success(image):
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    case .failure:
+                        placeholder
+                    @unknown default:
+                        placeholder
+                    }
                 }
             } else {
                 placeholder

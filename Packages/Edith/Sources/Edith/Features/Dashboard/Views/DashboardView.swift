@@ -61,6 +61,8 @@ struct DashboardView: View {
                     masthead
                     if model.loaded {
                         controlsBar
+                    } else if !model.loadAttempted {
+                        DashboardControlsSkeleton(dark: dark)
                     }
                     ScrollView {
                         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
@@ -77,9 +79,8 @@ struct DashboardView: View {
                                 }
                                 .pageContent(compact)
                             } else if !model.loadAttempted {
-                                ProgressView("Loading usage data…")
-                                    .controlSize(.small)
-                                    .frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
+                                DashboardPageSkeleton(dark: dark)
+                                    .pageContent(compact)
                             } else {
                                 ContentUnavailableView(
                                     "No usage data yet", systemImage: "chart.bar",
@@ -174,13 +175,24 @@ struct DashboardView: View {
         } trailing: {
             mastheadButtons
         } accessory: {
-            WrapHStack(spacing: UIScale.pt(6), lineSpacing: 2) {
-                ForEach(metaSegments) { seg in
-                    Text(seg.text)
-                        .presenterBlur((seg.sensitive && blurMoney) || (seg.usage && blurUsage))
+            if model.loaded {
+                WrapHStack(spacing: UIScale.pt(6), lineSpacing: 2) {
+                    ForEach(metaSegments) { seg in
+                        Text(seg.text)
+                            .presenterBlur((seg.sensitive && blurMoney) || (seg.usage && blurUsage))
+                    }
                 }
+                .font(.system(size: UIScale.pt(12.5))).foregroundStyle(DashSkin.inkSoft(dark))
+            } else {
+                SkeletonGroup {
+                    HStack(spacing: UIScale.pt(8)) {
+                        SkeletonBlock(width: 112, height: 9)
+                        SkeletonBlock(width: 64, height: 9)
+                        SkeletonBlock(width: 86, height: 9)
+                    }
+                }
+                .accessibilityLabel("Loading usage summary")
             }
-            .font(.system(size: UIScale.pt(12.5))).foregroundStyle(DashSkin.inkSoft(dark))
         }
     }
 
@@ -236,7 +248,9 @@ struct DashboardView: View {
             Button(action: action) {
                 Group {
                     if isLoading {
-                        ProgressView().controlSize(.small)
+                        SkeletonGroup {
+                            SkeletonBlock(width: 18, height: 18, corner: 9)
+                        }
                     } else if let tint {
                         Image(systemName: systemImage).foregroundStyle(tint)
                     } else {
@@ -1170,5 +1184,102 @@ private struct HeatCellView: View {
                 RoundedRectangle(cornerRadius: UIScale.pt(3))
                     .strokeBorder(stroke, lineWidth: UIScale.pt(1))
             )
+    }
+}
+
+private struct DashboardControlsSkeleton: View {
+    let dark: Bool
+
+    var body: some View {
+        SkeletonGroup {
+            HStack(spacing: UIScale.pt(10)) {
+                SkeletonBlock(width: 220, height: 28, corner: 7)
+                SkeletonBlock(width: 118, height: 28, corner: 7)
+                Spacer()
+                SkeletonBlock(width: 76, height: 28, corner: 7)
+            }
+            .padding(.horizontal, PageMetrics.gutter(false))
+            .padding(.vertical, UIScale.pt(10))
+            .background(DashSkin.paper2(dark).opacity(0.45))
+        }
+        .accessibilityLabel("Loading usage controls")
+    }
+}
+
+private struct DashboardPageSkeleton: View {
+    let dark: Bool
+    @Environment(\.compactLayout) private var compact
+
+    var body: some View {
+        SkeletonGroup {
+            VStack(spacing: UIScale.pt(16)) {
+                LazyVGrid(
+                    columns: [
+                        GridItem(
+                            .adaptive(minimum: UIScale.pt(compact ? 145 : 190)),
+                            spacing: UIScale.pt(12))
+                    ],
+                    spacing: UIScale.pt(12)
+                ) {
+                    ForEach(0..<4, id: \.self) { index in
+                        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                            HStack {
+                                SkeletonBlock(width: 76, height: 8)
+                                Spacer()
+                                SkeletonBlock(width: 20, height: 20, corner: 6)
+                            }
+                            SkeletonBlock(
+                                width: index.isMultiple(of: 2) ? 94 : 68,
+                                height: 20)
+                            SkeletonBlock(width: 104, height: 8)
+                        }
+                        .padding(UIScale.pt(14))
+                        .background(
+                            DashSkin.paper2(dark),
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+                    }
+                }
+                DashboardSkeletonCard(height: 150, dark: dark, rows: 3)
+                HStack(spacing: UIScale.pt(12)) {
+                    DashboardSkeletonCard(height: 190, dark: dark, rows: 2)
+                    if !compact {
+                        DashboardSkeletonCard(height: 190, dark: dark, rows: 3)
+                    }
+                }
+                ForEach(0..<4, id: \.self) { _ in
+                    DashboardSkeletonCard(height: 220, dark: dark, rows: 1)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: UIScale.pt(240), alignment: .top)
+        .accessibilityLabel("Loading usage data")
+    }
+}
+
+private struct DashboardSkeletonCard: View {
+    let height: CGFloat
+    let dark: Bool
+    let rows: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+            HStack {
+                SkeletonBlock(width: 118, height: 10)
+                Spacer()
+                SkeletonBlock(width: 68, height: 8)
+            }
+            ForEach(0..<rows, id: \.self) { index in
+                SkeletonBlock(
+                    width: index == rows - 1 ? 176 : nil,
+                    height: index == 0 && rows == 1 ? height - 54 : 9,
+                    corner: index == 0 && rows == 1 ? 10 : 4)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(UIScale.pt(14))
+        .frame(maxWidth: .infinity, minHeight: UIScale.pt(height), alignment: .topLeading)
+        .background(
+            DashSkin.paper2(dark),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
     }
 }

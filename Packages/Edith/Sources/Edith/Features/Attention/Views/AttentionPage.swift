@@ -77,9 +77,7 @@ struct AttentionPage: View {
                         }
                     }
                 } placeholder: {
-                    ProgressView("Loading attention activity")
-                        .controlSize(.small)
-                        .frame(maxWidth: .infinity, minHeight: 240)
+                    AttentionPageSkeleton()
                 }
                 .pageContent(compact)
             }
@@ -95,6 +93,93 @@ struct AttentionPage: View {
                 await model.checkBrowser()
             }
         }
+    }
+}
+
+private struct AttentionPageSkeleton: View {
+    @Environment(\.compactLayout) private var compact
+
+    var body: some View {
+        SkeletonGroup {
+            VStack(alignment: .leading, spacing: UIScale.pt(18)) {
+                LazyVGrid(
+                    columns: [
+                        GridItem(
+                            .adaptive(minimum: UIScale.pt(compact ? 145 : 180)),
+                            spacing: UIScale.pt(12))
+                    ],
+                    spacing: UIScale.pt(12)
+                ) {
+                    ForEach(0..<4, id: \.self) { index in
+                        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                            HStack {
+                                SkeletonBlock(width: 72, height: 9)
+                                Spacer()
+                                SkeletonBlock(width: 22, height: 22, corner: 6)
+                            }
+                            SkeletonBlock(
+                                width: index.isMultiple(of: 2) ? 92 : 64,
+                                height: 20)
+                            SkeletonBlock(width: 84, height: 8)
+                        }
+                        .padding(UIScale.pt(14))
+                        .background(
+                            Color.secondary.opacity(0.06),
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+                    }
+                }
+
+                AttentionSkeletonCard(rows: 1, includesBar: true)
+                AttentionSkeletonCard(rows: 6, includesBar: false)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: UIScale.pt(240), alignment: .topLeading)
+        .accessibilityLabel("Loading attention activity")
+    }
+}
+
+private struct AttentionSkeletonCard: View {
+    let rows: Int
+    let includesBar: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            HStack {
+                VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                    SkeletonBlock(width: 136, height: 11)
+                    SkeletonBlock(width: 188, height: 8)
+                }
+                Spacer()
+                SkeletonBlock(width: 68, height: 9)
+            }
+            if includesBar {
+                SkeletonBlock(height: 12, corner: 6)
+                HStack(spacing: UIScale.pt(18)) {
+                    ForEach(0..<4, id: \.self) { _ in
+                        SkeletonBlock(width: 76, height: 8)
+                    }
+                }
+            } else {
+                ForEach(0..<rows, id: \.self) { index in
+                    if index > 0 { Divider() }
+                    HStack(spacing: UIScale.pt(12)) {
+                        SkeletonBlock(width: 24, height: 24, corner: 6)
+                        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                            SkeletonBlock(
+                                width: index.isMultiple(of: 2) ? 142 : 188,
+                                height: 9)
+                            SkeletonBlock(width: 96, height: 7)
+                        }
+                        Spacer()
+                        SkeletonBlock(width: 54, height: 9)
+                    }
+                }
+            }
+        }
+        .padding(UIScale.pt(16))
+        .background(
+            Color.secondary.opacity(0.06),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
     }
 }
 

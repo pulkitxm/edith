@@ -101,10 +101,12 @@ struct LidAwakeRows: View {
                 .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
                 if operations.applying {
                     HStack {
-                        ProgressView().controlSize(.small)
-                        Text("Applying system sleep state...")
+                        SkeletonGroup {
+                            SkeletonBlock(width: 184, height: 9, corner: 4)
+                        }
                     }
                     .settingsCaption()
+                    .accessibilityLabel("Applying system sleep state")
                 }
                 if let error = operations.errorMessage ?? operations.lastSnapshot?.lastError {
                     Text(error)

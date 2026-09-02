@@ -142,47 +142,64 @@ struct OnboardingView: View {
     private var restoreStep: some View {
         VStack(spacing: UIScale.pt(0)) {
             Spacer(minLength: 44)
-            ZStack {
-                Circle()
-                    .fill(DashSkin.accent(dark).opacity(0.13))
-                    .frame(width: UIScale.pt(106), height: UIScale.pt(106))
-                Image(systemName: restoreSymbol)
-                    .font(.system(size: UIScale.pt(40), weight: .medium))
-                    .foregroundStyle(DashSkin.accent(dark))
-            }
-            Text(restoreTitle)
-                .font(DashSkin.serif(34, weight: .bold))
-                .foregroundStyle(DashSkin.ink(dark))
-                .padding(.top, UIScale.pt(22))
-            Text(restoreDetail)
-                .font(.system(size: UIScale.pt(14)))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-                .multilineTextAlignment(.center)
-                .padding(.top, UIScale.pt(7))
-            VStack(spacing: UIScale.pt(10)) {
-                if cloudChecked {
-                    Button("Continue") { move(to: .picks, direction: 1) }
+            if cloudChecking {
+                SkeletonGroup {
+                    VStack(spacing: UIScale.pt(0)) {
+                        SkeletonBlock(width: 106, height: 106, corner: 53)
+                        SkeletonBlock(width: 178, height: 28)
+                            .padding(.top, UIScale.pt(22))
+                        VStack(spacing: UIScale.pt(6)) {
+                            SkeletonBlock(width: 410, height: 10)
+                            SkeletonBlock(width: 326, height: 10)
+                        }
+                        .padding(.top, UIScale.pt(7))
+                        SkeletonBlock(width: 230, height: 34, corner: 9)
+                            .padding(.top, UIScale.pt(26))
+                    }
+                }
+                .accessibilityLabel("Checking iCloud for a backup")
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(DashSkin.accent(dark).opacity(0.13))
+                        .frame(width: UIScale.pt(106), height: UIScale.pt(106))
+                    Image(systemName: restoreSymbol)
+                        .font(.system(size: UIScale.pt(40), weight: .medium))
+                        .foregroundStyle(DashSkin.accent(dark))
+                }
+                Text(restoreTitle)
+                    .font(DashSkin.serif(34, weight: .bold))
+                    .foregroundStyle(DashSkin.ink(dark))
+                    .padding(.top, UIScale.pt(22))
+                Text(restoreDetail)
+                    .font(.system(size: UIScale.pt(14)))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .multilineTextAlignment(.center)
+                    .padding(.top, UIScale.pt(7))
+                VStack(spacing: UIScale.pt(10)) {
+                    if cloudChecked {
+                        Button("Continue") { move(to: .picks, direction: 1) }
+                            .buttonStyle(OnboardingPrimaryButtonStyle())
+                            .keyboardShortcut(.defaultAction)
+                    } else {
+                        Button("Check for a backup") {
+                            checkForCloudBackup()
+                        }
                         .buttonStyle(OnboardingPrimaryButtonStyle())
                         .keyboardShortcut(.defaultAction)
-                } else {
-                    Button(cloudChecking ? "Checking iCloud…" : "Check for a backup") {
-                        checkForCloudBackup()
+                        Button("Start fresh") { move(to: .picks, direction: 1) }
+                            .buttonStyle(.edith(.borderless))
+                            .foregroundStyle(DashSkin.inkSoft(dark))
                     }
-                    .buttonStyle(OnboardingPrimaryButtonStyle())
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(cloudChecking)
-                    Button("Start fresh") { move(to: .picks, direction: 1) }
-                        .buttonStyle(.edith(.borderless))
-                        .foregroundStyle(DashSkin.inkSoft(dark))
                 }
-            }
-            .frame(width: UIScale.pt(230))
-            .padding(.top, UIScale.pt(26))
-            if !cloudChecked {
-                Text("macOS will ask permission to read Edith's folder in iCloud Drive.")
-                    .font(.system(size: UIScale.pt(10.5)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .padding(.top, UIScale.pt(12))
+                .frame(width: UIScale.pt(230))
+                .padding(.top, UIScale.pt(26))
+                if !cloudChecked {
+                    Text("macOS will ask permission to read Edith's folder in iCloud Drive.")
+                        .font(.system(size: UIScale.pt(10.5)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .padding(.top, UIScale.pt(12))
+                }
             }
             Spacer(minLength: 28)
         }

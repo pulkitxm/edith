@@ -419,7 +419,7 @@ struct CompanionLibraryScreen: View {
                         }
                         if model.episodes.isEmpty {
                             if !model.loaded, model.error == nil {
-                                ListRowsSkeleton(rows: 6, showsLeadingDot: false, dark: dark)
+                                CompanionEpisodeRowsSkeleton(dark: dark)
                             } else {
                                 Text("Nothing ingested yet. Drop files above to give it memory.")
                                     .font(.system(size: UIScale.pt(12)))
@@ -548,7 +548,9 @@ struct CompanionLibraryScreen: View {
                     .help("Close")
                 }
                 if model.loadingDetail {
-                    ProgressView().controlSize(.small)
+                    CompanionEpisodeDetailSkeleton(
+                        kind: model.episodes.first(where: { $0.id == model.selectedId })?.kind,
+                        dark: dark)
                 } else if let detail = model.detail {
                     preview(detail)
                 }
@@ -671,6 +673,81 @@ struct CompanionLibraryScreen: View {
                 .monospacedDigit()
                 .foregroundStyle(DashSkin.inkSoft(dark))
         }
+    }
+}
+
+private struct CompanionEpisodeRowsSkeleton: View {
+    let dark: Bool
+
+    var body: some View {
+        SkeletonGroup {
+            VStack(spacing: UIScale.pt(6)) {
+                ForEach(0..<6, id: \.self) { index in
+                    HStack(spacing: UIScale.pt(9)) {
+                        SkeletonBlock(width: 42, height: 18, corner: 5)
+                        SkeletonBlock(
+                            width: index.isMultiple(of: 2) ? 136 : 184,
+                            height: 10)
+                        Spacer(minLength: 0)
+                        SkeletonBlock(width: 68, height: 8)
+                    }
+                    .padding(.horizontal, UIScale.pt(11))
+                    .padding(.vertical, UIScale.pt(7))
+                    .background(
+                        DashSkin.paper2(dark),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(10))
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: UIScale.pt(10))
+                            .strokeBorder(DashSkin.line(dark))
+                    }
+                }
+            }
+        }
+        .accessibilityLabel("Loading memory")
+    }
+}
+
+private struct CompanionEpisodeDetailSkeleton: View {
+    let kind: String?
+    let dark: Bool
+
+    var body: some View {
+        SkeletonGroup {
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                switch kind {
+                case "pdf":
+                    SkeletonBlock(height: 320, corner: 10)
+                case "voice":
+                    HStack(spacing: UIScale.pt(8)) {
+                        SkeletonBlock(width: 28, height: 28, corner: 14)
+                        SkeletonBlock(height: 6, corner: 3)
+                        SkeletonBlock(width: 38, height: 8)
+                    }
+                    ForEach(0..<6, id: \.self) { index in
+                        SkeletonBlock(
+                            width: index == 5 ? 180 : nil,
+                            height: 8)
+                    }
+                    HStack(alignment: .bottom, spacing: UIScale.pt(4)) {
+                        ForEach(0..<16, id: \.self) { index in
+                            SkeletonBlock(
+                                height: CGFloat(10 + index % 4 * 5),
+                                corner: 2)
+                        }
+                    }
+                    .frame(height: UIScale.pt(28), alignment: .bottom)
+                default:
+                    ForEach(0..<10, id: \.self) { index in
+                        SkeletonBlock(
+                            width: index == 9 ? 156 : nil,
+                            height: 8)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .accessibilityLabel("Loading episode")
     }
 }
 

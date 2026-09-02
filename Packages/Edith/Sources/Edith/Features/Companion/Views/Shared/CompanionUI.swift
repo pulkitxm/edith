@@ -90,13 +90,16 @@ struct CompanionButton: View {
         Button(action: action) {
             HStack(spacing: UIScale.pt(6)) {
                 if busy {
-                    ProgressView()
-                        .controlSize(.small)
-                        .scaleEffect(0.7)
-                        .frame(width: UIScale.pt(12), height: UIScale.pt(12))
+                    SkeletonGroup {
+                        SkeletonBlock(
+                            width: max(48, CGFloat((busyTitle ?? title).count) * 6),
+                            height: 9,
+                            corner: 4)
+                    }
+                } else {
+                    Text(title)
+                        .font(.system(size: UIScale.pt(12), weight: .medium))
                 }
-                Text(busy ? (busyTitle ?? title) : title)
-                    .font(.system(size: UIScale.pt(12), weight: .medium))
             }
             .foregroundStyle(labelColor)
             .padding(.horizontal, UIScale.pt(12))

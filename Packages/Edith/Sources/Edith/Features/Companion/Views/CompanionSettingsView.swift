@@ -301,7 +301,11 @@ struct CompanionSettingsScreen: View {
                         } else {
                             CompanionGrid(width: proxy.size.width) {
                                 CompanionCardSkeleton(rows: 3, dark: dark)
+                                CompanionCardSkeleton(rows: 3, dark: dark)
+                                CompanionCardSkeleton(rows: 2, dark: dark)
                             } secondary: {
+                                CompanionCardSkeleton(rows: 2, dark: dark)
+                                CompanionCardSkeleton(rows: 3, dark: dark)
                                 CompanionCardSkeleton(rows: 2, dark: dark)
                             } full: {
                             }

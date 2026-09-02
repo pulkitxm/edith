@@ -72,7 +72,7 @@ struct CompanionBackendScreen: View {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 if model.hosts.isEmpty {
                     if model.probing {
-                        ListRowsSkeleton(rows: 2, showsLeadingDot: true, dark: dark)
+                        CompanionHostRowsSkeleton()
                     } else {
                         Text("No machines found yet.")
                             .font(.system(size: UIScale.pt(12)))
@@ -339,6 +339,35 @@ struct CompanionBackendScreen: View {
             CompanionFieldLabel(text: label)
             EdithNumberField(value: value, width: UIScale.pt(84))
         }
+    }
+}
+
+private struct CompanionHostRowsSkeleton: View {
+    var body: some View {
+        SkeletonGroup {
+            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                ForEach(0..<2, id: \.self) { index in
+                    HStack(alignment: .top, spacing: UIScale.pt(9)) {
+                        SkeletonBlock(width: 13, height: 13, corner: 7)
+                            .padding(.top, UIScale.pt(3))
+                        VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                            HStack(spacing: UIScale.pt(7)) {
+                                SkeletonBlock(
+                                    width: index == 0 ? 92 : 124,
+                                    height: 10)
+                                SkeletonBlock(width: 52, height: 16, corner: 8)
+                            }
+                            SkeletonBlock(width: 232, height: 8)
+                            if index == 1 {
+                                SkeletonBlock(width: 184, height: 8)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+        }
+        .accessibilityLabel("Probing companion hosts")
     }
 }
 

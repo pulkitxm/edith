@@ -151,11 +151,13 @@ struct CompanionDeskScreen: View {
                             .foregroundStyle(DashSkin.warn)
                     }
                     if !model.loaded, model.error == nil {
+                        CompanionCardSkeleton(rows: 1, dark: dark)
                         CompanionGrid(width: proxy.size.width) {
-                            CompanionCardSkeleton(rows: 2, dark: dark)
+                            CompanionCardSkeleton(rows: 3, dark: dark)
                         } secondary: {
                             CompanionCardSkeleton(rows: 2, dark: dark)
                         } full: {
+                            CompanionCardSkeleton(rows: 3, dark: dark)
                         }
                     } else {
                         questionCard

@@ -120,7 +120,11 @@ struct CompanionMindScreen: View {
                             CompanionCardSkeleton(rows: 3, dark: dark)
                         } secondary: {
                             CompanionCardSkeleton(rows: 2, dark: dark)
+                            CompanionCardSkeleton(rows: 2, dark: dark)
                         } full: {
+                            CompanionCardSkeleton(rows: 3, dark: dark)
+                            CompanionCardSkeleton(rows: 2, dark: dark)
+                            CompanionCardSkeleton(rows: 3, dark: dark)
                         }
                     } else {
                         CompanionGrid(width: proxy.size.width) {
@@ -468,6 +472,7 @@ private struct MindDetailSheet: View {
     let openEpisode: (String) -> Void
     let close: () -> Void
     @State private var episodeRefs: [(String, String)] = []
+    @State private var episodeRefsLoaded = false
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Environment(\.companionGeneration) private var generation
 
@@ -494,6 +499,7 @@ private struct MindDetailSheet: View {
             }
         }
         episodeRefs = refs
+        episodeRefsLoaded = true
     }
 
     var body: some View {
@@ -521,7 +527,11 @@ private struct MindDetailSheet: View {
         .frame(width: UIScale.pt(460), height: UIScale.pt(360), alignment: .topLeading)
         .background(DashSkin.paper(dark))
         .task(id: generation) {
-            if requestsEnabled { await loadRefs() }
+            if requestsEnabled {
+                await loadRefs()
+            } else {
+                episodeRefsLoaded = true
+            }
         }
     }
 
@@ -532,10 +542,20 @@ private struct MindDetailSheet: View {
                 .tracking(0.9)
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .padding(.top, UIScale.pt(4))
-            if episodeRefs.isEmpty {
-                Text("Loading the involved episodes…")
-                    .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+            if !episodeRefsLoaded {
+                SkeletonGroup {
+                    VStack(alignment: .leading, spacing: UIScale.pt(7)) {
+                        ForEach(0..<3, id: \.self) { index in
+                            HStack(spacing: UIScale.pt(6)) {
+                                SkeletonBlock(width: 10, height: 12, corner: 2)
+                                SkeletonBlock(
+                                    width: index.isMultiple(of: 2) ? 176 : 132,
+                                    height: 9)
+                            }
+                        }
+                    }
+                }
+                .accessibilityLabel("Loading the involved episodes")
             }
             ForEach(Array(episodeRefs.enumerated()), id: \.offset) { _, ref in
                 Button {
