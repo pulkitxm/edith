@@ -197,6 +197,30 @@ struct NetworkSparkline: View {
     }
 }
 
+struct NetworkSpeedLoadingSkeleton: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            HStack(spacing: UIScale.pt(12)) {
+                speed(labelWidth: 54, valueWidth: 78)
+                speed(labelWidth: 42, valueWidth: 68)
+            }
+            SkeletonBlock(height: 34, corner: 6)
+            SkeletonBlock(width: 116, height: 11, corner: 3)
+        }
+    }
+
+    private func speed(labelWidth: Double, valueWidth: Double) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+            HStack(spacing: UIScale.pt(4)) {
+                SkeletonBlock(width: 9, height: 9, corner: 2)
+                SkeletonBlock(width: labelWidth, height: 10, corner: 3)
+            }
+            SkeletonBlock(width: valueWidth, height: 18, corner: 4)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 struct NetworkMetricCard: View {
     let measurement: InternetSpeedMeasurement?
     let downloadHistory: [Double]
@@ -207,6 +231,19 @@ struct NetworkMetricCard: View {
     let refresh: () -> Void
 
     var body: some View {
+        Group {
+            if isTesting {
+                SkeletonGroup { cardContent }
+            } else {
+                cardContent
+            }
+        }
+        .padding(UIScale.pt(14))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .widgetBar(cornerRadius: 14, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
+    }
+
+    private var cardContent: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             HStack(alignment: .center) {
                 Text("INTERNET SPEED")
@@ -215,8 +252,7 @@ struct NetworkMetricCard: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 Spacer()
                 if isTesting {
-                    ProgressView()
-                        .controlSize(.small)
+                    SkeletonBlock(width: 13, height: 13, corner: 4)
                 } else {
                     Button(action: refresh) {
                         Image(systemName: "arrow.clockwise")
@@ -226,23 +262,26 @@ struct NetworkMetricCard: View {
                     .help("Test again")
                 }
             }
-            HStack(spacing: UIScale.pt(12)) {
-                speed(
-                    "Download", value: measurement?.downloadBitsPerSecond,
-                    systemImage: "arrow.down", color: DashSkin.networkDownload)
-                speed(
-                    "Upload", value: measurement?.uploadBitsPerSecond,
-                    systemImage: "arrow.up", color: DashSkin.networkUpload)
+            if isTesting, measurement == nil {
+                NetworkSpeedLoadingSkeleton()
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Testing internet speed")
+            } else {
+                HStack(spacing: UIScale.pt(12)) {
+                    speed(
+                        "Download", value: measurement?.downloadBitsPerSecond,
+                        systemImage: "arrow.down", color: DashSkin.networkDownload)
+                    speed(
+                        "Upload", value: measurement?.uploadBitsPerSecond,
+                        systemImage: "arrow.up", color: DashSkin.networkUpload)
+                }
+                NetworkSparkline(
+                    downloadValues: downloadHistory, uploadValues: uploadHistory
+                )
+                .frame(height: UIScale.pt(34))
+                status
             }
-            NetworkSparkline(
-                downloadValues: downloadHistory, uploadValues: uploadHistory
-            )
-            .frame(height: UIScale.pt(34))
-            status
         }
-        .padding(UIScale.pt(14))
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .widgetBar(cornerRadius: 14, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
     }
 
     private func speed(
@@ -268,9 +307,11 @@ struct NetworkMetricCard: View {
     @ViewBuilder
     private var status: some View {
         if isTesting {
-            Text(measurement == nil ? "Testing this machine" : "Testing again")
-                .font(.system(size: UIScale.pt(10.5)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+            ZStack(alignment: .leading) {
+                SkeletonBlock(width: 74, height: 11, corner: 3)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Testing internet speed again")
         } else if let error {
             Text(error)
                 .font(.system(size: UIScale.pt(10.5)))

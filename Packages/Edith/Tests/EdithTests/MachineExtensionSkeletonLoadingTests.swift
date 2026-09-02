@@ -34,6 +34,10 @@ import Testing
             "Machines/ViewModels/FilePreviewModel.swift": ["FilePreviewLoadingSkeleton"],
             "Machines/Views/DockerConsoleViews.swift": ["DockerContainerRowsSkeleton"],
             "Machines/Views/MachineProcessesTab.swift": ["MachineProcessRowsSkeleton"],
+            "Machines/Views/MachineOverviewTab.swift": ["NetworkSpeedLoadingSkeleton"],
+            "Machines/Views/MachineSkeletons.swift": [
+                "MetricsGridLayout", "NetworkMetricCardSkeleton",
+            ],
             "Machines/Views/MachineTerminalTab.swift": ["TerminalLoadingSkeleton"],
             "Quinjet/Views/QuinjetMachineProjectPicker.swift": [
                 "QuinjetPreparingMachineSkeleton", "QuinjetProjectGridSkeleton",
@@ -64,6 +68,17 @@ import Testing
 
         #expect(!flavors.contains(.generic))
         #expect(Set(flavors.map(\.rawValue)).count == HerdrKind.filterLabels.count)
+    }
+
+    @Test func networkRetestsKeepTheLastMeasurementVisible() throws {
+        let source = try String(
+            contentsOf: featuresRoot.appendingPathComponent(
+                "Machines/Views/MachineOverviewTab.swift"),
+            encoding: .utf8
+        )
+
+        #expect(source.contains("if isTesting, measurement == nil"))
+        #expect(source.contains("NetworkSpeedLoadingSkeleton()"))
     }
 
     @Test @MainActor func dockerProcessFailureEndsTheLoadingState() async {

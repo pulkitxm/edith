@@ -8,7 +8,7 @@ private struct SkeletonCard<Content: View>: View {
     var body: some View {
         content
             .padding(UIScale.pt(14))
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .widgetBar(cornerRadius: 14, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
     }
 }
@@ -27,6 +27,23 @@ struct MetricCardSkeleton: View {
                 SkeletonBlock(height: 6, corner: 3)
                 SkeletonBlock(height: 46, corner: 8)
                 SkeletonBlock(width: 78, height: 9)
+            }
+        }
+    }
+}
+
+struct NetworkMetricCardSkeleton: View {
+    let dark: Bool
+
+    var body: some View {
+        SkeletonCard(dark: dark) {
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                HStack {
+                    SkeletonBlock(width: 86, height: 10, corner: 3)
+                    Spacer()
+                    SkeletonBlock(width: 13, height: 13, corner: 4)
+                }
+                NetworkSpeedLoadingSkeleton()
             }
         }
     }
@@ -78,14 +95,10 @@ struct MachineOverviewSkeleton: View {
         SkeletonGroup {
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                 BannerSkeleton(dark: dark)
-                LazyVGrid(
-                    columns: [
-                        GridItem(.flexible(), spacing: UIScale.pt(12)),
-                        GridItem(.flexible(), spacing: UIScale.pt(12)),
-                    ], spacing: UIScale.pt(12)
-                ) {
+                MetricsGridLayout(spacing: UIScale.pt(12)) {
                     MetricCardSkeleton(dark: dark)
                     MetricCardSkeleton(dark: dark)
+                    NetworkMetricCardSkeleton(dark: dark)
                 }
                 MeterRowsSkeleton(title: "Storage", rows: 2, dark: dark)
                 SkinCard(title: "Host", dark: dark) {
