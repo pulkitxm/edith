@@ -395,6 +395,13 @@ enum AppMaintenanceSection: String, CaseIterable, Identifiable {
         }
     }
 
+    var usesApplicationInventory: Bool {
+        switch self {
+        case .packages, .cleaner: false
+        case .updates, .removal, .history: true
+        }
+    }
+
     var summary: String {
         switch self {
         case .updates: "Review and run available application updates."
@@ -539,7 +546,7 @@ struct AppMaintenanceView: View {
                         .font(.system(size: UIScale.pt(12)))
                         .foregroundStyle(.secondary)
                     Spacer()
-                    if section != .packages {
+                    if section.usesApplicationInventory {
                         Button {
                             showingUpdateSettings.toggle()
                         } label: {
@@ -582,9 +589,10 @@ struct AppMaintenanceView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if section == .cleaner {
             ScrollView {
-                CleanerCard(dark: scheme == .dark)
+                CleanerCard(dark: scheme == .dark, framed: false)
                     .pageContent(compact)
             }
+            .scrollIndicators(.never)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if model.phase == .loading {
             AppMaintenanceSectionSkeleton(section: section)

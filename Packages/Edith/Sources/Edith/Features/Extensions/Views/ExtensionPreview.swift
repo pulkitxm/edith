@@ -40,6 +40,10 @@ struct ExtensionPreview: View {
         case "focusDim": focusDimPreview(phase: phase)
         case "presenter": presenterPreview(phase: phase)
         case "colorPicker": colorPickerPreview(phase: phase)
+        case "homebrew": homebrewPreview(phase: phase)
+        case "cleaner": cleanerPreview(phase: phase)
+        case "downloads": downloadsPreview(phase: phase)
+        case "audioMixer": audioMixerPreview(phase: phase)
         default: staticPreview
         }
     }
@@ -562,6 +566,146 @@ struct ExtensionPreview: View {
             red: lower.red + (upper.red - lower.red) * amount,
             green: lower.green + (upper.green - lower.green) * amount,
             blue: lower.blue + (upper.blue - lower.blue) * amount)
+    }
+
+    private func homebrewPreview(phase: Double) -> some View {
+        let active = Int(phase * 1.4) % 3
+        let labels = ["formula", "cask", "tap"]
+        return VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+            ForEach(0..<3) { index in
+                HStack(spacing: UIScale.pt(7)) {
+                    Image(systemName: index == 2 ? "spigot" : "shippingbox.fill")
+                        .font(.system(size: UIScale.pt(8)))
+                        .foregroundStyle(
+                            index == active ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
+                        )
+                        .frame(width: UIScale.pt(12))
+                    Text(labels[index])
+                        .font(DashSkin.mono(7, weight: .medium))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                    RoundedRectangle(cornerRadius: UIScale.pt(2))
+                        .fill(
+                            index == active
+                                ? DashSkin.accent(dark).opacity(0.65)
+                                : DashSkin.lineStrong(dark)
+                        )
+                        .frame(width: UIScale.pt(Double(34 - index * 6)), height: UIScale.pt(5))
+                    Spacer(minLength: 0)
+                    Text(index == active ? "↑" : "✓")
+                        .font(DashSkin.mono(7, weight: .semibold))
+                        .foregroundStyle(
+                            index == active ? DashSkin.accent(dark) : DashSkin.sage)
+                }
+            }
+        }
+        .padding(.horizontal, UIScale.pt(16))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func cleanerPreview(phase: Double) -> some View {
+        let reclaimed = CGFloat(0.35 + (sin(phase * 1.6) + 1) * 0.22)
+        return VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+            HStack {
+                Text("RECLAIMABLE")
+                    .font(DashSkin.mono(7, weight: .semibold))
+                Spacer()
+                Text("\(Int(reclaimed * 48)) GB")
+                    .font(DashSkin.mono(8, weight: .medium))
+                    .foregroundStyle(DashSkin.accent(dark))
+            }
+            GeometryReader { proxy in
+                HStack(spacing: UIScale.pt(3)) {
+                    ForEach(0..<4) { index in
+                        let share = [0.42, 0.26, 0.19, 0.13][index]
+                        RoundedRectangle(cornerRadius: UIScale.pt(2))
+                            .fill(
+                                index == 0
+                                    ? DashSkin.accent(dark)
+                                    : DashSkin.accent(dark).opacity(0.55 - Double(index) * 0.14)
+                            )
+                            .frame(
+                                width: max(
+                                    6, proxy.size.width * reclaimed * share * 2.1))
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            .frame(height: UIScale.pt(7))
+            HStack(spacing: UIScale.pt(8)) {
+                ForEach(["caches", "logs", "builds"], id: \.self) { label in
+                    Text(label)
+                        .font(DashSkin.mono(6.5))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                }
+            }
+        }
+        .foregroundStyle(DashSkin.inkSoft(dark))
+        .padding(.horizontal, UIScale.pt(15))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func downloadsPreview(phase: Double) -> some View {
+        let progress = [0.82, 0.46, 0.0]
+        let pulse = CGFloat(0.46 + (sin(phase * 2.4) + 1) * 0.18)
+        return VStack(spacing: UIScale.pt(5)) {
+            ForEach(0..<3) { index in
+                HStack(spacing: UIScale.pt(7)) {
+                    Image(
+                        systemName: index == 2
+                            ? "clock" : (index == 0 ? "checkmark.circle.fill" : "arrow.down")
+                    )
+                    .font(.system(size: UIScale.pt(8)))
+                    .foregroundStyle(index == 0 ? DashSkin.sage : DashSkin.accent(dark))
+                    .frame(width: UIScale.pt(12))
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(DashSkin.lineStrong(dark))
+                            Capsule()
+                                .fill(index == 0 ? DashSkin.sage : DashSkin.accent(dark))
+                                .frame(
+                                    width: max(
+                                        0,
+                                        proxy.size.width
+                                            * (index == 1 ? pulse : progress[index])))
+                        }
+                    }
+                    .frame(height: UIScale.pt(5))
+                }
+            }
+        }
+        .padding(.horizontal, UIScale.pt(16))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func audioMixerPreview(phase: Double) -> some View {
+        let levels = (0..<4).map { index in
+            CGFloat(0.3 + (sin(phase * 2.2 + Double(index) * 0.9) + 1) * 0.32)
+        }
+        return HStack(alignment: .bottom, spacing: UIScale.pt(10)) {
+            ForEach(0..<4) { index in
+                VStack(spacing: UIScale.pt(4)) {
+                    ZStack(alignment: .bottom) {
+                        Capsule()
+                            .fill(DashSkin.lineStrong(dark))
+                            .frame(width: UIScale.pt(4))
+                        Capsule()
+                            .fill(
+                                index == 1
+                                    ? DashSkin.accent(dark)
+                                    : DashSkin.accent(dark).opacity(0.5)
+                            )
+                            .frame(width: UIScale.pt(4), height: UIScale.pt(26) * levels[index])
+                    }
+                    .frame(height: UIScale.pt(26))
+                    Circle()
+                        .fill(
+                            index == 1 ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
+                        )
+                        .frame(width: UIScale.pt(5), height: UIScale.pt(5))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var staticPreview: some View {

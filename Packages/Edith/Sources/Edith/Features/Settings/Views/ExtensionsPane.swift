@@ -171,7 +171,8 @@ struct ExtensionsPane: View {
                 ForEach(visibleSuites, id: \.suite.id) { group in
                     VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                         SuiteHeader(
-                            suite: group.suite, dark: colorScheme == .dark,
+                            suite: group.suite, abilities: group.abilities,
+                            dark: colorScheme == .dark,
                             setEnabled: { setSuiteEnabled($0, for: group.suite) })
                         LazyVGrid(columns: gridColumns, spacing: UIScale.pt(14)) {
                             ForEach(group.abilities) { entry in
@@ -292,12 +293,17 @@ struct ExtensionsPane: View {
 
 private struct SuiteHeader: View {
     let suite: SuiteDescriptor
+    let abilities: [ExtensionRegistryEntry]
     let dark: Bool
     let setEnabled: (Bool) -> Void
     @ExtensionEnablementStorage private var enabled: Bool
 
-    init(suite: SuiteDescriptor, dark: Bool, setEnabled: @escaping (Bool) -> Void) {
+    init(
+        suite: SuiteDescriptor, abilities: [ExtensionRegistryEntry], dark: Bool,
+        setEnabled: @escaping (Bool) -> Void
+    ) {
         self.suite = suite
+        self.abilities = abilities
         self.dark = dark
         self.setEnabled = setEnabled
         _enabled = ExtensionEnablementStorage(defaultsKey: suite.defaultsKey)
@@ -307,11 +313,15 @@ private struct SuiteHeader: View {
         Binding(get: { enabled }, set: setEnabled)
     }
 
+    private var onCount: Int {
+        abilities.filter { $0.isEnabled(in: SharedDefaults.store) }.count
+    }
+
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(9)) {
+        HStack(alignment: .center, spacing: UIScale.pt(10)) {
             Image(systemName: suite.symbolName)
                 .font(.system(size: UIScale.pt(13), weight: .semibold))
-                .foregroundStyle(enabled ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
+                .foregroundStyle(enabled ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                 .frame(width: UIScale.pt(18))
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(suite.title)
@@ -320,9 +330,23 @@ private struct SuiteHeader: View {
                 Text(suite.subtitle)
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(DashSkin.inkSoft(dark))
-                    .lineLimit(2)
+                    .lineLimit(1)
             }
-            Spacer(minLength: 0)
+            .fixedSize(horizontal: true, vertical: false)
+            Rectangle()
+                .fill(DashSkin.line(dark))
+                .frame(height: UIScale.pt(1))
+                .frame(minWidth: UIScale.pt(24))
+            Text(enabled ? "\(onCount) of \(abilities.count) on" : "off")
+                .font(DashSkin.mono(10, weight: .medium))
+                .foregroundStyle(enabled ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
+                .padding(.horizontal, UIScale.pt(7))
+                .padding(.vertical, UIScale.pt(3))
+                .background(
+                    (enabled ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)).opacity(0.12),
+                    in: Capsule()
+                )
+                .fixedSize()
             Toggle("", isOn: enabledBinding)
                 .labelsHidden()
                 .toggleStyle(.switch)

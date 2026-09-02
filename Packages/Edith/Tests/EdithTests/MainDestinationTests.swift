@@ -130,6 +130,6 @@ import Testing
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
         #expect(source.contains("value: sidebarUtilityVisibility"))
-        #expect(source.components(separatedBy: ".transition(sidebarUtilityTransition)").count == 5)
+        #expect(source.components(separatedBy: ".transition(sidebarUtilityTransition)").count == 6)
     }
 }

@@ -310,39 +310,18 @@ final class CleanerModel {
 
 struct CleanerCard: View {
     let dark: Bool
+    var framed = true
     @State private var model = CleanerModel.shared
     @State private var showDrivePicker = false
     @State private var pickerScans = false
     @State private var confirmClean = false
 
     var body: some View {
-        SkinCard(title: "Reclaim developer space", dark: dark) {
-            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                if !model.scanned && !model.scanning {
-                    intro
-                } else {
-                    header
-                    if model.logsExpanded { logView }
-                    if model.scanned {
-                        drivesView
-                        if !model.categories.isEmpty {
-                            searchBar
-                            selectAllRow
-                            ForEach(model.filteredCategories) { category in
-                                CleanerCategoryRow(model: model, category: category, dark: dark)
-                            }
-                            footer
-                        } else {
-                            Text("Nothing to clean. You're already tidy.")
-                                .font(.system(size: UIScale.pt(12))).foregroundStyle(
-                                    DashSkin.inkFaint(dark))
-                        }
-                    }
-                }
-                if model.lastReclaimed > 0 {
-                    Text("Reclaimed \(JunkScanner.format(model.lastReclaimed)) last clean.")
-                        .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.sage)
-                }
+        Group {
+            if framed {
+                SkinCard(title: "Reclaim developer space", dark: dark) { content }
+            } else {
+                content
             }
         }
         .sheet(isPresented: $showDrivePicker) {
@@ -362,6 +341,36 @@ struct CleanerCard: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Items go to the Trash, so you can restore them until you empty it.")
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            if !model.scanned && !model.scanning {
+                intro
+            } else {
+                header
+                if model.logsExpanded { logView }
+                if model.scanned {
+                    drivesView
+                    if !model.categories.isEmpty {
+                        searchBar
+                        selectAllRow
+                        ForEach(model.filteredCategories) { category in
+                            CleanerCategoryRow(model: model, category: category, dark: dark)
+                        }
+                        footer
+                    } else {
+                        Text("Nothing to clean. You're already tidy.")
+                            .font(.system(size: UIScale.pt(12)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                    }
+                }
+            }
+            if model.lastReclaimed > 0 {
+                Text("Reclaimed \(JunkScanner.format(model.lastReclaimed)) last clean.")
+                    .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.sage)
+            }
         }
     }
 

@@ -2328,3 +2328,53 @@ enum MusicBarProgress {
         return min(1, max(0, elapsed / duration))
     }
 }
+
+struct MusicSidebarPill: View {
+    let theme: Color
+    let expand: () -> Void
+    @State private var remote = MusicRemote.shared
+    @ObservedObject private var visibility = WindowVisibility.shared
+
+    private var progress: Double {
+        MusicBarProgress.fraction(elapsed: remote.elapsed, duration: remote.duration)
+    }
+
+    var body: some View {
+        Button(action: expand) {
+            VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                HStack(spacing: UIScale.pt(7)) {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: UIScale.pt(9), weight: .semibold))
+                        .foregroundStyle(theme)
+                    Text(remote.current?.title ?? "Nothing playing")
+                        .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    if remote.current != nil {
+                        PlaybackWave(
+                            playing: remote.isPlaying && visibility.visible,
+                            color: theme.opacity(0.9), maxHeight: UIScale.pt(9))
+                    }
+                }
+                if remote.current != nil {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.primary.opacity(0.12))
+                            Capsule()
+                                .fill(theme)
+                                .frame(width: max(2, geo.size.width * progress))
+                        }
+                    }
+                    .frame(height: UIScale.pt(2))
+                }
+            }
+            .padding(.horizontal, UIScale.pt(9))
+            .padding(.vertical, UIScale.pt(7))
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+        }
+        .buttonStyle(.edith(.borderless))
+        .help("Show the player bar")
+        .accessibilityLabel("Show the player bar")
+    }
+}

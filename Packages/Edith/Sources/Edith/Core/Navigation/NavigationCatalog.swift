@@ -104,7 +104,7 @@ enum NavigationCatalog {
             logoName: "herdr", band: .suite(.agents), abilityIDs: ["herdr"]),
         SidebarPage(
             id: "quinjet", title: "Review", symbolName: "arrow.triangle.branch",
-            band: .suite(.agents), abilityIDs: ["quinjet"], parentID: "herdr"),
+            band: .suite(.agents), abilityIDs: ["quinjet"]),
         SidebarPage(
             id: "companion", title: "Memory", symbolName: "brain.head.profile",
             band: .suite(.agents), abilityIDs: ["companion"]),

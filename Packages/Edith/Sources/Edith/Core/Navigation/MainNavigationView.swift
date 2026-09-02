@@ -383,6 +383,8 @@ struct MainWindowView: View {
         var mediaSuite = false
     @AppStorage(AppStorageKeys.Music.barAutoHide, store: SharedDefaults.store) private
         var musicBarAutoHide = false
+    @AppStorage(AppStorageKeys.Music.barCollapsed, store: SharedDefaults.store) private
+        var musicBarCollapsed = false
     @AppStorage(AppStorageKeys.Suites.data, store: SharedDefaults.store) private
         var dataSuite = false
     @AppStorage(AppStorageKeys.Tabs.databaseEnabled, store: SharedDefaults.store) private
@@ -512,7 +514,7 @@ struct MainWindowView: View {
             let bandHeight = Self.chromeHeight + UIScale.pt(10)
             VStack(spacing: 0) {
                 mainArea(bandHeight)
-                if musicFooterVisible {
+                if musicFooterVisible, !musicBarCollapsed {
                     MusicFooter()
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -526,7 +528,11 @@ struct MainWindowView: View {
             )
             .animation(
                 Motion.animation(Motion.glide, reduceMotion: reduceMotion),
-                value: footerVisible)
+                value: footerVisible
+            )
+            .animation(
+                Motion.animation(Motion.glide, reduceMotion: reduceMotion),
+                value: musicBarCollapsed)
         }
         .background(historyShortcuts)
         .onExitCommand { InputFocus.resignEditing() }
@@ -757,7 +763,7 @@ struct MainWindowView: View {
 
     private var footerVisible: Bool {
         sidebarUtilityVisibility.hasActions || permissionsNeedAttention
-            || updater.updateReady != nil
+            || updater.updateReady != nil || (musicFooterVisible && musicBarCollapsed)
     }
 
     private var sidebarUtilityVisibility: SidebarUtilityVisibility {
@@ -1030,6 +1036,16 @@ struct MainWindowView: View {
 
     private var sidebarFooter: some View {
         VStack(spacing: UIScale.pt(8)) {
+            if musicFooterVisible, musicBarCollapsed {
+                MusicSidebarPill(theme: theme) {
+                    withAnimation(
+                        Motion.animation(Motion.glide, reduceMotion: reduceMotion)
+                    ) {
+                        musicBarCollapsed = false
+                    }
+                }
+                .transition(sidebarUtilityTransition)
+            }
             if let version = updater.updateReady {
                 updateReadyPill(version)
             }
