@@ -643,7 +643,9 @@ private struct ExtensionLifecycleRows: View {
                     }
                     .disabled(readiness.isRefreshing)
                 } else {
+                    let loading = ExtensionLifecycleState.loading(extensionID: entry.id)
                     ExtensionReadinessSkeleton()
+                        .accessibilityLabel("\(loading.runtimePhase.title) readiness")
                 }
             }
             if let lifecycle = entry.lifecycle {
