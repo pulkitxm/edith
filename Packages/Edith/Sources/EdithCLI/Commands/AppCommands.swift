@@ -52,6 +52,27 @@ enum AppInspectionCLI {
             "uptimeSeconds": .int(diagnostics.uptimeSeconds),
             "uptime": .string(diagnostics.uptimeText),
             "idleWakeups": .int(diagnostics.idleWakeups),
+            "agent": agentJSON(),
+        ])
+    }
+
+    static func agentJSON() -> JSONValue {
+        let state = AgentRegistrationState.current
+        guard let snapshot = try? AgentClient.shared.runtimeSnapshot() else {
+            return .object([
+                "state": .string(state.rawValue), "running": .bool(false),
+                "protocolVersion": .int(AgentService.protocolVersion),
+            ])
+        }
+        return .object([
+            "state": .string(state.rawValue), "running": .bool(true),
+            "build": .string(snapshot.build),
+            "pid": .int(Int(snapshot.processIdentifier)),
+            "uptimeSeconds": .int(Int(snapshot.uptime)),
+            "residentBytes": .int(Int(snapshot.residentBytes)),
+            "subscribers": .int(snapshot.subscriberCount),
+            "schemaVersion": .int(snapshot.schemaVersion),
+            "protocolVersion": .int(AgentService.protocolVersion),
         ])
     }
 
@@ -146,6 +167,7 @@ struct AppDiagnosticsCommand: AsyncParsableCommand {
                         ["uptime", diagnostics.uptimeText],
                         ["idle wakeups", String(diagnostics.idleWakeups)],
                         ["bundle path", diagnostics.info.bundlePath],
+                        ["agent", AgentRegistrationState.current.title],
                     ]))
         }
     }

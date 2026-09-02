@@ -1,0 +1,95 @@
+import CoreGraphics
+import EdithKit
+import Foundation
+import os
+
+public enum AgentLog {
+    public static let subsystem = "com.pulkit.edith.agent"
+    public static let logger = Logger(subsystem: subsystem, category: "runtime")
+}
+
+public enum AgentBoot {
+    public static func build() -> String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+            ?? ProcessInfo.processInfo.environment["EDITH_AGENT_BUILD"] ?? "development"
+    }
+
+    public static func makeStore(build: String) -> AgentStore? {
+        do {
+            return try AgentStore(url: AgentStoreLayout.storeURL(), build: build)
+        } catch {
+            AgentLog.logger.error(
+                "store unavailable: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    public static func start() -> (runtime: AgentRuntime, hub: AgentHub, scheduler: JobScheduler) {
+        let build = build()
+        let store = makeStore(build: build)
+        let runtime = AgentRuntime(build: build, store: store)
+        let scheduler = JobScheduler(
+            publish: { topic, payload in
+                Task { await runtime.publish(topic: topic, payload: payload) }
+            },
+            power: LivePowerSource(),
+            pauseAmbientOnBattery: SharedDefaults.store.bool(
+                forKey: AgentSettingsKeys.pauseAmbientOnBattery))
+        let hub = AgentHub(runtime: runtime)
+        Task {
+            await runtime.attach(scheduler: scheduler)
+            for job in AgentJobCatalog.jobs(store: store) {
+                await scheduler.register(job)
+            }
+            await scheduler.start()
+        }
+        hub.resume()
+        AgentLog.logger.info("edithd \(build, privacy: .public) listening")
+        return (runtime, hub, scheduler)
+    }
+}
+
+public struct LivePowerSource: AgentPowerSource {
+    public init() {}
+
+    public var isOnBattery: Bool {
+        PowerState.isOnBattery()
+    }
+
+    public var isScreenLocked: Bool {
+        PowerState.isScreenLocked()
+    }
+}
+
+enum PowerState {
+    static func isOnBattery() -> Bool {
+        guard
+            let output = try? Shell.capture(
+                "/usr/bin/pmset", arguments: ["-g", "batt"])
+        else { return false }
+        return output.contains("Battery Power")
+    }
+
+    static func isScreenLocked() -> Bool {
+        guard
+            let session = CGSessionCopyCurrentDictionary() as? [String: Any],
+            let locked = session["CGSSessionScreenIsLocked"] as? Int
+        else { return false }
+        return locked == 1
+    }
+}
+
+enum Shell {
+    static func capture(_ path: String, arguments: [String]) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = arguments
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+}

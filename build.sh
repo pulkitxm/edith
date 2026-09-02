@@ -147,13 +147,19 @@ SWIFT_CONFIGURATION=debug
 [ "$CONFIG" = Release ] && SWIFT_CONFIGURATION=release
 "$SWIFT_BIN" build --package-path Packages/Edith --configuration "$SWIFT_CONFIGURATION" \
   --product EdithLidAwakeHelper
-PRIVILEGED_HELPER_BUILD="$($SWIFT_BIN build --package-path Packages/Edith \
-  --configuration "$SWIFT_CONFIGURATION" --show-bin-path)/EdithLidAwakeHelper"
+"$SWIFT_BIN" build --package-path Packages/Edith --configuration "$SWIFT_CONFIGURATION" \
+  --product edithd
+SWIFT_BIN_PATH="$($SWIFT_BIN build --package-path Packages/Edith \
+  --configuration "$SWIFT_CONFIGURATION" --show-bin-path)"
+PRIVILEGED_HELPER_BUILD="$SWIFT_BIN_PATH/EdithLidAwakeHelper"
+AGENT_BUILD="$SWIFT_BIN_PATH/edithd"
 
 APP="dist/Edith.app"
 HELPER="$APP/Contents/Library/LoginItems/Edith.app"
 PRIVILEGED_HELPER="$APP/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake"
 LAUNCH_DAEMONS="$APP/Contents/Library/LaunchDaemons"
+LAUNCH_AGENTS="$APP/Contents/Library/LaunchAgents"
+AGENT="$APP/Contents/MacOS/edithd"
 rm -rf dist && mkdir -p dist
 ditto "$BUILT" "$APP"
 rm -f "$APP/Contents/MacOS/edh"
@@ -171,9 +177,11 @@ rm -rf "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
 ln -s ../../../../../Resources/Edith_EdithKit.bundle \
   "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
 
-mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS"
+mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS" "$LAUNCH_AGENTS"
 cp "$PRIVILEGED_HELPER_BUILD" "$PRIVILEGED_HELPER"
 cp Resources/com.pulkit.edith.lidawake.v2.plist "$LAUNCH_DAEMONS/"
+cp "$AGENT_BUILD" "$AGENT"
+cp Resources/com.pulkit.edith.agent.plist "$LAUNCH_AGENTS/"
 
 find "$APP" -type f -perm -u+x -print0 \
   | while IFS= read -r -d '' binary; do
@@ -219,6 +227,8 @@ sign_tool() {
 
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
   --identifier com.pulkit.edith.lidawake "$PRIVILEGED_HELPER"
+codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
+  --identifier com.pulkit.edith.agent "$AGENT"
 for library in "$APP"/Contents/Frameworks/*.dylib "$HELPER"/Contents/Frameworks/*.dylib; do
   [ -e "$library" ] || continue
   sign_tool "$library"
@@ -258,6 +268,7 @@ stop_installed_app() {
   stop_process "$installed_helper"
   stop_process "com.pulkit.edith.helper"
   stop_process "com.pulkit.edith.helper.v2"
+  stop_process "/Applications/Edith.app/Contents/MacOS/edithd"
 }
 
 if [ "$INSTALL" = 1 ]; then

@@ -51,7 +51,7 @@ import Testing
     @Test func settingsTabsUseInformationArchitectureOrder() {
         #expect(
             SettingsPane.Tab.allCases == [
-                .general, .permissions, .shortcuts, .terminal, .icloud, .updates,
+                .general, .permissions, .agent, .shortcuts, .terminal, .icloud, .updates,
             ])
     }
 

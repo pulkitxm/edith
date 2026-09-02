@@ -163,6 +163,10 @@ public enum CommandTree {
             options: ["--json", "-h", "--help", "--version"], arguments: [.appPath]),
         "ed app open-link": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.appLink]),
+        "ed agent status": Spec(options: common),
+        "ed agent jobs": Spec(options: common),
+        "ed agent restart": Spec(options: common),
+        "ed agent logs": Spec(options: ["--json", "--last"]),
         "ed app actions": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed app clean-keys": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed app test-notification": Spec(options: ["--json", "-h", "--help", "--version"]),

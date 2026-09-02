@@ -16,6 +16,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var launchCleanupTask: Task<Void, Never>?
     private var helperMaintenanceTask: Task<Void, Never>?
     private let lidAwakeDaemonRegistrar = LidAwakeDaemonRegistrar()
+    private let agentRegistrar = AgentRegistrar()
     private let postLaunch = StartupCoordinator()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -37,6 +38,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         appStarted = true
         ExtensionDefaultsMigration.migrate()
         lidAwakeDaemonRegistrar.register()
+        agentRegistrar.register()
         applyConfiguredActivationPolicy()
         showInitialWindow()
         PerformanceTrace.event(.mainThread, "main.initialWindow")

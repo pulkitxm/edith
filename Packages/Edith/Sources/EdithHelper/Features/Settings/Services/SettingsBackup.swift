@@ -670,7 +670,8 @@ final class SettingsBackup {
         SuiteRegistry.defaultsKeys + [
             AppStorageKeys.Homebrew.enabled, AppStorageKeys.Cleaner.enabled,
             AppStorageKeys.Downloads.enabled, AppStorageKeys.Music.barCollapsed,
-            AppStorageKeys.Music.barAutoHide,
+            AppStorageKeys.Music.barAutoHide, AgentSettingsKeys.pauseAmbientOnBattery,
+            AgentSettingsKeys.notifyWhenBlocked,
         ]
 
     private nonisolated static let baseBackedKeys = [
@@ -921,6 +922,7 @@ final class SettingsBackup {
     nonisolated static let sharedKeys = baseSharedKeys.union(registryV2Keys)
 
     nonisolated static let deviceLocalKeys: Set<String> = [
+        AgentService.stateKey,
         "extensionsExpand", "hasPromptedPermissions", AppStorageKeys.Backup.lastBackupAt,
         AppStorageKeys.Music.lastBackupAt,
         AppStorageKeys.Clipboard.lastBackupAt, "micMuted", "migratedFromControlCenter",

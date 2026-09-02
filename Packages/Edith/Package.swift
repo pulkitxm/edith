@@ -8,9 +8,11 @@ let products: [Product] = [
     .library(name: "Edith", targets: ["Edith"]),
     .library(name: "EdithKit", targets: ["EdithKit"]),
     .library(name: "EdithCLI", targets: ["EdithCLI"]),
+    .library(name: "EdithAgent", targets: ["EdithAgent"]),
     .library(name: "Highlighter", targets: ["Highlighter"]),
     .library(name: "GhosttyTerminal", targets: ["GhosttyTerminal"]),
     .executable(name: "EdithLidAwakeHelper", targets: ["EdithLidAwakeHelper"]),
+    .executable(name: "edithd", targets: ["edithd"]),
 ]
 
 let dependencies: [Package.Dependency] = [
@@ -138,6 +140,20 @@ let targets: [Target] = [
         dependencies: ["EdithCLI"],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
+    .target(
+        name: "EdithAgent",
+        dependencies: [
+            "EdithCore",
+            "EdithKit",
+            .product(name: "GRDB", package: "GRDB.swift"),
+        ],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
+    .executableTarget(
+        name: "edithd",
+        dependencies: ["EdithAgent"],
+        swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
     .executableTarget(
         name: "EdithLidAwakeHelper",
         dependencies: ["EdithLidAwakeSupport"],
@@ -198,7 +214,7 @@ let targets: [Target] = [
         name: "EdithTests",
         dependencies: [
             "EdithCore", "Edith", "EdithDatabase", "EdithKit", "EdithLidAwakeSupport",
-            "EdithHelper",
+            "EdithHelper", "EdithAgent",
             "EdithCLI", "Highlighter", "ed",
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]

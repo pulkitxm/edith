@@ -45,7 +45,8 @@ public struct SettingDefinition: Equatable, Sendable {
 
 public enum ConfigCatalog {
     public static let groups = [
-        "suites", "appearance", "panel", "attention", "usage", "limits", "menubar", "alerts",
+        "agent", "suites", "appearance", "panel", "attention", "usage", "limits", "menubar",
+        "alerts",
         "budget",
         "dashboard", "database",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
@@ -57,7 +58,7 @@ public enum ConfigCatalog {
     ]
 
     public static let settings: [SettingDefinition] =
-        suites + appearance + panel + attention + usageAndLimits
+        agent + suites + appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + database + machines + herdr + quinjet + companion
         + finder + system + homebrew + cleaner
         + music + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
@@ -82,6 +83,21 @@ public enum ConfigCatalog {
 
     public static let extensionKeys: [String: String] = Dictionary(
         uniqueKeysWithValues: ExtensionRegistry.entries.map { ($0.id, $0.defaultsKey) })
+
+    private static let agent: [SettingDefinition] = [
+        SettingDefinition(
+            AgentSettingsKeys.pauseAmbientOnBattery, .bool, group: "agent",
+            summary: "Pause the agent's ambient jobs while this Mac is on battery.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AgentSettingsKeys.notifyWhenBlocked, .bool, group: "agent",
+            summary: "Notify when a background agent job is blocked.", fallback: .bool(false)),
+        SettingDefinition(
+            AgentService.stateKey, .string, group: "agent",
+            summary: "Login Items registration state of the background agent.",
+            allowed: AgentRegistrationState.allCases.map(\.rawValue),
+            fallback: .string(AgentRegistrationState.notRegistered.rawValue), readOnly: true),
+    ]
 
     private static let suites: [SettingDefinition] = SuiteRegistry.suites.map { suite in
         SettingDefinition(

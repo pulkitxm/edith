@@ -48,7 +48,7 @@ import EdithKit
         #expect(settings.contains(".pickerStyle(.menu)"))
         #expect(!settings.contains(".pickerStyle(.segmented)"))
         #expect(!settings.contains("List(selection: tab)"))
-        #expect(settings.contains("case .permissions: .infinity"))
+        #expect(settings.contains("case .permissions, .agent: .infinity"))
         #expect(settings.contains("UIScale.pt(1180)"))
         #expect(settings.contains("alignment: .topLeading"))
     }
@@ -61,7 +61,9 @@ import EdithKit
             .appendingPathComponent("Sources/Edith/Features/Settings/Views/GeneralPane.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-        for category in ["general", "permissions", "shortcuts", "terminal", "icloud", "updates"] {
+        for category in [
+            "general", "permissions", "agent", "shortcuts", "terminal", "icloud", "updates",
+        ] {
             #expect(source.contains("case .\(category): return"))
         }
         #expect(source.contains("tab.wrappedValue.summary"))
