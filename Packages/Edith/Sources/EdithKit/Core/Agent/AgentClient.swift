@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 public final class AgentClient: NSObject, @unchecked Sendable {
@@ -105,27 +106,42 @@ public final class AgentClient: NSObject, @unchecked Sendable {
         return try AgentPayload.decode(type, from: data)
     }
 
-    public func runtimeSnapshot() throws -> AgentRuntimeSnapshot {
-        try verifyHandshake()
-        let data: Data = try call { remote, reply in
-            remote.runtime { reply($0, $1) }
+    public func perform(_ operation: UserOperationID, payload: Data = Data()) throws -> Data {
+        guard AgentOperationCatalog.serves(operation) else {
+            throw AgentError(
+                .unknownOperation, "The agent does not serve \(operation.rawValue).")
         }
-        return try AgentPayload.decode(AgentRuntimeSnapshot.self, from: data)
+        try verifyHandshake()
+        return try call { remote, reply in
+            remote.perform(operation: operation.rawValue, payload: payload) { reply($0, $1) }
+        }
+    }
+
+    public func perform<T: Decodable>(
+        _ type: T.Type, operation: UserOperationID, payload: Data = Data()
+    ) throws -> T {
+        try AgentPayload.decode(type, from: perform(operation, payload: payload))
+    }
+
+    public func runtimeSnapshot() throws -> AgentRuntimeSnapshot {
+        try perform(
+            AgentRuntimeSnapshot.self, operation: AgentControlOperation.status.descriptor.id)
     }
 
     public func jobSnapshots() throws -> [AgentJobSnapshot] {
-        try verifyHandshake()
-        let data: Data = try call { remote, reply in
-            remote.jobs { reply($0, $1) }
-        }
-        return try AgentPayload.decode([AgentJobSnapshot].self, from: data)
+        try perform(
+            [AgentJobSnapshot].self, operation: AgentControlOperation.jobs.descriptor.id)
     }
 
-    public func perform(operation: String, payload: Data = Data()) throws -> Data {
-        try verifyHandshake()
-        return try call { remote, reply in
-            remote.perform(operation: operation, payload: payload) { reply($0, $1) }
-        }
+    public func restart() throws {
+        _ = try perform(AgentControlOperation.restart.descriptor.id)
+        reset()
+    }
+
+    public func logLines(last: String) throws -> [String] {
+        try perform(
+            [String].self, operation: AgentControlOperation.logs.descriptor.id,
+            payload: Data(last.utf8))
     }
 
     public func subscribe(

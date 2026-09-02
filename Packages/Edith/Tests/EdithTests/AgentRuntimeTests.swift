@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 import Testing
 
@@ -38,6 +39,53 @@ import Testing
         #expect(AgentPeerIdentity.identifiers.contains(MainApp.bundleIdentifier))
         #expect(AgentPeerIdentity.identifiers.contains(MainApp.statusBarBundleIdentifier))
         #expect(AgentPeerIdentity.identifiers.contains(AgentService.machServiceName))
+    }
+}
+
+@Suite struct AgentOperationCatalogTests {
+    @Test func theAgentServesEveryOperationItDeclares() async throws {
+        let runtime = AgentRuntime(build: "test", store: nil)
+        await AgentOperations.register(on: runtime)
+
+        for id in AgentOperationCatalog.served
+        where id
+            != AgentControlOperation.restart
+            .descriptor.id
+        {
+            _ = try await runtime.perform(operation: id.rawValue, payload: Data())
+        }
+    }
+
+    @Test func theServedListIsExactlyTheAgentControlOperations() {
+        #expect(
+            AgentOperationCatalog.served
+                == AgentControlOperation.allCases.map { $0.descriptor.id })
+        #expect(AgentOperationCatalog.serves(AgentControlOperation.jobs.descriptor.id))
+    }
+
+    @Test func everyServedOperationIsInTheUserOperationCatalog() {
+        #expect(AgentOperationCatalog.descriptors.count == AgentOperationCatalog.served.count)
+        for descriptor in AgentOperationCatalog.descriptors {
+            #expect(descriptor.cli.first == "agent")
+        }
+    }
+
+    @Test func anUnservedOperationIsRefusedBeforeItReachesTheWire() {
+        #expect(!AgentOperationCatalog.serves(UserOperationID(rawValue: "app.quit")))
+    }
+
+    @Test func anUnknownOperationFails() async {
+        let runtime = AgentRuntime(build: "test", store: nil)
+        await #expect(throws: AgentError.self) {
+            _ = try await runtime.perform(operation: "nope.at.all", payload: Data())
+        }
+    }
+
+    @Test func onlyAWellFormedLogWindowIsPassedThrough() {
+        #expect(AgentLogQuery.isValidWindow("10m"))
+        #expect(AgentLogQuery.isValidWindow("2h"))
+        #expect(!AgentLogQuery.isValidWindow("1h; rm -rf /"))
+        #expect(!AgentLogQuery.isValidWindow(""))
     }
 }
 

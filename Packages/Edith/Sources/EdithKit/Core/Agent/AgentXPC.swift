@@ -6,8 +6,6 @@ import Foundation
     func subscribe(topic: String, reply: @escaping (String?) -> Void)
     func unsubscribe(topic: String, reply: @escaping (String?) -> Void)
     func perform(operation: String, payload: Data, reply: @escaping (Data?, String?) -> Void)
-    func jobs(reply: @escaping (Data?, String?) -> Void)
-    func runtime(reply: @escaping (Data?, String?) -> Void)
 }
 
 @objc public protocol EdithAgentSubscriberXPC {

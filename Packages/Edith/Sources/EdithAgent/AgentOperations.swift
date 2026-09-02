@@ -1,0 +1,58 @@
+import EdithKit
+import Foundation
+
+public enum AgentOperations {
+    public static func register(on runtime: AgentRuntime) async {
+        await runtime.register(operation: AgentControlOperation.status.descriptor.id.rawValue) {
+            _ in
+            try AgentPayload.encode(await runtime.runtimeSnapshot())
+        }
+        await runtime.register(operation: AgentControlOperation.jobs.descriptor.id.rawValue) {
+            _ in
+            try AgentPayload.encode(await runtime.jobSnapshots())
+        }
+        await runtime.register(operation: AgentControlOperation.logs.descriptor.id.rawValue) {
+            payload in
+            let window = String(data: payload, encoding: .utf8) ?? "1h"
+            let lines = await Task.detached(priority: .userInitiated) {
+                AgentLogQuery.recent(last: window)
+            }.value
+            return try AgentPayload.encode(lines)
+        }
+        await runtime.register(operation: AgentControlOperation.restart.descriptor.id.rawValue) {
+            _ in
+            Task {
+                try? await Task.sleep(for: .milliseconds(200))
+                AgentLog.logger.info("restart requested")
+                exit(0)
+            }
+            return try AgentPayload.encode(["restarted": true])
+        }
+    }
+}
+
+public enum AgentLogQuery {
+    public static let windowPattern = "^[0-9]+[smhd]$"
+
+    public static func isValidWindow(_ window: String) -> Bool {
+        window.range(of: windowPattern, options: .regularExpression) != nil
+    }
+
+    public static func recent(last: String) -> [String] {
+        let window = isValidWindow(last) ? last : "1h"
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
+        process.arguments = [
+            "show", "--style", "compact", "--last", window, "--predicate",
+            "subsystem == \"\(AgentLog.subsystem)\"",
+        ]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return [] }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return (String(data: data, encoding: .utf8) ?? "")
+            .split(separator: "\n").map(String.init)
+    }
+}

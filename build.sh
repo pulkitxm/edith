@@ -268,7 +268,7 @@ stop_installed_app() {
   stop_process "$installed_helper"
   stop_process "com.pulkit.edith.helper"
   stop_process "com.pulkit.edith.helper.v2"
-  stop_process "/Applications/Edith.app/Contents/MacOS/edithd"
+  pkill -x edithd 2>/dev/null || true
 }
 
 if [ "$INSTALL" = 1 ]; then

@@ -38,6 +38,7 @@ public enum AgentBoot {
         let hub = AgentHub(runtime: runtime)
         Task {
             await runtime.attach(scheduler: scheduler)
+            await AgentOperations.register(on: runtime)
             for job in AgentJobCatalog.jobs(store: store) {
                 await scheduler.register(job)
             }

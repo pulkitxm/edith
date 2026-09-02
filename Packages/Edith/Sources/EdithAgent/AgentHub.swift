@@ -128,17 +128,4 @@ final class AgentPeer: NSObject, EdithAgentXPC, @unchecked Sendable {
         }
     }
 
-    func jobs(reply: @escaping (Data?, String?) -> Void) {
-        Task { [runtime] in
-            let snapshots = await runtime.jobSnapshots()
-            reply(try? AgentPayload.encode(snapshots), nil)
-        }
-    }
-
-    func runtime(reply: @escaping (Data?, String?) -> Void) {
-        Task { [runtime] in
-            let snapshot = await runtime.runtimeSnapshot()
-            reply(try? AgentPayload.encode(snapshot), nil)
-        }
-    }
 }

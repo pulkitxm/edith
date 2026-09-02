@@ -149,9 +149,11 @@ struct AgentRestartCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let snapshot = try AgentCLI.snapshot()
-            kill(snapshot.processIdentifier, SIGTERM)
-            AgentClient.shared.reset()
+            do {
+                try AgentClient.shared.restart()
+            } catch let error as AgentError {
+                throw CLIFailure.unavailable("background agent", hint: error.message)
+            }
             guard !json else {
                 CLIOut.json(.object(["restarted": .bool(true)]))
                 return
@@ -173,31 +175,17 @@ struct AgentLogsCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let lines = AgentLogReader.recent(last: last)
+            let lines: [String]
+            do {
+                lines = try AgentClient.shared.logLines(last: last)
+            } catch let error as AgentError {
+                throw CLIFailure.unavailable("background agent", hint: error.message)
+            }
             guard !json else {
                 CLIOut.json(.array(lines.map { .string($0) }))
                 return
             }
             for line in lines { CLIOut.out(line) }
         }
-    }
-}
-
-enum AgentLogReader {
-    static func recent(last: String) -> [String] {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
-        process.arguments = [
-            "show", "--style", "compact", "--last", last, "--predicate",
-            "subsystem == \"com.pulkit.edith.agent\"",
-        ]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        guard (try? process.run()) != nil else { return [] }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (String(data: data, encoding: .utf8) ?? "")
-            .split(separator: "\n").map(String.init)
     }
 }

@@ -7,6 +7,19 @@ final class AgentRegistrar {
     private let service = SMAppService.agent(plistName: AgentService.plistName)
     private var refresh: DispatchWorkItem?
 
+    func registerAndRestartIfStale() {
+        register()
+        guard AgentBuildStamp.hasChanged() else { return }
+        AgentBuildStamp.record()
+        restartRunningAgent()
+    }
+
+    private func restartRunningAgent() {
+        DispatchQueue.global(qos: .utility).async {
+            try? AgentClient.shared.restart()
+        }
+    }
+
     func register() {
         switch service.status {
         case .enabled:

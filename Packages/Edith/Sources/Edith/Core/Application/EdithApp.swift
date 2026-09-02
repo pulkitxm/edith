@@ -38,7 +38,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         appStarted = true
         ExtensionDefaultsMigration.migrate()
         lidAwakeDaemonRegistrar.register()
-        agentRegistrar.register()
+        agentRegistrar.registerAndRestartIfStale()
         applyConfiguredActivationPolicy()
         showInitialWindow()
         PerformanceTrace.event(.mainThread, "main.initialWindow")

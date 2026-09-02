@@ -24,15 +24,13 @@ final class BackgroundAgentModel {
     }
 
     func restart() {
-        guard let runtime else { return }
-        kill(runtime.processIdentifier, SIGTERM)
-        AgentClient.shared.reset()
+        try? AgentClient.shared.restart()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             self?.refresh()
         }
     }
 
-    func openLogs() {
+    func copyLogCommand() {
         let script =
             "log show --style compact --last 1h --predicate 'subsystem == "
             + "\"\(AgentService.machServiceName)\"'"
@@ -94,7 +92,7 @@ struct BackgroundAgentPane: View {
             HStack {
                 Button("Restart") { model.restart() }
                     .disabled(model.runtime == nil)
-                Button("Copy log command") { model.openLogs() }
+                Button("Copy log command") { model.copyLogCommand() }
                 if model.registration.needsAttention {
                     Button("Open Login Items") {
                         AgentRegistrar.openLoginItemsSettings()
