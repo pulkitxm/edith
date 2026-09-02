@@ -154,8 +154,191 @@ struct MetricCard: View {
             }
         }
         .padding(UIScale.pt(14))
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .widgetBar(cornerRadius: 14, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
+    }
+}
+
+struct NetworkSparkline: View {
+    let downloadValues: [Double]
+    let uploadValues: [Double]
+
+    private var maximum: Double {
+        max(max(downloadValues.max() ?? 0, uploadValues.max() ?? 0), 1)
+    }
+
+    var body: some View {
+        ZStack {
+            SparkShape(
+                samples: SparkSamples(values: downloadValues), maximum: maximum,
+                capacity: MachineSession.historyLength, filled: true
+            )
+            .fill(
+                LinearGradient(
+                    colors: [DashSkin.networkDownload.opacity(0.18), .clear],
+                    startPoint: .top, endPoint: .bottom))
+            SparkShape(
+                samples: SparkSamples(values: downloadValues), maximum: maximum,
+                capacity: MachineSession.historyLength, filled: false
+            )
+            .stroke(
+                DashSkin.networkDownload,
+                style: StrokeStyle(lineWidth: UIScale.pt(1.6), lineJoin: .round))
+            SparkShape(
+                samples: SparkSamples(values: uploadValues), maximum: maximum,
+                capacity: MachineSession.historyLength, filled: false
+            )
+            .stroke(
+                DashSkin.networkUpload,
+                style: StrokeStyle(lineWidth: UIScale.pt(1.6), lineJoin: .round))
+        }
+        .animation(.easeInOut(duration: 0.6), value: downloadValues)
+        .animation(.easeInOut(duration: 0.6), value: uploadValues)
+    }
+}
+
+struct NetworkMetricCard: View {
+    let measurement: InternetSpeedMeasurement?
+    let downloadHistory: [Double]
+    let uploadHistory: [Double]
+    let isTesting: Bool
+    let error: String?
+    let dark: Bool
+    let refresh: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            HStack(alignment: .center) {
+                Text("INTERNET SPEED")
+                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                    .tracking(UIScale.pt(0.7))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                Spacer()
+                if isTesting {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Button(action: refresh) {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.edith(.borderless))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .help("Test again")
+                }
+            }
+            HStack(spacing: UIScale.pt(12)) {
+                speed(
+                    "Download", value: measurement?.downloadBitsPerSecond,
+                    systemImage: "arrow.down", color: DashSkin.networkDownload)
+                speed(
+                    "Upload", value: measurement?.uploadBitsPerSecond,
+                    systemImage: "arrow.up", color: DashSkin.networkUpload)
+            }
+            NetworkSparkline(
+                downloadValues: downloadHistory, uploadValues: uploadHistory
+            )
+            .frame(height: UIScale.pt(34))
+            status
+        }
+        .padding(UIScale.pt(14))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .widgetBar(cornerRadius: 14, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
+    }
+
+    private func speed(
+        _ title: String, value: Double?, systemImage: String, color: Color
+    ) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                .foregroundStyle(color)
+            Text(value.map(InternetSpeedFormatter.string) ?? "–")
+                .font(DashSkin.serif(17))
+                .foregroundStyle(DashSkin.ink(dark))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .animation(.easeInOut(duration: 0.6), value: value)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(value.map(InternetSpeedFormatter.string) ?? "Not tested")
+    }
+
+    @ViewBuilder
+    private var status: some View {
+        if isTesting {
+            Text(measurement == nil ? "Testing this machine" : "Testing again")
+                .font(.system(size: UIScale.pt(10.5)))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+        } else if let error {
+            Text(error)
+                .font(.system(size: UIScale.pt(10.5)))
+                .foregroundStyle(DashSkin.danger)
+                .lineLimit(1)
+                .help(error)
+        } else if let measurement {
+            Text("Tested \(measurement.measuredAt, style: .relative)")
+                .font(.system(size: UIScale.pt(10.5)))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+        } else {
+            Text("Waiting to test this machine")
+                .font(.system(size: UIScale.pt(10.5)))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+        }
+    }
+}
+
+struct MetricsGridLayout: Layout {
+    let spacing: CGFloat
+    var minimumColumnWidth = UIScale.pt(238)
+
+    private func columnCount(width: CGFloat, itemCount: Int) -> Int {
+        let fitting = max(1, Int((width + spacing) / (minimumColumnWidth + spacing)))
+        return min(itemCount, min(3, fitting))
+    }
+
+    private func rows(width: CGFloat, subviews: Subviews) -> [(Range<Int>, CGFloat, CGFloat)] {
+        guard !subviews.isEmpty else { return [] }
+        let columns = columnCount(width: width, itemCount: subviews.count)
+        return stride(from: 0, to: subviews.count, by: columns).map { start in
+            let end = min(start + columns, subviews.count)
+            let range = start..<end
+            let itemWidth = (width - spacing * CGFloat(range.count - 1)) / CGFloat(range.count)
+            let height = range.reduce(0) { current, index in
+                max(
+                    current,
+                    subviews[index].sizeThatFits(
+                        ProposedViewSize(width: itemWidth, height: nil)
+                    ).height)
+            }
+            return (range, itemWidth, height)
+        }
+    }
+
+    func sizeThatFits(
+        proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) -> CGSize {
+        let width = proposal.width ?? minimumColumnWidth
+        let rows = rows(width: width, subviews: subviews)
+        let height = rows.reduce(0) { $0 + $1.2 } + spacing * CGFloat(max(0, rows.count - 1))
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) {
+        var y = bounds.minY
+        for row in rows(width: bounds.width, subviews: subviews) {
+            var x = bounds.minX
+            for index in row.0 {
+                subviews[index].place(
+                    at: CGPoint(x: x, y: y), anchor: .topLeading,
+                    proposal: ProposedViewSize(width: row.1, height: row.2))
+                x += row.1 + spacing
+            }
+            y += row.2 + spacing
+        }
     }
 }
 
@@ -181,6 +364,8 @@ struct MachineOverviewTab: View {
             }
             .pageContent(compact)
         }
+        .onAppear { session.beginInternetSpeedObservation() }
+        .onDisappear { session.endInternetSpeedObservation() }
     }
 
     @ViewBuilder
@@ -249,12 +434,7 @@ struct MachineOverviewTab: View {
     }
 
     private var metricsGrid: some View {
-        LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: UIScale.pt(12)),
-                GridItem(.flexible(), spacing: UIScale.pt(12)),
-            ], spacing: UIScale.pt(12)
-        ) {
+        MetricsGridLayout(spacing: UIScale.pt(12)) {
             metricCard(
                 "CPU", value: session.sample.map { String(format: "%.0f%%", $0.cpu.total) } ?? "—",
                 fraction: (session.sample?.cpu.total ?? 0) / 100, history: session.cpuHistory,
@@ -273,6 +453,14 @@ struct MachineOverviewTab: View {
                     "\(ByteFormatter.string($0.mem.usedKB * 1024)) of "
                         + ByteFormatter.string($0.mem.totalKB * 1024)
                 } ?? "")
+            NetworkMetricCard(
+                measurement: session.internetSpeed,
+                downloadHistory: session.internetDownloadHistory,
+                uploadHistory: session.internetUploadHistory,
+                isTesting: session.isTestingInternetSpeed,
+                error: session.internetSpeedError,
+                dark: dark,
+                refresh: session.refreshInternetSpeed)
         }
     }
 
