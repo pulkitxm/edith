@@ -326,3 +326,117 @@ import Testing
         return (defaults, suiteName)
     }
 }
+
+@Suite struct SessionsAndDownloadTests {
+    private func host(
+        id: String, working: Int, idle: Int, reachable: Bool = true
+    ) -> HerdrHostSnapshot {
+        let agents =
+            (0..<working).map { agent(id: "\(id)-w\($0)", host: id, status: .working) }
+            + (0..<idle).map { agent(id: "\(id)-i\($0)", host: id, status: .idle) }
+        return HerdrHostSnapshot(
+            id: id, name: id, isLocal: id == "local", herdrPresent: true, reachable: reachable,
+            agents: agents)
+    }
+
+    private func agent(id: String, host: String, status: HerdrAgentStatus) -> HerdrAgent {
+        HerdrAgent(
+            id: id, machineID: host, machineName: host, machineIsLocal: host == "local",
+            sshTarget: nil, session: "s", pane: "p", kind: "claude", status: status,
+            title: "t", workspace: "w", cwd: "/tmp")
+    }
+
+    @Test func discoveryStopsEntirelyWhenNothingWatchesAndAlertsAreOff() {
+        #expect(SessionsTally.scope(subscribed: false, blockAlerts: false) == nil)
+    }
+
+    @Test func blockAlertsKeepALocalOnlyAmbientPoll() {
+        let scope = SessionsTally.scope(subscribed: false, blockAlerts: true)
+        guard case .local = scope else {
+            Issue.record("expected a local scope, got \(String(describing: scope))")
+            return
+        }
+    }
+
+    @Test func aSubscriberWidensDiscoveryToEveryHost() {
+        let scope = SessionsTally.scope(subscribed: true, blockAlerts: false)
+        guard case .all = scope else {
+            Issue.record("expected every host, got \(String(describing: scope))")
+            return
+        }
+    }
+
+    @Test func theSnapshotCountsWorkingAgentsAcrossHosts() {
+        let snapshot = SessionsTally.snapshot(
+            hosts: [host(id: "local", working: 2, idle: 1), host(id: "box", working: 1, idle: 3)])
+
+        #expect(snapshot.working == 3)
+        #expect(snapshot.total == 7)
+        #expect(snapshot.hosts.map(\.id) == ["local", "box"])
+        #expect(snapshot.hosts.first?.working == 2)
+    }
+
+    @Test func anUnwatchedDiscoveryPublishesNothing() async throws {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let job = SessionsJob(
+            store: nil, isSubscribed: { false }, defaults: defaults, collect: { _ in [] })
+
+        #expect(try await job.run() == nil)
+    }
+
+    @Test func aWatchedDiscoveryPublishesItsCount() async throws {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let hosts = [host(id: "local", working: 2, idle: 0)]
+        let job = SessionsJob(
+            store: nil, isSubscribed: { true }, defaults: defaults, collect: { _ in hosts })
+
+        let payload = try #require(try await job.run())
+        let snapshot = try AgentPayload.decode(SessionsSnapshot.self, from: payload)
+
+        #expect(snapshot.working == 2)
+    }
+
+    private func record(status: DownloadStatus) -> DownloadRecord {
+        DownloadRecord(
+            url: URL(string: "https://example.com/\(UUID().uuidString)")!, status: status,
+            outputFilename: nil, createdAt: Date(), kind: .audio)
+    }
+
+    @Test func theQueueTallySplitsRunningFromFinishedAndFailed() {
+        let records = [
+            record(status: .queued),
+            record(status: .downloading(progress: "10%", videoIndex: 1, videoCount: 2)),
+            record(status: .resolving),
+            record(status: .done("d.m4a")),
+            record(status: .error("nope")),
+            record(status: .interrupted(nil)),
+        ]
+
+        let snapshot = DownloadQueueTally.snapshot(records: records)
+
+        #expect(snapshot.queued == 1)
+        #expect(snapshot.running == 2)
+        #expect(snapshot.finished == 1)
+        #expect(snapshot.failed == 2)
+        #expect(snapshot.pending == 3)
+    }
+
+    @Test func anEmptyQueueTalliesToZero() async throws {
+        let job = DownloadQueueJob(store: nil, load: { [] })
+
+        let payload = try #require(try await job.run())
+        let snapshot = try AgentPayload.decode(DownloadQueueSnapshot.self, from: payload)
+
+        #expect(snapshot.pending == 0)
+        #expect(snapshot.finished == 0)
+    }
+
+    private func makeDefaults() -> (UserDefaults, String) {
+        let suiteName = "SessionsJobTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return (defaults, suiteName)
+    }
+}

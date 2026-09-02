@@ -48,8 +48,8 @@ public enum AgentJobCatalog {
         ]
     }
 
-    public static func jobs(store: AgentStore?) -> [AgentJob] {
-        let bodies = collectors(store: store)
+    public static func jobs(store: AgentStore?, scheduler: JobScheduler? = nil) -> [AgentJob] {
+        let bodies = collectors(store: store, scheduler: scheduler)
         return descriptors().map { descriptor in
             let empty: @Sendable () async throws -> Data? = { nil }
             let body = bodies[descriptor.id] ?? empty
@@ -60,18 +60,27 @@ public enum AgentJobCatalog {
         }
     }
 
-    static func collectors(store: AgentStore?) -> [String: @Sendable () async throws -> Data?] {
+    static func collectors(
+        store: AgentStore?, scheduler: JobScheduler? = nil
+    ) -> [String: @Sendable () async throws -> Data?] {
         let usage = UsageCollectorJob(store: store)
         let machines = MachineHealthJob(store: store)
         let updates = UpdateDiscoveryJob(store: store)
         let cleaner = CleanerEstimateJob(store: store)
         let backup = BackupJob(store: store)
+        let downloads = DownloadQueueJob(store: store)
+        let sessions = SessionsJob(store: store) {
+            guard let scheduler else { return false }
+            return await scheduler.subscriberCount(topic: .sessions) > 0
+        }
         return [
             "usage.refresh": { try await usage.run() },
             "machines.health": { try await machines.run() },
             "updates.discover": { try await updates.run() },
             "cleaner.estimate": { try await cleaner.run() },
             "backup.sync": { try await backup.run() },
+            "downloads.queue": { try await downloads.run() },
+            "sessions.discover": { try await sessions.run() },
         ]
     }
 

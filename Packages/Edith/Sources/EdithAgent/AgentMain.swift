@@ -62,7 +62,7 @@ public enum AgentBoot {
         Task {
             await runtime.attach(scheduler: scheduler)
             await AgentOperations.register(on: runtime)
-            for job in AgentJobCatalog.jobs(store: store) {
+            for job in AgentJobCatalog.jobs(store: store, scheduler: scheduler) {
                 await scheduler.register(job)
             }
             await scheduler.start()
