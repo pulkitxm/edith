@@ -202,3 +202,108 @@ import Testing
         return (defaults, suiteName)
     }
 }
+
+@Suite struct OnboardingSuiteSelectionTests {
+    @Test func everySuiteIsOfferedWithItsAbilities() {
+        let picks = OnboardingFlow.suitePicks()
+        #expect(picks.map(\.id) == SuiteID.allCases)
+        for pick in picks {
+            #expect(!pick.abilities.isEmpty)
+            #expect(pick.abilities.allSatisfy { $0.suite == pick.id })
+        }
+    }
+
+    @Test func theDeveloperPresetPicksAgentsMaintenanceAndSystem() {
+        #expect(OnboardingPreset.developer.suites == [.agents, .maintenance, .system])
+        let ids = OnboardingFlow.abilityIDs(forSuites: Set(OnboardingPreset.developer.suites))
+        #expect(ids.contains("usage"))
+        #expect(ids.contains("homebrew"))
+        #expect(ids.contains("micMute"))
+        #expect(!ids.contains("clipboard"))
+    }
+
+    @Test func skippingLeavesCoreOnly() {
+        #expect(OnboardingPreset.nothing.suites.isEmpty)
+        #expect(OnboardingFlow.abilityIDs(forSuites: []).isEmpty)
+    }
+
+    @Test func abilitiesAndSuitesRoundTrip() {
+        let suites: Set<SuiteID> = [.media, .data]
+        let ids = OnboardingFlow.abilityIDs(forSuites: suites)
+        #expect(OnboardingFlow.suites(forAbilities: ids) == suites)
+    }
+
+    @Test func permissionsAreGroupedBySuiteAndOnlyListWhatIsMissing() {
+        let granted: [ExtensionPermission: Bool] = [.screenRecording: true]
+        let selected = OnboardingFlow.abilityIDs(forSuites: [.desk, .media])
+
+        let groups = OnboardingFlow.permissionsBySuite(
+            selectedIDs: selected, granted: granted)
+        let bySuite = Dictionary(
+            uniqueKeysWithValues: groups.map { ($0.suite.id, $0.permissions) })
+
+        #expect(bySuite[.desk]?.contains { $0.permission == .inputMonitoring } == true)
+        #expect(bySuite[.desk]?.contains { $0.permission == .screenRecording } == false)
+        #expect(bySuite[.media]?.contains { $0.permission == .calendar } == true)
+        #expect(bySuite[.agents] == nil)
+    }
+
+    @Test func requiredPermissionsAreMarkedApartFromOptionalOnes() {
+        let groups = OnboardingFlow.permissionsBySuite(
+            selectedIDs: ["calendar", "notchShelf"], granted: [:])
+        let media = groups.first { $0.suite.id == .media }?.permissions ?? []
+
+        #expect(media.first { $0.permission == .calendar }?.required == true)
+        #expect(media.first { $0.permission == .camera }?.required == false)
+    }
+}
+
+@Suite struct MCPRegistrationTests {
+    @Test func theEntryRunsEdithsOwnMCPServer() {
+        let entry = MCPRegistration.entry(commandPath: "/usr/local/bin/ed")
+        #expect(entry.name == "edith")
+        #expect(entry.command == "/usr/local/bin/ed")
+        #expect(entry.arguments == ["database", "mcp"])
+    }
+
+    @Test func registeringMergesRatherThanReplacingOtherServers() {
+        let existing: [String: Any] = [
+            "mcpServers": ["other": ["command": "/bin/other"]],
+            "unrelated": true,
+        ]
+        let merged = MCPRegistration.merged(
+            into: existing, entry: MCPRegistration.entry(commandPath: "/bin/ed"))
+        let servers = merged["mcpServers"] as? [String: Any]
+
+        #expect(servers?.keys.sorted() == ["edith", "other"])
+        #expect(merged["unrelated"] as? Bool == true)
+        #expect(MCPRegistration.isRegistered(in: merged))
+    }
+
+    @Test func anEmptyConfigurationGainsTheServersKey() {
+        let merged = MCPRegistration.merged(
+            into: [:], entry: MCPRegistration.entry(commandPath: "/bin/ed"))
+        #expect(MCPRegistration.isRegistered(in: merged))
+    }
+
+    @Test func writingLandsOnDiskAndReadsBack() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MCPTests.\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("config.json")
+
+        #expect(!MCPRegistration.isRegistered(url: url))
+        #expect(
+            MCPRegistration.register(url: url, entry: MCPRegistration.entry(commandPath: "/bin/ed"))
+        )
+        #expect(MCPRegistration.isRegistered(url: url))
+    }
+
+    @Test func theCodexLineNamesTheServerAndItsArguments() {
+        let line = MCPRegistration.entry(commandPath: "/bin/ed").codexLine
+        #expect(line.contains("[mcp_servers.edith]"))
+        #expect(line.contains("command = \"/bin/ed\""))
+        #expect(line.contains("\"database\", \"mcp\""))
+    }
+}
