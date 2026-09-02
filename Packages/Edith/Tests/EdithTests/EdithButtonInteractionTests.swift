@@ -150,7 +150,7 @@ import Testing
     }
 
     @Test func harnessRemainsInactiveAndHiddenWhileRenderingAndDeliveringInput() async throws {
-        let application = NSApplication.shared
+        let application = TestWindowHost.application
         let wasActive = application.isActive
         let probe = EdithButtonProbe()
         let harness = EdithButtonHarness(
@@ -419,22 +419,15 @@ private final class EdithButtonHarness {
 
     var isKey: Bool { window.isKeyWindow }
     var isMain: Bool { window.isMainWindow }
-    var isExposedOnDesktop: Bool {
-        window.isVisible && NSScreen.screens.contains { $0.frame.intersects(window.frame) }
-    }
+    var isExposedOnDesktop: Bool { TestWindowHost.isExposedOnDesktop(window) }
 
     init<Content: View>(rootView: Content, size: CGSize = CGSize(width: 360, height: 180)) {
         let host = NSHostingView(rootView: rootView)
         host.frame = CGRect(origin: .zero, size: size)
         self.host = host
-        window = EdithButtonWindow(
-            contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window = TestWindowHost.window(contentRect: host.frame)
         window.acceptsMouseMovedEvents = true
         window.contentView = host
-        let desktopMinX = NSScreen.screens.map(\.frame.minX).min() ?? 0
-        let desktopMinY = NSScreen.screens.map(\.frame.minY).min() ?? 0
-        window.setFrameOrigin(
-            CGPoint(x: desktopMinX - size.width - 1_000, y: desktopMinY - size.height - 1_000))
         window.orderBack(nil)
         window.makeFirstResponder(host)
         window.layoutIfNeeded()
@@ -524,10 +517,6 @@ private final class EdithButtonHarness {
 
 private enum EdithButtonHarnessError: Error {
     case missingFrames
-}
-
-private final class EdithButtonWindow: NSWindow {
-    override var canBecomeKey: Bool { true }
 }
 
 private enum EdithButtonTestPoints {

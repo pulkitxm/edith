@@ -201,9 +201,7 @@ import Testing
             let theme = GhosttyTheme(palette: .edith(dark: true))
             let first = holder.retainedGhosttyView(launch: launch, theme: theme)
             first.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
-            let window = NSWindow(
-                contentRect: first.frame, styleMask: [.borderless], backing: .buffered,
-                defer: false)
+            let window = TestWindowHost.window(contentRect: first.frame)
             window.contentView = first
             defer {
                 holder.stop()
@@ -418,9 +416,8 @@ import Testing
             let launch = try #require(holder.ghosttyLaunch)
             let view = holder.retainedGhosttyView(
                 launch: launch, theme: GhosttyTheme(palette: .edith(dark: true)))
-            let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
-                styleMask: [.borderless], backing: .buffered, defer: false)
+            let window = TestWindowHost.window(
+                contentRect: NSRect(x: 0, y: 0, width: 800, height: 600))
             window.contentView = view
             _ = window.makeFirstResponder(nil)
             var focusReports = 0

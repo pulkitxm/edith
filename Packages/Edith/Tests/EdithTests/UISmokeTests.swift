@@ -17,8 +17,7 @@ private func renderedBitmap(
             .environment(\.machineConnectionsEnabled, false)
             .environment(\.terminalLaunchEnabled, false))
     host.frame = NSRect(x: 0, y: 0, width: width, height: height)
-    let window = NSWindow(
-        contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+    let window = TestWindowHost.window(contentRect: host.frame)
     defer { window.orderOut(nil) }
     window.contentView = host
     window.layoutIfNeeded()
@@ -47,7 +46,7 @@ private func descendantViews(of view: NSView) -> [NSView] {
 
 @MainActor @Suite(.serialized) struct UISmokeTests {
     init() {
-        _ = NSApplication.shared
+        _ = TestWindowHost.application
     }
 
     @Test func loadingSkeletonsRender() {
@@ -129,8 +128,7 @@ private func descendantViews(of view: NSView) -> [NSView] {
         let host = NSHostingView(
             rootView: ExtensionSettingsHeader(title: "Lid Awake", enabled: .constant(false)))
         host.frame = NSRect(x: 0, y: 0, width: 560, height: 64)
-        let window = NSWindow(
-            contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        let window = TestWindowHost.window(contentRect: host.frame)
         defer { window.orderOut(nil) }
         window.contentView = host
         window.layoutIfNeeded()
@@ -151,8 +149,7 @@ private func descendantViews(of view: NSView) -> [NSView] {
             rootView: ExtensionSettingsHeader(
                 title: "Lid Awake", enabled: .constant(true), disabled: true))
         host.frame = NSRect(x: 0, y: 0, width: 560, height: 64)
-        let window = NSWindow(
-            contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        let window = TestWindowHost.window(contentRect: host.frame)
         defer { window.orderOut(nil) }
         window.contentView = host
         window.layoutIfNeeded()
@@ -396,10 +393,9 @@ private func descendantViews(of view: NSView) -> [NSView] {
     }
 
     @Test func herdrViewPickerUsesTheRightTitlebarAccessory() throws {
-        let window = NSWindow(
+        let window = TestWindowHost.window(
             contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable],
-            backing: .buffered, defer: false)
+            styleMask: [.titled, .closable, .resizable, .miniaturizable])
         defer { window.orderOut(nil) }
 
         HerdrAgentWindow.addViewControls(

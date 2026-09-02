@@ -9,7 +9,7 @@ import Testing
 @Suite(.serialized)
 struct DatabaseWorkbenchRenderTests {
     init() {
-        _ = NSApplication.shared
+        _ = TestWindowHost.application
     }
 
     @Test func populatedWorkbenchRendersAcrossLayoutsAndAppearances() async throws {
@@ -323,17 +323,13 @@ private func renderWorkbench(
             .environment(\.compactLayout, width < 680)
             .preferredColorScheme(scheme))
     host.frame = NSRect(x: 0, y: 0, width: width, height: height)
-    let window = DatabaseWorkbenchTestWindow(
-        contentRect: host.frame,
-        styleMask: [.borderless],
-        backing: .buffered,
-        defer: false)
+    let window = TestWindowHost.window(contentRect: host.frame)
     defer { window.orderOut(nil) }
     window.appearance = NSAppearance(
         named: scheme == .dark ? .darkAqua : .aqua)
     window.backgroundColor = .windowBackgroundColor
     window.contentView = host
-    window.makeKeyAndOrderFront(nil)
+    window.orderBack(nil)
     window.layoutIfNeeded()
     host.layoutSubtreeIfNeeded()
     host.displayIfNeeded()
@@ -341,8 +337,4 @@ private func renderWorkbench(
     guard let image = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
     host.cacheDisplay(in: host.bounds, to: image)
     return image
-}
-
-private final class DatabaseWorkbenchTestWindow: NSWindow {
-    override var canBecomeKey: Bool { true }
 }
