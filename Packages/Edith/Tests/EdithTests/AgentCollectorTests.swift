@@ -210,3 +210,119 @@ import Testing
         return (defaults, suiteName)
     }
 }
+
+@Suite struct BackupPolicyTests {
+    @Test func everyDataClassInThePlanIsCatalogued() {
+        let ids = BackupCatalog.classes.map(\.id)
+        #expect(
+            ids == [
+                "settings", "machines", "database", "usage", "attention", "clipboard", "music",
+                "metrics", "memories",
+            ])
+        #expect(Set(ids).count == ids.count)
+    }
+
+    @Test func nothingSyncsWhenICloudBackupIsOff() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(false, forKey: AppStorageKeys.Backup.icloud)
+
+        #expect(BackupCatalog.enabled(in: defaults).isEmpty)
+    }
+
+    @Test func alwaysClassesFollowTheMasterSwitchAndOptInOnesNeedTheirOwn() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: AppStorageKeys.Backup.icloud)
+
+        let enabled = Set(BackupCatalog.enabled(in: defaults).map(\.id))
+
+        #expect(enabled.contains("machines"))
+        #expect(enabled.contains("attention"))
+        #expect(!enabled.contains("clipboard"))
+        #expect(!enabled.contains("metrics"))
+        #expect(!enabled.contains("memories"))
+
+        defaults.set(true, forKey: AppStorageKeys.Clipboard.backup)
+        #expect(BackupCatalog.byID("clipboard")?.isEnabled(in: defaults) == true)
+    }
+
+    @Test func neverClassesStayLocalEvenWithEverythingOn() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        for key in [AppStorageKeys.Backup.icloud, AppStorageKeys.Backup.usage] {
+            defaults.set(true, forKey: key)
+        }
+
+        #expect(BackupCatalog.byID("metrics")?.isEnabled(in: defaults) == false)
+        #expect(BackupCatalog.byID("memories")?.isEnabled(in: defaults) == false)
+    }
+
+    @Test func theFirstSnapshotAlwaysRunsAndADailyOneWaitsADay() {
+        let now = Date()
+        #expect(BackupCadence.shouldSnapshot(lastSnapshot: nil, now: now))
+        #expect(
+            !BackupCadence.shouldSnapshot(
+                lastSnapshot: now.addingTimeInterval(-3_600), now: now))
+        #expect(
+            BackupCadence.shouldSnapshot(
+                lastSnapshot: now.addingTimeInterval(-25 * 3_600), now: now))
+    }
+
+    @Test func aChangeIsHeldForTheDebounceWindow() {
+        let now = Date()
+        #expect(BackupCadence.debounce == 60)
+        #expect(BackupCadence.nextRun(after: now, now: now) == 60)
+        #expect(BackupCadence.nextRun(after: now.addingTimeInterval(-90), now: now) == 0)
+    }
+
+    @Test func snapshotFilesAreNamedByTableAndDay() {
+        var components = DateComponents()
+        components.year = 2026
+        components.month = 9
+        components.day = 3
+        let day = Calendar.current.date(from: components)!
+
+        #expect(
+            BackupSnapshotTables.fileName(table: "usage_day", day: day)
+                == "usage_day-2026-09-03.jsonl")
+    }
+
+    @Test func onlySyncedTablesAreSnapshotted() {
+        #expect(
+            BackupSnapshotTables.synced == ["usage_day", "limits_sample", "attention_event"])
+        #expect(!BackupSnapshotTables.synced.contains("machine_metric"))
+        #expect(!BackupSnapshotTables.synced.contains("cleaner_scan"))
+    }
+
+    @Test func backupIsSkippedWithNothingEnabled() async throws {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(false, forKey: AppStorageKeys.Backup.icloud)
+        let job = BackupJob(store: nil, defaults: defaults)
+
+        let payload = try #require(try await job.run())
+        let result = try AgentPayload.decode(BackupSnapshotResult.self, from: payload)
+
+        #expect(result.skipped)
+        #expect(result.classes.isEmpty)
+    }
+
+    @Test func theFootprintReaderMeasuresAFolderItCanSee() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Footprint.\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data(repeating: 7, count: 2_048).write(to: root.appendingPathComponent("a.bin"))
+
+        #expect(BackupFootprintReader.size(of: root) == 2_048)
+        #expect(BackupFootprintReader.size(of: root.appendingPathComponent("missing")) == 0)
+    }
+
+    private func makeDefaults() -> (UserDefaults, String) {
+        let suiteName = "BackupPolicyTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return (defaults, suiteName)
+    }
+}

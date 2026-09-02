@@ -5,13 +5,14 @@ import SwiftUI
 
 struct SettingsPane: View {
     enum Tab: String, CaseIterable {
-        case general, permissions, agent, shortcuts, terminal, icloud, updates
+        case general, permissions, agent, data, shortcuts, terminal, icloud, updates
 
         var label: String {
             switch self {
             case .general: return "General"
             case .permissions: return "Permissions"
             case .agent: return "Background agent"
+            case .data: return "Data & backup"
             case .shortcuts: return "Shortcuts"
             case .terminal: return "Terminal"
             case .icloud: return "iCloud"
@@ -24,6 +25,7 @@ struct SettingsPane: View {
             case .general: return "gearshape"
             case .permissions: return "hand.raised"
             case .agent: return "bolt.horizontal.circle"
+            case .data: return "externaldrive.badge.icloud"
             case .shortcuts: return "keyboard"
             case .terminal: return "apple.terminal"
             case .icloud: return "icloud"
@@ -36,6 +38,7 @@ struct SettingsPane: View {
             case .general: return "Appearance, window, and welcome tour"
             case .permissions: return "Privacy access used by enabled extensions"
             case .agent: return "The headless process that collects in the background"
+            case .data: return "Where Edith keeps things, and what leaves this Mac"
             case .shortcuts: return "Global and application keyboard shortcuts"
             case .terminal: return "Command line and terminal integration"
             case .icloud: return "Backup and synchronization"
@@ -83,6 +86,7 @@ struct SettingsPane: View {
                 case .general: GeneralPane()
                 case .permissions: PermissionsPane()
                 case .agent: BackgroundAgentPane()
+                case .data: DataBackupPane()
                 case .shortcuts: ShortcutsSettingsPane()
                 case .terminal: TerminalSettingsPane()
                 case .icloud: ICloudPane()
@@ -108,7 +112,7 @@ struct SettingsPane: View {
 
     private var contentMaximumWidth: CGFloat {
         switch tab.wrappedValue {
-        case .permissions, .agent: .infinity
+        case .permissions, .agent, .data: .infinity
         case .general, .shortcuts, .terminal, .icloud, .updates: UIScale.pt(1180)
         }
     }

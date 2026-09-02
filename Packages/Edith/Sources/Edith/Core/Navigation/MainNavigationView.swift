@@ -27,7 +27,8 @@ enum MainNavigationFallback {
         }
         let section = MainDestination(rawValue: mainWindowSection)?.rawValue ?? "home"
         let validSettingsTabs = [
-            "general", "permissions", "agent", "shortcuts", "terminal", "icloud", "updates",
+            "general", "permissions", "agent", "data", "shortcuts", "terminal", "icloud",
+            "updates",
         ]
         let resolvedSettingsTab =
             validSettingsTabs.contains(settingsTab) ? settingsTab : "general"

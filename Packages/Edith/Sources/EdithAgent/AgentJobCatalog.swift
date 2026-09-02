@@ -65,11 +65,13 @@ public enum AgentJobCatalog {
         let machines = MachineHealthJob(store: store)
         let updates = UpdateDiscoveryJob(store: store)
         let cleaner = CleanerEstimateJob(store: store)
+        let backup = BackupJob(store: store)
         return [
             "usage.refresh": { try await usage.run() },
             "machines.health": { try await machines.run() },
             "updates.discover": { try await updates.run() },
             "cleaner.estimate": { try await cleaner.run() },
+            "backup.sync": { try await backup.run() },
         ]
     }
 
