@@ -194,17 +194,6 @@ let targets: [Target] = [
         ]
     ),
     .executableTarget(
-        name: "EdithFiles",
-        dependencies: ["Edith"],
-        swiftSettings: [.swiftLanguageMode(.v5)],
-        linkerSettings: [
-            .unsafeFlags([
-                "-Xlinker", "-rpath", "-Xlinker",
-                "@executable_path/../../../../../Frameworks",
-            ])
-        ]
-    ),
-    .executableTarget(
         name: "EdithHelper",
         dependencies: ["EdithKit", "EdithLidAwakeSupport"],
         resources: [.copy("MenuBar.png")],
