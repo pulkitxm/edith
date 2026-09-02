@@ -555,6 +555,15 @@ public enum Guide {
         ed agent logs --last 10m        recent lines from its log subsystem
         ```
 
+        ## Serving yourself
+
+        `ed mcp` exposes every operation above as an MCP tool over stdio, so an
+        agent can call them directly instead of shelling out:
+
+        ```
+        ed mcp                          one tool per route, JSON in and out
+        ```
+
         ## Completions
 
         ```
