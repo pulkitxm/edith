@@ -335,12 +335,14 @@ struct MetricsGridLayout: Layout {
     var minimumColumnWidth = UIScale.pt(238)
 
     private func columnCount(width: CGFloat, itemCount: Int) -> Int {
+        guard width.isFinite else { return 1 }
         let fitting = max(1, Int((width + spacing) / (minimumColumnWidth + spacing)))
         return min(itemCount, min(3, fitting))
     }
 
     private func rows(width: CGFloat, subviews: Subviews) -> [(Range<Int>, CGFloat, CGFloat)] {
         guard !subviews.isEmpty else { return [] }
+        let width = width.isFinite ? width : minimumColumnWidth
         let columns = columnCount(width: width, itemCount: subviews.count)
         return stride(from: 0, to: subviews.count, by: columns).map { start in
             let end = min(start + columns, subviews.count)
