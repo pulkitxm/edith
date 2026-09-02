@@ -120,7 +120,8 @@ import Testing
             ).count == 3)
         #expect(pane.contains("case .attention: AttentionRows()"))
         #expect(pane.contains("private struct AttentionRows: View"))
-        #expect(navigation.contains("case .attention: attentionEnabled"))
+        #expect(navigation.contains("NavigationCatalog.rows()"))
+        #expect(navigation.contains("private var sidebarRows: [SidebarRow]"))
         #expect(helper.contains("AppStorageKeys.Tabs.attentionEnabled"))
         #expect(
             helper.contains(
@@ -254,7 +255,6 @@ import Testing
             ("seoAudit", "SEOAuditRows", "enabled", "ExtensionsPane.swift"),
             ("system", "SystemRows", "enabled", "ExtensionsPane.swift"),
             ("appMaintenance", "AppMaintenanceRows", "enabled", "ExtensionsPane.swift"),
-            ("machines", "MachinesRows", "enabled", "MachinesRows.swift"),
             ("database", "DatabaseRows", "enabled", "ExtensionsPane.swift"),
             ("companion", "CompanionRows", "enabled", "ExtensionsPane.swift"),
             ("systemStats", "SystemStatsRows", "enabled", "ExtensionsPane.swift"),
@@ -272,6 +272,10 @@ import Testing
             ("presenter", "PresenterRows", "presenterEnabled", "PresenterRows.swift"),
             ("colorPicker", "ColorPickerRows", "colorPickerEnabled", "ColorPickerRows.swift"),
             ("emoji", "EmojiRows", "emojiEnabled", "EmojiRows.swift"),
+            ("homebrew", "HomebrewRows", "enabled", "ExtensionsPane.swift"),
+            ("cleaner", "CleanerRows", "enabled", "ExtensionsPane.swift"),
+            ("downloads", "DownloadsRows", "enabled", "ExtensionsPane.swift"),
+            ("audioMixer", "AudioMixerRows", "enabled", "ExtensionsPane.swift"),
         ]
 
         #expect(Set(routes.map(\.id)) == Set(ExtensionDetailRoute.allCases.map(\.rawValue)))

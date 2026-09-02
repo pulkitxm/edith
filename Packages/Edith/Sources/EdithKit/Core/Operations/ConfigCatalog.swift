@@ -45,7 +45,8 @@ public struct SettingDefinition: Equatable, Sendable {
 
 public enum ConfigCatalog {
     public static let groups = [
-        "appearance", "panel", "attention", "usage", "limits", "menubar", "alerts", "budget",
+        "suites", "appearance", "panel", "attention", "usage", "limits", "menubar", "alerts",
+        "budget",
         "dashboard", "database",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
         "music",
@@ -56,7 +57,7 @@ public enum ConfigCatalog {
     ]
 
     public static let settings: [SettingDefinition] =
-        appearance + panel + attention + usageAndLimits
+        suites + appearance + panel + attention + usageAndLimits
         + menuBar + alerts + budget + dashboard + database + machines + herdr + quinjet + companion
         + finder + system + homebrew + cleaner
         + music + calendar + clipboard + keystrokeHighlight + notch + focusDim + presenter
@@ -81,6 +82,12 @@ public enum ConfigCatalog {
 
     public static let extensionKeys: [String: String] = Dictionary(
         uniqueKeysWithValues: ExtensionRegistry.entries.map { ($0.id, $0.defaultsKey) })
+
+    private static let suites: [SettingDefinition] = SuiteRegistry.suites.map { suite in
+        SettingDefinition(
+            suite.defaultsKey, .bool, group: "suites",
+            summary: "\(suite.title) suite: \(suite.subtitle)", fallback: .bool(false))
+    }
 
     private static let appearance: [SettingDefinition] = [
         SettingDefinition(
@@ -401,9 +408,6 @@ public enum ConfigCatalog {
             "dockerLogFontSize", .number, group: "machines",
             summary: "Text size in the Docker log viewer.", fallback: .double(11)),
         SettingDefinition(
-            AppStorageKeys.Tabs.machinesEnabled, .bool, group: "machines",
-            summary: "Machines extension: other computers over SSH.", fallback: .bool(false)),
-        SettingDefinition(
             AppStorageKeys.Machines.autoConnect, .bool, group: "machines",
             summary: "Connect to machines automatically when the app starts."),
         SettingDefinition(
@@ -534,6 +538,10 @@ public enum ConfigCatalog {
 
     private static let cleaner: [SettingDefinition] = [
         SettingDefinition(
+            AppStorageKeys.Cleaner.enabled, .bool, group: "cleaner",
+            summary: "Cleaner ability: reclaimable space scanning and removal.",
+            fallback: .bool(false)),
+        SettingDefinition(
             "cleanerSelectedDrives", .stringList, group: "cleaner",
             summary: "Volumes the disk cleaner scans."),
         SettingDefinition(
@@ -549,13 +557,27 @@ public enum ConfigCatalog {
 
     private static let homebrew: [SettingDefinition] = [
         SettingDefinition(
+            AppStorageKeys.Homebrew.enabled, .bool, group: "homebrew",
+            summary: "Packages ability: the Homebrew client for formulae, casks and taps.",
+            fallback: .bool(false)),
+        SettingDefinition(
             AppStorageKeys.Homebrew.defaultKind, .string, group: "homebrew",
             summary: "Package kind selected when App Maintenance opens Packages.",
             allowed: HomebrewPackageKind.allCases.map(\.rawValue),
-            fallback: .string(HomebrewPackageKind.formula.rawValue))
+            fallback: .string(HomebrewPackageKind.formula.rawValue)),
     ]
 
     private static let music: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Downloads.enabled, .bool, group: "music",
+            summary: "Downloads ability: queued audio and video downloads.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Music.barCollapsed, .bool, group: "music",
+            summary: "Collapse the player bar to a progress line.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.Music.barAutoHide, .bool, group: "music",
+            summary: "Hide the player bar when nothing is playing.", fallback: .bool(false)),
         SettingDefinition(
             Repo.musicFolderStaleKey, .bool, group: "music",
             summary: "Whether the stored music folder has gone missing.", fallback: .bool(false),
@@ -729,7 +751,8 @@ public enum ConfigCatalog {
             summary: "Alert on Bluetooth connections."),
         SettingDefinition(
             AppStorageKeys.Notch.audioMixerEnabled, .bool, group: "notch",
-            summary: "Per-app audio mixer in the notch shelf."),
+            summary: "Audio Mixer ability: per-app volume in the notch shelf.",
+            fallback: .bool(false)),
     ]
 
     private static let focusDim: [SettingDefinition] = [

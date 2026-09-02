@@ -18,70 +18,104 @@ import EdithDatabase
 
     static let matrix = [
         MatrixRow(
-            id: "attention", helper: true, machine: false, toolRule: .all, adapter: true,
-            requiredTools: [], optionalTools: []),
-        MatrixRow(
-            id: "usage", helper: true, machine: false, toolRule: .any, adapter: true,
+            id: "usage", helper: true, machine: false,
+            toolRule: .any, adapter: true,
             requiredTools: ["claude", "codex"], optionalTools: []),
         MatrixRow(
-            id: "herdr", helper: false, machine: false, toolRule: .all, adapter: true,
+            id: "herdr", helper: false, machine: false,
+            toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "quinjet", helper: false, machine: false, toolRule: .all, adapter: true,
+            id: "quinjet", helper: false, machine: false,
+            toolRule: .all, adapter: true,
             requiredTools: ["quinjet"], optionalTools: []),
         MatrixRow(
-            id: "seoAudit", helper: false, machine: false, toolRule: .all, adapter: true,
+            id: "companion", helper: false, machine: false,
+            toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "system", helper: true, machine: false, toolRule: .all, adapter: true,
-            requiredTools: [], optionalTools: []),
-        MatrixRow(
-            id: "appMaintenance", helper: false, machine: false, toolRule: .all, adapter: true,
+            id: "appMaintenance", helper: false, machine: false,
+            toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: ["homebrew"]),
         MatrixRow(
-            id: "machines", helper: true, machine: true, toolRule: .all, adapter: true,
+            id: "homebrew", helper: false, machine: false,
+            toolRule: .all, adapter: true,
+            requiredTools: ["homebrew"], optionalTools: []),
+        MatrixRow(
+            id: "cleaner", helper: false, machine: false,
+            toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "database", helper: false, machine: false, toolRule: .all, adapter: true,
+            id: "system", helper: true, machine: false,
+            toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "companion", helper: false, machine: false, toolRule: .all, adapter: true,
+            id: "lidAwake", helper: true, machine: false,
+            toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "systemStats", helper: true, machine: false, toolRule: .all, adapter: true,
+            id: "systemStats", helper: true, machine: false,
+            toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "micMute", helper: true, machine: false, toolRule: .all, adapter: true,
+            id: "micMute", helper: true, machine: false,
+            toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "lidAwake", helper: true, machine: false, toolRule: .all, adapter: true,
+            id: "clipboard", helper: true, machine: false,
+            toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "music", helper: true, machine: false, toolRule: .all, adapter: true,
-            requiredTools: [], optionalTools: ["yt-dlp"]),
-        MatrixRow(
-            id: "calendar", helper: true, machine: false, toolRule: .all, adapter: true,
+            id: "emoji", helper: true, machine: false,
+            toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "notchShelf", helper: true, machine: false, toolRule: .all, adapter: true,
+            id: "colorPicker", helper: true, machine: false,
+            toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "clipboard", helper: true, machine: false, toolRule: .all, adapter: true,
+            id: "keystrokeHighlight", helper: true, machine: false,
+            toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "keystrokeHighlight", helper: true, machine: false, toolRule: .all, adapter: true,
+            id: "focusDim", helper: true, machine: false,
+            toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "focusDim", helper: true, machine: false, toolRule: .all, adapter: true,
+            id: "presenter", helper: true, machine: false,
+            toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "presenter", helper: true, machine: false, toolRule: .all, adapter: true,
+            id: "music", helper: true, machine: false,
+            toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "emoji", helper: true, machine: false, toolRule: .all, adapter: true,
+            id: "downloads", helper: false, machine: false,
+            toolRule: .all, adapter: true,
+            requiredTools: ["yt-dlp"], optionalTools: []),
+        MatrixRow(
+            id: "notchShelf", helper: true, machine: false,
+            toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
-            id: "colorPicker", helper: true, machine: false, toolRule: .all, adapter: true,
+            id: "audioMixer", helper: true, machine: false,
+            toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
+            id: "calendar", helper: true, machine: false,
+            toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
+            id: "database", helper: false, machine: false,
+            toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
+            id: "attention", helper: true, machine: false,
+            toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
+            id: "seoAudit", helper: false, machine: false,
+            toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
     ]
 
@@ -160,14 +194,12 @@ import EdithDatabase
         #expect(report.checks.first { $0.id == "tool.provider" }?.status == .passed)
     }
 
-    @Test func missingHelperAndMachineConfigurationNeedSetup() async throws {
-        let entry = try #require(ExtensionRegistry.entries.first { $0.id == "machines" })
-        let report = await probe(
-            permissions: [.notifications: true], helperRunning: false, machineCount: 0
-        ).report(for: entry)
+    @Test func missingHelperNeedsSetup() async throws {
+        let entry = try #require(ExtensionRegistry.entries.first { $0.id == "systemStats" })
+        let report = await probe(helperRunning: false).report(for: entry)
 
         #expect(report.state.phase == .needsSetup)
-        #expect(Set(report.state.issues.map(\.id)).isSuperset(of: ["helper", "machines"]))
+        #expect(Set(report.state.issues.map(\.id)).contains("helper"))
     }
 
     @Test func missingRequiredPlatformCapabilityIsUnavailable() async throws {
@@ -183,25 +215,23 @@ import EdithDatabase
         #expect(report.state.issues.map(\.id) == ["platform"])
     }
 
-    @Test func oldMacOSOnlyDegradesNotchShelfWhenAudioMixerIsEnabled() async throws {
-        let entry = try #require(ExtensionRegistry.entries.first { $0.id == "notchShelf" })
+    @Test func oldMacOSMakesTheAudioMixerUnavailableWithoutTouchingTheShelf() async throws {
+        let shelf = try #require(ExtensionRegistry.entries.first { $0.id == "notchShelf" })
+        let mixer = try #require(ExtensionRegistry.entries.first { $0.id == "audioMixer" })
         let platform = PlatformCapabilities.macOS(
             version: OperatingSystemVersion(majorVersion: 14, minorVersion: 3, patchVersion: 0))
-        let ready = await probe(
-            permissions: [.camera: true], helperRunning: true, platform: platform,
-            applicationAudioEnabled: false
-        ).report(for: entry)
-        let degraded = await probe(
-            permissions: [.camera: true], helperRunning: true, platform: platform,
-            applicationAudioEnabled: true
-        ).report(for: entry)
+        let shelfReport = await probe(
+            permissions: [.camera: true], helperRunning: true, platform: platform
+        ).report(for: shelf)
+        let mixerReport = await probe(
+            permissions: [.applicationAudio: true], helperRunning: true, platform: platform
+        ).report(for: mixer)
 
-        #expect(ready.state.phase == .ready)
-        #expect(ready.state.runtimePhase == .installed)
-        #expect(degraded.state.phase == .degraded)
-        #expect(degraded.state.runtimePhase == .installed)
-        #expect(degraded.state.issues.map(\.id) == ["platform"])
-        #expect(degraded.state.issues.first?.detail.contains("applicationAudio") == true)
+        #expect(shelfReport.state.phase == .ready)
+        #expect(shelfReport.state.runtimePhase == .installed)
+        #expect(mixerReport.state.phase == .unavailable)
+        #expect(mixerReport.state.issues.map(\.id) == ["platform"])
+        #expect(mixerReport.state.issues.first?.detail.contains("applicationAudio") == true)
     }
 
     @Test func backendFailureIsDifferentFromIncompleteSetup() async throws {
@@ -272,13 +302,13 @@ import EdithDatabase
         #expect(report.state.issues.isEmpty)
     }
 
-    @Test func optionalMusicWorkflowDoesNotBlockCoreInstallation() async throws {
-        let entry = try #require(ExtensionRegistry.entries.first { $0.id == "music" })
-        let report = await probe(helperRunning: true).report(for: entry)
+    @Test func optionalWorkflowToolDoesNotBlockCoreInstallation() async throws {
+        let entry = try #require(ExtensionRegistry.entries.first { $0.id == "appMaintenance" })
+        let report = await probe(permissions: [.notifications: true]).report(for: entry)
 
         #expect(report.state.phase == .degraded)
         #expect(report.state.runtimePhase == .installed)
-        #expect(report.checks.first { $0.id == "tool.yt-dlp" }?.status == .warning)
+        #expect(report.checks.first { $0.id == "tool.homebrew" }?.status == .warning)
     }
 
     @Test func executablePresenceRequiresASuccessfulVersionProbe() async {

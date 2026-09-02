@@ -71,14 +71,7 @@ public struct ExtensionLifecycleProbeEnvironment: Sendable {
             ).isEmpty
         },
         platformCapabilities: .macOS,
-        usesOptionalCapability: { capability in
-            switch capability {
-            case .applicationAudio:
-                SharedDefaults.store.bool(forKey: AppStorageKeys.Notch.audioMixerEnabled)
-            default:
-                true
-            }
-        },
+        usesOptionalCapability: { _ in true },
         machineCount: { MachineRegistry.machines().count },
         adapterReadiness: { id in
             switch id {
@@ -197,8 +190,6 @@ public struct ExtensionLifecycleProbe: Sendable {
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "appMaintenance": Policy(
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
-        "machines": Policy(
-            requiresHelper: true, requiresMachine: true, toolRule: .all, adapter: true),
         "database": Policy(
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "companion": Policy(
@@ -226,6 +217,14 @@ public struct ExtensionLifecycleProbe: Sendable {
         "colorPicker": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "emoji": Policy(
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
+        "homebrew": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
+        "cleaner": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
+        "downloads": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
+        "audioMixer": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
     ]
 

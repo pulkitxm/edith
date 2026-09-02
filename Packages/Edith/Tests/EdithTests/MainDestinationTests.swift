@@ -43,9 +43,8 @@ import Testing
     @Test func homeItemsUseInformationArchitectureOrder() {
         #expect(
             MainDestination.homeItems == [
-                .home, .attention, .dashboard, .herdr, .quinjet, .seoAudit, .music, .calendar,
-                .system,
-                .appMaintenance, .machines, .database, .companion,
+                .home, .machines, .dashboard, .herdr, .quinjet, .companion, .appMaintenance,
+                .system, .music, .calendar, .database, .attention, .seoAudit,
             ])
     }
 

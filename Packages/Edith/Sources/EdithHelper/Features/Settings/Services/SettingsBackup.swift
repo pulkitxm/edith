@@ -666,7 +666,14 @@ final class SettingsBackup {
     private(set) var musicBackupRunning = false
     private(set) var clipboardBackupRunning = false
 
-    nonisolated static let backedKeys = [
+    nonisolated static let registryV2Keys =
+        SuiteRegistry.defaultsKeys + [
+            AppStorageKeys.Homebrew.enabled, AppStorageKeys.Cleaner.enabled,
+            AppStorageKeys.Downloads.enabled, AppStorageKeys.Music.barCollapsed,
+            AppStorageKeys.Music.barAutoHide,
+        ]
+
+    private nonisolated static let baseBackedKeys = [
         "onboardingCompleted", "dashPaths", MusicFade.enabledKey, MusicFade.secondsKey,
         AppStorageKeys.General.theme, AppStorageKeys.General.panelTab,
         AppStorageKeys.Presenter.mode,
@@ -692,7 +699,7 @@ final class SettingsBackup {
         AppStorageKeys.General.lastPaletteTheme, AppStorageKeys.General.appearance,
         AppStorageKeys.Tabs.systemEnabled, AppStorageKeys.General.preventSleep,
         AppStorageKeys.Tabs.order,
-        AppStorageKeys.Tabs.machinesEnabled, AppStorageKeys.Machines.notifyDown,
+        AppStorageKeys.Machines.notifyDown,
         AppStorageKeys.Machines.notifyDiskFull,
         AppStorageKeys.Machines.diskThreshold, AppStorageKeys.Machines.autoConnect,
         AppStorageKeys.Tabs.databaseEnabled,
@@ -789,7 +796,9 @@ final class SettingsBackup {
         AppStorageKeys.AppMaintenance.updateRetries,
     ]
 
-    nonisolated static let sharedKeys: Set<String> = [
+    nonisolated static let backedKeys = baseBackedKeys + registryV2Keys
+
+    private nonisolated static let baseSharedKeys: Set<String> = [
         "onboardingCompleted", "dashPaths", MusicFade.enabledKey, MusicFade.secondsKey,
         AppStorageKeys.General.theme, AppStorageKeys.General.lastPaletteTheme,
         AppStorageKeys.General.appearance, AppStorageKeys.Music.downloadKind,
@@ -810,7 +819,7 @@ final class SettingsBackup {
         AppStorageKeys.Tabs.systemEnabled, AppStorageKeys.Tabs.calendarEnabled,
         AppStorageKeys.Tabs.order,
         "usageMachines",
-        AppStorageKeys.Tabs.machinesEnabled, AppStorageKeys.Machines.notifyDown,
+        AppStorageKeys.Machines.notifyDown,
         AppStorageKeys.Machines.notifyDiskFull,
         AppStorageKeys.Machines.diskThreshold, AppStorageKeys.Machines.autoConnect,
         AppStorageKeys.Tabs.databaseEnabled,
@@ -908,6 +917,8 @@ final class SettingsBackup {
         AppStorageKeys.General.settingsCategoriesExpanded,
         AppStorageKeys.AppMaintenance.categoriesExpanded,
     ]
+
+    nonisolated static let sharedKeys = baseSharedKeys.union(registryV2Keys)
 
     nonisolated static let deviceLocalKeys: Set<String> = [
         "extensionsExpand", "hasPromptedPermissions", AppStorageKeys.Backup.lastBackupAt,

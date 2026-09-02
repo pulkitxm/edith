@@ -26,7 +26,6 @@ struct SystemPage: View {
                     SkinCard(title: "Running apps", dark: dark) {
                         appList
                     }
-                    CleanerCard(dark: dark)
                 }
                 .pageContent(compact)
             }

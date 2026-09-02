@@ -372,6 +372,7 @@ enum AppMaintenanceSection: String, CaseIterable, Identifiable {
     case updates = "Updates"
     case packages = "Packages"
     case removal = "Remove"
+    case cleaner = "Cleaner"
     case history = "History"
 
     var id: Self { self }
@@ -381,7 +382,16 @@ enum AppMaintenanceSection: String, CaseIterable, Identifiable {
         case .updates: "arrow.up.circle"
         case .packages: "shippingbox"
         case .removal: "trash"
+        case .cleaner: "sparkles.rectangle.stack"
         case .history: "clock.arrow.circlepath"
+        }
+    }
+
+    var abilityID: String {
+        switch self {
+        case .packages: "homebrew"
+        case .cleaner: "cleaner"
+        default: "appMaintenance"
         }
     }
 
@@ -390,6 +400,7 @@ enum AppMaintenanceSection: String, CaseIterable, Identifiable {
         case .updates: "Review and run available application updates."
         case .packages: "Manage installed and discoverable Homebrew packages."
         case .removal: "Review applications and their related files before removal."
+        case .cleaner: "Find reclaimable space and remove it after review."
         case .history: "Review completed maintenance operations."
         }
     }
@@ -404,6 +415,8 @@ struct AppMaintenanceView: View {
     @State private var showingUpdateSettings = false
     @AppStorage(AppStorageKeys.AppMaintenance.section, store: SharedDefaults.store)
     private var sectionRaw = AppMaintenanceSection.updates.rawValue
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
     @AppStorage(AppStorageKeys.AppMaintenance.installDestination, store: SharedDefaults.store)
@@ -567,6 +580,12 @@ struct AppMaintenanceView: View {
         if section == .packages {
             HomebrewMaintenanceView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if section == .cleaner {
+            ScrollView {
+                CleanerCard(dark: scheme == .dark)
+                    .pageContent(compact)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if model.phase == .loading {
             AppMaintenanceSectionSkeleton(section: section)
         } else {
@@ -586,7 +605,7 @@ struct AppMaintenanceView: View {
     private var sectionInventory: some View {
         switch section {
         case .updates: updateInventory
-        case .packages: EmptyView()
+        case .packages, .cleaner: EmptyView()
         case .removal: removalInventory
         case .history: historyInventory
         }
@@ -752,7 +771,7 @@ struct AppMaintenanceView: View {
     private var detail: some View {
         switch section {
         case .updates: updateDetail
-        case .packages: EmptyView()
+        case .packages, .cleaner: EmptyView()
         case .removal: removalDetail
         case .history: historyDetail
         }
@@ -1103,7 +1122,7 @@ struct AppMaintenanceSectionSkeleton: View {
             AppMaintenanceRemovalSkeleton()
         case .history:
             AppMaintenanceHistorySkeleton()
-        case .packages:
+        case .packages, .cleaner:
             EmptyView()
         }
     }

@@ -185,7 +185,19 @@ public struct ExtensionLifecycleDescriptor: Identifiable, Codable, Equatable, Se
 }
 
 public enum ExtensionLifecycleCatalog {
-    public static let descriptors: [ExtensionLifecycleDescriptor] = [
+    public static let descriptors: [ExtensionLifecycleDescriptor] = {
+        let order = Dictionary(
+            uniqueKeysWithValues: ExtensionRegistry.entries.enumerated().map {
+                ($0.element.id, $0.offset)
+            })
+        return
+            allDescriptors
+            .compactMap { descriptor in order[descriptor.id].map { (descriptor, $0) } }
+            .sorted { $0.1 < $1.1 }
+            .map(\.0)
+    }()
+
+    public static let allDescriptors: [ExtensionLifecycleDescriptor] = [
         descriptor(
             "attention", "Understand app and browser activity, then protect focused work.",
             workflows: [
@@ -902,9 +914,117 @@ public enum ExtensionLifecycleCatalog {
                     "history", "Read sampled colors",
                     "Confirm the color history repository responds.", "ed color ls --json")
             ]),
+        descriptor(
+            "homebrew", "Install, upgrade and remove Homebrew packages from one client.",
+            workflows: [
+                instruction(
+                    "browse", "Browse packages",
+                    "Search installed and discoverable formulae, casks and taps."),
+                instruction(
+                    "change", "Install or upgrade",
+                    "Queue package changes and watch each one run to completion."),
+            ],
+            prerequisites: [
+                instruction(
+                    "tool", "Install Homebrew", "Put brew on Edith's PATH.",
+                    "ed tools install homebrew")
+            ],
+            examples: ["ed extensions enable homebrew", "ed brew ls --json"],
+            docs: [documentation("guide", "Homebrew guide", "docs/cli/brew/README.md")],
+            recovery: [
+                instruction(
+                    "install", "Repair Homebrew", "Reinstall the managed Homebrew client.",
+                    "ed tools install homebrew")
+            ],
+            verification: [
+                instruction(
+                    "list", "List packages", "Confirm brew reports installed packages.",
+                    "ed brew ls --json")
+            ]),
+        descriptor(
+            "cleaner", "Find reclaimable space on your drives and remove it after review.",
+            workflows: [
+                instruction(
+                    "scan", "Scan for space", "Measure caches, logs and other reclaimable files."),
+                instruction(
+                    "clean", "Reclaim space", "Review each category before anything is removed."),
+            ],
+            prerequisites: [
+                instruction(
+                    "drives", "Choose drives", "Pick the volumes the cleaner is allowed to scan.",
+                    "ed cleaner drives --json")
+            ],
+            examples: ["ed extensions enable cleaner", "ed cleaner scan --json"],
+            docs: [documentation("guide", "Cleaner guide", "docs/cli/cleaner/README.md")],
+            recovery: [
+                instruction(
+                    "drives", "Reset the drive selection",
+                    "List the volumes the cleaner can reach.", "ed cleaner drives --json")
+            ],
+            verification: [
+                instruction(
+                    "scan", "Read a scan", "Confirm a scan reports category sizes.",
+                    "ed cleaner scan --json")
+            ]),
+        descriptor(
+            "downloads", "Queue audio and video downloads that outlive the window.",
+            workflows: [
+                instruction("add", "Queue a download", "Add one or more URLs to the queue."),
+                instruction(
+                    "watch", "Follow progress", "Track each item until the file lands on disk."),
+            ],
+            prerequisites: [
+                instruction(
+                    "tool", "Install yt-dlp", "Put yt-dlp on Edith's PATH.",
+                    "ed tools install yt-dlp"),
+                instruction(
+                    "folder", "Choose a music folder",
+                    "Downloads are written into the folder Music uses."),
+            ],
+            examples: ["ed extensions enable downloads", "ed download ls --json"],
+            docs: [documentation("guide", "Download guide", "docs/cli/download/README.md")],
+            recovery: [
+                instruction(
+                    "tool", "Repair yt-dlp", "Reinstall the managed downloader.",
+                    "ed download tool --json"),
+                instruction(
+                    "retry", "Retry a failed item", "Requeue an item that stopped early.",
+                    "ed download retry"),
+            ],
+            verification: [
+                instruction(
+                    "queue", "Read the queue", "Confirm the queue is readable.",
+                    "ed download ls --json")
+            ]),
+        descriptor(
+            "audioMixer", "Set the volume of each app from the notch shelf.",
+            workflows: [
+                instruction("mix", "Balance apps", "Change one app's volume without the others."),
+                instruction("mute", "Silence an app", "Mute a single app while the rest play on."),
+            ],
+            prerequisites: [
+                instruction(
+                    "shelf", "Enable Notch Shelf", "The mixer lives in the shelf's audio tab.",
+                    "ed extensions enable notchShelf"),
+                instruction(
+                    "permission", "Allow application audio",
+                    "macOS asks for audio capture the first time the mixer runs."),
+            ],
+            examples: ["ed extensions enable audioMixer", "ed shelf ls --json"],
+            docs: [documentation("guide", "Notch Shelf guide", "docs/cli/shelf/README.md")],
+            recovery: [
+                instruction(
+                    "shelf", "Check the shelf", "Confirm the shelf is enabled and reachable.",
+                    "ed extensions doctor notchShelf --json")
+            ],
+            verification: [
+                instruction(
+                    "shelf", "Read the shelf", "Confirm the shelf responds.", "ed shelf ls --json")
+            ]),
     ]
 
-    public static let byID = Dictionary(uniqueKeysWithValues: descriptors.map { ($0.id, $0) })
+    public static let byID = Dictionary(
+        uniqueKeysWithValues: allDescriptors.map { ($0.id, $0) })
 
     public static func descriptor(for extensionID: String) -> ExtensionLifecycleDescriptor? {
         byID[extensionID]

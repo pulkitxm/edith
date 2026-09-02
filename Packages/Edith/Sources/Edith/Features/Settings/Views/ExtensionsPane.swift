@@ -957,15 +957,18 @@ private struct ExtensionDetailRows: View {
             case .seoAudit: SEOAuditRows()
             case .system: SystemRows()
             case .appMaintenance: AppMaintenanceRows()
-            case .machines: MachinesRows()
+            case .homebrew: HomebrewRows()
+            case .cleaner: CleanerRows()
             case .database: DatabaseRows()
             case .companion: CompanionRows()
             case .systemStats: SystemStatsRows()
             case .micMute: MicMuteRows()
             case .lidAwake: LidAwakeRows()
             case .music: MusicRows()
+            case .downloads: DownloadsRows()
             case .calendar: CalendarRows()
             case .notchShelf: NotchShelfRows()
+            case .audioMixer: AudioMixerRows()
             case .clipboard: ClipboardRows()
             case .keystrokeHighlight: KeystrokeHighlightRows()
             case .focusDim: FocusDimRows()
@@ -979,6 +982,100 @@ private struct ExtensionDetailRows: View {
                     .settingsCaption()
             }
         }
+    }
+}
+
+private struct HomebrewRows: View {
+    @AppStorage(AppStorageKeys.Homebrew.enabled, store: SharedDefaults.store) private
+        var enabled = false
+
+    var body: some View {
+        Section("Packages") {
+            LabeledContent("Client", value: "Homebrew")
+            Text(
+                "One client for formulae, casks and taps, with every change reviewed before it runs."
+            )
+            .settingsCaption()
+            Button("Open Packages") {
+                SharedDefaults.store.set(
+                    AppMaintenanceSection.packages.rawValue,
+                    forKey: AppStorageKeys.AppMaintenance.section)
+                SectionWindow.open(.appMaintenance)
+            }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+    }
+}
+
+private struct CleanerRows: View {
+    @AppStorage(AppStorageKeys.Cleaner.enabled, store: SharedDefaults.store) private
+        var enabled = false
+
+    var body: some View {
+        Section("Cleaner") {
+            LabeledContent("Removal", value: "Moves to Trash")
+            Text(
+                "Scan drives for reclaimable space and review every category before anything moves."
+            )
+            .settingsCaption()
+            Button("Open Cleaner") {
+                SharedDefaults.store.set(
+                    AppMaintenanceSection.cleaner.rawValue,
+                    forKey: AppStorageKeys.AppMaintenance.section)
+                SectionWindow.open(.appMaintenance)
+            }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+    }
+}
+
+private struct DownloadsRows: View {
+    @AppStorage(AppStorageKeys.Downloads.enabled, store: SharedDefaults.store) private
+        var enabled = false
+    @AppStorage(AppStorageKeys.Music.downloadKind, store: SharedDefaults.store) private
+        var downloadKind = DownloadKind.audio.rawValue
+
+    var body: some View {
+        Section("Downloads") {
+            Picker(
+                "Default format",
+                selection: $downloadKind.configured(AppStorageKeys.Music.downloadKind)
+            ) {
+                ForEach(DownloadKind.allCases, id: \.rawValue) { kind in
+                    Text(kind.title).tag(kind.rawValue)
+                }
+            }
+            Text("Queued downloads keep running in the background and land in your music folder.")
+                .settingsCaption()
+            Button("Open Music") { SectionWindow.open(.music) }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+    }
+}
+
+private struct AudioMixerRows: View {
+    @AppStorage(AppStorageKeys.Notch.audioMixerEnabled, store: SharedDefaults.store) private
+        var enabled = false
+
+    private var available: Bool {
+        PlatformCapabilities.macOS.state(for: .applicationAudio).isSupported
+    }
+
+    var body: some View {
+        Section("Mixer") {
+            LabeledContent("Lives in", value: "Notch Shelf")
+            Text(
+                available
+                    ? "Set the volume of each app from the shelf's audio tab."
+                    : "Requires macOS 14.4 or later."
+            )
+            .settingsCaption()
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
     }
 }
 

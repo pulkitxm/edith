@@ -239,7 +239,7 @@ final class AppServices {
             SharedDefaults.store.set(false, forKey: AppStorageKeys.General.preventSleep)
         }
 
-        let machinesOn = Self.extensionEnabled(AppStorageKeys.Tabs.machinesEnabled)
+        let machinesOn = !MachineRegistry.machines().isEmpty
         if machinesOn, machines == nil { machines = MachineMonitor() }
         if !machinesOn, let monitor = machines {
             monitor.shutdown()

@@ -65,10 +65,10 @@ private final class ExtensionAdapterDefaults: @unchecked Sendable {
 
 public enum ExtensionLiveAdapters {
     public static let extensionIDs = [
-        "attention", "usage", "quinjet", "seoAudit", "system", "appMaintenance", "machines",
-        "systemStats", "micMute",
-        "lidAwake", "music", "calendar", "notchShelf", "clipboard", "keystrokeHighlight",
-        "focusDim", "presenter", "emoji", "colorPicker",
+        "usage", "quinjet", "appMaintenance", "homebrew", "cleaner", "system", "lidAwake",
+        "systemStats", "micMute", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
+        "focusDim", "presenter", "music", "downloads", "notchShelf", "audioMixer", "calendar",
+        "attention", "seoAudit",
     ]
 
     public static func provider(
@@ -99,7 +99,10 @@ public enum ExtensionLiveAdapters {
         case "seoAudit": siteAuditReadiness()
         case "system": await systemReadiness()
         case "appMaintenance": appMaintenanceReadiness()
-        case "machines": machinesReadiness()
+        case "homebrew": homebrewReadiness(executable: executableNamed("brew"))
+        case "cleaner": cleanerReadiness()
+        case "downloads": downloadsReadiness(executable: executableNamed("yt-dlp"))
+        case "audioMixer": audioMixerReadiness(defaults: defaults)
         case "systemStats": systemStatsReadiness()
         case "micMute": microphoneReadiness()
         case "lidAwake": lidAwakeReadiness()
@@ -215,6 +218,58 @@ public enum ExtensionLiveAdapters {
             setupDetail: available
                 ? "Required macOS disk image verification tools are unavailable."
                 : "No readable Applications folder is available."
+        ).readiness
+    }
+
+    static func homebrewReadiness(
+        executable: URL? = CLIToolEnvironment.executable(named: "brew")
+    ) -> ExtensionAdapterReadiness {
+        ExtensionAdapterFacts(
+            installed: executable != nil,
+            readyDetail: "Homebrew is installed and reachable.",
+            uninstalledDetail: "Homebrew is not installed on this Mac."
+        ).readiness
+    }
+
+    static func cleanerReadiness(
+        drives: [DriveInfo] = JunkScanner.drives()
+    ) -> ExtensionAdapterReadiness {
+        let readable = drives.filter { FileManager.default.isReadableFile(atPath: $0.id) }
+        return ExtensionAdapterFacts(
+            contentCount: readable.count,
+            readyDetail: "Scannable volumes: \(readable.count).",
+            emptyDetail: "No volume is readable for scanning."
+        ).readiness
+    }
+
+    static func downloadsReadiness(
+        executable: URL? = CLIToolEnvironment.executable(named: "yt-dlp"),
+        directory: URL = Repo.musicDir
+    ) -> ExtensionAdapterReadiness {
+        var isDirectory: ObjCBool = false
+        let hasFolder =
+            FileManager.default.fileExists(
+                atPath: directory.path, isDirectory: &isDirectory) && isDirectory.boolValue
+        return ExtensionAdapterFacts(
+            installed: executable != nil, configured: hasFolder,
+            readyDetail: "yt-dlp is installed and the download folder is writable.",
+            uninstalledDetail: "yt-dlp is not installed on this Mac.",
+            setupDetail: "The download folder does not exist yet."
+        ).readiness
+    }
+
+    static func audioMixerReadiness(
+        defaults: UserDefaults,
+        capabilities: PlatformCapabilities = .macOS
+    ) -> ExtensionAdapterReadiness {
+        let supported = capabilities.state(for: .applicationAudio).isSupported
+        let shelfEnabled = defaults.bool(forKey: AppStorageKeys.Notch.shelfEnabled)
+        return ExtensionAdapterFacts(
+            configured: shelfEnabled,
+            unsupportedReason: supported
+                ? nil : "Application audio mixing requires macOS 14.4 or later.",
+            readyDetail: "The per-app mixer is available in the notch shelf.",
+            setupDetail: "Turn on Notch Shelf to reach the mixer."
         ).readiness
     }
 

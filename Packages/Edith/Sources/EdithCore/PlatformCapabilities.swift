@@ -8,6 +8,7 @@ public enum PlatformCapability: String, CaseIterable, Codable, Hashable, Sendabl
     case clipboardHistory
     case companionService
     case databaseBroker
+    case diskCleaning
     case emojiInsertion
     case externalMediaControl
     case fileShelf
@@ -20,6 +21,7 @@ public enum PlatformCapability: String, CaseIterable, Codable, Hashable, Sendabl
     case localTerminal
     case machineManagement
     case mediaControls
+    case mediaDownloads
     case microphoneControl
     case notifications
     case packageManagement

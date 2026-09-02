@@ -101,6 +101,8 @@ import Testing
 
     @Test func verifyCanProveAConfiguredExtensionReady() async {
         await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Suites.agents)
+            world.shared.set(true, forKey: AppStorageKeys.Tabs.herdrEnabled)
             world.shared.set(true, forKey: AppStorageKeys.Tabs.quinjetEnabled)
             CLIEnvironment.executableNamed = { name in
                 name == "quinjet" ? URL(fileURLWithPath: "/opt/homebrew/bin/quinjet") : nil
@@ -122,6 +124,8 @@ import Testing
 
     @Test func verifyDistinguishesABrokenExecutableFromAnUninstalledTool() async {
         await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Suites.agents)
+            world.shared.set(true, forKey: AppStorageKeys.Tabs.herdrEnabled)
             world.shared.set(true, forKey: AppStorageKeys.Tabs.quinjetEnabled)
             CLIEnvironment.extensionToolReadiness = { _ in
                 .error("Found Quinjet, but its version probe failed.")
@@ -145,6 +149,7 @@ import Testing
 
     @Test func doctorReturnsActionableHelperFailures() async {
         await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Suites.system)
             world.shared.set(true, forKey: AppStorageKeys.MenuBar.systemStats)
             let result = await CLIProbe.capture([
                 "extensions", "doctor", "systemStats", "--json",
@@ -160,6 +165,7 @@ import Testing
 
     @Test func calendarDoctorUsesTheAuthorizedHelper() async {
         await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Suites.media)
             world.shared.set(true, forKey: AppStorageKeys.Tabs.calendarEnabled)
             world.shared.set(true, forKey: AppStorageKeys.Permissions.calendarGranted)
             world.helperRunning(true)
@@ -183,6 +189,7 @@ import Testing
 
     @Test func calendarDoctorTrustsAHelperRejectionOverMirroredPermission() async {
         await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Suites.media)
             world.shared.set(true, forKey: AppStorageKeys.Tabs.calendarEnabled)
             world.shared.set(true, forKey: AppStorageKeys.Permissions.calendarGranted)
             world.helperRunning(true)
@@ -203,6 +210,8 @@ import Testing
 
     @Test func statusIncludesTheLiveRuntimeAdapter() async {
         await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Suites.agents)
+            world.shared.set(true, forKey: AppStorageKeys.Tabs.herdrEnabled)
             world.shared.set(true, forKey: AppStorageKeys.Tabs.quinjetEnabled)
             CLIEnvironment.executableNamed = { name in
                 name == "quinjet" ? URL(fileURLWithPath: "/opt/homebrew/bin/quinjet") : nil
@@ -226,6 +235,7 @@ import Testing
 
     @Test func companionStatusRoutesFreshSetupAndConfiguredRecovery() async {
         await CLIProbe.inWorld { world in
+            world.shared.set(true, forKey: AppStorageKeys.Suites.agents)
             world.shared.set(true, forKey: AppStorageKeys.Tabs.companionEnabled)
             CLIEnvironment.companionConfigured = { false }
             let fresh = await CLIProbe.capture([

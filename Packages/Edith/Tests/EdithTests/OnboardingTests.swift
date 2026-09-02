@@ -25,7 +25,11 @@ import Testing
 
     @Test func onboardingSeparatesCoreAndOptionalWorkflowTools() {
         #expect(OnboardingFlow.requiredTools(selectedIDs: ["music"]).isEmpty)
-        #expect(OnboardingFlow.optionalTools(selectedIDs: ["music"]) == [.youtubeDownloader])
+        #expect(OnboardingFlow.optionalTools(selectedIDs: ["music"]).isEmpty)
+        #expect(
+            OnboardingFlow.requiredTools(selectedIDs: ["downloads"]) == [.youtubeDownloader])
+        #expect(
+            OnboardingFlow.optionalTools(selectedIDs: ["appMaintenance"]) == [.homebrew])
         #expect(
             OnboardingFlow.requiredTools(selectedIDs: ["usage", "quinjet"])
                 == [.claudeCode, .codex, .quinjet])

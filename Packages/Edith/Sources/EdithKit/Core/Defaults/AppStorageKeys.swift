@@ -1,6 +1,15 @@
 import Foundation
 
 public enum AppStorageKeys {
+    public enum Suites {
+        public static let agents = "suiteAgentsEnabled"
+        public static let maintenance = "suiteMaintenanceEnabled"
+        public static let system = "suiteSystemEnabled"
+        public static let desk = "suiteDeskEnabled"
+        public static let media = "suiteMediaEnabled"
+        public static let data = "suiteDataEnabled"
+    }
+
     public enum AppMaintenance {
         public static let categoriesExpanded = "appMaintenanceCategoriesExpanded"
         public static let enabled = "appMaintenanceEnabled"
@@ -126,8 +135,17 @@ public enum AppStorageKeys {
         public static let collapsedSpaceCounts = "herdrCollapsedSpaceCounts"
     }
 
+    public enum Cleaner {
+        public static let enabled = "cleanerEnabled"
+    }
+
+    public enum Downloads {
+        public static let enabled = "downloadsEnabled"
+    }
+
     public enum Homebrew {
         public static let defaultKind = "homebrewDefaultKind"
+        public static let enabled = "homebrewEnabled"
     }
 
     public enum KeystrokeHighlight {
@@ -187,6 +205,8 @@ public enum AppStorageKeys {
     }
 
     public enum Music {
+        public static let barAutoHide = "musicBarAutoHide"
+        public static let barCollapsed = "musicBarCollapsed"
         public static let lastBackupAt = "lastMusicBackupAt"
         public static let backup = "musicBackup"
         public static let downloadKind = "musicDownloadKind"
@@ -263,7 +283,6 @@ public enum AppStorageKeys {
         public static let companionEnabled = "tabCompanionEnabled"
         public static let databaseEnabled = "tabDatabaseEnabled"
         public static let herdrEnabled = "tabHerdrEnabled"
-        public static let machinesEnabled = "tabMachinesEnabled"
         public static let musicEnabled = "tabMusicEnabled"
         public static let order = "tabOrder"
         public static let quinjetEnabled = "tabQuinjetEnabled"
