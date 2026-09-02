@@ -695,7 +695,6 @@ final class SettingsBackup {
         AppStorageKeys.General.hotKeyCode, AppStorageKeys.General.hotKeyMods,
         AppStorageKeys.General.hotKeyLabel, AppStorageKeys.Music.volume,
         AppStorageKeys.Music.downloadKind,
-        Repo.pathKey,
         AppStorageKeys.Backup.icloud, AppStorageKeys.Music.backup,
         AppStorageKeys.General.lastPaletteTheme, AppStorageKeys.General.appearance,
         AppStorageKeys.Tabs.systemEnabled, AppStorageKeys.General.preventSleep,
@@ -860,7 +859,7 @@ final class SettingsBackup {
         "micHotKeyCode", "micHotKeyMods", "micHotKeyLabel", "cleanerSelectionOverrides",
         "cleanerCategoryDefaults",
         "cleanerSelectedDrives", "cleanerCustomFolders",
-        AppStorageKeys.General.preventSleep, Repo.pathKey,
+        AppStorageKeys.General.preventSleep,
         LidAwakeState.enabledKey, LidAwakeState.restoreOnQuitKey, LidAwakeState.sessionKey,
         LidAwakeState.batteryThresholdKey,
         AppStorageKeys.Notch.shelfEnabled, AppStorageKeys.Notch.shelfOpenOnDrag,
@@ -943,7 +942,7 @@ final class SettingsBackup {
         Repo.musicFolderPathKey,
         Repo.musicFolderStaleKey,
         LidAwakeState.activeKey,
-        "musicFolderExternalConfirmation", "musicRevealPath", "repoPathExternalConfirmation",
+        "musicFolderExternalConfirmation", "musicRevealPath",
         "cleanerConfirmedExternalPaths",
         "mainWindowZoom", AppStorageKeys.General.editMainWindowFullScreen,
         AppStorageKeys.Machines.selection, AppStorageKeys.Machines.tab,
@@ -2008,14 +2007,6 @@ final class SettingsBackup {
         for (key, encodedValue) in dict where Self.backedKeys.contains(key) {
             guard let value = settingsBackupDecodeJSONValue(encodedValue) else { continue }
             switch key {
-            case Repo.pathKey:
-                guard let path = value as? String else { continue }
-                guard RestoredPathValidation.verdict(for: path) == .keep else {
-                    Repo.setDevRootPath(nil)
-                    SharedDefaults.store.set(true, forKey: Repo.musicFolderStaleKey)
-                    continue
-                }
-                store(for: key).set(path, forKey: key)
             case "cleanerSelectedDrives", "cleanerCustomFolders":
                 guard let paths = value as? [String] else { continue }
                 store(for: key).set(

@@ -58,8 +58,7 @@ import Testing
 
 @Suite(.serialized) struct RepoConfirmedPathTests {
     private static let keys = [
-        "repoPath", "repoPathExternalConfirmation", Repo.musicFolderPathKey,
-        "musicFolderExternalConfirmation", Repo.musicFolderStaleKey,
+        Repo.musicFolderPathKey, "musicFolderExternalConfirmation", Repo.musicFolderStaleKey,
     ]
 
     private func withCleanRepoKeys(_ body: () -> Void) {
@@ -81,90 +80,11 @@ import Testing
 
     private var homePath: String {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("edith-test-\(UUID().uuidString)").path
+            .appendingPathComponent("EdithTest-\(UUID().uuidString)").path
     }
 
     private var externalPath: String {
-        "/Volumes/EdithTest-\(UUID().uuidString)/repo"
-    }
-
-    @Test func devRootIsNilWhenUnset() {
-        withCleanRepoKeys {
-            #expect(Repo.devRoot == nil)
-        }
-    }
-
-    @Test func setDevRootPathKeepsHomePathWithoutConfirmation() {
-        withCleanRepoKeys {
-            let path = homePath
-            Repo.setDevRootPath(path)
-            #expect(Repo.devRoot == URL(fileURLWithPath: path).standardizedFileURL)
-            #expect(SharedDefaults.store.string(forKey: "repoPathExternalConfirmation") == nil)
-        }
-    }
-
-    @Test func setDevRootPathConfirmsExternalPath() {
-        withCleanRepoKeys {
-            let path = externalPath
-            Repo.setDevRootPath(path)
-            #expect(Repo.devRoot == URL(fileURLWithPath: path).standardizedFileURL)
-            #expect(SharedDefaults.store.string(forKey: "repoPathExternalConfirmation") == path)
-        }
-    }
-
-    @Test func setDevRootPathNilClearsPathAndConfirmation() {
-        withCleanRepoKeys {
-            Repo.setDevRootPath(externalPath)
-            Repo.setDevRootPath(nil)
-            #expect(Repo.devRoot == nil)
-            #expect(SharedDefaults.store.string(forKey: "repoPath") == nil)
-            #expect(SharedDefaults.store.string(forKey: "repoPathExternalConfirmation") == nil)
-        }
-    }
-
-    @Test func unconfirmedExternalDevRootIsHidden() {
-        withCleanRepoKeys {
-            SharedDefaults.store.set(externalPath, forKey: "repoPath")
-            #expect(Repo.devRoot == nil)
-        }
-    }
-
-    @Test func staleConfirmationDoesNotCoverDifferentPath() {
-        withCleanRepoKeys {
-            SharedDefaults.store.set(externalPath, forKey: "repoPath")
-            SharedDefaults.store.set(
-                "/Volumes/Other/repo", forKey: "repoPathExternalConfirmation")
-            #expect(Repo.devRoot == nil)
-        }
-    }
-
-    @Test func prepareDropsUnconfirmedExternalRepoPathAndMarksMusicStale() {
-        withCleanRepoKeys {
-            SharedDefaults.store.set(externalPath, forKey: "repoPath")
-            Repo.prepareStoredPaths()
-            #expect(SharedDefaults.store.string(forKey: "repoPath") == nil)
-            #expect(SharedDefaults.store.bool(forKey: Repo.musicFolderStaleKey))
-        }
-    }
-
-    @Test func prepareKeepsConfirmedExternalRepoPath() {
-        withCleanRepoKeys {
-            let path = externalPath
-            Repo.setDevRootPath(path)
-            Repo.prepareStoredPaths()
-            #expect(Repo.devRoot == URL(fileURLWithPath: path).standardizedFileURL)
-            #expect(!SharedDefaults.store.bool(forKey: Repo.musicFolderStaleKey))
-        }
-    }
-
-    @Test func prepareKeepsHomeRepoPathWithoutStale() {
-        withCleanRepoKeys {
-            let path = homePath
-            Repo.setDevRootPath(path)
-            Repo.prepareStoredPaths()
-            #expect(Repo.devRoot == URL(fileURLWithPath: path).standardizedFileURL)
-            #expect(!SharedDefaults.store.bool(forKey: Repo.musicFolderStaleKey))
-        }
+        "/Volumes/EdithTest-\(UUID().uuidString)/music"
     }
 
     @Test func prepareDropsUnconfirmedExternalMusicPathAndMarksStale() {
@@ -188,20 +108,56 @@ import Testing
         }
     }
 
-    @Test func unconfirmedExternalMusicPathFallsBackToSupportDir() {
+    @Test func unconfirmedExternalMusicPathFallsBackToTheDataRoot() {
         withCleanRepoKeys {
             SharedDefaults.store.set(externalPath, forKey: Repo.musicFolderPathKey)
-            #expect(Repo.musicDir == AppData.supportDir.appendingPathComponent("music"))
+            #expect(Repo.musicDir == DataRoot.music)
         }
     }
 
-    @Test func musicDirFallsBackToDevRootLocalMusic() {
+    @Test func aHomeMusicFolderNeedsNoConfirmation() {
         withCleanRepoKeys {
-            let path = homePath
-            Repo.setDevRootPath(path)
-            let expected = URL(fileURLWithPath: path).standardizedFileURL
-                .appendingPathComponent("local/music")
-            #expect(Repo.musicDir == expected)
+            let url = URL(fileURLWithPath: homePath)
+            Repo.setMusicDirectory(url)
+            #expect(Repo.musicDir == url.standardizedFileURL)
+            #expect(
+                SharedDefaults.store.string(forKey: "musicFolderExternalConfirmation") == nil)
         }
+    }
+}
+
+@Suite struct DataRootTests {
+    @Test func everyDataLocationSitsUnderTheOneRoot() {
+        let root = DataRoot.support.path
+        for url in [
+            DataRoot.machines, DataRoot.clipboard, DataRoot.siteAudit, DataRoot.settingsExport,
+            DataRoot.music, DataRoot.usage,
+        ] {
+            #expect(url.path.hasPrefix(root), "\(url.path) escapes the data root")
+        }
+    }
+
+    @Test func cachesAndLogsSitOutsideTheDataRoot() {
+        #expect(!DataRoot.caches.path.hasPrefix(DataRoot.support.path))
+        #expect(!DataRoot.logs.path.hasPrefix(DataRoot.support.path))
+        #expect(DataRoot.runtime.path.hasPrefix(DataRoot.caches.path))
+        #expect(DataRoot.logs.path.hasSuffix("Library/Logs/Edith"))
+    }
+
+    @Test func theDevOverrideIsAnEnvironmentVariableRatherThanASetting() {
+        #expect(DataRoot.devOverrideVariable == "EDITH_DATA_ROOT")
+        #expect(!ConfigCatalog.keys.contains("repoPath"))
+    }
+
+    @Test func logsOlderThanSevenDaysExpire() {
+        let now = Date()
+        let names = ["today.log", "old.log", "ancient.log"]
+        let ages: [String: Date] = [
+            "today.log": now.addingTimeInterval(-3600),
+            "old.log": now.addingTimeInterval(-6 * 24 * 60 * 60),
+            "ancient.log": now.addingTimeInterval(-8 * 24 * 60 * 60),
+        ]
+
+        #expect(DataRoot.expiredLogs(in: names, now: now, ages: ages) == ["ancient.log"])
     }
 }

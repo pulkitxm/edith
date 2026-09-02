@@ -63,10 +63,8 @@ answer a question, so none of them fails because the app is closed.
 ## Notes and gotchas
 
 - The queue lives at `downloads.json` in Edith's data directory,
-  `~/Library/Application Support/Edith/data` normally, or
-  `<repoPath>/apps/dashboard/data` when the `repoPath` setting points at a
-  checkout. Both `ed` and the app read and write that one file, and every
-  mutation here rewrites it whole and atomically.
+  `~/Library/Application Support/Edith/data`. Both `ed` and the app read and
+  write that one file, and every mutation here rewrites it whole and atomically.
 - Order is by queued time, newest first, with the persisted record ID breaking
   timestamp ties. Numbering remains stable until the queue changes.
 - Every mutating verb posts `com.pulkit.edith.downloadQueueChanged`, which is

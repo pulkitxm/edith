@@ -61,6 +61,8 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 self.launchCleanupTask?.cancel()
                 self.launchCleanupTask = Task.detached(priority: .utility) {
+                    DataRoot.prepare()
+                    DataRoot.pruneLogs()
                     Repo.prepareStoredPaths()
                     RetiredLicenseCleanup.run()
                 }

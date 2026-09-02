@@ -4,7 +4,6 @@ import SwiftUI
 
 struct DeveloperPanel: View {
     let services: AppServices
-    @State private var repoPath = SharedDefaults.store.string(forKey: Repo.pathKey) ?? ""
     @State private var diagnostics = AppInspectionCenter().diagnostics()
     @State private var refreshing = false
     private let inspection = AppInspectionCenter()
@@ -37,15 +36,13 @@ struct DeveloperPanel: View {
                 .buttonStyle(.link)
                 .font(.system(size: 10))
 
-                HStack(spacing: 6) {
-                    TextField("Repo path override", text: $repoPath)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 10))
-                        .onSubmit(saveRepoPath)
-                    Button("Browse…", action: browseRepoPath)
-                        .buttonStyle(.link)
-                        .font(.system(size: 10))
-                }
+                Text("Data root: \(DataRoot.support.path)")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                Text("Set \(DataRoot.devOverrideVariable) to point a dev build somewhere else.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
             }
             .padding(.top, 6)
         }
@@ -53,22 +50,6 @@ struct DeveloperPanel: View {
         .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
             diagnostics = inspection.diagnostics()
         }
-    }
-
-    private func saveRepoPath() {
-        let trimmed = repoPath.trimmingCharacters(in: .whitespacesAndNewlines)
-        Repo.setDevRootPath(trimmed.isEmpty ? nil : trimmed)
-        IPC.post(IPC.Name.settingsChanged)
-    }
-
-    private func browseRepoPath() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        repoPath = url.path
-        saveRepoPath()
     }
 
 }
