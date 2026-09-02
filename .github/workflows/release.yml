@@ -197,8 +197,20 @@ jobs:
           ditto dist/Edith.app dmg-root/Edith.app
           ln -s /Applications dmg-root/Applications
           hdiutil create -volname Edith -srcfolder dmg-root -format ULMO Edith.dmg
+          verify_status=1
+          for attempt in 1 2 3 4 5; do
+            if hdiutil verify Edith.dmg; then
+              verify_status=0
+              break
+            else
+              verify_status=$?
+            fi
+            if [ "$attempt" -lt 5 ]; then
+              sleep 2
+            fi
+          done
           rm -rf dmg-root
-          hdiutil verify Edith.dmg
+          exit "$verify_status"
 
       - name: Notarize and staple
         if: steps.release_build.outputs.superseded != 'true' && env.HAS_NOTARY == 'true'
