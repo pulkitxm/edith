@@ -8,16 +8,19 @@ public struct GhosttyLaunch: Sendable {
     public let environment: [String]
     public let workingDirectory: String?
     public let allowsLocalFileLinks: Bool
+    public let resetTerminalAfterInterrupt: Bool
 
     public init(
         executable: String, arguments: [String], environment: [String],
-        workingDirectory: String? = nil, allowsLocalFileLinks: Bool = true
+        workingDirectory: String? = nil, allowsLocalFileLinks: Bool = true,
+        resetTerminalAfterInterrupt: Bool = false
     ) {
         self.executable = executable
         self.arguments = arguments
         self.environment = environment.filter { !$0.hasPrefix("NO_COLOR=") }
         self.workingDirectory = workingDirectory
         self.allowsLocalFileLinks = allowsLocalFileLinks
+        self.resetTerminalAfterInterrupt = resetTerminalAfterInterrupt
     }
 
     var command: String {

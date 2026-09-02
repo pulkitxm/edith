@@ -15,6 +15,9 @@ public final class GhosttyTerminalView: NSView {
     public internal(set) var hoveredLink: String?
     public let allowsLocalFileLinks: Bool
     private var launch: GhosttyLaunch?
+    var shouldResetTerminalAfterInterrupt: Bool {
+        launch?.resetTerminalAfterInterrupt == true
+    }
     private var theme: GhosttyTheme?
     private var themeConfig: ghostty_config_t?
     private var owned: GhosttyConfigStrings?

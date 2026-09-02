@@ -5,6 +5,59 @@ import GhosttyKit
 import Testing
 
 @Suite struct GhosttyInputTests {
+    @Test func onlyConfiguredInterruptsRequestTerminalReset() {
+        #expect(
+            GhosttyTerminalView.shouldResetTerminalAfterInterrupt(
+                keyCode: UInt16(kVK_ANSI_C), flags: .control, isARepeat: false))
+        #expect(
+            !GhosttyTerminalView.shouldResetTerminalAfterInterrupt(
+                keyCode: UInt16(kVK_ANSI_C), flags: .control, isARepeat: true))
+        #expect(
+            !GhosttyTerminalView.shouldResetTerminalAfterInterrupt(
+                keyCode: UInt16(kVK_ANSI_C), flags: [.command, .control], isARepeat: false))
+        #expect(
+            !GhosttyTerminalView.shouldResetTerminalAfterInterrupt(
+                keyCode: UInt16(kVK_ANSI_X), flags: .control, isARepeat: false))
+    }
+
+    @Test @MainActor func interruptResetClearsMouseReportingForConfiguredLaunches() async throws {
+        let command =
+            "stty raw -echo; printf '\\033[?1003h\\033[?1006h'; cat"
+        let launch = GhosttyLaunch(
+            executable: "/bin/sh", arguments: ["-c", command],
+            environment: ProcessInfo.processInfo.environment.map { "\($0.key)=\($0.value)" },
+            resetTerminalAfterInterrupt: true)
+        let view = GhosttyTerminalView(launch: launch)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+        let window = TestWindowHost.window(contentRect: view.frame)
+        window.contentView = view
+        defer {
+            window.contentView = nil
+            view.shutdown()
+        }
+
+        for _ in 0..<100 {
+            if let surface = view.surface, ghostty_surface_mouse_captured(surface) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let surface = try #require(view.surface)
+        #expect(ghostty_surface_mouse_captured(surface))
+        let event = try #require(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: .control, timestamp: 1,
+                windowNumber: window.windowNumber, context: nil, characters: "\u{3}",
+                charactersIgnoringModifiers: "c", isARepeat: false,
+                keyCode: UInt16(kVK_ANSI_C)))
+
+        view.keyDown(with: event)
+
+        for _ in 0..<100 {
+            if !ghostty_surface_mouse_captured(surface) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(!ghostty_surface_mouse_captured(surface))
+    }
+
     @Test @MainActor func mouseMotionReachesAChildThatEnablesAnyEventReporting() async throws {
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-ghostty-mouse-\(UUID().uuidString)")
