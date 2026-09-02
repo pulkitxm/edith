@@ -89,6 +89,15 @@ struct HerdrTerminalInputRouter {
         var offset = 0
 
         while offset < bytes.count {
+            if isFocusReport(bytes, at: offset) {
+                if inputStart < offset {
+                    commands.append(
+                        try HerdrTerminalBridge.inputCommand(Data(bytes[inputStart..<offset])))
+                }
+                offset += 3
+                inputStart = offset
+                continue
+            }
             guard isMousePrefix(bytes, at: offset) else {
                 offset += 1
                 continue
@@ -129,6 +138,12 @@ struct HerdrTerminalInputRouter {
         let command = try HerdrTerminalBridge.inputCommand(pending)
         pending.removeAll(keepingCapacity: true)
         return [command]
+    }
+
+    private func isFocusReport(_ bytes: [UInt8], at offset: Int) -> Bool {
+        bytes.count - offset >= 3
+            && bytes[offset] == 0x1B && bytes[offset + 1] == 0x5B
+            && (bytes[offset + 2] == 0x49 || bytes[offset + 2] == 0x4F)
     }
 
     private func isMousePrefix(_ bytes: [UInt8], at offset: Int) -> Bool {

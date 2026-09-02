@@ -196,6 +196,13 @@ import Testing
         }
     }
 
+    @Test func bridgeLeavesFocusReportingOff() {
+        let start = String(decoding: HerdrTerminalBridge.startSequence, as: UTF8.self)
+        let stop = String(decoding: HerdrTerminalBridge.stopSequence, as: UTF8.self)
+        #expect(!start.contains("?1004"))
+        #expect(!stop.contains("?1004"))
+    }
+
     @Test func closingAnAgentInterruptsItWithoutClosingItsPane() {
         let agent = HerdrAgent.make(
             machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,

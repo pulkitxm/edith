@@ -63,6 +63,24 @@ private final class HerdrPipeReadBox: @unchecked Sendable {
         #expect(Data(base64Encoded: try #require(trailing["bytes"] as? String)) == Data("x".utf8))
     }
 
+    @Test func bridgeDropsFocusReportsWithoutChangingOtherInput() throws {
+        var router = HerdrTerminalInputRouter()
+        let focusIn = Data("\u{1B}[I".utf8)
+        let focusOut = Data("\u{1B}[O".utf8)
+        let escape = Data("\u{1B}".utf8)
+        let commands = try router.commands(
+            for: focusOut + Data("a".utf8) + focusIn + escape + Data("b".utf8) + focusOut)
+
+        #expect(commands.count == 2)
+        let leading = try object(commands[0])
+        #expect(leading["type"] as? String == "terminal.input")
+        #expect(Data(base64Encoded: try #require(leading["bytes"] as? String)) == Data("a".utf8))
+        let trailing = try object(commands[1])
+        #expect(
+            Data(base64Encoded: try #require(trailing["bytes"] as? String))
+                == escape + Data("b".utf8))
+    }
+
     @Test func bridgeReassemblesWheelReportsAcrossReads() throws {
         var router = HerdrTerminalInputRouter()
         let first = try router.commands(for: Data("a\u{1B}[<65;12".utf8))

@@ -98,10 +98,10 @@ public enum HerdrTerminalScrollDirection: String, Sendable {
 
 public enum HerdrTerminalBridge {
     public static let startSequence = Data(
-        "\u{1B}[?1049h\u{1B}[?1006l\u{1B}[?1016l\u{1B}[?1015l\u{1B}[?1005l\u{1B}[?1003l\u{1B}[?1002l\u{1B}[?1000l\u{1B}[?1000h\u{1B}[?1002h\u{1B}[?1003h\u{1B}[?1006h\u{1B}[?1004h\u{1B}[?2004h\u{1B}[?7l"
+        "\u{1B}[?1049h\u{1B}[?1006l\u{1B}[?1016l\u{1B}[?1015l\u{1B}[?1005l\u{1B}[?1003l\u{1B}[?1002l\u{1B}[?1000l\u{1B}[?1000h\u{1B}[?1002h\u{1B}[?1003h\u{1B}[?1006h\u{1B}[?2004h\u{1B}[?7l"
             .utf8)
     public static let stopSequence = Data(
-        "\u{1B}[?1006l\u{1B}[?1016l\u{1B}[?1015l\u{1B}[?1005l\u{1B}[?1003l\u{1B}[?1002l\u{1B}[?1000l\u{1B}[?1004l\u{1B}[?2004l\u{1B}[?7h\u{1B}[?25h\u{1B}[?1049l"
+        "\u{1B}[?1006l\u{1B}[?1016l\u{1B}[?1015l\u{1B}[?1005l\u{1B}[?1003l\u{1B}[?1002l\u{1B}[?1000l\u{1B}[?2004l\u{1B}[?7h\u{1B}[?25h\u{1B}[?1049l"
             .utf8)
 
     public static func executable(
