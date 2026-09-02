@@ -61,7 +61,8 @@ final class TerminalSessionHolder {
 
     func start(
         executable: String, arguments: [String], environment: [String],
-        currentDirectory: String? = nil, allowsLocalFileLinks: Bool = true
+        currentDirectory: String? = nil, allowsLocalFileLinks: Bool = true,
+        resetTerminalAfterInterrupt: Bool = false
     ) {
         guard !started else { return }
         clearQueuedGhosttyInput()
@@ -72,7 +73,8 @@ final class TerminalSessionHolder {
         guard !GhosttyTerminals.enabled else {
             ghosttyLaunch = GhosttyLaunch(
                 executable: executable, arguments: arguments, environment: environment,
-                workingDirectory: currentDirectory, allowsLocalFileLinks: allowsLocalFileLinks)
+                workingDirectory: currentDirectory, allowsLocalFileLinks: allowsLocalFileLinks,
+                resetTerminalAfterInterrupt: resetTerminalAfterInterrupt)
             return
         }
         let delegateGeneration = generation

@@ -37,10 +37,11 @@ extension GhosttyTerminalView {
                 surface, Self.mods(from: event.modifierFlags)))
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if !flags.isDisjoint(with: [.command, .control]) {
-            guard
-                send(
-                    event: event, translationEvent: translationEvent, action: action,
-                    text: Self.inputText(for: translationEvent), composing: false)
+            let delivered = send(
+                event: event, translationEvent: translationEvent, action: action,
+                text: Self.inputText(for: translationEvent), composing: false)
+            if delivered { resetTerminalAfterInterruptIfNeeded(event) }
+            guard delivered
             else {
                 super.keyDown(with: event)
                 return
@@ -255,6 +256,22 @@ extension GhosttyTerminalView {
 
     static func shouldHandleCopyShortcut(hasSelection: Bool) -> Bool {
         hasSelection
+    }
+
+    static func shouldResetTerminalAfterInterrupt(
+        keyCode: UInt16, flags: NSEvent.ModifierFlags, isARepeat: Bool
+    ) -> Bool {
+        guard keyCode == UInt16(kVK_ANSI_C), !isARepeat else { return false }
+        let flags = flags.intersection(.deviceIndependentFlagsMask)
+        return flags.contains(.control) && flags.isDisjoint(with: [.command, .option])
+    }
+
+    private func resetTerminalAfterInterruptIfNeeded(_ event: NSEvent) {
+        guard shouldResetTerminalAfterInterrupt,
+            Self.shouldResetTerminalAfterInterrupt(
+                keyCode: event.keyCode, flags: event.modifierFlags, isARepeat: event.isARepeat)
+        else { return }
+        _ = performBindingAction("reset")
     }
 
     private func send(
