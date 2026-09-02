@@ -8,6 +8,7 @@ public enum AgentOperationCatalog {
 
     public static let internalOperations: [String] = [
         AttentionOperation.record, AttentionOperation.range, AttentionOperation.importLegacy,
+        AgentBus.publish, AgentBus.subscribe, AgentBus.unsubscribe,
     ]
 
     public static func serves(_ id: UserOperationID) -> Bool {

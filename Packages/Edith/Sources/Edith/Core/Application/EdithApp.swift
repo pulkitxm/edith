@@ -38,6 +38,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         appStarted = true
         ExtensionDefaultsMigration.migrate()
         AttentionRepository.sink = AgentAttentionSink()
+        IPCTransport.enable()
         lidAwakeDaemonRegistrar.register()
         agentRegistrar.registerAndRestartIfStale()
         applyConfiguredActivationPolicy()

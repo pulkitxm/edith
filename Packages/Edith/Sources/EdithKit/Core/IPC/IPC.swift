@@ -120,6 +120,8 @@ public enum IPC {
     }
 
     public static func post(_ name: Notification.Name, userInfo: [String: Any]? = nil) {
+        let body = userInfo ?? [:]
+        if IPCTransport.deliverOverAgent(channel: name.rawValue, userInfo: body) { return }
         DistributedNotificationCenter.default().postNotificationName(
             name, object: nil, userInfo: userInfo, deliverImmediately: true)
     }
@@ -127,20 +129,128 @@ public enum IPC {
     public static func observe(_ name: Notification.Name, using block: @escaping () -> Void)
         -> NSObjectProtocol
     {
-        DistributedNotificationCenter.default().addObserver(
-            forName: name, object: nil, queue: .main
-        ) { _ in block() }
+        observe(name, info: { _ in block() })
     }
 
     public static func observe(
         _ name: Notification.Name, info block: @escaping ([AnyHashable: Any]) -> Void
     ) -> NSObjectProtocol {
-        DistributedNotificationCenter.default().addObserver(
-            forName: name, object: nil, queue: .main
-        ) { note in block(note.userInfo ?? [:]) }
+        IPCTransport.observe(channel: name.rawValue, name: name, info: block)
     }
 
     public static func stopObserving(_ token: NSObjectProtocol) {
+        if let observation = token as? IPCObservation {
+            observation.cancel()
+            return
+        }
         DistributedNotificationCenter.default().removeObserver(token)
+    }
+}
+
+public final class IPCObservation: NSObject, @unchecked Sendable {
+    private var busSubscription: AgentBusSubscription?
+    private var fallback: NSObjectProtocol?
+
+    init(busSubscription: AgentBusSubscription?, fallback: NSObjectProtocol?) {
+        self.busSubscription = busSubscription
+        self.fallback = fallback
+    }
+
+    func cancel() {
+        busSubscription?.cancel()
+        busSubscription = nil
+        if let fallback { DistributedNotificationCenter.default().removeObserver(fallback) }
+        fallback = nil
+    }
+
+    deinit { cancel() }
+}
+
+public enum IPCTransport {
+    public static let cooldown: TimeInterval = 30
+
+    static let state = IPCTransportState()
+
+    public static var isEnabled: Bool { state.isEnabled }
+
+    public static func enable() {
+        guard (try? AgentClient.shared.verifyHandshake()) != nil else { return }
+        state.enable()
+    }
+
+    public static func disable() {
+        state.disable()
+    }
+
+    public static func shouldTry(lastFailure: Date?, now: Date) -> Bool {
+        guard let lastFailure else { return true }
+        return now.timeIntervalSince(lastFailure) >= cooldown
+    }
+
+    public static func deliverOverAgent(channel: String, userInfo: [String: Any]) -> Bool {
+        guard state.shouldAttempt(), AgentBusEncoding.isTransportable(userInfo) else {
+            return false
+        }
+        do {
+            try AgentClient.shared.publishBus(channel: channel, userInfo: userInfo)
+            return true
+        } catch {
+            state.recordFailure()
+            return false
+        }
+    }
+
+    static func observe(
+        channel: String, name: Notification.Name,
+        info block: @escaping ([AnyHashable: Any]) -> Void
+    ) -> NSObjectProtocol {
+        let fallback = DistributedNotificationCenter.default().addObserver(
+            forName: name, object: nil, queue: .main
+        ) { note in block(note.userInfo ?? [:]) }
+        let subscription =
+            state.shouldAttempt()
+            ? try? AgentClient.shared.subscribeBus(channel: channel) { userInfo in
+                DispatchQueue.main.async { block(userInfo) }
+            }
+            : nil
+        return IPCObservation(busSubscription: subscription, fallback: fallback)
+    }
+}
+
+final class IPCTransportState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var enabled = false
+    private var lastFailure: Date?
+
+    var isEnabled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return enabled
+    }
+
+    func enable() {
+        lock.lock()
+        enabled = true
+        lastFailure = nil
+        lock.unlock()
+    }
+
+    func disable() {
+        lock.lock()
+        enabled = false
+        lock.unlock()
+    }
+
+    func shouldAttempt(now: Date = Date()) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard enabled else { return false }
+        return IPCTransport.shouldTry(lastFailure: lastFailure, now: now)
+    }
+
+    func recordFailure(now: Date = Date()) {
+        lock.lock()
+        lastFailure = now
+        lock.unlock()
     }
 }

@@ -17,6 +17,7 @@ public actor AgentRuntime {
     private var subscribers: [UUID: Subscriber] = [:]
     private var latest: [AgentTopic: Data] = [:]
     private var operations: [String: OperationHandler] = [:]
+    private var busSubscribers: [UUID: Set<String>] = [:]
 
     public init(build: String, store: AgentStore?, startedAt: Date = Date()) {
         self.build = build
@@ -42,6 +43,30 @@ public actor AgentRuntime {
         for subscriber in subscribers.values where subscriber.topics.contains(topic) {
             subscriber.proxy?.topicChanged(topic: topic.rawValue, payload: payload)
         }
+    }
+
+    public func subscribeBus(peer: UUID, channel: String, subscriber: EdithAgentSubscriberXPC?) {
+        busSubscribers[peer, default: []].insert(channel)
+        if let subscriber, subscribers[peer] == nil {
+            subscribers[peer] = Subscriber(topics: [], proxy: subscriber)
+        }
+    }
+
+    public func unsubscribeBus(peer: UUID, channel: String) {
+        busSubscribers[peer]?.remove(channel)
+        if busSubscribers[peer]?.isEmpty == true { busSubscribers[peer] = nil }
+    }
+
+    public func publishBus(_ message: AgentBusMessage, from peer: UUID?) {
+        let topic = AgentBus.topic(for: message.channel)
+        for (id, channels) in busSubscribers where channels.contains(message.channel) {
+            guard id != peer else { continue }
+            subscribers[id]?.proxy?.topicChanged(topic: topic, payload: message.body)
+        }
+    }
+
+    public var busChannelCount: Int {
+        Set(busSubscribers.values.flatMap { $0 }).count
     }
 
     public func snapshot(topic: AgentTopic) async throws -> Data {
@@ -80,6 +105,7 @@ public actor AgentRuntime {
     }
 
     public func forget(peer: UUID) async {
+        busSubscribers[peer] = nil
         guard let existing = subscribers.removeValue(forKey: peer) else { return }
         for topic in existing.topics {
             await scheduler?.removeSubscriber(topic: topic)

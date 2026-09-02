@@ -113,6 +113,7 @@ final class MenuBarAppDelegate: NSObject, NSApplicationDelegate {
         let launchTrace = PerformanceTrace.begin(.startup, "helper.panel")
         defer { PerformanceTrace.end(launchTrace) }
         AttentionRepository.sink = AgentAttentionSink()
+        IPCTransport.enable()
         AppState.services.start()
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }

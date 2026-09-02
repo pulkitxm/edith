@@ -57,6 +57,52 @@ public struct AgentRuntimeSnapshot: Codable, Equatable, Sendable {
     public var uptime: TimeInterval { Date().timeIntervalSince(startedAt) }
 }
 
+public enum AgentBus {
+    public static let publish = "bus.publish"
+    public static let subscribe = "bus.subscribe"
+    public static let unsubscribe = "bus.unsubscribe"
+    public static let topicPrefix = "bus:"
+
+    public static func topic(for channel: String) -> String {
+        topicPrefix + channel
+    }
+
+    public static func channel(fromTopic topic: String) -> String? {
+        guard topic.hasPrefix(topicPrefix) else { return nil }
+        return String(topic.dropFirst(topicPrefix.count))
+    }
+}
+
+public struct AgentBusMessage: Codable, Equatable, Sendable {
+    public let channel: String
+    public let body: Data
+
+    public init(channel: String, body: Data) {
+        self.channel = channel
+        self.body = body
+    }
+
+    public init(channel: String, userInfo: [String: Any]) {
+        self.channel = channel
+        self.body =
+            (try? JSONSerialization.data(withJSONObject: userInfo, options: [.sortedKeys]))
+            ?? Data()
+    }
+
+    public var userInfo: [String: Any] {
+        guard !body.isEmpty,
+            let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
+        else { return [:] }
+        return object
+    }
+}
+
+public enum AgentBusEncoding {
+    public static func isTransportable(_ userInfo: [String: Any]) -> Bool {
+        JSONSerialization.isValidJSONObject(userInfo)
+    }
+}
+
 public enum AgentPayload {
     public static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()

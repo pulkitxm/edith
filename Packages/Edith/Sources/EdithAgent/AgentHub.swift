@@ -119,6 +119,12 @@ final class AgentPeer: NSObject, EdithAgentXPC, @unchecked Sendable {
     }
 
     func perform(operation: String, payload: Data, reply: @escaping (Data?, String?) -> Void) {
+        if operation == AgentBus.publish || operation == AgentBus.subscribe
+            || operation == AgentBus.unsubscribe
+        {
+            handleBus(operation: operation, payload: payload, reply: reply)
+            return
+        }
         Task { [runtime] in
             do {
                 reply(try await runtime.perform(operation: operation, payload: payload), nil)
@@ -128,4 +134,25 @@ final class AgentPeer: NSObject, EdithAgentXPC, @unchecked Sendable {
         }
     }
 
+    private func handleBus(
+        operation: String, payload: Data, reply: @escaping (Data?, String?) -> Void
+    ) {
+        guard let message = try? AgentPayload.decode(AgentBusMessage.self, from: payload) else {
+            reply(nil, "Malformed bus message.")
+            return
+        }
+        let subscriber = connection?.remoteObjectProxy as? EdithAgentSubscriberXPC
+        Task { [runtime, id] in
+            switch operation {
+            case AgentBus.publish:
+                await runtime.publishBus(message, from: id)
+            case AgentBus.subscribe:
+                await runtime.subscribeBus(
+                    peer: id, channel: message.channel, subscriber: subscriber)
+            default:
+                await runtime.unsubscribeBus(peer: id, channel: message.channel)
+            }
+            reply(Data(), nil)
+        }
+    }
 }

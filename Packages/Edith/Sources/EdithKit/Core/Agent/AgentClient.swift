@@ -154,6 +154,38 @@ public final class AgentClient: NSObject, @unchecked Sendable {
             payload: Data(last.utf8))
     }
 
+    public func publishBus(channel: String, userInfo: [String: Any]) throws {
+        let message = AgentBusMessage(channel: channel, userInfo: userInfo)
+        _ = try performInternal(AgentBus.publish, payload: AgentPayload.encode(message))
+    }
+
+    public func subscribeBus(
+        channel: String, handler: @escaping @Sendable ([String: Any]) -> Void
+    ) throws -> AgentBusSubscription {
+        try verifyHandshake()
+        let topic = AgentBus.topic(for: channel)
+        let token = UUID()
+        queue.sync {
+            subscriptions[topic, default: [:]][token] = { body in
+                handler(AgentBusMessage(channel: channel, body: body).userInfo)
+            }
+        }
+        let message = AgentBusMessage(channel: channel, body: Data())
+        _ = try performInternal(AgentBus.subscribe, payload: AgentPayload.encode(message))
+        return AgentBusSubscription(channel: channel, token: token, client: self)
+    }
+
+    fileprivate func cancelBus(channel: String, token: UUID) {
+        let topic = AgentBus.topic(for: channel)
+        let empty = queue.sync { () -> Bool in
+            subscriptions[topic]?.removeValue(forKey: token)
+            return subscriptions[topic]?.isEmpty ?? true
+        }
+        guard empty else { return }
+        let message = AgentBusMessage(channel: channel, body: Data())
+        _ = try? performInternal(AgentBus.unsubscribe, payload: AgentPayload.encode(message))
+    }
+
     public func subscribe(
         _ topic: AgentTopic, handler: @escaping @Sendable (Data) -> Void
     ) throws -> AgentSubscription {
@@ -173,6 +205,24 @@ public final class AgentClient: NSObject, @unchecked Sendable {
         guard empty, let remote = try? proxy() else { return }
         remote.unsubscribe(topic: topic.rawValue) { _ in }
     }
+}
+
+public final class AgentBusSubscription: Sendable {
+    private let channel: String
+    private let token: UUID
+    private let client: AgentClient
+
+    fileprivate init(channel: String, token: UUID, client: AgentClient) {
+        self.channel = channel
+        self.token = token
+        self.client = client
+    }
+
+    public func cancel() {
+        client.cancelBus(channel: channel, token: token)
+    }
+
+    deinit { client.cancelBus(channel: channel, token: token) }
 }
 
 public final class AgentSubscription: Sendable {
