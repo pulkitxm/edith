@@ -151,11 +151,6 @@ let targets: [Target] = [
             ])
         ]
     ),
-    .executableTarget(
-        name: "UsageSnapshotCrashDriver",
-        dependencies: ["EdithKit"],
-        swiftSettings: [.swiftLanguageMode(.v5)]
-    ),
     .binaryTarget(
         name: "GhosttyKit",
         path: "vendor/GhosttyKit.xcframework"
@@ -204,7 +199,7 @@ let targets: [Target] = [
         dependencies: [
             "EdithCore", "Edith", "EdithDatabase", "EdithKit", "EdithLidAwakeSupport",
             "EdithHelper",
-            "EdithCLI", "Highlighter", "ed", "UsageSnapshotCrashDriver",
+            "EdithCLI", "Highlighter", "ed",
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),

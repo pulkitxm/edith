@@ -918,9 +918,6 @@ struct AppMaintenanceView: View {
             Button("Reset Ignored, Snoozed, and Excluded Apps") {
                 model.resetUpdatePolicies()
             }
-            if AppUpdateAutomationHook.isAvailable() {
-                LabeledContent("Automation command", value: AppUpdateAutomationHook.refreshCommand)
-            }
             Text("Automatic refresh only checks. Updates always require an explicit action.")
                 .settingsCaption()
         }
