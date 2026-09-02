@@ -221,7 +221,7 @@ struct NetworkMetricCard: View {
                     Button(action: refresh) {
                         Image(systemName: "arrow.clockwise")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .help("Test again")
                 }
