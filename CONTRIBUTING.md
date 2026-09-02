@@ -25,10 +25,11 @@ Needs Xcode, not just Command Line Tools: `edth.xcodeproj` at the repo root
 is what assembles the app. `build.sh` drives `xcodebuild` for the `EdithMain`
 scheme, which builds and embeds `EdithHelper` (the always-on menu bar
 companion, nested at `Contents/Library/LoginItems` and shipped as
-`Edith.app`), `EdithFiles` (nested at `Contents/Library/Applications`), and
-the `ed` CLI executable (`Contents/MacOS`). Its final embed phase also builds
-`EdithLidAwakeHelper` with SwiftPM and places the signed executable and launchd
-property list inside the menu bar companion.
+`Edith.app`) and the `ed` CLI executable (`Contents/MacOS`). `build.sh` then
+builds `edithd`, the headless background agent, and `EdithLidAwakeHelper` with
+SwiftPM, placing the agent at `Contents/MacOS/edithd` with its LaunchAgent
+property list in `Contents/Library/LaunchAgents`, and the signed privileged
+helper with its launchd property list alongside.
 
 All Swift code lives in one SwiftPM package, `Packages/Edith`. The Xcode
 targets are folder-synchronized onto `Packages/Edith/Sources/*`, so a file
