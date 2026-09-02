@@ -354,7 +354,11 @@ struct DatabaseConnectionCreationSheet: View {
             Spacer(minLength: UIScale.pt(12))
             Button(action: submit) {
                 if isWorking {
-                    ProgressView().controlSize(.small)
+                    SkeletonReplica(
+                        model.phase == .testing ? "Testing connection" : "Saving connection"
+                    ) {
+                        Text(model.canSave ? "Save connection" : "Test and save")
+                    }
                 } else {
                     Text(model.canSave ? "Save connection" : "Test and save")
                 }
@@ -374,13 +378,15 @@ struct DatabaseConnectionCreationSheet: View {
         case .editing:
             EmptyView()
         case .testing:
-            status(
-                "Testing connection", symbol: "arrow.triangle.2.circlepath",
-                color: palette.accent)
+            SkeletonReplica("Testing connection") {
+                status("Connection ready", symbol: "checkmark.circle.fill", color: DashSkin.ok)
+            }
         case .tested(let detail):
             status(detail, symbol: "checkmark.circle.fill", color: DashSkin.ok)
         case .saving:
-            status("Saving connection", symbol: "tray.and.arrow.down", color: palette.accent)
+            SkeletonReplica("Saving connection") {
+                status("Connection saved", symbol: "checkmark.circle.fill", color: DashSkin.ok)
+            }
         case .failed(let detail):
             status(detail, symbol: "exclamationmark.triangle.fill", color: DashSkin.danger)
         case .saved:

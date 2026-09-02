@@ -646,10 +646,11 @@ private struct NotchUsageRings: View {
         } label: {
             Group {
                 if usage.refreshingLimits {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .controlSize(.mini)
-                        .tint(.white)
+                    SkeletonReplica("Refreshing limits") {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.55))
+                    }
                 } else {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 10, weight: .semibold))
@@ -666,7 +667,7 @@ private struct NotchUsageRings: View {
 
     private func ring(_ label: String, _ window: LimitWindow?) -> some View {
         let value = NotchLimitRingValue(window)
-        return VStack(spacing: 0) {
+        let content = VStack(spacing: 0) {
             ZStack {
                 Circle().stroke(.white.opacity(0.12), lineWidth: 4.5)
                 Circle()
@@ -678,7 +679,7 @@ private struct NotchUsageRings: View {
                     .rotationEffect(.degrees(-90))
                     .animation(
                         LimitRing.animation(reduceMotion: reduceMotion), value: value.progress)
-                Text(value.text)
+                Text(window == nil && usage.refreshingLimits ? "00%" : value.text)
                     .font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
                     .monospacedDigit()
                     .contentTransition(.numericText())
@@ -693,6 +694,15 @@ private struct NotchUsageRings: View {
                 .padding(.top, 7)
             resetLabel(window?.resetsAt)
                 .padding(.top, 2)
+        }
+        return Group {
+            if window == nil, usage.refreshingLimits {
+                SkeletonReplica("Loading \(label) limit") {
+                    content
+                }
+            } else {
+                content
+            }
         }
     }
 

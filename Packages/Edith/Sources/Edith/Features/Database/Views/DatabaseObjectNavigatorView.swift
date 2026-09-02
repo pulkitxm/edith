@@ -60,21 +60,9 @@ struct DatabaseObjectNavigatorView: View {
     private var content: some View {
         switch explorer.state {
         case .idle:
-            VStack(spacing: UIScale.pt(9)) {
-                ProgressView().controlSize(.small)
-                Text("Loading objects")
-                    .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            loadingObjectList
         case .loading where explorer.groups.isEmpty:
-            VStack(spacing: UIScale.pt(9)) {
-                ProgressView().controlSize(.small)
-                Text("Loading objects")
-                    .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            loadingObjectList
         case .failed(let message) where explorer.groups.isEmpty:
             VStack(spacing: UIScale.pt(10)) {
                 Image(systemName: "exclamationmark.triangle")
@@ -93,6 +81,45 @@ struct DatabaseObjectNavigatorView: View {
         }
     }
 
+    private var loadingObjectList: some View {
+        SkeletonReplica("Loading database objects") {
+            List {
+                ForEach(0..<4, id: \.self) { groupIndex in
+                    DisclosureGroup(isExpanded: .constant(groupIndex == 0)) {
+                        if groupIndex == 0 {
+                            ForEach(0..<4, id: \.self) { objectIndex in
+                                HStack(spacing: UIScale.pt(7)) {
+                                    Image(systemName: "tablecells")
+                                    Text(
+                                        objectIndex.isMultiple(of: 2)
+                                            ? "customer_records" : "reporting_summary"
+                                    )
+                                    .font(.system(size: UIScale.pt(11)))
+                                    .lineLimit(1)
+                                    Spacer(minLength: UIScale.pt(4))
+                                    Text("12K")
+                                        .font(.system(size: UIScale.pt(9.5)))
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: UIScale.pt(7)) {
+                            Image(systemName: "square.stack.3d.up")
+                            Text(groupIndex.isMultiple(of: 2) ? "public" : "analytics")
+                                .font(.system(size: UIScale.pt(11), weight: .semibold))
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            Text("24")
+                                .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                        }
+                    }
+                }
+            }
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+        }
+    }
+
     private var objectList: some View {
         List(selection: selectionBinding) {
             ForEach(explorer.filteredGroups) { group in
@@ -107,7 +134,10 @@ struct DatabaseObjectNavigatorView: View {
                             .lineLimit(1)
                         Spacer(minLength: 0)
                         if group.state == .loading {
-                            ProgressView().controlSize(.mini)
+                            SkeletonReplica("Loading \(group.title)") {
+                                Text("24")
+                                    .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                            }
                         } else if !group.objects.isEmpty {
                             Text(group.objects.count.formatted())
                                 .font(.system(size: UIScale.pt(9.5), weight: .medium))
@@ -148,6 +178,21 @@ struct DatabaseObjectNavigatorView: View {
             }
             .tag(object.identifier)
             .help(objectHelp(object))
+        }
+        if group.state == .loading {
+            ForEach(0..<3, id: \.self) { index in
+                SkeletonReplica("Loading \(group.title) objects") {
+                    HStack(spacing: UIScale.pt(7)) {
+                        Image(systemName: "tablecells")
+                        Text(index.isMultiple(of: 2) ? "customer_records" : "reporting_summary")
+                            .font(.system(size: UIScale.pt(11)))
+                            .lineLimit(1)
+                        Spacer(minLength: UIScale.pt(4))
+                        Text("12K")
+                            .font(.system(size: UIScale.pt(9.5)))
+                    }
+                }
+            }
         }
         if group.state == .loaded, group.objects.isEmpty {
             Text("No tables or views")

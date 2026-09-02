@@ -75,24 +75,11 @@ struct DatabaseWorkbenchView: View {
     private func sessionContent(_ connection: DatabaseConnectionSummary) -> some View {
         switch connections.selectedSessionState {
         case .disconnected:
-            VStack(spacing: UIScale.pt(16)) {
-                Image(systemName: productSymbol(connection.product))
-                    .font(.system(size: UIScale.pt(40), weight: .light))
-                    .foregroundStyle(theme)
-                Text(connection.name)
-                    .font(.system(size: UIScale.pt(21), weight: .semibold))
-                Text("\(connection.product.displayName) · \(connection.environmentLabel)")
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(.secondary)
-                Button("Connect") {
-                    Task { await connections.connectSelected() }
-                }
-                .buttonStyle(.edith(.primary, tint: theme))
-                .keyboardShortcut(.defaultAction)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            disconnectedSession(connection)
         case .connecting:
-            workingState("Connecting", "Opening a secure database session.")
+            SkeletonReplica("Connecting to \(connection.name)") {
+                workspace(connection)
+            }
         case .connected:
             workspace(connection)
                 .task(id: connection.id) {
@@ -100,7 +87,9 @@ struct DatabaseWorkbenchView: View {
                     explorer.load(connection)
                 }
         case .disconnecting:
-            workingState("Disconnecting", "Closing the database session.")
+            SkeletonReplica("Disconnecting from \(connection.name)") {
+                disconnectedSession(connection)
+            }
         case .failed(let message, _), .outcomeUnknown(let message, _):
             emptyState(
                 symbol: "exclamationmark.triangle",
@@ -109,6 +98,25 @@ struct DatabaseWorkbenchView: View {
                 actionTitle: "Try again",
                 action: { Task { await connections.connectSelected() } })
         }
+    }
+
+    private func disconnectedSession(_ connection: DatabaseConnectionSummary) -> some View {
+        VStack(spacing: UIScale.pt(16)) {
+            Image(systemName: productSymbol(connection.product))
+                .font(.system(size: UIScale.pt(40), weight: .light))
+                .foregroundStyle(theme)
+            Text(connection.name)
+                .font(.system(size: UIScale.pt(21), weight: .semibold))
+            Text("\(connection.product.displayName) · \(connection.environmentLabel)")
+                .font(.system(size: UIScale.pt(12)))
+                .foregroundStyle(.secondary)
+            Button("Connect") {
+                Task { await connections.connectSelected() }
+            }
+            .buttonStyle(.edith(.primary, tint: theme))
+            .keyboardShortcut(.defaultAction)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func workspace(_ connection: DatabaseConnectionSummary) -> some View {
@@ -471,7 +479,9 @@ struct DatabaseWorkbenchView: View {
                 explorer.loadGroup(group.identifier, connection: connection)
             }
         case .loading:
-            Label("Loading \(group.title)", systemImage: "arrow.triangle.2.circlepath")
+            SkeletonReplica("Loading \(group.title)") {
+                Label("Available \(group.title)", systemImage: "tablecells")
+            }
         case .loaded:
             if group.objects.isEmpty {
                 Text("No objects")
@@ -493,9 +503,9 @@ struct DatabaseWorkbenchView: View {
                     title: "Run a query",
                     detail: "Use the native read-only editor above, then press Command-Return.")
             } else if explorer.state == .loading {
-                workingState(
-                    "Loading objects",
-                    "Reading the first available database namespace.",
+                loadingResults(
+                    connection,
+                    label: "Loading database objects",
                     cancel: explorer.cancel)
             } else {
                 emptyState(
@@ -504,11 +514,9 @@ struct DatabaseWorkbenchView: View {
                     detail: "Choose a table or view from the object navigator.")
             }
         case .loading where data.records.isEmpty:
-            workingState(
-                workbenchMode == .query ? "Running query" : "Loading data",
-                workbenchMode == .query
-                    ? "Fetching a bounded read-only result."
-                    : "Fetching the first bounded page.",
+            loadingResults(
+                connection,
+                label: workbenchMode == .query ? "Running query" : "Loading data",
                 cancel: data.cancel)
         case .failed(let message) where data.records.isEmpty:
             if workbenchMode == .browse {
@@ -523,6 +531,21 @@ struct DatabaseWorkbenchView: View {
             }
         case .loading, .loaded, .failed:
             populatedResults(connection)
+        }
+    }
+
+    private func loadingResults(
+        _ connection: DatabaseConnectionSummary,
+        label: String,
+        cancel: @escaping () -> Void
+    ) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            SkeletonReplica(label) {
+                populatedResults(connection)
+            }
+            Button("Cancel", action: cancel)
+                .buttonStyle(.edith(.secondary))
+                .padding(UIScale.pt(12))
         }
     }
 
@@ -646,13 +669,17 @@ struct DatabaseWorkbenchView: View {
             Divider().opacity(0.35)
             HStack(spacing: UIScale.pt(9)) {
                 if data.isLoading {
-                    ProgressView().controlSize(.small)
+                    SkeletonReplica("Loading database rows") {
+                        Text(resultSummary)
+                            .font(.system(size: UIScale.pt(10.5)))
+                    }
                     Button("Cancel", action: data.cancel)
                         .buttonStyle(.edith(.borderless))
+                } else {
+                    Text(resultSummary)
+                        .font(.system(size: UIScale.pt(10.5)))
+                        .foregroundStyle(.secondary)
                 }
-                Text(resultSummary)
-                    .font(.system(size: UIScale.pt(10.5)))
-                    .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
                 Menu {
                     ForEach(DatabaseDataWorkspaceModel.pageSizeOptions, id: \.self) { size in
@@ -1027,25 +1054,6 @@ struct DatabaseWorkbenchView: View {
                 .disabled(!field.isEditable)
         }
         .opacity(field.isEditable ? 1 : 0.62)
-    }
-
-    private func workingState(
-        _ title: String,
-        _ detail: String,
-        cancel: (() -> Void)? = nil
-    ) -> some View {
-        VStack(spacing: UIScale.pt(10)) {
-            ProgressView()
-            Text(title).font(.system(size: UIScale.pt(15), weight: .semibold))
-            Text(detail)
-                .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(.secondary)
-            if let cancel {
-                Button("Cancel", action: cancel)
-                    .buttonStyle(.edith(.secondary))
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func emptyState(

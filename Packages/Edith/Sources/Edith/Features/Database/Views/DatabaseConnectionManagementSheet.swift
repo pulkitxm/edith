@@ -297,15 +297,60 @@ struct DatabaseConnectionManagementSheet: View {
     }
 
     private var loadingEdit: some View {
-        HStack(spacing: UIScale.pt(10)) {
-            ProgressView().controlSize(.small)
-            Text("Loading connection settings")
-                .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                .foregroundStyle(palette.inkSoft)
+        SkeletonReplica("Loading connection settings") {
+            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                section("Identity", symbol: "tag") {
+                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                        responsivePair {
+                            loadingField("Connection name *", placeholder: "Connection name")
+                        } right: {
+                            loadingField("Group", placeholder: "Optional group")
+                        }
+                        loadingField("Tags", placeholder: "production, reporting")
+                        Toggle("Show this connection in favorites", isOn: .constant(false))
+                            .toggleStyle(.switch)
+                            .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                    }
+                }
+                section("Appearance", symbol: "paintpalette") {
+                    loadingPicker("Card color", value: "Automatic")
+                }
+                section("Environment", symbol: "building.2") {
+                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                        responsivePair {
+                            loadingPicker("Environment", value: "Development")
+                        } right: {
+                            loadingField("Environment label *", placeholder: "Staging")
+                        }
+                        loadingPicker("Protection", value: "Standard")
+                    }
+                }
+                section("Safety", symbol: "checkmark.shield") {
+                    responsivePair {
+                        loadingPicker("Data access", value: "Read only")
+                    } right: {
+                        loadingPicker("Mutation policy", value: "Confirm changes")
+                    }
+                }
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(UIScale.pt(14))
-        .background(palette.panel, in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+    }
+
+    private func loadingField(_ label: String, placeholder: String) -> some View {
+        field(label) {
+            EdithTextField(placeholder: placeholder, text: .constant(""))
+        }
+    }
+
+    private func loadingPicker(_ label: String, value: String) -> some View {
+        field(label) {
+            Picker(label, selection: .constant(value)) {
+                Text(value).tag(value)
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     @ViewBuilder
@@ -356,13 +401,11 @@ struct DatabaseConnectionManagementSheet: View {
     @ViewBuilder
     private var operationStatus: some View {
         if isBusy {
-            HStack(spacing: UIScale.pt(8)) {
-                ProgressView().controlSize(.small)
-                Text(operationTitle)
+            SkeletonReplica(operationTitle) {
+                Text(footerDetail)
+                    .font(.system(size: UIScale.pt(10.5)))
+                    .lineLimit(2)
             }
-            .font(.system(size: UIScale.pt(11), weight: .medium))
-            .foregroundStyle(palette.inkSoft)
-            .accessibilityElement(children: .combine)
         } else {
             Text(footerDetail)
                 .font(.system(size: UIScale.pt(10.5)))
@@ -378,7 +421,9 @@ struct DatabaseConnectionManagementSheet: View {
                 .disabled(preventsDismissal)
             Button(action: save) {
                 if isBusy {
-                    ProgressView().controlSize(.small)
+                    SkeletonReplica(operationTitle) {
+                        Text(saveTitle)
+                    }
                 } else {
                     Text(saveTitle)
                 }

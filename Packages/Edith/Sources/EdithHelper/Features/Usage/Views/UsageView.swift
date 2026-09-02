@@ -87,9 +87,11 @@ struct UsageView: View {
                 } label: {
                     Group {
                         if store.refreshingLimits {
-                            ProgressView()
-                                .progressViewStyle(.circular)
-                                .controlSize(.mini)
+                            SkeletonReplica("Refreshing limits") {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                            }
                         } else {
                             Image(systemName: "arrow.clockwise")
                                 .font(.system(size: 11))
@@ -131,7 +133,7 @@ struct UsageView: View {
     private func ring(_ label: String, window: LimitWindow?) -> some View {
         let pct = window?.percent ?? 0
         let fill = color(for: pct)
-        return VStack(spacing: 7) {
+        let content = VStack(spacing: 7) {
             ZStack {
                 Circle()
                     .stroke(.primary.opacity(0.1), lineWidth: 7)
@@ -140,7 +142,7 @@ struct UsageView: View {
                     .stroke(fill, style: StrokeStyle(lineWidth: 7, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .animation(.easeOut(duration: 0.5), value: pct)
-                Text(window != nil ? "\(Int(pct))%" : "-")
+                Text(window != nil ? "\(Int(pct))%" : store.refreshingLimits ? "00%" : "-")
                     .font(.system(size: 18, weight: .semibold))
                     .monospacedDigit()
             }
@@ -160,6 +162,15 @@ struct UsageView: View {
             }
         }
         .frame(maxWidth: .infinity)
+        return Group {
+            if window == nil, store.refreshingLimits {
+                SkeletonReplica("Loading \(label.lowercased()) limit") {
+                    content
+                }
+            } else {
+                content
+            }
+        }
     }
 
     private func countdown(from now: Date, to reset: Date) -> String {
@@ -266,7 +277,9 @@ struct UsageView: View {
                 } label: {
                     Group {
                         if store.updating {
-                            ProgressView().progressViewStyle(.circular).controlSize(.mini)
+                            SkeletonReplica("Refreshing usage data") {
+                                Image(systemName: "arrow.clockwise")
+                            }
                         } else {
                             Image(systemName: "arrow.clockwise")
                         }
@@ -317,26 +330,52 @@ struct UsageView: View {
                     .foregroundStyle(.orange)
             } else {
                 VStack(spacing: 9) {
-                    ForEach(store.stats) { stat in
+                    usageStatsRows
+                }
+            }
+        }
+        .card()
+    }
+
+    @ViewBuilder
+    private var usageStatsRows: some View {
+        if store.updating, store.stats.isEmpty {
+            SkeletonReplica("Loading usage statistics") {
+                VStack(spacing: 9) {
+                    ForEach(0..<4, id: \.self) { index in
                         HStack {
-                            Text(stat.label)
+                            Text(index.isMultiple(of: 2) ? "Current session" : "Last seven days")
                                 .foregroundStyle(.secondary)
                             Spacer()
-                            Text(stat.tokens.compactTokens)
+                            Text("1.2M")
                                 .monospacedDigit()
-                                .presenterBlur(blurUsage)
-                            Text(String(format: "$%.2f", stat.cost))
+                            Text("$12.34")
                                 .monospacedDigit()
                                 .foregroundStyle(.secondary)
                                 .frame(width: 84, alignment: .trailing)
-                                .presenterBlur(blurMoney)
                         }
                         .font(.system(size: 13))
                     }
                 }
             }
+        } else {
+            ForEach(store.stats) { stat in
+                HStack {
+                    Text(stat.label)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(stat.tokens.compactTokens)
+                        .monospacedDigit()
+                        .presenterBlur(blurUsage)
+                    Text(String(format: "$%.2f", stat.cost))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .frame(width: 84, alignment: .trailing)
+                        .presenterBlur(blurMoney)
+                }
+                .font(.system(size: 13))
+            }
         }
-        .card()
     }
 
     private var sourcePicker: some View {

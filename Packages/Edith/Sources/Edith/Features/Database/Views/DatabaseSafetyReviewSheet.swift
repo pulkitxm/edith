@@ -451,10 +451,14 @@ struct DatabaseSafetyReviewSheet: View {
             .edithButtonTarget(.primary)
         } else if activePhase == .cancelling || activePhase == .reconciling {
             Button(action: {}) {
-                HStack(spacing: UIScale.pt(6)) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text(activePhase == .cancelling ? "Cancelling" : "Checking status")
+                SkeletonReplica(
+                    activePhase == .cancelling ? "Cancelling mutation" : "Checking mutation status"
+                ) {
+                    if activePhase == .cancelling {
+                        Text("Cancel mutation")
+                    } else {
+                        Label("Check mutation status", systemImage: "arrow.clockwise")
+                    }
                 }
                 .frame(maxWidth: fillsWidth ? .infinity : nil)
             }
@@ -503,18 +507,17 @@ struct DatabaseSafetyReviewSheet: View {
             Button {
                 performConfirm(now: Date())
             } label: {
-                HStack(spacing: UIScale.pt(6)) {
+                Group {
                     if activePhase == .executing {
-                        ProgressView()
-                            .controlSize(.small)
+                        SkeletonReplica("Executing database mutation") {
+                            Text(presentation.actionButtonTitle)
+                        }
+                    } else {
+                        Text(presentation.actionButtonTitle)
                     }
-                    Text(
-                        activePhase == .executing
-                            ? "Executing" : presentation.actionButtonTitle
-                    )
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
                 }
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
                 .frame(maxWidth: fillsWidth ? .infinity : nil)
             }
             .buttonStyle(.edith(.destructive))

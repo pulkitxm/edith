@@ -151,22 +151,9 @@ struct DatabaseConnectionGallery: View {
     private var content: some View {
         switch model.listState {
         case .idle:
-            emptyState(
-                symbol: "cylinder.split.1x2",
-                title: "Connections not loaded",
-                detail: "Load your saved database connections to get started.",
-                actionTitle: "Load connections",
-                action: reload)
+            loadingConnectionCards([])
         case .loading(let connections):
-            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                stateNotice(
-                    symbol: "arrow.triangle.2.circlepath",
-                    title: "Loading connections",
-                    detail: "Saved connection information is being refreshed.",
-                    tint: palette.accent,
-                    progress: true)
-                connectionCards(connections)
-            }
+            loadingConnectionCards(connections)
         case .empty:
             emptyState(
                 symbol: "cylinder.split.1x2",
@@ -215,6 +202,65 @@ struct DatabaseConnectionGallery: View {
                 connectionCards(connections)
             }
         }
+    }
+
+    private func loadingConnectionCards(_ connections: [DatabaseConnectionSummary]) -> some View {
+        SkeletonReplica("Loading saved database connections") {
+            Group {
+                if connections.isEmpty {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(14)) {
+                        ForEach(0..<6, id: \.self) { index in
+                            loadingConnectionCard(index)
+                        }
+                    }
+                } else {
+                    connectionCards(connections)
+                }
+            }
+        }
+    }
+
+    private func loadingConnectionCard(_ index: Int) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+            HStack(alignment: .top, spacing: UIScale.pt(11)) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: UIScale.pt(9))
+                        .fill(palette.accent.opacity(0.11))
+                    Image(systemName: "cylinder")
+                        .font(.system(size: UIScale.pt(16), weight: .semibold))
+                        .foregroundStyle(palette.accent)
+                }
+                .frame(width: UIScale.pt(38), height: UIScale.pt(38))
+                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                    Text(index.isMultiple(of: 2) ? "Analytics warehouse" : "Primary database")
+                        .font(.system(size: UIScale.pt(14), weight: .semibold))
+                        .lineLimit(2)
+                    Text(index.isMultiple(of: 2) ? "PostgreSQL · Production" : "MySQL")
+                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "ellipsis.circle")
+                    .frame(width: UIScale.pt(26), height: UIScale.pt(26))
+            }
+            HStack(spacing: UIScale.pt(7)) {
+                Image(systemName: "cylinder")
+                    .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                Text(index.isMultiple(of: 2) ? "analytics" : "default_namespace")
+                    .font(.system(size: UIScale.pt(10.5), design: .monospaced))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                Text("Connected")
+                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+            }
+        }
+        .padding(UIScale.pt(14))
+        .frame(maxWidth: .infinity, minHeight: UIScale.pt(126), alignment: .topLeading)
+        .background(
+            palette.panel.opacity(0.74),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(13)))
     }
 
     @ViewBuilder
@@ -288,15 +334,7 @@ struct DatabaseConnectionGallery: View {
                             .foregroundStyle(palette.inkSoft)
                             .lineLimit(1)
                         Spacer(minLength: 0)
-                        if session != .disconnected {
-                            Image(systemName: sessionSymbol(session))
-                                .font(.system(size: UIScale.pt(9.5), weight: .semibold))
-                                .foregroundStyle(sessionColor(session))
-                                .accessibilityHidden(true)
-                            Text(sessionTitle(session))
-                                .font(.system(size: UIScale.pt(10), weight: .semibold))
-                                .foregroundStyle(palette.inkSoft)
-                        }
+                        connectionSessionSlot(session)
                     }
                 }
                 .padding(UIScale.pt(14))
@@ -338,7 +376,11 @@ struct DatabaseConnectionGallery: View {
             .accessibilityHint("Open this database workspace")
 
             if performConnectionAction != nil {
-                connectionActionMenu(connection)
+                if busyConnectionID == connection.id {
+                    loadingConnectionAction(connection)
+                } else {
+                    connectionActionMenu(connection)
+                }
             }
         }
         .onHover { isHovered in hoveredConnectionID = isHovered ? connection.id : nil }
@@ -348,6 +390,42 @@ struct DatabaseConnectionGallery: View {
                 connectionActions(connection)
             }
         }
+    }
+
+    @ViewBuilder
+    private func connectionSessionSlot(_ session: DatabaseConnectionSessionState) -> some View {
+        switch session {
+        case .disconnected:
+            EmptyView()
+        case .connecting, .disconnecting:
+            SkeletonReplica(sessionTitle(session)) {
+                HStack(spacing: UIScale.pt(7)) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                    Text("Connected")
+                        .font(.system(size: UIScale.pt(10), weight: .semibold))
+                }
+            }
+        case .connected, .failed, .outcomeUnknown:
+            Image(systemName: sessionSymbol(session))
+                .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                .foregroundStyle(sessionColor(session))
+                .accessibilityHidden(true)
+            Text(sessionTitle(session))
+                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                .foregroundStyle(palette.inkSoft)
+        }
+    }
+
+    private func loadingConnectionAction(_ connection: DatabaseConnectionSummary) -> some View {
+        SkeletonReplica("Updating \(connection.name)") {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: UIScale.pt(13), weight: .semibold))
+                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+                .background(palette.panel.opacity(0.94), in: Circle())
+                .overlay(Circle().stroke(palette.line, lineWidth: 1))
+        }
+        .padding(UIScale.pt(10))
     }
 
     private func connectionActionMenu(_ connection: DatabaseConnectionSummary) -> some View {
@@ -413,19 +491,12 @@ struct DatabaseConnectionGallery: View {
         title: String,
         detail: String,
         tint: Color,
-        progress: Bool = false,
         retry: Bool = false
     ) -> some View {
         HStack(alignment: .top, spacing: UIScale.pt(10)) {
-            if progress {
-                ProgressView()
-                    .controlSize(.small)
-                    .accessibilityHidden(true)
-            } else {
-                Image(systemName: symbol)
-                    .foregroundStyle(tint)
-                    .accessibilityHidden(true)
-            }
+            Image(systemName: symbol)
+                .foregroundStyle(tint)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text(title)
                     .font(.system(size: UIScale.pt(12), weight: .semibold))
@@ -595,7 +666,7 @@ struct DatabaseFocusedConnectionHeader: View {
                     identityRow
                     Spacer(minLength: 0)
                     if performConnectionAction != nil {
-                        connectionActionMenu
+                        connectionActionSlot
                     }
                     sessionLabel
                 }
@@ -613,9 +684,22 @@ struct DatabaseFocusedConnectionHeader: View {
             navigationButton
             Spacer(minLength: 0)
             if performConnectionAction != nil {
-                connectionActionMenu
+                connectionActionSlot
             }
             sessionLabel
+        }
+    }
+
+    @ViewBuilder
+    private var connectionActionSlot: some View {
+        if busyConnectionID == connection.id {
+            SkeletonReplica("Updating \(connection.name)") {
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: UIScale.pt(14), weight: .semibold))
+                    .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+            }
+        } else {
+            connectionActionMenu
         }
     }
 
@@ -749,18 +833,37 @@ struct DatabaseFocusedConnectionHeader: View {
         return DashSkin.accent(dark, theme: theme)
     }
 
+    @ViewBuilder
     private var sessionLabel: some View {
-        HStack(spacing: UIScale.pt(6)) {
-            Image(systemName: sessionSymbol)
-                .font(.system(size: UIScale.pt(9.5), weight: .semibold))
-                .foregroundStyle(sessionColor)
-                .accessibilityHidden(true)
-            Text(sessionTitle)
-                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                .foregroundStyle(palette.inkSoft)
+        if sessionIsTransitioning {
+            SkeletonReplica(sessionTitle) {
+                HStack(spacing: UIScale.pt(6)) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                    Text("Connected")
+                        .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                }
+            }
+        } else {
+            HStack(spacing: UIScale.pt(6)) {
+                Image(systemName: sessionSymbol)
+                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                    .foregroundStyle(sessionColor)
+                    .accessibilityHidden(true)
+                Text(sessionTitle)
+                    .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                    .foregroundStyle(palette.inkSoft)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(sessionTitle)
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(sessionTitle)
+    }
+
+    private var sessionIsTransitioning: Bool {
+        switch sessionState {
+        case .connecting, .disconnecting: true
+        case .disconnected, .connected, .failed, .outcomeUnknown: false
+        }
     }
 
     private var contextTitle: String {

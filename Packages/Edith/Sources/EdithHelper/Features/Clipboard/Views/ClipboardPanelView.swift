@@ -13,8 +13,6 @@ struct ClipboardPanelView: View {
     @State private var arranged: [ClipboardEntry] = []
     @State private var visible: [ClipboardEntry] = []
     @State private var renderLimit = ClipboardPanelView.pageSize
-    @State private var searching = false
-    @State private var searchTask: Task<Void, Never>?
     @State private var lastMouse = NSEvent.mouseLocation
     @State private var rowFrames: [String: CGRect] = [:]
     @State private var listHeight: CGFloat = 0
@@ -79,12 +77,6 @@ struct ClipboardPanelView: View {
         ClipboardActions.arrange(entries, query: query, pinToTop: pinToTop)
     }
 
-    private nonisolated static func search(
-        _ entries: [ClipboardEntry], query: String, pinToTop: Bool
-    ) async -> [ClipboardEntry] {
-        arrange(entries, query: query, pinToTop: pinToTop)
-    }
-
     private func adoptArranged(_ result: [ClipboardEntry], selectFirst: Bool) {
         arranged = result
         syncVisible()
@@ -109,31 +101,15 @@ struct ClipboardPanelView: View {
     }
 
     private func refreshVisible(selectFirst: Bool = false, resetLimit: Bool = false) {
-        searchTask?.cancel()
         if resetLimit { renderLimit = Self.pageSize }
         let query = filterText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if query.isEmpty {
-            searching = false
-            adoptArranged(
-                Self.arrange(store.entries, query: query, pinToTop: pinToTop),
-                selectFirst: selectFirst)
-            return
-        }
-        searching = true
-        let entries = store.entries
-        let pinTop = pinToTop
-        searchTask = Task {
-            let result = await Self.search(entries, query: query, pinToTop: pinTop)
-            guard !Task.isCancelled else { return }
-            searching = false
-            adoptArranged(result, selectFirst: selectFirst)
-        }
+        adoptArranged(
+            Self.arrange(store.entries, query: query, pinToTop: pinToTop),
+            selectFirst: selectFirst)
     }
 
     private func resetForShow() {
         lastMouse = NSEvent.mouseLocation
-        searchTask?.cancel()
-        searching = false
         filterText = ""
         renderLimit = Self.pageSize
         refreshVisible(selectFirst: true)
@@ -228,13 +204,6 @@ struct ClipboardPanelView: View {
                         return .handled
                     }
                     .onKeyPress { press in handle(press) }
-                if searching {
-                    ProgressView()
-                        .controlSize(.small)
-                        .scaleEffect(0.6)
-                        .frame(width: 12, height: 12)
-                        .padding(.trailing, 4)
-                }
                 if !filterText.isEmpty {
                     Button {
                         filterText = ""
