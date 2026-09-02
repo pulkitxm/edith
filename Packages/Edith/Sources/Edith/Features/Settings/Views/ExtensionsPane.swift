@@ -148,6 +148,14 @@ struct ExtensionsPane: View {
             entries: inspectionCenter.list().map(\.entry), query: query, category: category)
     }
 
+    private var visibleSuites: [(suite: SuiteDescriptor, abilities: [ExtensionRegistryEntry])] {
+        let matches = filteredEntries
+        return SuiteRegistry.suites.compactMap { suite in
+            let abilities = matches.filter { $0.suite == suite.id }
+            return abilities.isEmpty ? nil : (suite, abilities)
+        }
+    }
+
     @ViewBuilder
     private var extensionGrid: some View {
         if filteredEntries.isEmpty {
@@ -159,20 +167,34 @@ struct ExtensionsPane: View {
             }
             .frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
         } else {
-            LazyVGrid(columns: gridColumns, spacing: UIScale.pt(14)) {
-                ForEach(filteredEntries) { entry in
-                    ExtensionMarketplaceCard(
-                        entry: entry,
-                        dark: colorScheme == .dark,
-                        switchDisabled: entry.defaultsKey == LidAwakeState.enabledKey
-                            && lidAwakeOperations.applying,
-                        open: { openSettings(for: entry) },
-                        setEnabled: { setEnabled($0, for: entry) }
-                    )
-                    .id(entry.id)
+            LazyVStack(alignment: .leading, spacing: UIScale.pt(22)) {
+                ForEach(visibleSuites, id: \.suite.id) { group in
+                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                        SuiteHeader(
+                            suite: group.suite, dark: colorScheme == .dark,
+                            setEnabled: { setSuiteEnabled($0, for: group.suite) })
+                        LazyVGrid(columns: gridColumns, spacing: UIScale.pt(14)) {
+                            ForEach(group.abilities) { entry in
+                                ExtensionMarketplaceCard(
+                                    entry: entry,
+                                    dark: colorScheme == .dark,
+                                    switchDisabled: entry.defaultsKey == LidAwakeState.enabledKey
+                                        && lidAwakeOperations.applying,
+                                    open: { openSettings(for: entry) },
+                                    setEnabled: { setEnabled($0, for: entry) }
+                                )
+                                .id(entry.id)
+                            }
+                        }
+                    }
                 }
             }
         }
+    }
+
+    private func setSuiteEnabled(_ newValue: Bool, for suite: SuiteDescriptor) {
+        SuiteEnablement.setEnabled(newValue, suite: suite.id)
+        ExtensionMutationCenter.application.environment.announceChange()
     }
 
     private var gridColumns: [GridItem] {
@@ -266,6 +288,49 @@ struct ExtensionsPane: View {
         lidAwakeOperations.errorMessage ?? lidAwakeOperations.lastSnapshot?.lastError
     }
 
+}
+
+private struct SuiteHeader: View {
+    let suite: SuiteDescriptor
+    let dark: Bool
+    let setEnabled: (Bool) -> Void
+    @ExtensionEnablementStorage private var enabled: Bool
+
+    init(suite: SuiteDescriptor, dark: Bool, setEnabled: @escaping (Bool) -> Void) {
+        self.suite = suite
+        self.dark = dark
+        self.setEnabled = setEnabled
+        _enabled = ExtensionEnablementStorage(defaultsKey: suite.defaultsKey)
+    }
+
+    private var enabledBinding: Binding<Bool> {
+        Binding(get: { enabled }, set: setEnabled)
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(9)) {
+            Image(systemName: suite.symbolName)
+                .font(.system(size: UIScale.pt(13), weight: .semibold))
+                .foregroundStyle(enabled ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
+                .frame(width: UIScale.pt(18))
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(suite.title)
+                    .font(.system(size: UIScale.pt(14), weight: .semibold))
+                    .foregroundStyle(DashSkin.ink(dark))
+                Text(suite.subtitle)
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+            Toggle("", isOn: enabledBinding)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .tint(DashSkin.accent(dark))
+                .accessibilityLabel("\(suite.title) suite enabled")
+        }
+    }
 }
 
 private struct ExtensionMarketplaceCard: View {
@@ -964,7 +1029,9 @@ private struct ExtensionDetailRows: View {
             case .systemStats: SystemStatsRows()
             case .micMute: MicMuteRows()
             case .lidAwake: LidAwakeRows()
-            case .music: MusicRows()
+            case .music:
+                MusicRows()
+                MusicBarRows()
             case .downloads: DownloadsRows()
             case .calendar: CalendarRows()
             case .notchShelf: NotchShelfRows()
@@ -1028,6 +1095,26 @@ private struct CleanerRows: View {
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
+    }
+}
+
+private struct MusicBarRows: View {
+    @AppStorage(AppStorageKeys.Music.barCollapsed, store: SharedDefaults.store) private
+        var collapsed = false
+    @AppStorage(AppStorageKeys.Music.barAutoHide, store: SharedDefaults.store) private
+        var autoHide = false
+
+    var body: some View {
+        Section("Player bar") {
+            Toggle(
+                "Collapse to a progress line",
+                isOn: $collapsed.configured(AppStorageKeys.Music.barCollapsed))
+            Toggle(
+                "Hide when nothing is playing",
+                isOn: $autoHide.configured(AppStorageKeys.Music.barAutoHide))
+            Text("The chevron at the right end of the bar toggles the collapsed state too.")
+                .settingsCaption()
+        }
     }
 }
 

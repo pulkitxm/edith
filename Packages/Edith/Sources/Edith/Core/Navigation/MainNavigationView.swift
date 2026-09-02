@@ -381,6 +381,8 @@ struct MainWindowView: View {
         var deskSuite = false
     @AppStorage(AppStorageKeys.Suites.media, store: SharedDefaults.store) private
         var mediaSuite = false
+    @AppStorage(AppStorageKeys.Music.barAutoHide, store: SharedDefaults.store) private
+        var musicBarAutoHide = false
     @AppStorage(AppStorageKeys.Suites.data, store: SharedDefaults.store) private
         var dataSuite = false
     @AppStorage(AppStorageKeys.Tabs.databaseEnabled, store: SharedDefaults.store) private
@@ -672,7 +674,8 @@ struct MainWindowView: View {
     }
 
     private var musicFooterVisible: Bool {
-        musicEnabled
+        guard musicEnabled, mediaSuite else { return false }
+        return !musicBarAutoHide || MusicRemote.shared.current != nil
     }
 
     private var detailShadow: Color {

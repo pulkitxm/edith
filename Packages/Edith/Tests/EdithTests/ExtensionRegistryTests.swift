@@ -191,6 +191,7 @@ import Testing
             source.components(
                 separatedBy: "ExtensionEnablementStorage(entry: entry)"
             ).count == 3)
+        #expect(source.contains("ExtensionEnablementStorage(defaultsKey: suite.defaultsKey)"))
     }
 
     @Test func featuredEntriesArePresent() {

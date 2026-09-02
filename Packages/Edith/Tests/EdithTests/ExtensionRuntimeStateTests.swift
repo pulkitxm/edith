@@ -54,7 +54,8 @@ import Testing
             .appendingPathComponent("Sources/Edith/Features/Settings/Views/ExtensionsPane.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-        #expect(source.contains("ForEach(filteredEntries)"))
+        #expect(source.contains("ForEach(visibleSuites, id: \\.suite.id)"))
+        #expect(source.contains("ForEach(group.abilities)"))
         #expect(source.contains("if filteredEntries.isEmpty"))
         #expect(source.contains("ExtensionMarketplaceFilter.emptyState"))
         #expect(source.contains("ContentUnavailableView"))
@@ -76,7 +77,7 @@ import Testing
         #expect(
             source.components(
                 separatedBy: "@ExtensionEnablementStorage private var enabled: Bool"
-            ).count == 3)
+            ).count == 4)
         #expect(
             source.components(
                 separatedBy: "_enabled = ExtensionEnablementStorage(entry: entry)"
@@ -113,7 +114,7 @@ import Testing
         #expect(
             pane.components(
                 separatedBy: "@ExtensionEnablementStorage private var enabled: Bool"
-            ).count == 3)
+            ).count == 4)
         #expect(
             pane.components(
                 separatedBy: "_enabled = ExtensionEnablementStorage(entry: entry)"
