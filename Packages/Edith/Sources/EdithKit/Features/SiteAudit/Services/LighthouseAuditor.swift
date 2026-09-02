@@ -1,16 +1,15 @@
-import EdithKit
 import Foundation
 
-struct LighthouseAuditResult: Sendable {
-    let scores: SEOAuditScores
-    let error: String?
+public struct LighthouseAuditResult: Sendable {
+    public let scores: SEOAuditScores
+    public let error: String?
 }
 
-struct LighthouseAuditor: Sendable {
-    let executable: URL?
-    let cacheDirectory: URL
+public struct LighthouseAuditor: Sendable {
+    public let executable: URL?
+    public let cacheDirectory: URL
 
-    init(
+    public init(
         executable: URL? = CLIToolEnvironment.executable(named: "lighthouse"),
         cacheDirectory: URL = AppData.supportDir.appendingPathComponent(
             "Cache/SEOAudit", isDirectory: true)
@@ -19,9 +18,9 @@ struct LighthouseAuditor: Sendable {
         self.cacheDirectory = cacheDirectory
     }
 
-    var isAvailable: Bool { executable != nil }
+    public var isAvailable: Bool { executable != nil }
 
-    func audit(_ url: URL) async -> LighthouseAuditResult {
+    public func audit(_ url: URL) async -> LighthouseAuditResult {
         guard let executable else {
             return LighthouseAuditResult(
                 scores: .unavailable,

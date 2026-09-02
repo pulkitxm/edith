@@ -1,11 +1,10 @@
 import Foundation
-import EdithKit
 
-struct SEOAuditRepository {
-    let root: URL
+public struct SEOAuditRepository {
+    public let root: URL
     private let fileManager: FileManager
 
-    init(
+    public init(
         root: URL = AppData.supportDir.appendingPathComponent(
             "SEOAudit", isDirectory: true),
         fileManager: FileManager = .default
@@ -14,19 +13,19 @@ struct SEOAuditRepository {
         self.fileManager = fileManager
     }
 
-    func loadSummaries() throws -> [SEOAuditProjectSummary] {
+    public func loadSummaries() throws -> [SEOAuditProjectSummary] {
         let file = root.appendingPathComponent("projects.json")
         guard fileManager.fileExists(atPath: file.path) else { return [] }
         return try decoder.decode([SEOAuditProjectSummary].self, from: Data(contentsOf: file))
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
-    func loadProject(id: UUID) throws -> SEOAuditProject {
+    public func loadProject(id: UUID) throws -> SEOAuditProject {
         let file = projectFile(id: id)
         return try decoder.decode(SEOAuditProject.self, from: Data(contentsOf: file))
     }
 
-    func save(_ project: SEOAuditProject) throws {
+    public func save(_ project: SEOAuditProject) throws {
         try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
         try encoder.encode(project).write(to: projectFile(id: project.id), options: .atomic)
         var summaries = (try? loadSummaries()) ?? []
@@ -37,7 +36,7 @@ struct SEOAuditRepository {
             to: root.appendingPathComponent("projects.json"), options: .atomic)
     }
 
-    func delete(id: UUID) throws {
+    public func delete(id: UUID) throws {
         let assets = projectAssetsDirectory(id: id)
         if fileManager.fileExists(atPath: assets.path) { try fileManager.removeItem(at: assets) }
         let file = projectFile(id: id)

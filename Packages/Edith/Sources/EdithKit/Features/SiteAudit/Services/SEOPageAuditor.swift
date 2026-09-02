@@ -1,13 +1,13 @@
 import Foundation
 
-struct SEOPageAuditor: Sendable {
-    let session: URLSession
+public struct SEOPageAuditor: Sendable {
+    public let session: URLSession
 
-    init(session: URLSession = .shared) {
+    public init(session: URLSession = .shared) {
         self.session = session
     }
 
-    func audit(_ url: URL) async -> SEOAuditPageResult {
+    public func audit(_ url: URL) async -> SEOAuditPageResult {
         let startedAt = ContinuousClock.now
         do {
             var request = URLRequest(url: url)
@@ -39,8 +39,8 @@ struct SEOPageAuditor: Sendable {
     }
 }
 
-enum HTMLMetadataParser {
-    static func parse(_ html: String, baseURL: URL) -> SEOAuditMetadata {
+public enum HTMLMetadataParser {
+    public static func parse(_ html: String, baseURL: URL) -> SEOAuditMetadata {
         let metas = tags(named: "meta", in: html).map(attributes)
         let links = tags(named: "link", in: html).map(attributes)
         let htmlTag = tags(named: "html", in: html).first.map(attributes)
@@ -139,8 +139,8 @@ enum HTMLMetadataParser {
     }
 }
 
-enum SEOIssueAnalyzer {
-    static func issues(
+public enum SEOIssueAnalyzer {
+    public static func issues(
         url: URL, statusCode: Int?, metadata: SEOAuditMetadata
     ) -> [SEOAuditIssue] {
         var issues: [SEOAuditIssue] = []
@@ -222,7 +222,7 @@ enum SEOIssueAnalyzer {
 }
 
 extension SEOAuditMetadata {
-    static let empty = SEOAuditMetadata(
+    public static let empty = SEOAuditMetadata(
         title: nil, description: nil, canonicalURL: nil, robots: nil, language: nil,
         heading: nil, openGraphTitle: nil, openGraphDescription: nil,
         openGraphImageURL: nil, openGraphImageSnapshotURL: nil, openGraphType: nil,

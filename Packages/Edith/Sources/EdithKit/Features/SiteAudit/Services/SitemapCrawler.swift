@@ -1,10 +1,10 @@
 import Foundation
 
-enum SitemapCrawlerError: LocalizedError {
+public enum SitemapCrawlerError: LocalizedError {
     case invalidResponse(URL)
     case empty(URL)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case let .invalidResponse(url): "Could not read a sitemap from \(url.absoluteString)."
         case let .empty(url): "The sitemap at \(url.absoluteString) did not contain any pages."
@@ -12,18 +12,21 @@ enum SitemapCrawlerError: LocalizedError {
     }
 }
 
-struct SitemapCrawler: Sendable {
-    let session: URLSession
-    let maximumPages: Int
-    let maximumSitemaps: Int
+public struct SitemapCrawler: Sendable {
+    public let session: URLSession
+    public let maximumPages: Int
+    public let maximumSitemaps: Int
 
-    init(session: URLSession = .shared, maximumPages: Int = 20_000, maximumSitemaps: Int = 1_000) {
+    public init(
+        session: URLSession = .shared, maximumPages: Int = 20_000,
+        maximumSitemaps: Int = 1_000
+    ) {
         self.session = session
         self.maximumPages = maximumPages
         self.maximumSitemaps = maximumSitemaps
     }
 
-    func pages(startingAt input: URL) async throws -> [URL] {
+    public func pages(startingAt input: URL) async throws -> [URL] {
         var candidates: [URL] = []
         if input.pathExtension.lowercased() == "xml" { candidates.append(input) }
         candidates.append(contentsOf: try await robotsSitemaps(for: input))
@@ -98,12 +101,12 @@ struct SitemapCrawler: Sendable {
 }
 
 private final class SitemapDocument: NSObject, XMLParserDelegate {
-    var locations: [URL] = []
-    var isIndex = false
+    public var locations: [URL] = []
+    public var isIndex = false
     private var currentElement = ""
     private var text = ""
 
-    static func parse(_ data: Data) throws -> SitemapDocument {
+    public static func parse(_ data: Data) throws -> SitemapDocument {
         let document = SitemapDocument()
         let parser = XMLParser(data: data)
         parser.delegate = document
@@ -115,7 +118,7 @@ private final class SitemapDocument: NSObject, XMLParserDelegate {
         return document
     }
 
-    func parser(
+    public func parser(
         _: XMLParser, didStartElement elementName: String, namespaceURI _: String?,
         qualifiedName _: String?, attributes _: [String: String] = [:]
     ) {
@@ -124,11 +127,11 @@ private final class SitemapDocument: NSObject, XMLParserDelegate {
         if currentElement == "loc" { text = "" }
     }
 
-    func parser(_: XMLParser, foundCharacters string: String) {
+    public func parser(_: XMLParser, foundCharacters string: String) {
         if currentElement == "loc" { text += string }
     }
 
-    func parser(
+    public func parser(
         _: XMLParser, didEndElement elementName: String, namespaceURI _: String?,
         qualifiedName _: String?
     ) {

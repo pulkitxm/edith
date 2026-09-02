@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-actor SEOAuditImageStore {
+public actor SEOAuditImageStore {
     private static let maximumImageBytes = 25 * 1_024 * 1_024
     private static let imageExtensions = [
         "png", "jpg", "gif", "webp", "avif", "tiff", "bmp", "svg", "heic", "heif", "ico",
@@ -13,13 +13,13 @@ actor SEOAuditImageStore {
     private let fileManager: FileManager
     private var cachedURLs: [String: URL] = [:]
 
-    init(root: URL, session: URLSession = .shared, fileManager: FileManager = .default) {
+    public init(root: URL, session: URLSession = .shared, fileManager: FileManager = .default) {
         self.root = root
         self.session = session
         self.fileManager = fileManager
     }
 
-    func capture(
+    public func capture(
         metadata: SEOAuditMetadata, projectID: UUID, runID: UUID, runStartedAt: Date
     ) async -> SEOAuditImageSnapshots {
         let openGraphSource = metadata.openGraphImageURL.flatMap(URL.init(string:))
