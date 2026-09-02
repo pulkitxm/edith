@@ -457,14 +457,13 @@ struct MachineControlCenterView: View {
                 .lineLimit(1)
             Spacer(minLength: 0)
             if isBusy {
-                HStack(spacing: UIScale.pt(4)) {
-                    ProgressView()
-                        .controlSize(.small)
-                        .scaleEffect(0.72)
-                    Text(busyLabel)
-                        .font(.system(size: UIScale.pt(10.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+                SkeletonGroup {
+                    HStack(spacing: UIScale.pt(5)) {
+                        SkeletonBlock(width: 8, height: 8, corner: 4)
+                        SkeletonBlock(width: 72, height: 9, corner: 2)
+                    }
                 }
+                .accessibilityLabel(busyLabel)
             }
             Button {
                 Task { await model.refresh(reportFailure: true, clearsMessage: true) }
@@ -539,8 +538,21 @@ struct MachineControlCenterView: View {
             .foregroundStyle(DashSkin.inkFaint(dark))
             .fixedSize(horizontal: false, vertical: true)
             if model.requiresConnection {
-                Button(session.state.isBusy ? "Connecting…" : "Connect") {
+                Button {
                     session.retry()
+                } label: {
+                    ZStack {
+                        Text(session.state.isBusy ? "Connecting…" : "Connect")
+                            .hidden()
+                        if session.state.isBusy {
+                            SkeletonGroup {
+                                SkeletonBlock(width: 54, height: 8, corner: 2)
+                            }
+                            .accessibilityLabel("Connecting")
+                        } else {
+                            Text("Connect")
+                        }
+                    }
                 }
                 .controlSize(.small)
                 .disabled(session.state.isBusy)

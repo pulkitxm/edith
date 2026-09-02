@@ -45,11 +45,26 @@ struct ToolProvisioningPanel: View {
             }
             DisclosureGroup("Installation log", isExpanded: $logExpanded) {
                 ScrollView {
-                    Text(logText)
-                        .font(.system(size: UIScale.pt(10.5), design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(UIScale.pt(10))
+                    if hasLogOutput {
+                        Text(logText)
+                            .font(.system(size: UIScale.pt(10.5), design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(UIScale.pt(10))
+                    } else {
+                        SkeletonGroup {
+                            VStack(alignment: .leading, spacing: UIScale.pt(7)) {
+                                ForEach(0..<7, id: \.self) { index in
+                                    SkeletonBlock(
+                                        width: index.isMultiple(of: 3) ? 210 : 348, height: 9,
+                                        corner: 2)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(UIScale.pt(10))
+                        }
+                        .accessibilityLabel("Waiting for installation output")
+                    }
                 }
                 .frame(height: UIScale.pt(110))
                 .background(
@@ -79,6 +94,10 @@ struct ToolProvisioningPanel: View {
         }
         return sections.isEmpty ? "Waiting for output..." : sections.joined(separator: "\n\n")
     }
+
+    private var hasLogOutput: Bool {
+        tools.contains { !(provisioner.logs[$0.id] ?? []).isEmpty }
+    }
 }
 
 private struct ProvisioningToolRow: View {
@@ -94,10 +113,18 @@ private struct ProvisioningToolRow: View {
                     Text(tool.displayName)
                         .font(.system(size: UIScale.pt(13), weight: .semibold))
                     Spacer()
-                    Text(statusText)
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(statusColor)
-                        .lineLimit(1)
+                    if state.showsLoadingSkeleton {
+                        SkeletonGroup {
+                            SkeletonBlock(
+                                width: state.installing ? 92 : 58, height: 8)
+                        }
+                        .accessibilityLabel(statusText)
+                    } else {
+                        Text(statusText)
+                            .font(.system(size: UIScale.pt(10)))
+                            .foregroundStyle(statusColor)
+                            .lineLimit(1)
+                    }
                 }
                 Text(tool.why)
                     .settingsCaption()
@@ -140,8 +167,10 @@ private struct ToolStateIcon: View {
     var body: some View {
         switch state {
         case .checking, .installing:
-            ProgressView()
-                .controlSize(.small)
+            SkeletonGroup {
+                SkeletonBlock(width: 14, height: 14, corner: 7)
+            }
+            .accessibilityLabel("Checking command-line tool")
         case .present, .installed:
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
@@ -169,9 +198,16 @@ struct CLIToolStatusSection: View {
                     VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                         Text(tool.displayName)
                             .fontWeight(.medium)
-                        Text(detail(for: tool))
-                            .settingsCaption()
-                            .textSelection(.enabled)
+                        if provisioner.state(for: tool).showsLoadingSkeleton {
+                            SkeletonGroup {
+                                SkeletonBlock(width: 150, height: 8)
+                            }
+                            .accessibilityLabel(detail(for: tool))
+                        } else {
+                            Text(detail(for: tool))
+                                .settingsCaption()
+                                .textSelection(.enabled)
+                        }
                     }
                     Spacer(minLength: 12)
                     if canInstall(tool) {
@@ -219,5 +255,19 @@ struct CLIToolStatusSection: View {
     private func buttonTitle(for tool: CLIToolSpec) -> String {
         if case .failed = provisioner.state(for: tool) { return "Retry" }
         return "Install"
+    }
+}
+
+private extension CLIToolProvisionState {
+    var showsLoadingSkeleton: Bool {
+        switch self {
+        case .checking, .installing: true
+        case .idle, .present, .installed, .failed: false
+        }
+    }
+
+    var installing: Bool {
+        if case .installing = self { return true }
+        return false
     }
 }

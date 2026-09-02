@@ -120,10 +120,10 @@ struct SEOAuditPageAccordion: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(!lighthouseAvailable || lighthouseRunning)
                 if lighthouseRunning {
-                    ProgressView().controlSize(.small)
-                    Text("Running four Lighthouse categories")
-                        .font(.system(size: UIScale.pt(10.5)))
-                        .foregroundStyle(.secondary)
+                    SkeletonGroup {
+                        SkeletonBlock(width: 176, height: 9)
+                    }
+                    .accessibilityLabel("Running four Lighthouse categories")
                 } else if !lighthouseAvailable {
                     Text("Install the Lighthouse CLI to enable page scores.")
                         .font(.system(size: UIScale.pt(10.5), weight: .medium))
@@ -283,7 +283,7 @@ struct SEOAuditPageAccordion: View {
                     } else if phase.error != nil {
                         previewFallback
                     } else {
-                        ProgressView().controlSize(.small)
+                        SEOAuditImageSkeleton()
                     }
                 }
             } else {
@@ -364,7 +364,9 @@ struct SEOAuditPageAccordion: View {
                         .font(DashSkin.mono(8.5, weight: .semibold))
                         .foregroundStyle(page.hasLighthouseScores ? DashSkin.ok : .secondary)
                 }
-                if page.hasLighthouseScores {
+                if lighthouseRunning {
+                    SEOAuditScoreTilesSkeleton(dark: dark)
+                } else if page.hasLighthouseScores {
                     HStack(spacing: UIScale.pt(8)) {
                         scoreTile("PERF", page.scores.performance)
                         scoreTile("A11Y", page.scores.accessibility)

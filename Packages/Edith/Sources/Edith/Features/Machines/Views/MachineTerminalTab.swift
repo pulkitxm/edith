@@ -648,7 +648,11 @@ struct MachineTerminalTab: View {
             }
             if detectingWindowsShells {
                 Divider()
-                Text("Detecting installed shells…")
+                SkeletonGroup {
+                    SkeletonBlock(width: 142, height: 9, corner: 2)
+                        .frame(height: UIScale.pt(18))
+                }
+                .accessibilityLabel("Detecting installed shells")
             }
         } label: {
             HStack(spacing: UIScale.pt(5)) {
@@ -666,31 +670,32 @@ struct MachineTerminalTab: View {
     }
 
     private func terminalUnavailable(_ presentation: MachineTerminalPresentation) -> some View {
-        VStack(spacing: UIScale.pt(10)) {
+        Group {
             if presentation.showsProgress {
-                ProgressView()
-                    .controlSize(.small)
+                TerminalLoadingSkeleton(palette: .edith(dark: dark))
             } else {
-                Image(systemName: presentation.symbol)
-                    .font(.system(size: UIScale.pt(24), weight: .light))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-            }
-            Text(presentation.title)
-                .font(.system(size: UIScale.pt(14), weight: .semibold))
-                .foregroundStyle(DashSkin.ink(dark))
-            if let detail = presentation.detail {
-                Text(detail)
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: UIScale.pt(520))
-            }
-            if let action = presentation.action {
-                Button(action.title) { perform(action) }
-                    .buttonStyle(.edith(.primary))
+                VStack(spacing: UIScale.pt(10)) {
+                    Image(systemName: presentation.symbol)
+                        .font(.system(size: UIScale.pt(24), weight: .light))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                    Text(presentation.title)
+                        .font(.system(size: UIScale.pt(14), weight: .semibold))
+                        .foregroundStyle(DashSkin.ink(dark))
+                    if let detail = presentation.detail {
+                        Text(detail)
+                            .font(.system(size: UIScale.pt(12)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: UIScale.pt(520))
+                    }
+                    if let action = presentation.action {
+                        Button(action.title) { perform(action) }
+                            .buttonStyle(.edith(.primary))
+                    }
+                }
+                .padding(UIScale.pt(24))
             }
         }
-        .padding(UIScale.pt(24))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 

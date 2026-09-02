@@ -490,8 +490,7 @@ struct HerdrPage: View {
     private var board: some View {
         Group {
             if store.hosts.isEmpty, store.refreshing {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                HerdrBoardSkeleton(dark: dark, compact: compact)
             } else if store.hosts.allSatisfy({ !$0.herdrPresent }) && store.agents.isEmpty {
                 emptyState(
                     title: "Herdr is not installed",

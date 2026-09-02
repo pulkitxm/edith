@@ -253,19 +253,28 @@ struct AddMachineSheet: View {
                 Button {
                     runTest()
                 } label: {
-                    if testState == .testing {
-                        HStack(spacing: UIScale.pt(6)) {
-                            ProgressView().controlSize(.small).scaleEffect(0.7)
-                            Text("Testing…")
-                        }
-                    } else {
-                        Text("Test connection")
-                    }
+                    Text("Test connection")
                 }
                 .disabled(!isValid || testState == .testing)
                 Spacer(minLength: 0)
             }
             switch testState {
+            case .testing:
+                SkeletonGroup {
+                    HStack(alignment: .top, spacing: UIScale.pt(7)) {
+                        SkeletonBlock(width: 15, height: 15, corner: 7.5)
+                        VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                            SkeletonBlock(width: 116, height: 10, corner: 2)
+                            SkeletonBlock(width: 208, height: 9, corner: 2)
+                        }
+                    }
+                    .padding(UIScale.pt(10))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        DashSkin.accent(dark).opacity(0.08),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+                }
+                .accessibilityLabel("Testing connection")
             case let .success(message):
                 statusLine(message, symbol: "checkmark.circle.fill", color: DashSkin.ok)
             case let .failure(message):

@@ -111,7 +111,10 @@ struct MachineToolsTab: View {
                     }
                     Spacer(minLength: 0)
                     if session.isRemounting {
-                        ProgressView().controlSize(.small).scaleEffect(0.6)
+                        SkeletonGroup {
+                            SkeletonBlock(width: 18, height: 8, corner: 4)
+                        }
+                        .accessibilityLabel("Reconnecting disk")
                     }
                     Button("Reveal") {
                         RemoteFileOperationExecution.present(
@@ -139,7 +142,10 @@ struct MachineToolsTab: View {
                     .truncationMode(.head)
                     Spacer(minLength: 0)
                     if mounting {
-                        ProgressView().controlSize(.small).scaleEffect(0.6)
+                        SkeletonGroup {
+                            SkeletonBlock(width: 18, height: 8, corner: 4)
+                        }
+                        .accessibilityLabel("Mounting disk")
                     }
                     Button("Mount") { mountDisk() }
                         .disabled(

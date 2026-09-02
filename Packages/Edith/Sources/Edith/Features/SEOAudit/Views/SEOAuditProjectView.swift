@@ -438,19 +438,20 @@ struct SEOAuditProjectView: View {
 
     @ViewBuilder
     private var pageList: some View {
-        if model.selectedRun == nil {
+        if model.selectedRun == nil, model.stage == .discovering {
+            SEOAuditPageRowsSkeleton(dark: dark, rows: 3)
+        } else if model.selectedRun == nil {
             emptyState(
                 model.discoveredPageURLs.isEmpty ? "Discover the sitemap" : "Pages are ready",
                 model.discoveredPageURLs.isEmpty
                     ? "Find pages first, then choose exactly what to audit."
                     : "Choose pages and run your first audit."
             )
+        } else if model.visiblePages.isEmpty, model.isRunning {
+            SEOAuditPageRowsSkeleton(dark: dark, rows: pendingSkeletonRows)
         } else if model.visiblePages.isEmpty {
             emptyState(
-                model.isRunning ? "Waiting for the first page" : "No pages match",
-                model.isRunning
-                    ? "Results appear here as the crawl advances."
-                    : "Clear the filters to see every page.")
+                "No pages match", "Clear the filters to see every page.")
         } else {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 PageSectionHeader(
@@ -479,8 +480,19 @@ struct SEOAuditProjectView: View {
                                     }
                                 }))
                     }
+                    if model.isRunning {
+                        SEOAuditPageRowsSkeleton(dark: dark, rows: pendingSkeletonRows)
+                    }
                 }
             }
+        }
+    }
+
+    private var pendingSkeletonRows: Int {
+        switch model.stage {
+        case let .auditing(current, total, _): min(3, max(1, total - current + 1))
+        case .discovering, .lighthouse, .saving: 1
+        case .idle: 1
         }
     }
 
@@ -507,7 +519,10 @@ private struct SEOAuditProgressRail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             HStack(spacing: UIScale.pt(8)) {
-                ProgressView().controlSize(.small)
+                SkeletonGroup {
+                    SkeletonBlock(width: 12, height: 12, corner: 6)
+                }
+                .accessibilityLabel(title)
                 Text(title).font(.system(size: UIScale.pt(12), weight: .semibold))
                 Text(detail)
                     .font(DashSkin.mono(10.5))

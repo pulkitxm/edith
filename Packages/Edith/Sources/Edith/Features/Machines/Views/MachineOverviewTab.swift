@@ -390,14 +390,20 @@ struct MachineOverviewTab: View {
     private var connectionNotice: some View {
         HStack(spacing: UIScale.pt(10)) {
             if session.state.isBusy {
-                ProgressView().controlSize(.small)
+                SkeletonGroup {
+                    HStack(spacing: UIScale.pt(10)) {
+                        SkeletonBlock(width: 13, height: 13, corner: 6.5)
+                        SkeletonBlock(width: 226, height: 10, corner: 2)
+                    }
+                }
+                .accessibilityLabel(MachineStatusStyle.detail(session.state))
             } else {
                 Image(systemName: "bolt.horizontal.circle")
                     .foregroundStyle(DashSkin.inkFaint(dark))
+                Text(MachineStatusStyle.detail(session.state))
+                    .font(.system(size: UIScale.pt(12)))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
             }
-            Text(MachineStatusStyle.detail(session.state))
-                .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(DashSkin.inkSoft(dark))
             Spacer(minLength: 0)
             if case .disconnected = session.state {
                 Button("Connect") { model.performConnection(.connect, for: session) }

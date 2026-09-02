@@ -238,13 +238,7 @@ struct FilePreviewPane: View {
         case .empty:
             placeholder("Select a file to preview it.", symbol: "doc.text.magnifyingglass")
         case .loading:
-            VStack(spacing: UIScale.pt(10)) {
-                ProgressView()
-                Text("Loading preview…")
-                    .font(.system(size: UIScale.pt(11.5)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            FilePreviewLoadingSkeleton(entry: entry, dark: dark)
         case let .text(text, language, truncated):
             CodePreview(text: text, language: language, truncated: truncated, dark: dark)
         case let .image(image):
@@ -319,6 +313,66 @@ struct FilePreviewPane: View {
         }
         .padding(UIScale.pt(20))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct FilePreviewLoadingSkeleton: View {
+    let entry: RemoteFileEntry?
+    let dark: Bool
+
+    private var kind: FilePreviewKind {
+        guard let entry else { return .quickLook }
+        if FilePreviewKind.isPlainTextName(entry.name) { return .text }
+        return FilePreviewKind.kind(forExtension: entry.fileExtension)
+    }
+
+    var body: some View {
+        SkeletonGroup {
+            Group {
+                switch kind {
+                case .text:
+                    textPreview
+                case .image:
+                    mediaPreview(width: 280, height: 190, corner: 10)
+                case .media, .unsupported:
+                    mediaPreview(width: 320, height: 180, corner: 10)
+                case .pdf:
+                    mediaPreview(width: 230, height: 310, corner: 4)
+                case .quickLook:
+                    mediaPreview(width: 260, height: 300, corner: 6)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading preview")
+    }
+
+    private var textPreview: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            ForEach(0..<18, id: \.self) { index in
+                HStack(spacing: UIScale.pt(10)) {
+                    SkeletonBlock(width: 24, height: 8, corner: 2)
+                    SkeletonBlock(
+                        width: [218, 164, 286, 126, 246, 194][index % 6],
+                        height: 9,
+                        corner: 2
+                    )
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(UIScale.pt(14))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(DashSkin.paper(dark))
+    }
+
+    private func mediaPreview(width: Double, height: Double, corner: Double) -> some View {
+        VStack(spacing: UIScale.pt(10)) {
+            SkeletonBlock(width: width, height: height, corner: corner)
+            SkeletonBlock(width: min(width * 0.62, 168), height: 9, corner: 2)
+        }
+        .padding(UIScale.pt(18))
     }
 }
 

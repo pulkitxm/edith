@@ -316,7 +316,7 @@ struct FinderBody: View {
                 FinderListView(model: model)
             }
             if model.loading, model.entries.isEmpty {
-                FinderSkeleton(mode: model.viewMode, dark: dark)
+                FinderSkeleton(mode: model.viewMode, iconSize: model.iconSize, dark: dark)
             } else if model.visibleEntries.isEmpty, !model.loading {
                 Text(model.errorMessage ?? "This folder is empty.")
                     .font(.system(size: UIScale.pt(12)))
@@ -386,7 +386,10 @@ struct FinderBody: View {
             }
             Spacer(minLength: 0)
             if model.loading {
-                ProgressView().controlSize(.small).scaleEffect(0.6)
+                SkeletonGroup {
+                    SkeletonBlock(width: 12, height: 12, corner: 6)
+                }
+                .accessibilityLabel("Loading folder")
             }
             if model.viewMode == .icon {
                 Slider(value: $model.iconSize, in: 40...128)
