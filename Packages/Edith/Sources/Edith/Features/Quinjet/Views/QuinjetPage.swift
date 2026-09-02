@@ -3,7 +3,6 @@ import SwiftUI
 
 struct QuinjetPage: View {
     @State private var model = QuinjetPageModel()
-    private let usesSessionBridge: Bool
     @AppStorage(AppStorageKeys.Quinjet.terminal, store: SharedDefaults.store)
     private var terminalName = QuinjetTerminal.embedded.rawValue
     @AppStorage(AppStorageKeys.Quinjet.theme, store: SharedDefaults.store)
@@ -13,10 +12,6 @@ struct QuinjetPage: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.terminalLaunchEnabled) private var launchEnabled
-
-    init(usesSessionBridge: Bool = true) {
-        self.usesSessionBridge = usesSessionBridge
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,7 +29,7 @@ struct QuinjetPage: View {
         .environment(\.quinjetLaunchConfiguration, configuration)
         .onAppear {
             model.setSessionLaunchEnabled(launchEnabled)
-            if usesSessionBridge { QuinjetSessionBridge.shared.attach(model) }
+            QuinjetSessionBridge.shared.attach(model)
         }
         .task {
             guard automaticActionsEnabled else { return }
@@ -48,7 +43,7 @@ struct QuinjetPage: View {
             model.setSessionLaunchEnabled(enabled)
         }
         .onDisappear {
-            if usesSessionBridge { QuinjetSessionBridge.shared.detach(model) }
+            QuinjetSessionBridge.shared.detach(model)
             model.stopAll()
         }
     }

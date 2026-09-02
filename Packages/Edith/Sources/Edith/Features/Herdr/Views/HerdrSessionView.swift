@@ -376,18 +376,7 @@ struct HerdrSessionView: View {
         }
     }
 
-    @ViewBuilder
     private var diffPane: some View {
-        if tab.quinjet.showsProjectPicker {
-            QuinjetPage(usesSessionBridge: false)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .presenterCover(hideAgents, dark: dark)
-        } else {
-            diffTerminalPane
-        }
-    }
-
-    private var diffTerminalPane: some View {
         let palette = TerminalPalette.quinjet(configuration: diffConfiguration)
         return ZStack {
             Color(nsColor: palette.background)
