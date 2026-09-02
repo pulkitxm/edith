@@ -120,6 +120,7 @@ struct CompanionButton: View {
         .animation(.easeOut(duration: 0.12), value: hovering)
         .animation(.easeOut(duration: 0.12), value: busy)
         .help(help ?? "")
+        .accessibilityLabel(busy ? (busyTitle ?? "\(title) in progress") : title)
     }
 }
 
@@ -401,26 +402,35 @@ struct CompanionConfirmSheet: View {
     }
 }
 
-struct CompanionCardSkeleton: View {
-    var rows: Int = 3
+struct CompanionSkeletonCard<Content: View>: View {
+    let titleWidth: Double
+    var noteWidth: Double? = nil
     let dark: Bool
+    var fill = false
+    @ViewBuilder let content: () -> Content
 
     var body: some View {
-        SkeletonGroup {
-            SkinCard(title: " ", dark: dark) {
-                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                    ForEach(0..<rows, id: \.self) { index in
-                        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                            SkeletonBlock(width: index.isMultiple(of: 2) ? 72 : 96, height: 8)
-                            SkeletonBlock(height: 26, corner: 9)
-                        }
-                    }
-                    HStack(spacing: UIScale.pt(8)) {
-                        SkeletonBlock(width: 64, height: 24, corner: 8)
-                        SkeletonBlock(width: 104, height: 24, corner: 8)
-                    }
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            HStack(alignment: .firstTextBaseline) {
+                SkeletonBlock(width: titleWidth, height: 16, corner: 5)
+                Spacer()
+                if let noteWidth {
+                    SkeletonBlock(width: noteWidth, height: 9, corner: 4)
                 }
             }
+            content()
         }
+        .padding(
+            EdgeInsets(
+                top: UIScale.pt(16), leading: UIScale.pt(16),
+                bottom: UIScale.pt(14), trailing: UIScale.pt(16))
+        )
+        .frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
+        .widgetBar(
+            cornerRadius: 16,
+            fill: DashSkin.paper2(dark),
+            stroke: DashSkin.line(dark),
+            shadow: .black.opacity(dark ? 0.32 : 0.05)
+        )
     }
 }

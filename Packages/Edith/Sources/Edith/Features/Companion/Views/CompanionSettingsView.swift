@@ -299,16 +299,9 @@ struct CompanionSettingsScreen: View {
                                     maxWidth: CompanionMetrics.columnWidth,
                                     alignment: .leading)
                         } else {
-                            CompanionGrid(width: proxy.size.width) {
-                                CompanionCardSkeleton(rows: 3, dark: dark)
-                                CompanionCardSkeleton(rows: 3, dark: dark)
-                                CompanionCardSkeleton(rows: 2, dark: dark)
-                            } secondary: {
-                                CompanionCardSkeleton(rows: 2, dark: dark)
-                                CompanionCardSkeleton(rows: 3, dark: dark)
-                                CompanionCardSkeleton(rows: 2, dark: dark)
-                            } full: {
-                            }
+                            CompanionSettingsLoadingSkeleton(
+                                width: proxy.size.width,
+                                dark: dark)
                         }
                     } else {
                         CompanionGrid(width: proxy.size.width) {
@@ -435,9 +428,14 @@ struct CompanionSettingsScreen: View {
     }
 
     private var healthCard: some View {
-        SkinCard(title: "Health", note: home.healthy ? "healthy" : "degraded", dark: dark) {
-            if home.checks.isEmpty {
-                Text(home.error ?? "Waiting for the companion to answer…")
+        SkinCard(title: "Health", note: healthNote, dark: dark) {
+            if !home.hasAttemptedRefresh {
+                SkeletonGroup {
+                    CompanionHealthRowsSkeleton()
+                }
+                .accessibilityLabel("Loading companion health")
+            } else if home.checks.isEmpty {
+                Text(home.error ?? "No health checks were returned.")
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             } else {
@@ -466,6 +464,12 @@ struct CompanionSettingsScreen: View {
                 }
             }
         }
+    }
+
+    private var healthNote: String? {
+        guard home.hasAttemptedRefresh else { return nil }
+        if home.error != nil { return "unreachable" }
+        return home.healthy ? "healthy" : "degraded"
     }
 
     private var connectorsCard: some View {
@@ -768,5 +772,142 @@ struct CompanionSettingsScreen: View {
         panel.message = "Pick an exported folder, or its bundle.json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task { await model.restoreData(from: url) }
+    }
+}
+
+private struct CompanionHealthRowsSkeleton: View {
+    var body: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(
+                    .adaptive(minimum: UIScale.pt(290)), spacing: UIScale.pt(14),
+                    alignment: .leading)
+            ],
+            alignment: .leading, spacing: UIScale.pt(7)
+        ) {
+            ForEach(0..<6, id: \.self) { index in
+                HStack(spacing: UIScale.pt(8)) {
+                    SkeletonBlock(width: 7, height: 7, corner: 4)
+                    SkeletonBlock(
+                        width: index.isMultiple(of: 2) ? 174 : 226,
+                        height: 9)
+                }
+            }
+        }
+    }
+}
+
+private struct CompanionSettingsLoadingSkeleton: View {
+    let width: CGFloat
+    let dark: Bool
+
+    var body: some View {
+        SkeletonGroup {
+            CompanionGrid(width: width) {
+                reasoner
+                connectors
+                data
+            } secondary: {
+                health
+                connection
+                danger
+            } full: {
+            }
+        }
+        .accessibilityLabel("Loading companion settings")
+    }
+
+    private var reasoner: some View {
+        CompanionSkeletonCard(titleWidth: 72, noteWidth: 86, dark: dark) {
+            VStack(alignment: .leading, spacing: CompanionMetrics.rowSpacing) {
+                field(width: 280, label: 54)
+                field(label: 34)
+                field(label: 46)
+                SkeletonBlock(width: 328, height: 8)
+                actions([54, 98])
+            }
+        }
+    }
+
+    private var connectors: some View {
+        CompanionSkeletonCard(titleWidth: 84, noteWidth: 148, dark: dark) {
+            VStack(alignment: .leading, spacing: CompanionMetrics.rowSpacing) {
+                field(label: 76, detail: 58)
+                field(label: 76, detail: 58)
+                actions([82, 88, 88])
+                Divider().opacity(0.3)
+                actions([66, 56, 68], label: 94)
+                SkeletonBlock(width: 336, height: 8)
+                SkeletonBlock(width: 278, height: 8)
+            }
+        }
+    }
+
+    private var data: some View {
+        CompanionSkeletonCard(titleWidth: 72, noteWidth: 124, dark: dark) {
+            operationRow(action: 62)
+            Divider().opacity(0.3)
+            operationRow(action: 58)
+        }
+    }
+
+    private var health: some View {
+        CompanionSkeletonCard(titleWidth: 50, noteWidth: 48, dark: dark) {
+            CompanionHealthRowsSkeleton()
+        }
+    }
+
+    private var connection: some View {
+        CompanionSkeletonCard(titleWidth: 84, dark: dark) {
+            field(label: 112)
+            SkeletonBlock(width: 318, height: 8)
+        }
+    }
+
+    private var danger: some View {
+        CompanionSkeletonCard(titleWidth: 92, noteWidth: 144, dark: dark) {
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                operationRow(action: 68)
+                Divider().opacity(0.3)
+                operationRow(action: 66)
+                Divider().opacity(0.3)
+                operationRow(action: 52)
+            }
+        }
+    }
+
+    private func field(width: Double? = nil, label: Double, detail: Double? = nil) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+            HStack {
+                SkeletonBlock(width: label, height: 8)
+                Spacer(minLength: 0)
+                if let detail { SkeletonBlock(width: detail, height: 8) }
+            }
+            SkeletonBlock(width: width, height: 30, corner: 9)
+        }
+    }
+
+    private func actions(_ widths: [Double], label: Double? = nil) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+            if let label { SkeletonBlock(width: label, height: 8) }
+            HStack(spacing: UIScale.pt(8)) {
+                ForEach(Array(widths.enumerated()), id: \.offset) { _, width in
+                    SkeletonBlock(width: width, height: 26, corner: 8)
+                }
+            }
+        }
+    }
+
+    private func operationRow(action: Double) -> some View {
+        HStack(alignment: .center, spacing: UIScale.pt(12)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                SkeletonBlock(width: 142, height: 10)
+                SkeletonBlock(width: 276, height: 8)
+                SkeletonBlock(width: 224, height: 8)
+            }
+            Spacer(minLength: UIScale.pt(12))
+            SkeletonBlock(width: action, height: 26, corner: 8)
+        }
+        .padding(.vertical, UIScale.pt(8))
     }
 }

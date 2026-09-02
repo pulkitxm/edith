@@ -190,20 +190,33 @@ struct CompanionBackendScreen: View {
                     }
                 }
                 HStack(spacing: UIScale.pt(8)) {
-                    CompanionButton(title: "Start", disabled: model.busy != nil) {
+                    CompanionButton(
+                        title: "Start", busy: model.busy == "Starting",
+                        busyTitle: "Starting…",
+                        disabled: model.busy != nil && model.busy != "Starting"
+                    ) {
                         Task { await model.start() }
                     }
-                    CompanionButton(title: "Stop", disabled: model.busy != nil) {
+                    CompanionButton(
+                        title: "Stop", busy: model.busy == "Stopping",
+                        busyTitle: "Stopping…",
+                        disabled: model.busy != nil && model.busy != "Stopping"
+                    ) {
                         Task { await model.stop() }
                     }
-                    CompanionButton(title: "Restart", disabled: model.busy != nil) {
+                    CompanionButton(
+                        title: "Restart", busy: model.busy == "Restarting",
+                        busyTitle: "Restarting…",
+                        disabled: model.busy != nil && model.busy != "Restarting"
+                    ) {
                         Task { await model.restart() }
                     }
-                    CompanionButton(title: "Logs", disabled: model.busy != nil) {
+                    CompanionButton(
+                        title: "Logs", busy: model.busy == "Reading logs",
+                        busyTitle: "Reading logs…",
+                        disabled: model.busy != nil && model.busy != "Reading logs"
+                    ) {
                         Task { await model.readLogs(nil) }
-                    }
-                    if let busy = model.busy {
-                        CompanionStatusLine(text: "\(busy)…", tone: .info)
                     }
                     Spacer(minLength: 0)
                 }

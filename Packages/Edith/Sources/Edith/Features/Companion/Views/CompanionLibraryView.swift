@@ -370,12 +370,18 @@ struct CompanionLibraryScreen: View {
                     .tracking(0.6)
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 if pending > 0 {
-                    CompanionLinkButton(
-                        title: model.indexing ? "indexing…" : "index now",
-                        disabled: model.indexing,
-                        help: "Embed the pending episodes now"
-                    ) {
-                        Task { await model.indexNow() }
+                    if model.indexing {
+                        SkeletonGroup {
+                            SkeletonBlock(width: 48, height: 8, corner: 4)
+                        }
+                        .accessibilityLabel("Indexing pending episodes")
+                    } else {
+                        CompanionLinkButton(
+                            title: "index now",
+                            help: "Embed the pending episodes now"
+                        ) {
+                            Task { await model.indexNow() }
+                        }
                     }
                 }
             }
