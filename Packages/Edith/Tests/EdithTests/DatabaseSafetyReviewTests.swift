@@ -243,7 +243,7 @@ import Testing
     }
 
     @MainActor @Test func hostsScrollableSheetAndMaterializesSafetyControlsAtMinimumSize() throws {
-        _ = NSApplication.shared
+        _ = TestWindowHost.application
         let preview = Self.preview(
             confirmationText: String(repeating: "required-confirmation-", count: 160))
         let sheet = DatabaseSafetyReviewSheet(
@@ -256,11 +256,7 @@ import Testing
             dismiss: {})
         let host = NSHostingView(rootView: sheet)
         host.frame = NSRect(x: 0, y: 0, width: 320, height: 320)
-        let window = NSWindow(
-            contentRect: host.frame,
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false)
+        let window = TestWindowHost.window(contentRect: host.frame)
         defer { window.orderOut(nil) }
         window.contentView = host
         window.layoutIfNeeded()

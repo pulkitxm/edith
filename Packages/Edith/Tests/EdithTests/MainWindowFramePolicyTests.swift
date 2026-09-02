@@ -53,9 +53,9 @@ import Testing
     }
 
     @Test @MainActor func explicitFrameAutosaveOwnsMainWindowRestoration() {
-        let window = NSWindow(
+        let window = TestWindowHost.window(
             contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
-            styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+            styleMask: [.titled, .resizable])
 
         MainWindowFramePolicy.disableApplicationStateRestoration(window)
 

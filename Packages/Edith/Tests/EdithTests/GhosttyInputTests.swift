@@ -16,8 +16,7 @@ import Testing
             environment: ProcessInfo.processInfo.environment.map { "\($0.key)=\($0.value)" })
         let view = GhosttyTerminalView(launch: launch)
         view.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
-        let window = NSWindow(
-            contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        let window = TestWindowHost.window(contentRect: view.frame)
         window.contentView = view
         #expect(window.acceptsMouseMovedEvents)
         defer {
@@ -58,8 +57,7 @@ import Testing
             environment: ProcessInfo.processInfo.environment.map { "\($0.key)=\($0.value)" })
         let view = GhosttyTerminalView(launch: launch)
         view.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
-        let window = NSWindow(
-            contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        let window = TestWindowHost.window(contentRect: view.frame)
         window.contentView = view
         defer {
             window.contentView = nil
@@ -115,8 +113,7 @@ import Testing
             environment: ProcessInfo.processInfo.environment.map { "\($0.key)=\($0.value)" })
         let view = GhosttyTerminalView(launch: launch)
         view.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
-        let window = NSWindow(
-            contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        let window = TestWindowHost.window(contentRect: view.frame)
         window.contentView = view
         defer {
             window.contentView = nil
@@ -171,8 +168,7 @@ import Testing
             background: "#111111", foreground: "#eeeeee", cursor: "#eeeeee", fontSize: 13)
         let view = GhosttyTerminalView(launch: launch, theme: theme)
         view.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
-        let window = NSWindow(
-            contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        let window = TestWindowHost.window(contentRect: view.frame)
         window.contentView = view
         defer {
             window.contentView = nil
@@ -571,8 +567,7 @@ import Testing
         let view = GhosttyTerminalView(
             launch: GhosttyLaunch(executable: "/bin/cat", arguments: [], environment: []))
         view.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
-        let window = NSWindow(
-            contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        let window = TestWindowHost.window(contentRect: view.frame)
         window.contentView = view
         view.setHoveredLink("https://example.com")
         _ = window.makeFirstResponder(nil)

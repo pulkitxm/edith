@@ -8,7 +8,7 @@ import Testing
 @MainActor
 @Suite struct MusicKeyCommandTests {
     init() {
-        _ = NSApplication.shared
+        _ = TestWindowHost.application
     }
 
     private final class Recorder {

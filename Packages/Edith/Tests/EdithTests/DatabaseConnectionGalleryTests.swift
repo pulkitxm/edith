@@ -10,7 +10,7 @@ import Testing
 @Suite(.serialized)
 struct DatabaseConnectionGalleryTests {
     init() {
-        _ = NSApplication.shared
+        _ = TestWindowHost.application
     }
 
     @Test func selectedFirstConnectionStillRendersInCatalog() async throws {
@@ -449,14 +449,10 @@ private func withGalleryHost<Content: View, Result>(
             .environment(\.automaticViewActionsEnabled, false)
             .environment(\.compactLayout, width < 680))
     host.frame = NSRect(x: 0, y: 0, width: width, height: height)
-    let window = DatabaseConnectionGalleryTestWindow(
-        contentRect: host.frame,
-        styleMask: [.borderless],
-        backing: .buffered,
-        defer: false)
+    let window = TestWindowHost.window(contentRect: host.frame)
     defer { window.orderOut(nil) }
     window.contentView = host
-    window.makeKeyAndOrderFront(nil)
+    window.orderBack(nil)
     window.layoutIfNeeded()
     host.layoutSubtreeIfNeeded()
     host.displayIfNeeded()
@@ -490,14 +486,10 @@ private func withGalleryHostAsync<Content: View, Result>(
             .environment(\.automaticViewActionsEnabled, false)
             .environment(\.compactLayout, width < 680))
     host.frame = NSRect(x: 0, y: 0, width: width, height: height)
-    let window = DatabaseConnectionGalleryTestWindow(
-        contentRect: host.frame,
-        styleMask: [.borderless],
-        backing: .buffered,
-        defer: false)
+    let window = TestWindowHost.window(contentRect: host.frame)
     defer { window.orderOut(nil) }
     window.contentView = host
-    window.makeKeyAndOrderFront(nil)
+    window.orderBack(nil)
     window.layoutIfNeeded()
     host.layoutSubtreeIfNeeded()
     host.displayIfNeeded()
@@ -510,10 +502,6 @@ private func withGalleryHostAsync<Content: View, Result>(
 @MainActor
 private func galleryDescendantViews(of view: NSView) -> [NSView] {
     view.subviews + view.subviews.flatMap { galleryDescendantViews(of: $0) }
-}
-
-private final class DatabaseConnectionGalleryTestWindow: NSWindow {
-    override var canBecomeKey: Bool { true }
 }
 
 private struct GalleryViewRegion: Hashable {
