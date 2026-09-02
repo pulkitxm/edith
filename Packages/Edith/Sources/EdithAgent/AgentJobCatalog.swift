@@ -49,12 +49,28 @@ public enum AgentJobCatalog {
     }
 
     public static func jobs(store: AgentStore?) -> [AgentJob] {
-        descriptors().map { descriptor in
-            AgentJob(
+        let bodies = collectors(store: store)
+        return descriptors().map { descriptor in
+            let empty: @Sendable () async throws -> Data? = { nil }
+            let body = bodies[descriptor.id] ?? empty
+            return AgentJob(
                 descriptor: descriptor,
                 isEnabled: { isEnabled(descriptor) },
-                run: { nil })
+                run: body)
         }
+    }
+
+    static func collectors(store: AgentStore?) -> [String: @Sendable () async throws -> Data?] {
+        let usage = UsageCollectorJob(store: store)
+        let machines = MachineHealthJob(store: store)
+        let updates = UpdateDiscoveryJob(store: store)
+        let cleaner = CleanerEstimateJob(store: store)
+        return [
+            "usage.refresh": { try await usage.run() },
+            "machines.health": { try await machines.run() },
+            "updates.discover": { try await updates.run() },
+            "cleaner.estimate": { try await cleaner.run() },
+        ]
     }
 
     static func isEnabled(_ descriptor: AgentJobDescriptor) -> Bool {

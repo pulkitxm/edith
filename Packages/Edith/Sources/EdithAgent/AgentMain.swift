@@ -8,6 +8,23 @@ public enum AgentLog {
     public static let logger = Logger(subsystem: subsystem, category: "runtime")
 }
 
+public struct AgentServices {
+    public let runtime: AgentRuntime
+    public let hub: AgentHub
+    public let scheduler: JobScheduler
+    public let watchers: [FileSystemWatcher]
+
+    public init(
+        runtime: AgentRuntime, hub: AgentHub, scheduler: JobScheduler,
+        watchers: [FileSystemWatcher]
+    ) {
+        self.runtime = runtime
+        self.hub = hub
+        self.scheduler = scheduler
+        self.watchers = watchers
+    }
+}
+
 public enum AgentBoot {
     public static func build() -> String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
@@ -24,7 +41,7 @@ public enum AgentBoot {
         }
     }
 
-    public static func start() -> (runtime: AgentRuntime, hub: AgentHub, scheduler: JobScheduler) {
+    public static func start() -> AgentServices {
         let build = build()
         let store = makeStore(build: build)
         let runtime = AgentRuntime(build: build, store: store)
@@ -36,6 +53,12 @@ public enum AgentBoot {
             pauseAmbientOnBattery: SharedDefaults.store.bool(
                 forKey: AgentSettingsKeys.pauseAmbientOnBattery))
         let hub = AgentHub(runtime: runtime)
+        let watcher = FileSystemWatcher(paths: UsageWatchPaths.directories(), debounce: 30) {
+            Task { await scheduler.runNow("usage.refresh") }
+        }
+        watcher.start()
+        AgentLog.logger.info(
+            "watching \(watcher.watchedPaths.count, privacy: .public) usage paths")
         Task {
             await runtime.attach(scheduler: scheduler)
             await AgentOperations.register(on: runtime)
@@ -46,7 +69,7 @@ public enum AgentBoot {
         }
         hub.resume()
         AgentLog.logger.info("edithd \(build, privacy: .public) listening")
-        return (runtime, hub, scheduler)
+        return AgentServices(runtime: runtime, hub: hub, scheduler: scheduler, watchers: [watcher])
     }
 }
 
