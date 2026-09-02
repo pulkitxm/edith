@@ -424,6 +424,7 @@ import Testing
             "error: Not a Git repository: fatal: not a git repository"
         )
 
+        #expect(error.isNotGitRepository)
         #expect(
             error.localizedDescription
                 == "This folder is not a Git repository. "

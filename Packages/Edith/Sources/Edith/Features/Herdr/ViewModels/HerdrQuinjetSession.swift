@@ -10,6 +10,7 @@ final class HerdrQuinjetSession {
     private(set) var worktree: QuinjetWorktree?
     private(set) var projectName: String?
     var errorMessage: String?
+    var showsProjectPicker = false
 
     private let client: QuinjetClient
     private var launched: QuinjetLaunchConfiguration?
@@ -75,6 +76,7 @@ final class HerdrQuinjetSession {
             guard attempt == generation else { return }
             worktree = selection.worktree
             projectName = selection.projectName
+            showsProjectPicker = false
             let request = try QuinjetLaunchRequest(
                 executableURL: executable, worktreePath: selection.worktree.path, remote: remote,
                 configuration: configuration, managedByEdith: false,
@@ -89,7 +91,13 @@ final class HerdrQuinjetSession {
             launched = configuration
         } catch {
             guard attempt == generation else { return }
-            errorMessage = error.localizedDescription
+            if let error = error as? QuinjetClientError, error.isNotGitRepository {
+                showsProjectPicker = true
+                errorMessage = nil
+            } else {
+                showsProjectPicker = false
+                errorMessage = error.localizedDescription
+            }
         }
     }
 }

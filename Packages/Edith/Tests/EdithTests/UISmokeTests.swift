@@ -320,6 +320,28 @@ private func descendantViews(of view: NSView) -> [NSView] {
         #expect(renders(HerdrPage(store: HerdrStore())))
     }
 
+    @Test func herdrDiffFallsBackToTheQuinjetPicker() {
+        let name = "herdr-quinjet-picker-smoke-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = HerdrStore(defaults: defaults, liveWatcher: { _ in })
+        let agent = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true,
+            sshTarget: nil, session: "main", pane: "p1", kind: "Codex", status: .working,
+            title: "Build checkout", workspace: "edith", cwd: "/tmp")
+        var tab = HerdrOpenTab(
+            agent: agent, machine: nil, holder: TerminalSessionHolder(),
+            quinjet: HerdrQuinjetSession())
+        tab.view = .diff
+        tab.quinjet.showsProjectPicker = true
+
+        #expect(
+            renders(
+                HerdrSessionView(store: store, tab: tab, launchEnabled: false),
+                width: 900, height: 700))
+        tab.quinjet.stop()
+    }
+
     @Test func herdrBoardWithAgentSpacesRenders() {
         let name = "herdr-board-smoke-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
