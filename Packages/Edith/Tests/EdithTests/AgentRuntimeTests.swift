@@ -168,6 +168,27 @@ import Testing
         #expect(await scheduler.subscriberCount(topic: .usage) == 0)
     }
 
+    @Test func anOnDemandJobIsIdleRatherThanPaused() async {
+        let scheduler = JobScheduler()
+        await scheduler.register(
+            AgentJob(descriptor: descriptor("downloads.queue", topic: .downloads)) { nil })
+
+        #expect(await scheduler.snapshots.first?.phase == .idle)
+    }
+
+    @Test func aJobWaitingForItsFirstSubscriberReadsAsPaused() async {
+        let scheduler = JobScheduler()
+        await scheduler.register(
+            AgentJob(
+                descriptor: descriptor(
+                    "sessions.discover", cadence: .every(live: 2), topic: .sessions)
+            ) { nil })
+
+        #expect(await scheduler.snapshots.first?.phase == .paused)
+        await scheduler.addSubscriber(topic: .sessions)
+        #expect(await scheduler.snapshots.first?.phase == .idle)
+    }
+
     @Test func aBatteryPolicyPausesTheJobWhileUnplugged() async {
         let scheduler = JobScheduler(
             power: StaticPowerSource(isOnBattery: true))

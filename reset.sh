@@ -11,8 +11,8 @@
 #   ./reset.sh -y      # skip confirmation
 set -uo pipefail
 
-BUNDLE_IDS=("com.pulkit.edith" "com.pulkit.edith.helper.v2" "com.pulkit.edith.helper" "com.pulkit.edith.statusbar" "com.pulkit.edith.panel" "com.pulkit.edith.bar" "com.pulkit.edith.menubar" "com.pulkit.edith.shared")
-HELPER_IDS=("com.pulkit.edith.helper.v2" "com.pulkit.edith.helper" "com.pulkit.edith.statusbar" "com.pulkit.edith.panel" "com.pulkit.edith.bar" "com.pulkit.edith.menubar")
+BUNDLE_IDS=("com.pulkit.edith" "com.pulkit.edith.agent" "com.pulkit.edith.helper.v2" "com.pulkit.edith.helper" "com.pulkit.edith.statusbar" "com.pulkit.edith.panel" "com.pulkit.edith.bar" "com.pulkit.edith.menubar" "com.pulkit.edith.shared")
+HELPER_IDS=("com.pulkit.edith.agent" "com.pulkit.edith.helper.v2" "com.pulkit.edith.helper" "com.pulkit.edith.statusbar" "com.pulkit.edith.panel" "com.pulkit.edith.bar" "com.pulkit.edith.menubar")
 APP_SUPPORT="$HOME/Library/Application Support/Edith"
 INSTALLED_APPS=("/Applications/Edith.app" "$HOME/Applications/Edith.app")
 ICLOUD_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs/Edith"
@@ -36,6 +36,7 @@ fi
 # 1. quit anything running
 killall Edith 2>/dev/null || true
 pkill -x EdithHelper 2>/dev/null || true
+pkill -x edithd 2>/dev/null || true
 pkill -f "/Applications/Edith.app" 2>/dev/null || true
 sleep 1
 

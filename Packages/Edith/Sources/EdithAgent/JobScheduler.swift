@@ -157,6 +157,8 @@ public actor JobScheduler {
         if !state.job.isEnabled() { return .disabled }
         if state.running { return .running }
         if state.lastError != nil { return .failed }
+        let cadence = state.job.descriptor.cadence
+        if cadence.ambient == nil, cadence.live == nil { return .idle }
         if interval(for: state) == nil { return .paused }
         return .idle
     }
