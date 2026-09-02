@@ -298,7 +298,7 @@ struct DownloadSheet: View {
     }
 
     private func sizeText(_ kind: DownloadKind) -> String {
-        guard let bytes = estimate?.bytes(for: kind) else { return estimating ? "…" : "—" }
+        guard let bytes = estimate?.bytes(for: kind) else { return estimating ? "…" : "-" }
         let formatted = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
         return (estimate?.approximate == true ? "~" : "") + formatted
     }
@@ -326,7 +326,7 @@ struct DownloadSheet: View {
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 label("FILENAME PREFIX")
                 EdithTextField(
-                    placeholder: "Optional — e.g. roadtrip_", text: $filenamePrefix)
+                    placeholder: "Optional, e.g. roadtrip_", text: $filenamePrefix)
             }
             if !filenamePrefix.isEmpty {
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
@@ -766,12 +766,30 @@ struct DownloadSheet: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    Text(live.logs.isEmpty ? "Waiting for output…" : live.logs)
-                        .font(.system(size: UIScale.pt(11), design: .monospaced))
-                        .foregroundStyle(DashSkin.ink(dark))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                        .padding(UIScale.pt(14))
+                    Group {
+                        if !live.logs.isEmpty {
+                            Text(live.logs)
+                        } else if isActiveLog(live) {
+                            SkeletonGroup {
+                                VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                                    ForEach(0..<7, id: \.self) { index in
+                                        SkeletonBlock(
+                                            width: [286, 410, 344, 426, 238, 382, 304][index],
+                                            height: 8,
+                                            corner: 3)
+                                    }
+                                }
+                            }
+                            .accessibilityLabel("Waiting for download output")
+                        } else {
+                            Text("No output was captured.")
+                        }
+                    }
+                    .font(.system(size: UIScale.pt(11), design: .monospaced))
+                    .foregroundStyle(DashSkin.ink(dark))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                    .padding(UIScale.pt(14))
                     Color.clear.frame(height: UIScale.pt(1)).id("logBottom")
                 }
                 .scrollIndicators(.hidden)
@@ -781,6 +799,13 @@ struct DownloadSheet: View {
         }
         .frame(width: UIScale.pt(480), height: UIScale.pt(360))
         .background(DashSkin.paper(dark))
+    }
+
+    private func isActiveLog(_ item: YoutubeDownloader.DownloadItem) -> Bool {
+        switch item.status {
+        case .queued, .resolving, .downloading: true
+        case .done, .error, .interrupted: false
+        }
     }
 
     private var controlsRow: some View {
@@ -880,7 +905,10 @@ private struct DownloadThumb: View {
                     switch phase {
                     case .empty:
                         SkeletonGroup {
-                            SkeletonBlock(corner: 5)
+                            SkeletonBlock(
+                                width: Double(height) * 16 / 9 / UIScale.current,
+                                height: Double(height) / UIScale.current,
+                                corner: 5)
                         }
                     case let .success(image):
                         image.resizable().aspectRatio(contentMode: .fill)

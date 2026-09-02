@@ -77,7 +77,7 @@ struct AttentionPage: View {
                         }
                     }
                 } placeholder: {
-                    AttentionPageSkeleton()
+                    AttentionPageSkeleton(model: model)
                 }
                 .pageContent(compact)
             }
@@ -97,44 +97,150 @@ struct AttentionPage: View {
 }
 
 private struct AttentionPageSkeleton: View {
+    let model: AttentionPageModel
     @Environment(\.compactLayout) private var compact
 
     var body: some View {
         SkeletonGroup {
-            VStack(alignment: .leading, spacing: UIScale.pt(18)) {
-                LazyVGrid(
-                    columns: [
-                        GridItem(
-                            .adaptive(minimum: UIScale.pt(compact ? 145 : 180)),
-                            spacing: UIScale.pt(12))
-                    ],
-                    spacing: UIScale.pt(12)
-                ) {
-                    ForEach(0..<4, id: \.self) { index in
-                        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                            HStack {
-                                SkeletonBlock(width: 72, height: 9)
-                                Spacer()
-                                SkeletonBlock(width: 22, height: 22, corner: 6)
-                            }
-                            SkeletonBlock(
-                                width: index.isMultiple(of: 2) ? 92 : 64,
-                                height: 20)
-                            SkeletonBlock(width: 84, height: 8)
-                        }
-                        .padding(UIScale.pt(14))
-                        .background(
-                            Color.secondary.opacity(0.06),
-                            in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
-                    }
+            Group {
+                if model.needsSetup {
+                    AttentionSetupSkeleton()
+                } else if model.hasActivity {
+                    AttentionOverviewSkeleton(compact: compact)
+                } else {
+                    AttentionCollectingSkeleton()
                 }
-
-                AttentionSkeletonCard(rows: 1, includesBar: true)
-                AttentionSkeletonCard(rows: 6, includesBar: false)
             }
         }
         .frame(maxWidth: .infinity, minHeight: UIScale.pt(240), alignment: .topLeading)
         .accessibilityLabel("Loading attention activity")
+    }
+}
+
+private struct AttentionSetupSkeleton: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(9)) {
+                SkeletonBlock(width: 312, height: 27)
+                SkeletonBlock(height: 9)
+                SkeletonBlock(width: 464, height: 9)
+            }
+            .padding(.bottom, UIScale.pt(4))
+
+            AttentionSetupCardSkeleton(rows: 2)
+            AttentionSetupCardSkeleton(rows: 1, includesSegmentedControl: true)
+            AttentionSetupCardSkeleton(rows: 2)
+
+            HStack {
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    SkeletonBlock(width: 174, height: 10)
+                    SkeletonBlock(width: 286, height: 8)
+                }
+                Spacer()
+                SkeletonBlock(width: 112, height: 30, corner: 7)
+            }
+            .padding(.top, UIScale.pt(4))
+        }
+    }
+}
+
+private struct AttentionSetupCardSkeleton: View {
+    let rows: Int
+    var includesSegmentedControl = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(13)) {
+            HStack(alignment: .top, spacing: UIScale.pt(11)) {
+                SkeletonBlock(width: 26, height: 26, corner: 13)
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    SkeletonBlock(width: 156, height: 12)
+                    SkeletonBlock(width: 348, height: 8)
+                }
+            }
+            Divider()
+            if includesSegmentedControl {
+                SkeletonBlock(height: 28, corner: 7)
+                SkeletonBlock(width: 382, height: 8)
+            } else {
+                ForEach(0..<rows, id: \.self) { index in
+                    HStack(spacing: UIScale.pt(10)) {
+                        SkeletonBlock(width: 24, height: 24, corner: 6)
+                        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                            SkeletonBlock(width: index.isMultiple(of: 2) ? 112 : 138, height: 10)
+                            SkeletonBlock(width: index.isMultiple(of: 2) ? 310 : 354, height: 8)
+                        }
+                        Spacer()
+                        SkeletonBlock(width: 30, height: 18, corner: 9)
+                    }
+                }
+            }
+        }
+        .padding(UIScale.pt(18))
+        .background(
+            Color.secondary.opacity(0.06),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(15)))
+    }
+}
+
+private struct AttentionCollectingSkeleton: View {
+    var body: some View {
+        VStack(spacing: UIScale.pt(18)) {
+            SkeletonBlock(width: 76, height: 76, corner: 38)
+            SkeletonBlock(width: 324, height: 23)
+            VStack(spacing: UIScale.pt(5)) {
+                SkeletonBlock(width: 494, height: 9)
+                SkeletonBlock(width: 362, height: 9)
+            }
+            HStack(spacing: UIScale.pt(12)) {
+                SkeletonBlock(width: 126, height: 25, corner: 13)
+                SkeletonBlock(width: 112, height: 25, corner: 13)
+            }
+            SkeletonBlock(width: 96, height: 27, corner: 7)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, UIScale.pt(60))
+        .padding(.horizontal, UIScale.pt(18))
+        .background(
+            Color.secondary.opacity(0.06),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(15)))
+    }
+}
+
+private struct AttentionOverviewSkeleton: View {
+    let compact: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(18)) {
+            LazyVGrid(
+                columns: [
+                    GridItem(
+                        .adaptive(minimum: UIScale.pt(compact ? 145 : 180)),
+                        spacing: UIScale.pt(12))
+                ],
+                spacing: UIScale.pt(12)
+            ) {
+                ForEach(0..<4, id: \.self) { index in
+                    VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                        HStack {
+                            SkeletonBlock(width: 16, height: 16, corner: 5)
+                            Spacer()
+                            SkeletonBlock(width: 72, height: 9)
+                        }
+                        SkeletonBlock(
+                            width: index.isMultiple(of: 2) ? 92 : 64,
+                            height: 20)
+                        SkeletonBlock(width: 84, height: 8)
+                    }
+                    .padding(UIScale.pt(15))
+                    .background(
+                        Color.secondary.opacity(0.06),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
+                }
+            }
+
+            AttentionSkeletonCard(rows: 1, includesBar: true)
+            AttentionSkeletonCard(rows: 6, includesBar: false)
+        }
     }
 }
 

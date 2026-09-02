@@ -634,10 +634,11 @@ private struct ExtensionLifecycleRows: View {
                     } label: {
                         HStack(spacing: UIScale.pt(6)) {
                             Text("Check again")
-                            SkeletonGroup {
-                                SkeletonBlock(width: 14, height: 14, corner: 7)
+                            if readiness.isRefreshing {
+                                SkeletonGroup {
+                                    SkeletonBlock(width: 14, height: 14, corner: 7)
+                                }
                             }
-                            .opacity(readiness.isRefreshing ? 1 : 0)
                         }
                     }
                     .disabled(readiness.isRefreshing)

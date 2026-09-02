@@ -121,20 +121,22 @@ struct AboutPane: View {
                 Text("Contributors")
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
                     .foregroundStyle(.secondary)
-                LazyVGrid(columns: avatarColumns, spacing: UIScale.pt(10)) {
-                    ForEach(contributors) { person in
-                        Button {
-                            _ = try? inspection.openLink(
-                                "contributor:\(person.login)", contributors: contributors)
-                        } label: {
-                            avatar(for: person)
+                SkeletonGroup {
+                    LazyVGrid(columns: avatarColumns, spacing: UIScale.pt(10)) {
+                        ForEach(contributors) { person in
+                            Button {
+                                _ = try? inspection.openLink(
+                                    "contributor:\(person.login)", contributors: contributors)
+                            } label: {
+                                avatar(for: person)
+                            }
+                            .buttonStyle(.edith(.borderless))
+                            .help(person.login)
+                            .accessibilityLabel("Open \(person.login) on GitHub")
                         }
-                        .buttonStyle(.edith(.borderless))
-                        .help(person.login)
-                        .accessibilityLabel("Open \(person.login) on GitHub")
                     }
+                    .frame(maxWidth: UIScale.pt(340))
                 }
-                .frame(maxWidth: UIScale.pt(340))
             }
             .padding(.top, UIScale.pt(6))
         }
@@ -144,9 +146,7 @@ struct AboutPane: View {
         AsyncImage(url: person.avatarURL) { phase in
             switch phase {
             case .empty:
-                SkeletonGroup {
-                    SkeletonBlock(width: 44, height: 44, corner: 22)
-                }
+                SkeletonBlock(width: 44, height: 44, corner: 22)
             case let .success(image):
                 image.resizable().interpolation(.high)
             case .failure:
