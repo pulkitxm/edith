@@ -128,6 +128,11 @@ public final class GhosttyRuntime {
 
     var handle: ghostty_app_t? { app }
 
+    func drainPendingWork() {
+        guard let app else { return }
+        ghostty_app_tick(app)
+    }
+
     var configHandle: ghostty_config_t? { config }
 
     func configuration(for theme: GhosttyTheme) -> ghostty_config_t? {

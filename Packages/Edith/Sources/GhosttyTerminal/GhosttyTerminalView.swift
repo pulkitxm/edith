@@ -147,6 +147,7 @@ public final class GhosttyTerminalView: NSView {
         }
         closeAlert = nil
         if let surface {
+            GhosttyRuntime.shared.drainPendingWork()
             ghostty_surface_free(surface)
             self.surface = nil
         }
