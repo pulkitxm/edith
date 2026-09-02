@@ -22,7 +22,7 @@ struct DatabaseBrokerExtensionReadinessAdapter: Sendable {
             try await ensureReady()
             return .ready("The secure local database service is ready.")
         } catch is CancellationError {
-            return .loading("The database service check was cancelled.")
+            return .failed("The database service check was cancelled.")
         } catch let error as DatabaseBrokerAvailabilityError {
             return readiness(for: error)
         } catch {

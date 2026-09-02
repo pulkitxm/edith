@@ -46,6 +46,16 @@ struct DatabasePageModelTests {
         #expect(model.readiness == .ready)
         #expect(await calls.repairCount == 1)
     }
+
+    @Test("Cancelled readiness enters a recoverable terminal state")
+    func cancelledReadiness() async {
+        let model = DatabasePageModel(ensureReady: { throw CancellationError() })
+
+        await model.refresh()
+
+        #expect(model.readiness == .failed("The database readiness check was cancelled."))
+        #expect(model.failureDetail == "The database readiness check was cancelled.")
+    }
 }
 
 private actor DatabasePageCallRecorder {

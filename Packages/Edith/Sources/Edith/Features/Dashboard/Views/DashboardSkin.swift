@@ -190,10 +190,25 @@ struct LazyChartCard<Content: View>: View {
                 if loaded {
                     content()
                 } else {
-                    Image(systemName: "chart.xyaxis.line")
-                        .font(.system(size: UIScale.pt(24), weight: .light))
-                        .foregroundStyle(DashSkin.inkFaint(dark).opacity(0.24))
-                        .frame(maxWidth: .infinity, minHeight: placeholderHeight)
+                    SkeletonGroup {
+                        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                            HStack(alignment: .bottom, spacing: UIScale.pt(6)) {
+                                ForEach(0..<12, id: \.self) { index in
+                                    SkeletonBlock(
+                                        height: CGFloat(32 + index % 5 * 22),
+                                        corner: 3)
+                                }
+                            }
+                            .frame(maxHeight: .infinity, alignment: .bottom)
+                            HStack {
+                                SkeletonBlock(width: 58, height: 8)
+                                Spacer()
+                                SkeletonBlock(width: 58, height: 8)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: placeholderHeight)
+                    .accessibilityLabel("Loading \(title)")
                 }
             }
         }

@@ -121,30 +121,45 @@ struct AboutPane: View {
                 Text("Contributors")
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
                     .foregroundStyle(.secondary)
-                LazyVGrid(columns: avatarColumns, spacing: UIScale.pt(10)) {
-                    ForEach(contributors) { person in
-                        Button {
-                            _ = try? inspection.openLink(
-                                "contributor:\(person.login)", contributors: contributors)
-                        } label: {
-                            avatar(for: person)
+                SkeletonGroup {
+                    LazyVGrid(columns: avatarColumns, spacing: UIScale.pt(10)) {
+                        ForEach(contributors) { person in
+                            Button {
+                                _ = try? inspection.openLink(
+                                    "contributor:\(person.login)", contributors: contributors)
+                            } label: {
+                                avatar(for: person)
+                            }
+                            .buttonStyle(.edith(.borderless))
+                            .help(person.login)
+                            .accessibilityLabel("Open \(person.login) on GitHub")
                         }
-                        .buttonStyle(.edith(.borderless))
-                        .help(person.login)
-                        .accessibilityLabel("Open \(person.login) on GitHub")
                     }
+                    .frame(maxWidth: UIScale.pt(340))
                 }
-                .frame(maxWidth: UIScale.pt(340))
             }
             .padding(.top, UIScale.pt(6))
         }
     }
 
     private func avatar(for person: Contributor) -> some View {
-        AsyncImage(url: person.avatarURL) { image in
-            image.resizable().interpolation(.high)
-        } placeholder: {
-            Circle().fill(Color.secondary.opacity(0.18))
+        AsyncImage(url: person.avatarURL) { phase in
+            switch phase {
+            case .empty:
+                SkeletonBlock(width: 44, height: 44, corner: 22)
+            case let .success(image):
+                image.resizable().interpolation(.high)
+            case .failure:
+                Circle()
+                    .fill(Color.secondary.opacity(0.18))
+                    .overlay {
+                        Text(String(person.login.prefix(1)).uppercased())
+                            .font(.system(size: UIScale.pt(13), weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+            @unknown default:
+                Circle().fill(Color.secondary.opacity(0.18))
+            }
         }
         .frame(width: UIScale.pt(44), height: UIScale.pt(44))
         .clipShape(Circle())

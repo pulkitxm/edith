@@ -57,19 +57,9 @@ struct DatabaseConnectionSidebar: View {
     private var content: some View {
         switch model.listState {
         case .idle:
-            emptyState(
-                symbol: "cylinder.split.1x2",
-                title: "Connections not loaded",
-                detail: "Loading your saved database connections.",
-                actionTitle: "Load connections")
+            loadingConnectionRows([])
         case .loading(let connections):
-            stateNotice(
-                symbol: "arrow.triangle.2.circlepath",
-                title: "Loading connections",
-                detail: "Saved connection information is being refreshed.",
-                tint: theme,
-                progress: true)
-            connectionRows(connections)
+            loadingConnectionRows(connections)
         case .empty:
             emptyState(
                 symbol: "cylinder.split.1x2",
@@ -112,6 +102,45 @@ struct DatabaseConnectionSidebar: View {
         }
     }
 
+    private func loadingConnectionRows(_ connections: [DatabaseConnectionSummary]) -> some View {
+        SkeletonReplica("Loading saved database connections") {
+            Group {
+                if connections.isEmpty {
+                    LazyVStack(spacing: UIScale.pt(3)) {
+                        ForEach(0..<6, id: \.self) { index in
+                            loadingConnectionRow(index)
+                        }
+                    }
+                } else {
+                    connectionRows(connections)
+                }
+            }
+        }
+    }
+
+    private func loadingConnectionRow(_ index: Int) -> some View {
+        HStack(spacing: UIScale.pt(9)) {
+            Image(systemName: "cylinder")
+                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .frame(width: UIScale.pt(16))
+            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                Text(index.isMultiple(of: 2) ? "Analytics warehouse" : "Primary database")
+                    .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                    .lineLimit(1)
+                Text(index.isMultiple(of: 2) ? "PostgreSQL · Production" : "MySQL · Development")
+                    .font(.system(size: UIScale.pt(10), weight: .medium))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Text("Connected")
+                .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, UIScale.pt(9))
+        .padding(.vertical, UIScale.pt(7))
+        .background(Color.clear, in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
+    }
+
     @ViewBuilder
     private func connectionRows(_ connections: [DatabaseConnectionSummary]) -> some View {
         if connections.isEmpty {
@@ -131,7 +160,8 @@ struct DatabaseConnectionSidebar: View {
 
     private func connectionRow(_ connection: DatabaseConnectionSummary) -> some View {
         let selected = model.selectedConnectionID == connection.id
-        let sessionLabel = sessionTitle(model.sessionState(for: connection.id))
+        let session = model.sessionState(for: connection.id)
+        let sessionLabel = sessionTitle(session)
         return Button {
             model.selectConnection(connection.id)
         } label: {
@@ -158,11 +188,7 @@ struct DatabaseConnectionSidebar: View {
                         .foregroundStyle(.yellow)
                         .accessibilityHidden(true)
                 }
-                if let sessionLabel {
-                    Text(sessionLabel)
-                        .font(.system(size: UIScale.pt(9.5), weight: .semibold))
-                        .foregroundStyle(sessionColor(model.sessionState(for: connection.id)))
-                }
+                connectionSessionSlot(session, label: sessionLabel)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, UIScale.pt(9))
@@ -194,25 +220,40 @@ struct DatabaseConnectionSidebar: View {
         .accessibilityHint("Select this database connection")
     }
 
+    @ViewBuilder
+    private func connectionSessionSlot(
+        _ session: DatabaseConnectionSessionState,
+        label: String?
+    ) -> some View {
+        switch session {
+        case .disconnected:
+            EmptyView()
+        case .connecting, .disconnecting:
+            SkeletonReplica(label ?? "Updating connection") {
+                Text("Connected")
+                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+            }
+        case .connected, .failed, .outcomeUnknown:
+            if let label {
+                Text(label)
+                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                    .foregroundStyle(sessionColor(session))
+            }
+        }
+    }
+
     private func stateNotice(
         symbol: String,
         title: String,
         detail: String,
         tint: Color,
-        progress: Bool = false,
         retry: Bool = false
     ) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
             HStack(spacing: UIScale.pt(7)) {
-                if progress {
-                    ProgressView()
-                        .controlSize(.small)
-                        .accessibilityHidden(true)
-                } else {
-                    Image(systemName: symbol)
-                        .foregroundStyle(tint)
-                        .accessibilityHidden(true)
-                }
+                Image(systemName: symbol)
+                    .foregroundStyle(tint)
+                    .accessibilityHidden(true)
                 Text(title)
                     .font(.system(size: UIScale.pt(11.5), weight: .semibold))
             }

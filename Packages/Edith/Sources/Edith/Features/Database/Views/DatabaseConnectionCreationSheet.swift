@@ -354,9 +354,13 @@ struct DatabaseConnectionCreationSheet: View {
             Spacer(minLength: UIScale.pt(12))
             Button(action: submit) {
                 if isWorking {
-                    ProgressView().controlSize(.small)
+                    SkeletonReplica(
+                        model.phase == .testing ? "Testing connection" : "Saving connection"
+                    ) {
+                        Text(footerActionTitle)
+                    }
                 } else {
-                    Text(model.canSave ? "Save connection" : "Test and save")
+                    Text(footerActionTitle)
                 }
             }
             .buttonStyle(.edith(.primary, tint: palette.accent))
@@ -368,19 +372,25 @@ struct DatabaseConnectionCreationSheet: View {
         .background(palette.panel.opacity(0.68))
     }
 
+    private var footerActionTitle: String {
+        model.phase == .saving || model.canSave ? "Save connection" : "Test and save"
+    }
+
     @ViewBuilder
     private var phaseStatus: some View {
         switch model.phase {
         case .editing:
             EmptyView()
         case .testing:
-            status(
-                "Testing connection", symbol: "arrow.triangle.2.circlepath",
-                color: palette.accent)
+            SkeletonReplica("Testing connection") {
+                status("Connection ready", symbol: "checkmark.circle.fill", color: DashSkin.ok)
+            }
         case .tested(let detail):
             status(detail, symbol: "checkmark.circle.fill", color: DashSkin.ok)
         case .saving:
-            status("Saving connection", symbol: "tray.and.arrow.down", color: palette.accent)
+            SkeletonReplica("Saving connection") {
+                status("Connection saved", symbol: "checkmark.circle.fill", color: DashSkin.ok)
+            }
         case .failed(let detail):
             status(detail, symbol: "exclamationmark.triangle.fill", color: DashSkin.danger)
         case .saved:

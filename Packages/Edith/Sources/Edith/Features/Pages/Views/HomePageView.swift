@@ -57,11 +57,17 @@ struct HomePage: View {
                                 }
                             }
                         }
-                        if usageEnabled, model.loaded {
-                            SkinCard(title: "Activity", note: "daily cost", dark: dark) {
-                                ActivityHeatmap(
-                                    days: model.calendarDays, cuts: model.chartData.heatCuts,
-                                    model: model, dark: dark, blur: blurMoney)
+                        if usageEnabled {
+                            if model.loaded {
+                                SkinCard(title: "Activity", note: "daily cost", dark: dark) {
+                                    ActivityHeatmap(
+                                        days: model.calendarDays, cuts: model.chartData.heatCuts,
+                                        model: model, dark: dark, blur: blurMoney)
+                                }
+                            } else if !model.loadAttempted {
+                                SkinCard(title: "Activity", note: "daily cost", dark: dark) {
+                                    ActivityHeatmapSkeleton()
+                                }
                             }
                         }
                         LazyVGrid(
@@ -893,10 +899,14 @@ private struct UsageSummaryCard: View {
                     jumpLink("Open Agent Usage", to: .dashboard, dark: dark)
                 }
             } else {
-                Text(model.loadAttempted ? "No usage data yet" : "Loading usage data…")
-                    .font(.system(size: UIScale.pt(12.5)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .frame(maxWidth: .infinity, minHeight: UIScale.pt(120))
+                if model.loadAttempted {
+                    Text("No usage data yet")
+                        .font(.system(size: UIScale.pt(12.5)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .frame(maxWidth: .infinity, minHeight: UIScale.pt(120))
+                } else {
+                    UsageSummarySkeleton(dark: dark)
+                }
             }
         }
     }
@@ -941,6 +951,66 @@ private struct UsageSummaryCard: View {
         }
         .chartYAxis(.hidden)
         .frame(height: UIScale.pt(64))
+    }
+}
+
+private struct ActivityHeatmapSkeleton: View {
+    var body: some View {
+        SkeletonGroup {
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: UIScale.pt(3)) {
+                    ForEach(0..<18, id: \.self) { _ in
+                        VStack(spacing: UIScale.pt(3)) {
+                            SkeletonBlock(width: 14, height: 8, corner: 3)
+                            ForEach(0..<7, id: \.self) { _ in
+                                SkeletonBlock(width: 14, height: 14, corner: 3)
+                            }
+                        }
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+            .frame(height: UIScale.pt(137))
+        }
+        .accessibilityLabel("Loading activity")
+    }
+}
+
+private struct UsageSummarySkeleton: View {
+    let dark: Bool
+
+    var body: some View {
+        SkeletonGroup {
+            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                HStack(spacing: UIScale.pt(24)) {
+                    ForEach(0..<2, id: \.self) { index in
+                        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                            SkeletonBlock(width: index == 0 ? 44 : 66, height: 8)
+                            SkeletonBlock(width: 72, height: 22)
+                            SkeletonBlock(width: 88, height: 8)
+                        }
+                    }
+                }
+                HStack(alignment: .bottom, spacing: UIScale.pt(5)) {
+                    ForEach(0..<14, id: \.self) { index in
+                        SkeletonBlock(
+                            height: CGFloat(18 + index % 5 * 8),
+                            corner: 2)
+                    }
+                }
+                .frame(height: UIScale.pt(62), alignment: .bottom)
+                HStack(spacing: UIScale.pt(12)) {
+                    ForEach(0..<3, id: \.self) { index in
+                        SkeletonBlock(
+                            width: index == 1 ? 78 : 62,
+                            height: 9)
+                    }
+                }
+                SkeletonBlock(width: 116, height: 9)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: UIScale.pt(120), alignment: .topLeading)
+        .accessibilityLabel("Loading usage summary")
     }
 }
 

@@ -9,6 +9,7 @@ final class CompanionHomeModel: CompanionRefreshable {
     private(set) var error: String?
     private(set) var generation = 0
     private(set) var reachable = false
+    private(set) var hasAttemptedRefresh = false
 
     var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
@@ -30,6 +31,7 @@ final class CompanionHomeModel: CompanionRefreshable {
     }
 
     func refresh() async {
+        defer { hasAttemptedRefresh = true }
         do {
             let client = client
             async let liveness = client.health(timeout: 5)

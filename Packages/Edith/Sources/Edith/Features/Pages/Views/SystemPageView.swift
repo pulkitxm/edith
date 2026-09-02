@@ -18,7 +18,11 @@ struct SystemPage: View {
                     if let status = model.actionStatus {
                         actionStatus(status)
                     }
-                    summary
+                    if model.loaded {
+                        summary
+                    } else {
+                        SystemSummarySkeleton(dark: dark)
+                    }
                     SkinCard(title: "Running apps", dark: dark) {
                         appList
                     }
@@ -173,15 +177,14 @@ struct SystemPage: View {
         VStack(spacing: UIScale.pt(0)) {
             columnHeaders
             Divider().opacity(0.4)
-            if model.apps.isEmpty {
-                HStack(spacing: UIScale.pt(8)) {
-                    ProgressView().controlSize(.small)
-                    Text("Reading running apps…")
-                        .font(.system(size: UIScale.pt(12))).foregroundStyle(
-                            DashSkin.inkFaint(dark))
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, UIScale.pt(24))
+            if !model.loaded {
+                SystemAppRowsSkeleton(dark: dark)
+            } else if model.apps.isEmpty {
+                Text("No user applications are running.")
+                    .font(.system(size: UIScale.pt(12)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, UIScale.pt(24))
             }
             ForEach(model.apps) { app in
                 SystemAppRow(app: app, dark: dark, canQuit: model.canQuit(app)) {
@@ -201,6 +204,58 @@ struct SystemPage: View {
 
     fileprivate static func memoryLabel(_ mb: Double) -> String {
         mb >= 1024 ? String(format: "%.1f GB", mb / 1024) : String(format: "%.0f MB", mb)
+    }
+}
+
+private struct SystemSummarySkeleton: View {
+    let dark: Bool
+
+    var body: some View {
+        SkeletonGroup {
+            HStack(spacing: UIScale.pt(12)) {
+                ForEach(0..<2, id: \.self) { index in
+                    VStack(alignment: .leading, spacing: UIScale.pt(7)) {
+                        SkeletonBlock(width: index == 0 ? 82 : 74, height: 8)
+                        SkeletonBlock(width: index == 0 ? 42 : 88, height: 20)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(UIScale.pt(16))
+                    .background(
+                        DashSkin.paper2(dark),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
+                }
+            }
+        }
+        .accessibilityLabel("Reading system summary")
+    }
+}
+
+private struct SystemAppRowsSkeleton: View {
+    let dark: Bool
+
+    var body: some View {
+        SkeletonGroup {
+            VStack(spacing: UIScale.pt(0)) {
+                ForEach(0..<6, id: \.self) { index in
+                    HStack(spacing: UIScale.pt(10)) {
+                        SkeletonBlock(width: 22, height: 22, corner: 6)
+                        SkeletonBlock(
+                            width: index.isMultiple(of: 2) ? 126 : 174,
+                            height: 10)
+                        Spacer()
+                        SkeletonBlock(width: 38, height: 9)
+                            .frame(width: UIScale.pt(48), alignment: .trailing)
+                        SkeletonBlock(width: 58, height: 9)
+                            .frame(width: UIScale.pt(72), alignment: .trailing)
+                        SkeletonBlock(width: 16, height: 16, corner: 8)
+                    }
+                    .padding(.horizontal, UIScale.pt(6))
+                    .padding(.vertical, UIScale.pt(7))
+                    if index < 5 { Divider().opacity(0.3) }
+                }
+            }
+        }
+        .accessibilityLabel("Reading running apps")
     }
 }
 

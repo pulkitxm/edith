@@ -296,10 +296,19 @@ struct HerdrSessionView: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             if transferringDrop {
-                ProgressView()
-                    .controlSize(.small)
-                    .padding(UIScale.pt(10))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                SkeletonGroup {
+                    HStack(spacing: UIScale.pt(6)) {
+                        SkeletonBlock(width: 12, height: 12, corner: 3)
+                        SkeletonBlock(width: 74, height: 9)
+                    }
+                    .padding(.horizontal, UIScale.pt(9))
+                    .padding(.vertical, UIScale.pt(7))
+                    .background(
+                        DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                }
+                .accessibilityLabel("Transferring files")
+                .padding(UIScale.pt(10))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
             if let dropError {
                 Text(dropError)
@@ -325,7 +334,10 @@ struct HerdrSessionView: View {
         case .none:
             EmptyView()
         case .progress:
-            ProgressView()
+            HerdrAgentTerminalSkeleton(
+                kind: agent.kind,
+                palette: .edith(dark: dark)
+            )
         case .failure(let message):
             Text(message)
                 .font(.system(size: UIScale.pt(13)))
@@ -384,7 +396,7 @@ struct HerdrSessionView: View {
                 diffPlaceholder(
                     title: "Quinjet could not open this diff", detail: error, palette: palette)
             } else if tab.quinjet.preparing {
-                ProgressView()
+                TerminalLoadingSkeleton(palette: palette)
             } else if !launchEnabled {
                 diffPlaceholder(
                     title: "Terminals are paused",
@@ -527,9 +539,10 @@ struct HerdrSessionView: View {
             } label: {
                 HStack(spacing: UIScale.pt(6)) {
                     if closingAgent {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(.white)
+                        SkeletonGroup {
+                            SkeletonBlock(width: 12, height: 12, corner: 6)
+                        }
+                        .accessibilityLabel("Closing agent")
                     } else {
                         Image(systemName: "xmark.circle.fill")
                     }

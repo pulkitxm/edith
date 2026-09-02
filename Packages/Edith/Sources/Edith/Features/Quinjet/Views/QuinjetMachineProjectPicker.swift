@@ -39,8 +39,9 @@ struct QuinjetProjectPicker: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ProgressView("Preparing machine")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                QuinjetPreparingMachineSkeleton(
+                    machines: machines, selection: tab.machineID,
+                    machineName: selectedMachine?.name, selectMachine: select)
             }
         }
         .onAppear { reconcileSelection() }
@@ -219,8 +220,10 @@ private struct QuinjetRemoteProjectPicker: View {
                 return .handled
             }
             if picker.loading {
-                ProgressView()
-                    .controlSize(.small)
+                SkeletonGroup {
+                    SkeletonBlock(width: 42, height: 8)
+                }
+                .accessibilityLabel("Matching folder path")
             } else if !picker.canOpenCurrentDirectory, !picker.path.isEmpty {
                 Text("matching")
                     .font(DashSkin.mono(8.5))
@@ -240,8 +243,8 @@ private struct QuinjetRemoteProjectPicker: View {
     private var recentContent: some View {
         let projects = model.filteredProjects(for: remote)
         if model.isLoadingProjects(for: remote), projects.isEmpty {
-            ProgressView("Loading recent projects from \(machine.name)")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            QuinjetProjectGridSkeleton(dark: dark)
+                .accessibilityLabel("Loading recent projects from \(machine.name)")
         } else if let error = model.projectError(for: remote), projects.isEmpty {
             ContentUnavailableView {
                 Label("Projects unavailable", systemImage: "exclamationmark.triangle")
@@ -289,8 +292,8 @@ private struct QuinjetRemoteProjectPicker: View {
     @ViewBuilder
     private var browserContent: some View {
         if picker.loading, picker.directory.isEmpty {
-            ProgressView("Connecting to \(machine.name)")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            QuinjetFolderBrowserSkeleton(dark: dark)
+                .accessibilityLabel("Connecting to \(machine.name)")
         } else if let error = picker.errorMessage, picker.entries.isEmpty {
             ContentUnavailableView {
                 Label("Folder unavailable", systemImage: "exclamationmark.triangle")
@@ -432,6 +435,67 @@ private struct QuinjetRemoteProjectPicker: View {
         } else {
             Task { await picker.refresh() }
         }
+    }
+}
+
+private struct QuinjetPreparingMachineSkeleton: View {
+    let machines: MachinesModel
+    let selection: UUID
+    let machineName: String?
+    let selectMachine: (Machine) -> Void
+
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            PageHeader {
+                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                    Text("Open a project")
+                    Text("Recent Quinjet workspaces on \(machineName ?? "this machine")")
+                        .font(.system(size: UIScale.pt(12), weight: .regular))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                }
+            } trailing: {
+                SkeletonGroup {
+                    SkeletonBlock(width: 30, height: 30, corner: 7)
+                }
+            } accessory: {
+                VStack(alignment: .leading, spacing: UIScale.pt(9)) {
+                    QuinjetMachineStrip(
+                        machines: machines, selection: selection, select: selectMachine)
+                    SkeletonGroup {
+                        VStack(alignment: .leading, spacing: UIScale.pt(9)) {
+                            HStack(spacing: UIScale.pt(2)) {
+                                SkeletonBlock(height: 24, corner: 6)
+                                SkeletonBlock(height: 24, corner: 6)
+                            }
+                            HStack(spacing: UIScale.pt(8)) {
+                                SkeletonBlock(width: 14, height: 14, corner: 7)
+                                SkeletonBlock(width: 186, height: 10)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, UIScale.pt(11))
+                            .frame(height: UIScale.pt(36))
+                            .background(
+                                DashSkin.paper2(dark),
+                                in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: UIScale.pt(8))
+                                    .strokeBorder(DashSkin.lineStrong(dark))
+                            }
+                        }
+                    }
+                }
+            }
+            QuinjetProjectGridSkeleton(dark: dark)
+                .pageContent(compact)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Preparing machine")
     }
 }
 

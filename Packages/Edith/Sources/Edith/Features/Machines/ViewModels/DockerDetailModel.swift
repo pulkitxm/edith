@@ -28,6 +28,12 @@ final class DockerDetailModel {
 
     var inspectFailed = false
     var processesFailed = false
+    private(set) var inspectLoading = false
+    private(set) var processesLoading = false
+    private(set) var processesLoaded = false
+    private(set) var filesLoading = false
+    private(set) var filesLoaded = false
+    private(set) var filesFailed = false
 
     private var stream: SSHLineStream?
     private var nextLogID = 0
@@ -71,6 +77,12 @@ final class DockerDetailModel {
         inspect = nil
         inspectFailed = false
         processesFailed = false
+        inspectLoading = false
+        processesLoading = false
+        processesLoaded = false
+        filesLoading = false
+        filesLoaded = false
+        filesFailed = false
         detailContainerID = container.id
         inspectRequest &+= 1
         processesRequest &+= 1
@@ -136,6 +148,9 @@ final class DockerDetailModel {
         inspectRequest &+= 1
         processesRequest &+= 1
         fileToken &+= 1
+        inspectLoading = false
+        processesLoading = false
+        filesLoading = false
     }
 
     private func enqueue(_ line: DockerLogLine) {
@@ -172,11 +187,13 @@ final class DockerDetailModel {
         inspectRequest &+= 1
         let request = inspectRequest
         inspectFailed = false
+        inspectLoading = true
         let result = await DockerDetailOperationExecution.inspect(
             containerID: container.id, platform: platform, using: run)
         guard
             !Task.isCancelled, detailContainerID == container.id, inspectRequest == request
         else { return }
+        inspectLoading = false
         guard case let .success(summary) = result else {
             inspect = nil
             inspectFailed = true
@@ -201,11 +218,15 @@ final class DockerDetailModel {
         processesRequest &+= 1
         let request = processesRequest
         processesFailed = false
+        processesLoading = true
+        processesLoaded = false
         let result = await DockerDetailOperationExecution.processes(
             containerID: container.id, platform: platform, using: run)
         guard
             !Task.isCancelled, detailContainerID == container.id, processesRequest == request
         else { return }
+        processesLoading = false
+        processesLoaded = true
         guard case let .success(rows) = result else {
             processes = []
             processesFailed = true
@@ -232,14 +253,20 @@ final class DockerDetailModel {
         fileToken &+= 1
         let token = fileToken
         filePath = path
+        filesLoading = true
+        filesLoaded = false
+        filesFailed = false
         let result = await run(
             DockerCommands.listFiles(
                 containerID: container.id, path: path, platform: platform), 30)
         guard !Task.isCancelled, detailContainerID == container.id, token == fileToken else {
             return
         }
+        filesLoading = false
+        filesLoaded = true
         guard case let .success(output) = result else {
             files = []
+            filesFailed = true
             return
         }
         files = FileListing.parse(output: output, parent: path)
@@ -596,7 +623,7 @@ struct DockerContainerDetail: View {
                         .font(.system(size: UIScale.pt(11), weight: .medium))
                     }
                 } else {
-                    ProgressView().controlSize(.small)
+                    DockerInspectSkeleton()
                 }
             }
             .padding(UIScale.pt(16))
@@ -704,7 +731,9 @@ struct DockerContainerDetail: View {
 
     private var processesView: some View {
         ScrollView {
-            if model.processesFailed {
+            if model.processesLoading || !model.processesLoaded && !model.processesFailed {
+                DockerProcessRowsSkeleton()
+            } else if model.processesFailed {
                 HStack(spacing: UIScale.pt(8)) {
                     Image(systemName: "exclamationmark.triangle")
                         .foregroundStyle(DashSkin.warn)
@@ -718,7 +747,11 @@ struct DockerContainerDetail: View {
                 }
                 .padding(UIScale.pt(16))
             } else if model.processes.isEmpty {
-                ProgressView().controlSize(.small).padding(UIScale.pt(16))
+                Text("No processes are running in this container.")
+                    .font(.system(size: UIScale.pt(12)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(UIScale.pt(16))
             } else {
                 LazyVStack(spacing: 0) {
                     ForEach(model.processes) { process in
@@ -771,6 +804,26 @@ struct DockerContainerDetail: View {
             Divider().opacity(0.3)
             ScrollView {
                 LazyVStack(spacing: 0) {
+                    if model.filesLoading || !model.filesLoaded && !model.filesFailed {
+                        DockerFileRowsSkeleton()
+                    } else if model.filesFailed {
+                        HStack(spacing: UIScale.pt(8)) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .foregroundStyle(DashSkin.warn)
+                            Text("Could not read this folder.")
+                                .font(.system(size: UIScale.pt(12)))
+                                .foregroundStyle(DashSkin.inkSoft(dark))
+                            Button("Retry") { loadGeneration &+= 1 }
+                                .font(.system(size: UIScale.pt(11), weight: .medium))
+                        }
+                        .padding(UIScale.pt(16))
+                    } else if model.files.isEmpty {
+                        Text("This folder is empty.")
+                            .font(.system(size: UIScale.pt(12)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(UIScale.pt(16))
+                    }
                     ForEach(model.files) { entry in
                         HStack(spacing: UIScale.pt(10)) {
                             Image(systemName: entry.isDirectory ? "folder" : "doc")

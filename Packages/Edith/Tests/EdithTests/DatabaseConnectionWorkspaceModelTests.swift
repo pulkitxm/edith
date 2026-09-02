@@ -123,6 +123,21 @@ import Testing
         #expect(model.listState == .filteredEmpty("missing"))
     }
 
+    @Test func cancelledInitialListIsRecoverable() async {
+        let sender = DatabaseConnectionScriptedSender()
+        let model = Self.model(sender)
+        let load = Task { @MainActor in await model.loadConnections() }
+        await sender.waitUntilRequested(1)
+
+        load.cancel()
+        await sender.succeed(Self.listResponse([]), at: 0)
+        await load.value
+
+        #expect(
+            model.listState
+                == .failed([], "Loading saved database connections was cancelled."))
+    }
+
     @Test func favoriteFilterEmptyResultPreservesThePriorSelection() async throws {
         let connection = try Self.connection(id: 19, name: "Favorite")
         let sender = DatabaseConnectionScriptedSender()

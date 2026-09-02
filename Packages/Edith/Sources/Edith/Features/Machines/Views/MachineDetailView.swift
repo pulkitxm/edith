@@ -132,18 +132,24 @@ struct ConnectionPill: View {
     var body: some View {
         HStack(spacing: UIScale.pt(6)) {
             if session.state.isBusy {
-                ProgressView().controlSize(.small).scaleEffect(0.7)
+                SkeletonGroup {
+                    HStack(spacing: UIScale.pt(6)) {
+                        SkeletonBlock(width: 7, height: 7, corner: 3.5)
+                        SkeletonBlock(width: 74, height: 9, corner: 2)
+                    }
+                }
+                .accessibilityLabel(MachineStatusStyle.detail(session.state))
             } else {
                 Circle()
                     .fill(MachineStatusStyle.color(session.state, dark: dark))
                     .frame(width: UIScale.pt(7), height: UIScale.pt(7))
+                Text(MachineStatusStyle.label(session.state))
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(MachineStatusStyle.detail(session.state))
             }
-            Text(MachineStatusStyle.label(session.state))
-                .font(.system(size: UIScale.pt(11)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .help(MachineStatusStyle.detail(session.state))
             if session.state.isRetryable {
                 Button("Retry") { session.retry() }
                     .buttonStyle(.edith(.borderless))

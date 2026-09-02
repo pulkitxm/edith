@@ -151,12 +151,7 @@ struct CompanionDeskScreen: View {
                             .foregroundStyle(DashSkin.warn)
                     }
                     if !model.loaded, model.error == nil {
-                        CompanionGrid(width: proxy.size.width) {
-                            CompanionCardSkeleton(rows: 2, dark: dark)
-                        } secondary: {
-                            CompanionCardSkeleton(rows: 2, dark: dark)
-                        } full: {
-                        }
+                        CompanionDeskLoadingSkeleton(width: proxy.size.width, dark: dark)
                     } else {
                         questionCard
                         CompanionGrid(width: proxy.size.width) {
@@ -357,5 +352,96 @@ struct CompanionDeskScreen: View {
         Text(text)
             .font(.system(size: UIScale.pt(12)))
             .foregroundStyle(DashSkin.inkFaint(dark))
+    }
+}
+
+private struct CompanionDeskLoadingSkeleton: View {
+    let width: CGFloat
+    let dark: Bool
+
+    var body: some View {
+        SkeletonGroup {
+            VStack(alignment: .leading, spacing: CompanionMetrics.cardSpacing) {
+                todayCard
+                CompanionGrid(width: width) {
+                    overnightCard
+                } secondary: {
+                    resolvedCard
+                } full: {
+                    discrepanciesCard
+                }
+            }
+        }
+        .accessibilityLabel("Loading the companion desk")
+    }
+
+    private var todayCard: some View {
+        CompanionSkeletonCard(titleWidth: 48, noteWidth: 116, dark: dark) {
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                SkeletonBlock(width: 286, height: 14, corner: 5)
+                SkeletonBlock(width: 224, height: 9, corner: 4)
+                SkeletonBlock(height: 48, corner: 9)
+                HStack(spacing: UIScale.pt(8)) {
+                    SkeletonBlock(width: 62, height: 26, corner: 8)
+                    SkeletonBlock(width: 58, height: 26, corner: 8)
+                    SkeletonBlock(width: 148, height: 26, corner: 8)
+                }
+                SkeletonBlock(width: 112, height: 9, corner: 4)
+            }
+        }
+    }
+
+    private var overnightCard: some View {
+        CompanionSkeletonCard(titleWidth: 76, noteWidth: 102, dark: dark, fill: true) {
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                ForEach(0..<5, id: \.self) { index in
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                        SkeletonBlock(
+                            width: index.isMultiple(of: 2) ? nil : 238,
+                            height: 10,
+                            corner: 4)
+                        SkeletonBlock(width: 86, height: 8, corner: 4)
+                    }
+                }
+            }
+        }
+    }
+
+    private var resolvedCard: some View {
+        CompanionSkeletonCard(titleWidth: 68, noteWidth: 146, dark: dark, fill: true) {
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                ForEach(0..<5, id: \.self) { index in
+                    HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(6)) {
+                        SkeletonBlock(
+                            width: index.isMultiple(of: 2) ? nil : 204,
+                            height: 10,
+                            corner: 4)
+                        Spacer(minLength: 0)
+                        SkeletonBlock(
+                            width: index.isMultiple(of: 2) ? 58 : 46, height: 16, corner: 8)
+                    }
+                }
+            }
+        }
+    }
+
+    private var discrepanciesCard: some View {
+        CompanionSkeletonCard(titleWidth: 106, noteWidth: 144, dark: dark) {
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                ForEach(0..<3, id: \.self) { index in
+                    HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
+                        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                            SkeletonBlock(
+                                width: index.isMultiple(of: 2) ? 286 : 222,
+                                height: 10,
+                                corner: 4)
+                            SkeletonBlock(width: 74, height: 8, corner: 4)
+                        }
+                        Spacer(minLength: 0)
+                        SkeletonBlock(width: 72, height: 9, corner: 4)
+                    }
+                }
+            }
+        }
     }
 }

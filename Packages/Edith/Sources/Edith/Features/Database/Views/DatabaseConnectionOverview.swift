@@ -108,9 +108,17 @@ struct DatabaseConnectionOverview: View {
                 .buttonStyle(.edith(.primary, tint: palette.accent))
                 .accessibilityLabel("Connect to \(connection.name)")
             case .connecting:
-                sessionProgress(
-                    title: "Connecting",
-                    detail: "Opening a secure database session.")
+                SkeletonReplica("Connecting to \(connection.name)") {
+                    VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                        sessionStatus(
+                            symbol: "checkmark.circle.fill",
+                            title: "Connected",
+                            detail: "A secure database session is available.",
+                            tint: DashSkin.ok)
+                        Button("Disconnect") {}
+                            .buttonStyle(.edith(.secondary))
+                    }
+                }
             case .connected(let session, let quality):
                 sessionStatus(
                     symbol: "checkmark.circle.fill",
@@ -124,9 +132,17 @@ struct DatabaseConnectionOverview: View {
                 .buttonStyle(.edith(.secondary))
                 .accessibilityLabel("Disconnect \(connection.name)")
             case .disconnecting:
-                sessionProgress(
-                    title: "Disconnecting",
-                    detail: "Closing the database session.")
+                SkeletonReplica("Disconnecting from \(connection.name)") {
+                    VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                        sessionStatus(
+                            symbol: "circle",
+                            title: "Disconnected",
+                            detail: "Connecting is always an explicit action.",
+                            tint: palette.inkFaint)
+                        Button("Connect") {}
+                            .buttonStyle(.edith(.primary, tint: palette.accent))
+                    }
+                }
             case .failed(let message, let previous):
                 sessionStatus(
                     symbol: "exclamationmark.triangle.fill",
@@ -175,11 +191,15 @@ struct DatabaseConnectionOverview: View {
                     .foregroundStyle(palette.inkFaint)
                     .fixedSize(horizontal: false, vertical: true)
             case .refreshing(let snapshot, let quality):
-                sessionProgress(
-                    title: "Refreshing capabilities",
-                    detail: "Checking current product and permission support.")
-                if let snapshot {
-                    capabilitySnapshot(snapshot, quality: quality ?? .partial)
+                SkeletonReplica("Refreshing database capabilities") {
+                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                        capabilityActions(connection)
+                        if let snapshot {
+                            capabilitySnapshot(snapshot, quality: quality ?? .partial)
+                        } else {
+                            capabilitySnapshotPlaceholder
+                        }
+                    }
                 }
             case .loaded(let snapshot, let quality):
                 capabilityActions(connection)
@@ -195,6 +215,40 @@ struct DatabaseConnectionOverview: View {
                 if let snapshot {
                     qualityNotice(quality ?? .stale, noun: "previous capability information")
                     capabilitySnapshot(snapshot, quality: quality ?? .stale)
+                }
+            }
+        }
+    }
+
+    private var capabilitySnapshotPlaceholder: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            HStack(spacing: UIScale.pt(12)) {
+                capabilityCount(12, label: "available", tint: DashSkin.ok)
+                capabilityCount(2, label: "degraded", tint: DashSkin.warn)
+                capabilityCount(4, label: "unavailable", tint: palette.inkFaint)
+            }
+            factRow("Product", "Database product and version")
+            factRow("Topology", "Primary and replica topology")
+            factRow("Source", "Live database session")
+            factRow("Discovered", "Today at 10:30 AM")
+            Divider().opacity(0.35)
+            VStack(spacing: UIScale.pt(7)) {
+                ForEach(0..<4, id: \.self) { index in
+                    HStack(alignment: .top, spacing: UIScale.pt(8)) {
+                        Image(systemName: "checkmark.circle.fill")
+                        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                            Text(index.isMultiple(of: 2) ? "Browse records" : "Run read queries")
+                                .font(DashSkin.mono(10.5, weight: .medium))
+                            Text("Available")
+                                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(UIScale.pt(8))
+                    .background(
+                        palette.canvas,
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
                 }
             }
         }
@@ -330,24 +384,6 @@ struct DatabaseConnectionOverview: View {
                     tint: DashSkin.warn)
             }
         }
-    }
-
-    private func sessionProgress(title: String, detail: String) -> some View {
-        HStack(alignment: .top, spacing: UIScale.pt(10)) {
-            ProgressView()
-                .controlSize(.small)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                Text(title)
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
-                Text(detail)
-                    .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(palette.inkFaint)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(title). \(detail)")
     }
 
     private func sessionStatus(

@@ -327,7 +327,7 @@ private struct SEOAuditProjectCard: View {
                     } else if phase.error != nil {
                         projectMark
                     } else {
-                        ProgressView().controlSize(.small)
+                        SEOAuditImageSkeleton()
                     }
                 }
             } else {
@@ -339,9 +339,10 @@ private struct SEOAuditProjectCard: View {
         .overlay(alignment: .bottomLeading) {
             HStack(spacing: UIScale.pt(7)) {
                 if activeStage != nil {
-                    ProgressView()
-                        .controlSize(.mini)
-                        .tint(.white)
+                    SkeletonGroup {
+                        SkeletonBlock(width: 9, height: 9, corner: 4.5)
+                    }
+                    .accessibilityLabel("Audit in progress")
                 }
                 Text(activityLabel)
                     .font(DashSkin.mono(9, weight: .bold))

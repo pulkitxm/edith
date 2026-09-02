@@ -16,6 +16,7 @@ struct BudgetCardView: View {
     @AppStorage(AppStorageKeys.Budget.deadline, store: SharedDefaults.store) private
         var deadlineTS = 0.0
     @State private var latest: LimitPoint?
+    @State private var loaded = false
 
     private var kind: LimitWindowKind { kindRaw == "session" ? .session : .weekly }
     private var mode: BudgetMode { BudgetMode(rawValue: modeRaw) ?? .pace }
@@ -36,7 +37,25 @@ struct BudgetCardView: View {
 
     var body: some View {
         SkinCard(title: "Personal budget", dark: dark) {
-            if let status {
+            if !loaded {
+                SkeletonGroup {
+                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                        HStack(spacing: UIScale.pt(8)) {
+                            SkeletonBlock(width: 54, height: 24)
+                            SkeletonBlock(width: 74, height: 22, corner: 11)
+                            Spacer()
+                            SkeletonBlock(width: 108, height: 8)
+                        }
+                        SkeletonBlock(height: 8, corner: 4)
+                        HStack(spacing: UIScale.pt(16)) {
+                            ForEach(0..<3, id: \.self) { _ in
+                                SkeletonBlock(width: 78, height: 22)
+                            }
+                        }
+                    }
+                }
+                .accessibilityLabel("Loading personal budget")
+            } else if let status {
                 content(status)
             } else {
                 Text(
@@ -56,6 +75,7 @@ struct BudgetCardView: View {
                     date: $0.date, s: $0.session?.percent, w: $0.week?.percent,
                     sessionReset: $0.session?.resetsAt, weekReset: $0.week?.resetsAt)
             }
+            loaded = true
         }
     }
 

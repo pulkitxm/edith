@@ -44,7 +44,7 @@ struct DockerContainerList: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                 if !session.containersLoaded {
-                    ListRowsSkeleton(rows: 5, dark: dark)
+                    DockerContainerRowsSkeleton()
                 } else if filtered.isEmpty {
                     Text("No containers.")
                         .font(.system(size: UIScale.pt(12)))
@@ -103,7 +103,10 @@ struct DockerContainerList: View {
         let key = Self.groupKey(project)
         let plan = DockerGroupPlan(containers: containers)
         if busyIDs.contains(key) {
-            ProgressView().controlSize(.small).scaleEffect(0.5).frame(width: UIScale.pt(20))
+            SkeletonGroup {
+                SkeletonBlock(width: 20, height: 16, corner: 5)
+            }
+            .accessibilityLabel("Updating container group")
         } else {
             HStack(spacing: UIScale.pt(4)) {
                 if plan.canStart {
@@ -269,7 +272,11 @@ private struct DockerContainerRow: View {
     private var actions: some View {
         HStack(spacing: UIScale.pt(2)) {
             if busy {
-                ProgressView().controlSize(.small).scaleEffect(0.6).frame(width: UIScale.pt(24))
+                SkeletonGroup {
+                    SkeletonBlock(width: 20, height: 20, corner: 6)
+                        .frame(width: UIScale.pt(24))
+                }
+                .accessibilityLabel("Updating container")
             } else {
                 Button {
                     onAction(container.state.isRunning ? "stop" : "start")

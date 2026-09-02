@@ -61,6 +61,8 @@ struct DashboardView: View {
                     masthead
                     if model.loaded {
                         controlsBar
+                    } else if !model.loadAttempted {
+                        DashboardControlsSkeleton()
                     }
                     ScrollView {
                         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
@@ -77,9 +79,8 @@ struct DashboardView: View {
                                 }
                                 .pageContent(compact)
                             } else if !model.loadAttempted {
-                                ProgressView("Loading usage data…")
-                                    .controlSize(.small)
-                                    .frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
+                                DashboardPageSkeleton(dark: dark)
+                                    .pageContent(compact)
                             } else {
                                 ContentUnavailableView(
                                     "No usage data yet", systemImage: "chart.bar",
@@ -174,13 +175,24 @@ struct DashboardView: View {
         } trailing: {
             mastheadButtons
         } accessory: {
-            WrapHStack(spacing: UIScale.pt(6), lineSpacing: 2) {
-                ForEach(metaSegments) { seg in
-                    Text(seg.text)
-                        .presenterBlur((seg.sensitive && blurMoney) || (seg.usage && blurUsage))
+            if model.loaded {
+                WrapHStack(spacing: UIScale.pt(6), lineSpacing: 2) {
+                    ForEach(metaSegments) { seg in
+                        Text(seg.text)
+                            .presenterBlur((seg.sensitive && blurMoney) || (seg.usage && blurUsage))
+                    }
                 }
+                .font(.system(size: UIScale.pt(12.5))).foregroundStyle(DashSkin.inkSoft(dark))
+            } else {
+                SkeletonGroup {
+                    HStack(spacing: UIScale.pt(8)) {
+                        SkeletonBlock(width: 112, height: 9)
+                        SkeletonBlock(width: 64, height: 9)
+                        SkeletonBlock(width: 86, height: 9)
+                    }
+                }
+                .accessibilityLabel("Loading usage summary")
             }
-            .font(.system(size: UIScale.pt(12.5))).foregroundStyle(DashSkin.inkSoft(dark))
         }
     }
 
@@ -236,7 +248,9 @@ struct DashboardView: View {
             Button(action: action) {
                 Group {
                     if isLoading {
-                        ProgressView().controlSize(.small)
+                        SkeletonGroup {
+                            SkeletonBlock(width: 18, height: 18, corner: 9)
+                        }
                     } else if let tint {
                         Image(systemName: systemImage).foregroundStyle(tint)
                     } else {
@@ -248,6 +262,7 @@ struct DashboardView: View {
             .buttonStyle(.edith(.toolbar))
             .disabled(isLoading)
             .help(helperText)
+            .accessibilityLabel(helperText)
         }
     }
 
@@ -1170,5 +1185,233 @@ private struct HeatCellView: View {
                 RoundedRectangle(cornerRadius: UIScale.pt(3))
                     .strokeBorder(stroke, lineWidth: UIScale.pt(1))
             )
+    }
+}
+
+private struct DashboardControlsSkeleton: View {
+    @Environment(\.compactLayout) private var compact
+    private let rangeWidths = [48.0, 74, 92, 34, 62, 100, 98, 44]
+    private let scopeWidths = [88.0, 104, 92, 90]
+
+    var body: some View {
+        SkeletonGroup {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                controlRow(widths: rangeWidths, split: 5)
+                controlRow(widths: scopeWidths, split: 1)
+            }
+            .pageGutter(compact)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical)
+        }
+        .accessibilityLabel("Loading usage controls")
+    }
+
+    @ViewBuilder private func controlRow(widths: [Double], split: Int) -> some View {
+        if compact {
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                SkeletonBlock(width: 42, height: 7)
+                WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
+                    ForEach(Array(widths.enumerated()), id: \.offset) { _, width in
+                        SkeletonBlock(width: width, height: 25, corner: 8)
+                    }
+                }
+            }
+        } else {
+            HStack(spacing: UIScale.pt(8)) {
+                SkeletonBlock(width: 42, height: 7)
+                    .frame(width: UIScale.pt(42), alignment: .leading)
+                ForEach(Array(widths.prefix(split).enumerated()), id: \.offset) { _, width in
+                    SkeletonBlock(width: width, height: 25, corner: 8)
+                }
+                Spacer(minLength: UIScale.pt(8))
+                ForEach(Array(widths.dropFirst(split).enumerated()), id: \.offset) { _, width in
+                    SkeletonBlock(width: width, height: 25, corner: 8)
+                }
+            }
+        }
+    }
+}
+
+private struct DashboardPageSkeleton: View {
+    let dark: Bool
+    @Environment(\.compactLayout) private var compact
+
+    var body: some View {
+        SkeletonGroup {
+            VStack(spacing: UIScale.pt(16)) {
+                LazyVGrid(
+                    columns: [
+                        GridItem(
+                            .adaptive(minimum: UIScale.pt(compact ? 145 : 190)),
+                            spacing: UIScale.pt(12))
+                    ],
+                    spacing: UIScale.pt(12)
+                ) {
+                    ForEach(0..<8, id: \.self) { index in
+                        HStack(spacing: UIScale.pt(0)) {
+                            SkeletonBlock(width: 3, height: 78, corner: 0)
+                            VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                                SkeletonBlock(
+                                    width: index.isMultiple(of: 3) ? 82 : 68, height: 8)
+                                SkeletonBlock(
+                                    width: index.isMultiple(of: 2) ? 96 : 72, height: 22)
+                                SkeletonBlock(
+                                    width: index.isMultiple(of: 3) ? 116 : 92, height: 9)
+                            }
+                            .padding(UIScale.pt(14))
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            DashSkin.paper2(dark),
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
+                    }
+                }
+                if compact {
+                    VStack(spacing: UIScale.pt(16)) {
+                        DashboardPanelSkeleton(kind: .heatmap, dark: dark)
+                        DashboardPanelSkeleton(kind: .dials, dark: dark)
+                    }
+                } else {
+                    HStack(alignment: .top, spacing: UIScale.pt(16)) {
+                        DashboardPanelSkeleton(kind: .heatmap, dark: dark)
+                        DashboardPanelSkeleton(kind: .dials, dark: dark)
+                            .frame(width: UIScale.pt(340))
+                    }
+                }
+                DashboardPanelSkeleton(kind: .history, dark: dark)
+                DashboardPanelSkeleton(kind: .budget, dark: dark)
+                ForEach(0..<3, id: \.self) { _ in
+                    DashboardPanelSkeleton(kind: .chart, dark: dark)
+                }
+                if compact {
+                    VStack(spacing: UIScale.pt(16)) {
+                        DashboardPanelSkeleton(kind: .chart, dark: dark)
+                        DashboardPanelSkeleton(kind: .chart, dark: dark)
+                    }
+                } else {
+                    HStack(alignment: .top, spacing: UIScale.pt(16)) {
+                        DashboardPanelSkeleton(kind: .chart, dark: dark)
+                        DashboardPanelSkeleton(kind: .chart, dark: dark)
+                    }
+                }
+                DashboardPanelSkeleton(kind: .table, dark: dark)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: UIScale.pt(240), alignment: .top)
+        .accessibilityLabel("Loading usage data")
+    }
+}
+
+private enum DashboardPanelSkeletonKind: Equatable {
+    case heatmap, dials, history, budget, chart, table
+}
+
+private struct DashboardPanelSkeleton: View {
+    let kind: DashboardPanelSkeletonKind
+    let dark: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            HStack {
+                SkeletonBlock(width: titleWidth, height: 16)
+                Spacer()
+                if kind == .dials || kind == .table {
+                    SkeletonBlock(width: 72, height: 8)
+                }
+            }
+            panelContent
+        }
+        .padding(UIScale.pt(16))
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(
+            DashSkin.paper2(dark),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(16)))
+    }
+
+    @ViewBuilder private var panelContent: some View {
+        switch kind {
+        case .heatmap:
+            HStack(alignment: .top, spacing: UIScale.pt(8)) {
+                VStack(spacing: UIScale.pt(7)) {
+                    ForEach(0..<7, id: \.self) { _ in SkeletonBlock(width: 24, height: 7) }
+                }
+                HStack(spacing: UIScale.pt(3)) {
+                    ForEach(0..<18, id: \.self) { column in
+                        VStack(spacing: UIScale.pt(3)) {
+                            ForEach(0..<7, id: \.self) { row in
+                                SkeletonBlock(
+                                    width: 8, height: 8,
+                                    corner: (column + row).isMultiple(of: 4) ? 3 : 2)
+                            }
+                        }
+                    }
+                }
+            }
+        case .dials:
+            HStack(spacing: UIScale.pt(24)) {
+                ForEach(0..<2, id: \.self) { _ in
+                    VStack(spacing: UIScale.pt(8)) {
+                        SkeletonBlock(width: 104, height: 104, corner: 52)
+                        SkeletonBlock(width: 72, height: 7)
+                        SkeletonBlock(width: 84, height: 8)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+        case .history:
+            SkeletonBlock(width: 88, height: 18, corner: 9)
+            HStack {
+                ForEach(0..<4, id: \.self) { _ in
+                    SkeletonBlock(width: 38, height: 22, corner: 11)
+                }
+                Spacer()
+                SkeletonBlock(width: 126, height: 8)
+            }
+            chartPlot(height: 150)
+        case .budget:
+            HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
+                SkeletonBlock(width: 54, height: 24)
+                SkeletonBlock(width: 74, height: 22, corner: 11)
+                Spacer()
+                SkeletonBlock(width: 108, height: 8)
+            }
+            SkeletonBlock(height: 8, corner: 4)
+            HStack(spacing: UIScale.pt(16)) {
+                ForEach(0..<3, id: \.self) { _ in SkeletonBlock(width: 78, height: 22) }
+            }
+        case .chart:
+            chartPlot(height: 166)
+        case .table:
+            ForEach(0..<5, id: \.self) { index in
+                HStack(spacing: UIScale.pt(8)) {
+                    SkeletonBlock(width: 8, height: 8, corner: 4)
+                    SkeletonBlock(width: index.isMultiple(of: 2) ? 142 : 112, height: 9)
+                    Spacer()
+                    ForEach(0..<3, id: \.self) { _ in SkeletonBlock(width: 54, height: 9) }
+                }
+                Divider()
+            }
+        }
+    }
+
+    private var titleWidth: Double {
+        switch kind {
+        case .heatmap: 66
+        case .dials: 86
+        case .history: 216
+        case .budget: 126
+        case .chart: 118
+        case .table: 58
+        }
+    }
+
+    private func chartPlot(height: Double) -> some View {
+        HStack(alignment: .bottom, spacing: UIScale.pt(6)) {
+            ForEach(0..<12, id: \.self) { index in
+                SkeletonBlock(height: Double(28 + index % 5 * 18), corner: 3)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: UIScale.pt(height), alignment: .bottom)
     }
 }

@@ -598,10 +598,7 @@ struct AppMaintenanceView: View {
                 .textFieldStyle(.roundedBorder)
                 .padding(UIScale.pt(12))
             Divider()
-            if model.phase == .loading, model.applications.isEmpty {
-                ProgressView("Scanning Applications")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if filteredApplications.isEmpty {
+            if filteredApplications.isEmpty {
                 ContentUnavailableView(
                     "No applications", systemImage: "app.dashed",
                     description: Text("No installed app matches this search."))
@@ -641,10 +638,7 @@ struct AppMaintenanceView: View {
                 .textFieldStyle(.roundedBorder)
                 .padding(UIScale.pt(12))
             Divider()
-            if model.phase == .loading, model.updates.isEmpty {
-                ProgressView("Checking Update Sources")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if filteredUpdates.isEmpty {
+            if filteredUpdates.isEmpty {
                 ContentUnavailableView(
                     "No updates", systemImage: "checkmark.circle",
                     description: Text("Everything visible is current, ignored, or snoozed."))
@@ -769,11 +763,11 @@ struct AppMaintenanceView: View {
         if model.phase == .scanning {
             AppMaintenanceRemovalSkeleton()
         } else if model.phase == .removing || model.phase == .mounting {
-            VStack(spacing: UIScale.pt(12)) {
-                ProgressView()
-                    .controlSize(.large)
+            ZStack(alignment: .top) {
+                AppMaintenanceRemovalSkeleton()
                 Text(progressMessage)
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
+                    .padding(.top, UIScale.pt(8))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let application = model.selectedApplication, let plan = model.plan {
@@ -801,11 +795,12 @@ struct AppMaintenanceView: View {
     @ViewBuilder
     private var updateDetail: some View {
         if model.phase == .updating {
-            VStack(spacing: UIScale.pt(14)) {
-                ProgressView().controlSize(.large)
-                Text("Running reviewed updates").font(.headline)
-                Text("Results are saved separately for every item.").foregroundStyle(.secondary)
+            ZStack(alignment: .bottomLeading) {
+                SkeletonGroup {
+                    AppMaintenanceUpdateSkeleton()
+                }
                 Button("Cancel") { model.cancel() }
+                    .padding(UIScale.pt(22))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let item = model.focusedUpdate {
@@ -1041,42 +1036,64 @@ struct AppMaintenanceSectionSkeleton: View {
         .accessibilityLabel("Loading \(section.rawValue)")
     }
 
+    @ViewBuilder
     private var inventory: some View {
-        VStack(spacing: 0) {
-            SkeletonBlock(height: UIScale.pt(24), corner: UIScale.pt(6))
-                .padding(UIScale.pt(12))
-            Divider()
+        if section == .history {
             VStack(spacing: 0) {
                 ForEach(0..<7, id: \.self) { index in
-                    HStack(spacing: UIScale.pt(9)) {
-                        if section == .updates {
-                            SkeletonBlock(width: 14, height: 14, corner: 3)
-                        }
-                        SkeletonBlock(width: 28, height: 28, corner: 7)
-                        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                        HStack {
                             SkeletonBlock(
-                                width: index.isMultiple(of: 2) ? 112 : 148,
+                                width: index.isMultiple(of: 2) ? 118 : 154,
                                 height: 10)
-                            SkeletonBlock(width: 82, height: 8)
+                            Spacer()
+                            SkeletonBlock(width: 14, height: 14, corner: 7)
                         }
-                        Spacer(minLength: 0)
-                        if section == .updates {
-                            SkeletonBlock(width: 48, height: 8)
-                        }
+                        SkeletonBlock(width: 104, height: 8)
+                        SkeletonBlock(width: 76, height: 8)
                     }
                     .padding(.horizontal, UIScale.pt(12))
                     .padding(.vertical, UIScale.pt(9))
                 }
                 Spacer(minLength: 0)
             }
-            Divider()
-            HStack {
-                SkeletonBlock(width: 82, height: 8)
-                Spacer()
-                SkeletonBlock(width: 62, height: 8)
+        } else {
+            VStack(spacing: 0) {
+                SkeletonBlock(height: 24, corner: 6)
+                    .padding(UIScale.pt(12))
+                Divider()
+                VStack(spacing: 0) {
+                    ForEach(0..<7, id: \.self) { index in
+                        HStack(spacing: UIScale.pt(9)) {
+                            if section == .updates {
+                                SkeletonBlock(width: 14, height: 14, corner: 3)
+                            }
+                            SkeletonBlock(width: 28, height: 28, corner: 7)
+                            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                                SkeletonBlock(
+                                    width: index.isMultiple(of: 2) ? 112 : 148,
+                                    height: 10)
+                                SkeletonBlock(width: 82, height: 8)
+                            }
+                            Spacer(minLength: 0)
+                            if section == .updates {
+                                SkeletonBlock(width: 48, height: 8)
+                            }
+                        }
+                        .padding(.horizontal, UIScale.pt(12))
+                        .padding(.vertical, UIScale.pt(9))
+                    }
+                    Spacer(minLength: 0)
+                }
+                Divider()
+                HStack {
+                    SkeletonBlock(width: 82, height: 8)
+                    Spacer()
+                    SkeletonBlock(width: 62, height: 8)
+                }
+                .padding(.horizontal, UIScale.pt(12))
+                .frame(height: UIScale.pt(34))
             }
-            .padding(.horizontal, UIScale.pt(12))
-            .frame(height: UIScale.pt(34))
         }
     }
 
@@ -1125,16 +1142,13 @@ private struct AppMaintenanceUpdateSkeleton: View {
 
 private struct AppMaintenanceHistorySkeleton: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            HStack(spacing: UIScale.pt(12)) {
-                SkeletonBlock(width: 44, height: 44, corner: 11)
-                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                    SkeletonBlock(width: 132, height: 14)
-                    SkeletonBlock(width: 248, height: 9)
-                }
-            }
-            ForEach(0..<4, id: \.self) { index in
-                AppMaintenanceDetailSkeleton(lines: index.isMultiple(of: 2) ? 2 : 3, height: 92)
+        VStack(spacing: UIScale.pt(14)) {
+            Spacer(minLength: 0)
+            SkeletonBlock(width: 44, height: 44, corner: 22)
+            SkeletonBlock(width: 154, height: 14)
+            VStack(spacing: UIScale.pt(6)) {
+                SkeletonBlock(width: 320, height: 9)
+                SkeletonBlock(width: 252, height: 9)
             }
             Spacer(minLength: 0)
         }
@@ -1344,8 +1358,9 @@ private struct AppMaintenanceInstallReview: View {
             Divider()
             HStack {
                 if installing {
-                    ProgressView()
-                        .controlSize(.small)
+                    SkeletonGroup {
+                        SkeletonBlock(width: 16, height: 16, corner: 8)
+                    }
                     Text("Installing verified application")
                         .settingsCaption()
                 }

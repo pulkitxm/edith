@@ -634,20 +634,18 @@ private struct ExtensionLifecycleRows: View {
                     } label: {
                         HStack(spacing: UIScale.pt(6)) {
                             Text("Check again")
-                            ProgressView()
-                                .controlSize(.small)
-                                .opacity(readiness.isRefreshing ? 1 : 0)
+                            if readiness.isRefreshing {
+                                SkeletonGroup {
+                                    SkeletonBlock(width: 14, height: 14, corner: 7)
+                                }
+                            }
                         }
                     }
                     .disabled(readiness.isRefreshing)
                 } else {
                     let loading = ExtensionLifecycleState.loading(extensionID: entry.id)
-                    HStack(spacing: UIScale.pt(8)) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("\(loading.runtimePhase.title) readiness...")
-                            .settingsCaption()
-                    }
+                    ExtensionReadinessSkeleton()
+                        .accessibilityLabel("\(loading.runtimePhase.title) readiness")
                 }
             }
             if let lifecycle = entry.lifecycle {
@@ -801,6 +799,35 @@ private struct ExtensionLifecycleRows: View {
                     .textSelection(.enabled)
             }
         }
+    }
+}
+
+private struct ExtensionReadinessSkeleton: View {
+    var body: some View {
+        SkeletonGroup {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                HStack {
+                    SkeletonBlock(width: 54, height: 9)
+                    Spacer()
+                    SkeletonBlock(width: 92, height: 9)
+                }
+                ForEach(0..<3, id: \.self) { index in
+                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                        HStack(spacing: UIScale.pt(6)) {
+                            SkeletonBlock(width: 14, height: 14, corner: 7)
+                            SkeletonBlock(
+                                width: index.isMultiple(of: 2) ? 118 : 154,
+                                height: 9)
+                            Spacer()
+                            SkeletonBlock(width: 48, height: 8)
+                        }
+                        SkeletonBlock(width: 236, height: 8)
+                    }
+                }
+                SkeletonBlock(width: 84, height: 22, corner: 6)
+            }
+        }
+        .accessibilityLabel("Loading extension readiness")
     }
 }
 
@@ -1048,8 +1075,10 @@ private struct HerdrRows: View {
                 Button("Open setup guide") { openGuide() }
             }
             if checking {
-                ProgressView()
-                    .controlSize(.small)
+                SkeletonGroup {
+                    SkeletonBlock(width: 238, height: 9, corner: 4)
+                }
+                .accessibilityLabel("Checking Herdr sessions")
             } else if let checkResult {
                 Text(checkResult)
                     .settingsCaption()
