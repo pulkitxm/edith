@@ -56,6 +56,12 @@ enum SectionWindow {
         entries.contains { $0.controller.destination == destination }
     }
 
+    static func focusOrSelect(_ destination: MainDestination) {
+        if focusExisting(destination) { return }
+        SharedDefaults.store.set(
+            destination.rawValue, forKey: AppStorageKeys.General.mainWindowSection)
+    }
+
     @discardableResult
     static func focusExisting(_ destination: MainDestination) -> Bool {
         guard let entry = entries.first(where: { $0.controller.destination == destination })

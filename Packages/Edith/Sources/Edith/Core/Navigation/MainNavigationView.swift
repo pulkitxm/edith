@@ -87,6 +87,8 @@ private struct SidebarNavRow: View {
     let selected: Bool
     let theme: Color
     var indented = false
+    var emphasised = false
+    var badge: SidebarBadge?
     let shortcutHint: String?
     let action: () -> Void
     var detach: (() -> Void)?
@@ -112,10 +114,17 @@ private struct SidebarNavRow: View {
                         .foregroundStyle(selected ? .primary : .secondary)
                         .frame(width: UIScale.pt(22))
                     Text(item.title)
-                        .font(.system(size: UIScale.pt(13.5), weight: .medium))
-                        .foregroundStyle(selected ? .primary : .secondary)
+                        .font(
+                            .system(
+                                size: UIScale.pt(13.5),
+                                weight: emphasised ? .semibold : .medium)
+                        )
+                        .foregroundStyle(selected || emphasised ? .primary : .secondary)
                         .lineLimit(1)
                     Spacer(minLength: 0)
+                    if let badge {
+                        SidebarBadgeLabel(badge: badge, theme: theme)
+                    }
                     if let shortcutHint {
                         Text(shortcutHint)
                             .font(.system(size: UIScale.pt(11), weight: .medium))
@@ -232,10 +241,32 @@ private struct CollapsibleSidebarLayout: Layout {
     }
 }
 
+private struct SidebarBadgeLabel: View {
+    let badge: SidebarBadge
+    let theme: Color
+
+    private var tint: Color {
+        switch badge.tone {
+        case .neutral: .secondary
+        case .accent: theme
+        case .warning: .orange
+        }
+    }
+
+    var body: some View {
+        Text(badge.text)
+            .font(.system(size: UIScale.pt(10.5), weight: .medium))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .fixedSize()
+    }
+}
+
 private struct SidebarSectionRow: View {
     let child: SidebarChild
     let indented: Bool
     let theme: Color
+    var badge: SidebarBadge?
     let selected: Bool
     let action: () -> Void
     let detach: () -> Void
@@ -254,6 +285,9 @@ private struct SidebarSectionRow: View {
                 Text(child.title)
                     .lineLimit(1)
                 Spacer(minLength: 0)
+                if let badge {
+                    SidebarBadgeLabel(badge: badge, theme: theme)
+                }
             }
             .font(.system(size: UIScale.pt(12.5), weight: .medium))
             .foregroundStyle(selected ? .primary : .secondary)
@@ -387,6 +421,18 @@ struct MainWindowView: View {
         var musicBarCollapsed = false
     @AppStorage(AppStorageKeys.Suites.data, store: SharedDefaults.store) private
         var dataSuite = false
+    @AppStorage(SuiteExpansion.key(for: .agents), store: SharedDefaults.store) private
+        var agentsExpanded = true
+    @AppStorage(SuiteExpansion.key(for: .maintenance), store: SharedDefaults.store) private
+        var maintenanceExpanded = true
+    @AppStorage(SuiteExpansion.key(for: .system), store: SharedDefaults.store) private
+        var systemExpanded = true
+    @AppStorage(SuiteExpansion.key(for: .desk), store: SharedDefaults.store) private
+        var deskExpanded = true
+    @AppStorage(SuiteExpansion.key(for: .media), store: SharedDefaults.store) private
+        var mediaExpanded = true
+    @AppStorage(SuiteExpansion.key(for: .data), store: SharedDefaults.store) private
+        var dataExpanded = true
     @AppStorage(AppStorageKeys.Tabs.databaseEnabled, store: SharedDefaults.store) private
         var databaseEnabled =
         false
@@ -795,6 +841,7 @@ struct MainWindowView: View {
                         }
                         .transition(sidebarUtilityTransition)
                     }
+                    AgentStatusBar(theme: theme)
                     credit
                         .padding(.vertical, UIScale.pt(8))
                 }
@@ -825,7 +872,7 @@ struct MainWindowView: View {
         )
         .animation(
             Motion.animation(Motion.snap, reduceMotion: reduceMotion),
-            value: appMaintenanceSectionsExpanded
+            value: suiteExpansionToken
         )
     }
 
@@ -845,25 +892,23 @@ struct MainWindowView: View {
         case let .section(parent, child):
             SidebarSectionRow(
                 child: child, indented: true, theme: theme,
+                badge: status.badge(childID: child.id, of: parent),
                 selected: destination.rawValue == parent
                     && selectedChild(of: parent) == child.id,
                 action: { selectChild(child, of: parent) },
-                detach: { detachChild(child, of: parent) }
-            )
-            .modifier(
-                CollapsibleRow(
-                    expanded: isExpanded(parent),
-                    reduceMotion: reduceMotion))
+                detach: { detachChild(child, of: parent) })
         }
     }
 
     @ViewBuilder
     private func pageRow(_ page: SidebarPage) -> some View {
         let item = MainDestination.resolve(page.id)
-        let expandable = !page.children.isEmpty
+        let expandable = NavigationCatalog.hasDisclosure(page, in: SharedDefaults.store)
         SidebarNavRow(
             item: item, selected: destination == item, theme: theme,
             indented: page.parentID != nil,
+            emphasised: page.isSuiteLanding,
+            badge: page.parentID == nil ? nil : status.badge(pageID: page.id),
             shortcutHint: shortcutHint(for: item),
             action: {
                 if expandable, destination == item {
@@ -875,12 +920,20 @@ struct MainWindowView: View {
             detach: page.detachable ? { detach(item) } : nil,
             disclosureExpanded: expandable ? isExpanded(page.id) : nil,
             disclosureAction: expandable ? { toggleExpansion(page.id) } : nil,
-            disclosureLabel: "\(page.title) sections")
+            disclosureLabel: "\(page.title) abilities")
     }
 
     private var sidebarRows: [SidebarRow] {
         _ = extensionSelectionToken
+        _ = suiteExpansionToken
         return NavigationCatalog.rows()
+    }
+
+    private var suiteExpansionToken: [Bool] {
+        [
+            agentsExpanded, maintenanceExpanded, systemExpanded, deskExpanded, mediaExpanded,
+            dataExpanded, settingsCategoriesExpanded,
+        ]
     }
 
     private var extensionSelectionToken: [Bool] {
@@ -893,19 +946,20 @@ struct MainWindowView: View {
     }
 
     private func isExpanded(_ pageID: String) -> Bool {
-        switch pageID {
-        case MainDestination.settings.rawValue: settingsCategoriesExpanded
-        case MainDestination.appMaintenance.rawValue: appMaintenanceSectionsExpanded
-        default: true
-        }
+        if pageID == MainDestination.settings.rawValue { return settingsCategoriesExpanded }
+        guard let suite = NavigationCatalog.byID[pageID]?.suite else { return true }
+        return SuiteExpansion.isExpanded(suite, in: SharedDefaults.store)
     }
 
     private func toggleExpansion(_ pageID: String) {
-        switch pageID {
-        case MainDestination.settings.rawValue: settingsCategoriesExpanded.toggle()
-        case MainDestination.appMaintenance.rawValue: appMaintenanceSectionsExpanded.toggle()
-        default: break
+        if pageID == MainDestination.settings.rawValue {
+            settingsCategoriesExpanded.toggle()
+            return
         }
+        guard let suite = NavigationCatalog.byID[pageID]?.suite else { return }
+        let key = SuiteExpansion.key(for: suite)
+        SharedDefaults.store.set(
+            !SuiteExpansion.isExpanded(suite, in: SharedDefaults.store), forKey: key)
     }
 
     private func selectedChild(of pageID: String) -> String? {
@@ -915,6 +969,8 @@ struct MainWindowView: View {
         default: nil
         }
     }
+
+    private var status: SidebarStatusModel { SidebarStatus.shared }
 
     private func selectChild(_ child: SidebarChild, of pageID: String) {
         switch pageID {

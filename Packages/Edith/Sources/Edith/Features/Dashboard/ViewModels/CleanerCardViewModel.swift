@@ -13,7 +13,12 @@ final class CleanerModel {
     static let shared = CleanerModel()
     private static let confirmedExternalPathsKey = "cleanerConfirmedExternalPaths"
 
-    private(set) var categories: [JunkCategory] = []
+    private(set) var categories: [JunkCategory] = [] {
+        didSet {
+            SidebarBadgeStore.recordReclaimable(
+                bytes: categories.flatMap(\.items).reduce(0) { $0 + $1.sizeBytes })
+        }
+    }
     private(set) var scanning = false
     private(set) var scanned = false
     private(set) var logs: [String] = []

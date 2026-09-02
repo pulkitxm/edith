@@ -26,7 +26,9 @@ final class AppMaintenanceModel {
     var errorMessage: String?
     var resultMessage: String?
     var installPlan: AppMaintenanceDiskImagePlan?
-    var updates: [AppUpdateItem] = []
+    var updates: [AppUpdateItem] = [] {
+        didSet { SidebarBadgeStore.recordUpdates(available: updates.count) }
+    }
     var updateHistory: [AppUpdateResult] = []
     var selectedUpdateIDs = Set<String>()
     var focusedUpdateID: String?

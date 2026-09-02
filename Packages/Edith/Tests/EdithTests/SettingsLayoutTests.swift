@@ -41,8 +41,7 @@ import EdithKit
             maintenancePage.children.map(\.id)
                 == AppMaintenanceSection.allCases.map(\.rawValue))
         #expect(settingsPage.expansionKey == AppStorageKeys.General.settingsCategoriesExpanded)
-        #expect(
-            maintenancePage.expansionKey == AppStorageKeys.AppMaintenance.categoriesExpanded)
+        #expect(maintenancePage.expansionKey == SuiteExpansion.key(for: .maintenance))
         #expect(!settingsPage.detachable)
 
         #expect(settings.contains(".pickerStyle(.menu)"))
