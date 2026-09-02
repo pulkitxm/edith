@@ -117,6 +117,16 @@ public final class AgentClient: NSObject, @unchecked Sendable {
         }
     }
 
+    public func performInternal(_ operation: String, payload: Data = Data()) throws -> Data {
+        guard AgentOperationCatalog.servesInternal(operation) else {
+            throw AgentError(.unknownOperation, "The agent does not serve \(operation).")
+        }
+        try verifyHandshake()
+        return try call { remote, reply in
+            remote.perform(operation: operation, payload: payload) { reply($0, $1) }
+        }
+    }
+
     public func perform<T: Decodable>(
         _ type: T.Type, operation: UserOperationID, payload: Data = Data()
     ) throws -> T {

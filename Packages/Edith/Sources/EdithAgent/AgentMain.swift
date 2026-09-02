@@ -61,11 +61,18 @@ public enum AgentBoot {
             "watching \(watcher.watchedPaths.count, privacy: .public) usage paths")
         Task {
             await runtime.attach(scheduler: scheduler)
-            await AgentOperations.register(on: runtime)
+            await AgentOperations.register(on: runtime, store: store)
             for job in AgentJobCatalog.jobs(store: store, scheduler: scheduler) {
                 await scheduler.register(job)
             }
             await scheduler.start()
+            if let store {
+                let report = try? AttentionEventStore(store: store).importLegacyFiles()
+                if let report, !report.alreadyImported, report.events > 0 {
+                    AgentLog.logger.info(
+                        "imported \(report.events, privacy: .public) attention events")
+                }
+            }
         }
         hub.resume()
         AgentLog.logger.info("edithd \(build, privacy: .public) listening")

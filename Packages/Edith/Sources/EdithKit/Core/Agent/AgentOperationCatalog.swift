@@ -6,8 +6,20 @@ public enum AgentOperationCatalog {
         $0.descriptor.id
     }
 
+    public static let internalOperations: [String] = [
+        AttentionOperation.record, AttentionOperation.range, AttentionOperation.importLegacy,
+    ]
+
     public static func serves(_ id: UserOperationID) -> Bool {
         served.contains(id)
+    }
+
+    public static func servesInternal(_ name: String) -> Bool {
+        internalOperations.contains(name)
+    }
+
+    public static var allNames: [String] {
+        served.map(\.rawValue) + internalOperations
     }
 
     public static var descriptors: [UserOperationDescriptor] {

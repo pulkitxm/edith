@@ -440,3 +440,139 @@ import Testing
         return (defaults, suiteName)
     }
 }
+
+@Suite struct AttentionTransportTests {
+    private func event(
+        id: String = UUID().uuidString, startedAt: Date, duration: TimeInterval = 60
+    ) -> AttentionEvent {
+        AttentionEvent(
+            id: id, startedAt: startedAt, duration: duration, source: .application,
+            appName: "Edith", bundleID: "com.pulkit.edith")
+    }
+
+    @Test func eventsOlderThanAYearAreExpired() {
+        let now = Date()
+        #expect(!AttentionRetention.isExpired(event(startedAt: now), now: now))
+        #expect(
+            AttentionRetention.isExpired(
+                event(startedAt: now.addingTimeInterval(-366 * 86_400)), now: now))
+        #expect(AttentionRetention.days == 365)
+    }
+
+    @Test func aBatchCarriesItsPulseTime() throws {
+        let one = event(startedAt: Date())
+        let batch = AttentionBatch(events: [one], pulseTime: 45)
+        let round = try AgentPayload.decode(
+            AttentionBatch.self, from: AgentPayload.encode(batch))
+
+        #expect(round.pulseTime == 45)
+        #expect(round.events.map(\.id) == [one.id])
+        #expect(round.events.first?.duration == one.duration)
+    }
+
+    @Test func foldingMergesAContinuationAndAppendsAnythingElse() {
+        let start = Date()
+        let first = event(startedAt: start, duration: 30)
+        let continuation = AttentionEvent(
+            startedAt: start.addingTimeInterval(30), duration: 30, source: .application,
+            appName: "Edith", bundleID: "com.pulkit.edith")
+        let other = AttentionEvent(
+            startedAt: start.addingTimeInterval(120), duration: 30, source: .application,
+            appName: "Xcode", bundleID: "com.apple.dt.Xcode")
+
+        let merged = AttentionMerge.fold([first], with: continuation, pulseTime: 30)
+        let appended = AttentionMerge.fold(merged, with: other, pulseTime: 30)
+
+        #expect(merged.count == 1)
+        #expect(merged[0].duration == 60)
+        #expect(appended.count == 2)
+    }
+
+    @Test func legacyLinesAreReadBackAsEvents() throws {
+        let events = [event(startedAt: Date()), event(startedAt: Date().addingTimeInterval(-60))]
+        let lines = try events.map { try AgentPayload.encode($0) }
+            .compactMap { String(data: $0, encoding: .utf8) }
+        let document = Data(lines.joined(separator: "\n").utf8)
+
+        #expect(AttentionLegacyReader.events(in: document).count == 2)
+        #expect(AttentionLegacyReader.events(in: Data("not json".utf8)).isEmpty)
+    }
+
+    @Test func theAgentStoresAndReadsBackARange() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AttentionStore.\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = try AgentStore(url: AgentStoreLayout.storeURL(root: root), build: "1")
+        let events = AttentionEventStore(store: store, defaults: defaults)
+        let start = Date().addingTimeInterval(-600)
+
+        try events.record(AttentionBatch(events: [event(startedAt: start, duration: 120)]))
+        let read = try events.events(
+            from: start.addingTimeInterval(-60), to: start.addingTimeInterval(600))
+
+        #expect(read.count == 1)
+        #expect(read.first?.appName == "Edith")
+    }
+
+    @Test func recordingTheSameEventTwiceKeepsOneRow() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AttentionStore.\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = try AgentStore(url: AgentStoreLayout.storeURL(root: root), build: "1")
+        let events = AttentionEventStore(store: store, defaults: defaults)
+        let one = event(id: "stable", startedAt: Date().addingTimeInterval(-300))
+
+        try events.record(AttentionBatch(events: [one]))
+        try events.record(AttentionBatch(events: [one]))
+        let rows = try store.read { database in
+            try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM attention_event") ?? 0
+        }
+
+        #expect(rows == 1)
+    }
+
+    @Test func theLegacyImportRunsOnceAndIsMarked() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AttentionImport.\(UUID().uuidString)")
+        let events = root.appendingPathComponent("events")
+        try FileManager.default.createDirectory(at: events, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let line = try AgentPayload.encode(event(startedAt: Date().addingTimeInterval(-120)))
+        try (String(data: line, encoding: .utf8) ?? "").write(
+            to: events.appendingPathComponent("2026-09-01.jsonl"), atomically: true,
+            encoding: .utf8)
+        let store = try AgentStore(url: AgentStoreLayout.storeURL(root: root), build: "1")
+        let sut = AttentionEventStore(store: store, defaults: defaults)
+
+        let first = try sut.importLegacyFiles(directory: events)
+        let second = try sut.importLegacyFiles(directory: events)
+
+        #expect(first.events == 1)
+        #expect(!first.alreadyImported)
+        #expect(second.alreadyImported)
+        #expect(second.events == 0)
+    }
+
+    @Test func theAgentDeclaresItsInternalOperations() {
+        #expect(AgentOperationCatalog.servesInternal(AttentionOperation.record))
+        #expect(AgentOperationCatalog.servesInternal(AttentionOperation.range))
+        #expect(!AgentOperationCatalog.servesInternal("nope"))
+        #expect(AgentOperationCatalog.allNames.contains("agent.status"))
+        #expect(AgentOperationCatalog.allNames.contains(AttentionOperation.record))
+    }
+
+    private func makeDefaults() -> (UserDefaults, String) {
+        let suiteName = "AttentionTransportTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return (defaults, suiteName)
+    }
+}

@@ -2,6 +2,8 @@ import Darwin
 import Foundation
 
 public struct AttentionRepository: Sendable {
+    nonisolated(unsafe) public static var sink: AttentionEventSink?
+
     public let root: URL
 
     private let encoder: JSONEncoder
@@ -51,6 +53,19 @@ public struct AttentionRepository: Sendable {
 
     public func append(_ event: AttentionEvent, pulseTime: TimeInterval = 30) throws {
         guard event.duration > 0 else { return }
+        if let sink = Self.sink {
+            do {
+                try sink.record(AttentionBatch(events: [event], pulseTime: pulseTime))
+                return
+            } catch {
+                try appendToFile(event, pulseTime: pulseTime)
+                return
+            }
+        }
+        try appendToFile(event, pulseTime: pulseTime)
+    }
+
+    private func appendToFile(_ event: AttentionEvent, pulseTime: TimeInterval) throws {
         try withLock {
             try prepare()
             let file = eventFile(for: event.startedAt)
@@ -74,7 +89,14 @@ public struct AttentionRepository: Sendable {
 
     public func events(from: Date, to: Date) -> [AttentionEvent] {
         guard to > from else { return [] }
-        return withLock {
+        if let sink = Self.sink, let events = try? sink.events(from: from, to: to) {
+            return events
+        }
+        return eventsFromFiles(from: from, to: to)
+    }
+
+    private func eventsFromFiles(from: Date, to: Date) -> [AttentionEvent] {
+        withLock {
             var result: [AttentionEvent] = []
             let files =
                 (try? FileManager.default.contentsOfDirectory(

@@ -18,16 +18,13 @@ final class ColorPickerStore: FeatureModule {
     }
 
     func shutdown() {
-        GlobalHotKey.clear(id: GlobalHotKey.ID.colorPicker)
+        HotKeyRegistrar.clear(HotKeyCatalog.colorPicker)
         if let requestObserver { IPC.stopObserving(requestObserver) }
         requestObserver = nil
     }
 
     func registerHotKey() {
-        GlobalHotKey.set(
-            id: GlobalHotKey.ID.colorPicker, keyCode: ColorPickerHotKey.code,
-            modifiers: ColorPickerHotKey.mods
-        ) { [weak self] in
+        HotKeyRegistrar.install(HotKeyCatalog.colorPicker) { [weak self] in
             self?.pick()
         }
     }
@@ -93,14 +90,11 @@ final class ColorPickerStore: FeatureModule {
 }
 
 enum ColorPickerHotKey {
-    static var code: Int {
-        SharedDefaults.store.object(forKey: "colorPickerHotKeyCode") as? Int ?? kVK_ANSI_C
+    private static var binding: HotKeyBinding {
+        HotKeyCatalog.binding(HotKeyCatalog.colorPicker)!
     }
-    static var mods: Int {
-        SharedDefaults.store.object(forKey: "colorPickerHotKeyMods") as? Int
-            ?? (cmdKey | optionKey | controlKey)
-    }
-    static var label: String {
-        SharedDefaults.store.string(forKey: "colorPickerHotKeyLabel") ?? "⌃⌥⌘C"
-    }
+
+    static var code: Int { binding.code() }
+    static var mods: Int { binding.mods() }
+    static var label: String { binding.label() }
 }

@@ -2,7 +2,28 @@ import EdithKit
 import Foundation
 
 public enum AgentOperations {
-    public static func register(on runtime: AgentRuntime) async {
+    public static func register(on runtime: AgentRuntime, store: AgentStore? = nil) async {
+        if let store {
+            let attention = AttentionEventStore(store: store)
+            await runtime.register(operation: AttentionOperation.record) { payload in
+                let batch = try AgentPayload.decode(AttentionBatch.self, from: payload)
+                try attention.record(batch)
+                return try AgentPayload.encode(["recorded": batch.events.count])
+            }
+            await runtime.register(operation: AttentionOperation.range) { payload in
+                let request = try AgentPayload.decode(
+                    AttentionRangeRequest.self, from: payload)
+                let events = try attention.events(from: request.from, to: request.to)
+                return try AgentPayload.encode(AttentionRangeResponse(events: events))
+            }
+            await runtime.register(operation: AttentionOperation.importLegacy) { _ in
+                try AgentPayload.encode(try attention.importLegacyFiles())
+            }
+        }
+        await registerControls(on: runtime)
+    }
+
+    static func registerControls(on runtime: AgentRuntime) async {
         await runtime.register(operation: AgentControlOperation.status.descriptor.id.rawValue) {
             _ in
             try AgentPayload.encode(await runtime.runtimeSnapshot())
