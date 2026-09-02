@@ -37,4 +37,22 @@ import Testing
         #expect(!block.contains("repeatForever"))
         #expect(!block.contains("@State"))
     }
+
+    @Test func skeletonReplicasPreserveLayoutWithoutInteraction() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/EdithKit/UI/LoadingPrimitives.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let replicaStart = try #require(source.range(of: "public struct SkeletonReplica"))
+        let blockStart = try #require(source.range(of: "public struct SkeletonBlock"))
+        let replica = String(source[replicaStart.lowerBound..<blockStart.lowerBound])
+
+        #expect(replica.contains("content.skeletonized()"))
+        #expect(replica.contains(".redacted(reason: .placeholder)"))
+        #expect(replica.contains(".allowsHitTesting(false)"))
+        #expect(replica.contains(".accessibilityHidden(true)"))
+        #expect(replica.contains(".accessibilityLabel(label)"))
+    }
 }

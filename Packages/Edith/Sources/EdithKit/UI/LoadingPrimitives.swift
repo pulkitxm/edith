@@ -59,17 +59,6 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
         ZStack {
             if state.presentsContent {
                 content
-                    .overlay(alignment: .topTrailing) {
-                        if state == .refreshing || state == .partial {
-                            ProgressView()
-                                .controlSize(.small)
-                                .padding(UIScale.pt(10))
-                                .accessibilityLabel(
-                                    state == .refreshing
-                                        ? "Refreshing" : "Loading remaining content"
-                                )
-                        }
-                    }
             } else if state == .loading {
                 placeholder
                     .opacity(showsLoading ? 1 : 0)
@@ -168,6 +157,59 @@ public struct SkeletonGroup<Content: View>: View {
         withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
             phase = true
         }
+    }
+}
+
+public struct SkeletonReplica<Content: View>: View {
+    public let label: String
+    @ViewBuilder public let content: Content
+
+    public init(_ label: String = "Loading", @ViewBuilder content: () -> Content) {
+        self.label = label
+        self.content = content()
+    }
+
+    public var body: some View {
+        SkeletonGroup {
+            content.skeletonized()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+    }
+}
+
+public extension View {
+    func skeletonized() -> some View {
+        modifier(SkeletonReplicaModifier())
+    }
+}
+
+private struct SkeletonReplicaModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.skeletonPhase) private var phase
+
+    func body(content: Content) -> some View {
+        content
+            .redacted(reason: .placeholder)
+            .opacity(0.58)
+            .overlay {
+                if !reduceMotion {
+                    GeometryReader { proxy in
+                        LinearGradient(
+                            colors: [.clear, Color.primary.opacity(0.16), .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: proxy.size.width * 0.45)
+                        .offset(x: phase ? proxy.size.width : -proxy.size.width * 0.45)
+                    }
+                    .mask {
+                        content.redacted(reason: .placeholder)
+                    }
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 
